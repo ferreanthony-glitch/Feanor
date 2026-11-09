@@ -9284,3 +9284,161 @@ Plus petits :
 11. La section « Durées » n'est plus dans le panneau.
 12. Un plan à effet vivant : le couper en deux, le réunir avec le suivant, rogner son début avec Ctrl puis le rallonger, insérer des images. À chaque fois, rien ne bouge à l'image et l'effet est devenu des clés ; Ctrl+Z le rend vivant.
 13. Outil Caméra sur un plan à forte secousse : le coin du cadre s'attrape là où on le voit.
+
+
+## 131. La caméra se souvient : un trait appartient tout entier à la case où le stylet s'est posé (2026-11-09, branche `camera-souvient`)
+
+Anthony : « essayons de repenser vignettes, quitte à repartir de zéro […] pour l'instant il n'agit pas encore comme une grande planche de
+dessin sur laquelle des caméras sont posées, et peuvent avoir une action sur le dessin sous certaines conditions dont nous avons parlé. »
+Cinq approches présentées (A « La caméra se souvient », B « Des feuilles, pas une planche », C « Le tableau de liège », D « Le rouleau »,
+E « Le carnet détaché ») ; son choix : « Ok on essaye A ». Note de conception : `suivi/CAMERA-SOUVIENT.md`.
+Code : `horschamp.rs`, `render.rs`, `thumbs.rs`, `boardui.rs`, `vignettesel.rs`, `vignetteselbmp.rs`, `caseprend.rs`, `planche.rs`,
+`plancheui.rs`, et un fichier neuf, `gommedebord.rs`. Essais : `camera_souvient_tests.rs` (11, neufs) et les essais d'avant réécrits là où
+ils sont. **Le format du projet ne change pas** (pas de format 53) : un ancien projet s'ouvre tel quel. Une relecture indépendante du code
+a été faite avant de proposer la fusion (demandée par l'autre session) ; ce qu'elle a changé est dit plus bas.
+
+### La règle
+
+**Un trait appartient tout entier à la case où le stylet s'est posé ; hors de toute case, il appartient au papier. Le bord d'une case est
+une étiquette, jamais des ciseaux.**
+
+Avant (parties 111 à 128), chaque point du trait cherchait sa case au lâcher : le trait était coupé en parts (sa case, les voisines, le
+papier) reliées par un numéro, et chaque geste suivant (sélection, collage, case qui naît) devait retrouver et recoller ces parts. C'est de
+là que venaient les traits coupés, cachés ou perdus de vue. Maintenant il n'y a plus qu'une question au lâcher : **où le trait a-t-il
+commencé ?**
+
+### Ce que ça fait
+
+- **Dessiner.** Le propriétaire du trait est celui de son **premier point** : l'image d'une case d'abord, puis la marge d'une case (le
+  débord des Préférences, 12 % d'origine), sinon le papier (le calque « Hors cadres », ou la couche bitmap de la planche). Le trait reste
+  **entier**, à un seul endroit ; les cases qu'il traverse ne reçoivent rien. En bitmap, ses pixels au-delà du cadre restent dans le dessin
+  du plan (les tuiles hors de la feuille, déjà enregistrées avec le projet).
+- **La feuille ou le film.** Sur la planche, **rien n'est caché par une case** : le papier et ce que chaque case a dessiné hors de son
+  cadre se peignent **par-dessus les images de toutes les cases**, sous leurs filets, leurs numéros et leurs notes. Un trait parti de la
+  case 1 qui traverse la case 2 se voit donc en entier, dans la case 2 aussi, bien qu'il ne soit pas dans son plan. **Le passe-partout
+  montre le film** : chaque case ne montre plus que son plan, le reste passe dessous. L'export de la planche suit la même règle (son option
+  de passe-partout).
+- **Le film ne change pas.** Le plan, la bande de montage, la vue Dessin et tous les exports du film restent coupés au cadre de la caméra :
+  un trait qui dépasse est dans le dessin du plan, hors champ, comme n'importe quel dessin plus grand que le cadre.
+- **La vignette d'une case s'étend à son encre.** L'image d'une case sur la planche couvre maintenant tout ce que son plan a dessiné, de
+  chaque côté ce qu'il faut (marges inégales), jusqu'à **quatre cadres par côté** et 4096 pixels en tout. Calculé sur le fil des vignettes,
+  jamais sur celui de l'interface.
+- **Les deux conditions d'Anthony** (une caméra qu'on déplace emporte son dessin ; un mouvement de caméra fait de la place) sont tenues
+  sans rien faire de plus : le dessin est rangé dans le plan, il suit sa case ; le papier suit la case à laquelle il est attaché.
+- **Les cases pâles.** Une case pâle naît quand on pose le stylet **dedans, ou dans la marge de la première case pâle de sa séquence**
+  (pas à sa gauche : c'est la zone de la barre de continuité). **Le bout d'un trait ne fait plus rien naître** (la décision 8 de la
+  partie 113 est remplacée) : un trait parti d'une case reste à cette case.
+- **Une case qui naît prend le papier** (partie 128) : elle prend maintenant les traits du papier qui ont un point dans son champ
+  **entiers**, plus seulement leur part.
+- **La sélection de la planche** (Ctrl + lasso). Un trait se prend **partout où il passe**, même hors du champ de sa case. Déplacé, il se
+  repose entier **là où son premier point arrive** : dans une case, dans son plan ; sur le papier, sur le papier. En bitmap, les pixels
+  pris restent dans leur case tant qu'ils y ont de l'encre ; quand ils la quittent tout à fait, ils vont entiers à la case sous eux (ou au
+  papier). Coller (Ctrl+V) repose de la même façon.
+- **La gomme.** Ce qu'on voit sur le papier se gomme sur le papier : la gomme partie hors de toute image efface aussi ce que les cases ont
+  dessiné **hors de leur cadre** (un trait vectoriel : entier, comme un trait du papier, si elle le touche hors du cadre ; des pixels :
+  ceux sous son cercle). Dans l'image d'une case, le dessin de cette case reste à elle, même si le cercle de la gomme mord dans le cadre :
+  pour y gommer, on pose la gomme dedans, comme avant. Une seule étape d'annulation pour tout le geste (`gommedebord.rs`). **Elle ne touche
+  à aucun plan quand le storyboard est verrouillé, ni avec le passe-partout** (ce qui dépasse est caché : on ne gomme pas ce qu'on ne
+  voit pas), ni plus loin que ce que la planche montre.
+- **Les dessins que plusieurs cases montrent gardent la règle d'avant** : le **Décor** (un seul dessin pour toutes les cases d'un plan), un
+  calque partagé (**planche-mère**, partie 126), un calque de toute la scène, un dessin tenu d'une marque d'image à l'autre
+  (`render::dessins_communs`). Un trait tracé sur la planche y est réparti case par case comme avant, chaque case en montre son cadre et
+  sa marge ordinaire, la gomme de la planche n'y touche pas, le lasso ne les prend que près de leur case. Sans cela, ce qui dépasse d'un
+  tel dessin se répéterait autour de chacune des cases qui le montrent, par-dessus leurs voisines, et une planche-mère vue par trois
+  caméras s'étalerait trois fois sur la planche. Le Décor reste donc tel quel.
+- **Un trait bitmap parti du papier** qui traverse le dessin d'une case va sur le papier **seul** : il n'emporte pas un double du dessin
+  qu'il recouvre (`horschamp::part_du_trait`).
+- **Une case qui ne peut pas recevoir** (calque verrouillé, masqué… partie 122) : rien ne change, on n'y dessine pas ; un trait qu'un
+  déplacement y mène reste sur la planche, par-dessus elle, entier, et la ligne d'état dit pourquoi.
+- **Les anciens projets.** Les traits déjà coupés en parts restent des parts d'un même numéro, que le lasso prend toujours ensemble ; un
+  vieux trait coupé **redevient entier dès qu'on le déplace**. Rien n'est converti à l'ouverture.
+
+### Ce qui est gardé des parties d'avant
+
+Tout ou rien, calculé avant d'écrire quoi que ce soit ; l'ordre de peinture et « Peindre derrière » ; une seule étape d'annulation par
+geste, avec tout son historique (`History::marque`, `regrouper_depuis`) ; les refus de la partie 122 ; le film partagé et son jeton de
+montage (on n'écrit jamais dans un plan qu'on ne tient pas) ; le lasso Ctrl qui prend aussi les formes, les textes et les images ; la
+priorité de Caméra et de T sur Ctrl ; Suppr sur le choix ; le Décor, tel quel.
+
+### Comment
+
+- `horschamp.rs` : `partager_vecteur` et `partager_bitmap` ne demandent plus le propriétaire de chaque point, seulement celui du premier ;
+  les fonctions de la découpe par case (`horschamp_repartir_element`, `horschamp_creer_cases`…) sont retirées. Un interrupteur d'essai
+  (`COMME_AVANT_131`) refait la découpe d'avant, pour fabriquer dans les essais les traits d'un ancien projet.
+- `render.rs` : `plan_ink_bounds` (la boîte de l'encre d'un plan, tuiles hors feuille comprises), `marges_de_l_encre` (les quatre marges
+  d'une vignette ; la marge ordinaire ne rétrécit jamais, seul ce qui s'étend au-delà se borne), `dessins_communs` (les dessins que
+  plusieurs cases montrent : ils ne font pas s'étendre la vignette et ne sont pas composés au-delà de la marge ordinaire), les bornes
+  `MARGE_MAX_CADRES`, `VIGNETTE_MAX` (écran) et `MARGE_EXPORT_MAX` (export de la planche).
+- `thumbs.rs` : marges inégales par vignette ; `debord_de_case` dit sans rendu jusqu'où va l'encre d'une case (gardé tant que ni
+  l'historique ni la version d'aucun dessin ne change), pour ne pas rendre ni garder les cases hors de l'écran.
+- `boardui.rs` : l'ordre de peinture (feuille ou film), `board_debords`, l'appui dans la marge de la première case pâle, la gomme.
+- `vignettesel.rs`, `vignetteselbmp.rs`, `caseprend.rs` : la repose entière ; `planche.rs`, `plancheui.rs` : l'export de la planche.
+
+### Mesures
+
+Essai `sixty_cases_and_two_thousand_strokes_with_long_overflows_rest_and_a_frame_stays_cheap` : 60 cases, 2 040 traits, de longs débords.
+Repos atteint en 1,2 s après l'ouverture ; 65 vignettes gardées, 23,4 Mo ; la construction d'une image d'écran : 0,89 ms (médiane),
+1,63 ms (la pire) ; un trait de plus, puis le repos : 0,3 s. (Mesuré seul, après les corrections de la relecture.)
+
+### Limites connues
+
+- **Caméra basculée ou en panoramique** (perspective) : un trait qui sort d'une telle case s'amincit avec la perspective de sa feuille ;
+  il n'est pas continu sur la planche. Le film et les exports sont justes.
+- **Au-delà de quatre cadres** de sa case, un trait est toujours dans le dessin mais ne se voit plus sur la planche.
+- **Le trait d'une case qui passe dans l'image d'une autre** s'y voit mais ne s'y gomme pas depuis cette autre case : on le gomme depuis le
+  papier, depuis sa case, ou on le prend au lasso et Suppr.
+- **Un plan vectoriel qui naît** ne prend pas les morceaux bitmap du papier (ils restent sur le papier, visibles par-dessus).
+- **La gomme de la planche** laisse intacts les calques qu'on ne dessine pas depuis la planche (verrouillés, masqués, transformés) et les
+  dessins que plusieurs cases montrent (Décor, planche-mère) : on les gomme dans leur case.
+- **Un trait du Décor mené au lasso hors du champ de sa case** passe sur la planche : il ne se verrait pas loin de sa case.
+- **Dessiner vite plusieurs traits qui sortent d'une même case** : le bout hors cadre d'un trait d'avant peut manquer un instant, le
+  temps que la vignette de la case se refasse (une fraction de seconde ; rien n'est perdu).
+- **Mémoire** : une case très zoomée dont le dessin s'étend loin peut porter une vignette de 4096 pixels de côté (64 Mo) tant qu'elle est
+  à l'écran.
+- **Export de la planche à très grande échelle** : la marge d'une case y est bornée à 12 288 pixels de côté ; au-delà, ce qui dépasse le
+  plus loin est coupé dans le fichier.
+
+### Ce que la relecture indépendante a changé
+
+Quinze remarques, lues une à une. Corrigées avant tout essai d'Anthony : la gomme de la planche prenait un trait vectoriel resté tout
+entier dans son cadre dès que son cercle y mordait, ignorait le verrou du storyboard et le passe-partout, gommait plus loin que ce que
+la planche montre, relisait toutes les cases à chaque point du geste, et perdait le compte de ses étapes si on annulait pendant le geste ;
+un dessin montré par plusieurs cases (Décor, planche-mère) débordait autour de chacune ; un trait bitmap parti du papier emportait un
+double du dessin qu'il recouvrait ; la marge ordinaire d'une case disparaissait quand son image dépassait la borne (grand export) ; la
+planche gardait une idée périmée du débord d'une case après un rendu d'arrière-plan ; des messages parlaient encore de traits « répartis ».
+Laissées en limites, dites plus haut : le bout d'un trait d'avant qui manque un instant quand on dessine vite, et la mémoire d'une
+vignette très zoomée.
+
+### À juger à l'essai (Anthony)
+
+- Un trait parti de la case 1 qui traverse la case 2 **se voit dans la case 2** sur la planche, sans être dans son plan ; le passe-partout
+  le retire.
+- Un trait commencé entre deux cases ou dans une bande de note reste du papier, même s'il entre ensuite dans une case.
+- Le bout d'un trait ne fait plus naître la case pâle suivante.
+- Une caméra zoomée montre autour de sa case tout le dessin de sa feuille.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un grand trait de la case 1 à la case 4, à travers les cases 2 et 3 : il est entier sur la planche. Ouvre le plan 1 au Storyboard : le
+   trait y est, coupé au cadre ; les plans 2, 3 et 4 n'ont rien reçu.
+2. Le passe-partout : chaque case ne montre plus que son plan. L'enlever : le trait revient, entier.
+3. Un trait commencé sur le papier, au-dessus des cases, qui descend à travers une case : il est entier, par-dessus la case, et il n'est
+   pas dans son plan.
+4. Déplacer la case 1 (Maj + glisser) : son trait la suit, en entier.
+5. Ctrl + lasso sur le trait là où il traverse la case 3 : il est pris en entier. Le glisser d'une case : il passe au plan de la case où
+   son début arrive. Le glisser sur le papier : il passe au papier. Ctrl+Z à chaque fois.
+6. Pareil sur un calque bitmap.
+7. La gomme, posée sur le papier, passée sur le bout d'un trait qui dépasse de sa case : en vectoriel le trait part entier, en bitmap
+   seulement ce qui est sous la gomme. Ce que la case a dans son cadre ne bouge pas. Ctrl+Z rend tout d'un coup.
+8. Un trait dans la marge de la première case pâle : elle naît. Le bout d'un trait qui finit dans une case pâle : elle ne naît pas.
+9. Un trait du papier, puis une case pâle qui naît dessus : elle le prend entier.
+10. Ouvrir un ancien projet avec des traits à travers les cases : rien n'a bougé, rien ne manque. Déplacer un de ces traits au lasso : il
+    redevient entier.
+11. Enregistrer, fermer, rouvrir : les traits qui dépassent sont toujours là, à leur place.
+12. Exporter la planche (PDF ou image), avec et sans passe-partout : comme à l'écran.
+13. Le Décor : un trait d'une brosse du décor à travers les cases d'une continuité. Il se comporte comme avant ce chantier (chaque case en
+    reçoit sa part), et aucune case ne s'étale sur ses voisines.
+14. La gomme passée sur le papier tout contre le bord d'une case : rien de ce qui est dans la case ne part. Storyboard verrouillé, ou
+    passe-partout mis : la gomme de la planche ne touche à aucun plan.
+15. Sur un calque bitmap, un trait au pinceau à moitié transparent, parti du papier, à travers le dessin d'une case ; puis gommer ce
+    dessin dans la case : aucun fantôme du dessin ne reste sous le trait.

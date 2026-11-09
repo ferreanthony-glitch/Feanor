@@ -310,17 +310,22 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             cadre = cadre.union(e.expand(4.0).intersect(cadre.expand(cadre.width().max(cadre.height()) * 0.5)));
         }
     }
-    // Ce qui dépasse d'une case en bordure de page sort aussi (partie 111) : seulement là où le plan a du dessin, jamais plus loin que sa marge.
+    // Ce qui dépasse d'une case en bordure de page sort aussi (partie 111) : seulement là où le plan a du dessin, et jusqu'où il va (partie 131 :
+    // la case montre tout son dessin), dans la limite de ce que sa vignette couvre et d'une étendue raisonnable autour des pages.
     if !opt.marie {
+        let pages = cadre;
+        let loin = crate::render::MARGE_MAX_CADRES as f32;
         for (k, c) in layout.cards.iter().enumerate() {
             if layout.move_of(k).is_some() {
                 continue;
             }
             let plan_reel = plans[c.panel];
             let Some(aff) = crate::horschamp::aff_de_camera(&doc.panel_camera(plan_reel, c.frame), doc.frame, c.thumb) else { continue };
-            let aire = crate::render::plan_bounds(doc, &crate::render::panel_plan_at(doc, plan_reel, c.frame, None));
+            // (Sans les dessins que la case n'est pas seule à montrer : ils ne se voient pas au-delà de sa marge ordinaire, comme à l'écran.)
+            let communs = crate::render::dessins_communs(doc, plan_reel, c.frame);
+            let Some(aire) = crate::render::plan_ink_bounds_sauf(doc, &crate::render::panel_plan_at(doc, plan_reel, c.frame, None), &communs) else { continue };
             let encre = Rect::from_two_pos(aff.applique(eframe::egui::pos2(aire.x0 as f32, aire.y0 as f32)), aff.applique(eframe::egui::pos2(aire.x1 as f32, aire.y1 as f32)));
-            let r = encre.intersect(c.thumb.expand(opt.debord * c.thumb.width()));
+            let r = encre.intersect(c.thumb.expand2(c.thumb.size() * loin)).intersect(pages.expand(pages.width().max(pages.height()) * 0.5));
             if r.is_positive() {
                 cadre = cadre.union(r);
             }
@@ -479,11 +484,12 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
 }
 
 /// Le dessin d'une case hors de son image : pour un plan à mouvement de caméra, sur toute son enveloppe (sa « tuile », comme à l'écran) ;
-/// sinon, sa marge seule. Pixels RVBA prémultipliés, `taille` pixels, dont `marge` tout autour du rectangle de la tuile ou de la case.
+/// sinon, sa marge seule. Pixels RVBA prémultipliés, `taille` pixels, dont `marges` (à gauche, en haut, à droite, en bas) autour du rectangle de
+/// la tuile ou de la case : elles vont jusqu'où va le dessin du plan (partie 131, comme à l'écran).
 #[derive(Clone, Debug)]
 pub struct TuileImage {
     pub taille: [u32; 2],
-    pub marge: u32,
+    pub marges: [u32; 4],
     pub rvba: Vec<u8>,
 }
 
@@ -553,20 +559,54 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
             trait_rond_a(pix, &px, t.color, t.alpha);
         }
     };
-    hors_cadres(&mut pix, false);
-    // Les marges des cases, puis le dessin sur toute l'enveloppe des plans à mouvement : sur le papier, sous toutes les images, comme à l'écran.
-    for mouvements in [false, true] {
-        for (k, c) in p.cartes.iter().enumerate() {
-            if c.mouvement.is_some() != mouvements {
-                continue;
+    // La tuile ou la marge de la case `k`, posée à sa place. `hors_enveloppe` : d'un plan à mouvement de caméra, seulement ce que sa tuile porte
+    // hors de son enveloppe (dedans, c'est son image).
+    let poser_tuile = |pix: &mut Pixmap, k: usize, hors_enveloppe: bool| {
+        let (Some(c), Some(Some(t))) = (p.cartes.get(k), tuiles.get(k)) else { return };
+        let q = rect_px(c.mouvement.as_ref().map_or(c.place.thumb, |m| m.tuile.rect), p.cadre, s);
+        let Some(mut cell) = tiny_skia::IntSize::from_wh(t.taille[0], t.taille[1]).and_then(|sz| Pixmap::from_vec(t.rvba.clone(), sz)) else { return };
+        let (x0, y0) = (q[0] - t.marges[0] as i32, q[1] - t.marges[1] as i32);
+        if let Some(m) = c.mouvement.as_ref().filter(|_| hors_enveloppe) {
+            let mut pb = PathBuilder::new();
+            for (i, e) in m.enveloppe.iter().enumerate() {
+                let (x, y) = ((e.x - p.cadre.left()) * s - x0 as f32, (e.y - p.cadre.top()) * s - y0 as f32);
+                if i == 0 {
+                    pb.move_to(x, y);
+                } else {
+                    pb.line_to(x, y);
+                }
             }
-            let Some(Some(t)) = tuiles.get(k) else { continue };
-            let q = rect_px(c.mouvement.as_ref().map_or(c.place.thumb, |m| m.tuile.rect), p.cadre, s);
-            if let Some(cell) = tiny_skia::IntSize::from_wh(t.taille[0], t.taille[1]).and_then(|sz| Pixmap::from_vec(t.rvba.clone(), sz)) {
-                pix.draw_pixmap(q[0] - t.marge as i32, q[1] - t.marge as i32, cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+            pb.close();
+            if let Some(path) = pb.finish() {
+                let efface = tiny_skia::Paint { blend_mode: tiny_skia::BlendMode::Clear, anti_alias: true, ..Default::default() };
+                cell.fill_path(&path, &efface, tiny_skia::FillRule::Winding, Transform::identity(), None);
+            }
+        }
+        pix.draw_pixmap(x0, y0, cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+    };
+    // **La feuille ou le film** (partie 131, comme à l'écran : `boardui::board_view`). La feuille : rien n'est caché par une case, le papier et
+    // ce que chaque case a dessiné hors de son cadre se posent **par-dessus les images**, sous les filets, les cadres et les textes. Le film (le
+    // passe-partout) : chaque case ne montre que son plan, tout le reste passe dessous, comme avant.
+    let film = opt.marie;
+    if film {
+        hors_cadres(&mut pix, false);
+        // Les marges des cases, puis le dessin sur toute l'enveloppe des plans à mouvement : sur le papier, sous toutes les images.
+        for mouvements in [false, true] {
+            for (k, c) in p.cartes.iter().enumerate() {
+                if c.mouvement.is_some() == mouvements {
+                    poser_tuile(&mut pix, k, false);
+                }
+            }
+        }
+    } else {
+        // Les tuiles des plans à mouvement d'abord : elles tiennent lieu d'image là où la case montre sa feuille.
+        for (k, c) in p.cartes.iter().enumerate() {
+            if c.mouvement.is_some() {
+                poser_tuile(&mut pix, k, false);
             }
         }
     }
+    // Les images de toutes les cases.
     for (k, c) in p.cartes.iter().enumerate() {
         let r = rect_px(c.place.thumb, p.cadre, s);
         let (tw, th) = ((r[2] - r[0]).max(1) as u32, (r[3] - r[1]).max(1) as u32);
@@ -587,6 +627,17 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
         } else {
             remplir(&mut pix, r, [255, 255, 255]);
         }
+    }
+    // La feuille : le papier, puis ce que chaque case a dessiné hors de son cadre, par-dessus les images.
+    if !film {
+        hors_cadres(&mut pix, false);
+        for k in 0..p.cartes.len() {
+            poser_tuile(&mut pix, k, true);
+        }
+    }
+    // Ce qui habille les cases, par-dessus tout le dessin : filets, cadres de caméra, légendes, textes.
+    for c in &p.cartes {
+        let r = rect_px(c.place.thumb, p.cadre, s);
         contour(&mut pix, [r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1], FILET, 1.0);
         // Les cadres de caméra, comme à l'écran : fins, bleus, avec leur lettre, reliés par la flèche ou les coins. (L'image de la case
         // est celle de A ; le reste de l'empreinte est le papier : seuls les cadres s'y dessinent.)

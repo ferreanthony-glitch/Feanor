@@ -314,16 +314,49 @@ fn sorte(bitmap: bool) -> &'static str {
     }
 }
 
-fn verifier_recu(v: Variante, bitmap: bool, depuis: bool) {
-    let Some(c) = constater(v, bitmap, depuis) else { return println!("pas de carte graphique") };
-    let nom = format!("{v:?} {} {}", sorte(bitmap), if depuis { "depuis la case" } else { "à travers" });
+/// Partie 131 (avant : la case traversée recevait sa part du trait dans son plan, ou la gardait par-dessus elle si elle ne pouvait pas la recevoir).
+/// Un trait parti de la case voisine et qui **traverse** la case du plan `PLAN`, quelle qu'elle soit (une autre caméra, des cadres, un calque
+/// verrouillé, masqué, transformé, d'une autre sorte, un plan écarté) : il reste entier dans le plan où il commence, se voit en entier sur la
+/// planche, par-dessus la case traversée, qui ne reçoit rien ; rien ne va sur le papier, et il n'y a rien à dire.
+fn verifier_traverse(v: Variante, bitmap: bool) {
+    let Some(c) = constater(v, bitmap, false) else { return println!("pas de carte graphique") };
+    let nom = format!("{v:?} {} à travers", sorte(bitmap));
     println!("TRAIT {nom} : {c:?}");
     assert!(c.geste <= TROU_PERMIS, "{nom} : pendant le geste : {c:?}");
-    assert!(c.repos <= TROU_PERMIS, "{nom} : au repos : {c:?}");
+    assert!(c.repos <= TROU_PERMIS, "{nom} : au repos, rien n'a disparu : {c:?}");
     assert!(c.rouvert <= TROU_PERMIS, "{nom} : après réouverture : {c:?}");
+    if let Some(t) = c.export {
+        assert!(t <= TROU_PERMIS, "{nom} : à l'export : {c:?}");
+    }
+    assert!(!c.dans_le_plan, "{nom} : rien n'entre dans le plan de la case traversée : {c:?}");
+    assert_eq!(c.hors_cadres, 0, "{nom} : rien sur la planche, le trait est entier dans son plan : {c:?}");
+    assert_eq!(c.etapes, 1, "{nom} : une seule étape : {c:?}");
+    assert_eq!(c.rejeux, 0, "{nom} : aucun rejeu sur le fil de l'interface : {c:?}");
+    assert!(c.deja_intact, "{nom} : ce qui était dessiné ne bouge pas : {c:?}");
+    assert!(c.annule_ok, "{nom} : annuler rend tout : {c:?}");
+    assert!(c.statut.is_empty(), "{nom} : rien à dire : {c:?}");
+}
+
+/// Partie 131 : un trait **parti** de la case du plan `PLAN`, quelle que soit sa caméra, lui appartient tout entier : il est dans son plan, se
+/// voit en entier sur la planche jusque deux cases plus loin, rien ne va sur le papier.
+///
+/// **Ce qui reste** (noté dans la partie 131) : une caméra en panoramique ou basculée montre sa feuille en perspective, et le trait est dessiné
+/// sur cette feuille. Loin du cadre, du côté où la feuille fuit, il s'amincit jusqu'à moins d'un pixel d'écran : il n'est pas perdu (il est entier
+/// dans le dessin, et l'export, plus fin, le montre), mais la planche ne le montre plus d'un trait continu. Avant, sa part hors de la case était
+/// redessinée à plat dans les cases voisines ou sur la planche.
+fn verifier_depuis(v: Variante, bitmap: bool) {
+    let Some(c) = constater(v, bitmap, true) else { return println!("pas de carte graphique") };
+    let nom = format!("{v:?} {} depuis la case", sorte(bitmap));
+    println!("TRAIT {nom} : {c:?}");
+    let en_perspective = matches!(v, Variante::Bascule | Variante::Panoramique);
+    assert!(c.geste <= TROU_PERMIS, "{nom} : pendant le geste : {c:?}");
+    if !en_perspective {
+        assert!(c.repos <= TROU_PERMIS, "{nom} : au repos : {c:?}");
+        assert!(c.rouvert <= TROU_PERMIS, "{nom} : après réouverture : {c:?}");
+    }
     assert!(c.export.is_some_and(|t| t <= TROU_PERMIS), "{nom} : à l'export : {c:?}");
-    assert!(c.dans_le_plan, "{nom} : la part est dans le plan : {c:?}");
-    assert_eq!(c.hors_cadres, 0, "{nom} : rien ne reste sur la planche : {c:?}");
+    assert!(c.dans_le_plan, "{nom} : le trait est dans le plan de sa case : {c:?}");
+    assert_eq!(c.hors_cadres, 0, "{nom} : rien sur la planche : {c:?}");
     assert_eq!(c.etapes, 1, "{nom} : une seule étape : {c:?}");
     assert_eq!(c.rejeux, 0, "{nom} : aucun rejeu sur le fil de l'interface : {c:?}");
     assert!(c.deja_intact, "{nom} : ce qui était dessiné ne bouge pas : {c:?}");
@@ -332,50 +365,47 @@ fn verifier_recu(v: Variante, bitmap: bool, depuis: bool) {
 }
 
 #[test]
-fn a_stroke_across_a_case_with_another_zoom_reaches_its_plan_and_stays_whole() {
+fn a_stroke_across_or_from_a_case_with_another_zoom_stays_whole_in_the_plan_where_it_starts() {
     for v in [Variante::Zoom, Variante::ZoomFaible] {
         for bitmap in [false, true] {
-            for depuis in [false, true] {
-                verifier_recu(v, bitmap, depuis);
-            }
+            verifier_traverse(v, bitmap);
+            verifier_depuis(v, bitmap);
         }
     }
 }
 
 #[test]
-fn a_stroke_across_a_case_with_a_rolled_camera_reaches_its_plan_and_stays_whole() {
+fn a_stroke_across_or_from_a_case_with_a_rolled_camera_stays_whole_in_the_plan_where_it_starts() {
     for bitmap in [false, true] {
-        for depuis in [false, true] {
-            verifier_recu(Variante::Roulis, bitmap, depuis);
-        }
+        verifier_traverse(Variante::Roulis, bitmap);
+        verifier_depuis(Variante::Roulis, bitmap);
     }
 }
 
 #[test]
-fn a_stroke_across_a_case_with_a_tilted_or_panned_camera_reaches_its_plan_and_stays_whole() {
+fn a_stroke_across_or_from_a_case_with_a_tilted_or_panned_camera_stays_whole_in_the_plan_where_it_starts() {
     for v in [Variante::Bascule, Variante::Panoramique] {
         for bitmap in [false, true] {
-            for depuis in [false, true] {
-                verifier_recu(v, bitmap, depuis);
-            }
+            verifier_traverse(v, bitmap);
+            verifier_depuis(v, bitmap);
         }
     }
 }
 
 #[test]
-fn a_stroke_across_a_plan_with_frames_a_and_b_reaches_its_plan_and_stays_whole() {
+fn a_stroke_across_or_from_a_plan_with_frames_a_and_b_stays_whole_in_the_plan_where_it_starts() {
     for v in [Variante::Cadres, Variante::CadresZoom, Variante::CadresRoulis] {
         for bitmap in [false, true] {
-            for depuis in [false, true] {
-                verifier_recu(v, bitmap, depuis);
-            }
+            verifier_traverse(v, bitmap);
+            verifier_depuis(v, bitmap);
         }
     }
 }
 
-/// Le plan a vraiment reçu sa part, au bon endroit : l'image du film, à travers la caméra de la case, montre le trait là où la case le montre.
+/// Le plan a vraiment le trait, au bon endroit : l'image du film, à travers la caméra de la case, montre le trait là où la case le montre.
+/// (Partie 131 : le trait part du bord gauche de la case, dedans, et sort à droite : il est à elle, tout entier.)
 #[test]
-fn the_film_frame_of_the_plan_shows_the_part_where_the_case_shows_it() {
+fn the_film_frame_of_the_plan_shows_the_stroke_where_the_case_shows_it() {
     for v in [Variante::Zoom, Variante::ZoomFaible, Variante::Roulis, Variante::Bascule, Variante::Panoramique] {
         for bitmap in [false, true] {
             let mut doc = des_plans(18, bitmap);
@@ -389,7 +419,7 @@ fn the_film_frame_of_the_plan_shows_the_part_where_the_case_shows_it() {
             let case = case_ecran(&b, id);
             let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN + 1].id));
             let y = rd.top() + rd.height() * 0.35;
-            tracer(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
+            tracer(&mut b, pos2(case.left() + 1.0, y), pos2(ra.center().x, y));
             repos(&mut b);
             let doc = &b.app.doc;
             let snap = crate::exportrender::snapshot_of(doc, &[PLAN]);
@@ -417,60 +447,57 @@ fn the_film_frame_of_the_plan_shows_the_part_where_the_case_shows_it() {
     }
 }
 
-// ------------------------------------------------------------------------------ refusé, jamais caché
-
-fn verifier_refus(v: Variante, bitmap: bool, mots: &str) {
-    let Some(c) = constater(v, bitmap, false) else { return println!("pas de carte graphique") };
-    let nom = format!("{v:?} {}", sorte(bitmap));
-    println!("TRAIT {nom} : {c:?}");
-    assert!(c.geste <= TROU_PERMIS, "{nom} : pendant le geste : {c:?}");
-    assert!(c.repos <= TROU_PERMIS, "{nom} : au repos, rien n'a disparu : {c:?}");
-    assert!(c.rouvert <= TROU_PERMIS, "{nom} : après réouverture : {c:?}");
-    if let Some(t) = c.export {
-        assert!(t <= TROU_PERMIS, "{nom} : à l'export : {c:?}");
-    }
-    assert!(!c.dans_le_plan, "{nom} : rien n'est écrit dans ce plan : {c:?}");
-    assert!(c.hors_cadres >= 1, "{nom} : la part reste sur la planche : {c:?}");
-    assert_eq!(c.etapes, 1, "{nom} : une seule étape : {c:?}");
-    assert_eq!(c.rejeux, 0, "{nom} : aucun rejeu sur le fil de l'interface : {c:?}");
-    assert!(c.deja_intact, "{nom} : ce qui était dessiné ne bouge pas : {c:?}");
-    assert!(c.annule_ok, "{nom} : annuler rend tout : {c:?}");
-    assert!(c.statut.contains(mots), "{nom} : le message dit pourquoi ({mots}) : {:?}", c.statut);
-    assert!(c.statut.contains(" / "), "{nom} : le message est là dès le geste, et encore au lever : {:?}", c.statut);
-}
+// ------------------------------------------------------------------------------ la case traversée ne reçoit rien, jamais caché
 
 #[test]
-fn a_stroke_across_a_locked_layer_writes_nothing_stays_visible_and_says_why() {
+fn a_stroke_across_a_locked_layer_writes_nothing_and_stays_whole_and_visible() {
     for bitmap in [false, true] {
-        verifier_refus(Variante::Verrou, bitmap, "verrouillé");
+        verifier_traverse(Variante::Verrou, bitmap);
     }
 }
 
 #[test]
-fn a_stroke_across_a_hidden_layer_writes_nothing_stays_visible_and_says_why() {
+fn a_stroke_across_a_hidden_layer_writes_nothing_and_stays_whole_and_visible() {
     for bitmap in [false, true] {
-        verifier_refus(Variante::Masque, bitmap, "masqué");
+        verifier_traverse(Variante::Masque, bitmap);
     }
 }
 
 #[test]
-fn a_stroke_across_a_plan_without_a_layer_of_its_kind_stays_visible_and_says_why() {
-    verifier_refus(Variante::AutreSorte, false, "vectoriel");
-    verifier_refus(Variante::AutreSorte, true, "bitmap");
+fn a_stroke_across_a_plan_without_a_layer_of_its_kind_stays_whole_and_visible() {
+    verifier_traverse(Variante::AutreSorte, false);
+    verifier_traverse(Variante::AutreSorte, true);
 }
 
 #[test]
-fn a_stroke_across_a_transformed_layer_stays_visible_and_says_why() {
+fn a_stroke_across_a_transformed_layer_stays_whole_and_visible() {
     for bitmap in [false, true] {
-        verifier_refus(Variante::CalqueTransforme, bitmap, "transformé");
+        verifier_traverse(Variante::CalqueTransforme, bitmap);
     }
 }
 
 #[test]
-fn a_stroke_across_a_cancelled_plan_stays_visible_and_says_why() {
+fn a_stroke_across_a_cancelled_plan_stays_whole_and_visible() {
     for bitmap in [false, true] {
-        verifier_refus(Variante::Ecarte, bitmap, "écarté");
+        verifier_traverse(Variante::Ecarte, bitmap);
     }
+}
+
+/// Un point du papier, loin de toute case : le coin haut gauche de la vue (vérifié).
+fn coin_du_papier(b: &Banc) -> Pos2 {
+    let view = b.app.vignettes.view;
+    let a = pos2(view.left() + 6.0, view.top() + 6.0);
+    let l = b.app.board_layout();
+    let champs = crate::horschamp::champs(&l, b.app.settings.vignettes.debord_fraction());
+    let (p, q) = (b.app.vignettes.xf.to_board(a), b.app.vignettes.xf.to_board(a + eframe::egui::vec2(80.0, 40.0)));
+    assert!(champs.iter().all(|c| !c.contains(p) && !c.contains(q)), "le coin est hors de tout champ");
+    a
+}
+
+/// Un trait droit **coupé au lâcher comme avant la partie 131** (le trait d'un projet d'avant : ses parts sur les cases qui ne pouvaient pas les
+/// recevoir sont par-dessus elles), puis le repos.
+fn tracer_coupe(b: &mut Banc, de: Pos2, a: Pos2) {
+    crate::vignettes_selection_tests::tracer_comme_avant(b, de, a);
 }
 
 /// À chaque image d'écran depuis le lâcher, le trait reste entier : il n'apparaît pas pour disparaître au lever.
@@ -540,16 +567,23 @@ fn a_locked_layer_keeps_every_pixel_and_receives_again_once_unlocked() {
         repos(&mut b);
         assert_eq!(encre_du_plan(&b.app.doc, id), avant, "{} : rien n'est écrit dans le calque verrouillé", sorte(bitmap));
         assert_eq!(empreinte(&b), e0, "{}", sorte(bitmap));
+        // Poser le stylet dans la case verrouillée : rien non plus (on n'y dessine pas), et rien ne va sur la planche à sa place.
+        let y = r.top() + r.height() * 0.6;
+        tracer(&mut b, pos2(r.center().x - 20.0, y), pos2(r.center().x + 20.0, y));
+        repos(&mut b);
+        assert_eq!(encre_du_plan(&b.app.doc, id), avant, "{} : on ne dessine pas dans le calque verrouillé", sorte(bitmap));
+        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "{} : rien sur la planche", sorte(bitmap));
+        // Déverrouillé : un trait posé dans sa case y entre normalement. (Partie 131 : un trait qui la traverse, parti d'ailleurs, n'y entre plus.)
         b.app.doc.panels[PLAN].layers[0].locked = false;
         b.chauffer(2);
-        let y = rd.top() + rd.height() * 0.6;
-        tracer(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
+        tracer(&mut b, pos2(r.center().x - 20.0, y), pos2(r.center().x + 20.0, y));
         repos(&mut b);
         assert_ne!(encre_du_plan(&b.app.doc, id), avant, "{} : déverrouillé, il reçoit", sorte(bitmap));
     }
 }
 
-/// La part posée par-dessus la case : la gomme l'efface d'un geste, sans clic droit et sans toucher au dessin du plan.
+/// La part posée par-dessus la case (un trait d'avant la partie 131, coupé ; depuis, un trait qu'un déplacement mène sur une case qui ne peut pas
+/// le recevoir) : la gomme l'efface d'un geste, sans clic droit et sans toucher au dessin du plan.
 #[test]
 fn the_eraser_removes_a_part_left_on_top_of_a_case_and_nothing_else() {
     for bitmap in [false, true] {
@@ -563,7 +597,7 @@ fn the_eraser_removes_a_part_left_on_top_of_a_case_and_nothing_else() {
         let case = case_ecran(&b, id);
         let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN + 1].id));
         let y = rd.top() + rd.height() * 0.35;
-        tracer(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
+        tracer_coupe(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
         repos(&mut b);
         assert_eq!(dessus(&b), 1, "{}", sorte(bitmap));
         let plan = encre_du_plan(&b.app.doc, id);
@@ -607,9 +641,10 @@ fn a_stroke_across_a_cancelled_plan_stays_visible_after_the_plan_comes_back() {
     assert_eq!(encre_du_plan(&b.app.doc, id), (0, 0), "le plan n'a rien reçu");
 }
 
-/// Les petits débordements restent à la marge : une part dans la marge d'une case à l'autre caméra va dans son plan, et ne recouvre jamais l'image d'à côté.
+/// Un grand débord (40 %) et une case verrouillée à côté : le trait parti de la case voisine reste entier dans son plan et se voit jusque dans
+/// la case verrouillée, par-dessus son image ; rien n'est posé sur la planche. (Partie 131 ; avant : sa part sur la case verrouillée était par-dessus.)
 #[test]
-fn a_stroke_does_not_leave_a_refused_case_covered_by_a_margin_of_its_neighbour() {
+fn a_stroke_over_a_locked_case_with_wide_margins_stays_whole_and_visible() {
     let Some(mut b) = planche(des_plans(18, false), 6, 1.0) else { return println!("pas de carte graphique") };
     appliquer(&mut b, Variante::Verrou, false);
     b.app.settings.vignettes.debord = 40;
@@ -621,9 +656,11 @@ fn a_stroke_does_not_leave_a_refused_case_covered_by_a_margin_of_its_neighbour()
     repos(&mut b);
     let img = b.capturer().unwrap();
     let r = relever(&img, de, a);
-    println!("TRAIT marge sur case refusée : {r:?}");
-    assert!(r.trou <= TROU_PERMIS, "l'image refusée passe avant la marge de sa voisine : {r:?}");
-    assert!(b.app.doc.annotations.traces.iter().any(|t| t.dessus), "la part est par-dessus");
+    println!("TRAIT sur case verrouillée, grand débord : {r:?}");
+    assert!(r.trou <= TROU_PERMIS, "le trait se voit en entier, par-dessus l'image de la case verrouillée : {r:?}");
+    assert_eq!(traits_hors_cadres(&b.app.doc), 0, "rien sur la planche");
+    assert_eq!(encre_du_plan(&b.app.doc, b.app.doc.panels[PLAN - 1].id).0, 1, "le trait est entier dans le plan où il commence");
+    assert_eq!(encre_du_plan(&b.app.doc, b.app.doc.panels[PLAN].id), (0, 0), "la case verrouillée n'a rien reçu");
 }
 
 /// À l'export, la part posée sur une case écartée part avec elle : le plan est absent, elle ne flotte pas sur la planche exportée.
@@ -634,7 +671,8 @@ fn the_part_on_a_cancelled_plan_is_not_in_the_board_export() {
     b.chauffer(4);
     let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN].id));
     let y = rd.top() + rd.height() * 0.35;
-    tracer(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
+    // (Un trait d'avant la partie 131, coupé : sa part sur la case écartée est par-dessus elle.)
+    tracer_coupe(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
     repos(&mut b);
     let i = b.app.doc.annotations.traces.iter().position(|t| t.dessus).expect("la part sur la case écartée");
     let opt = b.app.planche_options(&crate::planche::Options::default());
@@ -748,11 +786,14 @@ fn mesure_le_cout_du_lever_a_fort_zoom() {
     }
 }
 
-/// La planche a atteint `MAX_TRACES` : la part ne peut pas y être posée, elle reste où elle était (le dessin d'origine), et le message dit la vérité.
+/// La planche a atteint `MAX_TRACES` : un trait parti du papier ne peut pas y être posé, il reste où il a été tracé (le dessin de la case la plus
+/// proche, hors de son cadre), et le message dit la vérité. (Partie 131 : seul un trait parti du papier va sur la planche.)
 #[test]
-fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_message_says_so() {
+fn when_the_board_is_full_a_paper_stroke_stays_in_the_drawing_where_it_was_traced_and_the_message_says_so() {
     for bitmap in [false, true] {
-        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let Some((mut b, _, _)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let de = coin_du_papier(&b);
+        let a = de + eframe::egui::vec2(80.0, 40.0);
         let l = b.app.board_layout();
         let carte = l.cards[0].id;
         let calque = b.app.doc.annotations.calque_hors_cadres();
@@ -777,8 +818,7 @@ fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_messag
                 b.app.doc.annotations.traces.push(crate::annotations::Trace::new(calque, crate::annotations::Ancre { card: carte, after: 0, rank: 0 }, [0, 0, 0], vec![crate::vector::VPoint { x: 0.0, y: 3.0, r: 0.001 }]));
             }
         }
-        let (x, y) = (b.app.vignettes.xf, case_ecran(&b, b.app.doc.panels[PLAN].id));
-        let milieu = x.to_board(pos2(y.center().x, de.y));
+        let milieu = b.app.vignettes.xf.to_board(de + (a - de) * 0.5);
         let aff = crate::horschamp::aff_de_la_case(&b.app.doc, &l, 0).expect("caméra droite");
         let sur_la_feuille = pos2((milieu.x - aff.tx) / aff.a, (milieu.y - aff.ty) / aff.a);
         tracer(&mut b, de, a);
@@ -798,22 +838,25 @@ fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_messag
         } else {
             c.vector.as_ref().is_some_and(|v| v.elements.iter().any(|e| e.bounds().expand(20.0).contains(sur_la_feuille)))
         };
-        assert!(garde, "{} : la part est restée dans le dessin d'origine", sorte(bitmap));
+        assert!(garde, "{} : le trait est resté dans le dessin où il a été tracé", sorte(bitmap));
     }
 }
 
-/// Le calque « Hors cadres » caché : une part neuve le remontre (sinon elle disparaîtrait au lever), le message le dit, annuler le recache.
+/// Le calque « Hors cadres » caché : un trait du papier le remontre (sinon il disparaîtrait au lever), le message le dit, annuler le recache.
 #[test]
-fn a_hidden_off_frame_layer_comes_back_when_a_part_lands_on_it() {
+fn a_hidden_off_frame_layer_comes_back_when_a_paper_stroke_lands_on_it() {
     for bitmap in [false, true] {
-        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let Some((mut b, _, _)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let de = coin_du_papier(&b);
+        let a = de + eframe::egui::vec2(80.0, 40.0);
         let id = b.app.doc.annotations.calque_hors_cadres();
         b.app.doc.annotations.regler_visible(id, false);
         tracer(&mut b, de, a);
         repos(&mut b);
+        assert_eq!(traits_hors_cadres(&b.app.doc), 1, "{} : le trait est sur la planche, entier", sorte(bitmap));
         let img = b.capturer().unwrap();
         let r = relever(&img, de, a);
-        assert!(r.trou <= TROU_PERMIS, "{} : la part ne disparaît pas : {r:?}", sorte(bitmap));
+        assert!(r.trou <= TROU_PERMIS, "{} : le trait ne disparaît pas : {r:?}", sorte(bitmap));
         assert!(b.app.status.contains("Hors cadres"), "{} : {}", sorte(bitmap), b.app.status);
         b.app.run_action("edition.annuler");
         b.chauffer(2);
@@ -825,7 +868,8 @@ fn a_hidden_off_frame_layer_comes_back_when_a_part_lands_on_it() {
 #[test]
 fn the_eraser_does_not_remove_what_a_hidden_off_frame_layer_hides() {
     let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
-    tracer(&mut b, de, a);
+    // (Un trait d'avant la partie 131, coupé : des parts sur le papier et une par-dessus la case verrouillée.)
+    tracer_coupe(&mut b, de, a);
     repos(&mut b);
     let avant = traits_hors_cadres(&b.app.doc);
     assert!(avant >= 2);
@@ -846,7 +890,8 @@ fn the_eraser_does_not_remove_what_a_hidden_off_frame_layer_hides() {
 fn the_eraser_on_a_refused_part_erases_only_refused_parts_and_undo_redo_follow() {
     for bitmap in [false, true] {
         let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
-        tracer(&mut b, de, a);
+        // (Un trait d'avant la partie 131, coupé au lâcher.)
+        tracer_coupe(&mut b, de, a);
         repos(&mut b);
         let avant = traits_hors_cadres(&b.app.doc);
         // (Vectoriel : trois tronçons, le papier de chaque côté et la case ; bitmap, partie 127 : un morceau pour le papier, un par-dessus la case.)
@@ -877,7 +922,8 @@ fn undo_then_redo_of_a_stroke_brings_the_refused_part_back() {
         let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
         let id = b.app.doc.panels[PLAN].id;
         let plan = encre_du_plan(&b.app.doc, id);
-        tracer(&mut b, de, a);
+        // (Un trait d'avant la partie 131, coupé au lâcher : sa part sur la case verrouillée est par-dessus elle.)
+        tracer_coupe(&mut b, de, a);
         repos(&mut b);
         b.app.run_action("edition.annuler");
         repos(&mut b);
@@ -891,9 +937,10 @@ fn undo_then_redo_of_a_stroke_brings_the_refused_part_back() {
     }
 }
 
-/// Le chemin A, B, A : chaque case n'est annoncée qu'une fois pendant le geste.
+/// Partie 131 (avant : chaque case qui ne pouvait pas recevoir sa part était annoncée une fois pendant le geste). Un trait qui traverse des cases
+/// verrouillées ne leur donne rien et ne perd rien : il n'y a rien à annoncer, la ligne d'état reste muette.
 #[test]
-fn a_case_is_announced_only_once_during_a_gesture() {
+fn crossing_locked_cases_announces_nothing_during_a_gesture() {
     let Some(mut b) = planche(des_plans(18, false), 6, 1.0) else { return println!("pas de carte graphique") };
     b.app.doc.panels[1].layers[0].locked = true;
     b.app.doc.panels[2].layers[0].locked = true;
@@ -914,10 +961,10 @@ fn a_case_is_announced_only_once_during_a_gesture() {
         }
     }
     println!("MESSAGES {dits:?}");
-    assert_eq!(dits.len(), 2, "une fois par case : {dits:?}");
+    assert!(dits.is_empty(), "rien à annoncer : {dits:?}");
 }
 
-/// Annuler en plein geste : le trait part, rien n'est posé, et la ligne d'état ne dit plus qu'il reste sur la planche.
+/// Annuler en plein geste : le trait part, rien n'est posé, et la ligne d'état ne dit pas qu'il reste sur la planche.
 #[test]
 fn undo_during_the_gesture_leaves_nothing_and_no_stale_message() {
     for bitmap in [false, true] {
@@ -925,7 +972,7 @@ fn undo_during_the_gesture_leaves_nothing_and_no_stale_message() {
         let id = b.app.doc.panels[PLAN].id;
         let plan = encre_du_plan(&b.app.doc, id);
         main_baissee(&mut b, de, a);
-        assert!(b.app.status.contains("reste sur la planche"), "{}", b.app.status);
+        assert!(!b.app.status.contains("reste sur la planche"), "rien n'est annoncé pendant le geste : {}", b.app.status);
         b.app.run_action("edition.annuler");
         b.chauffer(1);
         b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
@@ -937,9 +984,10 @@ fn undo_during_the_gesture_leaves_nothing_and_no_stale_message() {
     }
 }
 
-/// Échap ne défait pas un trait du pinceau : la part est posée, une étape, et le message reste vrai.
+/// Échap ne défait pas un trait du pinceau : il est posé, entier, dans le plan où il a commencé, en une étape ; rien par-dessus la case verrouillée
+/// qu'il traverse, rien à dire. (Partie 131.)
 #[test]
-fn escape_during_the_gesture_keeps_the_stroke_and_the_message_stays_true() {
+fn escape_during_the_gesture_keeps_the_stroke_whole_in_its_plan() {
     let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
     let n = b.app.history.undo_len();
     main_baissee(&mut b, de, a);
@@ -949,8 +997,9 @@ fn escape_during_the_gesture_keeps_the_stroke_and_the_message_stays_true() {
     b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
     repos(&mut b);
     assert_eq!(b.app.history.undo_len(), n + 1);
-    assert_eq!(dessus(&b), 1);
-    assert!(b.app.status.contains("reste sur la planche"), "{}", b.app.status);
+    assert_eq!((dessus(&b), traits_hors_cadres(&b.app.doc)), (0, 0), "rien sur la planche");
+    assert_eq!(encre_du_plan(&b.app.doc, b.app.doc.panels[PLAN - 1].id).0, 1, "le trait est entier dans le plan où il a commencé");
+    assert!(!b.app.status.contains("reste sur la planche"), "{}", b.app.status);
 }
 
 /// Changer de plan en plein geste : pas de plantage, le calque verrouillé reste intact, et tout s'annule.
@@ -998,7 +1047,8 @@ fn opening_another_tab_during_the_gesture_writes_nothing_in_it() {
     }
 }
 
-/// Film partagé : on n'écrit jamais dans le plan d'un autre ; la part reste visible, le message le dit.
+/// Film partagé : on n'écrit jamais dans le plan d'un autre. Un trait parti de mon plan qui entre dans la case d'un plan tenu par un autre reste
+/// entier dans le mien (partie 131) : rien dans le sien, rien sur la planche (elle ne s'enregistre qu'avec le jeton du montage : rien à y perdre).
 #[test]
 fn in_a_shared_film_a_stroke_never_writes_in_a_plan_held_by_someone_else() {
     use crate::cooperation_tests::confirmer;
@@ -1029,25 +1079,19 @@ fn in_a_shared_film_a_stroke_never_writes_in_a_plan_held_by_someone_else() {
     b.chauffer(3);
     println!("PARTAGE : encre du plan 0 {:?}, plan courant {}, traits sur la planche {}, sur une case {}, message {:?}", encre_du_plan(&b.app.doc, ids[0]), b.app.cur_panel, traits_hors_cadres(&b.app.doc), dessus(&b), b.app.status);
     assert_eq!(encre_du_plan(&b.app.doc, ids[1]), tenu, "rien dans le plan de Léa");
-    let bitmap = b.app.layers().get(b.app.cur_layer).is_some_and(|l| l.kind == crate::document::LayerKind::Bitmap);
-    if bitmap {
-        // (Partie 127, contre-relecture : sans le jeton du montage, la couche bitmap de la planche ne serait pas enregistrée ; elle ne reçoit rien, le
-        // bout reste dans le dessin du plan 0, hors de sa case.)
-        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "rien sur la planche sans le jeton");
-        assert!(b.app.status.contains("montage n'est pas à toi"), "{}", b.app.status);
-    } else {
-        assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
-        assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
-    }
+    assert_ne!(encre_du_plan(&b.app.doc, ids[0]), (0, 0), "le trait est dans mon plan, entier");
+    assert_eq!((traits_hors_cadres(&b.app.doc), dessus(&b)), (0, 0), "rien sur la planche");
 }
 
-/// La part sur une case garde le rang de sa case (le secours de `rattacher_manquantes` reste juste).
+/// La part sur une case garde le rang de sa case (le secours de `rattacher_manquantes` reste juste). (Un trait d'avant la partie 131, coupé au lâcher.)
 #[test]
 fn a_part_on_a_case_remembers_the_rank_of_its_case() {
     let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
     let etapes = b.app.history.undo_len();
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(true));
     main_baissee(&mut b, de, a);
     b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(false));
     assert_eq!(b.app.history.undo_len(), etapes + 1, "réparti dès l'image du lâcher");
     let t = b.app.doc.annotations.traces.iter().find(|t| t.dessus).expect("la part");
     assert_eq!(t.anchor.rank as usize, PLAN);

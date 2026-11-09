@@ -100,8 +100,11 @@ fn shift_click_chooses_a_plan_and_escape_or_a_click_on_the_paper_removes_it() {
 
 // ------------------------------------------------------------------------------ dessiner partout
 
+/// Partie 131 (avant : la part dans la case allait à son plan, le bout dans la case vide faisait naître le sien, le reste restait sur la planche).
+/// Un trait appartient tout entier à l'endroit où il commence : parti du papier, il est au papier, entier, même s'il traverse une case et finit
+/// dans une case vide ; aucun plan ne naît.
 #[test]
-fn a_stroke_from_the_paper_through_a_case_into_empty_cases_keeps_every_part_in_one_undo_step() {
+fn a_stroke_from_the_paper_through_a_case_into_empty_cases_stays_whole_on_the_paper_in_one_undo_step() {
     for bitmap in [false, true] {
         let mut b = ouvert(plan_seul(bitmap), 4);
         let v = vignette(&b, 0);
@@ -109,19 +112,16 @@ fn a_stroke_from_the_paper_through_a_case_into_empty_cases_keeps_every_part_in_o
         // Du papier sous la case, à travers elle, dans la première case vide et au-delà.
         let de = v.left_bottom() + vec2(40.0, 60.0);
         let fin = v.right_top() + vec2(v.width() * 1.3, -30.0);
+        let l = b.app.board_layout();
+        let depart = b.app.vignettes.xf.to_board(de);
+        assert!(!crate::horschamp::champs(&l, b.app.settings.vignettes.debord_fraction()).iter().any(|c| c.contains(depart)), "le trait part hors du champ de toute case");
         glisser(&mut b, &vague(de, fin, 40));
         b.chauffer(8);
-        assert!(encre(&b.app.doc, 0), "bitmap {bitmap} : la part dans la case est dans son plan");
-        assert!(hors_cadres(&b) >= 1, "bitmap {bitmap} : ce qui ne tombe dans aucun champ reste sur la planche");
-        assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape, plans créés compris");
+        assert!(!encre(&b.app.doc, 0), "bitmap {bitmap} : rien n'entre dans le plan de la case traversée");
+        assert_eq!(hors_cadres(&b), 1, "bitmap {bitmap} : le trait est sur la planche, entier, en un seul morceau");
+        assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape");
         assert!(b.app.vignettes.libre);
-        if bitmap {
-            // (Un plan neuf n'a qu'un calque vectoriel : un trait bitmap n'y entre pas, il ne crée donc pas de plan vide et sa part reste sur la planche.)
-            assert_eq!(b.app.doc.panels.len(), plans);
-            continue;
-        }
-        assert!(b.app.doc.panels.len() > plans, "la case vide touchée a fait son plan");
-        assert!(encre(&b.app.doc, 1), "et son plan a sa part");
+        assert_eq!(b.app.doc.panels.len(), plans, "bitmap {bitmap} : le bout du trait ne fait naître aucun plan");
         // Annuler : tout part d'un coup ; rétablir : tout revient.
         b.app.run_action("edition.annuler");
         b.chauffer(3);
@@ -129,13 +129,15 @@ fn a_stroke_from_the_paper_through_a_case_into_empty_cases_keeps_every_part_in_o
         assert_eq!(pas_d_annulation(&b), n);
         b.app.run_action("edition.retablir");
         b.chauffer(3);
-        assert!(b.app.doc.panels.len() > plans && encre(&b.app.doc, 0) && encre(&b.app.doc, 1) && hors_cadres(&b) >= 1, "rétabli");
+        assert!(b.app.doc.panels.len() == plans && !encre(&b.app.doc, 0) && hors_cadres(&b) == 1, "rétabli");
     }
 }
 
+/// Partie 131 (avant : chaque case recevait sa part, dans l'image qu'elle montre). Le trait va tout entier à l'image que montre **la case où il
+/// commence** ; les autres cases du plan ne reçoivent rien.
 #[test]
-fn a_stroke_across_cases_of_a_plan_with_several_keys_goes_to_the_key_shown_in_each_case() {
-    // Le plan 1 a trois cases (images 0, a, b) : une part dans la case du milieu va à l'image que cette case montre.
+fn a_stroke_goes_whole_to_the_key_shown_by_the_case_where_it_starts() {
+    // Le plan 1 a trois cases (images 0, a, b) : un trait parti de la troisième, à travers la deuxième, est dans l'image de la troisième.
     for bitmap in [false, true] {
         let mut doc = quatre_plans();
         if bitmap {
@@ -168,32 +170,44 @@ fn a_stroke_across_cases_of_a_plan_with_several_keys_goes_to_the_key_shown_in_ea
         glisser(&mut b, &vague(v2.center(), v1.center(), 24));
         let apres: Vec<usize> = frames.iter().map(|f| quantite(&b, *f)).collect();
         assert_eq!(apres[0], avant[0], "bitmap {bitmap} : rien dans la clé de la case 1 : {avant:?} {apres:?}");
-        assert!(apres[1] > avant[1], "bitmap {bitmap} : la clé de la case 2, pas le plan précédemment courant : {avant:?} {apres:?}");
-        assert!(apres[2] > avant[2], "bitmap {bitmap} : la clé de la case 3 : {avant:?} {apres:?}");
+        assert_eq!(apres[1], avant[1], "bitmap {bitmap} : rien dans la clé de la case 2, que le trait traverse : {avant:?} {apres:?}");
+        assert!(apres[2] > avant[2], "bitmap {bitmap} : tout le trait est dans la clé de la case 3, où il commence : {avant:?} {apres:?}");
+        assert_eq!(hors_cadres(&b), 0, "bitmap {bitmap} : rien sur le papier");
         assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap}");
     }
 }
+
+/// Partie 131 (avant : la part du trait dans la case verrouillée restait sur la planche, par-dessus elle). Un trait qui traverse une case ne lui
+/// donne rien : il reste entier dans le plan où il commence, le calque verrouillé n'est pas touché, rien ne va sur le papier.
 #[test]
-fn a_layer_that_cannot_receive_keeps_its_part_on_the_board_and_nothing_is_lost() {
+fn a_stroke_crossing_a_locked_case_stays_whole_in_its_own_plan() {
     let mut b = ouvert(quatre_plans(), 4);
-    for l in &mut b.app.doc.panels[1].layers {
+    // (Les cases 5 et 6 : les plans 3 et 4, d'une seule case chacun. Le plan 1 en a trois, qui montreraient toutes un dessin neuf : il garde
+    // la règle d'avant, `render::dessins_communs`.)
+    for l in &mut b.app.doc.panels[3].layers {
         l.locked = true;
     }
     b.chauffer(3);
-    let (v2, v3) = (vignette(&b, 2), vignette(&b, 3));
-    glisser(&mut b, &vague(v2.center(), v3.center(), 24));
-    assert!(encre(&b.app.doc, 0), "la case d'où part le trait a sa part");
-    assert!(!encre(&b.app.doc, 1), "le calque verrouillé n'a rien reçu");
-    assert!(hors_cadres(&b) >= 1, "sa part reste sur la planche : rien n'est perdu");
+    let (v4, v5) = (vignette(&b, 4), vignette(&b, 5));
+    glisser(&mut b, &vague(v4.center(), v5.center(), 24));
+    assert!(encre(&b.app.doc, 2), "le trait est dans le plan de la case où il commence");
+    assert!(!encre(&b.app.doc, 3), "le calque verrouillé n'a rien reçu");
+    assert_eq!(hors_cadres(&b), 0, "rien sur le papier : le trait est entier dans son plan");
 }
 
+/// Partie 131 (avant : le bout du trait dans la case vide faisait naître son plan). Le trait reste entier dans le plan où il commence, au-delà
+/// du cadre aussi, et se relit tel quel.
 #[test]
-fn what_is_drawn_across_cases_is_the_same_in_the_storyboard_plan_after_saving_and_reopening() {
+fn what_is_drawn_beyond_the_frame_is_the_same_in_the_storyboard_plan_after_saving_and_reopening() {
     let mut b = ouvert(plan_seul(false), 4);
     let v = vignette(&b, 0);
     glisser(&mut b, &vague(v.center(), v.right_top() + vec2(v.width() * 1.3, 0.0), 40));
     b.chauffer(8);
-    assert!(b.app.doc.panels.len() >= 2 && encre(&b.app.doc, 1));
+    assert!(b.app.doc.panels.len() == 1 && encre(&b.app.doc, 0), "aucun plan ne naît : le trait est entier dans le sien");
+    let cadre = b.app.doc.frame[0] as f32;
+    let au_dela = b.app.doc.cels.values().filter_map(|c| c.vector.as_ref()).flat_map(|v| v.elements.iter()).any(|e| matches!(e, crate::vector::Element::Stroke { points, .. } if points.iter().any(|p| p.x > cadre * 1.5)));
+    assert!(au_dela, "le trait garde ses points au-delà du cadre, dans le dessin de son plan");
+    assert_eq!(hors_cadres(&b), 0);
     let dossier = std::env::temp_dir().join(format!("shot-test-canevas-libre-{}-{:?}", std::process::id(), std::thread::current().id()));
     std::fs::remove_dir_all(&dossier).ok();
     std::fs::create_dir_all(&dossier).unwrap();
@@ -362,22 +376,27 @@ fn a_stroke_drawn_in_the_frame_b_of_a_camera_move_is_written_where_it_was_drawn_
     std::fs::remove_dir_all(&dossier).ok();
 }
 
+/// Partie 131 (avant : la part dans le champ de la tuile allait au plan, le reste sur la planche). Parti du papier, le trait y est tout entier,
+/// à travers la tuile d'un mouvement de caméra aussi, avec la couleur du pinceau.
 #[test]
-fn a_stroke_leaving_the_field_of_a_camera_move_goes_on_the_board_with_the_same_colour_everywhere() {
+fn a_stroke_from_the_paper_across_a_camera_move_is_on_the_board_whole_with_the_colour_of_the_brush() {
     let mut b = avec_mouvement();
     b.app.set_tool(Tool::Brush);
     b.app.color = [200, 30, 40];
     let l = b.app.board_layout();
     let tuile = b.app.vignettes.xf.rect(l.move_of(crate::vignettes_camera_tests::K).unwrap().tuile.rect);
-    // Du papier au-dessus de la tuile, dans son champ, puis au-delà à droite.
-    let de = pos2(tuile.center().x, tuile.top() - 40.0);
+    // Du papier au-dessus de la tuile, hors de tout champ, à travers elle, puis au-delà à droite.
+    let champs = crate::horschamp::champs(&l, b.app.settings.vignettes.debord_fraction());
+    let libre = |p: egui::Pos2| !champs.iter().any(|c| c.contains(b.app.vignettes.xf.to_board(p)));
+    let de = (1..40).map(|k| pos2(tuile.center().x, tuile.top() - 10.0 * k as f32)).find(|p| libre(*p) && b.app.vignettes.view.contains(*p)).expect("du papier au-dessus de la tuile");
     let fin = pos2(tuile.right() + 90.0, tuile.center().y);
     let n = pas_d_annulation(&b);
+    let avant = encre(&b.app.doc, 1);
     glisser(&mut b, &vague(de, fin, 40));
     b.chauffer(10);
     assert_eq!(pas_d_annulation(&b), n + 1, "une seule étape");
-    assert!(encre(&b.app.doc, 1), "la part dans le champ est dans le plan");
-    assert!(hors_cadres(&b) >= 1, "la part hors du champ reste sur la planche");
+    assert_eq!(encre(&b.app.doc, 1), avant, "rien n'entre dans le plan traversé");
+    assert_eq!(hors_cadres(&b), 1, "le trait est sur la planche, entier");
     let a = &b.app.doc.annotations;
     for t in a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)) {
         assert_eq!(t.color, [200, 30, 40], "la couleur du trait d'origine");

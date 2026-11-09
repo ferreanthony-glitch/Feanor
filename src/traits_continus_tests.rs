@@ -260,8 +260,10 @@ fn a_vertical_stroke_down_a_column_and_a_stroke_on_the_japanese_board_stay_conti
     }
 }
 
+/// Partie 131 (avant : la case vide touchée par le bout du trait faisait son plan). Le trait reste entier dans le plan où il commence, visible
+/// jusque dans les cases vides ; aucun plan ne naît.
 #[test]
-fn a_stroke_from_the_last_plan_into_empty_cases_stays_continuous_at_rest_and_makes_new_plans() {
+fn a_stroke_from_the_last_plan_into_empty_cases_stays_continuous_at_rest_and_makes_no_plan() {
     for bitmap in [false, true] {
         for zoom in zooms() {
             let Some(mut b) = planche(des_plans(2, bitmap), 6, zoom) else { return println!("pas de carte graphique") };
@@ -273,9 +275,7 @@ fn a_stroke_from_the_last_plan_into_empty_cases_stays_continuous_at_rest_and_mak
             let (de, a) = (pos2(v.center().x, y), pos2(v.center().x + w * 2.0, y));
             tracer(&mut b, de, a);
             repos(&mut b);
-            if !bitmap {
-                assert!(b.app.doc.panels.len() >= 3, "la case vide touchée fait son plan");
-            }
+            assert_eq!(b.app.doc.panels.len(), 2, "le bout du trait ne fait naître aucun plan");
             let rgba = b.capturer().unwrap();
             let nom = format!("vide-{}-{zoom}", if bitmap { "bitmap" } else { "vecteur" });
             sauver(&rgba, &nom);
@@ -302,8 +302,10 @@ fn points_du_plan(b: &Banc, i: usize) -> Vec<Pos2> {
         .collect()
 }
 
+/// Partie 131 (avant : la part du trait dans la case du dessous entrait dans son plan). Le trait reste entier dans le plan où il commence, et se
+/// voit dans le cadre de la case du dessous, par-dessus son image (la feuille) : rien n'est coupé à l'écran, rien n'entre dans l'autre plan.
 #[test]
-fn a_stroke_going_down_into_the_top_of_the_next_row_enters_that_plan_and_shows_inside_its_frame() {
+fn a_stroke_going_down_into_the_top_of_the_next_row_stays_in_its_plan_and_shows_inside_the_next_frame() {
     // Le débord d'origine et de grands débords (jusqu'à 40 % : la marge de la case du dessus couvre bien plus que l'écart des rangées).
     for bitmap in [false, true] {
         for debord in [12u8, 25, 40] {
@@ -329,22 +331,22 @@ fn a_stroke_going_down_into_the_top_of_the_next_row_enters_that_plan_and_shows_i
             let nom = format!("descend-{}-{debord}", if bitmap { "bitmap" } else { "vecteur" });
             sauver(&rgba, &nom);
             continu(&rgba, de, a, &nom);
+            assert!(!crate::vignettes_tests::encre(&b.app.doc, 7), "{nom} : rien n'est entré dans le plan du dessous");
+            assert!(crate::vignettes_tests::encre(&b.app.doc, 1), "{nom} : le trait est dans le plan où il commence");
             if !bitmap {
-                let dedans = points_du_plan(&b, 7);
+                // Le trait est entier dans le dessin du plan du dessus : ses points vont jusque dans le cadre de la case du dessous.
                 let bord = bas.top();
-                assert!(dedans.iter().any(|p| b.app.vignettes.xf.to_screen(*p).y > bord + bas.height() * 0.25), "{nom} : la part est dans le plan du dessous : {dedans:?}");
-                let haut_b = l.cards[7].thumb;
                 let origine = points_du_plan(&b, 1);
-                assert!(origine.iter().all(|p| !haut_b.shrink(0.5).contains(*p)), "{nom} : rien de la case du dessous n'est resté au plan du dessus");
-            } else {
-                assert!(crate::vignettes_tests::encre(&b.app.doc, 7), "{nom} : la part est dans le plan du dessous");
+                assert!(origine.iter().any(|p| b.app.vignettes.xf.to_screen(*p).y > bord + bas.height() * 0.25), "{nom} : le plan du dessus garde le trait jusque dans la case du dessous : {origine:?}");
             }
         }
     }
 }
 
+/// Partie 131 (avant : la part du trait dans l'enveloppe du mouvement entrait dans la feuille de ce plan). Le trait reste entier dans le plan où
+/// il commence et se voit par-dessus la tuile du plan à mouvement.
 #[test]
-fn a_stroke_into_a_plan_with_a_camera_move_enters_its_sheet_and_stays_continuous() {
+fn a_stroke_into_a_plan_with_a_camera_move_stays_in_its_plan_and_stays_continuous() {
     let Some(mut b) = planche(crate::vignettes_camera_tests::plan_court(), 6, 1.0) else { return println!("pas de carte graphique") };
     crate::vignettes_camera_tests::deux_cadres(&mut b.app.doc, 1, 160.0, 0.0);
     b.chauffer(4);
@@ -352,16 +354,21 @@ fn a_stroke_into_a_plan_with_a_camera_move_enters_its_sheet_and_stays_continuous
     let k = crate::vignettes_camera_tests::K;
     let l = b.app.board_layout();
     let xf = b.app.vignettes.xf;
-    let (avant, m) = (xf.rect(l.cards[k - 1].thumb), xf.rect(l.move_of(k).expect("mouvement").tuile.rect));
+    // (Le trait part de la case d'après, celle du plan 3, qui n'a qu'une case. Celle d'avant est la troisième case du plan 1 : ses trois cases
+    // montreraient toutes ce dessin neuf, il garde la règle d'avant, `render::dessins_communs`.)
+    let (voisine, m) = (xf.rect(l.cards[k + 1].thumb), xf.rect(l.move_of(k).expect("mouvement").tuile.rect));
     let y = m.top() + m.height() * 0.3;
-    let (de, a) = (pos2(avant.center().x, y), pos2(m.center().x, y));
+    let (de, a) = (pos2(voisine.center().x, y), pos2(m.center().x, y));
     let n = crate::vignettes_tests::pas_d_annulation(&b);
+    let (origine, avant) = (l.cards[k + 1].panel, crate::vignettes_tests::encre(&b.app.doc, 1));
+    assert_ne!(origine, 1, "le trait part d'un autre plan que celui du mouvement");
     tracer(&mut b, de, a);
     repos(&mut b);
     let rgba = b.capturer().unwrap();
     sauver(&rgba, "mouvement");
     continu(&rgba, de, a, "mouvement");
-    assert!(crate::vignettes_tests::encre(&b.app.doc, 1), "la part dans l'enveloppe est dans le plan à mouvement");
+    assert!(crate::vignettes_tests::encre(&b.app.doc, origine), "le trait est dans le plan où il commence");
+    assert_eq!(crate::vignettes_tests::encre(&b.app.doc, 1), avant, "rien n'est entré dans le plan à mouvement");
     assert_eq!(crate::vignettes_tests::pas_d_annulation(&b), n + 1);
 }
 
@@ -589,25 +596,41 @@ fn the_margin_shows_on_the_paper_for_every_plan_and_the_passe_partout_hides_it()
     }
 }
 
+/// Partie 131, **la feuille ou le film** (avant : ce qui dépassait d'une case passait sous l'image des autres). Sur la planche rien n'est caché
+/// par une case : le trait d'une case qui monte dans l'image de la case du dessus s'y voit, par-dessus elle, sans être dans son plan. Avec le
+/// passe-partout, chaque case ne montre que son plan : le trait ne se voit plus que dans la sienne.
 #[test]
-fn the_margin_never_covers_the_image_of_another_case() {
-    // Un grand débord : le trait monte dans la marge de la case 7, dont la marge couvre l'image de la case du dessus. Rien ne vient par-dessus elle.
-    let Some(mut b) = planche(des_plans(18, false), 6, 1.0) else { return println!("pas de carte graphique") };
-    b.app.settings.vignettes.debord = 40;
-    b.app.layout.card_size = 800.0;
-    b.app.board_zoom = 0.0;
-    b.chauffer(8);
-    b.attendre_vignettes();
-    // Dans le cadre de la case 1, un trait la traverse ; une case voisine en reçoit une part dans sa marge, sous l'image.
-    let l = b.app.board_layout();
-    let xf = b.app.vignettes.xf;
-    let (haut, bas) = (xf.rect(l.cards[1].thumb), xf.rect(l.cards[7].thumb));
-    let x = bas.left() + 20.0;
-    tracer(&mut b, pos2(x, bas.center().y), pos2(x, bas.top() - 2.0));
-    repos(&mut b);
-    let rgba = b.capturer().unwrap();
-    assert_eq!(poids_dans(&rgba, haut), 0, "l'image de la case du dessus reste nette");
-    assert!(poids_dans(&rgba, bas) > 0);
+fn on_the_sheet_a_stroke_shows_over_the_image_of_another_case_and_the_passe_partout_shows_the_film() {
+    for bitmap in [false, true] {
+        let Some(mut b) = planche(des_plans(18, bitmap), 6, 1.0) else { return println!("pas de carte graphique") };
+        let l = b.app.board_layout();
+        let xf = b.app.vignettes.xf;
+        let (haut, bas) = (xf.rect(l.cards[1].thumb), xf.rect(l.cards[7].thumb));
+        let x = bas.left() + bas.width() * 0.3;
+        // De la case 8 (seconde rangée) jusqu'au tiers de la case 2, au-dessus d'elle.
+        tracer(&mut b, pos2(x, bas.center().y), pos2(x, haut.bottom() - haut.height() * 0.35));
+        repos(&mut b);
+        assert!(crate::vignettes_tests::encre(&b.app.doc, 7) && !crate::vignettes_tests::encre(&b.app.doc, 1), "bitmap {bitmap} : le trait est dans le plan où il commence, pas dans celui du dessus");
+        let rgba = b.capturer().unwrap();
+        sauver(&rgba, &format!("feuille-{bitmap}"));
+        assert!(poids_dans(&rgba, haut) > 0, "bitmap {bitmap} : la feuille : le trait se voit dans la case du dessus, par-dessus son image");
+        assert!(poids_dans(&rgba, bas) > 0);
+        // Un autre plan courant, puis celui du dessus : le trait se voit toujours dans sa case (la case courante ne cache rien non plus).
+        for courant in [4, 1] {
+            b.app.select_panel(courant);
+            b.chauffer(4);
+            repos(&mut b);
+            assert!(poids_dans(&b.capturer().unwrap(), haut) > 0, "bitmap {bitmap} : plan courant {courant} : le trait se voit toujours dans la case du dessus");
+        }
+        // Le film : la case du dessus ne montre plus que son plan, vide ; la case du trait garde le sien.
+        b.app.vignettes.annot.marie = true;
+        b.chauffer(4);
+        repos(&mut b);
+        let rgba = b.capturer().unwrap();
+        sauver(&rgba, &format!("film-{bitmap}"));
+        assert_eq!(poids_dans(&rgba, haut), 0, "bitmap {bitmap} : le film : la case du dessus ne montre que son plan");
+        assert!(poids_dans(&rgba, bas) > 0, "bitmap {bitmap} : le film : la case du trait montre son plan");
+    }
 }
 
 #[test]

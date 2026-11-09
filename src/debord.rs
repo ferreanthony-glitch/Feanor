@@ -2,9 +2,9 @@
 //!
 //! Dans la vue Vignettes, on dessine directement dans la case. Le geste ne s'arrête pas au bord : tant que la
 //! main est en bas, on voit **tout le trait**, même par-dessus l'écart, les barres, les bandes de note et les
-//! cases voisines. Au lâcher, il est réparti (`horschamp.rs`) et reste visuellement le même : chaque case montre
-//! sa part, sa marge se voit sur le papier (partie 111) ; le trait tracé reste peint tant que ces parts ne sont
-//! pas rendues (`Tenu`).
+//! cases voisines. Au lâcher, il va à son propriétaire (`horschamp.rs` ; partie 131 : entier, à la case où il
+//! commence ou au papier) et reste visuellement le même : la vignette de sa case s'étend jusqu'à lui, ou le papier
+//! le montre ; le trait tracé reste peint tant que cela n'est pas rendu (`Tenu`).
 //!
 //! Comment, sans rien coûter de plus : la vignette courante est le dessin lui-même, peint dans sa case et coupé
 //! à son bord. Ici, on ne repeint que **ce qui est dehors**, d'après le tracé que le moteur de dessin garde de
@@ -34,8 +34,8 @@ pub(crate) struct Debord {
     pub shapes: Vec<(Rect, Shape)>,
 }
 
-/// Le trait qui vient d'être réparti, gardé à l'écran le temps que ses parts soient rendues en fond. Il part dès qu'elles sont prêtes, ou si la
-/// planche bouge, ou si l'historique change.
+/// Le trait qui vient d'être lâché, gardé à l'écran le temps que ce qui le montre soit rendu en fond (la vignette de sa case, étendue jusqu'à
+/// lui, ou le papier). Il part dès que c'est prêt, ou si la planche bouge, ou si l'historique change.
 #[derive(Clone, Debug)]
 pub(crate) struct Tenu {
     pub debord: Debord,
@@ -44,7 +44,7 @@ pub(crate) struct Tenu {
     pub debut: std::time::Instant,
 }
 
-/// Le plus longtemps qu'un trait réparti reste tenu (un rendu qui n'arrive pas ne le laisse pas à l'écran pour de bon).
+/// Le plus longtemps qu'un trait lâché reste tenu (un rendu qui n'arrive pas ne le laisse pas à l'écran pour de bon).
 pub(crate) const TENU_MAX: std::time::Duration = std::time::Duration::from_secs(4);
 
 // (Le trait qui déborde avait la couleur pâle d'un fantôme tant que la main était en bas ; depuis le 2026-11-05 (« le trait doit garder la

@@ -7,18 +7,22 @@
 //! - **La sélection de la planche** : dans les Vignettes, sur un calque vectoriel, **Ctrl + glisser** trace un lasso **n'importe où** : dans une case,
 //!   sur le papier autour et entre les cases, ou à cheval. **Ctrl + clic** prend ce qui est sous le pointeur. Le lasso est sur la planche, pas dans le
 //!   dessin d'une case : il ne s'arrête à aucun bord. (L'outil Caméra et T tenue gardent Ctrl pour la caméra.)
-//! - **Le trait entier** : un trait tracé à travers les cases est réparti au lâcher (`horschamp.rs`) ; chaque part (dans le dessin d'une case, sur la
-//!   planche) porte le même numéro (`vector::Trace::lien`, `annotations::Trace::lien`). Prendre une part prend toutes celles qui la prolongent : celles
-//!   du même numéro dont un bout touche le sien (`entier_de`). Un projet d'avant n'a pas ce numéro : ses traits déjà coupés restent des morceaux. Une
-//!   copie (dessin dupliqué, plan dupliqué, collage) prend des numéros neufs.
+//! - **Le trait entier** : depuis la partie 131, un trait tracé à travers les cases **reste entier**, dans le dessin de la case où il commence
+//!   ou sur le papier (`horschamp.rs`) ; la planche le montre où qu'il aille, et il se prend partout où il passe. Avant (parties 111 à 128), il
+//!   était réparti au lâcher : chaque part (dans le dessin d'une case, sur la planche) portait le même numéro (`vector::Trace::lien`,
+//!   `annotations::Trace::lien`). Ces parts existent toujours dans les projets d'avant, et dans les dessins que plusieurs cases montrent (le
+//!   Décor, une planche-mère : `render::dessins_communs`, qui gardent la règle d'avant) : prendre une part prend toutes celles qui la
+//!   prolongent, celles du même numéro dont un bout touche le sien (`entier_de`). Une copie (dessin dupliqué, plan dupliqué, collage) prend
+//!   des numéros neufs.
 //! - **Les autres éléments d'une case** (formes remplies, textes, images) sont pris aussi, comme avant : ils restent dans leur case et ne sont pas
 //!   répartis ; le geste les transforme sur place, dans le même pas que les traits.
 //! - **Les gestes** : la boîte du choix est sur la planche (`selbox.rs`, les mêmes poignées). Ctrl + glisser dedans : déplacer ; un coin : l'échelle ;
 //!   hors d'un coin : tourner ; un bord : incliner. Pendant le geste, rien ne change dans le projet : les traits sont peints à leur nouvelle place,
 //!   par-dessus (des lignes de leur couleur ; règle « sans latence »). **Au lâcher**, tout est d'abord calculé sans rien écrire (`selp_preparer`) : si une
-//!   part n'a nulle part où aller (planche pleine), le geste est refusé tel quel et la ligne d'état le dit. Sinon chaque trait est rassemblé, transformé,
-//!   puis réparti comme un trait qu'on vient de tracer (`App::horschamp_repartir_element`) : il garde son rang dans le dessin d'où il vient ; dans une
-//!   case d'arrivée il est posé dessus, ou dessous s'il était peint derrière. Une seule étape d'annulation, même historique plein.
+//!   trait n'a nulle part où aller (planche pleine), le geste est refusé tel quel et la ligne d'état le dit. Sinon chaque trait est rassemblé, transformé,
+//!   puis posé **entier là où son premier point arrive**, comme un trait qu'on vient de tracer (partie 131 ; avant, il était réparti de nouveau
+//!   entre les cases) : il garde son rang dans le dessin d'où il vient ; dans une case d'arrivée il est posé dessus, ou dessous s'il était
+//!   peint derrière. Une seule étape d'annulation, même historique plein.
 //! - **Suppr, Ctrl+C, Ctrl+X, Ctrl+V, recolorer** agissent sur le choix entier, quand le dessin a la main (pas la timeline, le montage ni un panneau).
 //! - **Les refus de la partie 122 restent** : une case dont le calque est verrouillé, masqué, transformé… ne reçoit rien (la part reste sur la planche,
 //!   par-dessus elle, `ajouter_sur_la_case`) ; une part posée dans un tel calque n'est pas prise.
@@ -34,7 +38,7 @@ use crate::board::BoardLayout;
 use crate::boardui::Xf;
 use crate::document::{CelId, LayerKind};
 use crate::history::Edit;
-use crate::horschamp::{Pose, Pt};
+use crate::horschamp::Pose;
 use crate::horschamptex::Recette;
 use crate::selbox::{self, Grabs, Handle, Mods, SelFrame};
 use crate::vector::{Affine, Element, Trace as VTrace, VPoint, VectorDrawing};
@@ -141,9 +145,10 @@ pub(crate) struct Rassemble {
 
 /// Où un trait déplacé sera reposé, calculé avant de rien changer.
 enum Repose {
-    /// Dans le dessin de la case `k` (calque `rang`), ses points dans ce dessin ; puis réparti.
+    /// Dans le dessin de la case `k` (calque `rang`), ses points dans ce dessin : il y reste entier (partie 131).
     Case { k: usize, rang: usize, points: Vec<VPoint>, echelle: f32 },
-    /// Hors de toute case qui puisse le recevoir : sur la planche, par tronçons (la case qu'un tronçon recouvre, s'il en recouvre une ; ses points).
+    /// Hors de toute case qui puisse le recevoir : sur la planche (la case qu'il recouvre là où il commence, s'il en recouvre une ; ses points).
+    /// Depuis la partie 131 : un seul tronçon, le trait entier.
     Planche { troncons: Vec<(Option<crate::board::CardPlace>, Ligne)> },
 }
 
@@ -386,10 +391,16 @@ impl App {
         let boite = Rect::from_points(poly);
         let dessins = self.dessins_des_cases(layout);
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
+        // Le passe-partout montre le film : ce qui dépasse des cases est caché. On ne prend que ce qu'on voit.
+        let film = self.vignettes.annot.marie;
         let mut prises: Vec<(PartRef, bool)> = Vec::new();
         for &(k, cel) in &dessins {
-            // (Seul ce que la case montre compte : un trait d'avant la partie 111 qui dépasse de son champ n'est pas pris par ce qu'on n'y voit pas.)
-            let Some(champ) = champs.get(k).copied().filter(|c| c.intersects(boite)) else { continue };
+            // La règle d'avant la partie 131 (« seul ce que la case montre compte ») vaut encore quand la planche ne montre pas le dessin loin
+            // de sa case : avec le passe-partout, et pour un dessin que plusieurs cases montrent (`render::dessins_communs`).
+            let champ = (film || self.dessin_commun(layout, k, cel)).then(|| champs.get(k).copied().unwrap_or(Rect::NOTHING));
+            if champ.is_some_and(|c| !c.intersects(boite)) {
+                continue;
+            }
             let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
             let Some(d) = self.drawing(cel) else { continue };
             // (Le lasso dans le dessin de la case, pour les éléments qui ne sont pas des traits : s'il a une place dans ce dessin.)
@@ -397,10 +408,12 @@ impl App {
             for (rang, e) in d.elements.iter().enumerate() {
                 let r = PartRef::Dessin { cel, case: layout.cards[k].id, rang };
                 match e {
+                    // (Partie 131 : la case montre tout son dessin, où qu'il aille ; un trait se prend partout où il passe, loin de son cadre aussi.
+                    // Avant, seul ce qui était dans le champ de la case comptait : le reste n'y était pas montré.)
                     Element::Stroke { points, .. } => {
                         if points.iter().any(|p| {
                             let b = pose.planche(p.pos());
-                            champ.contains(b) && boite.contains(b) && crate::vector::point_in_polygon(b, poly)
+                            champ.is_none_or(|c| c.contains(b)) && boite.contains(b) && crate::vector::point_in_polygon(b, poly)
                         }) {
                             prises.push((r, false));
                         }
@@ -422,9 +435,15 @@ impl App {
     /// Ce qui est sous le point `p` (planche), à `tol` près : le trait le plus proche d'une case ou de la planche ; sinon l'élément d'une case sous le point.
     pub(crate) fn selp_sous_le_point(&self, layout: &BoardLayout, p: Pos2, tol: f32) -> Vec<TraitEntier> {
         let dessins = self.dessins_des_cases(layout);
+        let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
+        let film = self.vignettes.annot.marie;
         let mut meilleur: Option<(f32, PartRef)> = None;
         let mut objet: Option<PartRef> = None;
         for &(k, cel) in &dessins {
+            // (Comme le lasso : avec le passe-partout, ou pour un dessin que plusieurs cases montrent, seulement près de sa case.)
+            if (film || self.dessin_commun(layout, k, cel)) && !champs.get(k).is_some_and(|c| c.contains(p)) {
+                continue;
+            }
             let Some(d) = self.drawing(cel) else { continue };
             let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
             for rang in 0..d.elements.len() {
@@ -675,47 +694,48 @@ impl App {
         self.rejeu_cel(cel);
     }
 
-    /// Où reposer le trait rassemblé `t`, **sans rien changer** : dans le dessin de la première case qui peut le recevoir là où il passe (son image, puis sa
-    /// marge), si ce dessin a une place pour tous ses points ; sinon sur la planche, par tronçons (par-dessus l'image des cases qu'il recouvre).
-    fn selp_preparer(&self, layout: &BoardLayout, t: &Rassemble) -> Repose {
-        let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
-        let mut essayees: Vec<usize> = Vec::new();
-        for p in &t.ligne.points {
-            let images = (0..layout.cards.len()).filter(|k| crate::horschamp::dans_image(layout, *k, p.pos()));
-            let marges = champs.iter().enumerate().filter(|(_, c)| c.contains(p.pos())).map(|(k, _)| k);
-            for k in images.chain(marges) {
-                if essayees.contains(&k) {
-                    continue;
-                }
-                essayees.push(k);
-                let Ok(rang) = self.case_recoit(layout, k, LayerKind::Vector) else { continue };
-                let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
-                let pts: Option<Vec<VPoint>> = t.ligne.points.iter().map(|p| pose.dessin_sur(p.pos()).map(|q| VPoint { x: q.x, y: q.y, r: (p.r / pose.echelle_en(q).max(1e-6)).clamp(0.05, 400.0) })).collect();
-                if let Some(points) = pts.filter(|v| !v.is_empty()) {
-                    let echelle = pose.echelle_en(points[0].pos()).max(1e-6);
-                    return Repose::Case { k, rang, points, echelle };
+    /// Où reposer le trait rassemblé `t`, **sans rien changer** (partie 131 : entier, à un seul endroit). Dans le dessin de la case `prefere` si
+    /// elle est donnée et peut le recevoir (une case qui naît prend les traits du papier qui passent chez elle, `caseprend.rs`) ; sinon dans le
+    /// dessin de la case à qui revient **son premier point**, comme un trait qu'on vient de tracer (l'image d'une case ; sinon la marge de la
+    /// première case, dans l'ordre de lecture, qui peut le recevoir), si ce dessin a une place pour tous ses points ; sinon sur la planche, entier
+    /// (par-dessus l'image de la case où il commence, si elle ne pouvait pas le recevoir : partie 122).
+    fn selp_preparer(&self, layout: &BoardLayout, t: &Rassemble, prefere: Option<usize>) -> Repose {
+        let Some(p0) = t.ligne.points.first().map(|p| p.pos()) else { return Repose::Planche { troncons: Vec::new() } };
+        let dans_la_case = |k: usize| -> Option<Repose> {
+            let rang = self.case_recoit(layout, k, LayerKind::Vector).ok()?;
+            // Un dessin que plusieurs cases montrent (Décor, planche-mère… `render::dessins_communs`) ne se voit pas loin de sa case : le trait
+            // n'y entre que s'il tient tout entier dans le champ de la case. Sinon il va sur la planche, où il se voit entier.
+            if self.calque_commun(layout, k, rang) {
+                let champ = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction()).get(k).copied()?;
+                if !t.ligne.points.iter().all(|p| champ.contains(p.pos()) || crate::horschamp::dans_image(layout, k, p.pos())) {
+                    return None;
                 }
             }
+            let pose = crate::horschamp::pose_de_la_case(&self.doc, layout, k)?;
+            let pts: Option<Vec<VPoint>> = t.ligne.points.iter().map(|p| pose.dessin_sur(p.pos()).map(|q| VPoint { x: q.x, y: q.y, r: (p.r / pose.echelle_en(q).max(1e-6)).clamp(0.05, 400.0) })).collect();
+            let points = pts.filter(|v| !v.is_empty())?;
+            let echelle = pose.echelle_en(points[0].pos()).max(1e-6);
+            Some(Repose::Case { k, rang, points, echelle })
+        };
+        if let Some(r) = prefere.and_then(&dans_la_case) {
+            return r;
         }
-        // Aucune case ne peut le recevoir : sur la planche, par-dessus l'image des cases qu'il traverse (partie 122), sous elles ailleurs.
-        let pts: Vec<Pt> = t.ligne.points.iter().enumerate().map(|(i, p)| Pt {
-            layer: *p,
-            board: p.pos(),
-            pressure: t.ligne.appui.get(i).copied().unwrap_or(1.0),
-            time: t.ligne.instants.get(i).copied().unwrap_or(0.0),
-        }).collect();
-        let n = layout.cards.len();
-        let owner = |p: Pos2| (0..n).find(|k| crate::horschamp::dans_image(layout, *k, p)).or_else(|| layout.annulee_en(p).map(|i| n + i));
-        let suit = t.ligne.aligne();
-        let troncons = crate::horschamp::trancher(&pts, &owner)
-            .into_iter()
-            .map(|(q, run)| {
-                let c = q.and_then(|q| layout.cards.get(q).or_else(|| layout.annulees.get(q - n))).copied();
-                let l = Ligne { points: run.iter().map(|p| p.layer).collect(), appui: if suit { run.iter().map(|p| p.pressure).collect() } else { Vec::new() }, instants: if suit { run.iter().map(|p| p.time).collect() } else { Vec::new() } };
-                (c, l)
-            })
-            .collect();
-        Repose::Planche { troncons }
+        let image = (0..layout.cards.len()).find(|k| crate::horschamp::dans_image(layout, *k, p0));
+        let ecartee = layout.annulee_en(p0);
+        let chez = match image {
+            Some(k) => dans_la_case(k),
+            None if ecartee.is_some() => None,
+            None => {
+                let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
+                champs.iter().enumerate().filter(|(_, c)| c.contains(p0)).find_map(|(k, _)| dans_la_case(k))
+            }
+        };
+        if let Some(r) = chez {
+            return r;
+        }
+        // Aucune case ne le reçoit : sur la planche, entier ; par-dessus l'image de la case où il commence (partie 122), sous les images ailleurs.
+        let sur = image.and_then(|k| layout.cards.get(k)).or_else(|| ecartee.and_then(|i| layout.annulees.get(i))).copied();
+        Repose::Planche { troncons: vec![(sur, t.ligne.clone())] }
     }
 
     /// Pose le trait préparé `p` (rien ne peut plus échouer : la place a été vérifiée). Les dessins touchés sont notés dans `avant` **avant** d'être changés
@@ -771,27 +791,21 @@ impl App {
                     None => d.elements.len(),
                 };
                 d.elements.insert(i, el);
-                // (La répartition se fait depuis le plan de la case, sur son calque : on y passe le temps de répartir.)
-                let (cp, cf, cl) = (self.cur_panel, self.cur_frame, self.cur_layer);
-                let c = layout.cards[k];
-                self.cur_panel = c.panel;
-                self.cur_frame = c.frame;
-                self.cur_layer = rang;
-                let fait = self.horschamp_repartir_element(layout, k, cel, i, p.derriere, &p.places);
-                self.cur_panel = cp.min(self.doc.panels.len().saturating_sub(1));
-                self.cur_frame = cf;
-                self.cur_layer = cl;
-                if !fait {
-                    self.selp_refaire(cel);
-                }
+                // (Partie 131 : il reste entier dans ce dessin, où qu'il aille ; avant, il était réparti de nouveau entre les cases et le papier.)
+                self.selp_refaire(cel);
             }
         }
     }
 
-    /// Le choix reçoit `aff` (planche) : chaque trait est rassemblé, transformé, puis réparti à nouveau ; les autres éléments sont transformés sur place.
-    /// **Tout ou rien** : tout est calculé avant de changer quoi que ce soit ; si une part n'a nulle part où aller, rien ne bouge et la ligne d'état le dit.
-    /// Une seule étape d'annulation, nommée `nom`.
+    /// Le choix reçoit `aff` (planche) : chaque trait est rassemblé, transformé, puis posé entier là où il commence (`selp_preparer`) ; les autres
+    /// éléments sont transformés sur place. **Tout ou rien** : tout est calculé avant de changer quoi que ce soit ; si un trait n'a nulle part où
+    /// aller, rien ne bouge et la ligne d'état le dit. Une seule étape d'annulation, nommée `nom`.
     pub(crate) fn selp_reporter(&mut self, layout: &BoardLayout, aff: &Affine, nom: &str) {
+        self.selp_reporter_vers(layout, aff, nom, None);
+    }
+
+    /// `selp_reporter`, les traits allant de préférence dans le dessin de la case `prefere` (une case qui naît, `caseprend.rs`).
+    pub(crate) fn selp_reporter_vers(&mut self, layout: &BoardLayout, aff: &Affine, nom: &str, prefere: Option<usize>) {
         let Some(traits) = self.vignettes.selp.as_ref().filter(|_| self.selp_active()).map(|s| s.traits.clone()) else { return };
         if self.storyboard_refuses() {
             return;
@@ -827,7 +841,7 @@ impl App {
                     derriere |= rang == 0 && self.drawing(cel).is_some_and(|d| d.elements.len() > 1);
                 }
             }
-            let repose = self.selp_preparer(layout, &r);
+            let repose = self.selp_preparer(layout, &r, prefere);
             a_poser.push(APoser { trait_: r, repose, lien, places, derriere });
         }
         // La place sur la planche : celle que libèrent les parts retirées, contre celle que demandent les tronçons hors des cases.
@@ -1036,8 +1050,10 @@ impl App {
         }
     }
 
-    /// Ctrl+V dans les Vignettes : les éléments collés dans le dessin `cel` (rangs `rangs`) sont répartis comme des traits qu'on vient de tracer, et
-    /// deviennent le choix de la planche. L'étape du collage (d'après `marque`) les rejoint.
+    /// Ctrl+V dans les Vignettes : les éléments collés dans le dessin `cel` (rangs `rangs`) deviennent le choix de la planche, et chaque trait collé
+    /// va, entier, à qui revient son premier point, comme un trait qu'on vient de déplacer (partie 131 : collé dans le dessin de la case courante, il
+    /// revient à sa place sur la planche, qui peut être une autre case ou le papier ; avant, il était réparti entre les cases). L'étape du collage
+    /// (d'après `marque`) et cette pose n'en font qu'une.
     pub(crate) fn selp_apres_le_collage(&mut self, cel: CelId, rangs: std::ops::Range<usize>, marque: u64) {
         let layout = self.board_layout();
         let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
@@ -1045,6 +1061,7 @@ impl App {
         let mut liens = Vec::new();
         let mut objets = Vec::new();
         for i in rangs.rev() {
+            // (Un numéro neuf par trait collé : le choix le retrouve par lui.)
             let lien = crate::horschamp::nouveau_lien();
             match self.drawing_mut(cel).and_then(|d| d.elements.get_mut(i)) {
                 Some(Element::Stroke { trace, .. }) => trace.lien = Some(lien),
@@ -1055,7 +1072,6 @@ impl App {
                 None => continue,
             }
             liens.push(lien);
-            self.horschamp_repartir_element(&layout, k, cel, i, false, &[]);
         }
         self.history.regrouper_depuis(marque);
         self.vsel = None;
@@ -1076,6 +1092,15 @@ impl App {
         }
         let serial = self.history.serial();
         self.vignettes.selp = Some(SelPlanche { traits, serial, ..SelPlanche::default() });
+        // Chaque trait à qui revient son premier point : la pose de la sélection, sans la déplacer (tout ou rien, comme un geste).
+        self.selp_reporter(&layout, &Affine::IDENTITY, "Coller");
+        self.history.regrouper_depuis(marque);
+        self.vignettes.debord_tenu = None;
+        let serial = self.history.serial();
+        if let Some(s) = self.vignettes.selp.as_mut() {
+            s.serial = serial;
+            *s.vue.borrow_mut() = None;
+        }
     }
 
     /// Les formes du choix à l'écran, à la place où le geste `aff` le mène (rien : à sa place) : des lignes de sa couleur, par-dessus tout.

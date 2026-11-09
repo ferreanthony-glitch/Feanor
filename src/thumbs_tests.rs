@@ -300,7 +300,7 @@ fn fake_job(doc: &Document, slot: Slot, tint: u8) -> Job {
     plan.paper = Some([tint, 0, 0]);
     Job {
         slot,
-        work: Work::Plan { doc: snapshot(doc, &plan), cam: doc.panel_camera(0, 0), size: (96, 54), marge: 0, masque: None, generation: 0, geom: None },
+        work: Work::Plan { doc: snapshot(doc, &plan), cam: doc.panel_camera(0, 0), size: (96, 54), marge: 0, communs: Vec::new(), masque: None, generation: 0, geom: None },
         key: Arc::new(Key::Plan(plan, vec![u64::from(tint)], [0; 7])),
         seq: 0,
         era: 0,
@@ -401,7 +401,7 @@ fn a_running_job_is_cancelled_when_its_thumbnail_changes_again() {
     assert!(job.cancel.load(Ordering::Relaxed));
     assert!(!s.touch((1, 192), &key), "arrêté : il faut la redemander si l'écran revient à ce contenu");
     // Autre projet : tout est abandonné, jusqu'aux images finies.
-    s.lock().done.push_back(Done { slot: (9, 192), key: key.clone(), seq: 1, image: ColorImage::new([1, 1], Color32::RED), waiting: None, marge: 0, geom: None });
+    s.lock().done.push_back(Done { slot: (9, 192), key: key.clone(), seq: 1, image: ColorImage::new([1, 1], Color32::RED), waiting: None, marges: [0; 4], geom: None });
     s.reset();
     let q = s.lock();
     assert!(q.waiting.is_empty() && q.done.is_empty());
@@ -423,7 +423,7 @@ fn a_finished_thumbnail_answers_its_content_until_a_newer_request() {
     {
         let mut q = s.lock();
         q.running.retain(|r| r.seq != job.seq);
-        q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image: ColorImage::new([1, 1], Color32::RED), waiting: None, marge: 0, geom: None });
+        q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image: ColorImage::new([1, 1], Color32::RED), waiting: None, marges: [0; 4], geom: None });
     }
     assert!(s.touch((1, 192), &key), "finie : déjà la réponse");
     assert!(!s.touch((2, 192), &key), "une autre vignette n'est pas finie");

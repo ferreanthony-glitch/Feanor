@@ -196,6 +196,7 @@ fn a_copy_of_a_real_project_opens_and_saves_unchanged() {
 #[test]
 fn a_case_that_cannot_receive_keeps_the_part_visible_over_it() {
     // Partie 122 : le calque de la case 3 est verrouillé ; la part du trait sur sa case reste par-dessus elle, sur la planche, et rien n'est écrit dans son plan.
+    // (Un trait d'avant la partie 131, coupé au lâcher : depuis, un trait qui traverse une case ne lui laisse rien, `traits_caches_tests`.)
     let Some(mut b) = planche(des_plans(12, true), 6, 1.0) else { return println!("pas de carte graphique") };
     let l = b.app.board_layout();
     let p3 = l.cards[3].panel;
@@ -206,7 +207,10 @@ fn a_case_that_cannot_receive_keeps_the_part_visible_over_it() {
     let xf = b.app.vignettes.xf;
     let (t2, t3) = (xf.rect(l.cards[2].thumb), xf.rect(l.cards[3].thumb));
     let (de, a) = (t2.center(), pos2(t3.right() + 40.0, t3.center().y));
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(true));
     tracer(&mut b, de, a);
+    b.chauffer(2);
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(false));
     present(&voir(&mut b, "bmp-122", de, a), "rien ne disparaît au lever");
     assert!(!crate::vignettes_tests::encre(&b.app.doc, p3), "rien dans le plan verrouillé");
     let dessus = b.app.doc.annotations.bitmap.morceaux.iter().filter(|m| m.dessus).count();
@@ -227,14 +231,16 @@ fn painting_behind_puts_the_board_part_under_the_others() {
     let l = b.app.board_layout();
     let xf = b.app.vignettes.xf;
     let (t1, t2) = (xf.rect(l.cards[1].thumb), xf.rect(l.cards[2].thumb));
-    // Un premier trait de la case 1 au papier au-dessus d'elle, puis un second, peint derrière, sur le papier, qui le croise.
-    let y = t1.top() - 30.0;
-    tracer(&mut b, pos2(t1.center().x, t1.center().y), pos2(t1.center().x, t1.top() - 50.0));
+    // Un premier trait sur le papier, au-dessus de la première rangée, puis un second, peint derrière, sur le papier aussi, qui le croise.
+    // (Partie 131 : seul un trait parti du papier va sur la planche ; ces deux-là en partent, à 20 % de la largeur d'une case au-dessus d'elle.)
+    let y = t1.top() - t1.width() * 0.2;
+    tracer(&mut b, pos2(t1.center().x, y - 14.0), pos2(t1.center().x, y + 10.0));
     repos(&mut b);
+    assert_eq!(b.app.doc.annotations.bitmap.morceaux.len(), 1, "le premier trait est sur le papier : {}", b.app.status);
     let avant: Vec<Option<u64>> = b.app.doc.annotations.bitmap.morceaux.iter().map(|m| m.lien).collect();
     b.app.paint_behind = true;
     b.app.color = [30, 30, 200];
-    tracer(&mut b, pos2(t1.left() - 20.0, y), pos2(t2.center().x, y));
+    tracer(&mut b, pos2(t1.left() + 10.0, y), pos2(t2.center().x, y));
     repos(&mut b);
     println!("morceaux : {:?}", b.app.doc.annotations.bitmap.morceaux);
     let bm = &b.app.doc.annotations.bitmap;
@@ -622,16 +628,17 @@ fn an_unreadable_layer_keeps_the_stroke_in_its_case_and_refuses_the_board_select
     let l = b.app.board_layout();
     let xf = b.app.vignettes.xf;
     let t1 = xf.rect(l.cards[1].thumb);
-    let (de, a) = (t1.center(), pos2(t1.center().x, t1.top() - 40.0));
+    // (Partie 131 : seul un trait parti du papier va sur la planche. Celui-ci part au-dessus de la première rangée et entre dans la case 2.)
+    let (de, a) = (pos2(t1.center().x, t1.top() - t1.width() * 0.2), t1.center());
     tracer(&mut b, de, a);
     repos(&mut b);
     println!("{}", b.app.status);
     assert!(b.app.doc.annotations.bitmap.morceaux.is_empty(), "rien n'est posé sur une couche qu'on ne pourrait pas enregistrer");
     assert!(b.app.status.contains("n'a pas pu être lue"), "{}", b.app.status);
-    // Le trait reste entier dans le dessin d'où il part (au-delà de la case, caché, mais là).
+    // Le trait reste entier dans le dessin où il a été tracé (celui de la case la plus proche, au-delà de son cadre).
     let cel = b.app.doc.panels[l.cards[1].panel].layers[0].cel_at(l.cards[1].frame).expect("le dessin");
     let pose = crate::horschamp::pose_de_la_case(&b.app.doc, &l, 1).unwrap();
-    let haut = pose.dessin(xf.to_board(pos2(a.x, a.y + 6.0)));
+    let haut = pose.dessin(xf.to_board(pos2(de.x, de.y + 6.0)));
     assert!((-3..=3).any(|j| b.app.doc.cels[&cel].raster.get_i(haut.x as i64, haut.y as i64 + j).a() > 0), "le bout hors de la case est resté dans son dessin");
     // La sélection de la planche est coupée, et le dit.
     // (Ctrl + lasso retombe alors sur la sélection de la case, celle d'avant : elle ne sort pas du dessin.)
@@ -776,7 +783,8 @@ fn in_a_shared_film_without_the_montage_token_the_board_receives_no_pixel() {
     assert!(!b.app.planche_bitmap_ecrivable(), "sans le jeton du montage, la couche de la planche ne serait pas enregistrée");
     let xf = b.app.vignettes.xf;
     let t1 = xf.rect(l.cards[1].thumb);
-    let (de, a) = (t1.center(), pos2(t1.center().x, t1.top() - 40.0));
+    // (Partie 131 : seul un trait parti du papier va sur la planche. Celui-ci part au-dessus de la première rangée et entre dans la case 2, la mienne.)
+    let (de, a) = (pos2(t1.center().x, t1.top() - t1.width() * 0.2), t1.center());
     tracer(&mut b, de, a);
     repos(&mut b);
     println!("{}", b.app.status);
@@ -784,7 +792,7 @@ fn in_a_shared_film_without_the_montage_token_the_board_receives_no_pixel() {
     assert!(b.app.status.contains("montage n'est pas à toi"), "{}", b.app.status);
     let cel = b.app.doc.panels[l.cards[1].panel].layers[0].cel_at(l.cards[1].frame).expect("le dessin");
     let pose = crate::horschamp::pose_de_la_case(&b.app.doc, &l, 1).unwrap();
-    let haut = pose.dessin(xf.to_board(pos2(a.x, a.y + 6.0)));
+    let haut = pose.dessin(xf.to_board(pos2(de.x, de.y + 6.0)));
     assert!((-3..=3).any(|j| b.app.doc.cels[&cel].raster.get_i(haut.x as i64, haut.y as i64 + j).a() > 0), "le bout hors de la case est resté dans son dessin");
     // Le jeton pris : la planche reçoit.
     b.app.run_action("equipe.prendre_montage");
@@ -819,7 +827,9 @@ fn ghost_pieces_count_against_the_limit_of_a_selection_gesture() {
     assert!(!bm.peut_poser(1), "pleine en comptant le fantôme");
     let avant = (encre_totale(&b), b.app.doc.annotations.bitmap.morceaux.len(), b.app.history.undo_len());
     lasso(&mut b, t1.center(), 40.0);
-    glisser_droit(&mut b, prise(t1.center(), t1.center() + vec2(25.0, 25.0)), vec2(0.0, -(t1.height() * 0.5 + 40.0)));
+    // (Partie 131 : les pixels restent à leur case tant qu'il leur reste de l'encre dans son champ ; on les mène donc tout entiers au-dessus de sa
+    // marge, sur le papier : il leur faudrait une place sur la planche.)
+    glisser_droit(&mut b, prise(t1.center(), t1.center() + vec2(25.0, 25.0)), vec2(0.0, -(t1.height() * 0.5 + t1.width() * 0.12 + 60.0)));
     repos(&mut b);
     println!("{}", b.app.status);
     assert_eq!((encre_totale(&b), b.app.doc.annotations.bitmap.morceaux.len(), b.app.history.undo_len()), avant, "refusé : rien n'a bougé");

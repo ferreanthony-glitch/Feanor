@@ -258,6 +258,8 @@ pub(crate) struct Vignettes {
     pub refus_phrase: Option<String>,
     pub debord_garde: Option<crate::debord::Debord>,
     pub debord_tenu: Option<crate::debord::Tenu>,
+    /// Le geste de gomme de la planche en cours : ce qu'il efface de ce que les cases ont dessiné hors de leur cadre (`gommedebord.rs`, partie 131).
+    pub gomme_debord: Option<crate::gommedebord::GommeDebord>,
     /// Le cadrage d'ouverture : la taille de la vue pour laquelle il a été calculé, son zoom, son décalage (une fois rangé), et s'il vient d'être
     /// calculé. Vide dès que le zoom ou le défilement ont bougé.
     pub ouverture_suivi: Option<(Vec2, f32, Vec2, bool)>,
@@ -357,6 +359,7 @@ impl Default for Vignettes {
             refus_phrase: None,
             debord_garde: None,
             debord_tenu: None,
+            gomme_debord: None,
             selp: None,
             ouverture_suivi: None,
             ouverture_images: 0,
@@ -1043,8 +1046,31 @@ impl App {
             }
             Hit::Nothing => {
                 // Hors de toute image, toute la planche se dessine (Anthony, 2026-10-30) : le trait part dans le dessin de la case la plus
-                // proche, et au lâcher la part qui n'est dans le champ d'aucune case reste sur la planche (horschamp.rs).
+                // proche, et au lâcher il va à qui revient son premier point (partie 131, horschamp.rs) : la case dont la marge le contient,
+                // sinon le papier, entier.
                 if !cam_mode && !lasso && !selecting && matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline) {
+                    // La marge de **la case pâle suivante** vaut son cadre (partie 131 : le bout d'un trait ne la fait plus naître, on la fait
+                    // naître en y posant le stylet, et sa marge est aussi large que celle d'une vraie case) : son plan naît, si le point n'est
+                    // dans le champ d'aucune case. Seulement la première case pâle de sa séquence, comme pour le bout d'un trait avant (partie
+                    // 113, décision 8) : un appui dans la marge d'une case pâle lointaine ne fait pas naître des plans vides devant elle, il
+                    // est sur le papier. Poser le stylet **dans** une case pâle lointaine garde sa place, comme avant.
+                    let debord = self.settings.vignettes.debord_fraction();
+                    if self.tool_draws_in_empty() && !crate::horschamp::champs(layout, debord).iter().any(|c| c.contains(p)) && layout.annulee_en(p).is_none() {
+                        let mut premieres: Vec<usize> = layout.groupes.iter().filter(|g| g.vides.start < g.vides.end).map(|g| g.vides.start).collect();
+                        if premieres.is_empty() {
+                            premieres.push(0);
+                        }
+                        if let Some(e) = premieres.into_iter().find(|e| layout.empty.get(*e).is_some_and(|r| r.expand(debord * r.width()).contains(p))) {
+                            self.commit_note_text(layout);
+                            if self.board_create_from_empty(e) {
+                                self.vignettes.appui_bande = Some(pos);
+                                self.vignettes.press = Press::Card;
+                                self.draw_has_focus();
+                                self.pastille_avant_trait();
+                                return true;
+                            }
+                        }
+                    }
                     let proche = layout.cards.iter().enumerate().min_by(|a, b| distance_rect(a.1.thumb, p).total_cmp(&distance_rect(b.1.thumb, p))).map(|(k, _)| k);
                     if let Some(k) = proche {
                         self.commit_note_text(layout);
@@ -1355,6 +1381,11 @@ impl App {
         let haut_droite = egui::pos2(ui.max_rect().right(), ui.available_rect_before_wrap().top());
         // Le débord du trait hors des cases suit les Préférences (il fait partie de la clé des vignettes : elles se refont en fond).
         self.thumbs.debord = Some(self.settings.vignettes.debord_fraction());
+        // (Ce que les vignettes savent des marges des cases vaut pour cet état du projet : `board_marges`. L'historique ne suffit pas à le
+        // dire : un dessin vectoriel refait en arrière-plan change ses pixels, donc jusqu'où il va, sans étape de plus ; la version de
+        // chaque dessin, elle, change alors.)
+        let versions = self.doc.cels.values().fold(0u64, |s, c| s.wrapping_add(c.version));
+        self.thumbs.regler_serie(self.history.serial() ^ versions.rotate_left(32));
         // (Les cases ne montrent pas les calques d'annotation du plan : on ne dessine pas dedans depuis la planche.)
         self.ecarter_le_calque_d_annotation();
         self.board_toolbar(ui);
@@ -1581,6 +1612,8 @@ impl App {
             self.commit_note_text(&layout);
             let start = xf.to_board(ui.input(|i| i.pointer.press_origin()).unwrap_or(view.center()));
             let add = mods.ctrl || mods.shift;
+            // (Un geste de gomme neuf : rien ne reste d'un geste d'avant qui ne se serait pas fini, `gommedebord.rs`.)
+            self.gomme_debords_oublier();
             self.board_drag = Some(match self.tool {
                 Tool::Eraser => BoardDrag::Erase { recorded: false },
                 Tool::Select => match self.note_at(&layout, &texts, start, tol) {
@@ -1676,8 +1709,14 @@ impl App {
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les cases annulées, sous le dessin hors des cases : un trait qui les traverse reste visible (`planannuleui.rs`).
         self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
-        // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
-        self.hors_cadres_peindre(&painter, view, xf, &layout, false);
+        // **La feuille ou le film** (partie 131). La planche est une grande feuille où des caméras sont posées : **rien n'y est caché par une
+        // case**. Le papier (le dessin hors des cases) et ce que chaque case a dessiné hors de son cadre se peignent **par-dessus les images de
+        // toutes les cases**, sous leurs filets, leurs numéros et leurs notes. Avec le passe-partout, la planche montre le film : chaque case
+        // ne montre que son plan, et tout le reste passe dessous, comme avant (les images le recouvrent, le passe-partout cache le dehors).
+        let film = self.vignettes.annot.marie;
+        if film {
+            self.hors_cadres_peindre(&painter, view, xf, &layout, false);
+        }
         // (Le temps des demandes de vignettes se compte d'ici, pour les marges et les cases : peindre le dessin hors des cases ne le prend plus. Avant, des
         // milliers de morceaux de la couche bitmap dans la vue usaient ces 2 ms à chaque image, et les vignettes ne se refaisaient plus : partie 127.)
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
@@ -1688,8 +1727,8 @@ impl App {
         // tuile d'un plan à mouvement d'après lui plantait de même, `case_tient`).
         let plans = self.doc.panels.len();
         let mut tient = true;
-        // Les marges de toutes les cases d'abord, sur le papier : ce qui dépasse d'un cadre se voit, jamais par-dessus l'image d'une autre case.
-        let cases_tex = self.board_marges(ui, &painter, view, xf, &layout, pan_mode, deadline, plans);
+        // Les vignettes de toutes les cases (une seule demande par image d'écran). Le film : leurs marges d'abord, sur le papier, sous les images.
+        let cases_tex = self.board_marges(ui, &painter, view, xf, &layout, pan_mode, deadline, plans, film);
         for k in 0..layout.cards.len() {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
@@ -1702,12 +1741,25 @@ impl App {
         // (Où se posent les numéros : la marge au-dessus de chaque A, ou une place libre : `numerosmarge.rs`.)
         let mut marges = crate::numerosmarge::Marges::pour(&layout, xf, view);
         self.vignettes.numeros_zones.clear();
+        // Les images de toutes les cases ; puis (la feuille) le papier et ce que chaque case a dessiné hors de son cadre, par-dessus ; puis les
+        // filets, les numéros et les notes des cases, par-dessus tout le dessin.
         for k in (0..layout.cards.len()).take_while(|_| tient) {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, cases_tex[k], &numeros, &mut marges, plans);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, cases_tex[k], &numeros, &mut marges, plans, PasseCase::Image);
+        }
+        if tient && !film {
+            self.hors_cadres_peindre(&painter, view, xf, &layout, false);
+            self.board_debords(&painter, view, xf, &layout, &cases_tex, pan_mode);
+        }
+        for k in (0..layout.cards.len()).take_while(|_| tient) {
+            if !self.case_tient(&layout, plans, k) {
+                tient = false;
+                break;
+            }
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, cases_tex[k], &numeros, &mut marges, plans, PasseCase::Habillage);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -2080,6 +2132,12 @@ impl App {
         if let Some(BoardDrag::Rubber { now, .. }) = &mut self.board_drag {
             *now = p;
         }
+        // La gomme de la planche efface aussi ce que les cases ont dessiné hors de leur cadre (partie 131, `gommedebord.rs`) : ce qu'on voit sur le
+        // papier se gomme sur le papier. Tout le geste ne fait qu'une étape d'annulation (regroupée à son lâcher, `finish_board_drag`).
+        if matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
+            self.gomme_debords_commencer();
+            self.gomme_debords(layout, p, radius);
+        }
         // Gomme et déplacement de notes : l'étape d'annulation au premier changement du geste.
         if let Some(BoardDrag::Erase { recorded }) = self.board_drag {
             if self.doc.board.stroke_at(layout, p, radius).is_some() {
@@ -2123,6 +2181,8 @@ impl App {
                 self.doc.board.translate(layout, &sel, delta);
             }
         }
+        // (Le compte d'étapes après tout ce que cette image du geste a posé : la gomme sait ainsi si on a annulé pendant le geste.)
+        self.gomme_debords_noter();
     }
 
     fn finish_board_drag(&mut self, layout: &BoardLayout, texts: &[Option<Rect>]) {
@@ -2158,6 +2218,8 @@ impl App {
         } else {
             self.board_drag = None;
         }
+        // (La gomme de la planche : tout ce que le geste a effacé, papier et dessins des cases, ne fait qu'une étape.)
+        self.gomme_debords_finir();
     }
 
     /// La tuile de l'empreinte d'un mouvement de caméra (Anthony, 2026-10-22 : tout l'espace entre A et B se dessine) : une seule
@@ -2230,14 +2292,31 @@ impl App {
         }
     }
 
-    /// Les marges de toutes les cases et de toutes les tuiles, sur le papier, avant toute image (Anthony, 2026-11-06 : « des lignes qui se coupent
-    /// entre les plans ») : la part d'un plan qui dépasse de son cadre se voit, quel que soit le plan courant, et passe sous l'image des autres
-    /// cases. Rend la vignette de chaque case à l'écran (une seule demande par image : les cases s'en servent ensuite). La même texture que la
-    /// case, aucune recomposition. Le passe-partout, peint plus tard, les cache comme tout ce que la caméra ne montre pas.
+    /// La vignette de chaque case à l'écran (une seule demande par image d'écran : les cases s'en servent ensuite). `peindre` (le film, sous le
+    /// passe-partout) : leurs marges sont peintes ici, sur le papier, avant toute image (Anthony, 2026-11-06 : « des lignes qui se coupent entre
+    /// les plans ») : ce qui dépasse d'un cadre passe sous l'image des autres cases, et le passe-partout, peint plus tard, le cache comme tout
+    /// ce que la caméra ne montre pas. Sinon (la feuille, partie 131) elles se peignent après les images, par-dessus : `board_debords`. La même
+    /// texture que la case, aucune recomposition.
     #[allow(clippy::too_many_arguments)]
-    fn board_marges(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, pan_mode: bool, deadline: Instant, plans: usize) -> Vec<Option<crate::thumbs::CaseTex>> {
+    fn board_marges(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, pan_mode: bool, deadline: Instant, plans: usize, peindre: bool) -> Vec<Option<crate::thumbs::CaseTex>> {
         let ppp = ui.ctx().pixels_per_point();
         let debord = self.settings.vignettes.debord_fraction();
+        // Une case montre son dessin jusqu'où il va (partie 131) : sa vignette compte dès que son cadre et sa marge touchent la vue, comme avant,
+        // **ou que son dessin y arrive de plus loin**, dans la limite de ce qu'une vignette peut couvrir (`render::MARGE_MAX_CADRES` cadres de
+        // chaque côté). Pour une case hors de la vue, cela se sait sans la demander : la boîte de l'encre de son plan (`Thumbs::debord_de_case`,
+        // gardée tant que le projet ne change pas).
+        let loin = crate::render::MARGE_MAX_CADRES as f32;
+        #[allow(clippy::too_many_arguments)]
+        let compte = |thumbs: &mut crate::thumbs::Thumbs, doc: &crate::document::Document, zone: Rect, largeur_case: f32, panel: usize, frame: usize, id: u64, tuile: Option<&crate::vignettecam::Zone>| -> bool {
+            if zone.expand(debord * largeur_case + 1.0).intersects(view) {
+                return true;
+            }
+            if !zone.expand2(zone.size() * loin + vec2(1.0, 1.0)).intersects(view) {
+                return false;
+            }
+            let d = thumbs.debord_de_case(doc, panel, frame, id, tuile).map(|v| v.min(loin));
+            Rect::from_min_max(zone.min - vec2(d[0] * zone.width(), d[1] * zone.height()), zone.max + vec2(d[2] * zone.width(), d[3] * zone.height())).expand(2.0).intersects(view)
+        };
         let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let toute = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         let mut cases = vec![None; layout.cards.len()];
@@ -2251,14 +2330,14 @@ impl App {
             let courante = i == self.cur_panel && (place.frame..place.end).contains(&cur) && !pan_mode;
             if let Some(mv) = layout.move_of(k) {
                 let r = xf.rect(mv.tuile.rect);
-                if !r.expand(debord * thumb.width() + 1.0).intersects(view) {
+                if !compte(&mut self.thumbs, &self.doc, r, thumb.width(), i, place.frame, place.id, Some(&mv.tuile.zone)) {
                     continue;
                 }
                 let width = crate::thumbs::width_for(r.width() * ppp);
                 // (La marge de la tuile est 12 % de la largeur d'une case, comme celle des autres cases, pas 12 % de la tuile entière.)
                 let part_case = place.thumb.width() / mv.tuile.rect.width().max(1e-3);
                 let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque, part_case)), deadline);
-                if let Some(c) = &case {
+                if let Some(c) = case.as_ref().filter(|_| peindre) {
                     let a_jour = c.geom == Some(crate::thumbs::Geom::de(&mv.tuile.zone, &mv.tuile.masque));
                     if courante {
                         // (Le dessin vivant remplit la tuile : seule sa bordure reste à peindre, et pas d'une texture d'avant le geste.)
@@ -2271,12 +2350,12 @@ impl App {
                 }
                 cases[k] = case;
             } else {
-                if !thumb.expand(debord * thumb.width() + 1.0).intersects(view) {
+                if !compte(&mut self.thumbs, &self.doc, thumb, thumb.width(), i, place.frame, place.id, None) {
                     continue;
                 }
                 let width = crate::thumbs::width_for(thumb.width() * ppp);
                 let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, None, deadline);
-                if let Some(c) = &case {
+                if let Some(c) = case.as_ref().filter(|_| peindre) {
                     paint_ring(painter, thumb, c);
                 }
                 cases[k] = case;
@@ -2285,10 +2364,54 @@ impl App {
         cases
     }
 
+    /// **La feuille** (partie 131) : ce que chaque case a dessiné hors de son cadre, peint **par-dessus les images de toutes les cases** (après
+    /// elles, avant leurs filets, leurs numéros et leurs notes) : sur la planche, le bord d'une case ne coupe rien et ne cache rien. `cases` :
+    /// les vignettes de `board_marges`. Une case ordinaire : tout ce que sa vignette porte autour de son cadre. La case d'un mouvement de
+    /// caméra : tout ce que sa tuile porte hors de son enveloppe (dedans, c'est son image, déjà peinte ; la tuile de la case courante n'est
+    /// posée que si elle est celle de la géométrie d'aujourd'hui, comme dans `board_tuile`).
+    fn board_debords(&self, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, cases: &[Option<crate::thumbs::CaseTex>], pan_mode: bool) {
+        let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        for (k, c) in cases.iter().enumerate() {
+            let (Some(c), Some(place)) = (c, layout.cards.get(k)) else { continue };
+            match layout.move_of(k) {
+                None => {
+                    let thumb = xf.rect(place.thumb);
+                    if c.rect(thumb).intersects(view) {
+                        paint_ring(painter, thumb, c);
+                    }
+                }
+                Some(mv) => {
+                    let courante = place.panel == self.cur_panel && (place.frame..place.end).contains(&cur) && !pan_mode;
+                    if courante && c.geom != Some(crate::thumbs::Geom::de(&mv.tuile.zone, &mv.tuile.masque)) {
+                        continue;
+                    }
+                    let full = c.rect_tuile(xf.rect(mv.tuile.rect), &mv.tuile.zone, mv.tuile.zone.echelle * xf.zoom);
+                    if !full.intersects(view) {
+                        continue;
+                    }
+                    let hull: Vec<Pos2> = mv.enveloppe.iter().map(|p| xf.to_screen(*p)).collect();
+                    let coins = [full.left_top(), full.right_top(), full.right_bottom(), full.left_bottom()];
+                    let dehors = crate::viewbar::difference_convexe(&coins, &hull);
+                    let mut mesh = egui::Mesh::with_texture(c.id);
+                    for piece in dehors.iter().filter(|p| p.len() >= 3) {
+                        let base = mesh.vertices.len() as u32;
+                        for p in piece {
+                            mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv: pos2((p.x - full.min.x) / full.width().max(1e-3), (p.y - full.min.y) / full.height().max(1e-3)), color: Color32::WHITE });
+                        }
+                        for j in 1..piece.len() as u32 - 1 {
+                            mesh.add_triangle(base, base + j, base + j + 1);
+                        }
+                    }
+                    painter.add(egui::Shape::mesh(mesh));
+                }
+            }
+        }
+    }
+
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, case: Option<crate::thumbs::CaseTex>, numeros: &crate::numerotation::Numeros, marges: &mut crate::numerosmarge::Marges, plans: usize) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, case: Option<crate::thumbs::CaseTex>, numeros: &crate::numerotation::Numeros, marges: &mut crate::numerosmarge::Marges, plans: usize, passe: PasseCase) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k);
         let card = xf.rect(place.card);
@@ -2312,7 +2435,10 @@ impl App {
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
         let live = current && !pan_mode;
         let clip = painter.with_clip_rect(view);
+        // (Deux passes, partie 131 : les images de toutes les cases d'abord ; leurs filets, leurs numéros et leurs notes après ce que la planche
+        // peint par-dessus les images, le papier et le dessin des cases hors de leur cadre.)
         match mv {
+            _ if passe == PasseCase::Habillage => {}
             // La case d'un plan dont la caméra bouge (deux clés au moins) montre ses cadres à l'échelle des autres cases : une tuile
             // par rangée de l'empreinte, qui montre la feuille et ce qu'on a dessiné autour d'elle (`vignettecam.rs`) ; l'outil Caméra,
             // lui, recadre à l'ancienne (une seule image).
@@ -2340,6 +2466,9 @@ impl App {
                     }
                 }
             }
+        }
+        if passe == PasseCase::Image {
+            return;
         }
         // Le filet d'un point autour de l'image ; plus foncé pour l'image courante. Rien d'autre autour.
         // (Épaisseur et couleur du filet : Préférences > Vignettes ; la case courante est plus foncée.)
@@ -2702,6 +2831,14 @@ impl App {
 }
 
 
+/// Ce que `board_card` peint d'une case à cette passe (partie 131) : son image ; ou ce qui l'habille (filet, cadres de caméra, liseré, note,
+/// numéro), peint après le dessin que la planche pose par-dessus les images.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PasseCase {
+    Image,
+    Habillage,
+}
+
 /// La texture `id` (de rectangle `full` à l'écran) peinte seulement dans le polygone convexe `poly` : un maillage dont les coordonnées
 /// de texture suivent l'écran. Le même cliché, coupé net : aucune recomposition.
 fn peint_texture_dans(painter: &egui::Painter, id: egui::TextureId, full: Rect, poly: &[Pos2]) {
@@ -2719,21 +2856,25 @@ fn peint_texture_dans(painter: &egui::Painter, id: egui::TextureId, full: Rect, 
     painter.add(egui::Shape::mesh(mesh));
 }
 
-/// La marge d'une vignette, autour de son cadre : le trait qui déborde un peu (le reste de la texture est le cadre, que la
-/// vignette courante ne peint pas : c'est le dessin vivant qui l'occupe).
+/// Ce qu'une vignette montre autour de son cadre : le dessin du plan hors du cadre, jusqu'où il va (partie 131 ; le reste de la texture
+/// est le cadre, que la vignette courante ne peint pas : c'est le dessin vivant qui l'occupe). Les marges ne sont pas égales : chacune va
+/// jusqu'à l'encre de son côté.
 fn paint_ring(painter: &egui::Painter, thumb: Rect, c: &crate::thumbs::CaseTex) {
     let full = c.rect(thumb);
-    let (w, h, m) = (c.taille[0].max(1) as f32, c.taille[1].max(1) as f32, c.marge as f32);
-    let (ux, uy) = (m / w, m / h);
+    let (w, h) = (c.taille[0].max(1) as f32, c.taille[1].max(1) as f32);
+    let [g, t, d, b] = c.marges.map(|m| m as f32);
+    let (u0, v0, u1, v1) = (g / w, t / h, 1.0 - d / w, 1.0 - b / h);
     let uv = |x0: f32, y0: f32, x1: f32, y1: f32| Rect::from_min_max(pos2(x0, y0), pos2(x1, y1));
     let strips = [
-        (Rect::from_min_max(full.min, pos2(full.max.x, thumb.min.y)), uv(0.0, 0.0, 1.0, uy)),
-        (Rect::from_min_max(pos2(full.min.x, thumb.max.y), full.max), uv(0.0, 1.0 - uy, 1.0, 1.0)),
-        (Rect::from_min_max(pos2(full.min.x, thumb.min.y), pos2(thumb.min.x, thumb.max.y)), uv(0.0, uy, ux, 1.0 - uy)),
-        (Rect::from_min_max(pos2(thumb.max.x, thumb.min.y), pos2(full.max.x, thumb.max.y)), uv(1.0 - ux, uy, 1.0, 1.0 - uy)),
+        (Rect::from_min_max(full.min, pos2(full.max.x, thumb.min.y)), uv(0.0, 0.0, 1.0, v0)),
+        (Rect::from_min_max(pos2(full.min.x, thumb.max.y), full.max), uv(0.0, v1, 1.0, 1.0)),
+        (Rect::from_min_max(pos2(full.min.x, thumb.min.y), pos2(thumb.min.x, thumb.max.y)), uv(0.0, v0, u0, v1)),
+        (Rect::from_min_max(pos2(thumb.max.x, thumb.min.y), pos2(full.max.x, thumb.max.y)), uv(u1, v0, 1.0, v1)),
     ];
     for (r, uv) in strips {
-        painter.image(c.id, r, uv, Color32::WHITE);
+        if r.width() > 0.0 && r.height() > 0.0 {
+            painter.image(c.id, r, uv, Color32::WHITE);
+        }
     }
 }
 
