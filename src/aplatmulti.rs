@@ -462,6 +462,8 @@ impl App {
     pub(crate) fn poll_aplat_multi(&mut self) {
         // (L'aplat intelligent, platintel.rs : ses calculs arrivent par ici aussi.)
         self.poll_intel(false);
+        // (La gomme sur les clés qu'on ne voit pas, `gommemulti.rs` : ses calculs arrivent par ici aussi.)
+        self.poll_gomme_multi();
         if self.aplat_travaux.en_route == 0 {
             return;
         }
@@ -594,5 +596,7 @@ impl App {
             self.poll_intel(true);
             self.poll_aplat_multi();
         }
+        // (Et la gomme sur les clés qu'on ne voit pas, `gommemulti.rs` : le fichier a le geste entier.)
+        self.attendre_gomme_multi();
     }
 }

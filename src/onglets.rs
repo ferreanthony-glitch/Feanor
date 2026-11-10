@@ -168,6 +168,7 @@ etat_projet! {
     aplat_miroirs: crate::aplatmulti::Miroirs = Default::default(),
     aplat_travaux: crate::aplatmulti::Travaux = Default::default(),
     gomme_multi: crate::gommemulti::GommeMulti = Default::default(),
+    gomme_travaux: crate::gommemulti::GommeTravaux = Default::default(),
     deform_multi: Option<crate::deformmulti::DeformMulti> = None,
     aplat_intel: crate::aplatintel::Etat = Default::default(),
     aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente> = None,

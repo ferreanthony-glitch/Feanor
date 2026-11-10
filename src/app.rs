@@ -852,6 +852,8 @@ pub struct App {
     /// Plusieurs calques choisis : la gomme en cours sur les autres calques (`gommemulti.rs`), la séance de l'outil Déformer
     /// sur tous (`deformmulti.rs`). Propres à un projet.
     pub(crate) gomme_multi: crate::gommemulti::GommeMulti,
+    /// La gomme sur les clés qu'on ne voit pas, calculée sur des fils de travail après le lâcher.
+    pub(crate) gomme_travaux: crate::gommemulti::GommeTravaux,
     pub(crate) deform_multi: Option<crate::deformmulti::DeformMulti>,
     /// L'aplat intelligent (platintel.rs) : le dessin d'avant le trait en cours, les calculs en route.
     pub(crate) aplat_intel: crate::aplatintel::Etat,
@@ -1417,6 +1419,7 @@ impl App {
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
             gomme_multi: Default::default(),
+            gomme_travaux: Default::default(),
             deform_multi: None,
             aplat_intel: Default::default(),
             aplat_couleur_attente: None,

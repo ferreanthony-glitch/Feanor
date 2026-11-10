@@ -9493,6 +9493,14 @@ mesure à part). **Le format du projet ne change pas.** Rien dans les Vignettes 
   geste entier : c'était déjà la règle de la Sélection et de Transformer sur plusieurs calques.
 - **Ce qu'on voit.** La barre d'état dit ce qui est touché : « Gomme sur 4 calques », « Gomme sur 15 dessins (15 clés sur 3 calques) »,
   « Perspective sur 2 calques : … » ; la bulle de l'outil sous la vue le rappelle quand plusieurs calques ou clés sont choisis.
+- **L'alerte de la gomme** (choix d'Anthony : un avertissement, sans confirmation ni blocage). Au-delà de **24 dessins** touchés
+  (`gommemulti::SEUIL_ALERTE`, une constante), un bandeau rouge d'alerte en haut du dessin dit « Gomme sur 37 dessins (Ctrl+Z annule
+  tout) », de l'appui au lâcher. À 24 ou moins, rien.
+- **Les clés qu'on ne voit pas** sont gommées **sur des fils de travail** après le lâcher, comme les remplissages de l'aplat sur plusieurs
+  clés (partie 56) ; la barre d'état suit le calcul (« Gomme : 12/20 dessins des autres clés… »). Chaque résultat rejoint l'étape
+  d'annulation du geste. Un Ctrl+Z avant la fin annule tout le geste, et ce qui arrive ensuite est abandonné. Un dessin retouché pendant
+  le calcul est laissé tel quel, et la barre d'état le dit. Enregistrer attend la fin du calcul : le fichier a toujours le geste entier.
+  Un nouveau geste de gomme attend aussi la fin du précédent.
 
 ### Coût (10 calques × 20 clés, la moitié vectoriels, feuille 960 × 540, `cout_dix_calques_vingt_cles`)
 
@@ -9500,18 +9508,17 @@ Machine d'essai, `--release`, sans carte graphique (le banc), 200 dessins visés
 
 | Geste | Appui | Pire image du glissé | Lâcher |
 | --- | --- | --- | --- |
-| Gomme | 5 ms | 4 ms | 317 ms |
-| Perspective | 19 ms (ouverture du cadre) | 82 ms | 307 ms |
+| Gomme | 5 ms | 4 ms | 8 ms (avant les fils de travail : 317 ms) |
+| Perspective | 20 ms (ouverture du cadre) | 96 ms | 317 ms |
 
-Pendant le glissé de la gomme, seuls les dessins qu'on voit sont gommés (les 190 autres le sont au lâcher). Pendant celui de la
-perspective, rien n'est rejoué : la pire image est la première (les feuilles flottantes des traits se font une fois) et l'aperçu rapide
-des 5 dessins bitmap qu'on voit, recomposé à chaque image comme pour un seul calque. **Le lâcher coûte environ 0,3 s pour 200 dessins**,
-sur le fil de l'interface (les résultats exacts) ; à moins de 20 dessins, il ne se sent pas. Le faire sur un fil de travail est possible,
-si Anthony le sent.
+Pendant le glissé de la gomme, seuls les dessins qu'on voit sont gommés ; les 190 autres le sont sur des fils de travail après le
+lâcher. Pendant celui de la perspective, rien n'est rejoué : la pire image est la première (les feuilles flottantes des traits se font
+une fois) et l'aperçu rapide des 5 dessins bitmap qu'on voit, recomposé à chaque image comme pour un seul calque. **Le lâcher de la
+perspective coûte encore environ 0,3 s pour 200 dessins** (les résultats exacts, sur le fil de l'interface) ; à moins de 20 dessins, il ne
+se sent pas.
 
 Un long trait de gomme (un zigzag sur toute la feuille, 492 points) sur 20 clés d'un calque bitmap 1920 × 1080
-(`cout_long_trait_vingt_cles`) : pire image du glissé 2 ms, mais **lâcher 1,7 s** (les 19 clés qu'on ne voit pas reçoivent tout le
-trait d'un coup). À reprendre si Anthony gomme souvent de longs traits sur beaucoup de clés (voir « Ce qui reste »).
+(`cout_long_trait_vingt_cles`) : pire image du glissé 2 ms, **lâcher 1,3 ms** (avant les fils de travail : 1,7 s).
 
 ### Relecture (après 853bdbf)
 
@@ -9527,12 +9534,9 @@ trait d'un coup). À reprendre si Anthony gomme souvent de longs traits sur beau
 
 ### Ce qui reste
 
-- Une **garde** pour la gomme sur beaucoup de dessins qu'on ne voit pas (proposée, pas faite) : au-delà d'un nombre de dessins (24 ?),
-  le premier passage demande confirmation, ou la vue montre « Gomme sur 200 dessins » en couleur d'alerte pendant le geste. À décider avec
-  Anthony.
-- Le lâcher d'un long trait de gomme sur beaucoup de clés qu'on ne voit pas (1,7 s mesuré) : proposé, pas fait — appliquer leurs points
-  sur un fil de travail, comme les remplissages de l'aplat sur plusieurs clés (le résultat rejoint l'étape du geste), ou par petites
-  tranches pendant le geste.
+- Le lâcher de Déformer sur beaucoup de dessins (0,3 s pour 200) reste sur le fil de l'interface ; le même passage sur des fils de
+  travail est possible si Anthony le sent.
+- Un Ctrl+Z pendant le calcul de la gomme, puis Ctrl+Maj+Z : seul ce qui était posé revient (ce qui était en route a été abandonné).
 - Déformer ne reprend pas une partie choisie à l'outil Sélection sur plusieurs calques (tout le dessin de chaque calque se déforme).
 - Le pot de peinture, le cutter, les pinceaux : inchangés (calque courant, ou aplat de plusieurs clés, partie 56).
 
@@ -9552,3 +9556,7 @@ trait d'un coup). À reprendre si Anthony gomme souvent de longs traits sur beau
 8. Même choix de clés, Déformer : un seul cadre ; toutes les clés sont déformées pareil au lâcher.
 9. La Sélection sur plusieurs calques, puis Suppr, copier-coller, flèches : comme avant.
 10. Enregistrer, fermer, rouvrir : tout est à sa place.
+11. Choisir plus de 24 clés et gommer : le bandeau rouge « Gomme sur … dessins (Ctrl+Z annule tout) » est en haut du dessin pendant le
+    geste, et s'en va au lâcher. Avec 24 clés ou moins, pas de bandeau.
+12. Un long trait de gomme sur 20 clés : le lâcher rend la main tout de suite, la barre d'état compte les dessins ; aller voir une autre
+    clé une fois le compte fini : gommée. Gommer puis Ctrl+Z tout de suite : rien ne reste, sur aucune clé.

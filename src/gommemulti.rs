@@ -19,12 +19,15 @@
 //! - Ni dans une case des Vignettes (la planche a ses propres règles, `gommedebord.rs`), ni quand l'aplat est la cible
 //!   (`aplatmulti.rs` s'en charge, sur les clés).
 
+use std::sync::mpsc::{channel, Receiver, Sender};
+
 use eframe::egui::{Pos2, Rect};
 
 use crate::app::{App, Tool};
 use crate::brush::{StrokeMode, StrokeState};
 use crate::document::CelId;
 use crate::history::Edit;
+use crate::raster::Raster;
 use crate::vector::{self, Affine, VectorDrawing};
 
 enum Sorte {
@@ -57,17 +60,19 @@ struct Reglage {
     whole: bool,
 }
 
-/// La gomme passe en `q` (repère du dessin) sur ce dessin ; `voir` : l'image du dessin est refaite tout de suite (sinon au
-/// lâcher). Rend les tuiles changées.
-fn gommer(doc: &mut crate::document::Document, a: &mut Autre, q: Pos2, pressure: f32, time: f64, r: Reglage, voir: bool) -> Vec<usize> {
+/// La gomme passe en `q` (repère du dessin) sur ce dessin (ses pixels, ou ses traits) : rend les tuiles changées (bitmap) et la
+/// zone des traits coupés (vectoriel), dont l'image est à refaire. Sans `App` ni document : sert aussi sur le fil de travail.
+fn gommer(raster: &mut Raster, vecteur: Option<&mut VectorDrawing>, a: &mut Autre, q: Pos2, pressure: f32, time: f64, r: Reglage) -> (Vec<usize>, Option<Rect>) {
     let mut dirty = Vec::new();
-    let Some(c) = doc.cels.get_mut(&a.cel) else { return dirty };
     match &mut a.sorte {
-        Sorte::Pixels(stroke) => stroke.add_point_at(&mut c.raster, q, pressure, time, &mut dirty),
+        Sorte::Pixels(stroke) => {
+            stroke.add_point_at(raster, q, pressure, time, &mut dirty);
+            (dirty, None)
+        }
         Sorte::Traits { dernier, region, change, .. } => {
             let factor = if r.pressure_size { pressure.clamp(0.05, 1.0) } else { 1.0 };
             let radius = (r.size * 0.5 * factor * a.k).max(0.5);
-            let Some(d) = c.vector.as_mut() else { return dirty };
+            let Some(d) = vecteur else { return (dirty, None) };
             // Le long du segment parcouru (comme `App::erase_to`), et seule la zone des traits touchés est refaite.
             let from = dernier.unwrap_or(q);
             let steps = ((from.distance(q) / (radius * 0.5).max(0.5)).ceil() as usize).max(1);
@@ -82,13 +87,82 @@ fn gommer(doc: &mut crate::document::Document, a: &mut Autre, q: Pos2, pressure:
             if coupe {
                 *change = true;
                 *region = region.union(zone);
-                if voir {
-                    dirty = c.rerender_region(zone.expand(2.0));
-                }
+                return (dirty, Some(zone));
             }
+            (dirty, None)
         }
     }
-    dirty
+}
+
+/// Ce qu'un dessin qu'on ne voit pas reçoit au lâcher, calculé sur un fil de travail : le dessin gommé, son étape d'annulation.
+enum Fini {
+    Pixels { raster: Raster, edit: Option<Edit> },
+    Traits { dessin: Box<VectorDrawing>, avant: Box<VectorDrawing> },
+    Rien,
+}
+
+/// Un résultat qui revient du fil : pour le dessin `cel`, tel qu'il était à la version `version` au lâcher.
+struct Retour {
+    cel: CelId,
+    version: u64,
+    epoque: u64,
+    fini: Fini,
+}
+
+/// Un dessin à gommer sur le fil : le geste entier (ses points), et une copie de son image ou de ses traits (les tuiles se
+/// partagent : rien n'est recopié).
+struct Travail {
+    autre: Autre,
+    raster: Raster,
+    dessin: Option<VectorDrawing>,
+    version: u64,
+    epoque: u64,
+    r: Reglage,
+}
+
+fn calculer(t: Travail) -> Retour {
+    let Travail { mut autre, mut raster, mut dessin, version, epoque, r } = t;
+    for (q, pressure, time) in std::mem::take(&mut autre.attente) {
+        gommer(&mut raster, dessin.as_mut(), &mut autre, q, pressure, time, r);
+    }
+    let cel = autre.cel;
+    let fini = match autre.sorte {
+        Sorte::Pixels(mut stroke) => {
+            let mut dirty = Vec::new();
+            let edit = stroke.finish(&mut raster, &mut dirty);
+            Fini::Pixels { raster, edit }
+        }
+        Sorte::Traits { avant, change: true, .. } => match dessin {
+            Some(d) => Fini::Traits { dessin: Box::new(d), avant },
+            None => Fini::Rien,
+        },
+        Sorte::Traits { .. } => Fini::Rien,
+    };
+    Retour { cel, version, epoque, fini }
+}
+
+/// Les dessins des clés qu'on ne voit pas, gommés sur des fils de travail après le lâcher (comme les remplissages de l'aplat sur
+/// plusieurs clés, `aplatmulti.rs`). Chaque résultat rejoint l'étape d'annulation du geste ; si elle a été annulée entre-temps,
+/// ou si le dessin a été retouché, le résultat est abandonné. L'enregistrement attend la fin (`attendre_gomme_multi`).
+pub(crate) struct GommeTravaux {
+    tx: Sender<Retour>,
+    rx: Receiver<Retour>,
+    pub(crate) en_route: usize,
+    total: usize,
+    poses: usize,
+    retouches: usize,
+    annules: usize,
+    /// L'étape d'annulation du geste (son numéro propre, `History::last_id`) ; aucune : le geste n'en a pas encore.
+    etape: Option<u64>,
+    /// Ce que touche le geste, en clair (`GommeMulti::quoi`).
+    quoi: String,
+}
+
+impl Default for GommeTravaux {
+    fn default() -> Self {
+        let (tx, rx) = channel();
+        GommeTravaux { tx, rx, en_route: 0, total: 0, poses: 0, retouches: 0, annules: 0, etape: None, quoi: String::new() }
+    }
 }
 
 /// Le geste de gomme en cours sur les autres calques choisis.
@@ -100,7 +174,15 @@ pub(crate) struct GommeMulti {
     /// Le geste est en cours (même si le calque courant n'a rien à gommer).
     actif: bool,
     pen: bool,
+    /// Le nombre de dessins que touche le geste (celui qu'on voit compris) : l'alerte au-delà de `SEUIL_ALERTE`.
+    dessins: usize,
+    /// Ce qu'il touche, en clair (« 6 dessins (6 clés sur 2 calques) ») : la barre d'état le redit à la fin du calcul.
+    quoi: String,
 }
+
+/// Au-delà de ce nombre de dessins touchés par un geste de gomme, une alerte bien visible s'affiche sur le dessin pendant tout
+/// le geste (Anthony, 2026-11-10 : un avertissement, sans confirmation ni blocage).
+pub(crate) const SEUIL_ALERTE: usize = 24;
 
 impl GommeMulti {
     /// Un geste de gomme est en cours sur plusieurs calques.
@@ -133,6 +215,8 @@ impl App {
         if !self.gomme_multi_voulue() {
             return None;
         }
+        // (Le geste d'avant finit d'être posé sur les clés qu'on ne voit pas : ses dessins sont ceux que celui-ci reprend.)
+        self.attendre_gomme_multi();
         self.end_stroke();
         Some(self.history.marque())
     }
@@ -186,11 +270,11 @@ impl App {
             };
             autres.push(Autre { cel: t.cel, vers, k, live: t.live, attente: Vec::new(), sorte });
         }
-        self.gomme_multi = GommeMulti { autres, marque: Some(marque), actif: true, pen };
-        self.gomme_multi_point(p, pressure);
         // (Le dessin qu'on voit gomme toujours, choisi ou non.)
         let n = targets.list.len() + usize::from(deja.is_some_and(|c| !targets.list.iter().any(|t| t.cel == c)));
         let quoi = if par_cles { Self::dessins_texte(&targets, true) } else { format!("{n} calque{}", if n > 1 { "s" } else { "" }) };
+        self.gomme_multi = GommeMulti { autres, marque: Some(marque), actif: true, pen, dessins: n, quoi: quoi.clone() };
+        self.gomme_multi_point(p, pressure);
         self.status = match targets.skipped_text() {
             Some(l) => format!("Gomme sur {quoi}. {l}"),
             None => format!("Gomme sur {quoi}."),
@@ -208,7 +292,11 @@ impl App {
         for a in &mut autres {
             let q = a.vers.apply(p);
             if a.live {
-                let tiles = gommer(&mut self.doc, a, q, pressure, time, r, true);
+                let Some(c) = self.doc.cels.get_mut(&a.cel) else { continue };
+                let (mut tiles, zone) = gommer(&mut c.raster, c.vector.as_mut(), a, q, pressure, time, r);
+                if let Some(z) = zone {
+                    tiles.extend(c.rerender_region(z.expand(2.0)));
+                }
                 self.renderer.invalidate_tiles(&tiles);
             } else {
                 a.attente.push((q, pressure, time));
@@ -223,14 +311,20 @@ impl App {
         if !self.gomme_multi.actif {
             return;
         }
-        let GommeMulti { autres, marque, .. } = std::mem::take(&mut self.gomme_multi);
+        let GommeMulti { autres, marque, quoi, .. } = std::mem::take(&mut self.gomme_multi);
         let mut edits: Vec<Edit> = Vec::new();
         let mut dirty = Vec::new();
         let r = Reglage { size: self.eraser.size, pressure_size: self.eraser.pressure_size, whole: self.vector_erase_whole };
-        for mut a in autres {
-            // Les dessins des autres clés reçoivent maintenant le geste entier.
-            for (q, pressure, time) in std::mem::take(&mut a.attente) {
-                gommer(&mut self.doc, &mut a, q, pressure, time, r, false);
+        let mut travaux: Vec<Travail> = Vec::new();
+        for a in autres {
+            // Les dessins des autres clés (qu'on ne voit pas) reçoivent le geste entier sur un fil de travail.
+            if !a.live {
+                if a.attente.is_empty() {
+                    continue;
+                }
+                let Some(c) = self.doc.cels.get(&a.cel) else { continue };
+                travaux.push(Travail { raster: c.raster.clone(), dessin: c.vector.clone(), version: c.version, epoque: self.doc_epoch, r, autre: a });
+                continue;
             }
             match a.sorte {
                 Sorte::Pixels(mut stroke) => {
@@ -260,6 +354,155 @@ impl App {
         }
         if let Some(m) = marque {
             self.history.regrouper_depuis(m);
+        }
+        if travaux.is_empty() {
+            return;
+        }
+        // L'étape du geste, que les résultats rejoindront (aucune si le geste n'a rien posé sur ce qu'on voit : le premier
+        // résultat la fera).
+        let etape = marque.filter(|&m| self.history.last_id() > m).map(|_| self.history.last_id());
+        let n = travaux.len();
+        let fils = std::thread::available_parallelism().map_or(2, |p| p.get()).saturating_sub(1).clamp(1, 4).min(n);
+        let mut paquets: Vec<Vec<Travail>> = (0..fils).map(|_| Vec::new()).collect();
+        for (i, t) in travaux.into_iter().enumerate() {
+            paquets[i % fils].push(t);
+        }
+        let mut lances = 0;
+        let mut perdus = Vec::new();
+        for paquet in paquets {
+            let k = paquet.len();
+            let (tx, ctx) = (self.gomme_travaux.tx.clone(), self.ctx.clone());
+            let lance = std::thread::Builder::new().name("gomme-cles".into()).spawn(move || {
+                for t in paquet {
+                    let _ = tx.send(calculer(t));
+                    ctx.request_repaint();
+                }
+            });
+            match lance {
+                Ok(_) => lances += k,
+                Err(_) => perdus.push(k),
+            }
+        }
+        let t = &mut self.gomme_travaux;
+        t.en_route += lances;
+        t.total = lances;
+        (t.poses, t.retouches, t.annules) = (0, 0, 0);
+        t.etape = etape;
+        t.quoi = quoi;
+        self.status = if perdus.is_empty() {
+            format!("Gomme : 0/{lances} dessins des autres clés…")
+        } else {
+            format!("Gomme : 0/{lances} dessins des autres clés… ({} n'ont pas pu partir : ils restent tels quels.)", perdus.iter().sum::<usize>())
+        };
+    }
+
+    /// Une fois par image d'écran (`poll_aplat_multi`) : pose les résultats arrivés. Rien au repos.
+    pub(crate) fn poll_gomme_multi(&mut self) {
+        if self.gomme_travaux.en_route == 0 {
+            return;
+        }
+        let arrives: Vec<Retour> = self.gomme_travaux.rx.try_iter().collect();
+        for r in arrives {
+            self.gomme_travaux.en_route = self.gomme_travaux.en_route.saturating_sub(1);
+            self.poser_gomme(r);
+        }
+        let t = &self.gomme_travaux;
+        let faits = t.poses + t.retouches + t.annules;
+        if t.en_route > 0 {
+            self.status = format!("Gomme : {faits}/{} dessins des autres clés…", t.total);
+            self.ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        } else if t.annules > 0 {
+            self.status = "Gomme : le geste a été annulé, le calcul des autres clés est abandonné.".into();
+        } else if t.retouches > 0 {
+            self.status = format!("Gomme : {} dessin(s) retouché(s) pendant le calcul laissé(s) tel(s) quel(s) ; {} gommé(s).", t.retouches, t.poses);
+        } else {
+            self.status = format!("Gomme sur {} : posée partout.", t.quoi);
+        }
+    }
+
+    /// Pose un résultat, s'il vaut encore : même projet, étape du geste toujours à annuler, dessin pas retouché depuis le lâcher.
+    fn poser_gomme(&mut self, r: Retour) {
+        if r.epoque != self.doc_epoch {
+            return;
+        }
+        if let Some(id) = self.gomme_travaux.etape {
+            if self.history.etat_de_l_etape(id) != Some(true) {
+                self.gomme_travaux.annules += 1;
+                return;
+            }
+        }
+        let Some(c) = self.doc.cels.get_mut(&r.cel) else {
+            self.gomme_travaux.retouches += 1;
+            return;
+        };
+        if c.version != r.version {
+            self.gomme_travaux.retouches += 1;
+            return;
+        }
+        let edit = match r.fini {
+            Fini::Rien => {
+                self.gomme_travaux.poses += 1;
+                return;
+            }
+            Fini::Pixels { raster, edit } => {
+                let changed = c.raster.ids_either(&raster);
+                c.raster = raster;
+                c.version += 1;
+                self.renderer.invalidate_tiles(&changed);
+                edit
+            }
+            Fini::Traits { dessin, avant } => {
+                c.vector = Some(*dessin);
+                c.version += 1;
+                // (Son image se refait en arrière-plan ; on ne voit pas ce dessin.)
+                self.rejeu_cel(r.cel);
+                Some(Edit::Vector { cel: r.cel, drawing: *avant })
+            }
+        };
+        self.gomme_travaux.poses += 1;
+        self.modified = true;
+        let Some(edit) = edit else { return };
+        // (L'étape est encore à annuler : vérifié plus haut.)
+        match self.gomme_travaux.etape {
+            Some(id) => {
+                self.history.extend_step(id, edit);
+            }
+            None => {
+                let avant = self.history.context.replace("Gomme".to_string());
+                self.history.push(Edit::Group(vec![edit]));
+                self.history.context = avant;
+                self.gomme_travaux.etape = Some(self.history.last_id());
+            }
+        }
+    }
+
+    /// L'alerte du geste en cours : plus de `SEUIL_ALERTE` dessins touchés. Rien sinon, ni hors d'un geste.
+    pub(crate) fn gomme_alerte(&self) -> Option<String> {
+        let g = &self.gomme_multi;
+        (g.actif && g.dessins > SEUIL_ALERTE).then(|| format!("Gomme sur {} dessins (Ctrl+Z annule tout)", g.dessins))
+    }
+
+    /// Le bandeau de l'alerte, en haut du dessin (`rect` : la zone du dessin à l'écran), de la couleur d'alerte, pendant le geste.
+    pub(crate) fn paint_gomme_alerte(&self, painter: &eframe::egui::Painter, rect: Rect) {
+        use eframe::egui::{Color32, FontId, Stroke, StrokeKind, Vec2};
+        let Some(texte) = self.gomme_alerte() else { return };
+        let [r, v, b] = crate::theme::PAPIER_ALERTE;
+        let galley = painter.layout_no_wrap(texte, FontId::proportional(17.0), Color32::WHITE);
+        let taille = galley.size() + Vec2::new(28.0, 14.0);
+        let boite = Rect::from_center_size(eframe::egui::pos2(rect.center().x, rect.top() + 14.0 + taille.y * 0.5), taille);
+        painter.rect(boite, 6.0, Color32::from_rgb(r, v, b), Stroke::new(2.0_f32, Color32::WHITE), StrokeKind::Outside);
+        painter.galley(boite.min + Vec2::new(14.0, 7.0), galley, Color32::WHITE);
+    }
+
+    /// Attend les résultats en route et les pose : avant d'enregistrer (le fichier a le geste entier), avant un nouveau geste de
+    /// gomme, et dans les essais.
+    pub(crate) fn attendre_gomme_multi(&mut self) {
+        let debut = std::time::Instant::now();
+        while self.gomme_travaux.en_route > 0 && debut.elapsed() < std::time::Duration::from_secs(120) {
+            self.poll_gomme_multi();
+            if self.gomme_travaux.en_route > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
         }
     }
 }

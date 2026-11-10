@@ -613,6 +613,198 @@ fn two_chosen_keys_with_only_one_usable_drawing_keep_the_single_layer_envelope()
     assert!(b.app.envelope.is_some(), "un seul dessin visé : l'enveloppe d'un seul calque ({})", b.app.status);
 }
 
+// ---------------------------------------------------------------------------------------------- les clés qu'on ne voit pas, sur un fil de travail
+
+/// La gomme sur les six clés de `banc_cles`, lâchée ; rien n'est encore attendu (aucune image d'écran après le lâcher).
+fn gommer_les_cles_sans_attendre(b: &mut Banc) {
+    let pts = ligne(pos2(200.0, 20.0), pos2(200.0, 280.0), 26);
+    let p0 = ecran(b, pts[0]);
+    b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
+    b.image(vec![bouton(p0, true, Modifiers::NONE)], 1.0 / 60.0);
+    for &p in &pts[1..] {
+        let q = ecran(b, p);
+        b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
+    }
+    let fin = ecran(b, *pts.last().unwrap());
+    b.image(vec![bouton(fin, false, Modifiers::NONE)], 1.0 / 60.0);
+}
+
+/// Les calculs en route sont attendus et posés (comme avant un enregistrement), puis le repos.
+fn attendre_les_calculs(b: &mut Banc) {
+    b.app.attendre_aplat_multi();
+    repos(b);
+}
+
+#[test]
+fn the_release_says_what_is_being_computed_and_everything_lands_in_the_same_step() {
+    let mut b = banc_cles(Tool::Eraser);
+    let dessins = dessins_des_cles(&b);
+    let n0 = etapes(&b);
+    gommer_les_cles_sans_attendre(&mut b);
+    assert!(b.app.status.contains("Gomme :") && b.app.status.contains("/4"), "la barre d'état dit le travail en cours : {}", b.app.status);
+    attendre_les_calculs(&mut b);
+    for &(li, cel) in &dessins {
+        assert!(!encre(&b, cel, pos2(200.0, y_de(li))), "calque {li}, dessin {cel} : gommé");
+    }
+    assert_eq!(etapes(&b), n0 + 1, "les résultats arrivés rejoignent l'étape du geste");
+    b.app.undo();
+    attendre_les_calculs(&mut b);
+    for &(li, cel) in &dessins {
+        assert!(encre(&b, cel, pos2(200.0, y_de(li))), "calque {li}, dessin {cel} : un seul Ctrl+Z rend tout");
+    }
+}
+
+#[test]
+fn an_undo_before_the_results_arrive_undoes_the_whole_gesture_and_drops_the_work() {
+    let mut b = banc_cles(Tool::Eraser);
+    let dessins = dessins_des_cles(&b);
+    let avant: Vec<_> = dessins.iter().map(|&(_, c)| empreinte(&b, c)).collect();
+    let n0 = etapes(&b);
+    gommer_les_cles_sans_attendre(&mut b);
+    b.app.undo();
+    attendre_les_calculs(&mut b);
+    for (k, &(li, cel)) in dessins.iter().enumerate() {
+        assert!(empreinte(&b, cel) == avant[k], "calque {li}, dessin {cel} : rien n'est resté du geste annulé");
+    }
+    assert_eq!(etapes(&b), n0, "aucune étape n'est revenue");
+}
+
+#[test]
+fn a_hidden_drawing_retouched_before_its_result_arrives_is_left_alone_with_a_message() {
+    let mut b = banc_cles(Tool::Eraser);
+    // Le dessin bitmap de la clé de l'image 4 (on ne le voit pas à l'image 0).
+    let cel = cel_de(&b, 1, 4);
+    gommer_les_cles_sans_attendre(&mut b);
+    // Retouché avant l'arrivée de son résultat : un point posé ailleurs.
+    {
+        let c = b.app.doc.cels.get_mut(&cel).unwrap();
+        let i = c.raster.tile_index_of(20, 20);
+        c.raster.tile_mut(i)[(20 % TILE) * TILE + 20 % TILE] = Color32::from_rgba_premultiplied(200, 0, 0, 255);
+        c.version += 1;
+    }
+    attendre_les_calculs(&mut b);
+    let c = &b.app.doc.cels[&cel];
+    assert!(c.raster.get(20, 20).r() == 200, "la retouche est gardée");
+    assert!(c.raster.get(200, y_de(1) as usize).a() > 0, "le résultat périmé n'a pas écrasé la retouche");
+    assert!(b.app.status.contains("retouch"), "la barre d'état le dit : {}", b.app.status);
+}
+
+#[test]
+fn saving_while_the_hidden_keys_are_computed_writes_the_whole_gesture() {
+    let mut b = banc_cles(Tool::Eraser);
+    gommer_les_cles_sans_attendre(&mut b);
+    let dir = std::env::temp_dir().join(format!("shot-multicalques-cles-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifeste = dir.join("P.pelure");
+    assert!(b.app.save_to_blocking(manifeste.clone()), "enregistré");
+    let relu = crate::project::load(&manifeste).expect("ouverture").doc;
+    for li in 0..2 {
+        for f in [0, 2, 4] {
+            let cel = relu.panels[0].layers[li].cel_at(f).unwrap();
+            let c = &relu.cels[&cel];
+            let gomme = match &c.vector {
+                Some(d) => d.elements.iter().all(|e| match e {
+                    Element::Stroke { points, .. } => !points.windows(2).any(|w| au_segment(pos2(200.0, y_de(li)), pos2(w[0].x, w[0].y), pos2(w[1].x, w[1].y)) < 6.0),
+                    _ => true,
+                }),
+                None => c.raster.get(200, y_de(li) as usize).a() == 0,
+            };
+            assert!(gomme, "calque {li}, clé {f} : le fichier a le geste entier");
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_release_of_a_long_eraser_stroke_on_twenty_hidden_keys_is_quick() {
+    let (w, h) = (1920usize, 1080usize);
+    let mut doc = Document::new(w, h, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 40;
+    let mut l = Layer::new("Dessin", LayerKind::Bitmap);
+    for f in 0..20 {
+        let mut r = Raster::new(w, h);
+        for y in (100..980).step_by(3) {
+            for x in 100..1820 {
+                let k = r.tile_index_of(x, y);
+                r.tile_mut(k)[(y % TILE) * TILE + x % TILE] = Color32::from_rgba_premultiplied(30, 30, 30, 255);
+            }
+        }
+        let cel = dessin(&mut doc, Contenu::Pixels(r));
+        l.set(f * 2, Some(cel));
+    }
+    doc.panels[0].layers.push(l);
+    let mut b = ouvrir(doc, Tool::Eraser, 1);
+    let keys: Vec<_> = (0..20).filter_map(|f| b.app.key_ref(0, 0, f * 2)).collect();
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    let mut pts = Vec::new();
+    for k in 0..12 {
+        let y = 150.0 + 70.0 * k as f32;
+        let (a, z) = if k % 2 == 0 { (150.0, 1770.0) } else { (1770.0, 150.0) };
+        pts.extend(ligne(pos2(a, y), pos2(z, y + 35.0), 40));
+    }
+    let p0 = ecran(&b, pts[0]);
+    b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
+    b.image(vec![bouton(p0, true, Modifiers::NONE)], 1.0 / 60.0);
+    for &p in &pts[1..] {
+        let q = ecran(&b, p);
+        b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
+    }
+    let fin = ecran(&b, *pts.last().unwrap());
+    let t = std::time::Instant::now();
+    b.image(vec![bouton(fin, false, Modifiers::NONE)], 1.0 / 60.0);
+    let lacher = t.elapsed().as_secs_f64() * 1e3;
+    println!("LACHER long trait sur 20 cles : {lacher:.1} ms");
+    // (Le but est 50 ms ; la marge laisse passer une machine chargée par d'autres essais.)
+    assert!(lacher < 200.0, "le lâcher rend la main tout de suite ({lacher:.0} ms)");
+    attendre_les_calculs(&mut b);
+    let cel = b.app.doc.panels[0].layers[0].cel_at(38).unwrap();
+    assert_eq!(b.app.doc.cels[&cel].raster.get(960, 166).a(), 0, "la dernière clé est gommée, une fois le calcul arrivé");
+    assert!(b.app.doc.cels[&cel].raster.get(960, 100).a() > 0, "et pas ailleurs");
+}
+
+/// Un calque bitmap de `n` clés (images 0, 1, 2…), toutes choisies ; l'outil Gomme.
+fn banc_n_cles(n: usize) -> Banc {
+    let mut doc = Document::new(W, H, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = n;
+    let mut l = Layer::new("Dessin", LayerKind::Bitmap);
+    for f in 0..n {
+        let cel = dessin(&mut doc, contenu(LayerKind::Bitmap, 0));
+        l.set(f, Some(cel));
+    }
+    doc.panels[0].layers.push(l);
+    let mut b = ouvrir(doc, Tool::Eraser, 1);
+    let keys: Vec<_> = (0..n).filter_map(|f| b.app.key_ref(0, 0, f)).collect();
+    assert_eq!(keys.len(), n);
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    b
+}
+
+#[test]
+fn the_eraser_warns_on_the_drawing_above_twenty_four_drawings_and_only_during_the_gesture() {
+    assert_eq!(crate::gommemulti::SEUIL_ALERTE, 24);
+    for (n, alerte) in [(24, false), (25, true)] {
+        let mut b = banc_n_cles(n);
+        b.garder_textes = true;
+        let (a, z) = (ecran(&b, pos2(200.0, 20.0)), ecran(&b, pos2(200.0, 120.0)));
+        b.image(vec![Event::PointerMoved(a)], 1.0 / 60.0);
+        b.image(vec![bouton(a, true, Modifiers::NONE)], 1.0 / 60.0);
+        b.image(vec![Event::PointerMoved(z)], 1.0 / 60.0);
+        let texte = format!("Gomme sur {n} dessins (Ctrl+Z annule tout)");
+        assert_eq!(b.app.gomme_alerte().is_some(), alerte, "{n} dessins : alerte {alerte}");
+        assert_eq!(b.textes.iter().any(|t| *t == texte), alerte, "{n} dessins : le bandeau est peint sur le dessin ({:?})", b.app.gomme_alerte());
+        b.image(vec![bouton(z, false, Modifiers::NONE)], 1.0 / 60.0);
+        b.image(Vec::new(), 1.0 / 60.0);
+        assert!(b.app.gomme_alerte().is_none(), "{n} dessins : plus d'alerte après le lâcher");
+        assert!(!b.textes.iter().any(|t| t.starts_with("Gomme sur") && t.contains("Ctrl+Z annule tout")), "le bandeau s'en va");
+        attendre_les_calculs(&mut b);
+    }
+}
+
 /// Mesure : la gomme sur 20 clés d'un calque bitmap 1920 × 1080, un long trait en zigzag sur toute la feuille.
 /// `cargo test --release --offline --locked --target-dir target\msvc --lib cout_long_trait -- --ignored --nocapture`
 #[test]

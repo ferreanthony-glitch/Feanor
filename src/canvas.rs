@@ -261,6 +261,8 @@ impl App {
         self.paint_persp_overlay(&painter);
         self.paint_envelope_overlay(&painter);
         self.paint_deform_multi_overlay(&painter);
+        // La gomme sur beaucoup de dessins : l'alerte, pendant le geste (`gommemulti.rs`).
+        self.paint_gomme_alerte(&painter, rect);
         self.paint_stroke_tip(&painter);
         self.paint_droit(&painter);
         if !self.in_card {
