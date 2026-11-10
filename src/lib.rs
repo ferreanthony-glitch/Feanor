@@ -280,6 +280,9 @@ mod gommemulti;
 mod deformmulti;
 mod nouvellescles;
 mod choixtout;
+mod choixcalques;
+#[cfg(test)]
+mod selection_tout_2_tests;
 #[cfg(test)]
 mod multicalques_tests;
 #[cfg(test)]

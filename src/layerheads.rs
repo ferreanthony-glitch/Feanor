@@ -495,7 +495,7 @@ impl App {
             "",
         );
         if resp.clicked() {
-            self.set_layer_flag(li, |l| l.onion = !l.onion);
+            self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
         }
         if resp.secondary_clicked() {
             self.onion_window = true;
@@ -519,7 +519,7 @@ impl App {
             "",
         );
         if resp.clicked() {
-            self.set_layer_flag(li, |l| l.stencil = !l.stencil);
+            self.basculer_calques(li, "Pochoir", |l| l.stencil, |l, v| l.stencil = v, false);
         }
         let resp = icon_at(ui, slot(5), if h.negative { ph::MINUS } else { ph::PLUS }, shade(h.stencil));
         let resp = bulle(
@@ -529,7 +529,7 @@ impl App {
             "",
         );
         if resp.clicked() {
-            self.set_layer_flag(li, |l| l.stencil_negative = !l.stencil_negative);
+            self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
         }
         let resp = icon_at(ui, slot(6), ph::PUSH_PIN, shade(h.fixed));
         let resp = bulle(
@@ -572,9 +572,8 @@ impl App {
             mode = modes[(at + 1) % modes.len()];
         }
         if mode != h.blend {
-            self.record_step();
-            self.layers_mut()[li].blend = mode;
-            self.renderer.invalidate_all();
+            // (Plusieurs calques choisis : tous prennent ce mode, partie 136.)
+            self.regler_mode_calques(li, mode);
         }
     }
 
