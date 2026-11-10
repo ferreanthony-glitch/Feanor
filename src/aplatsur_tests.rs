@@ -253,6 +253,126 @@ fn paint_on_aplat_does_not_divert_the_eraser_or_a_colour_layer() {
     assert_eq!(app.sur_aplat_cible(), None);
 }
 
+/// Partie 133 (Anthony, 2026-11-10, « la planche ne prend plus le trait ») : sans trait à cette image, « Peint sur l'aplat » ne laisse
+/// rien, donc ne crée rien (ni aplat, ni dessin vide, ni étape d'annulation), et la barre d'état dit pourquoi et comment l'éteindre.
+#[test]
+fn paint_on_aplat_without_a_line_creates_nothing_and_says_how_to_turn_it_off() {
+    let mut b = banc(Document::new(400, 300, 24), false);
+    let app = &mut b.app;
+    app.set_tool(Tool::Brush);
+    app.paint_on_aplat = true;
+    assert!(app.layers()[0].cel_at(0).is_none() && app.layers()[0].fond.is_none());
+    let n0 = noms(app).len();
+    // Sans aplat : il n'est pas créé.
+    gliss(app, pos2(90.0, 110.0), pos2(130.0, 110.0));
+    assert!(app.layers()[0].fond.is_none(), "pas d'aplat créé pour rien");
+    assert!(app.layers()[0].cel_at(0).is_none(), "pas de dessin vide");
+    assert_eq!(noms(app).len(), n0, "pas d'étape : {:?}", noms(app));
+    assert_eq!(app.status, crate::aplatsur::SANS_TRAIT);
+    assert!(app.status.contains("Peint sur l'aplat est allumé") && app.status.contains("Éteins-le"), "{}", app.status);
+    // Avec un aplat déjà là : le dessin n'est pas créé non plus.
+    app.toggle_fond(0);
+    let n1 = noms(app).len();
+    gliss(app, pos2(90.0, 130.0), pos2(130.0, 130.0));
+    assert!(app.layers()[0].cel_at(0).is_none(), "pas de dessin vide");
+    assert_eq!(noms(app).len(), n1, "pas d'étape : {:?}", noms(app));
+    assert_eq!(app.status, crate::aplatsur::SANS_TRAIT);
+    // La sous-ligne de l'aplat choisie à la main : le refus d'avant, sans dessin vide ni étape non plus.
+    app.paint_on_aplat = false;
+    app.select_aplat(0);
+    assert!(app.aplat_en_cible());
+    gliss(app, pos2(90.0, 150.0), pos2(130.0, 150.0));
+    assert!(app.layers()[0].cel_at(0).is_none());
+    assert_eq!(noms(app).len(), n1, "{:?}", noms(app));
+    assert!(app.status.contains("dessine d'abord le trait"), "{}", app.status);
+    // Éteint, sur le trait : le pinceau dessine.
+    app.aplat_cible = None;
+    gliss(app, pos2(90.0, 170.0), pos2(130.0, 170.0));
+    assert!(app.layers()[0].cel_at(0).is_some(), "le trait est dessiné");
+    // Un trait fermé, puis « Peint sur l'aplat » : la peinture va dans l'aplat (le cas qui marche ne change pas).
+    trait_carre(app, 60.0, 60.0, 160.0, 160.0);
+    app.paint_on_aplat = true;
+    gliss(app, pos2(100.0, 100.0), pos2(120.0, 100.0));
+    assert!(peint(&strate_de(app, 0, 0)) > 0, "la peinture est dans l'aplat : {}", app.status);
+}
+
+/// Partie 133 : un trait qui reste hors de la forme du trait ne pose rien ; il ne laisse pas d'étape, et l'aplat créé pour lui est défait (sur
+/// son projet « afa », chaque essai créait un aplat en douce).
+#[test]
+fn paint_on_aplat_outside_the_shape_of_the_line_leaves_nothing_and_undoes_the_aplat_it_made() {
+    let mut b = banc_anneau();
+    let app = &mut b.app;
+    app.paint_on_aplat = true;
+    let n0 = noms(app).len();
+    let trait0 = trait_de(app, 0, 0);
+    // Loin de l'anneau : l'aplat se créait, puis rien n'y allait.
+    gliss(app, pos2(250.0, 250.0), pos2(320.0, 250.0));
+    assert!(app.layers()[0].fond.is_none(), "l'aplat créé pour rien est défait : {}", app.status);
+    assert_eq!(noms(app).len(), n0, "aucune étape : {:?}", noms(app));
+    assert_eq!(app.status, crate::aplatsur::HORS_DE_LA_FORME);
+    assert_eq!(trait_de(app, 0, 0), trait0);
+    assert!(app.history.names().1.is_empty(), "rien à rétablir non plus");
+    // L'aplat déjà là : pas d'étape vide non plus.
+    app.toggle_fond(0);
+    let n1 = noms(app).len();
+    gliss(app, pos2(250.0, 260.0), pos2(320.0, 260.0));
+    assert_eq!(noms(app).len(), n1, "{:?}", noms(app));
+    assert!(app.layers()[0].fond.is_some(), "l'aplat d'avant le geste reste");
+    assert_eq!(app.status, crate::aplatsur::HORS_DE_LA_FORME);
+    // Dans l'anneau : la peinture va dans l'aplat, une étape.
+    gliss(app, pos2(90.0, 110.0), pos2(130.0, 110.0));
+    assert_eq!(noms(app).len(), n1 + 1, "{:?}", noms(app));
+    assert!(peint(&strate_de(app, 0, 0)) > 0);
+    // Et sans aplat, dans l'anneau : il est créé et garde la peinture (deux étapes, comme avant).
+    app.undo();
+    app.undo();
+    assert!(app.layers()[0].fond.is_none());
+    let n2 = noms(app).len();
+    gliss(app, pos2(90.0, 110.0), pos2(130.0, 110.0));
+    assert!(app.layers()[0].fond.is_some() && peint(&strate_de(app, 0, 0)) > 0, "{}", app.status);
+    assert_eq!(noms(app).len(), n2 + 2, "{:?}", noms(app));
+}
+
+/// Partie 133 : tant que « Peint sur l'aplat » est allumé avec le pinceau ou le crayon, la barre du bas de la planche le montre ; éteint, ou
+/// avec un autre outil, rien.
+#[test]
+fn the_bottom_bar_of_the_board_shows_paint_on_aplat_while_it_is_on() {
+    let mut b = banc_anneau();
+    let ctx = egui::Context::default();
+    let textes = |app: &mut App| -> Vec<String> {
+        let mut t = Vec::new();
+        for _ in 0..2 {
+            let out = ctx.run(egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(900.0, 60.0))), ..Default::default() }, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| ui.horizontal(|ui| app.planche_signal_sur_aplat(ui)));
+            });
+            t.clear();
+            fn collecter(s: &egui::Shape, out: &mut Vec<String>) {
+                match s {
+                    egui::Shape::Text(t) => out.push(t.galley.job.text.clone()),
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| collecter(s, out)),
+                    _ => {}
+                }
+            }
+            for s in &out.shapes {
+                collecter(&s.shape, &mut t);
+            }
+        }
+        t
+    };
+    b.app.set_tool(Tool::Brush);
+    b.app.paint_on_aplat = false;
+    assert!(!textes(&mut b.app).iter().any(|t| t.contains("Peint sur l'aplat")), "éteint : rien");
+    b.app.paint_on_aplat = true;
+    assert!(textes(&mut b.app).iter().any(|t| t.contains("Peint sur l'aplat")), "allumé avec le pinceau : la barre le montre");
+    b.app.set_tool(Tool::Pencil);
+    assert!(textes(&mut b.app).iter().any(|t| t.contains("Peint sur l'aplat")), "avec le crayon aussi");
+    b.app.set_tool(Tool::Eraser);
+    assert!(!textes(&mut b.app).iter().any(|t| t.contains("Peint sur l'aplat")), "la gomme n'est pas détournée : rien");
+    // (La barre du bas de la planche l'appelle.)
+    let source = include_str!("vignettesprefs.rs");
+    assert!(source.contains("self.planche_signal_sur_aplat(ui);"));
+}
+
 // ------------------------------------------------------------------------------------ sélectionner et transformer l'aplat
 
 use crate::document::{CelId, Layer, LayerKind, Strate};

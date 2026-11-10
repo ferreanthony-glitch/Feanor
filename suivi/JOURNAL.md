@@ -10,6 +10,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   branche : aucun conflit. Vérificateur sur main : 4 329 essais réussis, 0 échec, aucun avertissement, tous les groupes de fiabilité OK
   (828 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`) et ouvert sur une copie de projet avec de faux
   réglages : pas de plantage. Le dossier de chantier `Chantiers\camera-souvient` attend son accord pour être retiré.
+- Son retour sur « afa » (« la planche ne prend plus le trait… le trait disparaît au lâcher ») : la cause était l'interrupteur « Peint
+  sur l'aplat » resté allumé (vu dans sa vidéo d'écran), pas la fusion ; ses trois symptômes rejoués sur une copie de son projet. Sur son
+  « Oui, corrige » : partie 133, branche `souvient-retours` (chantier `Chantiers\souvient-retours`, depuis main 3e2b090). Un trait posé
+  sur le papier va au papier ; un trait qui ne laisse rien ne crée ni aplat, ni dessin vide, ni étape, ni plan vide ; la barre d'état
+  dit pourquoi ; la barre du bas de la planche montre l'interrupteur allumé, un clic l'éteint. Vérificateur sur la branche : 4 339
+  essais réussis, 0 échec, aucun avertissement, fiabilité OK. Exe de branche ouvert sur une copie de son projet avec de faux réglages :
+  pas de plantage. Pas fusionné : attend son essai et son accord.
 
 ## 2026-11-09
 

@@ -150,6 +150,7 @@ impl App {
             self.renderer.invalidate_all();
             self.vsel = None;
             self.stroke = None;
+            self.sur_aplat_geste = None;
         }
         if let Some(m) = fx.messages.last() {
             self.status = m.clone();

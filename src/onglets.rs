@@ -165,6 +165,7 @@ etat_projet! {
     bdrag: Option<crate::pixtools::BDrag> = None,
     fond_stroke: Option<CelId> = None,
     fond_cut: Option<crate::brush::StrokeState> = None,
+    sur_aplat_geste: Option<crate::aplatsur::GesteSurAplat> = None,
     aplat_miroirs: crate::aplatmulti::Miroirs = Default::default(),
     aplat_travaux: crate::aplatmulti::Travaux = Default::default(),
     aplat_intel: crate::aplatintel::Etat = Default::default(),
