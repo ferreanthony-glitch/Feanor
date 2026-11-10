@@ -3,6 +3,14 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-10
+
+- Fusion de `camera-souvient` dans main (35a6e42, sans avance rapide), après l'essai d'Anthony dans la version portable du 9 novembre et
+  son accord (« ok tu peux fusionner avec le reste ») ; l'autre session prévenue avant. `main` n'avait pas bougé depuis le départ de la
+  branche : aucun conflit. Vérificateur sur main : 4 329 essais réussis, 0 échec, aucun avertissement, tous les groupes de fiabilité OK
+  (828 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`) et ouvert sur une copie de projet avec de faux
+  réglages : pas de plantage. Le dossier de chantier `Chantiers\camera-souvient` attend son accord pour être retiré.
+
 ## 2026-11-09
 
 - La caméra se souvient (partie 131, branche `camera-souvient`, chantier `Chantiers\camera-souvient`) : à sa demande de repenser les
