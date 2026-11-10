@@ -54,6 +54,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   second lancement, arrêt brutal sans reste. Il n'a pas essayé la version portable avant : le stylet pendant l'écriture continue
   reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` retiré avec son accord (« Oui,
   retire-le ») ; la branche est gardée.
+- Sa remarque sur les calques dans la timeline (« un peu bordélique », les bandes repliées « manquent parfois de lisibilité ») : relevé
+  du code (parties 29 et 68, `pistes.rs`, `montagerows.rs`) et de ses projets en lecture seule (13 calques dans le plan le plus chargé
+  de « retakes brawlydays », dix bandes de la même couleur, aucun nom donné par lui, 172 montées et descentes de calque au clavier).
+  Huit propositions numérotées 31 à 38 (couleur par dossier, bandes et noms plus lisibles, dossiers visibles, calques cachés en une
+  ligne, noms sans les taper, retrouver un calque par son dessin, pile qui ne saute plus, un plan à la fois) et une page de maquettes
+  cliquables. Rien de codé : attend son choix par numéros.
 
 ## 2026-11-09
 
