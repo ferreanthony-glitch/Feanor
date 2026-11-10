@@ -1214,3 +1214,47 @@ impl App {
         clip.circle_stroke(pivot, selbox::PIVOT_RADIUS, Stroke::new(1.0_f32, ACCENT));
     }
 }
+
+// ---------------------------------------------------------------------------------------------- Ctrl+A (partie 134)
+
+impl App {
+    /// Ctrl+A dans les Vignettes, calque bitmap (partie 134) : comme un lasso autour de toute la planche, les pixels du calque où l'on choisit dans
+    /// chaque case et ceux du papier, les traits pris entiers ; rien des autres calques. Au-delà de la limite de la sélection, rien n'est pris
+    /// et la barre d'état le dit.
+    pub(crate) fn selb_tout(&mut self) {
+        if !self.selb_possible() {
+            return;
+        }
+        self.end_stroke();
+        let layout = self.board_layout();
+        let poly = crate::vignettesel::lasso_de_toute_la_planche();
+        let pris = self.selb_prendre(&layout, &poly, None, None);
+        self.vsel = None;
+        let (pieces, liens) = match pris {
+            Ok(t) => t,
+            Err(Echec::Limite) => {
+                self.vignettes.selb = None;
+                self.status = "Tout sélectionner : la planche entière dépasse ce que la sélection de pixels peut prendre ; rien n'est pris (un lasso plus petit).".into();
+                return;
+            }
+            Err(_) => {
+                self.vignettes.selb = None;
+                self.status = "Tout sélectionner : un trait a changé depuis qu'il a été tracé, on ne sait plus le suivre ; rien n'est pris.".into();
+                return;
+            }
+        };
+        if pieces.is_empty() {
+            self.vignettes.selb = None;
+            self.status = "Tout sélectionner : rien sur ce calque ni sur le papier.".into();
+            return;
+        }
+        let serial = self.history.serial();
+        let bornes = Self::bornes_des(&pieces);
+        let cases = pieces.iter().filter(|p| matches!(p.source, Source::Dessin { .. })).count();
+        let planche = pieces.len() - cases;
+        self.vignettes.selb = Some(SelBitmap { pieces, liens, serial, bornes, planche: cle_planche(&layout), ..SelBitmap::default() });
+        let s = |k: usize| if k > 1 { "s" } else { "" };
+        let note = self.tout_note_calques();
+        self.status = format!("Tout sélectionné : les pixels de {cases} dessin{}{} : Ctrl + glisser dans la boîte pour déplacer.{note}", s(cases), if planche > 0 { " et du papier" } else { "" });
+    }
+}

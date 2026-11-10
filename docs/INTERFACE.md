@@ -9661,3 +9661,41 @@ verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état,
 15. Choisir des clés dans la timeline, Suppr : leurs dessins sont vides, les clés restent. Clic droit, « Supprimer les clés » : elles
     partent.
 16. Trois calques choisis : Vider le dessin, Retourner le calque, Poser une clé d'opacité agissent sur les trois.
+
+## 134. Ctrl+A dans les Vignettes : le choix de la planche (2026-11-10, branche `vignettes-ctrl-a`)
+
+Anthony : dans les Vignettes, Ctrl+A doit passer par le choix de la planche, prendre les traits entiers, ceux du papier et ceux qui
+débordent des cases, et rien des autres calques ; on doit pouvoir ensuite les déplacer ou les transformer sans couper un trait.
+Code : deux fonctions ajoutées à la fin de `vignettesel.rs` (`selp_tout`, `tout_note_calques`, `lasso_de_toute_la_planche`) et de
+`vignetteselbmp.rs` (`selb_tout`), et deux lignes d'aiguillage de `edition.tout_selectionner` dans `app.rs`. Rien d'autre n'est touché dans
+les fichiers des Vignettes. Essais : `vignettes_ctrl_a_tests.rs` (4, neufs, sur la carte graphique).
+
+### Avant
+
+Ctrl+A dans les Vignettes passait par le chemin du Storyboard : il choisissait les éléments du dessin du calque courant **de la case
+courante** seulement (une sélection de case, que la planche ne montre pas comme son choix), sans les autres cases ni les traits du papier.
+
+### Maintenant
+
+- **Calque vectoriel** : Ctrl+A fait comme un lasso autour de toute la planche (`selp_dans_le_lasso`) : tous les traits **entiers** du
+  calque où l'on choisit, dans chaque case (celui de `case_recoit` : le calque courant, ou le calque de même nom dans les autres plans),
+  ceux qui débordent des cases et ceux du papier compris, et les autres éléments des cases. Le choix est celui de la planche : sa boîte, ses
+  gestes (Ctrl + glisser : déplacer, un coin : agrandir ou tourner), Suppr, copier, couper ; déplacé, aucun trait n'est coupé, une seule
+  étape d'annulation. « Tout sélectionné : 3 traits entiers, du calque « Dessin » et du papier ».
+- **Calque bitmap** : la même chose avec le choix des pixels de la planche (`selb_prendre`) ; au-delà de la limite de cette sélection
+  (une planche très chargée), rien n'est pris et la barre d'état le dit.
+- **Rien des autres calques.** Le calque où l'on choisit verrouillé ou masqué : ses traits ne sont pas pris (ceux du papier si), et la barre
+  d'état le nomme.
+- **Plusieurs calques choisis, ou des clés choisies : pas fait.** Le choix de la planche ne connaît qu'un calque à la fois : un trait
+  déplacé y est reposé dans le calque où l'on choisit (`selp_preparer`, `case_recoit`). Prendre les traits de plusieurs calques demanderait
+  de reposer chacun dans son propre calque : un changement du cœur de `vignettesel.rs`, à faire avec l'autre session. En attendant, Ctrl+A
+  prend le calque courant et la barre d'état dit que les autres calques choisis ne sont pas pris. Les clés choisies de la timeline n'ont pas de
+  sens sur la planche (chaque case montre une image de son plan).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Dans les Vignettes, un plan à trois calques : Ctrl+A ne prend que les traits du calque courant (et ceux du papier) ; la boîte entoure tout.
+2. Un trait qui part d'une case, passe sur le papier et entre dans la case voisine : Ctrl+A le prend entier ; Ctrl + glisser dans la boîte :
+   il bouge entier ; un seul Ctrl+Z le remet.
+3. Verrouiller le calque : Ctrl+A le dit dans la barre d'état.
+4. Un calque bitmap : Ctrl+A prend ses pixels sur toute la planche.

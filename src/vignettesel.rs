@@ -1187,3 +1187,58 @@ impl App {
         let _ = pos2;
     }
 }
+
+// ---------------------------------------------------------------------------------------------- Ctrl+A (partie 134)
+
+/// Un lasso qui couvre toute la planche, et bien au-delà : « tout ».
+pub(crate) fn lasso_de_toute_la_planche() -> Vec<Pos2> {
+    const L: f32 = 1.0e7;
+    vec![pos2(-L, -L), pos2(L, -L), pos2(L, L), pos2(-L, L)]
+}
+
+impl App {
+    /// Ctrl+A dans les Vignettes, calque vectoriel (partie 134) : le choix de la planche prend tous les traits entiers du calque où l'on choisit
+    /// (celui de chaque case, `case_recoit`), ceux qui débordent des cases et ceux du papier compris, et les autres éléments des cases ; rien des
+    /// autres calques. Comme un lasso autour de toute la planche : on peut ensuite le déplacer ou le transformer sans couper un trait.
+    pub(crate) fn selp_tout(&mut self) {
+        if !self.selp_possible() {
+            return;
+        }
+        self.end_stroke();
+        let layout = self.board_layout();
+        let traits = self.selp_dans_le_lasso(&layout, &lasso_de_toute_la_planche());
+        let serial = self.history.serial();
+        self.vsel = None;
+        let n = traits.iter().filter(|t| !t.objet).count();
+        let o = traits.len() - n;
+        self.vignettes.selp = (!traits.is_empty()).then(|| SelPlanche { traits, serial, ..SelPlanche::default() });
+        let s = |k: usize| if k > 1 { "s" } else { "" };
+        let nom = self.layers().get(self.cur_layer).map(|l| l.name.clone()).unwrap_or_default();
+        let objets = if o > 0 { format!(" et {o} élément{} de case", s(o)) } else { String::new() };
+        let note = self.tout_note_calques();
+        self.status = if n + o == 0 {
+            format!("Tout sélectionner : rien sur le calque « {nom} » ni sur le papier.{note}")
+        } else {
+            format!("Tout sélectionné : {n} trait{} entier{}{objets}, du calque « {nom} » et du papier : Ctrl + glisser dans la boîte pour déplacer.{note}", s(n), s(n))
+        };
+    }
+
+    /// Ce que Ctrl+A laisse de côté dans les Vignettes : le calque où l'on choisit s'il est verrouillé ou masqué (ses traits ne sont pas pris ;
+    /// ceux du papier si), et les autres calques choisis (le choix de la planche se fait sur un calque à la fois).
+    pub(crate) fn tout_note_calques(&self) -> String {
+        let mut note = String::new();
+        if let Some(l) = self.layers().get(self.cur_layer) {
+            if !l.drawable() || crate::folders::locked_by_folder(self.layers(), self.cur_layer) {
+                note += &format!(" Laissé de côté : « {} » (verrouillé).", l.name);
+            } else if crate::folders::effect(self.layers(), self.cur_layer).is_none() {
+                note += &format!(" Laissé de côté : « {} » (masqué).", l.name);
+            }
+        }
+        let autres = self.chosen_layers().len().saturating_sub(1);
+        if autres > 0 {
+            let s = if autres > 1 { "s" } else { "" };
+            note += &format!(" Les {autres} autre{s} calque{s} choisi{s} ne sont pas pris : sur la planche, le choix se fait sur un calque à la fois.");
+        }
+        note
+    }
+}
