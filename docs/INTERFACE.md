@@ -9666,9 +9666,10 @@ verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état,
 
 Anthony : dans les Vignettes, Ctrl+A doit passer par le choix de la planche, prendre les traits entiers, ceux du papier et ceux qui
 débordent des cases, et rien des autres calques ; on doit pouvoir ensuite les déplacer ou les transformer sans couper un trait.
-Code : deux fonctions ajoutées à la fin de `vignettesel.rs` (`selp_tout`, `tout_note_calques`, `lasso_de_toute_la_planche`) et de
-`vignetteselbmp.rs` (`selb_tout`), et deux lignes d'aiguillage de `edition.tout_selectionner` dans `app.rs`. Rien d'autre n'est touché dans
-les fichiers des Vignettes. Essais : `vignettes_ctrl_a_tests.rs` (4, neufs, sur la carte graphique).
+Code : à la fin de `vignettesel.rs` (`selp_tout`, `tout_note_calques`, `calque_du_choix`, `calque_du_tout`, `bornes_de_tout`) et de
+`vignetteselbmp.rs` (`selb_tout`, `selb_prendre_tout`), deux lignes d'aiguillage de `edition.tout_selectionner` dans `app.rs` ; après la
+relecture, aussi un champ `calque` dans `SelPlanche` et `SelBitmap` (vérifié par `selp_active` et `selb_active`), et la boîte des morceaux
+du papier bornée dans `selb_prendre_avec`. Essais : `vignettes_ctrl_a_tests.rs` (15, sur la carte graphique).
 
 ### Avant
 
@@ -9677,12 +9678,12 @@ courante** seulement (une sélection de case, que la planche ne montre pas comme
 
 ### Maintenant
 
-- **Calque vectoriel** : Ctrl+A fait comme un lasso autour de toute la planche (`selp_dans_le_lasso`) : tous les traits **entiers** du
+- **Calque vectoriel** : Ctrl+A prend tout, sans lasso (`selp_tout`) : tous les traits **entiers** du
   calque où l'on choisit, dans chaque case (celui de `case_recoit` : le calque courant, ou le calque de même nom dans les autres plans),
   ceux qui débordent des cases et ceux du papier compris, et les autres éléments des cases. Le choix est celui de la planche : sa boîte, ses
   gestes (Ctrl + glisser : déplacer, un coin : agrandir ou tourner), Suppr, copier, couper ; déplacé, aucun trait n'est coupé, une seule
   étape d'annulation. « Tout sélectionné : 3 traits entiers, du calque « Dessin » et du papier ».
-- **Calque bitmap** : la même chose avec le choix des pixels de la planche (`selb_prendre`) ; au-delà de la limite de cette sélection
+- **Calque bitmap** : la même chose avec le choix des pixels de la planche, un lasso de la taille de tout ce que la planche montre (`bornes_de_tout`) ; au-delà de la limite de cette sélection
   (une planche très chargée), rien n'est pris et la barre d'état le dit.
 - **Rien des autres calques.** Le calque où l'on choisit verrouillé ou masqué : ses traits ne sont pas pris (ceux du papier si), et la barre
   d'état le nomme.
@@ -9699,3 +9700,24 @@ courante** seulement (une sélection de case, que la planche ne montre pas comme
    il bouge entier ; un seul Ctrl+Z le remet.
 3. Verrouiller le calque : Ctrl+A le dit dans la barre d'état.
 4. Un calque bitmap : Ctrl+A prend ses pixels sur toute la planche.
+
+### Relecture (2026-11-10)
+
+1. **Gel sur un calque bitmap** quand le papier avait un morceau : la boîte du lasso « infini » (±10 millions de pixels) n'était pas bornée
+   pour les morceaux du papier. Le lasso de Ctrl+A est maintenant celui de `bornes_de_tout` (cases, papier, dessins qui débordent), et
+   chaque morceau n'est parcouru que dans ses propres pixels.
+2. **Formes, textes, images** n'étaient jamais pris (le lasso infini sortait de ce que `dessin_sur` sait ramener). Ctrl+A vectoriel ne passe
+   plus par un lasso : il prend tous les éléments des dessins visés.
+3. Un plan sans calque de ce nom : `case_recoit` se rabat sur un autre calque (utile au lasso, inchangé) ; Ctrl+A n'y prend plus rien.
+4. Changer de calque après Ctrl+A (ou après un lasso) lève le choix : déplacé, il aurait été reposé dans le nouveau calque. Passer
+   d'une case à l'autre (le calque de même nom d'un autre plan) le garde.
+5. **Un trait du papier ne garde pas son calque** : tracé sur « Autre 1 », il est sur le calque de la planche (« Hors cadres ») ; glissé
+   dans une case, il arrive dans le calque où l'on choisit à ce moment, pas dans « Autre 1 ». Comportement d'avant, gardé et fixé par un
+   essai : à décider par Anthony.
+6. Calque verrouillé ou masqué : la barre d'état le dit aussi quand rien n'est pris (bitmap), et pour les autres plans (« verrouillé dans
+   3 plans »).
+7. L'aplat visé par l'outil Sélection et les clés choisies gardent leur Ctrl+A (`multi_select_all`) dans les Vignettes.
+8. Ctrl+A pendant un trait : le trait est fini et posé d'abord, il entre dans le choix ; une couche bitmap du papier illisible : rien n'est
+   pris, comme au lasso.
+9. Mesure : 100 cases de 50 traits coupés comme avant la partie 131 (2 500 traits entiers de deux parts) : Ctrl+A en 38 à 43 ms
+   (80 à 110 ms quand les parts ne se touchent pas et ne se recollent pas).

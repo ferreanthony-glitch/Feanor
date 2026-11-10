@@ -108,11 +108,13 @@ pub(crate) struct SelBitmap {
     pub limite_atteinte: bool,
     /// La disposition de la planche au moment du choix (`cle_planche`) : si elle change, le choix est levé.
     pub planche: u64,
+    /// Le calque où le choix a été fait (son id) : sur un autre calque, le choix ne vaut plus (partie 134).
+    pub calque: Option<(u64, String)>,
 }
 
 impl Default for SelBitmap {
     fn default() -> Self {
-        SelBitmap { pieces: Vec::new(), liens: Vec::new(), serial: 0, lasso: None, geste: None, pivot: None, bornes: Rect::NOTHING, tenu: None, limite_atteinte: false, planche: 0 }
+        SelBitmap { pieces: Vec::new(), liens: Vec::new(), serial: 0, lasso: None, geste: None, pivot: None, bornes: Rect::NOTHING, tenu: None, limite_atteinte: false, planche: 0, calque: None }
     }
 }
 
@@ -194,7 +196,7 @@ impl App {
     }
 
     pub(crate) fn selb_active(&self) -> bool {
-        self.selb_possible() && self.vignettes.selb.as_ref().is_some_and(|s| !s.pieces.is_empty() && s.serial == self.history.serial())
+        self.selb_possible() && self.vignettes.selb.as_ref().is_some_and(|s| !s.pieces.is_empty() && s.serial == self.history.serial() && self.choix_sur_ce_calque(&s.calque))
     }
 
     pub(crate) fn selb_a_la_main(&self) -> bool {
@@ -223,6 +225,18 @@ impl App {
         self.selb_prendre_jusqu_a(layout, poly, seule, clic, LIMITE_TUILES)
     }
 
+    /// Ctrl+A (partie 134) : comme `selb_prendre`, seulement sur le calque courant ou de même nom dans chaque case (`calque_du_tout`).
+    fn selb_prendre_tout(&self, layout: &BoardLayout, poly: &[Pos2]) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
+        let cases: Vec<Option<(usize, A64)>> = (0..layout.cards.len())
+            .map(|k| {
+                let (rang, _) = self.calque_du_tout(layout, k, LayerKind::Bitmap)?;
+                let a = crate::horschamp::pose_de_la_case(&self.doc, layout, k)?.affine64()?;
+                Some((rang, a))
+            })
+            .collect();
+        self.selb_prendre_avec(layout, poly, None, None, LIMITE_TUILES, cases)
+    }
+
     /// Essais : ce que prendrait le lasso `poly` sans limite (la mesure de la limite).
     #[cfg(test)]
     pub(crate) fn selb_prendre_sans_limite(&self, layout: &BoardLayout, poly: &[Pos2]) -> Vec<Piece> {
@@ -249,10 +263,14 @@ impl App {
     }
 
     fn selb_prendre_jusqu_a(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>, limite: usize) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
+        self.selb_prendre_avec(layout, poly, seule, clic, limite, self.selb_cases(layout))
+    }
+
+    /// `selb_prendre_jusqu_a`, les cases (et leur calque) étant données (`selb_cases`, ou celles de Ctrl+A).
+    fn selb_prendre_avec(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>, limite: usize, cases: Vec<Option<(usize, A64)>>) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
         // Le passe-partout montre le film : ce qui dépasse des cases est caché, et le papier passe sous leurs images. On ne prend que ce qu'on voit.
         let film = self.vignettes.annot.marie;
-        let cases = self.selb_cases(layout);
         let boite = if poly.len() >= 3 { Rect::from_points(poly) } else { Rect::NOTHING };
         let mut pris: Vec<(Source, Masque)> = Vec::new();
         let mut liens: Vec<u64> = Vec::new();
@@ -397,10 +415,15 @@ impl App {
                     continue;
                 }
                 let poly_px: Vec<Pos2> = poly.iter().map(|p| inv.point(*p)).collect();
-                let b = Rect::from_points(&poly_px);
+                // (Recoupé avec les pixels du morceau, comme à l'étape 1 : un grand lasso ne fait pas parcourir des milliards de pixels vides.)
+                let Some((mx0, my0, mx1, my1)) = crate::planchebitmap::boite_px(&m.pixels) else { continue };
+                let b = Rect::from_points(&poly_px).intersect(Rect::from_min_max(pos2(mx0 as f32, my0 as f32), pos2(mx1 as f32, my1 as f32)));
+                if !b.is_positive() {
+                    continue;
+                }
                 for y in b.top().floor() as i64..=b.bottom().ceil() as i64 {
                     for (x0, x1) in spans(&poly_px, y) {
-                        for x in x0..x1 {
+                        for x in x0.max(b.left().floor() as i64)..x1.min(b.right().ceil() as i64) {
                             if crate::planchebitmap::alpha_sans_garder(&m.pixels, x, y) != 0 && visible(v.point(pos2(x as f32 + 0.5, y as f32 + 0.5))) {
                                 ajouter(&mut pris, Source::Morceau { id: m.id }, x, y);
                             }
@@ -634,10 +657,12 @@ impl App {
                 let serial = self.history.serial();
                 let bornes = Self::bornes_des(&pieces);
                 let n: usize = pieces.iter().map(|p| crate::planchebitmap::tuiles_de(&p.pixels)).sum();
+                let calque = self.calque_du_choix();
                 let s = self.vignettes.selb.get_or_insert_with(SelBitmap::default);
                 s.pieces = pieces;
                 s.liens = liens;
                 s.serial = serial;
+                s.calque = calque;
                 s.pivot = None;
                 s.bornes = bornes;
         s.planche = cle_planche(&layout);
@@ -1218,43 +1243,54 @@ impl App {
 // ---------------------------------------------------------------------------------------------- Ctrl+A (partie 134)
 
 impl App {
-    /// Ctrl+A dans les Vignettes, calque bitmap (partie 134) : comme un lasso autour de toute la planche, les pixels du calque où l'on choisit dans
-    /// chaque case et ceux du papier, les traits pris entiers ; rien des autres calques. Au-delà de la limite de la sélection, rien n'est pris
-    /// et la barre d'état le dit.
+    /// Ctrl+A dans les Vignettes, calque bitmap (partie 134) : un lasso autour de tout ce que la planche montre (`bornes_de_tout`), les pixels du
+    /// calque courant ou de même nom dans chaque case et ceux du papier, les traits pris entiers ; rien des autres calques. Au-delà de la limite
+    /// de la sélection, rien n'est pris et la barre d'état le dit. Le trait en cours est d'abord fini et posé (il entre dans le choix).
     pub(crate) fn selb_tout(&mut self) {
         if !self.selb_possible() {
             return;
         }
-        self.end_stroke();
+        let note = |app: &App| app.tout_note_calques();
+        // (Une couche qu'on n'a pas pu lire ne pourrait pas s'enregistrer : on n'y mène rien, comme au lasso.)
+        if self.doc.annotations.bitmap.illisible {
+            self.vignettes.selb = None;
+            self.status = format!("La couche bitmap de la planche n'a pas pu être lue à l'ouverture : Tout sélectionner est coupé sur la planche (rien n'est perdu).{}", note(self));
+            return;
+        }
         let layout = self.board_layout();
-        let poly = crate::vignettesel::lasso_de_toute_la_planche();
-        let pris = self.selb_prendre(&layout, &poly, None, None);
+        self.end_stroke();
+        self.horschamp_partager(&layout);
+        self.drop_multi();
         self.vsel = None;
+        self.vignettes.selp = None;
+        let b = self.bornes_de_tout(&layout, LayerKind::Bitmap);
+        let poly = vec![b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
+        let pris = self.selb_prendre_tout(&layout, &poly);
         let (pieces, liens) = match pris {
             Ok(t) => t,
             Err(Echec::Limite) => {
                 self.vignettes.selb = None;
-                self.status = "Tout sélectionner : la planche entière dépasse ce que la sélection de pixels peut prendre ; rien n'est pris (un lasso plus petit).".into();
+                self.status = format!("Tout sélectionner : la planche entière dépasse ce que la sélection de pixels peut prendre ; rien n'est pris (un lasso plus petit).{}", note(self));
                 return;
             }
             Err(_) => {
                 self.vignettes.selb = None;
-                self.status = "Tout sélectionner : un trait a changé depuis qu'il a été tracé, on ne sait plus le suivre ; rien n'est pris.".into();
+                self.status = format!("Tout sélectionner : un trait a changé depuis qu'il a été tracé, on ne sait plus le suivre ; rien n'est pris.{}", note(self));
                 return;
             }
         };
         if pieces.is_empty() {
             self.vignettes.selb = None;
-            self.status = "Tout sélectionner : rien sur ce calque ni sur le papier.".into();
+            self.status = format!("Tout sélectionner : rien sur ce calque ni sur le papier.{}", note(self));
             return;
         }
         let serial = self.history.serial();
         let bornes = Self::bornes_des(&pieces);
         let cases = pieces.iter().filter(|p| matches!(p.source, Source::Dessin { .. })).count();
         let planche = pieces.len() - cases;
-        self.vignettes.selb = Some(SelBitmap { pieces, liens, serial, bornes, planche: cle_planche(&layout), ..SelBitmap::default() });
+        let calque = self.calque_du_choix();
+        self.vignettes.selb = Some(SelBitmap { pieces, liens, serial, bornes, planche: cle_planche(&layout), calque, ..SelBitmap::default() });
         let s = |k: usize| if k > 1 { "s" } else { "" };
-        let note = self.tout_note_calques();
-        self.status = format!("Tout sélectionné : les pixels de {cases} dessin{}{} : Ctrl + glisser dans la boîte pour déplacer.{note}", s(cases), if planche > 0 { " et du papier" } else { "" });
+        self.status = format!("Tout sélectionné : les pixels de {cases} dessin{}{} : Ctrl + glisser dans la boîte pour déplacer.{}", s(cases), if planche > 0 { " et du papier" } else { "" }, note(self));
     }
 }
