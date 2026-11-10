@@ -230,6 +230,9 @@ pub(crate) struct Vignettes {
     /// L'appui (écran) qui vient de tomber sur la bande de note d'une case et qui dessine : le dessin de la case l'accepte, même hors de
     /// son cadre. Effacé à la fin de l'image d'écran.
     pub appui_bande: Option<Pos2>,
+    /// Cet appui hors des cases fait un trait qui ira au papier au lâcher (hors du champ de toute case, ou sur une case écartée) :
+    /// « Peint sur l'aplat » ne le détourne pas, le papier n'a pas d'aplat (partie 133). Effacé avec `appui_bande`.
+    pub appui_papier: bool,
     /// Les annotations : outil, couleur, affichage, marie-louise (`annotationsui.rs`).
     pub annot: crate::annotationsui::Etat,
     /// Les images déposées sur la planche, en préparation sur un fil de fond (`deposer.rs`).
@@ -345,6 +348,7 @@ impl Default for Vignettes {
             decalage: Vec2::ZERO,
             camera_tenue: false,
             appui_bande: None,
+            appui_papier: false,
             annot: Default::default(),
             depots: Vec::new(),
             planche: Default::default(),
@@ -977,6 +981,7 @@ impl App {
                     if let Some(k) = proche {
                         let c = layout.cards[k];
                         self.vignettes.appui_bande = Some(pos);
+                        self.noter_appui_papier(layout, p);
                         self.board_sel = vec![c.plan];
                         self.board_notes.clear();
                         let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
@@ -999,6 +1004,7 @@ impl App {
                 let c = layout.cards[k];
                 if matches!(hit, Hit::Note(_)) && !selecting {
                     self.vignettes.appui_bande = Some(pos);
+                    self.noter_appui_papier(layout, p);
                 }
                 if selecting {
                     // Maj + appui : choisir des plans. (Ctrl + Maj, ou T tenue : un geste de caméra, plus haut.)
@@ -1076,6 +1082,7 @@ impl App {
                         self.commit_note_text(layout);
                         let c = layout.cards[k];
                         self.vignettes.appui_bande = Some(pos);
+                        self.noter_appui_papier(layout, p);
                         self.board_sel = vec![c.plan];
                         self.board_notes.clear();
                         let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
@@ -1095,6 +1102,13 @@ impl App {
                 false
             }
         }
+    }
+
+    /// Un appui hors des cases qui dessine, au point `p` de la planche : son trait ira-t-il au papier au lâcher (partie 131 : hors du champ de
+    /// toute case, ou sur une case écartée) ? Alors « Peint sur l'aplat » ne le détourne pas (partie 133, `aplatsur.rs`).
+    pub(crate) fn noter_appui_papier(&mut self, layout: &BoardLayout, p: Pos2) {
+        let debord = self.settings.vignettes.debord_fraction();
+        self.vignettes.appui_papier = layout.annulee_en(p).is_some() || !crate::horschamp::champs(layout, debord).iter().any(|c| c.contains(p));
     }
 
     /// Un appui qui ne fait rien le dit (partie 113) : le pot de peinture et le cutter n'agissent que dans une case dessinée ; `vide` :
@@ -1881,6 +1895,7 @@ impl App {
             self.finish_board_drag(&layout, &texts);
         }
         self.vignettes.appui_bande = None;
+        self.vignettes.appui_papier = false;
         // Un appui tombé sur une barre : au lâcher sans mouvement, la barre bascule et le point de trait est retiré (décision 11).
         if self.barre_au_lacher(&layout, latest, any_down) {
             ui.ctx().request_repaint();

@@ -349,6 +349,8 @@ mod gommedebord;
 #[cfg(test)]
 mod camera_souvient_tests;
 #[cfg(test)]
+mod souvient_retours_tests;
+#[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
 mod indices_tests;

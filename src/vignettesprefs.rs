@@ -141,6 +141,32 @@ impl App {
         if bulle(r, "Cadrer tout", "Toute la planche dans la vue, en largeur et en hauteur (jusqu'au zoom le plus petit, 20 %).", "").clicked() {
             self.planche_cadrer_tout();
         }
+        self.planche_signal_sur_aplat(ui);
+    }
+
+    /// « Peint sur l'aplat » allumé, avec le pinceau ou le crayon : la barre du bas de la planche le montre (une pastille braise, puis
+    /// l'interrupteur allumé et son nom) ; un clic l'éteint (partie 133 : Anthony ne le voyait pas sous l'aperçu du pinceau, et la planche
+    /// « ne prenait plus le trait »). Rien quand il est éteint.
+    pub(crate) fn planche_signal_sur_aplat(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        if !(self.paint_on_aplat && self.outil_peint_aplat()) {
+            return;
+        }
+        ui.add_space(crate::barres::MARGE_TRAIT);
+        ui.separator();
+        ui.add_space(crate::barres::MARGE_TRAIT);
+        let (r, _) = ui.allocate_exact_size(vec2(8.0, 13.0), egui::Sense::hover());
+        ui.painter().circle_filled(r.center(), 3.5, crate::theme::palette().braise);
+        let resp = ui.add(egui::SelectableLabel::new(true, format!("{}  Peint sur l'aplat", ph::SQUARE_HALF_BOTTOM)));
+        let resp = self.aide(
+            resp,
+            "« Peint sur l'aplat » est allumé",
+            "Le pinceau et le crayon peignent dans l'aplat, sous un trait déjà dessiné, pas sur le trait. Là où il n'y a pas de trait, rien ne reste. Sur le papier, hors des cases, le trait reste un trait. Cliquer pour l'éteindre.",
+            "pinceau.sur_aplat",
+        );
+        if resp.clicked() {
+            self.run_action("pinceau.sur_aplat");
+        }
     }
 
     /// Vignettes > Numéros et textes : la taille des numéros de plan (et leur fond), la pastille de version, la durée, les lignes de texte
