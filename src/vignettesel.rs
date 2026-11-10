@@ -107,6 +107,8 @@ pub(crate) struct SelPlanche {
     pub geste: Option<GesteSel>,
     pub pivot: Option<Pos2>,
     vue: RefCell<Option<Vue>>,
+    /// Le calque où le choix a été fait (son id) : sur un autre calque, le choix ne vaut plus (déplacé, il serait reposé dans le nouveau).
+    pub calque: Option<(u64, String)>,
 }
 
 /// Une part sur la planche : ses points (rayon compris, en unités de la planche), l'appui et l'instant de chacun (vides s'ils ne suivent pas).
@@ -229,7 +231,9 @@ impl App {
 
     /// Des éléments sont-ils choisis sur la planche, et le choix vaut-il encore (même historique, calque vectoriel) ?
     pub(crate) fn selp_active(&self) -> bool {
-        self.selp_possible() && self.vignettes.selp.as_ref().is_some_and(|s| !s.traits.is_empty() && s.serial == self.history.serial())
+        // (Et sur le calque où il a été fait : sur un autre, déplacé, il serait reposé dans celui-là.)
+        self.selp_possible()
+            && self.vignettes.selp.as_ref().is_some_and(|s| !s.traits.is_empty() && s.serial == self.history.serial() && self.choix_sur_ce_calque(&s.calque))
     }
 
     /// Les touches d'édition (Suppr, Ctrl+C, Ctrl+X) vont-elles au choix de la planche : il vaut, et le dessin a la main (pas les plans, les images de la
@@ -637,9 +641,11 @@ impl App {
                 let etendue = Rect::from_points(&l).size().max_elem() * zoom;
                 let trouves = if l.len() < 3 || etendue < CLIC_PX { self.selp_sous_le_point(layout, l[0], PRISE_PX / zoom) } else { self.selp_dans_le_lasso(layout, &l) };
                 let serial = self.history.serial();
+                let calque = self.calque_du_choix();
                 let s = self.vignettes.selp.get_or_insert_with(SelPlanche::default);
                 s.traits = trouves;
                 s.serial = serial;
+                s.calque = calque;
                 s.pivot = None;
                 *s.vue.borrow_mut() = None;
                 let n = s.traits.iter().filter(|t| !t.objet).count();
@@ -1185,5 +1191,183 @@ impl App {
         }
         clip.circle_stroke(pivot, selbox::PIVOT_RADIUS, Stroke::new(1.0_f32, ACCENT));
         let _ = pos2;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------- Ctrl+A (partie 134)
+
+impl App {
+    /// Le calque où l'on choisit (son id) : un choix de la planche fait sur un autre calque ne vaut plus (`selp_active`, `selb_active`).
+    pub(crate) fn calque_du_choix(&self) -> Option<(u64, String)> {
+        self.layers().get(self.cur_layer).map(|l| (l.id, l.name.clone()))
+    }
+
+    /// Le choix fait sur `calque` vaut-il encore ? Oui sur le même calque, ou sur celui de même nom d'un autre plan (passer d'une case à
+    /// l'autre change de plan, pas de calque) ; non sur un autre calque.
+    pub(crate) fn choix_sur_ce_calque(&self, calque: &Option<(u64, String)>) -> bool {
+        let Some((id, nom)) = calque else { return true };
+        self.layers().get(self.cur_layer).is_some_and(|l| l.id == *id || l.name == *nom)
+    }
+
+    /// Pour Ctrl+A, le calque de la case `k` où l'on choisit, de sorte `genre` : celui de `case_recoit` (ni verrouillé, ni masqué, ni
+    /// transformé…), et seulement s'il est **le calque courant ou de même nom** (`case_recoit` se rabat sinon sur un autre calque de la même
+    /// sorte : le lasso le garde, Ctrl+A ne le prend pas). Son rang et son dessin.
+    pub(crate) fn calque_du_tout(&self, layout: &BoardLayout, k: usize, genre: LayerKind) -> Option<(usize, CelId)> {
+        let voulu = self.layers().get(self.cur_layer)?;
+        let rang = self.case_recoit(layout, k, genre).ok()?;
+        let c = layout.cards.get(k)?;
+        let l = self.doc.panels.get(c.panel)?.layers.get(rang)?;
+        if l.id != voulu.id && l.name != voulu.name {
+            return None;
+        }
+        Some((rang, l.cel_at(c.frame)?))
+    }
+
+    /// La boîte, sur la planche, de tout ce que Ctrl+A peut prendre : les cases, le papier (traits et morceaux bitmap), et le dessin du calque
+    /// où l'on choisit dans chaque case, jusqu'où il déborde. Un lasso de cette taille (et non « l'infini ») reste dans ce que les dessins et la
+    /// couche bitmap savent parcourir.
+    pub(crate) fn bornes_de_tout(&self, layout: &BoardLayout, genre: LayerKind) -> Rect {
+        let mut r = Rect::from_min_size(Pos2::ZERO, layout.size);
+        for c in &layout.cards {
+            r = r.union(c.thumb);
+        }
+        let a = &self.doc.annotations;
+        for i in 0..a.traces.len() {
+            if let Some(pts) = a.points_planche(layout, i) {
+                for p in pts {
+                    r = r.union(Rect::from_center_size(p.pos(), egui::vec2(2.0 * p.r + 2.0, 2.0 * p.r + 2.0)));
+                }
+            }
+        }
+        for m in &a.bitmap.morceaux {
+            if let Some(b) = m.bornes(layout) {
+                r = r.union(b);
+            }
+        }
+        for k in 0..layout.cards.len() {
+            let Some((_, cel)) = self.calque_du_tout(layout, k, genre) else { continue };
+            let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
+            let Some(c) = self.doc.cels.get(&cel) else { continue };
+            let b = match &c.vector {
+                Some(d) => d.elements.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds())),
+                None => match crate::planchebitmap::boite_px(&c.raster) {
+                    Some((x0, y0, x1, y1)) => Rect::from_min_max(pos2(x0 as f32, y0 as f32), pos2(x1 as f32, y1 as f32)),
+                    None => Rect::NOTHING,
+                },
+            };
+            if b.is_finite() && b.is_positive() {
+                for q in [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()] {
+                    let p = pose.planche(q);
+                    if p.x.is_finite() && p.y.is_finite() {
+                        r = r.union(Rect::from_min_max(p, p));
+                    }
+                }
+            }
+        }
+        r.expand(16.0)
+    }
+
+    /// Ctrl+A dans les Vignettes, calque vectoriel (partie 134) : le choix de la planche prend **tout**, sans lasso : chaque trait entier du calque
+    /// où l'on choisit (le calque courant, ou celui de même nom dans les autres plans : `calque_du_tout`), où qu'il aille, ceux du papier, et
+    /// les autres éléments des cases (formes, textes, images, même sous une caméra en bascule). Rien des autres calques. On peut ensuite le
+    /// déplacer ou le transformer sans couper un trait. Le trait en cours est d'abord fini et posé (il entre dans le choix).
+    pub(crate) fn selp_tout(&mut self) {
+        if !self.selp_possible() {
+            return;
+        }
+        let layout = self.board_layout();
+        self.end_stroke();
+        // (Le trait qu'on vient de finir est posé sur la planche comme à son lâcher : il entre dans le choix.)
+        self.horschamp_partager(&layout);
+        self.drop_multi();
+        self.vsel = None;
+        self.vignettes.selb = None;
+        let mut dessins: Vec<(usize, CelId)> = Vec::new();
+        for k in 0..layout.cards.len() {
+            if let Some((_, cel)) = self.calque_du_tout(&layout, k, LayerKind::Vector) {
+                if !dessins.iter().any(|(_, c)| *c == cel) {
+                    dessins.push((k, cel));
+                }
+            }
+        }
+        // Le passe-partout montre le film (et un dessin que plusieurs cases montrent ne se voit que près de sa case) : un trait n'y est pris que s'il
+        // a un point dans le champ de sa case, comme au lasso.
+        let champs = crate::horschamp::champs(&layout, self.settings.vignettes.debord_fraction());
+        let film = self.vignettes.annot.marie;
+        let mut prises: Vec<(PartRef, bool)> = Vec::new();
+        for &(k, cel) in &dessins {
+            let champ = (film || self.dessin_commun(&layout, k, cel)).then(|| champs.get(k).copied().unwrap_or(Rect::NOTHING));
+            let pose = crate::horschamp::pose_de_la_case(&self.doc, &layout, k);
+            let Some(d) = self.drawing(cel) else { continue };
+            for (rang, e) in d.elements.iter().enumerate() {
+                let r = PartRef::Dessin { cel, case: layout.cards[k].id, rang };
+                match e {
+                    Element::Stroke { points, .. } => {
+                        let vu = match (champ, &pose) {
+                            (None, _) => true,
+                            (Some(c), Some(pose)) => points.iter().any(|p| c.contains(pose.planche(p.pos()))),
+                            (Some(_), None) => false,
+                        };
+                        if vu {
+                            prises.push((r, false));
+                        }
+                    }
+                    _ => prises.push((r, true)),
+                }
+            }
+        }
+        if let Some(calque) = self.doc.annotations.hors_cadres_montre() {
+            prises.extend(self.doc.annotations.traces.iter().filter(|t| t.calque == calque).map(|t| (PartRef::Planche { id: t.id }, false)));
+        }
+        let traits = self.en_traits_entiers(&layout, &dessins, prises);
+        let serial = self.history.serial();
+        let n = traits.iter().filter(|t| !t.objet).count();
+        let o = traits.len() - n;
+        let calque = self.calque_du_choix();
+        self.vignettes.selp = (!traits.is_empty()).then(|| SelPlanche { traits, serial, calque, ..SelPlanche::default() });
+        let s = |k: usize| if k > 1 { "s" } else { "" };
+        let nom = self.layers().get(self.cur_layer).map(|l| l.name.clone()).unwrap_or_default();
+        let objets = if o > 0 { format!(" et {o} élément{} de case", s(o)) } else { String::new() };
+        let note = self.tout_note_calques();
+        self.status = if n + o == 0 {
+            format!("Tout sélectionner : rien sur le calque « {nom} » ni sur le papier.{note}")
+        } else {
+            format!("Tout sélectionné : {n} trait{} entier{}{objets}, du calque « {nom} » et du papier : Ctrl + glisser dans la boîte pour déplacer.{note}", s(n), s(n))
+        };
+    }
+
+    /// Ce que Ctrl+A laisse de côté dans les Vignettes : le calque où l'on choisit là où il est verrouillé ou masqué (dans ce plan ou dans les
+    /// autres : ses traits n'y sont pas pris ; ceux du papier si), et les autres calques choisis (le choix de la planche se fait sur un calque à
+    /// la fois).
+    pub(crate) fn tout_note_calques(&self) -> String {
+        let mut note = String::new();
+        if let Some(voulu) = self.layers().get(self.cur_layer) {
+            let (mut verrouille, mut masque) = (0usize, 0usize);
+            for p in &self.doc.panels {
+                for (li, l) in p.layers.iter().enumerate() {
+                    if l.id != voulu.id && l.name != voulu.name {
+                        continue;
+                    }
+                    if !l.drawable() || crate::folders::locked_by_folder(&p.layers, li) {
+                        verrouille += 1;
+                    } else if crate::folders::effect(&p.layers, li).is_none() {
+                        masque += 1;
+                    }
+                }
+            }
+            let plans = |n: usize| if n > 1 { format!("dans {n} plans") } else { "dans 1 plan".to_string() };
+            if verrouille > 0 {
+                note += &format!(" Laissé de côté : « {} » (verrouillé {}).", voulu.name, plans(verrouille));
+            }
+            if masque > 0 {
+                note += &format!(" Laissé de côté : « {} » (masqué {}).", voulu.name, plans(masque));
+            }
+        }
+        let autres = self.chosen_layers().len().saturating_sub(1);
+        if autres > 0 {
+            let s = if autres > 1 { "s" } else { "" };
+            note += &format!(" Les {autres} autre{s} calque{s} choisi{s} ne sont pas pris : sur la planche, le choix se fait sur un calque à la fois.");
+        }
+        note
     }
 }

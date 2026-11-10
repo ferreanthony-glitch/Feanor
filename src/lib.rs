@@ -282,6 +282,8 @@ mod nouvellescles;
 mod choixtout;
 #[cfg(test)]
 mod multicalques_tests;
+#[cfg(test)]
+mod vignettes_ctrl_a_tests;
 mod aplatcouleur;
 mod aplatperso;
 #[cfg(test)]

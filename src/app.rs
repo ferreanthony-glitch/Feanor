@@ -4578,6 +4578,10 @@ impl App {
             }
             // Dans la timeline : toutes les images de tous les calques (audit A2).
             "edition.tout_selectionner" if self.images_focus => self.select_whole_timeline(),
+            // Dans les Vignettes : le choix de la planche, traits entiers et papier compris (partie 134).
+            // (L'aplat visé par l'outil Sélection, et les clés choisies, gardent leur chemin : `select_all` → `multi_select_all`.)
+            "edition.tout_selectionner" if self.selp_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selp_tout(),
+            "edition.tout_selectionner" if self.selb_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selb_tout(),
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();
