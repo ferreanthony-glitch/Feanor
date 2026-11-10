@@ -10,6 +10,7 @@ use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
+use crate::choixcalques::remplaces_texte;
 use crate::fx::{Effect, EffectKind, FAMILIES};
 
 /// Pourquoi le tremblement du trait est grisé sur un calque bitmap (bulle des menus).
@@ -202,6 +203,8 @@ impl App {
             let fx = &mut self.layers_mut()[k].fx;
             match fx.iter().position(|e| e.kind == kind) {
                 Some(_) if on => fx.iter_mut().filter(|e| e.kind == kind).for_each(|e| e.enabled = false),
+                // (Décocher n'ajoute jamais d'effet à un calque qui ne l'avait pas.)
+                None if on => {}
                 Some(i) => fx[i].enabled = true,
                 None => fx.push(Effect::new(kind)),
             }
@@ -397,19 +400,13 @@ impl App {
             return;
         }
         self.record_step();
-        for &k in &lis {
-            let stack = &mut self.layers_mut()[k].fx;
-            for e in built.iter().cloned() {
-                stack.retain(|x| x.kind != e.kind);
-                stack.push(e);
-            }
-        }
+        let remplaces = self.poser_preregle(&lis, &built);
         if lis.contains(&li) {
             let last = self.layers()[li].fx.len() - 1;
             self.select_fx(last);
         }
         self.renderer.invalidate_all();
-        let sur = if lis.len() >= 2 { format!("posé sur {} calques", lis.len()) } else { "posé sur le calque".to_string() };
+        let sur = if lis.len() >= 2 { format!("posé sur {} calques{}", lis.len(), remplaces_texte(remplaces)) } else { "posé sur le calque".to_string() };
         self.status = format!("{} : {sur}, les clés partent de l'image {}.{laisses}", preset.label(), self.frame_label(self.cur_frame));
     }
 
@@ -463,19 +460,13 @@ impl App {
             return;
         }
         self.record_step();
-        for &k in &lis {
-            let stack = &mut self.layers_mut()[k].fx;
-            for e in built.iter().cloned() {
-                stack.retain(|x| x.kind != e.kind);
-                stack.push(e);
-            }
-        }
+        let remplaces = self.poser_preregle(&lis, &built);
         if lis.contains(&li) {
             let last = self.layers()[li].fx.len() - 1;
             self.select_fx(last);
         }
         self.renderer.invalidate_all();
-        let sur = if lis.len() >= 2 { format!("posé sur {} calques", lis.len()) } else { "posé sur le calque".to_string() };
+        let sur = if lis.len() >= 2 { format!("posé sur {} calques{}", lis.len(), remplaces_texte(remplaces)) } else { "posé sur le calque".to_string() };
         self.status = format!("{} : {sur} (les dessins n'ont pas changé).{laisses}", preset.label());
     }
 
@@ -562,8 +553,10 @@ impl App {
         // La clé qu'on vient de créer, seule, devient le choix (elle se voit, se déplace, se copie
         // et se supprime dans le montage et la timeline).
         self.select_new_fx_key(li, i, f);
-        let sur = if autres.is_empty() { String::new() } else { format!(" sur {} calques", autres.len() + 1) };
-        self.status = format!("Clé de « {name} » à l'image {}{sur}.", self.frame_label(f));
+        let plusieurs = self.calques_du_geste(li).len() >= 2;
+        let sur = if plusieurs { format!(" sur {} calque{}", autres.len() + 1, if autres.is_empty() { "" } else { "s" }) } else { String::new() };
+        let laisses = if plusieurs { self.sans_effet_pareil(li, i) } else { String::new() };
+        self.status = format!("Clé de « {name} » à l'image {}{sur}.{laisses}", self.frame_label(f));
     }
 
     /// Retire la clé de l'effet choisi à l'image courante.
@@ -574,11 +567,25 @@ impl App {
             return;
         };
         // Plusieurs calques choisis : la clé de cette image part aussi de l'effet de même sorte de chacun (partie 136).
-        let cibles: Vec<(usize, usize)> = self.effets_du_geste(li, i).into_iter().filter(|&(k, j)| self.layers().get(k).and_then(|l| l.fx.get(j)).is_some_and(|e| e.key_at(f).is_some())).collect();
-        if cibles.is_empty() {
+        // La commande part du calque courant : sans clé ici, rien n'est supprimé ailleurs.
+        let ici = self.layers().get(li).and_then(|l| l.fx.get(i)).is_some_and(|e| e.key_at(f).is_some());
+        if !ici {
             self.status = "Pas de clé de cet effet à l'image courante.".into();
             return;
         }
+        let mut sans_cle: Vec<String> = Vec::new();
+        let cibles: Vec<(usize, usize)> = self
+            .effets_du_geste(li, i)
+            .into_iter()
+            .filter(|&(k, j)| {
+                let a = self.layers().get(k).and_then(|l| l.fx.get(j)).is_some_and(|e| e.key_at(f).is_some());
+                if !a {
+                    sans_cle.push(format!("{} (pas de clé à cette image)", self.layers()[k].name));
+                }
+                a
+            })
+            .collect();
+        let laisses = format!("{}{}", self.sans_effet_pareil(li, i), crate::choixcalques::laisses_de_cote(&sans_cle));
         if self.content_refuses() {
             return;
         }
@@ -586,7 +593,7 @@ impl App {
         for &(k, j) in &cibles {
             self.layers_mut()[k].fx[j].remove_key(f);
         }
-        self.status = if cibles.len() >= 2 { format!("Clé supprimée sur {} calques.", cibles.len()) } else { "Clé supprimée.".into() };
+        self.status = if self.calques_du_geste(li).len() >= 2 { format!("Clé supprimée sur {} calque{}.{laisses}", cibles.len(), if cibles.len() > 1 { "s" } else { "" }) } else { "Clé supprimée.".into() };
     }
 
     /// Va à la clé précédente (`dir` < 0) ou suivante de l'effet choisi.

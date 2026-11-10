@@ -87,20 +87,48 @@ impl App {
             if kinds.iter().all(|&kind| self.fx_allowed(k, kind)) {
                 ok.push(k);
             } else {
-                laisses.push(format!("{} ({})", l.name, if l.folder { "dossier" } else { "calque vectoriel seulement" }));
+                // (La vraie raison : un dossier n'a pas d'effets ; un effet du trait ne va que sur un calque vectoriel.)
+                let sorte = match l.kind {
+                    _ if l.video.is_some() => "calque vidéo, l'effet ne va que sur un calque vectoriel",
+                    crate::document::LayerKind::Bitmap => "calque bitmap, l'effet ne va que sur un calque vectoriel",
+                    _ => "ne prend pas cet effet",
+                };
+                laisses.push(format!("{} ({})", l.name, if l.folder { "dossier, pas d'effets" } else { sorte }));
             }
         }
         (ok, laisses_de_cote(&laisses))
     }
 
-    /// Dans le calque `k`, l'effet qui répond à l'effet `i` du calque `li` : le même rang parmi les effets de même sorte, sinon le
-    /// premier de cette sorte. Rien si `k` n'a pas d'effet de cette sorte.
+    /// Dans le calque `k`, l'effet qui répond à l'effet `i` du calque `li` : le même rang parmi les effets de même sorte (le 1er avec
+    /// le 1er, le 2e avec le 2e). Rien s'il n'y en a pas autant.
     pub(crate) fn effet_pareil(&self, li: usize, i: usize, k: usize) -> Option<usize> {
         let fx = &self.layers().get(li)?.fx;
         let kind = fx.get(i)?.kind;
         let rang = fx[..i].iter().filter(|e| e.kind == kind).count();
-        let autres: Vec<usize> = self.layers().get(k)?.fx.iter().enumerate().filter(|(_, e)| e.kind == kind).map(|(j, _)| j).collect();
-        autres.get(rang).or(autres.first()).copied()
+        self.layers().get(k)?.fx.iter().enumerate().filter(|(_, e)| e.kind == kind).map(|(j, _)| j).nth(rang)
+    }
+
+    /// Les calques choisis qui n'ont pas d'effet répondant à l'effet `i` du calque `li` (`effet_pareil`), prêts pour la barre d'état.
+    pub(crate) fn sans_effet_pareil(&self, li: usize, i: usize) -> String {
+        let nom = self.layers().get(li).and_then(|l| l.fx.get(i)).map(|e| e.kind.label()).unwrap_or_default();
+        let laisses: Vec<String> = self
+            .calques_du_geste(li)
+            .into_iter()
+            .filter(|&k| k != li && self.effet_pareil(li, i, k).is_none())
+            .filter_map(|k| self.layers().get(k).map(|l| format!("{} (pas d'effet « {nom} » à ce rang)", l.name)))
+            .collect();
+        laisses_de_cote(&laisses)
+    }
+
+    /// Après un cadenas posé sur les calques `ids` : la sélection sur plusieurs calques qui en touche un est lâchée, et la séance de
+    /// Déformer qui en touche un se ferme sans rien écrire (un geste en cours rend ses dessins d'avant). Rien sinon.
+    pub(crate) fn apres_verrou(&mut self, ids: &[u64]) {
+        if self.multi.sel.as_ref().is_some_and(|s| s.parts.iter().any(|p| ids.contains(&p.layer))) {
+            self.drop_multi();
+        }
+        if self.deform_multi.as_ref().is_some_and(|d| d.touche(ids)) {
+            self.deform_multi_abandonner();
+        }
     }
 
     /// Les effets qui répondent à l'effet `i` du calque `li` sur les calques du geste, `li` compris (calque, rang de l'effet).
@@ -144,10 +172,70 @@ impl App {
                 effect.values = new;
             }
         }
-        if cibles.len() >= 2 {
-            self.status = format!("Réglage de l'effet sur {} calques.", cibles.len());
+        if self.calques_du_geste(li).len() >= 2 {
+            self.status = format!("Réglage de l'effet sur {} calque{}.{}", cibles.len(), pluriel(cibles.len()), self.sans_effet_pareil(li, i));
         }
         cibles.len()
+    }
+}
+
+impl App {
+    /// Pose les effets d'un préréglage `built` sur chaque calque `lis` (ceux de même sorte sont remplacés). Rend le nombre d'effets
+    /// remplacés.
+    pub(crate) fn poser_preregle(&mut self, lis: &[usize], built: &[crate::fx::Effect]) -> usize {
+        let mut n = 0;
+        for &k in lis {
+            let stack = &mut self.layers_mut()[k].fx;
+            for e in built {
+                let avant = stack.len();
+                stack.retain(|x| x.kind != e.kind);
+                n += avant - stack.len();
+                stack.push(e.clone());
+            }
+        }
+        n
+    }
+
+    /// Les clés d'effets choisies `targets` (plan, calque, [(effet, image)]), plus, dans le plan courant, celles des mêmes images sur
+    /// l'effet de même rang et de même sorte des autres calques choisis (partie 136 : Suppr sur une clé d'effet choisie agit sur tous
+    /// les calques choisis).
+    pub(crate) fn cles_fx_du_geste(&self, targets: Vec<(usize, usize, Vec<(usize, usize)>)>) -> Vec<(usize, usize, Vec<(usize, usize)>)> {
+        let mut out = targets.clone();
+        let pi = self.cur_panel;
+        for (p, li, keys) in &targets {
+            if *p != pi {
+                continue;
+            }
+            for k in self.calques_du_geste(*li) {
+                if k == *li {
+                    continue;
+                }
+                for &(i, f) in keys {
+                    let Some(j) = self.effet_pareil(*li, i, k) else { continue };
+                    if self.layers()[k].fx[j].key_at(f).is_none() {
+                        continue;
+                    }
+                    match out.iter_mut().find(|t| t.0 == pi && t.1 == k) {
+                        Some(t) => {
+                            if !t.2.contains(&(j, f)) {
+                                t.2.push((j, f));
+                            }
+                        }
+                        None => out.push((pi, k, vec![(j, f)])),
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+/// « , 3 effets remplacés » (rien s'il n'y en a pas).
+pub(crate) fn remplaces_texte(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!(", {n} effet{} de même sorte remplacé{}", pluriel(n), pluriel(n))
     }
 }
 

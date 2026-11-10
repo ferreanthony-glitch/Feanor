@@ -232,3 +232,176 @@ fn flipping_a_trajectory_layer_with_others_flips_its_path_around_the_common_midd
     let relu = rouvrir(&b, "trajectoire");
     assert_eq!(relu.panels[0].layers[1].trajectoire.as_ref().map(|t| t.points.clone()), calques(&b)[1].trajectoire.as_ref().map(|t| t.points.clone()), "le fichier a le chemin retourné");
 }
+
+// ------------------------------------------------------------------------------------------------ relecture de 7725741
+
+/// Relecture, 1 : décocher un effet n'en ajoute jamais aux calques choisis qui ne l'avaient pas.
+#[test]
+fn unchecking_an_effect_never_adds_it_to_the_chosen_layers_that_did_not_have_it() {
+    let mut b = banc(&[V, V, V], Tool::Brush);
+    b.app.doc.panels[0].layers[0].fx.push(crate::fx::Effect::new(EffectKind::Boil));
+    b.app.run_action("fx.tremblement");
+    assert_eq!(effets(&b, EffectKind::Boil), [false, false, false]);
+    assert!(calques(&b)[1].fx.is_empty() && calques(&b)[2].fx.is_empty(), "rien n'est ajouté aux autres");
+    // Le flou : même règle.
+    b.app.doc.panels[0].layers[0].fx.push(crate::fx::Effect::new(EffectKind::GaussianBlur));
+    b.app.run_action("calque.flou");
+    assert!(calques(&b)[1].fx.is_empty() && calques(&b)[2].fx.is_empty());
+}
+
+/// Relecture, 2 : une trajectoire en clés d'images retournée avec un autre calque : après un nouveau calcul, chaque dessin de jalon
+/// est le miroir de ce qu'il était.
+#[test]
+fn flipping_a_trajectory_in_drawing_keys_keeps_each_milestone_drawing_mirrored_after_a_new_computation() {
+    let mut b = banc(&[V, V], Tool::Brush);
+    let y1 = y_de(1);
+    let mut t = crate::trajectoire::Trajectoire::nouvelle(&[[150.0, y1], [220.0, y1 + 20.0], [280.0, y1 + 40.0]]).expect("un chemin");
+    t.cles = crate::trajectoire::Cles::Images;
+    t.marques = vec![0.5];
+    b.app.doc.panels[0].layers[1].trajectoire = Some(t);
+    b.app.trajectoire_recalculer_dans(0, 1);
+    let jalons = calques(&b)[1].trajectoire.as_ref().unwrap().images_des_jalons(4);
+    assert!(jalons.len() >= 3, "{jalons:?}");
+    let centre = |b: &Banc, li: usize, f: usize| {
+        let bx = b.app.layer_content_box(li, f).expect("un dessin");
+        crate::multisel::layer_to_stage(&b.app.doc, 0, f, li).expect("sur la feuille").apply_rect(bx).center()
+    };
+    let f = b.app.cur_frame;
+    let avant0 = centre(&b, 0, f);
+    let avant: Vec<_> = jalons.iter().map(|&j| centre(&b, 1, j)).collect();
+    b.app.run_action("calque.miroir_h");
+    let axe = (avant0.x + centre(&b, 0, f).x) * 0.5;
+    b.app.trajectoire_recalculer_dans(0, 1);
+    for (k, &j) in jalons.iter().enumerate() {
+        let p = centre(&b, 1, j);
+        assert!((p.x - (2.0 * axe - avant[k].x)).abs() < 1.0 && (p.y - avant[k].y).abs() < 1.0, "jalon {k} (image {j}) : le miroir de {:?} autour de x = {axe}, pas {p:?}", avant[k]);
+    }
+}
+
+/// Relecture, 3 : le cadenas posé lâche la sélection sur plusieurs calques : un glissé ensuite ne bouge rien.
+#[test]
+fn locking_a_layer_drops_the_multi_layer_selection_and_a_drag_moves_nothing() {
+    use crate::multicalques_tests::{banc_deformer, cel_de, empreinte, glisser, ligne, repos};
+    let mut b = banc_deformer(crate::envelopetools::DeformMode::Perspective, 0);
+    b.app.set_tool(Tool::Select);
+    b.chauffer(2);
+    b.app.run_action("edition.tout_selectionner");
+    assert!(b.app.multi.sel.is_some(), "une sélection sur les deux calques : {}", b.app.status);
+    let (a, z) = (cel_de(&b, 0, 0), cel_de(&b, 1, 0));
+    let (ea, ez) = (empreinte(&b, a), empreinte(&b, z));
+    b.app.run_action("calque.verrouiller");
+    assert!(calques(&b).iter().all(|l| l.locked));
+    assert!(b.app.multi.sel.is_none(), "la sélection est lâchée");
+    glisser(&mut b, &ligne(pos2(200.0, 150.0), pos2(240.0, 170.0), 8));
+    repos(&mut b);
+    assert!(empreinte(&b, a) == ea && empreinte(&b, z) == ez, "rien n'a bougé");
+    let t = calques(&b).iter().map(|l| l.transform).collect::<Vec<_>>();
+    assert!(t.iter().all(|t| t.x == 0.0 && t.y == 0.0), "aucun calque déplacé : {t:?}");
+}
+
+/// Relecture, 3 : une sélection prise, puis le calque verrouillé autrement (dossier, fichier) : elle ne vaut plus.
+#[test]
+fn a_multi_layer_selection_on_a_layer_locked_since_is_no_longer_valid() {
+    use crate::multicalques_tests::banc_deformer;
+    let mut b = banc_deformer(crate::envelopetools::DeformMode::Perspective, 0);
+    b.app.set_tool(Tool::Select);
+    b.chauffer(2);
+    b.app.run_action("edition.tout_selectionner");
+    assert!(b.app.multi.sel.as_ref().expect("une sélection").still_valid(&b.app.doc, 0, 0));
+    b.app.doc.panels[0].layers[1].locked = true;
+    assert!(!b.app.multi.sel.as_ref().unwrap().still_valid(&b.app.doc, 0, 0), "un calque verrouillé : la sélection ne vaut plus");
+}
+
+/// Relecture, 3 : l'Enveloppe ouverte, puis Alt+L : la séance se ferme sans rien écrire, un geste ensuite ne déforme rien.
+#[test]
+fn locking_during_an_envelope_session_closes_it_and_a_gesture_deforms_nothing() {
+    use crate::multicalques_tests::{banc_deformer, cel_de, clic, empreinte, glisser, ligne, repos};
+    let mut b = banc_deformer(crate::envelopetools::DeformMode::Envelope, 0);
+    let (a, z) = (cel_de(&b, 0, 0), cel_de(&b, 1, 0));
+    let (ea, ez) = (empreinte(&b, a), empreinte(&b, z));
+    clic(&mut b, pos2(200.0, 150.0));
+    assert!(b.app.deform_multi.is_some(), "la séance est ouverte : {}", b.app.status);
+    b.app.run_action("calque.verrouiller");
+    assert!(b.app.deform_multi.is_none(), "la séance est fermée");
+    glisser(&mut b, &ligne(pos2(100.0, 100.0), pos2(140.0, 130.0), 8));
+    repos(&mut b);
+    assert!(empreinte(&b, a) == ea && empreinte(&b, z) == ez, "rien n'est déformé");
+}
+
+/// Relecture, 4 : supprimer une clé d'effet part du calque courant ; sans clé ici, rien n'est supprimé ailleurs. Les calques sans
+/// effet de même sorte sont nommés.
+#[test]
+fn deleting_an_effect_key_starts_from_the_current_layer_and_names_the_layers_left_aside() {
+    let mut b = banc(&[V, V, V], Tool::Brush);
+    b.app.run_action("calque.flou");
+    // Le calque 2 perd son flou : il est laissé de côté, nommé.
+    b.app.doc.panels[0].layers[2].fx.clear();
+    let i = calques(&b)[0].fx.iter().position(|e| e.kind == EffectKind::GaussianBlur).unwrap();
+    // Une clé à l'image 1 sur le calque 1 seulement : depuis le calque courant (0), sans clé ici, rien n'est supprimé.
+    let v = calques(&b)[1].fx[0].values_at(1);
+    b.app.doc.panels[0].layers[1].fx[0].set_key(1, v);
+    b.app.cur_frame = 1;
+    b.chauffer(1);
+    b.app.select_fx(i);
+    b.app.run_action("fx.cle_supprimer");
+    assert!(calques(&b)[1].fx[0].key_at(1).is_some(), "la clé du calque 1 reste : {}", b.app.status);
+    // Créer : sur 0 et 1, le calque 2 nommé.
+    b.app.run_action("fx.cle_creer");
+    assert!(b.app.status.contains("sur 2 calques") && b.app.status.contains("Calque 2"), "{}", b.app.status);
+    b.app.select_fx(i);
+    b.app.run_action("fx.cle_supprimer");
+    assert!(calques(&b)[0].fx[i].key_at(1).is_none() && calques(&b)[1].fx[0].key_at(1).is_none());
+    assert!(b.app.status.contains("sur 2 calques") && b.app.status.contains("Calque 2"), "{}", b.app.status);
+    // Un réglage : le compte et le calque laissé de côté.
+    b.app.record_step();
+    b.app.fx_regler(0, i, 0, &[3.0], false);
+    assert!(b.app.status.contains("sur 2 calques") && b.app.status.contains("Calque 2"), "{}", b.app.status);
+}
+
+/// Relecture, 4 : Suppr sur une clé d'effet choisie dans la timeline agit sur l'effet de même sorte de tous les calques choisis.
+#[test]
+fn delete_on_a_chosen_effect_key_in_the_timeline_acts_on_every_chosen_layer() {
+    let mut b = banc(&[V, B, V], Tool::Brush);
+    b.app.run_action("calque.flou");
+    b.app.cur_frame = 2;
+    b.chauffer(1);
+    let i = calques(&b)[0].fx.iter().position(|e| e.kind == EffectKind::GaussianBlur).unwrap();
+    b.app.select_fx(i);
+    b.app.run_action("fx.cle_creer");
+    let cles = |b: &Banc| calques(b).iter().map(|l| l.fx.iter().find(|e| e.kind == EffectKind::GaussianBlur).is_some_and(|e| e.key_at(2).is_some())).collect::<Vec<_>>();
+    assert_eq!(cles(&b), [true, true, true]);
+    // La clé créée est la clé d'effet choisie (celle du calque courant) ; Suppr la supprime, et celle des autres calques choisis.
+    let n0 = etapes(&b);
+    b.app.delete_fx_keys();
+    assert_eq!(cles(&b), [false, false, false], "{}", b.app.status);
+    assert_eq!(etapes(&b), n0 + 1);
+    assert!(b.app.status.contains("sur 3 calques"), "{}", b.app.status);
+}
+
+/// Relecture, 5 : l'effet répond par son rang parmi ceux de même sorte ; sans équivalent, le calque est laissé de côté.
+#[test]
+fn an_effect_answers_by_its_rank_among_effects_of_the_same_kind_or_the_layer_is_left_aside() {
+    let mut b = banc(&[V, V], Tool::Brush);
+    for li in 0..2 {
+        b.app.doc.panels[0].layers[li].fx.push(crate::fx::Effect::new(EffectKind::GaussianBlur));
+    }
+    b.app.doc.panels[0].layers[0].fx.push(crate::fx::Effect::new(EffectKind::GaussianBlur));
+    assert_eq!(b.app.effet_pareil(0, 0, 1), Some(0));
+    assert_eq!(b.app.effet_pareil(0, 1, 1), None, "le 2e flou n'a pas d'équivalent : pas le 1er à sa place");
+    let v0 = calques(&b)[1].fx[0].values_at(0)[0];
+    b.app.record_step();
+    b.app.fx_regler(0, 1, 0, &[v0 + 5.0], false);
+    assert_eq!(calques(&b)[1].fx[0].values_at(0)[0], v0, "le flou du calque 1 n'est pas touché");
+    assert!(b.app.status.contains("Calque 1"), "il est nommé : {}", b.app.status);
+}
+
+/// Relecture, 6 et 7 : un préréglage dit combien d'effets il remplace ; la raison d'un refus est la vraie.
+#[test]
+fn a_preset_on_several_layers_counts_the_replaced_effects_and_a_refusal_gives_the_real_reason() {
+    let mut b = banc(&[V, B, V], Tool::Brush);
+    b.app.apply_matter_preset(crate::fxmatiere::Preset::WhiteOutline);
+    b.app.apply_matter_preset(crate::fxmatiere::Preset::WhiteOutline);
+    assert!(b.app.status.contains("3 effets de même sorte remplacés"), "{}", b.app.status);
+    b.app.run_action("fx.tremblement");
+    assert!(b.app.status.contains("Calque 1 (calque bitmap"), "la vraie raison : {}", b.app.status);
+}

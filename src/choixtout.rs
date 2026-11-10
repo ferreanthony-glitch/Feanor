@@ -225,6 +225,16 @@ impl App {
                     q
                 });
                 t.decalage_depart[c] = -t.decalage_depart[c];
+                // En clés d'images : chaque dessin posé à un jalon garde sa place (le calque retourné le montre en miroir) ; son
+                // déplacement et sa rotation notés changent de sens, pour qu'un nouveau calcul le reconnaisse au lieu de le décaler.
+                for j in &mut t.dessins {
+                    if horizontal {
+                        j.dx = -j.dx;
+                    } else {
+                        j.dy = -j.dy;
+                    }
+                    j.angle = -j.angle;
+                }
             }
         }
         self.renderer.invalidate_all();

@@ -3292,10 +3292,19 @@ impl App {
                 self.layers_mut()[k].locked = v;
             }
             self.status = format!("{} calques {}.", lis.len(), if v { "verrouillés" } else { "déverrouillés" });
+            if v {
+                let ids: Vec<u64> = lis.iter().filter_map(|&k| self.layers().get(k).map(|l| l.id)).collect();
+                self.apres_verrou(&ids);
+            }
             return;
         }
         let layer = &mut self.layers_mut()[li];
         layer.locked = !layer.locked;
+        if layer.locked {
+            let id = layer.id;
+            self.apres_verrou(&[id]);
+        }
+        let layer = &self.layers()[li];
         self.status = format!(
             "Calque « {} » {}.",
             layer.name,
