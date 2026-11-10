@@ -3476,6 +3476,11 @@ impl App {
         // Une durée rendue par l'annulation n'est pas signalée.
         self.plan_len_seen = None;
         self.end_stroke();
+        // La gomme sur les clés qu'on ne voit pas finit d'être posée d'abord (tout ou rien : Ctrl+Z annule le geste entier, Ctrl+Maj+Z
+        // le rend entier) ; au-delà de 150 ms, la commande part à la fin du calcul, la fenêtre continuant de se peindre (`gommemulti.rs`).
+        if self.gomme_retient("edition.annuler") {
+            return;
+        }
         // (Le trait qu'on annule en plein geste n'est pas à répartir : `horschamp.rs`.)
         self.vignettes.fini = None;
         self.vignettes.debord_garde = None;
@@ -3497,6 +3502,9 @@ impl App {
         self.cancel_montage_drag();
         self.plan_len_seen = None;
         self.end_stroke();
+        if self.gomme_retient("edition.retablir") {
+            return;
+        }
         self.drop_bitmap_selection();
         self.multi_before_history();
         let mut nav = Nav {
@@ -4417,7 +4425,7 @@ impl App {
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
             // Suppr sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : leurs dessins se
             // vident, les clés restent (`choixtout.rs`). Supprimer les clés : le menu de la piste.
-            "edition.supprimer" if self.key_focus && !self.selection_sur_le_dessin() => self.vider_cles(),
+            "edition.supprimer" if self.suppr_vide_les_cles() => self.vider_cles(),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
             // une copie du dessin (F5), ou vide (F4).

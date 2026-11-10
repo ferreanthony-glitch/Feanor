@@ -1299,3 +1299,273 @@ fn copy_then_paste_strokes_on_the_board_puts_a_whole_copy_and_selects_it() {
     assert_eq!(choisies(&b), 1, "la copie est choisie, prête à bouger");
     assert_eq!(b.app.history.undo_len(), n0 + 1, "une étape");
 }
+
+// ---------------------------------------------------------------------------------------------- seconde relecture (après c3ec7c9)
+
+#[test]
+fn a_hidden_vector_drawing_whose_exact_render_arrives_meanwhile_is_still_erased() {
+    let mut b = banc_cles(Tool::Eraser);
+    // Le dessin vectoriel de la clé de l'image 2 : on ne le voit pas.
+    let cel = cel_de(&b, 0, 2);
+    gommer_les_cles_sans_attendre(&mut b);
+    // Son rendu exact arrive pendant le calcul : la version monte, les traits ne changent pas (`poll_rejeu`).
+    b.app.doc.cels.get_mut(&cel).unwrap().version += 1;
+    attendre_les_calculs(&mut b);
+    assert!(!encre(&b, cel, pos2(200.0, y_de(0))), "gommé quand même : ce n'est pas une retouche ({})", b.app.status);
+}
+
+#[test]
+fn a_result_waits_while_its_drawing_is_being_drawn_on() {
+    let mut b = banc_cles(Tool::Eraser);
+    let cel = cel_de(&b, 1, 2);
+    // (Le calcul attend que le trait ait commencé : il arrive pendant le trait, à coup sûr. Un projet à lui : les autres essais ne
+    // sont pas retenus.)
+    b.app.doc_epoch = crate::onglets::nouvelle_epoque();
+    *crate::gommemulti::PAUSE_ESSAI.lock().unwrap() = Some(b.app.doc_epoch);
+    gommer_les_cles_sans_attendre(&mut b);
+    // On va à l'image 2, sur le calque bitmap, et on y trace un trait au pinceau (là où il n'y a rien), lentement : le calcul arrive
+    // pendant le trait.
+    b.app.key_sel.clear();
+    (b.app.cur_layer, b.app.cur_frame) = (1, 2);
+    b.app.set_tool(Tool::Brush);
+    b.app.brush.size = 8.0;
+    b.app.brush.opacity = 1.0;
+    b.chauffer(1);
+    let (a, z) = (ecran(&b, pos2(120.0, 250.0)), ecran(&b, pos2(280.0, 250.0)));
+    b.image(vec![Event::PointerMoved(a)], 1.0 / 60.0);
+    b.image(vec![bouton(a, true, Modifiers::NONE)], 1.0 / 60.0);
+    *crate::gommemulti::PAUSE_ESSAI.lock().unwrap() = None;
+    for k in 1..=40 {
+        b.image(vec![Event::PointerMoved(a + (z - a) * (k as f32 / 40.0))], 1.0 / 60.0);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        assert!(encre(&b, cel, pos2(200.0, y_de(1))), "pendant le trait, le résultat de la gomme n'est pas posé");
+    }
+    b.image(vec![bouton(z, false, Modifiers::NONE)], 1.0 / 60.0);
+    attendre_les_calculs(&mut b);
+    for x in [125usize, 200, 275] {
+        assert!(b.app.doc.cels[&cel].raster.get(x, 250).a() > 0, "le trait est entier, rien n'a été écrasé (x = {x})");
+    }
+    assert!(b.app.status.contains("retouch"), "le dessin retouché pendant le calcul est laissé tel quel, et c'est dit : {}", b.app.status);
+}
+
+#[test]
+fn a_failed_computation_undoes_the_whole_gesture_and_never_blocks() {
+    let mut b = banc_cles(Tool::Eraser);
+    let dessins = dessins_des_cles(&b);
+    let avant: Vec<_> = dessins.iter().map(|&(_, c)| empreinte(&b, c)).collect();
+    let n0 = etapes(&b);
+    // (Un projet à lui : les autres essais, qui tournent en même temps, ne sont pas touchés par ce crochet.)
+    b.app.doc_epoch = crate::onglets::nouvelle_epoque();
+    *crate::gommemulti::PANIQUE_ESSAI.lock().unwrap() = Some((b.app.doc_epoch, cel_de(&b, 1, 4)));
+    gommer_les_cles_sans_attendre(&mut b);
+    let t = std::time::Instant::now();
+    attendre_les_calculs(&mut b);
+    *crate::gommemulti::PANIQUE_ESSAI.lock().unwrap() = None;
+    assert!(t.elapsed() < std::time::Duration::from_secs(20), "l'attente finit ({:?})", t.elapsed());
+    for (k, &(li, cel)) in dessins.iter().enumerate() {
+        assert!(empreinte(&b, cel) == avant[k], "calque {li}, dessin {cel} : tout ou rien, rien n'a changé");
+    }
+    assert_eq!(etapes(&b), n0, "le geste est retiré de l'historique");
+    assert!(b.app.status.contains("annulée en entier") && b.app.status.contains("1 dessin"), "{}", b.app.status);
+}
+
+#[test]
+fn the_eraser_step_exists_at_release_even_when_nothing_seen_changed() {
+    let mut b = banc_cles(Tool::Eraser);
+    // Les dessins qu'on voit, à l'image 0, sont vides : rien n'y change.
+    b.app.doc.cels.get_mut(&cel_de(&b, 0, 0)).unwrap().vector.as_mut().unwrap().elements.clear();
+    b.app.doc.cels.get_mut(&cel_de(&b, 1, 0)).unwrap().raster = Raster::new(W, H);
+    let n0 = etapes(&b);
+    gommer_les_cles_sans_attendre(&mut b);
+    assert_eq!(etapes(&b), n0 + 1, "l'étape « Gomme » est là dès le lâcher");
+    attendre_les_calculs(&mut b);
+    assert_eq!(etapes(&b), n0 + 1, "les résultats l'ont rejointe");
+    assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "les autres clés sont gommées");
+    b.app.undo();
+    assert!(encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "un Ctrl+Z annule tout le geste");
+}
+
+/// Vingt clés d'un calque bitmap 1920 × 1080 couvert de lignes (le banc du long trait).
+fn banc_vingt_cles_hd() -> Banc {
+    let (w, h) = (1920usize, 1080usize);
+    let mut doc = Document::new(w, h, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 40;
+    let mut l = Layer::new("Dessin", LayerKind::Bitmap);
+    for f in 0..20 {
+        let mut r = Raster::new(w, h);
+        for y in (100..980).step_by(3) {
+            for x in 100..1820 {
+                let k = r.tile_index_of(x, y);
+                r.tile_mut(k)[(y % TILE) * TILE + x % TILE] = Color32::from_rgba_premultiplied(30, 30, 30, 255);
+            }
+        }
+        let cel = dessin(&mut doc, Contenu::Pixels(r));
+        l.set(f * 2, Some(cel));
+    }
+    doc.panels[0].layers.push(l);
+    let mut b = ouvrir(doc, Tool::Eraser, 1);
+    let keys: Vec<_> = (0..20).filter_map(|f| b.app.key_ref(0, 0, f * 2)).collect();
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    b
+}
+
+/// Un long zigzag de gomme sur toute la feuille, lâché, sans attendre ; `dy` le décale vers le bas.
+fn zigzag(b: &mut Banc, dy: f32) {
+    let mut pts = Vec::new();
+    for k in 0..12 {
+        let y = 150.0 + 70.0 * k as f32 + dy;
+        let (a, z) = if k % 2 == 0 { (150.0, 1770.0) } else { (1770.0, 150.0) };
+        pts.extend(ligne(pos2(a, y), pos2(z, y + 35.0), 40));
+    }
+    let p0 = ecran(b, pts[0]);
+    b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
+    b.image(vec![bouton(p0, true, Modifiers::NONE)], 1.0 / 60.0);
+    for &p in &pts[1..] {
+        let q = ecran(b, p);
+        b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
+    }
+    let fin = ecran(b, *pts.last().unwrap());
+    b.image(vec![bouton(fin, false, Modifiers::NONE)], 1.0 / 60.0);
+}
+
+#[test]
+fn a_second_eraser_gesture_starts_at_once_and_its_hidden_part_follows_in_order() {
+    let mut b = banc_vingt_cles_hd();
+    zigzag(&mut b, 0.0);
+    // Le second geste, tout de suite : l'appui ne bloque pas.
+    let p = ecran(&b, pos2(960.0, 120.0));
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    let t = std::time::Instant::now();
+    b.image(vec![bouton(p, true, Modifiers::NONE)], 1.0 / 60.0);
+    let appui = t.elapsed().as_secs_f64() * 1e3;
+    let q = ecran(&b, pos2(960.0, 990.0));
+    for k in 1..=20 {
+        b.image(vec![Event::PointerMoved(p + (q - p) * (k as f32 / 20.0))], 1.0 / 60.0);
+    }
+    b.image(vec![bouton(q, false, Modifiers::NONE)], 1.0 / 60.0);
+    println!("APPUI du second geste pendant le calcul du premier : {appui:.1} ms");
+    assert!(appui < 150.0, "le second geste démarre tout de suite ({appui:.0} ms)");
+    attendre_les_calculs(&mut b);
+    let cel = b.app.doc.panels[0].layers[0].cel_at(38).unwrap();
+    let r = &b.app.doc.cels[&cel].raster;
+    assert_eq!(r.get(960, 166).a(), 0, "le premier geste est posé sur la dernière clé");
+    assert_eq!(r.get(961, 400).a() | r.get(960, 400).a(), 0, "le second aussi");
+    assert!(!b.app.status.contains("retouch"), "rien n'est pris pour une retouche : {}", b.app.status);
+}
+
+#[test]
+fn undo_during_a_long_computation_does_not_freeze_and_shows_the_progress() {
+    let mut b = banc_vingt_cles_hd();
+    let cel = b.app.doc.panels[0].layers[0].cel_at(38).unwrap();
+    zigzag(&mut b, 0.0);
+    let t = std::time::Instant::now();
+    b.app.undo();
+    let ms = t.elapsed().as_secs_f64() * 1e3;
+    println!("CTRL+Z pendant le calcul : rendu la main en {ms:.1} ms");
+    if b.app.gomme_travaux.en_route > 0 || ms > 150.0 {
+        assert!(ms < 400.0, "Ctrl+Z rend la main ({ms:.0} ms)");
+        assert!(b.app.gomme_alerte().is_some_and(|a| a.contains("Annuler attend")), "l'avancée se voit : {:?}", b.app.gomme_alerte());
+    }
+    attendre_les_calculs(&mut b);
+    b.chauffer(3);
+    assert!(b.app.doc.cels[&cel].raster.get(960, 166).a() > 0, "Ctrl+Z a fini par annuler le geste entier");
+}
+
+#[test]
+fn delete_empties_the_chosen_keys_even_with_a_selection_left_on_another_frame() {
+    let mut b = banc_cles(Tool::Brush);
+    let ailleurs = cel_de(&b, 0, 4);
+    b.app.vsel = Some(crate::vtools::VSelection { cel: ailleurs, items: vec![0] });
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "les clés choisies sont vidées ({})", b.app.status);
+}
+
+#[test]
+fn delete_on_the_board_never_empties_keys_and_without_chosen_keys_does_nothing() {
+    let mut b = banc_cles(Tool::Brush);
+    b.app.set_mode(Mode::Storyboard);
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "dans les Vignettes, Suppr ne vide pas les clés");
+    let mut b = banc_cles(Tool::Brush);
+    b.app.key_sel.clear();
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(encre(&b, cel_de(&b, 0, 0), pos2(200.0, y_de(0))), "sans clé choisie, Suppr n'efface rien");
+}
+
+#[test]
+fn a_computation_for_a_project_left_behind_ends_silently() {
+    let mut b = banc_cles(Tool::Eraser);
+    gommer_les_cles_sans_attendre(&mut b);
+    // Un autre projet est ouvert dans ce même onglet avant la fin du calcul.
+    b.app.doc = Document::new(W, H, 24);
+    b.app.doc_epoch = crate::onglets::nouvelle_epoque();
+    b.app.status = "autre projet".into();
+    b.app.attendre_gomme_multi();
+    assert_eq!(b.app.status, "autre projet", "aucun message de la gomme d'un autre projet");
+}
+
+// ---------------------------------------------------------------------------------------------- Ctrl+A
+
+/// Trois calques (vectoriel, bitmap, vectoriel), le premier courant ; `choisis` : combien sont choisis (en partant du bas).
+fn banc_trois(choisis: usize) -> Banc {
+    let kinds = [LayerKind::Vector, LayerKind::Bitmap, LayerKind::Vector];
+    let mut doc = Document::new(W, H, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 4;
+    for (i, &k) in kinds.iter().enumerate() {
+        let cel = dessin(&mut doc, contenu(k, i));
+        let mut l = Layer::new(&format!("Calque {i}"), k);
+        l.set(0, Some(cel));
+        doc.panels[0].layers.push(l);
+    }
+    ouvrir(doc, Tool::Brush, choisis)
+}
+
+#[test]
+fn select_all_with_one_chosen_layer_takes_only_its_strokes() {
+    let mut b = banc_trois(1);
+    b.app.run_action("edition.tout_selectionner");
+    assert!(b.app.multi.sel.is_none(), "un seul calque : pas de sélection sur plusieurs calques");
+    assert_eq!(b.app.vsel.as_ref().map(|s| s.cel), Some(cel_de(&b, 0, 0)), "les traits du calque courant seul");
+    assert!(b.app.status.contains("1 trait sur 1 calque"), "{}", b.app.status);
+}
+
+#[test]
+fn select_all_with_three_chosen_layers_takes_all_and_only_theirs_and_a_move_leaves_the_others() {
+    let mut doc_banc = banc_trois(3);
+    let b = &mut doc_banc;
+    // Un quatrième calque, pas choisi.
+    let cel4 = dessin(&mut b.app.doc, contenu(LayerKind::Vector, 4));
+    let mut l = Layer::new("Pas choisi", LayerKind::Vector);
+    l.set(0, Some(cel4));
+    b.app.doc.panels[0].layers.push(l);
+    b.chauffer(1);
+    let avant4 = empreinte(b, cel4);
+    b.app.run_action("edition.tout_selectionner");
+    let sel = b.app.multi.sel.as_ref().expect("une sélection sur plusieurs calques");
+    assert_eq!(sel.parts.len(), 3, "les trois calques choisis, pas le quatrième");
+    assert!(b.app.status.contains("2 traits et 1 zone sur 3 calques"), "{}", b.app.status);
+    // Déplacer la sélection (flèches) : le calque pas choisi ne bouge pas.
+    b.app.multi_nudge(eframe::egui::vec2(10.0, 0.0));
+    b.app.drop_multi();
+    b.app.multi_flush();
+    repos(b);
+    assert!(empreinte(b, cel4) == avant4, "le calque pas choisi n'a pas bougé");
+    assert!(encre(b, cel_de(b, 0, 0), pos2(295.0, y_de(0))), "le calque choisi a bougé");
+}
+
+#[test]
+fn select_all_leaves_a_locked_layer_aside_and_says_so() {
+    let mut b = banc_trois(3);
+    b.app.doc.panels[0].layers[2].locked = true;
+    b.app.run_action("edition.tout_selectionner");
+    let sel = b.app.multi.sel.as_ref().expect("une sélection");
+    assert_eq!(sel.parts.len(), 2, "le verrouillé est laissé de côté");
+    assert!(b.app.status.contains("1 trait et 1 zone sur 2 calques") && b.app.status.contains("verrouillé"), "{}", b.app.status);
+}

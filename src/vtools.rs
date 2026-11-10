@@ -646,6 +646,8 @@ impl App {
                 items: (0..n).collect(),
             });
             self.tool = Tool::Select;
+            // (Seulement le calque courant : les autres ne sont pas touchés.)
+            self.status = format!("Tout sélectionné : {n} trait{} sur 1 calque.", if n > 1 { "s" } else { "" });
         }
     }
 

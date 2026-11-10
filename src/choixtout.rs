@@ -32,19 +32,29 @@ impl App {
         lis.len()
     }
 
-    /// Une sélection est posée sur le dessin (traits, zone, plusieurs calques) : Suppr l'efface, elle.
+    /// Une sélection est posée sur le dessin qu'on voit (traits ou zone du dessin courant, plusieurs calques), ou sur la planche des
+    /// Vignettes (traits, pixels, annotations, notes) : Suppr l'efface, elle. (Une sélection restée sur le dessin d'une autre image ne
+    /// compte pas.)
     pub(crate) fn selection_sur_le_dessin(&self) -> bool {
-        self.multi.sel.is_some() || self.bsel.is_some() || self.vsel.as_ref().is_some_and(|s| !s.items.is_empty())
+        let ici = self.cel_here();
+        self.multi.sel.is_some()
+            || self.bsel.as_ref().is_some_and(|s| Some(s.cel) == ici)
+            || self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == ici)
+            || self.selp_active()
+            || self.selb_active()
+            || (self.board_shown() && (!self.vignettes.annot.selection.is_empty() || !self.board_notes.is_empty()))
     }
 
-    /// Suppr sur les clés choisies : leurs dessins sont vidés, les clés restent. Une étape, tout ou rien.
+    /// Suppr vide-t-il les clés choisies ? La timeline ou le montage a la main, des clés sont choisies, rien n'est choisi sur le
+    /// dessin, et ce n'est pas la planche des Vignettes (là, Suppr n'efface que ce qui y est choisi).
+    pub(crate) fn suppr_vide_les_cles(&self) -> bool {
+        self.key_focus && !self.key_sel.is_empty() && !self.board_shown() && !self.in_card && !self.selection_sur_le_dessin()
+    }
+
+    /// Suppr sur les clés choisies : leurs dessins sont vidés, les clés restent. Une étape, tout ou rien. (Sans clé choisie, Suppr
+    /// n'efface rien : la règle du 2026-10-18 ; `suppr_vide_les_cles`.)
     pub(crate) fn vider_cles(&mut self) {
-        // (Aucune clé choisie : celle de l'image courante du calque courant, comme le faisait Suppr.)
-        let choix: Vec<crate::montagekeys::KeyRef> = if self.key_sel.is_empty() {
-            self.key_ref(self.cur_panel, self.cur_layer, self.cur_frame).into_iter().collect()
-        } else {
-            self.key_sel.clone()
-        };
+        let choix = self.key_sel.clone();
         self.vider_dessins_des_cles(&choix, true);
     }
 

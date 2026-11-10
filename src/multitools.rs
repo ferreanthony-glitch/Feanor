@@ -31,6 +31,27 @@ const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
 const NUDGE_GESTURE: u64 = 0x6d75_6c74_696e_7564;
 
+/// « 42 traits sur 3 calques », « 12 traits et 2 zones sur 6 dessins de 2 calques » : ce que « Tout sélectionner » a pris.
+pub(crate) fn compte_tout(sel: &MultiSel) -> String {
+    let s = |n: usize| if n > 1 { "s" } else { "" };
+    let traits: usize = sel.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(multisel::Part::count).sum();
+    let zones = sel.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
+    let mut calques: Vec<u64> = sel.parts.iter().map(|p| p.layer).collect();
+    calques.sort_unstable();
+    calques.dedup();
+    let quoi = match (traits, zones) {
+        (t, 0) => format!("{t} trait{}", s(t)),
+        (0, z) => format!("{z} zone{}", s(z)),
+        (t, z) => format!("{t} trait{} et {z} zone{}", s(t), s(z)),
+    };
+    let (n, m) = (sel.parts.len(), calques.len());
+    if sel.by_keys {
+        format!("{quoi} sur {n} dessin{} de {m} calque{}", s(n), s(m))
+    } else {
+        format!("{quoi} sur {m} calque{}", s(m))
+    }
+}
+
 /// Les touches tenues font-elles le geste « tous les calques » (Ctrl+Maj avec
 /// l'outil Sélection) ? Ctrl seul garde le lasso temporaire et la boîte autour du pivot, Maj seul
 /// ajoute ou retire ; Alt est la pipette.
@@ -448,10 +469,11 @@ impl App {
         }
         self.multi.sel = Some(self.new_multi_sel(parts));
         self.tool = Tool::Select;
-        let summary = self.multi_summary().unwrap_or_default();
+        // « 42 traits sur 3 calques » (ou « … sur 6 dessins de 2 calques », par les clés ; « et 2 zones » pour les calques bitmap).
+        let compte = self.multi.sel.as_ref().map(compte_tout).unwrap_or_default();
         self.status = match left {
-            Some(l) => format!("{summary} choisis. {l}"),
-            None => format!("{summary} choisis."),
+            Some(l) => format!("Tout sélectionné : {compte}. {l}"),
+            None => format!("Tout sélectionné : {compte}."),
         };
     }
 
@@ -652,9 +674,6 @@ impl App {
     /// Avant une annulation ou un rétablissement : les feuilles lâchées sont terminées, la
     /// sélection s'en va (elle ne serait plus celle des dessins refaits).
     pub(crate) fn multi_before_history(&mut self) {
-        // La gomme sur les clés qu'on ne voit pas finit d'être posée d'abord (`gommemulti.rs`) : Ctrl+Z annule alors le geste
-        // entier, et Ctrl+Maj+Z le rend entier (tout ou rien, comme pour Enregistrer).
-        self.attendre_gomme_multi();
         // (La séance de Déformer sur plusieurs calques aussi : ses dessins d'origine ne seraient plus ceux du projet.)
         self.deform_multi_fermer();
         self.drop_multi();

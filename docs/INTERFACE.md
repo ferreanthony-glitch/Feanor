@@ -9534,6 +9534,42 @@ Un long trait de gomme (un zigzag sur toute la feuille, 492 points) sur 20 clés
 - **Ctrl+Z, Ctrl+Maj+Z et l'Historique** attendent la fin du calcul de la gomme sur les clés qu'on ne voit pas (comme Enregistrer) :
   Ctrl+Z annule le geste entier, Ctrl+Maj+Z le rend entier. Plus jamais un geste à moitié fait.
 
+### Seconde relecture (après c3ec7c9)
+
+- Un dessin vectoriel dont le **rendu exact arrive** pendant le calcul n'est plus pris pour un dessin retouché : la retouche se lit
+  dans son contenu (ses traits, ou les tuiles de son image), plus dans sa version.
+- Un résultat qui arrive **pendant un geste** (un trait, un glissé, un champ tenu, ou un trait sur ce dessin même) attend la fin du
+  geste : il n'écrase plus le trait en cours, et ne se mêle plus à l'étape d'un autre geste. Même chose pour les remplissages de l'aplat
+  sur plusieurs clés (`aplatmulti.rs`).
+- L'étape « Gomme » existe **dès le lâcher**, même quand rien de ce qu'on voit n'a changé : les résultats la rejoignent.
+- Un calcul qui **échoue** (une erreur dans le moteur) ne bloque plus rien : il est compté. Tout ou rien : le geste entier est annulé
+  s'il est encore la dernière étape (« Gomme annulée en entier : le calcul d'un dessin a échoué, rien n'a changé ») ; sinon il reste,
+  marqué incomplet dans la barre d'état.
+- Un **second geste** de gomme démarre tout de suite (avant, le stylet posé attendait la fin du premier) ; sa part cachée part après
+  celle du premier, dans l'ordre, et reprend les dessins tels que le premier les a laissés.
+- **Ctrl+Z, Ctrl+Maj+Z, Enregistrer** pendant un long calcul : on attend 150 ms ; au-delà, la commande part à la fin du calcul, la
+  fenêtre continue de se peindre et un bandeau rouge en haut du dessin montre l'avancée (« Gomme : 12/20 dessins… — Annuler attend »).
+- **Suppr** : une sélection restée sur le dessin d'une autre image ne l'empêche plus de vider les clés choisies ; dans les Vignettes,
+  Suppr ne vide jamais de clé (il n'efface que ce qui est choisi sur la planche : traits, pixels, annotations, notes) ; sans clé choisie,
+  il n'efface rien (règle du 2026-10-18).
+- Le calcul d'un projet qu'on a quitté se termine sans message, et chaque geste a ses propres comptes.
+- **L'opacité et sa clé** s'appliquent aussi aux calques verrouillés ou masqués : le verrou protège le dessin, pas les réglages du
+  calque.
+
+### Ctrl+A (tout sélectionner)
+
+- **Ce qu'il faisait déjà, et fait toujours** (Storyboard, Animation) : un seul calque choisi, les éléments du dessin du calque
+  courant à l'image courante (ou toute l'image d'un calque bitmap), jamais ceux des autres calques ; plusieurs calques choisis, tout ce que
+  contiennent leurs dessins à l'image courante (`multi_select_all`), et rien des autres ; deux clés ou plus choisies dans la timeline, tous
+  les dessins de ces clés (la sélection sur plusieurs clés, `3d0ca4e`) — c'est déjà la règle « la sélection agit sur tout ». Les calques
+  verrouillés ou masqués sont laissés de côté, et nommés.
+- **Nouveau** : la barre d'état donne le compte, « Tout sélectionné : 42 traits sur 3 calques » (« … et 2 zones » pour les calques
+  bitmap ; « … sur 6 dessins de 2 calques » par les clés).
+- **Dans les Vignettes**, Ctrl+A passe aujourd'hui par le même chemin que le Storyboard : il prend le dessin du calque courant de la case
+  courante (`vsel`), pas le choix de la planche (`selp`) ; il ne prend donc pas les traits du papier, et la planche ne le montre pas comme
+  son choix. Le faire passer par le choix de la planche touche `vignettesel.rs` (l'autre session y travaille) : **pas fait**, à
+  coordonner.
+
 ### Règle : la sélection agit sur tout
 
 Anthony, 2026-11-10 : quand on choisit des calques et des clés et qu'on leur applique une transformation, un effet ou un réglage, ça

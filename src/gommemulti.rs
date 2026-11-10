@@ -101,12 +101,69 @@ enum Fini {
     Rien,
 }
 
-/// Un résultat qui revient du fil : pour le dessin `cel`, tel qu'il était à la version `version` au lâcher.
+/// Ce que contenait un dessin au départ de son calcul, pour savoir à l'arrivée s'il a été retouché entre-temps. Pas sa version :
+/// elle monte aussi quand le rendu exact d'un dessin vectoriel arrive (`App::poll_rejeu`), sans que ses traits changent.
+enum Sceau {
+    /// Les tuiles de l'image (partagées : rien n'est recopié).
+    Pixels(Raster),
+    /// La géométrie des traits (`sceau_des_traits`).
+    Traits(u64),
+}
+
+/// L'empreinte de la géométrie d'un dessin vectoriel : le nombre d'éléments, et pour chacun sa boîte, son nombre de points, sa
+/// couleur et son opacité. Les pixels en cache des traits n'y sont pas.
+pub(crate) fn sceau_des_traits(d: &VectorDrawing) -> u64 {
+    use crate::vector::Element;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ d.elements.len() as u64;
+    let mut mix = |v: u64| {
+        h ^= v;
+        h = h.wrapping_mul(0x100_0000_01b3);
+    };
+    for e in &d.elements {
+        let b = e.bounds();
+        for v in [b.min.x, b.min.y, b.max.x, b.max.y] {
+            mix(v.to_bits() as u64);
+        }
+        match e {
+            Element::Stroke { points, color, opacity, .. } => {
+                mix(points.len() as u64);
+                mix(u64::from(color[0]) | u64::from(color[1]) << 8 | u64::from(color[2]) << 16);
+                mix(opacity.to_bits() as u64);
+                for p in points {
+                    mix(p.x.to_bits() as u64 ^ (p.y.to_bits() as u64) << 32);
+                }
+            }
+            Element::Fill { contours, color, opacity, .. } => {
+                mix(contours.iter().map(|c| c.len()).sum::<usize>() as u64);
+                mix(u64::from(color[0]) | u64::from(color[1]) << 8 | u64::from(color[2]) << 16);
+                mix(opacity.to_bits() as u64);
+            }
+            _ => mix(7),
+        }
+    }
+    h
+}
+
+fn sceau_de(c: &crate::document::Cel) -> Sceau {
+    match &c.vector {
+        Some(d) => Sceau::Traits(sceau_des_traits(d)),
+        None => Sceau::Pixels(c.raster.clone()),
+    }
+}
+
+/// Le dessin a-t-il gardé le contenu de son sceau ?
+fn intact(c: &crate::document::Cel, s: &Sceau) -> bool {
+    match (s, &c.vector) {
+        (Sceau::Traits(h), Some(d)) => sceau_des_traits(d) == *h,
+        (Sceau::Pixels(r), None) => c.raster.tiles == r.tiles && c.raster.outer == r.outer,
+        _ => false,
+    }
+}
+
+/// Un résultat qui revient du fil, pour le dessin `cel`. `fini` : rien si le calcul a échoué (le fil a paniqué).
 struct Retour {
     cel: CelId,
-    version: u64,
-    epoque: u64,
-    fini: Fini,
+    fini: Option<Fini>,
 }
 
 /// Un dessin à gommer sur le fil : le geste entier (ses points), et une copie de son image ou de ses traits (les tuiles se
@@ -115,18 +172,36 @@ struct Travail {
     autre: Autre,
     raster: Raster,
     dessin: Option<VectorDrawing>,
-    version: u64,
-    epoque: u64,
     r: Reglage,
+    /// (Essais : le projet, pour qu'un essai fasse échouer le calcul d'un dessin précis, `PANIQUE_ESSAI`.)
+    #[cfg(test)]
+    epoque: u64,
 }
 
-fn calculer(t: Travail) -> Retour {
-    let Travail { mut autre, mut raster, mut dessin, version, epoque, r } = t;
+/// Essais seulement : le calcul du dessin (projet, dessin) panique, comme un défaut dans le moteur.
+#[cfg(test)]
+pub(crate) static PANIQUE_ESSAI: std::sync::Mutex<Option<(u64, CelId)>> = std::sync::Mutex::new(None);
+
+/// Essais seulement : les calculs de ce projet attendent (pour qu'un essai place un geste pendant le calcul, sans course).
+#[cfg(test)]
+pub(crate) static PAUSE_ESSAI: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
+
+fn calculer(t: Travail) -> Fini {
+    #[cfg(test)]
+    {
+        if PANIQUE_ESSAI.lock().is_ok_and(|p| *p == Some((t.epoque, t.autre.cel))) {
+            panic!("essai : le calcul de ce dessin échoue");
+        }
+        let debut = std::time::Instant::now();
+        while PAUSE_ESSAI.lock().is_ok_and(|p| *p == Some(t.epoque)) && debut.elapsed() < std::time::Duration::from_secs(30) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+    let Travail { mut autre, mut raster, mut dessin, r, .. } = t;
     for (q, pressure, time) in std::mem::take(&mut autre.attente) {
         gommer(&mut raster, dessin.as_mut(), &mut autre, q, pressure, time, r);
     }
-    let cel = autre.cel;
-    let fini = match autre.sorte {
+    match autre.sorte {
         Sorte::Pixels(mut stroke) => {
             let mut dirty = Vec::new();
             let edit = stroke.finish(&mut raster, &mut dirty);
@@ -137,31 +212,71 @@ fn calculer(t: Travail) -> Retour {
             None => Fini::Rien,
         },
         Sorte::Traits { .. } => Fini::Rien,
-    };
-    Retour { cel, version, epoque, fini }
+    }
 }
 
-/// Les dessins des clés qu'on ne voit pas, gommés sur des fils de travail après le lâcher (comme les remplissages de l'aplat sur
-/// plusieurs clés, `aplatmulti.rs`). Chaque résultat rejoint l'étape d'annulation du geste ; si elle a été annulée entre-temps,
-/// ou si le dessin a été retouché, le résultat est abandonné. L'enregistrement attend la fin (`attendre_gomme_multi`).
-pub(crate) struct GommeTravaux {
-    tx: Sender<Retour>,
-    rx: Receiver<Retour>,
-    pub(crate) en_route: usize,
+/// La part cachée d'un geste lâché, qui attend son tour : les dessins des autres clés, avec les points du geste ; l'étape
+/// d'annulation du geste ; son projet.
+struct Lot {
+    autres: Vec<Autre>,
+    etape: u64,
+    quoi: String,
+    r: Reglage,
+    epoque: u64,
+}
+
+/// Le lot qui se calcule : ses comptes, et les sceaux des dessins au départ.
+struct EnCours {
+    etape: u64,
+    quoi: String,
+    epoque: u64,
     total: usize,
     poses: usize,
     retouches: usize,
     annules: usize,
-    /// L'étape d'annulation du geste (son numéro propre, `History::last_id`) ; aucune : le geste n'en a pas encore.
-    etape: Option<u64>,
-    /// Ce que touche le geste, en clair (`GommeMulti::quoi`).
-    quoi: String,
+    perdus: usize,
+    sceaux: Vec<(CelId, Sceau)>,
+}
+
+/// Les dessins des clés qu'on ne voit pas, gommés sur des fils de travail après le lâcher (comme les remplissages de l'aplat sur
+/// plusieurs clés, `aplatmulti.rs`), un geste après l'autre, dans l'ordre. Chaque résultat rejoint l'étape d'annulation du geste,
+/// qui existe dès le lâcher ; si elle a été annulée entre-temps, ou si le dessin a été retouché, le résultat est abandonné. Un
+/// résultat qui arrive pendant un geste (sur ce dessin ou un autre) attend sa fin. Enregistrer, Ctrl+Z et Ctrl+Maj+Z attendent la
+/// fin du calcul.
+pub(crate) struct GommeTravaux {
+    tx: Sender<Retour>,
+    rx: Receiver<Retour>,
+    /// Les résultats du lot en cours qui ne sont pas encore arrivés.
+    pub(crate) en_route: usize,
+    /// Ceux qui sont arrivés pendant un geste : posés à sa fin.
+    differes: Vec<Retour>,
+    courant: Option<EnCours>,
+    file: std::collections::VecDeque<Lot>,
+    /// Les commandes (Ctrl+Z, Ctrl+Maj+Z…) qui attendent la fin du calcul, dans l'ordre (`gomme_retient`).
+    pub(crate) commandes: Vec<&'static str>,
+    /// Un enregistrement qui attend la fin du calcul (`gomme_retient_sauvegarde`).
+    sauvegarde: Option<(std::path::PathBuf, Option<crate::app::Pending>)>,
 }
 
 impl Default for GommeTravaux {
     fn default() -> Self {
         let (tx, rx) = channel();
-        GommeTravaux { tx, rx, en_route: 0, total: 0, poses: 0, retouches: 0, annules: 0, etape: None, quoi: String::new() }
+        GommeTravaux { tx, rx, en_route: 0, differes: Vec::new(), courant: None, file: Default::default(), commandes: Vec::new(), sauvegarde: None }
+    }
+}
+
+impl GommeTravaux {
+    /// Un calcul est en route, ou en attente.
+    pub(crate) fn occupe(&self) -> bool {
+        self.en_route > 0 || !self.differes.is_empty() || self.courant.is_some() || !self.file.is_empty()
+    }
+
+    /// « 12/20 » : les dessins faits du lot en cours, sur son total (et les lots qui attendent).
+    fn progression(&self) -> String {
+        let Some(c) = &self.courant else { return String::new() };
+        let faits = c.poses + c.retouches + c.annules + c.perdus;
+        let suite = if self.file.is_empty() { String::new() } else { format!(" (puis {} geste{})", self.file.len(), if self.file.len() > 1 { "s" } else { "" }) };
+        format!("Gomme : {faits}/{} dessins des autres clés…{suite}", c.total)
     }
 }
 
@@ -215,8 +330,7 @@ impl App {
         if !self.gomme_multi_voulue() {
             return None;
         }
-        // (Le geste d'avant finit d'être posé sur les clés qu'on ne voit pas : ses dessins sont ceux que celui-ci reprend.)
-        self.attendre_gomme_multi();
+        // (Le geste démarre tout de suite, même si le calcul du précédent est en route : sa part cachée partira après, dans l'ordre.)
         self.end_stroke();
         Some(self.history.marque())
     }
@@ -315,15 +429,13 @@ impl App {
         let mut edits: Vec<Edit> = Vec::new();
         let mut dirty = Vec::new();
         let r = Reglage { size: self.eraser.size, pressure_size: self.eraser.pressure_size, whole: self.vector_erase_whole };
-        let mut travaux: Vec<Travail> = Vec::new();
+        let mut caches: Vec<Autre> = Vec::new();
         for a in autres {
-            // Les dessins des autres clés (qu'on ne voit pas) reçoivent le geste entier sur un fil de travail.
+            // Les dessins des autres clés (qu'on ne voit pas) reçoivent le geste entier sur un fil de travail, à leur tour.
             if !a.live {
-                if a.attente.is_empty() {
-                    continue;
+                if !a.attente.is_empty() {
+                    caches.push(a);
                 }
-                let Some(c) = self.doc.cels.get(&a.cel) else { continue };
-                travaux.push(Travail { raster: c.raster.clone(), dessin: c.vector.clone(), version: c.version, epoque: self.doc_epoch, r, autre: a });
                 continue;
             }
             match a.sorte {
@@ -355,93 +467,242 @@ impl App {
         if let Some(m) = marque {
             self.history.regrouper_depuis(m);
         }
-        if travaux.is_empty() {
+        if caches.is_empty() {
             return;
         }
-        // L'étape du geste, que les résultats rejoindront (aucune si le geste n'a rien posé sur ce qu'on voit : le premier
-        // résultat la fera).
-        let etape = marque.filter(|&m| self.history.last_id() > m).map(|_| self.history.last_id());
-        let n = travaux.len();
-        let fils = std::thread::available_parallelism().map_or(2, |p| p.get()).saturating_sub(1).clamp(1, 4).min(n);
-        let mut paquets: Vec<Vec<Travail>> = (0..fils).map(|_| Vec::new()).collect();
-        for (i, t) in travaux.into_iter().enumerate() {
-            paquets[i % fils].push(t);
+        // L'étape du geste existe dès le lâcher, même si rien de ce qu'on voit n'a changé : les résultats la rejoindront, et aucun
+        // n'atterrit dans l'étape d'un autre geste.
+        if marque.is_none_or(|m| self.history.last_id() <= m) {
+            let avant = self.history.context.replace("Gomme".to_string());
+            self.history.push(Edit::Group(Vec::new()));
+            self.history.context = avant;
         }
-        let mut lances = 0;
-        let mut perdus = Vec::new();
-        for paquet in paquets {
-            let k = paquet.len();
-            let (tx, ctx) = (self.gomme_travaux.tx.clone(), self.ctx.clone());
-            let lance = std::thread::Builder::new().name("gomme-cles".into()).spawn(move || {
-                for t in paquet {
-                    let _ = tx.send(calculer(t));
-                    ctx.request_repaint();
-                }
-            });
-            match lance {
-                Ok(_) => lances += k,
-                Err(_) => perdus.push(k),
-            }
+        let etape = self.history.last_id();
+        self.gomme_travaux.file.push_back(Lot { autres: caches, etape, quoi, r, epoque: self.doc_epoch });
+        // (Un calcul d'avant est encore en route : ce lot part à sa fin, dans l'ordre.)
+        self.gomme_lancer_suivant();
+        if self.gomme_travaux.occupe() {
+            self.status = self.gomme_travaux.progression();
         }
-        let t = &mut self.gomme_travaux;
-        t.en_route += lances;
-        t.total = lances;
-        (t.poses, t.retouches, t.annules) = (0, 0, 0);
-        t.etape = etape;
-        t.quoi = quoi;
-        self.status = if perdus.is_empty() {
-            format!("Gomme : 0/{lances} dessins des autres clés…")
-        } else {
-            format!("Gomme : 0/{lances} dessins des autres clés… ({} n'ont pas pu partir : ils restent tels quels.)", perdus.iter().sum::<usize>())
-        };
     }
 
-    /// Une fois par image d'écran (`poll_aplat_multi`) : pose les résultats arrivés. Rien au repos.
+    /// Le lot en cours est fini (tout est arrivé et posé) : son message ; puis le lot suivant de la file part, ses dessins pris tels
+    /// qu'ils sont maintenant (le geste d'avant y est posé).
+    fn gomme_lancer_suivant(&mut self) {
+        if self.gomme_travaux.en_route > 0 || !self.gomme_travaux.differes.is_empty() {
+            return;
+        }
+        if let Some(c) = self.gomme_travaux.courant.take() {
+            self.gomme_finir_lot(c);
+        }
+        while let Some(lot) = self.gomme_travaux.file.pop_front() {
+            if lot.epoque != self.doc_epoch {
+                continue;
+            }
+            let Lot { autres, etape, quoi, r, epoque } = lot;
+            let mut travaux = Vec::new();
+            let mut sceaux = Vec::new();
+            for mut a in autres {
+                let Some(c) = self.doc.cels.get(&a.cel) else { continue };
+                // (Ce que le geste annulera : le dessin tel qu'il est maintenant, le geste d'avant posé.)
+                if let (Sorte::Traits { avant, .. }, Some(d)) = (&mut a.sorte, &c.vector) {
+                    *avant = Box::new(d.clone());
+                }
+                sceaux.push((a.cel, sceau_de(c)));
+                travaux.push(Travail {
+                    raster: c.raster.clone(),
+                    dessin: c.vector.clone(),
+                    r,
+                    autre: a,
+                    #[cfg(test)]
+                    epoque,
+                });
+            }
+            let n = travaux.len();
+            if n == 0 {
+                continue;
+            }
+            let fils = std::thread::available_parallelism().map_or(2, |p| p.get()).saturating_sub(1).clamp(1, 4).min(n);
+            let mut paquets: Vec<Vec<Travail>> = (0..fils).map(|_| Vec::new()).collect();
+            for (i, t) in travaux.into_iter().enumerate() {
+                paquets[i % fils].push(t);
+            }
+            let mut lances = 0;
+            let mut perdus = 0;
+            for paquet in paquets {
+                let k = paquet.len();
+                let (tx, ctx) = (self.gomme_travaux.tx.clone(), self.ctx.clone());
+                let lance = std::thread::Builder::new().name("gomme-cles".into()).spawn(move || {
+                    for t in paquet {
+                        let cel = t.autre.cel;
+                        // Un calcul qui panique est compté comme perdu : la file ne reste jamais bloquée (comme `rejeu.rs`).
+                        let fini = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| calculer(t))).ok();
+                        let _ = tx.send(Retour { cel, fini });
+                        ctx.request_repaint();
+                    }
+                });
+                match lance {
+                    Ok(_) => lances += k,
+                    Err(_) => perdus += k,
+                }
+            }
+            self.gomme_travaux.en_route += lances;
+            self.gomme_travaux.courant = Some(EnCours { etape, quoi, epoque, total: n, poses: 0, retouches: 0, annules: 0, perdus, sceaux });
+            if lances == 0 {
+                // (Aucun fil n'a pu partir : le lot est fini, et perdu.)
+                if let Some(c) = self.gomme_travaux.courant.take() {
+                    self.gomme_finir_lot(c);
+                }
+                continue;
+            }
+            return;
+        }
+    }
+
+    /// Un lot est fini : son message. Si des dessins ont été perdus (un calcul a échoué), la règle du tout ou rien : le geste entier
+    /// est annulé s'il est encore la dernière étape (rien ne reste à moitié fait) ; sinon il reste, et la barre d'état dit combien de
+    /// dessins n'ont pas été gommés.
+    fn gomme_finir_lot(&mut self, c: EnCours) {
+        if c.epoque != self.doc_epoch {
+            return;
+        }
+        if c.perdus > 0 {
+            if self.history.etat_de_l_etape(c.etape) == Some(true) && self.history.last_id() == c.etape {
+                let mut nav = crate::history::Nav { panel: self.cur_panel, layer: self.cur_layer };
+                if self.history.undo_and_forget(&mut self.doc, &mut nav) {
+                    self.renderer.invalidate_all();
+                    self.rejeu_after_history();
+                    self.status = format!("Gomme annulée en entier : le calcul de {} dessin{} a échoué, rien n'a changé.", c.perdus, if c.perdus > 1 { "s" } else { "" });
+                    return;
+                }
+            }
+            self.status = format!("Gomme incomplète : le calcul de {} dessin{} a échoué (Ctrl+Z annule le geste en entier).", c.perdus, if c.perdus > 1 { "s" } else { "" });
+        } else if c.annules > 0 {
+            self.status = "Gomme : le geste a été annulé, le calcul des autres clés est abandonné.".into();
+        } else if c.retouches > 0 {
+            self.status = format!("Gomme : {} dessin(s) retouché(s) pendant le calcul laissé(s) tel(s) quel(s) ; {} gommé(s).", c.retouches, c.poses);
+        } else {
+            self.status = format!("Gomme sur {} : posée partout.", c.quoi);
+        }
+    }
+
+    /// Un geste est en cours (un trait, un glissé, un champ tenu…) : un résultat qui arrive attend sa fin, pour ne pas se mêler à
+    /// son étape d'annulation.
+    fn geste_en_cours(&self) -> bool {
+        self.gomme_multi.actif
+            || self.stroke.is_some()
+            || self.verase.is_some()
+            || self.vdrag.is_some()
+            || self.bdrag.is_some()
+            || self.multi.drag.is_some()
+            || self.layer_drag.is_some()
+            || self.gesture.en_cours()
+    }
+
+    /// Une fois par image d'écran (`poll_aplat_multi`) : pose les résultats arrivés (sauf pendant un geste), et lance le lot suivant.
+    /// Puis, le calcul fini, les commandes qui l'attendaient (Ctrl+Z…). Rien au repos.
     pub(crate) fn poll_gomme_multi(&mut self) {
-        if self.gomme_travaux.en_route == 0 {
+        if !self.gomme_travaux.occupe() && self.gomme_travaux.commandes.is_empty() && self.gomme_travaux.sauvegarde.is_none() {
             return;
         }
         let arrives: Vec<Retour> = self.gomme_travaux.rx.try_iter().collect();
         for r in arrives {
             self.gomme_travaux.en_route = self.gomme_travaux.en_route.saturating_sub(1);
-            self.poser_gomme(r);
+            self.gomme_travaux.differes.push(r);
         }
-        let t = &self.gomme_travaux;
-        let faits = t.poses + t.retouches + t.annules;
-        if t.en_route > 0 {
-            self.status = format!("Gomme : {faits}/{} dessins des autres clés…", t.total);
+        if !self.geste_en_cours() {
+            let differes = std::mem::take(&mut self.gomme_travaux.differes);
+            for r in differes {
+                if self.cel_busy(r.cel) {
+                    self.gomme_travaux.differes.push(r);
+                } else {
+                    self.poser_gomme(r);
+                }
+            }
+        }
+        self.gomme_lancer_suivant();
+        if self.gomme_travaux.occupe() {
+            // (Le calcul d'un projet qu'on a quitté se termine sans rien dire.)
+            if self.gomme_travaux.courant.as_ref().is_some_and(|c| c.epoque == self.doc_epoch) {
+                self.status = self.gomme_travaux.progression();
+            }
             self.ctx.request_repaint_after(std::time::Duration::from_millis(16));
-        } else if t.annules > 0 {
-            self.status = "Gomme : le geste a été annulé, le calcul des autres clés est abandonné.".into();
-        } else if t.retouches > 0 {
-            self.status = format!("Gomme : {} dessin(s) retouché(s) pendant le calcul laissé(s) tel(s) quel(s) ; {} gommé(s).", t.retouches, t.poses);
-        } else {
-            self.status = format!("Gomme sur {} : posée partout.", t.quoi);
+            return;
+        }
+        // Le calcul est fini : les commandes retenues partent, dans l'ordre, puis l'enregistrement retenu.
+        for action in std::mem::take(&mut self.gomme_travaux.commandes) {
+            self.run_action(action);
+        }
+        if let Some((manifeste, ensuite)) = self.gomme_travaux.sauvegarde.take() {
+            self.start_save(manifeste, ensuite);
         }
     }
 
-    /// Pose un résultat, s'il vaut encore : même projet, étape du geste toujours à annuler, dessin pas retouché depuis le lâcher.
+    /// Enregistrer pendant le calcul : on attend un peu (150 ms) ; si ce n'est pas fini, l'enregistrement est retenu et partira à la
+    /// fin du calcul. Rend ce qu'il faut enregistrer maintenant, ou rien s'il est retenu.
+    pub(crate) fn gomme_retient_sauvegarde(&mut self, manifeste: std::path::PathBuf, ensuite: Option<crate::app::Pending>) -> Option<(std::path::PathBuf, Option<crate::app::Pending>)> {
+        if !self.gomme_travaux.occupe() {
+            return Some((manifeste, ensuite));
+        }
+        self.attendre_gomme_multi_pendant(std::time::Duration::from_millis(150));
+        if !self.gomme_travaux.occupe() {
+            return Some((manifeste, ensuite));
+        }
+        self.gomme_travaux.sauvegarde = Some((manifeste, ensuite));
+        self.status = format!("{} — l'enregistrement attend la fin du calcul.", self.gomme_travaux.progression());
+        None
+    }
+
+    /// Ctrl+Z, Ctrl+Maj+Z (`action`) pendant le calcul : on attend un peu (150 ms) ; si ce n'est pas fini, la commande est retenue et
+    /// partira à la fin du calcul (la fenêtre continue de se peindre, la barre d'état et le bandeau montrent l'avancée). Vrai si la
+    /// commande est retenue (l'appelant ne fait rien de plus).
+    pub(crate) fn gomme_retient(&mut self, action: &'static str) -> bool {
+        if !self.gomme_travaux.commandes.is_empty() {
+            self.gomme_travaux.commandes.push(action);
+            return true;
+        }
+        if !self.gomme_travaux.occupe() {
+            return false;
+        }
+        self.attendre_gomme_multi_pendant(std::time::Duration::from_millis(150));
+        if !self.gomme_travaux.occupe() {
+            return false;
+        }
+        self.gomme_travaux.commandes.push(action);
+        self.status = format!("{} — {} attend la fin du calcul.", self.gomme_travaux.progression(), if action == "edition.annuler" { "Annuler" } else { "Rétablir" });
+        true
+    }
+
+    /// Pose un résultat, s'il vaut encore : même projet, étape du geste toujours à annuler, dessin pas retouché depuis le départ du
+    /// calcul (son contenu, pas sa version : `Sceau`).
     fn poser_gomme(&mut self, r: Retour) {
-        if r.epoque != self.doc_epoch {
+        let Some(courant) = self.gomme_travaux.courant.as_mut() else { return };
+        if courant.epoque != self.doc_epoch {
             return;
         }
-        if let Some(id) = self.gomme_travaux.etape {
-            if self.history.etat_de_l_etape(id) != Some(true) {
-                self.gomme_travaux.annules += 1;
-                return;
-            }
-        }
-        let Some(c) = self.doc.cels.get_mut(&r.cel) else {
-            self.gomme_travaux.retouches += 1;
+        let etape = courant.etape;
+        let Some(fini) = r.fini else {
+            courant.perdus += 1;
             return;
         };
-        if c.version != r.version {
-            self.gomme_travaux.retouches += 1;
+        if self.history.etat_de_l_etape(etape) != Some(true) {
+            courant.annules += 1;
             return;
         }
-        let edit = match r.fini {
+        let sceau_ok = match (self.doc.cels.get(&r.cel), courant.sceaux.iter().find(|(c, _)| *c == r.cel)) {
+            (Some(c), Some((_, s))) => intact(c, s),
+            _ => false,
+        };
+        if !sceau_ok {
+            courant.retouches += 1;
+            return;
+        }
+        let Some(c) = self.doc.cels.get_mut(&r.cel) else { return };
+        let edit = match fini {
             Fini::Rien => {
-                self.gomme_travaux.poses += 1;
+                if let Some(c) = self.gomme_travaux.courant.as_mut() {
+                    c.poses += 1;
+                }
                 return;
             }
             Fini::Pixels { raster, edit } => {
@@ -459,27 +720,31 @@ impl App {
                 Some(Edit::Vector { cel: r.cel, drawing: *avant })
             }
         };
-        self.gomme_travaux.poses += 1;
+        if let Some(c) = self.gomme_travaux.courant.as_mut() {
+            c.poses += 1;
+        }
         self.modified = true;
         let Some(edit) = edit else { return };
-        // (L'étape est encore à annuler : vérifié plus haut.)
-        match self.gomme_travaux.etape {
-            Some(id) => {
-                self.history.extend_step(id, edit);
-            }
-            None => {
-                let avant = self.history.context.replace("Gomme".to_string());
-                self.history.push(Edit::Group(vec![edit]));
-                self.history.context = avant;
-                self.gomme_travaux.etape = Some(self.history.last_id());
-            }
-        }
+        // L'étape du geste reçoit ce retour en arrière (elle est encore à annuler : vérifié plus haut). Le numéro de l'historique
+        // avance ; un champ tenu ne se croit pas pour autant devancé (`Gesture::suivre`).
+        let avant = self.history.serial();
+        self.history.extend_step(etape, edit);
+        self.gesture.suivre(avant, self.history.serial());
     }
 
     /// L'alerte du geste en cours : plus de `SEUIL_ALERTE` dessins touchés. Rien sinon, ni hors d'un geste.
     pub(crate) fn gomme_alerte(&self) -> Option<String> {
         let g = &self.gomme_multi;
-        (g.actif && g.dessins > SEUIL_ALERTE).then(|| format!("Gomme sur {} dessins (Ctrl+Z annule tout)", g.dessins))
+        if g.actif && g.dessins > SEUIL_ALERTE {
+            return Some(format!("Gomme sur {} dessins (Ctrl+Z annule tout)", g.dessins));
+        }
+        // (Une commande attend la fin du calcul : l'avancée, bien visible, jusqu'à ce qu'elle parte.)
+        let t = &self.gomme_travaux;
+        if !t.commandes.is_empty() || t.sauvegarde.is_some() {
+            let quoi = if t.sauvegarde.is_some() { "Enregistrer" } else { "Annuler" };
+            return Some(format!("{} — {quoi} attend", t.progression()));
+        }
+        None
     }
 
     /// Le bandeau de l'alerte, en haut du dessin (`rect` : la zone du dessin à l'écran), de la couleur d'alerte, pendant le geste.
@@ -497,10 +762,24 @@ impl App {
     /// Attend les résultats en route et les pose : avant d'enregistrer (le fichier a le geste entier), avant un nouveau geste de
     /// gomme, et dans les essais.
     pub(crate) fn attendre_gomme_multi(&mut self) {
+        self.attendre_gomme_multi_pendant(std::time::Duration::from_secs(120));
+    }
+
+    /// Comme `attendre_gomme_multi`, au plus `duree`. (Un résultat retenu par un geste en cours ne peut pas être posé : on n'attend
+    /// pas pour lui.)
+    pub(crate) fn attendre_gomme_multi_pendant(&mut self, duree: std::time::Duration) {
         let debut = std::time::Instant::now();
-        while self.gomme_travaux.en_route > 0 && debut.elapsed() < std::time::Duration::from_secs(120) {
+        while self.gomme_travaux.occupe() && debut.elapsed() < duree {
+            // (Les commandes et l'enregistrement retenus ne partent pas d'ici : de la prochaine image d'écran.)
+            let commandes = std::mem::take(&mut self.gomme_travaux.commandes);
+            let sauvegarde = self.gomme_travaux.sauvegarde.take();
             self.poll_gomme_multi();
-            if self.gomme_travaux.en_route > 0 {
+            self.gomme_travaux.commandes = commandes;
+            self.gomme_travaux.sauvegarde = sauvegarde;
+            if self.gomme_travaux.en_route == 0 && !self.gomme_travaux.differes.is_empty() {
+                break;
+            }
+            if self.gomme_travaux.occupe() {
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
         }
