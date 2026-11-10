@@ -44,6 +44,11 @@ action = "fichier.enregistrer"
 touches = ["Ctrl+S"]
 
 [[raccourci]]
+action = "fichier.jalons"
+touches = []
+source = "FEANOR (sans touche : la fenêtre des jalons, Fichier > Jalons…)"
+
+[[raccourci]]
 action = "fichier.enregistrer_sous"
 touches = ["Ctrl+Maj+S"]
 source = "proposition"

@@ -629,6 +629,10 @@ pub struct App {
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
     pub(crate) recovery: Option<crate::recovery::Recovery>,
+    /// L'écriture continue du projet (`continu.rs`) : depuis quand il attend, sa pause, le jalon qui se pose.
+    pub(crate) continu: crate::continu::Continu,
+    /// La fenêtre « Jalons » du projet (`jalonsui.rs`).
+    pub(crate) jalons_ui: Option<crate::jalonsui::Fenetre>,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
@@ -1300,6 +1304,8 @@ impl App {
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
             orphans,
             recovery,
+            continu: Default::default(),
+            jalons_ui: None,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -3610,7 +3616,11 @@ impl App {
         if self.saving.is_some() {
             self.after_save = Some(action);
         } else if self.modified {
-            self.pending = Some(action);
+            // L'écriture continue (`continu.rs`) : pas de question, le projet s'écrit puis l'action suit. Sinon (projet sans
+            // dossier, film partagé, réglage décoché, écriture en pause) : la boîte de toujours.
+            if !self.continu_avant(action) {
+                self.pending = Some(action);
+            }
         } else {
             self.perform(action);
         }
@@ -3664,6 +3674,16 @@ impl App {
         if self.montrer_si_deja_ouvert(&path) {
             return;
         }
+        // Un retour à un jalon coupé au milieu (plantage, courant) se finit avant la lecture : le projet est alors celui du jalon
+        // (`jalons.rs`). Le manifeste a pu reprendre son ancien nom.
+        let path = match path.parent().map(crate::jalons::finir_un_retour) {
+            Some(Ok(Some(_))) => crate::project::manifeste_a_ouvrir(&path),
+            Some(Err(e)) => {
+                self.status = format!("Impossible d'ouvrir le projet : le retour à un jalon, coupé au milieu, n'a pas pu se finir ({e}).");
+                return;
+            }
+            _ => path,
+        };
         if io::is_legacy_file(&path) {
             match io::load_legacy(&path) {
                 Ok(mut doc) => {
@@ -3692,6 +3712,11 @@ impl App {
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
+        // (Le jalon de l'ancien projet finit de se poser ; l'écriture continue et la fenêtre des jalons repartent de zéro pour le
+        // nouveau, `continu.rs`.)
+        self.attendre_le_jalon();
+        self.continu = Default::default();
+        self.jalons_ui = None;
         // (Un autre projet prend la place : si l'ancien était un film partagé, ce qu'on y tenait est rendu.)
         self.lacher_la_session();
         self.rejeu.cancel_all();
@@ -4280,9 +4305,15 @@ impl App {
         match action {
             "fichier.nouveau" => self.request(Pending::New),
             "fichier.ouvrir" => self.request(Pending::Open),
+            // Avec l'écriture continue, le projet est déjà sur le disque : Ctrl+S pose un jalon (`jalonsui.rs`).
             "fichier.enregistrer" => {
-                self.save();
+                if self.continu_actif() {
+                    self.jalon_demander();
+                } else {
+                    self.save();
+                }
             }
+            "fichier.jalons" => self.jalons_ouvrir(None),
             "fichier.afficher_explorateur" => match self.path.clone() {
                 Some(p) => crate::exportui::reveal_in_explorer(&p),
                 None => self.status = "Projet pas encore enregistré : Fichier > Enregistrer d'abord.".into(),
@@ -5310,7 +5341,9 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Sans titre".into());
-        let title = format!("{name}{} — FEANOR", if self.modified || self.saving.is_some() { " •" } else { "" });
+        // (Le « • » d'un projet à enregistrer : pas pour un projet que FEANOR écrit tout seul, il clignoterait à chaque trait, `continu.rs`.)
+        let a_enregistrer = (self.modified || self.saving.is_some()) && !self.continu_actif();
+        let title = format!("{name}{} — FEANOR", if a_enregistrer { " •" } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -5604,6 +5637,9 @@ impl App {
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);
             self.tick_save(ctx);
+            // L'écriture continue et les jalons (`continu.rs`, `jalonsui.rs`) : après l'adoption d'une écriture finie.
+            self.tick_continu(ctx);
+            self.jalons_fenetre(ctx);
             self.fusion_tick(ctx);
             // Travailler à plusieurs : ce que la session a préparé est posé (`cooperationui.rs`).
             self.cooperation_tick(ctx);
@@ -5700,6 +5736,9 @@ impl App {
         // Un enregistrement qui dure encore est attendu : on ne perd jamais un projet à la fermeture.
         // Même règle pour chaque onglet, dont la copie de secours est effacée (`onglets.rs`).
         self.retenir_la_session();
+        // L'écriture continue : ce qui n'était pas encore écrit l'est maintenant (la fenêtre fermée par le système, au milieu du délai).
+        self.continu_avant_de_partir();
+        self.attendre_le_jalon();
         self.fermer_tous_les_onglets();
         let current = self.current_layout();
         self.settings.set_layout_of(self.espace, current);

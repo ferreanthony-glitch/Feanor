@@ -72,6 +72,14 @@ mod collage;
 #[cfg(test)]
 mod collage_tests;
 mod enregistrement;
+// On n'enregistre plus (2026-11-10) : l'écriture continue du projet, et les jalons pour y revenir.
+mod continu;
+#[cfg(test)]
+mod continu_tests;
+mod jalons;
+#[cfg(test)]
+mod jalons_tests;
+mod jalonsui;
 mod remplacer;
 #[cfg(test)]
 mod remplacer_tests;

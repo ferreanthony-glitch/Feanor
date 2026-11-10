@@ -52,6 +52,8 @@ pub(crate) struct Enregistrement {
     epoch: u64,
     /// Ce qui suit si tout va bien (la boîte « Modifications non enregistrées »).
     then: Option<Pending>,
+    /// L'écriture continue (`continu.rs`) : rien dans la barre d'état quand tout va bien, seule une erreur se dit.
+    silencieux: bool,
 }
 
 impl Enregistrement {
@@ -68,6 +70,11 @@ impl Enregistrement {
     /// Une action attend la fin de cette écriture (fermer l'onglet…).
     pub(crate) fn a_une_suite(&self) -> bool {
         self.then.is_some()
+    }
+
+    /// Depuis combien de temps cette écriture dure.
+    pub(crate) fn dure_depuis(&self) -> Duration {
+        self.started.elapsed()
     }
 
     /// Attend la fin de l'écriture et jette son résultat (un onglet qui se ferme, l'application qui quitte :
@@ -158,6 +165,20 @@ impl App {
     /// Le cliché, sur le fil de l'interface, puis l'écriture sur un autre fil. Si un enregistrement
     /// dure encore, celui-ci le suit (un seul à la fois).
     pub(crate) fn start_save(&mut self, manifest: PathBuf, then: Option<Pending>) -> bool {
+        self.start_save_avec(manifest, then, false)
+    }
+
+    /// `start_save` ; `silencieux` : c'est l'écriture continue (`continu.rs`), qui ne dit rien dans la barre d'état quand tout va bien.
+    pub(crate) fn start_save_avec(&mut self, manifest: PathBuf, then: Option<Pending>, silencieux: bool) -> bool {
+        // Un jalon ouvert pour le regarder (`jalons.rs`) : FEANOR n'y écrit jamais, il garde le projet tel qu'il était.
+        if crate::jalons::est_dans_un_jalon(&manifest) {
+            let raison = "ce projet est un jalon, gardé tel qu'il était. « Enregistrer sous… » en fait une copie à toi, ou reviens à ce jalon depuis le projet (Fichier > Jalons…).".to_string();
+            self.status = format!("Enregistrement annulé : {raison}");
+            self.save_error = Some(raison);
+            return false;
+        }
+        // Un jalon se pose (il lit le dossier du projet) : l'écriture ne lui passe pas dessous.
+        self.attendre_le_jalon();
         // Une retouche de dégradé en cours s'écrit d'abord : le fichier ne contient jamais l'état « défait ».
         self.degrade_abandonner();
         // La gomme sur les clés qu'on ne voit pas se calcule encore : jamais un fichier à moitié fait. Au-delà de 150 ms, cet
@@ -231,8 +252,10 @@ impl App {
             wake.request_repaint();
             result
         });
-        self.status = "Enregistrement…".into();
-        self.saving = Some(Enregistrement { manifest, handle, progress, started: Instant::now(), epoch: self.doc_epoch, then });
+        if !silencieux {
+            self.status = "Enregistrement…".into();
+        }
+        self.saving = Some(Enregistrement { manifest, handle, progress, started: Instant::now(), epoch: self.doc_epoch, then, silencieux });
         true
     }
 
@@ -276,29 +299,36 @@ impl App {
 
     /// Joint le fil d'écriture et adopte son résultat.
     pub(crate) fn finish_job(&mut self) -> bool {
-        let Some(Enregistrement { manifest, handle, epoch, then, .. }) = self.saving.take() else { return true };
+        let Some(Enregistrement { manifest, handle, epoch, then, silencieux, .. }) = self.saving.take() else { return true };
         let result = handle.join().unwrap_or_else(|_| Err("l'écriture a planté".into()));
-        self.finish_save(manifest, epoch, then, result)
+        self.finish_save(manifest, epoch, then, silencieux, result)
     }
 
     /// Le résultat de l'écriture : l'état du projet, puis la suite.
-    fn finish_save(&mut self, manifest: PathBuf, epoch: u64, then: Option<Pending>, result: Result<SaveReport, String>) -> bool {
+    fn finish_save(&mut self, manifest: PathBuf, epoch: u64, then: Option<Pending>, silencieux: bool, result: Result<SaveReport, String>) -> bool {
         // (Un autre projet a pris la place pendant l'écriture : ce qu'on a écrit est bien écrit, mais
         // le projet d'à présent n'est ni à ce chemin, ni enregistré.)
         let same = epoch == self.doc_epoch;
         let folder = manifest.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if same {
+            // L'écriture continue : relancée par une écriture réussie, mise en pause par un échec (`continu.rs`).
+            self.continu_apres_ecriture(result.is_ok(), result.as_ref().err().map(String::as_str));
+        }
         match result {
             Ok(mut report) => {
                 let manquants = std::mem::take(&mut report.manquants);
                 // Le projet est un dossier à son nom : on le dit, le
                 // fichier n'est pas là où l'on pensait l'avoir mis (Anthony, 2026-10-17 : « quand
                 // j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur »).
-                self.status = format!(
-                    "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). Fichier > Afficher le projet dans l'Explorateur.",
-                    manifest.display(),
-                    report.written,
-                    if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() }
-                );
+                // (L'écriture continue ne dit rien : la barre d'état garde ce qu'elle disait du dessin.)
+                if !silencieux {
+                    self.status = format!(
+                        "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). Fichier > Afficher le projet dans l'Explorateur.",
+                        manifest.display(),
+                        report.written,
+                        if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() }
+                    );
+                }
                 if same {
                     // Film partagé : les bases de comparaison avancent, les prises annoncent ce qui est écrit ; une copie
                     // à plat ailleurs détache le projet du partage.
@@ -328,7 +358,7 @@ impl App {
                         for id in &manquants {
                             self.written.remove(id);
                         }
-                        return self.start_save(manifest, then);
+                        return self.start_save_avec(manifest, then, silencieux);
                     }
                 }
             }
@@ -355,7 +385,9 @@ impl App {
             if self.modified || self.path.as_ref() != Some(&next) {
                 return self.start_save(next, next_then.or(then));
             }
-            self.status = "Enregistré (rien de plus à écrire).".into();
+            if !silencieux {
+                self.status = "Enregistré (rien de plus à écrire).".into();
+            }
             return self.after_saved(next_then.or(then));
         }
         self.after_saved(then)
@@ -406,6 +438,10 @@ impl App {
     /// Dans la barre d'état : « Enregistrement… 12 / 50 » tant que l'écriture dure.
     pub(crate) fn save_status_ui(&self, ui: &mut egui::Ui) {
         let Some(job) = &self.saving else { return };
+        // (L'écriture continue a son mot à elle dans la barre, `continu_status_ui` : pas de compte qui clignote à chaque trait.)
+        if job.silencieux && job.then.is_none() && self.after_save.is_none() {
+            return;
+        }
         let (done, total) = job.advance();
         ui.separator();
         // (Pas de roue qui tourne : elle repeindrait l'écran à chaque image ; le compte se rafraîchit

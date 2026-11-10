@@ -16,6 +16,10 @@ pub struct Settings {
     /// Copie de secours toutes les N minutes (0 = jamais). 1 par défaut.
     #[serde(default = "default_autosave", rename = "copie_secours_minutes")]
     pub autosave_minutes: u32,
+    /// FEANOR écrit le projet tout seul dès que le stylet se lève, fermer ne demande rien, Ctrl+S pose un jalon (`continu.rs`,
+    /// 2026-11-10). Décoché : comme avant, seul « Enregistrer » écrit le projet.
+    #[serde(default = "default_continu", rename = "enregistrer_en_continu")]
+    pub enregistrer_en_continu: bool,
     /// Croix du système sur le dessin, en plus du cercle du pinceau : Windows la déplace dès que
     /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par SHOT, la suit).
     #[serde(default = "yes", rename = "curseur_systeme")]
@@ -321,6 +325,12 @@ fn default_autosave() -> u32 {
     1
 }
 
+/// L'écriture continue est allumée d'origine. Dans les essais, elle ne l'est que pour ceux qui la demandent : les autres
+/// regardent l'état « modifié » et la question de fermeture d'avant, qui valent encore pour un projet sans dossier.
+fn default_continu() -> bool {
+    !cfg!(test)
+}
+
 fn default_head_w() -> f32 {
     crate::soundtrack::HEADERS_W
 }
@@ -338,6 +348,7 @@ impl Default for Settings {
         Settings {
             ffmpeg: None,
             autosave_minutes: default_autosave(),
+            enregistrer_en_continu: default_continu(),
             system_cursor: true,
             montage_export_dir: None,
             fiche: Default::default(),

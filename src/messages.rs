@@ -23,6 +23,8 @@ pub(crate) enum ActionMessage {
     CrayonnesDeCote(std::path::PathBuf),
     /// Le remet à son nom.
     CrayonnesRemettre(std::path::PathBuf),
+    /// Ouvre la fenêtre « Jalons », le curseur dans le nom du jalon qu'on vient de poser (son dossier).
+    NommerJalon(std::path::PathBuf),
 }
 
 impl ActionMessage {
@@ -32,6 +34,7 @@ impl ActionMessage {
             ActionMessage::MontrerDossier(_) => "Ouvrir le dossier",
             ActionMessage::CrayonnesDeCote(_) => "Mettre de côté",
             ActionMessage::CrayonnesRemettre(_) => "Annuler",
+            ActionMessage::NommerJalon(_) => "Nommer…",
         }
     }
 
@@ -41,6 +44,7 @@ impl ActionMessage {
             ActionMessage::MontrerDossier(_) => "Ouvre l'explorateur sur ce qui vient d'être exporté.",
             ActionMessage::CrayonnesDeCote(_) => "Renomme crayonnes.json en crayonnes.json.ancien dans le dossier du projet : cet avis ne revient plus. Rien n'est effacé.",
             ActionMessage::CrayonnesRemettre(_) => "Remet crayonnes.json à son nom d'origine.",
+            ActionMessage::NommerJalon(_) => "Ouvre la fenêtre des jalons pour donner un nom à celui-ci. Un jalon nommé n'est jamais retiré tout seul.",
         }
     }
 }
@@ -148,6 +152,7 @@ impl App {
             ActionMessage::MontrerDossier(p) => crate::exportui::reveal_in_explorer(&p),
             ActionMessage::CrayonnesDeCote(dir) => self.crayonnes_de_cote(&dir),
             ActionMessage::CrayonnesRemettre(dir) => self.crayonnes_remettre(&dir),
+            ActionMessage::NommerJalon(dossier) => self.jalons_ouvrir(Some(dossier)),
         }
     }
 

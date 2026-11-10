@@ -648,7 +648,11 @@ impl App {
                     }
                 });
             }
-            Groupe::Secours => self.autosave_menu_ui(ui),
+            Groupe::Secours => {
+                // L'écriture continue d'abord (`continu.rs`) ; la copie de secours reste pour les projets qu'elle n'écrit pas.
+                self.continu_reglage_ui(ui);
+                self.autosave_menu_ui(ui);
+            }
             Groupe::Collage => self.collage_prefs_ui(ui),
             Groupe::Stylet => {
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(

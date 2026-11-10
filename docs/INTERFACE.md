@@ -9788,6 +9788,97 @@ courante** seulement (une sélection de case, que la planche ne montre pas comme
 9. Mesure : 100 cases de 50 traits coupés comme avant la partie 131 (2 500 traits entiers de deux parts) : Ctrl+A en 38 à 43 ms
    (80 à 110 ms quand les parts ne se touchent pas et ne se recollent pas).
 
+## 135. On n'enregistre plus : l'écriture continue et les jalons (2026-11-10, branche `sans-enregistrer`)
+
+Anthony, après l'audit du 10 novembre (`suivi/AUDIT-2026-11-10.md`, proposition 25) : « fais la proposition 25 ». Son compteur
+d'habitudes montrait 10 enregistrements pour 907 annulations en quatre jours, et sa séance du matin n'avait jamais été écrite.
+
+### Ce qui change
+
+- **FEANOR écrit le projet tout seul**, dans son dossier, dès que le stylet se lève : une seconde après un changement, quand le
+  stylet est levé depuis 0,4 s (on n'écrit pas entre deux hachures) et que le film ne se lit pas ; au plus tard dix secondes après
+  le premier changement, au premier stylet levé, même pendant une lecture. Jamais pendant un geste, une retouche de dégradé, ni tant
+  qu'un calcul de fond n'a pas posé son résultat. Rien dans la barre d'état quand tout va bien ; à droite, un mot discret :
+  « Enregistré » (« Écriture… » seulement si elle dure ou si quelque chose la retient), ou « Écriture en pause » en braise.
+- **Fermer et quitter ne demandent plus rien.** Ce qui reste à écrire s'écrit, puis l'onglet ou la fenêtre se ferme. Changer
+  d'onglet écrit le projet qu'on quitte. L'onglet n'a plus de pastille « à enregistrer ».
+- **Ctrl+S pose un jalon** : le projet tel qu'il est à ce moment, auquel on peut revenir. Le menu Fichier dit « Poser un jalon »
+  à la place d'« Enregistrer » ; la barre d'état propose de le nommer (« Nommer… »).
+- **Un jalon automatique à chaque ouverture**, avant la première écriture : c'est ce qui remplace « Ne pas enregistrer ». Pour
+  abandonner une séance ratée : Fichier > Jalons…, « À l'ouverture », « Revenir à ce jalon ». FEANOR garde les dix derniers jalons
+  automatiques et les trente derniers jalons posés à la main sans nom ; un jalon nommé reste jusqu'à ce qu'on le supprime. Rien
+  n'est posé à l'ouverture si le projet n'a pas changé depuis le dernier jalon.
+- **Fichier > Jalons…** : la liste, du plus récent au plus ancien, avec le nom (on le tape dans la ligne), la date, « Revenir à
+  ce jalon… » (une confirmation) et « Supprimer ». Revenir garde toujours l'état d'aujourd'hui dans un jalon « Avant le retour à
+  « … » » : un retour se défait.
+- **Préférences > En cas de plantage > « Enregistrer en continu »** (cochée d'origine). Décochée : tout est comme avant.
+
+### Pour qui
+
+Un projet qui a son dossier. Pas un **film partagé** (enregistrer y publie le travail à l'équipe : cela reste un geste voulu), pas
+un **projet sans dossier** (créé sans nom, ancien fichier importé, copie de secours sans projet : la question d'avant et la copie
+de secours restent), pas un **jalon ouvert** pour le regarder (FEANOR n'y écrit jamais : « Enregistrer » y est refusé).
+
+### Comment
+
+- `continu.rs` décide seulement **quand** ; ce qui écrit est l'enregistrement de toujours (`enregistrement.rs`,
+  `App::start_save_avec(…, silencieux)`) : cliché des seuls dessins modifiés sur le fil de l'interface (bornes des essais : 6 ms
+  pour 100 plans, 15 ms pour 600), écriture sur un autre fil, chaque fichier remplacé d'un renommage, le manifeste en dernier.
+  Un plantage ou un arrêt brutal laisse un projet lisible, à l'instant de la dernière écriture.
+- **Un échec** (disque plein, dossier retiré) : la fenêtre d'erreur de toujours, puis l'écriture continue se met en pause
+  (`Continu::pause` : elle ne redemande pas chaque seconde), la copie de secours reprend son rôle, fermer redemande ; un
+  enregistrement réussi la relance.
+- La copie de secours (`recovery.rs`) ne tourne plus pour un projet écrit en continu : son dossier est à jour.
+- `jalons.rs` (fichiers) : un jalon est un dossier de projet complet, `<projet>/jalons/<date>/`, avec sa fiche `jalon.json`. Les
+  dessins, sons, textures, images collées et images de vidéo y sont des **liens physiques** (un second nom du même fichier, aucune
+  place prise) : ces fichiers ne sont jamais modifiés sur place (`project::dossiers_jamais_modifies_sur_place`), une réécriture
+  remplace le nom du projet et laisse celui du jalon. Le manifeste et les annexes sont copiés. Sans liens (clé en FAT) : des copies.
+  Un jalon s'écrit sous un nom provisoire et n'apparaît qu'une fois complet.
+- **Le jalon d'ouverture garde l'ancien format.** Un projet d'un format d'avant, que l'écriture continue passe au format
+  d'aujourd'hui, reste tel qu'il était dans son jalon d'ouverture, octet pour octet : une version d'avant de FEANOR peut encore
+  l'ouvrir (le dossier du jalon est un projet). Si ce jalon ne peut pas être posé, l'écriture continue se met en pause et le dit.
+- **Revenir** (`jalonsui.rs`, `jalons::restaurer`) : tout est écrit, le jalon « Avant le retour » est posé, l'onglet se ferme, les
+  fichiers sont remis un par un d'un renommage (le manifeste en dernier, le surplus retiré à la fin), le projet se rouvre. Une
+  marque `jalons/.retour` dit qu'un retour est en cours : coupé au milieu, il se finit à l'ouverture suivante.
+- Le format du projet ne change pas (52). Une version d'avant ouvre un projet écrit par celle-ci et ignore son dossier `jalons`.
+
+### Limites connues
+
+- L'historique d'annulation ne survit pas à la fermeture : après avoir fermé, on revient en arrière par les jalons, pas par Ctrl+Z.
+- Un projet sans dossier garde la question « Modifications non enregistrées ».
+- Revenir à un jalon rouvre le projet : son onglet passe en dernier, la vue et l'historique repartent de zéro.
+- Dans un dossier synchronisé (OneDrive, Dropbox), le service envoie chaque jalon comme des fichiers à part.
+- Le fichier de projet unique (décidé pour la V1) reste à faire : c'est une étape à part, qui change le format.
+
+### Essais
+
+`jalons_tests.rs` (7) : un jalon est un projet complet fait de liens ; ce qui s'écrit après ne change aucun de ses fichiers (projet
+d'essai complet : bitmap, vectoriel, aplats, hors-feuille, son, vidéo, annexes) ; revenir remet chaque fichier et retire le surplus,
+dans les deux sens ; un retour coupé se finit ; dix automatiques et trente sans nom gardés, les nommés jamais retirés ; seul un jalon est jamais
+renommé ou supprimé. `continu_tests.rs` (14) : un changement s'écrit seul et ne dit rien ; rien pendant une lecture (jusqu'au plafond) ni stylet
+posé, puis FEANOR se repose ; quitter écrit d'abord et ne demande rien ; un projet sans dossier garde la question ; un échec met en
+pause, un enregistrement réussi relance ; Ctrl+S écrit puis pose un jalon ; l'ouverture en pose un, y revenir rend le projet et
+garde même le trait pas encore écrit ; un ancien format reste intact dans son jalon ; quitter un onglet l'écrit ; le dossier suit
+annuler et rétablir ; un jalon ouvert n'est jamais écrit.
+
+Lancement réel (exe de la branche, copie du projet « afa », faux réglages) : le jalon d'ouverture se pose en une seconde et demie
+(300 fichiers, en liens), aucun des 299 fichiers du projet ne change à l'ouverture, un second lancement ne pose pas de second jalon,
+un arrêt brutal ne laisse aucun fichier à moitié écrit.
+
+### À vérifier à l'écran (par Anthony), sur une COPIE de projet
+
+1. Ouvre le projet. Dessine un trait, lève le stylet : en bas à droite, le mot « Enregistré » reste. La barre d'état garde son
+   message.
+2. Ferme la fenêtre par la croix : aucune question. Rouvre : le trait est là.
+3. Dessine, puis arrête FEANOR brutalement par le Gestionnaire des tâches. Rouvre : tout est là, sauf au plus le dernier instant.
+4. Ctrl+S : « Jalon posé à … ». Clique « Nommer… », tape un nom, Entrée.
+5. Dessine n'importe quoi par-dessus. Fichier > Jalons…, ton jalon, « Revenir à ce jalon… », « Revenir » : le projet se rouvre
+   comme au jalon. Dans la liste, « Avant le retour à … » garde ton gribouillage : reviens-y, il est là.
+6. Fichier > Jalons… : un jalon « À l'ouverture », automatique, pour chaque ouverture où le projet avait changé.
+7. Hachure vite pendant vingt secondes : aucune saccade au stylet.
+8. Lance la lecture, change d'onglet, exporte une image : rien de bizarre.
+9. Préférences > En cas de plantage : décoche « Enregistrer en continu » : Ctrl+S enregistre comme avant, fermer redemande.
+
 ## 136. Les réglages des calques, leurs effets et leurs clés sur tous les calques choisis (2026-11-10, branche `selection-tout-2`)
 
 Anthony a validé quatre points du groupe (c) de la règle « la sélection agit sur tout ». Code : `choixcalques.rs` (neuf :

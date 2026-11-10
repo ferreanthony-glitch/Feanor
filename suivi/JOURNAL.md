@@ -28,6 +28,24 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   avertissement, fiabilité OK (985 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`, FEANOR n'était pas
   ouvert) et ouvert sur une copie d'afa avec de faux réglages : pas de plantage. Le dossier `Chantiers\souvient-retours` retiré avec
   son accord (« Oui, retire-le ») ; la branche est gardée.
+- Audit à sa demande (« audit sévère s'il faut »), à partir de son compteur d'habitudes et de ses projets : `suivi/AUDIT-2026-11-10.md`,
+  cinq constats, propositions 21 à 29, puis la 30 (« La feuille par axe ») en réponse à « si tu repartais de zéro ». Rien de codé.
+- Sur son « fais la proposition 25 » : **on n'enregistre plus** (partie 135, branche `sans-enregistrer`, chantier
+  `Chantiers\sans-enregistrer`, depuis main a17ad33). FEANOR écrit le projet tout seul dès que le stylet se lève (l'enregistrement
+  de toujours, déclenché par `continu.rs`, silencieux) ; fermer et quitter ne demandent plus rien ; Ctrl+S pose un jalon ; un jalon
+  automatique à chaque ouverture remplace « Ne pas enregistrer » ; Fichier > Jalons… pour nommer, revenir, supprimer. Un jalon est
+  un projet complet en liens physiques (`jalons.rs`), qui ne prend presque pas de place. Pas pour un film partagé ni un projet sans
+  dossier. Réglage « Enregistrer en continu » dans les Préférences. Le format ne change pas (52). Trouvé en relisant : chaque
+  écriture réécrivait les réglages (liste des récents) et le titre de la fenêtre aurait clignoté ; corrigé. Vérificateur sur la
+  branche : 4 406 essais réussis, 0 échec, aucun avertissement, fiabilité OK (975 s). Exe de branche lancé sur une copie d'« afa »
+  avec de faux réglages : jalon d'ouverture posé en 1,5 s (300 fichiers, en liens), aucun fichier du projet changé, pas de second
+  jalon au second lancement, arrêt brutal sans reste. Pas fait : le fichier de projet unique (étape à part), l'annulation qui survit
+  à la fermeture. Pas fusionné : attend son essai et son accord.
+- L'autre session a fusionné dans main `vignettes-ctrl-a` (d07678e, partie 134) puis `selection-tout-2` (d3662ef, partie 136) et l'a
+  rappelé : main fusionné dans `sans-enregistrer` (d7f1761), seul conflit dans docs/INTERFACE.md (parties rangées 134, 135, 136).
+  Vérifié dans le code reçu : ni fil, ni canal, ni travail de fond nouveau, donc rien à ajouter à `App::continu_retenu`. Vérificateur
+  sur la branche : 4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (785 s). L'exe de la branche n'a pas été
+  reconstruit : la version portable du soir (dac56c7) reste celle de son essai. Toujours pas fusionné : attend son essai et son accord.
 
 ## 2026-11-09
 
