@@ -91,6 +91,7 @@ impl App {
         self.update_text_preview(ui.ctx());
         self.check_persp();
         self.check_envelope();
+        self.check_deform_multi();
 
         // Garde : une feuille plus grande que la texture maximale de la carte graphique (ou de l'affichage de
         // secours) ne se compose pas ; au lieu d'une vue blanche en silence, on le dit sur le dessin et dans la barre d'état.
@@ -259,6 +260,9 @@ impl App {
         self.paint_text_overlay(&painter);
         self.paint_persp_overlay(&painter);
         self.paint_envelope_overlay(&painter);
+        self.paint_deform_multi_overlay(&painter);
+        // La gomme sur beaucoup de dessins : l'alerte, pendant le geste (`gommemulti.rs`).
+        self.paint_gomme_alerte(&painter, rect);
         self.paint_stroke_tip(&painter);
         self.paint_droit(&painter);
         if !self.in_card {
@@ -472,6 +476,8 @@ impl App {
                         Tool::Gradient => self.degrade_press(p, modifiers.alt),
                         Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => {
                             let pressure = if pen { self.pen_pressure } else { 1.0 };
+                            // Gomme et plusieurs calques (ou clés) choisis : la marque de l'historique avant le trait (`gommemulti.rs`).
+                            let gomme_multi = self.gomme_multi_avant();
                             // Le trait d'abord (`begin_paint` clôt le précédent, ce qui oublie le
                             // guide), puis le guide qu'il suit : sinon l'aimant ne servait jamais.
                             self.begin_paint(p, pressure, pen);
@@ -480,15 +486,17 @@ impl App {
                                 // Maj tenue pendant le trait : un segment droit (`tracedroit.rs`).
                                 self.droit_start(p);
                             }
+                            if let Some(marque) = gomme_multi {
+                                self.gomme_multi_debut(marque, p, pressure, pen);
+                            }
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Text => self.text_press(p),
                         // Déformer : l'enveloppe de Bézier ou la perspective (`envelopetools.rs`,
                         // `perstools.rs`).
-                        Tool::Perspective => {
-                            self.deform_many_note();
-                            self.deform_press(p, *pos)
-                        }
+                        // Plusieurs calques (ou clés) choisis : une seule déformation pour tous (`deformmulti.rs`).
+                        Tool::Perspective if self.deform_multi_voulu() => self.deform_multi_press(stage, *pos),
+                        Tool::Perspective => self.deform_press(p, *pos),
                         // La boîte de la sélection : déplacer, échelle, rotation, inclinaison, pivot
                         // (`seltools.rs`). Avec plusieurs calques choisis, le lasso prend sur tous
                         // et la boîte les entoure (`multitools.rs`).
@@ -532,8 +540,15 @@ impl App {
                         if let Some(q) = self.guided_point(stage) {
                             self.stroke_point(self.to_layer(q), pressure, &mods, true);
                         }
+                    } else if self.gomme_multi.actif() {
+                        // (La gomme sur les autres calques choisis, quand le calque courant n'a rien à gommer.)
+                        let pressure = if self.gomme_multi.pen() { self.pen_pressure } else { 1.0 };
+                        if let Some(q) = self.guided_point(stage) {
+                            self.gomme_multi_point(self.to_layer(q), pressure);
+                        }
                     } else if self.cutter_drag(p) {
                     } else if self.sculpt_drag(p) {
+                    } else if self.deform_multi_drag(stage) {
                     } else if self.envelope_drag(p) {
                     } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
@@ -565,6 +580,7 @@ impl App {
                     self.degrade_release();
                     self.persp_release();
                     self.envelope_release();
+                    self.deform_multi_release();
                     if self.multi.drag.is_some() {
                         self.multi_finish_drag();
                     }

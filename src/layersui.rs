@@ -243,9 +243,9 @@ impl App {
             let resp = ui.add(egui::DragValue::new(&mut opacity).range(0.0..=100.0).max_decimals(0).suffix(" %").speed(0.5));
             let resp = crate::bulles::bulle(resp, "Opacité du calque", "Glisser ou taper une valeur.", "");
             if self.edited(&resp) {
-                // Sans clé : l'opacité fixe ; avec des clés : la clé de l'image courante (posée au besoin).
-                let f = self.cur_frame;
-                self.layers_mut()[li].set_opacity_at(f, opacity / 100.0);
+                // Sans clé : l'opacité fixe ; avec des clés : la clé de l'image courante (posée au besoin). Plusieurs calques
+                // choisis : tous prennent cette valeur (`choixtout.rs`).
+                self.regler_opacite(li, opacity / 100.0);
             }
             // « Créer une clé » : le losange des clés d'opacité, comme celui des effets.
             self.op_keys_buttons(ui);

@@ -208,7 +208,8 @@ impl App {
     pub(crate) fn key_menu_core(&mut self, ui: &mut Ui, kind: KeyKind) {
         let st = self.key_menu_state(kind);
         for e in core_entries(kind, st) {
-            let shortcut = self.keymap.label(e.cmd.action());
+            // (Suppr vide le dessin des clés, il ne les supprime plus : cette commande-ci n'a pas de touche, `choixtout.rs`.)
+            let shortcut = if kind == KeyKind::Drawing && e.cmd == KeyCmd::Delete { String::new() } else { self.keymap.label(e.cmd.action()) };
             let resp = ui.add_enabled(e.enabled, egui::Button::new(&e.label).shortcut_text(shortcut));
             let resp = if e.hint.is_empty() { resp } else { crate::bulles::bulle(resp, &e.label, &e.hint, "") };
             if resp.clicked() {
