@@ -52,7 +52,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   (`target\release\feanor.exe`, FEANOR n'était pas ouvert) et ouvert deux fois sur une copie d'afa avec de faux réglages : pas de
   plantage, jalon d'ouverture posé au premier lancement (300 fichiers), aucun fichier du projet changé, pas de second jalon au
   second lancement, arrêt brutal sans reste. Il n'a pas essayé la version portable avant : le stylet pendant l'écriture continue
-  reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` attend son accord pour être retiré.
+  reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` retiré avec son accord (« Oui,
+  retire-le ») ; la branche est gardée.
 
 ## 2026-11-09
 
