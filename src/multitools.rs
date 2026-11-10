@@ -652,6 +652,9 @@ impl App {
     /// Avant une annulation ou un rétablissement : les feuilles lâchées sont terminées, la
     /// sélection s'en va (elle ne serait plus celle des dessins refaits).
     pub(crate) fn multi_before_history(&mut self) {
+        // La gomme sur les clés qu'on ne voit pas finit d'être posée d'abord (`gommemulti.rs`) : Ctrl+Z annule alors le geste
+        // entier, et Ctrl+Maj+Z le rend entier (tout ou rien, comme pour Enregistrer).
+        self.attendre_gomme_multi();
         // (La séance de Déformer sur plusieurs calques aussi : ses dessins d'origine ne seraient plus ceux du projet.)
         self.deform_multi_fermer();
         self.drop_multi();

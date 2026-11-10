@@ -22,6 +22,16 @@ pub fn mirror_transform_x(t: LayerTransform, pivot: Pos2, axis: f32) -> LayerTra
     LayerTransform { x: t1.x + target.x - q.x, y: t1.y + target.y - q.y, ..t1 }
 }
 
+/// Comme `mirror_transform_x`, autour de l'horizontale y = `axis` de la feuille : la rotation s'inverse, la hauteur change de signe,
+/// et l'inclinaison d'une carte autour de l'horizontale aussi (`choixtout.rs`, plusieurs calques retournés ensemble).
+pub fn mirror_transform_y(t: LayerTransform, pivot: Pos2, axis: f32) -> LayerTransform {
+    let p = t.affine(pivot).apply(pivot);
+    let target = pos2(p.x, 2.0 * axis - p.y);
+    let t1 = LayerTransform { angle: -t.angle, stretch_y: -t.stretch_y, tilt_x: -t.tilt_x, ..t };
+    let q = t1.affine(pivot).apply(pivot);
+    LayerTransform { x: t1.x + target.x - q.x, y: t1.y + target.y - q.y, ..t1 }
+}
+
 /// La transformation `t` retournée sur place : le point `center` du dessin (le milieu de son
 /// contenu) reste où il est sur la feuille ; de gauche à droite (`horizontal`) ou de haut en bas,
 /// dans le repère du calque.

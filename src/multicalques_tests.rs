@@ -785,6 +785,32 @@ fn banc_n_cles(n: usize) -> Banc {
 }
 
 #[test]
+fn undo_then_redo_during_the_computation_gives_back_the_whole_gesture() {
+    let mut b = banc_n_cles(20);
+    let cels: Vec<CelId> = (0..20).map(|f| cel_de(&b, 0, f)).collect();
+    gommer_les_cles_sans_attendre(&mut b);
+    // Ctrl+Z tout de suite ; quelques images passent (les calculs arrivent) ; puis Ctrl+Maj+Z : le geste entier revient, sur les
+    // vingt clés.
+    b.app.undo();
+    attendre_les_calculs(&mut b);
+    for f in 1..20 {
+        assert!(encre(&b, cels[f], pos2(200.0, y_de(0))), "clé de l'image {f} : rien ne reste du geste annulé");
+    }
+    b.app.redo();
+    attendre_les_calculs(&mut b);
+    for (f, &cel) in cels.iter().enumerate() {
+        assert!(!encre(&b, cel, pos2(200.0, y_de(0))), "clé de l'image {f} : gommée, comme sans annulation");
+        assert!(encre(&b, cel, pos2(130.0, y_de(0))), "clé de l'image {f} : le reste est intact");
+    }
+    // Et un second Ctrl+Z rend les vingt dessins d'avant.
+    b.app.undo();
+    attendre_les_calculs(&mut b);
+    for (f, &cel) in cels.iter().enumerate() {
+        assert!(encre(&b, cel, pos2(200.0, y_de(0))), "clé de l'image {f} : rendue par Ctrl+Z");
+    }
+}
+
+#[test]
 fn the_eraser_warns_on_the_drawing_above_twenty_four_drawings_and_only_during_the_gesture() {
     assert_eq!(crate::gommemulti::SEUIL_ALERTE, 24);
     for (n, alerte) in [(24, false), (25, true)] {
@@ -949,4 +975,327 @@ fn cout_dix_calques_vingt_cles() {
     println!("COUT perspective 10 calques x 20 cles : ouverture {ouvrir_ms:.1} ms, pire image du glisse {pire:.1} ms, lacher {lacher:.1} ms ({etat})");
     repos(&mut b);
     assert!(empreinte(&b, cel) != avant, "déformé sur une clé qu'on ne voit pas");
+}
+
+// ---------------------------------------------------------------------------------------------- la sélection agit sur tout
+
+/// Quatre images ; un calque vectoriel (courant), un bitmap avec un aplat, un calque de couleur (non lié), et un quatrième
+/// vectoriel : chacun une clé à l'image 0, tenue jusqu'au bout. Les quatre calques sont choisis.
+fn banc_quatre_sortes() -> Banc {
+    let mut doc = Document::new(W, H, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 4;
+    let sortes = [LayerKind::Vector, LayerKind::Bitmap, LayerKind::Bitmap, LayerKind::Vector];
+    for (i, &k) in sortes.iter().enumerate() {
+        let cel = dessin(&mut doc, contenu(k, i));
+        let mut l = Layer::new(&format!("Calque {i}"), k);
+        // (Une seule clé, tenue sur les quatre images.)
+        l.frames = vec![Some(cel); 4];
+        if i == 1 {
+            l.fond = Some(Default::default());
+        }
+        if i == 2 {
+            l.couleur = Some(crate::calquecouleur::CalqueCouleur::new(0));
+        }
+        doc.panels[0].layers.push(l);
+    }
+    let mut b = ouvrir(doc, Tool::Brush, 4);
+    b.app.cur_frame = 2;
+    b.chauffer(2);
+    b
+}
+
+/// Le calque `li` commence-t-il une clé à l'image `f` ?
+fn cle_ici(b: &Banc, li: usize, f: usize) -> bool {
+    crate::handles::key_start_taken(&b.app.doc.panels[0].layers[li], f)
+}
+
+#[test]
+fn a_new_key_goes_on_every_chosen_layer_in_one_step_and_survives_undo_redo_and_save() {
+    let mut b = banc_quatre_sortes();
+    // Le quatrième a déjà une clé à l'image 2 ; le troisième (calque de couleur) est verrouillé.
+    let deja = dessin(&mut b.app.doc, contenu(LayerKind::Vector, 3));
+    b.app.doc.panels[0].layers[3].set(2, Some(deja));
+    b.app.doc.panels[0].layers[2].locked = true;
+    b.chauffer(1);
+    let n0 = etapes(&b);
+    b.app.run_action("dessin.nouvelle_cle");
+    for li in [0, 1] {
+        assert!(cle_ici(&b, li, 2), "calque {li} : une nouvelle clé à l'image 2");
+        let (a, z) = (cel_de(&b, li, 0), cel_de(&b, li, 2));
+        assert_ne!(a, z, "calque {li} : un dessin à lui");
+        assert!(encre(&b, z, pos2(200.0, y_de(li))), "calque {li} : une copie du dessin montré");
+    }
+    assert_eq!(cel_de(&b, 1, 2) != cel_de(&b, 1, 0) && b.app.doc.panels[0].layers[1].kind == LayerKind::Bitmap, true, "le bitmap reste bitmap");
+    assert!(!cle_ici(&b, 2, 2), "le calque verrouillé est laissé de côté");
+    assert_eq!(cel_de(&b, 3, 2), deja, "la clé qui était déjà là reste");
+    assert_eq!(etapes(&b), n0 + 1, "une seule étape");
+    assert!(b.app.status.contains("2 calques") && b.app.status.contains("verrouillé") && b.app.status.contains("une clé commence déjà ici"), "{}", b.app.status);
+    b.app.undo();
+    assert!(!cle_ici(&b, 0, 2) && !cle_ici(&b, 1, 2), "Ctrl+Z retire les deux clés");
+    b.app.redo();
+    assert!(cle_ici(&b, 0, 2) && cle_ici(&b, 1, 2), "Ctrl+Maj+Z les rend");
+    // La clé vide : sur les calques choisis, à l'image 3.
+    b.app.cur_frame = 3;
+    b.app.run_action("dessin.nouvelle_cle_vide");
+    for li in [0, 1] {
+        assert!(cle_ici(&b, li, 3), "calque {li} : une clé vide à l'image 3");
+        assert!(!encre(&b, cel_de(&b, li, 3), pos2(200.0, y_de(li))), "calque {li} : elle est vide");
+    }
+    let dir = std::env::temp_dir().join(format!("shot-multicalques-nouvelles-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifeste = dir.join("P.pelure");
+    crate::project::save(&b.app.doc, &manifeste, &mut Default::default()).expect("enregistrement");
+    let relu = crate::project::load(&manifeste).expect("ouverture").doc;
+    for li in [0, 1] {
+        let l = &relu.panels[0].layers[li];
+        assert!(crate::handles::key_start_taken(l, 2) && crate::handles::key_start_taken(l, 3), "calque {li} : les clés sont dans le fichier");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_new_key_with_a_single_chosen_layer_is_unchanged() {
+    let mut b = banc_quatre_sortes();
+    b.app.run_action("calque.choisir_aucun");
+    b.app.cur_layer = 1;
+    b.chauffer(1);
+    b.app.run_action("dessin.nouvelle_cle");
+    assert!(cle_ici(&b, 1, 2) && !cle_ici(&b, 0, 2) && !cle_ici(&b, 3, 2), "le calque courant seul");
+    assert!(b.app.status.contains("Nouvelle clé sur « Calque 1 »"), "{}", b.app.status);
+}
+
+/// Le champ d'opacité du panneau Calques : le calque courant est mis à 37 % (une valeur que rien d'autre n'affiche), et le texte
+/// « 37 % » peint une seule fois est celui du champ (la ligne du calque, dans la liste, le peint aussi : deux fois, au même endroit).
+fn champ_opacite(b: &mut Banc) -> Pos2 {
+    b.app.doc.panels[0].layers[0].opacity = 0.37;
+    b.garder_formes = true;
+    b.chauffer(2);
+    let mut trouves: Vec<Pos2> = Vec::new();
+    for s in &b.formes {
+        if let eframe::egui::epaint::Shape::Text(t) = &s.shape {
+            if t.galley.job.text == "37 %" {
+                trouves.push(t.pos + t.galley.size() * 0.5);
+            }
+        }
+    }
+    b.garder_formes = false;
+    let seuls: Vec<Pos2> = trouves.iter().copied().filter(|p| trouves.iter().filter(|q| q.distance(*p) < 1.0).count() == 1).collect();
+    assert_eq!(seuls.len(), 1, "un seul champ « 37 % » à l'écran : {trouves:?}");
+    seuls[0]
+}
+
+#[test]
+fn the_opacity_field_sets_every_chosen_layer_in_one_step() {
+    let mut b = banc_quatre_sortes();
+    b.app.doc.panels[0].layers[2].locked = true;
+    b.chauffer(1);
+    let c = champ_opacite(&mut b);
+    let n0 = etapes(&b);
+    // Glisser le champ de 60 px vers la droite (0,5 % par pixel).
+    b.image(vec![Event::PointerMoved(c)], 1.0 / 60.0);
+    b.image(vec![bouton(c, true, Modifiers::NONE)], 1.0 / 60.0);
+    for k in 1..=12 {
+        b.image(vec![Event::PointerMoved(c + eframe::egui::vec2(5.0 * k as f32, 0.0))], 1.0 / 60.0);
+    }
+    b.image(vec![bouton(c + eframe::egui::vec2(60.0, 0.0), false, Modifiers::NONE)], 1.0 / 60.0);
+    b.chauffer(2);
+    let v0 = b.app.doc.panels[0].layers[0].opacity_at(2);
+    assert!(v0 > 0.45, "le calque courant a changé ({v0})");
+    for li in 0..4 {
+        let v = b.app.doc.panels[0].layers[li].opacity_at(2);
+        assert!((v - v0).abs() < 1e-4, "calque {li} : la même opacité que le courant ({v} et {v0}), verrouillé compris");
+    }
+    assert_eq!(etapes(&b), n0 + 1, "un glissé, une seule étape");
+    b.app.undo();
+    assert!((b.app.doc.panels[0].layers[0].opacity_at(2) - 0.37).abs() < 1e-4, "le courant : Ctrl+Z rend 37 %");
+    for li in 1..4 {
+        assert!((b.app.doc.panels[0].layers[li].opacity_at(2) - 1.0).abs() < 1e-4, "calque {li} : Ctrl+Z rend 100 %");
+    }
+}
+
+#[test]
+fn delete_on_chosen_keys_empties_their_drawings_once_and_keeps_the_keys() {
+    let mut b = banc_cles(Tool::Brush);
+    // Le dessin de la clé de l'image 2 du calque 0 est aussi montré à l'image 3 par une seconde clé (la même image tenue deux fois).
+    let partage = cel_de(&b, 0, 2);
+    b.app.doc.panels[0].layers[0].set(3, Some(partage));
+    let mut keys = b.app.key_sel.clone();
+    keys.extend(b.app.key_ref(0, 0, 3));
+    b.app.key_sel = keys;
+    b.app.key_focus = true;
+    let dessins = dessins_des_cles(&b);
+    let n0 = etapes(&b);
+    b.app.run_action("edition.supprimer");
+    for &(li, cel) in &dessins {
+        assert!(!encre(&b, cel, pos2(200.0, y_de(li))) && !encre(&b, cel, pos2(130.0, y_de(li))), "calque {li}, dessin {cel} : vidé");
+    }
+    for li in 0..2 {
+        for f in [0, 2, 4] {
+            assert!(cle_ici(&b, li, f), "calque {li}, clé de l'image {f} : toujours là");
+        }
+    }
+    assert_eq!(etapes(&b), n0 + 1, "une seule étape");
+    assert!(b.app.status.contains("7 clés vidées sur 2 calques"), "{}", b.app.status);
+    b.app.undo();
+    for &(li, cel) in &dessins {
+        assert!(encre(&b, cel, pos2(200.0, y_de(li))), "calque {li}, dessin {cel} : rendu par Ctrl+Z");
+    }
+}
+
+#[test]
+fn delete_leaves_a_locked_layer_and_keeps_deleting_a_canvas_selection_first() {
+    let mut b = banc_cles(Tool::Brush);
+    b.app.doc.panels[0].layers[1].locked = true;
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(encre(&b, cel_de(&b, 1, 2), pos2(200.0, y_de(1))), "le calque verrouillé n'est pas vidé");
+    assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "l'autre l'est");
+    assert!(b.app.status.contains("verrouillé"), "{}", b.app.status);
+    // Une sélection sur le dessin : Suppr l'efface, elle, et pas les clés.
+    let mut b = banc_cles(Tool::Select);
+    let cel = cel_de(&b, 0, 0);
+    b.app.vsel = Some(crate::vtools::VSelection { cel, items: vec![0] });
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(vect(&b, cel).elements.is_empty(), "la sélection du dessin est effacée");
+    assert!(encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "les clés ne sont pas vidées");
+}
+
+#[test]
+fn clear_flip_and_opacity_key_act_on_every_chosen_layer() {
+    // Vider le dessin.
+    let mut b = banc_quatre_sortes();
+    b.app.doc.panels[0].layers[3].locked = true;
+    let n0 = etapes(&b);
+    b.app.run_action("dessin.vider");
+    for li in 0..3 {
+        assert!(!encre(&b, cel_de(&b, li, 2), pos2(200.0, y_de(li))), "calque {li} : vidé");
+    }
+    assert!(encre(&b, cel_de(&b, 3, 2), pos2(200.0, y_de(3))), "le verrouillé ne l'est pas");
+    assert_eq!(etapes(&b), n0 + 1);
+    // Retourner : ensemble, autour du milieu de leur boîte commune (les traits de x 108 à 292, les bitmap à la tuile près).
+    let mut b = banc_quatre_sortes();
+    b.app.run_action("calque.miroir_h");
+    let pivot = b.app.doc.stage_center();
+    let t_ = TILE as f32;
+    let axe = ((110.0 / t_).floor() * t_).min(108.0) * 0.5 + ((290.0 / t_).ceil() * t_).max(292.0) * 0.5;
+    for li in 0..4 {
+        let t = b.app.doc.panels[0].layers[li].transform;
+        assert!(t.stretch_x < 0.0, "calque {li} : retourné");
+        let p = t.affine(pivot).apply(pos2(120.0, y_de(li)));
+        assert!((p.x - (2.0 * axe - 120.0)).abs() < 1.5, "calque {li} : autour du milieu commun x = {axe} ({p:?})");
+    }
+    // Clé d'opacité.
+    let mut b = banc_quatre_sortes();
+    b.app.run_action("calque.cle_opacite");
+    for li in 0..4 {
+        assert!(!b.app.doc.panels[0].layers[li].opacity_keys.is_empty(), "calque {li} : une clé d'opacité");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------- copier, coller une sélection
+//
+// Au clavier, comme dans la vraie fenêtre : egui transforme Ctrl+C en `Event::Copy` et Ctrl+V en `Event::Paste` (avec le texte du
+// presse-papiers : celui qu'une copie de FEANOR y écrit). Le presse-papiers de Windows n'est jamais lu dans les essais
+// (`pasteimage::clipboard_image`).
+
+fn ctrl_c(b: &mut Banc) {
+    b.image(vec![Event::Copy], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+}
+
+fn ctrl_v(b: &mut Banc) {
+    b.image(vec![Event::Paste(format!("{}copie", crate::pasteimage::MARK))], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+}
+
+/// Un rectangle de l'outil Sélection autour de tout le dessin (le pointeur part du vide).
+fn rectangle_autour(b: &mut Banc) {
+    // (Un tour fermé : un lasso pour un seul calque vectoriel, le même tour pour les autres.)
+    b.app.select_rect = false;
+    let (a, z) = (pos2(60.0, 20.0), pos2(340.0, 280.0));
+    let mut tour = ligne(a, pos2(z.x, a.y), 8);
+    tour.extend(ligne(pos2(z.x, a.y), z, 8));
+    tour.extend(ligne(z, pos2(a.x, z.y), 8));
+    tour.extend(ligne(pos2(a.x, z.y), a, 8));
+    glisser(b, &tour);
+}
+
+#[test]
+fn copy_then_paste_a_vector_selection_puts_editable_strokes_at_the_same_place_and_selects_them() {
+    for mode in [Mode::Animation, Mode::Storyboard] {
+        let mut b = banc(&[LayerKind::Vector], Tool::Select);
+        b.app.set_mode(mode);
+        b.app.board_view = crate::app::BoardView::Scene;
+        b.chauffer(4);
+        let cel = cel_de(&b, 0, 0);
+        rectangle_autour(&mut b);
+        assert!(b.app.vsel.as_ref().is_some_and(|s| !s.items.is_empty()), "{mode:?} : le trait est choisi ({})", b.app.status);
+        let n0 = etapes(&b);
+        ctrl_c(&mut b);
+        ctrl_v(&mut b);
+        let d = vect(&b, cel);
+        assert_eq!(d.elements.len(), 2, "{mode:?} : la copie est collée, en trait vectoriel ({})", b.app.status);
+        assert!(d.elements[0].bounds() == d.elements[1].bounds(), "{mode:?} : à la même place");
+        assert_eq!(b.app.vsel.as_ref().map(|s| s.items.clone()), Some(vec![1]), "{mode:?} : la copie est choisie, prête à bouger");
+        assert_eq!(etapes(&b), n0 + 1, "{mode:?} : une étape");
+        // À une autre image : la copie va dans le dessin de cette image.
+        b.app.cur_frame = 2;
+        b.chauffer(2);
+        ctrl_v(&mut b);
+        let ici = b.app.doc.panels[0].layers[0].cel_at(2).expect("un dessin à l'image 2");
+        assert!(vect(&b, ici).elements.iter().any(|e| e.bounds() == d.elements[0].bounds()), "{mode:?} : collée à l'image 2 aussi");
+    }
+}
+
+#[test]
+fn copy_then_paste_a_bitmap_selection_pastes_pixels() {
+    let mut b = banc(&[LayerKind::Bitmap], Tool::Select);
+    let cel = cel_de(&b, 0, 0);
+    rectangle_autour(&mut b);
+    assert!(b.app.bsel.is_some(), "une zone est choisie ({})", b.app.status);
+    ctrl_c(&mut b);
+    ctrl_v(&mut b);
+    assert!(b.app.bsel.as_ref().is_some_and(|s| s.lifted.is_some()), "les pixels collés sont soulevés, prêts à bouger ({})", b.app.status);
+    b.app.drop_bitmap_selection();
+    repos(&mut b);
+    assert!(encre(&b, cel, pos2(200.0, y_de(0))), "les pixels sont là");
+}
+
+#[test]
+fn copy_then_paste_on_several_chosen_layers_gives_each_its_own_strokes() {
+    let mut b = banc(&[LayerKind::Vector, LayerKind::Vector], Tool::Select);
+    rectangle_autour(&mut b);
+    assert!(b.app.multi.sel.is_some(), "{}", b.app.status);
+    ctrl_c(&mut b);
+    ctrl_v(&mut b);
+    for li in 0..2 {
+        let d = vect(&b, cel_de(&b, li, 0));
+        assert_eq!(d.elements.len(), 2, "calque {li} : sa copie, sur lui ({})", b.app.status);
+    }
+}
+
+#[test]
+fn copy_then_paste_strokes_on_the_board_puts_a_whole_copy_and_selects_it() {
+    use crate::vignettes_selection_tests::{choisies, lasso, parts};
+    let Some(mut b) = crate::traits_continus_tests::planche(crate::traits_continus_tests::des_plans(12, false), 6, 1.0) else { return println!("pas de carte graphique") };
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let t2 = xf.rect(l.cards[2].thumb);
+    // Un trait dans la case 2, qui en déborde à droite.
+    let (de, a) = (t2.center() - eframe::egui::vec2(20.0, 0.0), pos2(t2.right() + 25.0, t2.center().y + 5.0));
+    crate::traits_continus_tests::tracer(&mut b, de, a);
+    crate::traits_continus_tests::repos(&mut b);
+    let (el0, pl0) = parts(&b);
+    lasso(&mut b, t2.center(), 14.0);
+    assert_eq!(choisies(&b), 1, "le trait est choisi ({})", b.app.status);
+    let n0 = b.app.history.undo_len();
+    ctrl_c(&mut b);
+    ctrl_v(&mut b);
+    let (el1, pl1) = parts(&b);
+    assert_eq!(el1 + pl1, el0 + pl0 + 1, "un trait de plus, entier ({}) ; avant {:?}, après {:?}", b.app.status, (el0, pl0), (el1, pl1));
+    assert_eq!(choisies(&b), 1, "la copie est choisie, prête à bouger");
+    assert_eq!(b.app.history.undo_len(), n0 + 1, "une étape");
 }

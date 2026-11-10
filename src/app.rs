@@ -4358,6 +4358,7 @@ impl App {
             "calque.cles_position_supprimer" => self.pos_keys_clear(),
             // Les clés d'opacité (`opacitecleselui.rs`).
             "edition.supprimer" if self.op_keys_have_focus() => self.op_keys_delete(),
+            "calque.cle_opacite" if self.chosen_layers().len() >= 2 => self.cle_opacite_choisis(),
             "calque.cle_opacite" => self.op_key_here(),
             "calque.cle_opacite_lisser" => self.op_key_smooth(),
             "calque.cle_opacite_supprimer" => self.op_keys_delete(),
@@ -4414,13 +4415,20 @@ impl App {
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
-            "edition.supprimer" if self.key_focus => self.delete_keys(false),
+            // Suppr sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : leurs dessins se
+            // vident, les clés restent (`choixtout.rs`). Supprimer les clés : le menu de la piste.
+            "edition.supprimer" if self.key_focus && !self.selection_sur_le_dessin() => self.vider_cles(),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
             // une copie du dessin (F5), ou vide (F4).
             "dessin.nouvelle_cle" | "dessin.nouvelle_cle_vide" => {
                 let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
-                self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                // Plusieurs calques choisis : une clé sur chacun, en une étape (`nouvellescles.rs`).
+                if self.nouvelle_cle_sur_tous(li) {
+                    self.nouvelle_cle_choisis(action == "dessin.nouvelle_cle");
+                } else {
+                    self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                }
             }
             // Ctrl+A choisit toutes les clés de la sorte qui a la main : caméra, effet, ou dessins
             // (les clés de caméra et d'effets donnent aussi `key_focus` : elles passent d'abord).
@@ -4515,6 +4523,8 @@ impl App {
                     self.status = "Rien de sélectionné : Suppr n'efface rien (Édition > Vider le dessin pour tout effacer).".into();
                 }
             }
+            // Plusieurs calques choisis : le dessin de chacun à cette image (`choixtout.rs`).
+            "dessin.vider" if self.chosen_layers().len() >= 2 && !self.in_card => self.vider_dessins_choisis(),
             "dessin.vider" => self.clear_image(),
             // Maj+Suppr : une zone bitmap choisie est remplie de la couleur courante (`remplirsel.rs`) ;
             // sinon la touche garde son ancien sens : effacer hors de la sélection.
@@ -4619,6 +4629,9 @@ impl App {
             "outil.main" => self.set_tool(Tool::Pan),
             "outil.taille_plus" => self.resize_brush(1.15),
             "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
+            // Plusieurs calques choisis : retournés ensemble, comme un seul objet (`choixtout.rs`).
+            "calque.miroir_h" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(true),
+            "calque.miroir_v" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(false),
             "calque.miroir_h" => self.flip_layer(true),
             "calque.miroir_v" => self.flip_layer(false),
             "plan.retourner" => self.flip_panels(),

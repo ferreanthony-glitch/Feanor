@@ -278,6 +278,8 @@ mod aplatsur;
 mod aplatmulti;
 mod gommemulti;
 mod deformmulti;
+mod nouvellescles;
+mod choixtout;
 #[cfg(test)]
 mod multicalques_tests;
 mod aplatcouleur;
