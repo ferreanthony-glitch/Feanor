@@ -144,9 +144,14 @@ impl Flottante {
     /// et la perspective déforment toujours le dessin d'origine de leur séance (pas de perte d'un
     /// geste à l'autre), alors que le dessin du document a déjà reçu la géométrie du geste d'avant.
     pub fn lift_from(doc: &mut Document, src: CelId, drawing: &VectorDrawing, items: &[usize]) -> Option<Flottante> {
+        Self::lift_from_slot(doc, src, drawing, items, 0)
+    }
+
+    /// Comme `lift_from`, dans la place `slot` (une déformation sur plusieurs calques : une place par calque, `deformmulti.rs`).
+    pub fn lift_from_slot(doc: &mut Document, src: CelId, drawing: &VectorDrawing, items: &[usize], slot: usize) -> Option<Flottante> {
         let cel = doc.cels.get(&src)?;
         let split = drawing.render_split_extended(items, cel.raster.width, cel.raster.height);
-        Some(Flottante { for_warp: true, ..Self::store(doc, src, split, 0) })
+        Some(Flottante { for_warp: true, ..Self::store(doc, src, split, slot) })
     }
 
     fn store(doc: &mut Document, src: CelId, (base, sheet, margin): (Raster, Raster, (usize, usize)), slot: usize) -> Flottante {
@@ -195,7 +200,13 @@ impl Flottante {
     /// sur processeur, quelques dizaines de ms ; arrive seulement si l'utilisateur agit dans la
     /// seconde qui suit le lâcher). À appeler avant `release`. Rend les tuiles changées.
     pub fn flatten_warp(doc: &mut Document, src: CelId, warp: &Warp) -> Vec<usize> {
-        let (Some(base), Some(sheet)) = (doc.cels.get(&BASE_CEL), doc.cels.get(&SHEET_CEL)) else { return Vec::new() };
+        Self::flatten_warp_slot(doc, src, 0, warp)
+    }
+
+    /// Comme `flatten_warp`, pour la feuille de la place `slot`.
+    pub fn flatten_warp_slot(doc: &mut Document, src: CelId, slot: usize, warp: &Warp) -> Vec<usize> {
+        let (base_id, sheet_id) = slot_ids(slot);
+        let (Some(base), Some(sheet)) = (doc.cels.get(&base_id), doc.cels.get(&sheet_id)) else { return Vec::new() };
         let (w, h) = (base.raster.width, base.raster.height);
         let mut img = base.raster.clone();
         img.composite_over(&warp.rasterize(&sheet.raster, None, w, h));

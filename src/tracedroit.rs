@@ -81,6 +81,8 @@ impl App {
         } else {
             self.stroke_to(p, pressure);
         }
+        // Plusieurs calques choisis : la gomme passe aussi sur les autres (`gommemulti.rs`).
+        self.gomme_multi_point(p, pressure);
         self.droit.last = Some(p);
     }
 

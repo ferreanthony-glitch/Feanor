@@ -486,9 +486,10 @@ impl App {
         // Une enveloppe ou une perspective lâchée, dont la séance continue : reprendre un coin, ou
         // Entrée / Échap pour finir, ne touchent pas au dessin ; la feuille reste (et sert au geste
         // suivant, `App::float_for_warp`).
-        let session = self.flottante.as_ref().is_some_and(|f| f.for_warp) && (self.envelope.is_some() || self.persp.is_some());
+        // (Ou celle de plusieurs calques, `deformmulti.rs`.)
+        let session = (self.flottante.as_ref().is_some_and(|f| f.for_warp) && (self.envelope.is_some() || self.persp.is_some())) || self.deform_multi.is_some();
         let acts = ctx.input(|i| {
-            let grabs = session && i.pointer.interact_pos().is_some_and(|p| self.envelope_grip(p).is_some() || self.persp_grip(p).is_some());
+            let grabs = session && i.pointer.interact_pos().is_some_and(|p| self.envelope_grip(p).is_some() || self.persp_grip(p).is_some() || self.deform_multi_prise(p).is_some());
             let on_keys = |e: &Event| match e {
                 Event::Key { key: Key::Enter | Key::Escape, pressed: true, .. } if session => false,
                 Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy => true,

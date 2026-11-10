@@ -276,6 +276,10 @@ mod fondfil_tests;
 mod fondui;
 mod aplatsur;
 mod aplatmulti;
+mod gommemulti;
+mod deformmulti;
+#[cfg(test)]
+mod multicalques_tests;
 mod aplatcouleur;
 mod aplatperso;
 #[cfg(test)]

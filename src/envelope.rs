@@ -79,7 +79,7 @@ impl Envelope {
     }
 
     /// Surface approchée (polygone des côtés échantillonnés).
-    fn area(&self) -> f32 {
+    pub(crate) fn area(&self) -> f32 {
         let pts: Vec<Pos2> = (0..4).flat_map(|k| (0..8).map(move |i| (k, i as f32 / 8.0))).map(|(k, t)| bezier(self.edge(k), t)).collect();
         let n = pts.len();
         0.5 * (0..n).map(|i| pts[i].x * pts[(i + 1) % n].y - pts[(i + 1) % n].x * pts[i].y).sum::<f32>().abs()
@@ -88,7 +88,14 @@ impl Envelope {
 
 /// Les pixels de la feuille (`width` × `height`) que couvre l'enveloppe `env`, chacun avec le point
 /// du rectangle `src` qui lui correspond : chaque case d'un maillage est faite de deux triangles.
-fn rasterize(src: Rect, env: &Envelope, width: usize, height: usize, mut put: impl FnMut(usize, usize, Pos2)) {
+fn rasterize(src: Rect, env: &Envelope, width: usize, height: usize, put: impl FnMut(usize, usize, Pos2)) {
+    rasterize_with(src, |u, v| env.point(u, v), width, height, put);
+}
+
+/// Comme `rasterize`, la déformation étant donnée par `point(u, v)` : où va le point (`u`, `v`) du rectangle `src` (0 à 1 de
+/// gauche à droite, de haut en bas). Sert à l'enveloppe d'un calque, et à la déformation de plusieurs calques à la fois
+/// (`deformmulti.rs`), où chaque dessin a son repère.
+fn rasterize_with(src: Rect, point: impl Fn(f32, f32) -> Pos2, width: usize, height: usize, mut put: impl FnMut(usize, usize, Pos2)) {
     // Des cases d'environ 12 pixels du rectangle d'origine.
     let n = ((src.width().max(src.height()) / 12.0).ceil() as usize).clamp(8, 96);
     let (w, h) = (width as f32, height as f32);
@@ -97,7 +104,7 @@ fn rasterize(src: Rect, env: &Envelope, width: usize, height: usize, mut put: im
             (0..=n)
                 .map(|i| {
                     let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
-                    (pos2(src.min.x + u * src.width(), src.min.y + v * src.height()), env.point(u, v))
+                    (pos2(src.min.x + u * src.width(), src.min.y + v * src.height()), point(u, v))
                 })
                 .collect()
         })
@@ -149,6 +156,16 @@ fn scaled(c: Color32, k: f32) -> Color32 {
 /// L'image `original` dont le rectangle `src` est posé dans l'enveloppe `env` : le reste de l'image
 /// ne bouge pas, le rectangle d'origine est vidé.
 pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
+    warp_raster_by(original, src, |u, v| env.point(u, v))
+}
+
+/// Comme `warp_raster`, chaque point `p` du rectangle `src` allant en `map(p)` (une enveloppe ou une perspective vue dans le
+/// repère d'un autre dessin : `deformmulti.rs`).
+pub fn warp_raster_with(original: &Raster, src: Rect, map: impl Fn(Pos2) -> Pos2) -> Raster {
+    warp_raster_by(original, src, |u, v| map(pos2(src.min.x + u * src.width(), src.min.y + v * src.height())))
+}
+
+fn warp_raster_by(original: &Raster, src: Rect, point: impl Fn(f32, f32) -> Pos2) -> Raster {
     let mut out = original.clone();
     let (x0, y0) = (src.min.x.floor().max(0.0) as usize, src.min.y.floor().max(0.0) as usize);
     let (x1, y1) = ((src.max.x.ceil().max(0.0) as usize).min(out.width), (src.max.y.ceil().max(0.0) as usize).min(out.height));
@@ -161,7 +178,7 @@ pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
         }
     }
     let (w, h) = (out.width, out.height);
-    rasterize(src, env, w, h, |x, y, s| {
+    rasterize_with(src, point, w, h, |x, y, s| {
         let c = persp::sample(original, s.x, s.y);
         if c.a() > 0 {
             put_pixel(&mut out, x, y, c);
@@ -338,9 +355,13 @@ fn densify_points(points: &[[f32; 2]], step: f32, closed: bool) -> Vec<[f32; 2]>
 /// sont posés dans l'enveloppe `env`.
 pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect, env: &Envelope) -> VectorDrawing {
     let k = (env.area() / (src.width() * src.height()).max(1e-6)).sqrt();
+    warp_drawing_with(original, items, src, |p: Pos2| env.map(src, p), k)
+}
+
+/// Comme `warp_drawing`, chaque point allant en `map(p)` ; `k` : l'agrandissement moyen (l'épaisseur des traits le suit).
+pub fn warp_drawing_with(original: &VectorDrawing, items: Option<&[usize]>, src: Rect, map: impl Fn(Pos2) -> Pos2, k: f32) -> VectorDrawing {
     // Points au plus à 1/48 du rectangle l'un de l'autre : les côtés courbés restent lisses.
     let step = (src.width().max(src.height()) / 48.0).max(1.0);
-    let map = |p: Pos2| env.map(src, p);
     let mut out = original.clone();
     for (i, e) in out.elements.iter_mut().enumerate() {
         if !items.is_none_or(|list| list.contains(&i)) {

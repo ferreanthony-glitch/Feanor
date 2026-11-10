@@ -849,6 +849,10 @@ pub struct App {
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
     pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// Plusieurs calques choisis : la gomme en cours sur les autres calques (`gommemulti.rs`), la séance de l'outil Déformer
+    /// sur tous (`deformmulti.rs`). Propres à un projet.
+    pub(crate) gomme_multi: crate::gommemulti::GommeMulti,
+    pub(crate) deform_multi: Option<crate::deformmulti::DeformMulti>,
     /// L'aplat intelligent (platintel.rs) : le dessin d'avant le trait en cours, les calculs en route.
     pub(crate) aplat_intel: crate::aplatintel::Etat,
     /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
@@ -1412,6 +1416,8 @@ impl App {
             fond_cut: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
+            gomme_multi: Default::default(),
+            deform_multi: None,
             aplat_intel: Default::default(),
             aplat_couleur_attente: None,
             aplat_portee: Default::default(),
@@ -2552,6 +2558,8 @@ impl App {
             self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
+        // La gomme sur les autres calques choisis : leurs étapes et celle du calque courant n'en font qu'une (`gommemulti.rs`).
+        self.gomme_multi_fin();
         self.finish_cut();
         self.sculpt_finish();
         // (Le geste d'un champ chiffré de la boîte de sélection dure tant que le champ a la main :
@@ -2782,6 +2790,8 @@ impl App {
             || self.multi.busy_on(cel)
             || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
             || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
+            || self.deform_multi.as_ref().is_some_and(|d| d.busy_on(cel))
+            || self.gomme_multi.busy_on(cel)
             || self.sculpt_occupe(cel)
     }
 
@@ -5035,7 +5045,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.deform_multi_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.

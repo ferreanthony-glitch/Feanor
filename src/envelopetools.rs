@@ -236,6 +236,10 @@ impl App {
 
     /// Curseur de l'outil Déformer.
     pub(crate) fn deform_cursor(&self, screen: Pos2) -> egui::CursorIcon {
+        // Plusieurs calques choisis : la déformation commune (`deformmulti.rs`).
+        if let Some(c) = self.deform_multi_cursor(screen) {
+            return c;
+        }
         match self.deform_mode {
             DeformMode::Perspective => self.persp_cursor(screen),
             DeformMode::Envelope => self.envelope_cursor(screen).unwrap_or(egui::CursorIcon::Crosshair),
@@ -261,6 +265,10 @@ impl App {
             choix_a(ui, &mut mode, DeformMode::Perspective, ph::PERSPECTIVE, "Perspective", "Mettre en perspective : tirer les quatre coins.", &kp, "deformer.perspective");
         });
         self.set_deform_mode(mode);
+        if self.deform_multi_voulu() {
+            self.deform_multi_ui(ui);
+            return;
+        }
         match self.deform_mode {
             DeformMode::Perspective => self.persp_options_ui(ui),
             DeformMode::Envelope => {
