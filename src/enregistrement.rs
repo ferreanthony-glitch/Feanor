@@ -150,6 +150,8 @@ impl App {
 
     /// Enregistre dans `manifest` et attend la fin (création d'un projet neuf, déjà minuscule).
     pub(crate) fn save_to_blocking(&mut self, manifest: PathBuf) -> bool {
+        // (La gomme sur les clés qu'on ne voit pas finit d'abord : le fichier a le geste entier.)
+        self.attendre_gomme_multi();
         self.start_save(manifest, None) && self.wait_save()
     }
 
@@ -158,6 +160,12 @@ impl App {
     pub(crate) fn start_save(&mut self, manifest: PathBuf, then: Option<Pending>) -> bool {
         // Une retouche de dégradé en cours s'écrit d'abord : le fichier ne contient jamais l'état « défait ».
         self.degrade_abandonner();
+        // La gomme sur les clés qu'on ne voit pas se calcule encore : jamais un fichier à moitié fait. Au-delà de 150 ms, cet
+        // enregistrement part à la fin du calcul (la fenêtre continue de se peindre, le bandeau montre l'avancée, `gommemulti.rs`).
+        let (manifest, then) = match self.gomme_retient_sauvegarde(manifest, then) {
+            Some(rendu) => rendu,
+            None => return true,
+        };
         if self.saving.is_some() {
             self.save_queue = Some((manifest, then));
             self.status = "Enregistrement en cours : le suivant partira à sa fin.".into();

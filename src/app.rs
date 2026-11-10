@@ -849,6 +849,12 @@ pub struct App {
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
     pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// Plusieurs calques choisis : la gomme en cours sur les autres calques (`gommemulti.rs`), la séance de l'outil Déformer
+    /// sur tous (`deformmulti.rs`). Propres à un projet.
+    pub(crate) gomme_multi: crate::gommemulti::GommeMulti,
+    /// La gomme sur les clés qu'on ne voit pas, calculée sur des fils de travail après le lâcher.
+    pub(crate) gomme_travaux: crate::gommemulti::GommeTravaux,
+    pub(crate) deform_multi: Option<crate::deformmulti::DeformMulti>,
     /// L'aplat intelligent (platintel.rs) : le dessin d'avant le trait en cours, les calculs en route.
     pub(crate) aplat_intel: crate::aplatintel::Etat,
     /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
@@ -1412,6 +1418,9 @@ impl App {
             fond_cut: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
+            gomme_multi: Default::default(),
+            gomme_travaux: Default::default(),
+            deform_multi: None,
             aplat_intel: Default::default(),
             aplat_couleur_attente: None,
             aplat_portee: Default::default(),
@@ -2552,6 +2561,8 @@ impl App {
             self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
+        // La gomme sur les autres calques choisis : leurs étapes et celle du calque courant n'en font qu'une (`gommemulti.rs`).
+        self.gomme_multi_fin();
         self.finish_cut();
         self.sculpt_finish();
         // (Le geste d'un champ chiffré de la boîte de sélection dure tant que le champ a la main :
@@ -2782,6 +2793,8 @@ impl App {
             || self.multi.busy_on(cel)
             || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
             || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
+            || self.deform_multi.as_ref().is_some_and(|d| d.busy_on(cel))
+            || self.gomme_multi.busy_on(cel)
             || self.sculpt_occupe(cel)
     }
 
@@ -3463,6 +3476,11 @@ impl App {
         // Une durée rendue par l'annulation n'est pas signalée.
         self.plan_len_seen = None;
         self.end_stroke();
+        // La gomme sur les clés qu'on ne voit pas finit d'être posée d'abord (tout ou rien : Ctrl+Z annule le geste entier, Ctrl+Maj+Z
+        // le rend entier) ; au-delà de 150 ms, la commande part à la fin du calcul, la fenêtre continuant de se peindre (`gommemulti.rs`).
+        if self.gomme_retient("edition.annuler") {
+            return;
+        }
         // (Le trait qu'on annule en plein geste n'est pas à répartir : `horschamp.rs`.)
         self.vignettes.fini = None;
         self.vignettes.debord_garde = None;
@@ -3484,6 +3502,9 @@ impl App {
         self.cancel_montage_drag();
         self.plan_len_seen = None;
         self.end_stroke();
+        if self.gomme_retient("edition.retablir") {
+            return;
+        }
         self.drop_bitmap_selection();
         self.multi_before_history();
         let mut nav = Nav {
@@ -4345,6 +4366,7 @@ impl App {
             "calque.cles_position_supprimer" => self.pos_keys_clear(),
             // Les clés d'opacité (`opacitecleselui.rs`).
             "edition.supprimer" if self.op_keys_have_focus() => self.op_keys_delete(),
+            "calque.cle_opacite" if self.chosen_layers().len() >= 2 => self.cle_opacite_choisis(),
             "calque.cle_opacite" => self.op_key_here(),
             "calque.cle_opacite_lisser" => self.op_key_smooth(),
             "calque.cle_opacite_supprimer" => self.op_keys_delete(),
@@ -4401,13 +4423,20 @@ impl App {
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
-            "edition.supprimer" if self.key_focus => self.delete_keys(false),
+            // Suppr sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : leurs dessins se
+            // vident, les clés restent (`choixtout.rs`). Supprimer les clés : le menu de la piste.
+            "edition.supprimer" if self.suppr_vide_les_cles() => self.vider_cles(),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
             // une copie du dessin (F5), ou vide (F4).
             "dessin.nouvelle_cle" | "dessin.nouvelle_cle_vide" => {
                 let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
-                self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                // Plusieurs calques choisis : une clé sur chacun, en une étape (`nouvellescles.rs`).
+                if self.nouvelle_cle_sur_tous(li) {
+                    self.nouvelle_cle_choisis(action == "dessin.nouvelle_cle");
+                } else {
+                    self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                }
             }
             // Ctrl+A choisit toutes les clés de la sorte qui a la main : caméra, effet, ou dessins
             // (les clés de caméra et d'effets donnent aussi `key_focus` : elles passent d'abord).
@@ -4502,6 +4531,8 @@ impl App {
                     self.status = "Rien de sélectionné : Suppr n'efface rien (Édition > Vider le dessin pour tout effacer).".into();
                 }
             }
+            // Plusieurs calques choisis : le dessin de chacun à cette image (`choixtout.rs`).
+            "dessin.vider" if self.chosen_layers().len() >= 2 && !self.in_card => self.vider_dessins_choisis(),
             "dessin.vider" => self.clear_image(),
             // Maj+Suppr : une zone bitmap choisie est remplie de la couleur courante (`remplirsel.rs`) ;
             // sinon la touche garde son ancien sens : effacer hors de la sélection.
@@ -4606,6 +4637,9 @@ impl App {
             "outil.main" => self.set_tool(Tool::Pan),
             "outil.taille_plus" => self.resize_brush(1.15),
             "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
+            // Plusieurs calques choisis : retournés ensemble, comme un seul objet (`choixtout.rs`).
+            "calque.miroir_h" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(true),
+            "calque.miroir_v" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(false),
             "calque.miroir_h" => self.flip_layer(true),
             "calque.miroir_v" => self.flip_layer(false),
             "plan.retourner" => self.flip_panels(),
@@ -5035,7 +5069,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.deform_multi_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.

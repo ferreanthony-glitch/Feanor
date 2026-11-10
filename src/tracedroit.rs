@@ -81,6 +81,8 @@ impl App {
         } else {
             self.stroke_to(p, pressure);
         }
+        // Plusieurs calques choisis : la gomme passe aussi sur les autres (`gommemulti.rs`).
+        self.gomme_multi_point(p, pressure);
         self.droit.last = Some(p);
     }
 
@@ -108,19 +110,28 @@ impl App {
             self.droit.last = d.last;
             return;
         };
+        let size = self.current_brush().map_or(4.0, |s| s.size);
+        let step = (size * 0.25).clamp(2.0, 12.0);
+        let len = a.distance(b);
+        let n = ((len / step).ceil() as usize).clamp(1, MAX_POINTS);
+        let (t0, span) = (self.input_time, (len / VITESSE).max(0.02) as f64);
         if self.verase.is_some() {
             // La gomme vectorielle suit elle-même le segment parcouru.
             self.erase_to(b, d.pressure);
         } else if self.stroke.is_some() {
-            let size = self.current_brush().map_or(4.0, |s| s.size);
-            let step = (size * 0.25).clamp(2.0, 12.0);
-            let len = a.distance(b);
-            let n = ((len / step).ceil() as usize).clamp(1, MAX_POINTS);
-            let (t0, span) = (self.input_time, (len / VITESSE).max(0.02) as f64);
             for k in 1..=n {
                 let t = k as f32 / n as f32;
                 self.input_time = t0 + span * t as f64;
                 self.stroke_to(a + (b - a) * t, d.pressure);
+            }
+            self.input_time = t0;
+        }
+        // Plusieurs calques choisis : la gomme suit le même segment sur les autres (`gommemulti.rs`), en points réguliers.
+        if self.gomme_multi.actif() {
+            for k in 1..=n {
+                let t = k as f32 / n as f32;
+                self.input_time = t0 + span * t as f64;
+                self.gomme_multi_point(a + (b - a) * t, d.pressure);
             }
             self.input_time = t0;
         }

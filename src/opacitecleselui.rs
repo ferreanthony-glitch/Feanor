@@ -175,7 +175,8 @@ impl App {
             .bouton_etat(ui, here, ph::DIAMOND, "Créer une clé", "Pose une clé d'opacité à l'image courante, avec l'opacité actuelle du calque. Change d'image et règle l'opacité : elle s'anime, et va d'une clé à l'autre.", "calque.cle_opacite")
             .clicked()
         {
-            self.op_key_here();
+            // (Plusieurs calques choisis : une clé sur chacun, `choixtout.rs`.)
+            self.run_action("calque.cle_opacite");
         }
         if keys > 0 {
             if self.bouton_si(ui, here, ph::TRASH, "Supprimer la clé d'ici", "Retire la clé d'opacité de cette image.", "calque.cle_opacite_supprimer").clicked() {

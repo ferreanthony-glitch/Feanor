@@ -715,6 +715,27 @@ fn a_drawing_touched_while_the_fill_is_computed_is_left_alone() {
 }
 
 #[test]
+fn a_fill_result_waits_while_its_drawing_is_being_drawn_on() {
+    // Partie 132, relecture : un résultat qui arrive pendant un trait sur son dessin l'écraserait (la version ne monte qu'au lâcher).
+    let mut f = aplat_fix("trait-en-cours");
+    f.app.set_tool(Tool::Fill);
+    f.choose(&[0, 5]);
+    f.app.color = [200, 10, 10];
+    f.app.fill_at(pos2(30.0, 70.0));
+    let s = f.app.brush;
+    f.app.stroke = Some(crate::brush::StrokeState::new(f.cels[1], crate::brush::StrokeMode::Erase, s, None, false));
+    let fin = std::time::Instant::now() + std::time::Duration::from_millis(400);
+    while std::time::Instant::now() < fin {
+        f.app.poll_aplat_multi();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(f.peinture(1).get(30, 70).a(), 0, "pas posé pendant le trait sur ce dessin");
+    f.app.stroke = None;
+    f.app.attendre_aplat_multi();
+    assert_eq!(f.peinture(1).get(30, 70), ROUGE, "posé à la fin du trait");
+}
+
+#[test]
 fn a_bucket_on_a_single_key_never_starts_a_worker() {
     let mut f = aplat_fix("un-seul");
     f.app.set_tool(Tool::Fill);

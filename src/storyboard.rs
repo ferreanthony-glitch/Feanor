@@ -1722,12 +1722,21 @@ impl App {
                     if crate::bulles::bulle(resp, "Nouvelle clé ici", "Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.", "").clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
-                        self.montage_new_key(pi, k, f, true);
+                        // (La piste d'un des calques choisis : une clé sur chacun, `nouvellescles.rs`.)
+                        if pi == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                            self.nouvelle_cle_choisis(true);
+                        } else {
+                            self.montage_new_key(pi, k, f, true);
+                        }
                     }
                     if ui.add(egui::Button::new("Nouvelle clé vide ici").shortcut_text(self.keymap.label("dessin.nouvelle_cle_vide"))).clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
-                        self.montage_new_key(pi, k, f, false);
+                        if pi == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                            self.nouvelle_cle_choisis(false);
+                        } else {
+                            self.montage_new_key(pi, k, f, false);
+                        }
                     }
                     self.key_focus = true;
                     // Les cinq commandes communes aux trois sortes de clés (`clescommun.rs`), puis

@@ -9442,3 +9442,222 @@ vignette très zoomée.
     passe-partout mis : la gomme de la planche ne touche à aucun plan.
 15. Sur un calque bitmap, un trait au pinceau à moitié transparent, parti du papier, à travers le dessin d'une case ; puis gommer ce
     dessin dans la case : aucun fantôme du dessin ne reste sous le trait.
+
+## 132. Sélection, Gomme, Déformer et Transformer sur plusieurs calques et plusieurs clés (2026-11-10, branche `multi-calques`)
+
+Anthony : « Les outils sélection, gomme, déformer et transformer s'appliquent à plusieurs calques quand plusieurs calques sont
+sélectionnés. » Puis : ces outils agissent aussi sur toutes les **clés choisies dans la timeline** (les dessins de plusieurs images).
+Code : `gommemulti.rs` et `deformmulti.rs` (neufs), `layertools.rs` (Transformer), `multitools.rs`, `envelope.rs` (déformation donnée par
+une fonction), `flottante.rs` (une feuille déformée par place), et quelques lignes d'aiguillage dans `canvas.rs`, `app.rs`, `tracedroit.rs`,
+`envelopetools.rs`, `vtools.rs`, `viewbar.rs`, `onglets.rs`. Essais : `multicalques_tests.rs` (11, neufs, au vrai geste sur le banc, et une
+mesure à part). **Le format du projet ne change pas.** Rien dans les Vignettes (la planche a ses règles, parties 113 à 131).
+
+### L'état de départ (pas de régression)
+
+- **Sélection** sur plusieurs calques : existait (`dd15678`, 2026-10-19), et sur plusieurs clés aussi (`3d0ca4e`). Elle marchait encore :
+  ses essais neufs passent sur le code d'avant.
+- **Transformer** sur plusieurs calques : existait (`dd15678`), avec les clés de position de chaque calque (essai neuf vert avant aussi).
+  Deux trous : le milieu d'un côté (étirer) était refusé dès deux calques, et un calque à trajectoire choisi avec d'autres ne voyait pas sa
+  trajectoire suivre.
+- **Gomme** : n'a jamais agi que sur le calque courant.
+- **Déformer** (Enveloppe, Perspective) : volontairement sur le calque courant seul depuis `dd15678` (« Déformer agit sur le calque
+  courant seul »).
+
+### Ce que ça fait
+
+- **Ce qui est visé.** Les calques choisis (Ctrl ou Maj + clic dans le panneau Calques, la timeline ou le montage), à l'image courante ;
+  ou, dès que **deux clés au moins** sont choisies dans la timeline ou le montage, les dessins de ces clés, de tous les calques (« calque
+  par clé »). Un dessin tenu sur plusieurs images n'est pris qu'**une fois**.
+- **Gomme.** Le même passage efface aux mêmes endroits de la feuille sur chaque dessin visé, là où on le voit (sa transformation et ses
+  clés de position comptent). Chacun selon son genre : un dessin bitmap efface ses pixels avec la brosse de la gomme, un dessin vectoriel
+  coupe ses traits (avec le réglage « traits entiers »). Le dessin qu'on voit gomme toujours, choisi ou non. Les dessins des autres clés
+  (qu'on ne voit pas) reçoivent le geste au lâcher : rien ne coûte pendant le geste.
+- **Déformer.** Un clic sur le dessin ouvre **un seul** cadre (Perspective) ou **une seule** enveloppe autour de ce que contiennent tous
+  les dessins visés ; un coin, une poignée ronde ou l'intérieur les déforme ensemble, comme un seul objet. Pendant le geste : l'image
+  courante (les traits par leur feuille flottante posée par un maillage, les pixels par l'aperçu rapide) ; au lâcher : le résultat exact
+  sur chaque dessin, les traits rendus en arrière-plan. Chaque geste repart des dessins d'origine. Le cadre se ferme par Entrée, Échap, un
+  clic ailleurs, un autre outil, un autre mode, une autre image, Ctrl+Z, ou un autre choix de calques ou de clés. Ce qui est choisi à l'outil
+  Sélection n'est pas repris : tout le dessin de chaque calque se déforme.
+- **Transformer.** Inchangé pour déplacer, agrandir et tourner. Le **milieu d'un côté** étire maintenant tous les calques choisis dans le
+  sens de la feuille, le côté opposé (ou le centre, selon « Point fixe ») restant en place — si aucun n'est tourné ; sinon le geste est
+  refusé et la barre d'état dit pourquoi. Un calque **à trajectoire** dans le lot : son chemin suit, comme pour un seul calque. Les clés de
+  position : chaque calque reçoit la pose à l'image courante (sa clé de cette image), ses autres clés ne bougent pas. Transformer bouge des
+  **calques** entiers (tous leurs dessins à la fois) : les clés choisies ne changent rien pour lui ; pour transformer les dessins de
+  certaines clés seulement, c'est l'outil Sélection, qui le faisait déjà.
+- **Sélection.** Inchangée : le lasso, le rectangle et « Tout sélectionner » prennent sur tous les calques choisis ou sur tous les dessins
+  des clés choisies ; une seule boîte, un seul pivot.
+- **Une étape d'annulation par geste**, pour tous les dessins (la gomme regroupe tout ce qui a été posé depuis sa marque,
+  `History::regrouper_depuis` : juste même avec un historique plein).
+- **Calques laissés de côté.** Cachés, verrouillés (eux, leur dossier ou leur position), vidéo, sans dessin ou vides : ils ne changent
+  pas, les autres agissent, et la barre d'état les nomme (« Laissé de côté : Encre (verrouillé) »). Choisi ainsi plutôt que de refuser le
+  geste entier : c'était déjà la règle de la Sélection et de Transformer sur plusieurs calques.
+- **Ce qu'on voit.** La barre d'état dit ce qui est touché : « Gomme sur 4 calques », « Gomme sur 15 dessins (15 clés sur 3 calques) »,
+  « Perspective sur 2 calques : … » ; la bulle de l'outil sous la vue le rappelle quand plusieurs calques ou clés sont choisis.
+- **L'alerte de la gomme** (choix d'Anthony : un avertissement, sans confirmation ni blocage). Au-delà de **24 dessins** touchés
+  (`gommemulti::SEUIL_ALERTE`, une constante), un bandeau rouge d'alerte en haut du dessin dit « Gomme sur 37 dessins (Ctrl+Z annule
+  tout) », de l'appui au lâcher. À 24 ou moins, rien.
+- **Les clés qu'on ne voit pas** sont gommées **sur des fils de travail** après le lâcher, comme les remplissages de l'aplat sur plusieurs
+  clés (partie 56) ; la barre d'état suit le calcul (« Gomme : 12/20 dessins des autres clés… »). Chaque résultat rejoint l'étape
+  d'annulation du geste. Un Ctrl+Z avant la fin annule tout le geste, et ce qui arrive ensuite est abandonné. Un dessin retouché pendant
+  le calcul est laissé tel quel, et la barre d'état le dit. Enregistrer attend la fin du calcul : le fichier a toujours le geste entier.
+  Un nouveau geste de gomme attend aussi la fin du précédent.
+
+### Coût (10 calques × 20 clés, la moitié vectoriels, feuille 960 × 540, `cout_dix_calques_vingt_cles`)
+
+Machine d'essai, `--release`, sans carte graphique (le banc), 200 dessins visés, 10 qu'on voit :
+
+| Geste | Appui | Pire image du glissé | Lâcher |
+| --- | --- | --- | --- |
+| Gomme | 5 ms | 4 ms | 8 ms (avant les fils de travail : 317 ms) |
+| Perspective | 20 ms (ouverture du cadre) | 96 ms | 317 ms |
+
+Pendant le glissé de la gomme, seuls les dessins qu'on voit sont gommés ; les 190 autres le sont sur des fils de travail après le
+lâcher. Pendant celui de la perspective, rien n'est rejoué : la pire image est la première (les feuilles flottantes des traits se font
+une fois) et l'aperçu rapide des 5 dessins bitmap qu'on voit, recomposé à chaque image comme pour un seul calque. **Le lâcher de la
+perspective coûte encore environ 0,3 s pour 200 dessins** (les résultats exacts, sur le fil de l'interface) ; à moins de 20 dessins, il ne
+se sent pas.
+
+Un long trait de gomme (un zigzag sur toute la feuille, 492 points) sur 20 clés d'un calque bitmap 1920 × 1080
+(`cout_long_trait_vingt_cles`) : pire image du glissé 2 ms, **lâcher 1,3 ms** (avant les fils de travail : 1,7 s).
+
+### Relecture (après 853bdbf)
+
+- Un geste de Déformer revenu à son point de départ (ou « Remettre droit » sur un cadre déjà droit) ne laisse plus sa feuille flottante
+  ni l'aperçu bitmap derrière lui : la feuille attend le rendu exact, les pixels reprennent l'image d'avant le geste.
+- Un calque de couleur avec plusieurs clés choisies : ses autres clés suivent déjà la gomme par les miroirs de l'aplat (partie 56) ; elles
+  ne sont plus gommées une seconde fois. « Peint sur l'aplat » allumé : la gomme suit le chemin de l'aplat seul.
+- Le segment droit de la gomme (Maj) passe aussi sur les autres calques et clés.
+- Un dessin de la séance de Déformer qui change pendant que le cadre est ouvert (une clé posée ou effacée, une position, un trait) : la
+  séance se termine sans rien écrire (rien n'est perdu), la barre d'état le dit.
+- Deux clés choisies dont une seule est utilisable (l'autre cachée, verrouillée…) : la gomme et Déformer gardent le chemin d'un seul
+  calque (sa sélection, son enveloppe).
+- **Ctrl+Z, Ctrl+Maj+Z et l'Historique** attendent la fin du calcul de la gomme sur les clés qu'on ne voit pas (comme Enregistrer) :
+  Ctrl+Z annule le geste entier, Ctrl+Maj+Z le rend entier. Plus jamais un geste à moitié fait.
+
+### Seconde relecture (après c3ec7c9)
+
+- Un dessin vectoriel dont le **rendu exact arrive** pendant le calcul n'est plus pris pour un dessin retouché : la retouche se lit
+  dans son contenu (ses traits, ou les tuiles de son image), plus dans sa version.
+- Un résultat qui arrive **pendant un geste** (un trait, un glissé, un champ tenu, ou un trait sur ce dessin même) attend la fin du
+  geste : il n'écrase plus le trait en cours, et ne se mêle plus à l'étape d'un autre geste. Même chose pour les remplissages de l'aplat
+  sur plusieurs clés (`aplatmulti.rs`).
+- L'étape « Gomme » existe **dès le lâcher**, même quand rien de ce qu'on voit n'a changé : les résultats la rejoignent.
+- Un calcul qui **échoue** (une erreur dans le moteur) ne bloque plus rien : il est compté. Tout ou rien : le geste entier est annulé
+  s'il est encore la dernière étape (« Gomme annulée en entier : le calcul d'un dessin a échoué, rien n'a changé ») ; sinon il reste,
+  marqué incomplet dans la barre d'état.
+- Un **second geste** de gomme démarre tout de suite (avant, le stylet posé attendait la fin du premier) ; sa part cachée part après
+  celle du premier, dans l'ordre, et reprend les dessins tels que le premier les a laissés.
+- **Ctrl+Z, Ctrl+Maj+Z, Enregistrer** pendant un long calcul : on attend 150 ms ; au-delà, la commande part à la fin du calcul, la
+  fenêtre continue de se peindre et un bandeau rouge en haut du dessin montre l'avancée (« Gomme : 12/20 dessins… — Annuler attend »).
+- **Suppr** : une sélection restée sur le dessin d'une autre image ne l'empêche plus de vider les clés choisies ; dans les Vignettes,
+  Suppr ne vide jamais de clé (il n'efface que ce qui est choisi sur la planche : traits, pixels, annotations, notes) ; sans clé choisie,
+  il n'efface rien (règle du 2026-10-18).
+- Le calcul d'un projet qu'on a quitté se termine sans message, et chaque geste a ses propres comptes.
+- **L'opacité et sa clé** s'appliquent aussi aux calques verrouillés ou masqués : le verrou protège le dessin, pas les réglages du
+  calque.
+
+### Ctrl+A (tout sélectionner)
+
+- **Ce qu'il faisait déjà, et fait toujours** (Storyboard, Animation) : un seul calque choisi, les éléments du dessin du calque
+  courant à l'image courante (ou toute l'image d'un calque bitmap), jamais ceux des autres calques ; plusieurs calques choisis, tout ce que
+  contiennent leurs dessins à l'image courante (`multi_select_all`), et rien des autres ; deux clés ou plus choisies dans la timeline, tous
+  les dessins de ces clés (la sélection sur plusieurs clés, `3d0ca4e`) — c'est déjà la règle « la sélection agit sur tout ». Les calques
+  verrouillés ou masqués sont laissés de côté, et nommés.
+- **Nouveau** : la barre d'état donne le compte, « Tout sélectionné : 42 traits sur 3 calques » (« … et 2 zones » pour les calques
+  bitmap ; « … sur 6 dessins de 2 calques » par les clés).
+- **Dans les Vignettes**, Ctrl+A passe aujourd'hui par le même chemin que le Storyboard : il prend le dessin du calque courant de la case
+  courante (`vsel`), pas le choix de la planche (`selp`) ; il ne prend donc pas les traits du papier, et la planche ne le montre pas comme
+  son choix. Le faire passer par le choix de la planche touche `vignettesel.rs` (l'autre session y travaille) : **pas fait**, à
+  coordonner.
+
+### Règle : la sélection agit sur tout
+
+Anthony, 2026-11-10 : quand on choisit des calques et des clés et qu'on leur applique une transformation, un effet ou un réglage, ça
+s'applique à tout ce qui est choisi, pour tous les outils. Les règles communes : une seule étape d'annulation, tout ou rien, calques
+verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état, le compte dans la barre d'état, rien de lourd pendant le geste.
+
+**Fait sur cette branche, en plus des quatre outils :**
+- **Nouvelle clé à l'image courante** (F5) et **Nouvelle clé vide** (F4), par la touche, le bouton ou le menu de la piste d'un des
+  calques choisis : une clé sur chaque calque choisi, selon sa sorte (copie du dessin montré, ou dessin vide bitmap ou vectoriel ; l'aplat
+  et le calque de couleur suivent leur dessin), en une étape : « Nouvelle clé sur 4 calques ». Laissés de côté : verrouillés, masqués,
+  dossiers, vidéo, calques de couleur liés (leurs images suivent leur trait), et ceux qui ont déjà une clé à cette image (la règle d'un
+  seul calque : refus), chacun nommé. Le double-clic sur une piste reste pour ce calque-là (un geste à une place). Avec un seul calque :
+  comme avant. Rien dans les Vignettes (la commande n'y existe pas).
+- **L'opacité du calque** (champ du panneau Calques, glissé ou tapé) : tous les calques choisis prennent **la même valeur** (valeur
+  absolue, comme les logiciels de dessin) ; chacun la prend comme un seul calque la prendrait (sa valeur fixe, ou sa clé d'opacité de
+  l'image courante). Un glissé : une étape. Comme pour un seul calque, un calque verrouillé change aussi (le verrou protège le dessin).
+  Voisins dans le panneau, **non changés** (en attente de l'accord d'Anthony) : le mode de fusion, l'œil (visible), le cadenas
+  (verrouillé), la pelure, le pochoir.
+- **Suppr sur des clés choisies** : le dessin de chaque clé est **vidé**, la clé reste avec sa durée (avant : Suppr supprimait les clés,
+  le dessin d'avant tenant plus longtemps). Un dessin tenu par plusieurs clés n'est vidé qu'une fois ; verrouillés et masqués laissés de
+  côté ; une étape ; « 6 clés vidées sur 3 calques ». Supprimer vraiment les clés : clic droit sur une clé, « Supprimer les clés » (ou
+  « … en laissant un vide »), et Couper (Ctrl+X). Règle retenue pour Suppr : il vide les clés quand la timeline ou le montage a la main
+  (un clic sur une clé) **et** qu'aucune sélection n'est posée sur le dessin ; une sélection de traits ou de pixels sur le dessin passe
+  avant (Suppr l'efface, elle). Un champ de texte qui a la main garde Suppr pour lui, comme avant.
+- **Vider le dessin** (Édition) avec plusieurs calques choisis : le dessin de chacun à l'image courante, en une étape.
+- **Retourner le calque** (gauche-droite, haut-bas) avec plusieurs calques choisis : tous ensemble, comme un seul objet, autour du milieu
+  de leur boîte commune ; leurs clés de position suivent. Laissés de côté : verrouillés, position verrouillée, masqués, et les calques
+  à trajectoire (leur chemin se retourne sur place : à décider).
+- **Poser une clé d'opacité** avec plusieurs calques choisis : une sur chacun, à son opacité de l'image courante.
+- **Copier, coller une sélection** (demande d'Anthony avec une capture des Vignettes : « sélectionner des lignes comme ceci, puis
+  copier, colle à nouveau les lignes »). Vérifié au clavier comme dans la vraie fenêtre (Ctrl+C, Ctrl+V tels qu'egui les envoie), sans
+  toucher au presse-papiers de Windows : dans l'Animation et le Storyboard, des traits choisis se recollent en traits vectoriels, à la même
+  place, une étape, et la copie est choisie ; à une autre image aussi ; des pixels choisis se recollent en pixels soulevés ; avec plusieurs
+  calques choisis, chacun reçoit les siens ; dans les Vignettes, un trait choisi (même s'il déborde de sa case) se recolle entier, choisi.
+  **Rien n'a pu être reproduit en défaut** : la copie se pose exactement sur l'original, et ne se voit donc qu'en la déplaçant. Essais
+  gardés contre une régression (`copy_then_paste_*`).
+
+**Inventaire.**
+- (a) Déjà conformes : Sélection (lasso, rectangle, tout sélectionner, boîte, flèches, miroir, copier, couper, coller, Suppr d'une
+  sélection), Transformer et Ctrl+R, clés de position (poser, supprimer), les commandes d'images de la timeline (supprimer, couper,
+  copier, coller, dupliquer, inverser, insérer, retourner, faux-fixe, étirer, couper après : « calques choisis »), copier, couper, coller,
+  déplacer et dupliquer des clés (plusieurs calques), dupliquer, supprimer et fusionner les calques choisis, coller et remplacer des
+  effets (« ou les calques choisis »), l'aplat sous le trait de plusieurs calques, les rôles, les groupes, les dossiers.
+- (b) Faits ici : voir plus haut.
+- (c) À trancher (rien n'est changé) :
+  - Mode de fusion, visible, verrouillé, pelure, pochoir du panneau Calques : appliquer à tous les choisis (même valeur) — attend
+    l'accord d'Anthony.
+  - Effets de trait et de matière (tremblement, écriture, crayonné, liseré, encre qui bave, plume, préréglages) et « Flou sur le
+    calque » : les poser sur chaque calque choisi ; un interrupteur (flou) prend l'état inverse de celui du calque courant pour tous.
+  - Clés d'effets (créer, supprimer à l'image courante) : sur l'effet de même sorte de chaque calque choisi, s'il en a un.
+  - Nouveau dessin après l'exposition, dupliquer le dessin, retirer le dessin de la timeline : ils décalent les images d'un calque ;
+    sur plusieurs calques, les décalages doivent rester alignés — à concevoir avec les commandes d'images.
+  - Aplatir le dessin, aimanter au contour, remplir automatiquement les zones, colorier par zones, propager : des calculs longs par
+    dessin ; sur plusieurs calques et clés, sur un fil de travail avec le compte dans la barre d'état.
+  - Retourner un calque à trajectoire avec d'autres : retourner aussi son chemin autour du milieu commun.
+  - Le pot de peinture, le cutter, les pinceaux sur plusieurs calques : sans doute non (on peint sur un calque), à confirmer.
+  - Les Vignettes : leurs propres gestes (partie 131), hors de cette règle pour l'instant.
+
+### Ce qui reste
+
+- Le lâcher de Déformer sur beaucoup de dessins (0,3 s pour 200) reste sur le fil de l'interface ; le même passage sur des fils de
+  travail est possible si Anthony le sent.
+- Déformer ne reprend pas une partie choisie à l'outil Sélection sur plusieurs calques (tout le dessin de chaque calque se déforme).
+- Le pot de peinture, le cutter, les pinceaux : inchangés (calque courant, ou aplat de plusieurs clés, partie 56).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Deux calques choisis (Ctrl + clic dans le panneau Calques), un vectoriel et un bitmap, l'un sur l'autre. La gomme en travers : les deux
+   sont gommés au même endroit ; un seul Ctrl+Z rend les deux.
+2. Verrouiller l'un des deux, gommer : il ne change pas, la barre d'état le nomme.
+3. Décaler un des calques (Transformer), revenir à la gomme : elle efface là où on le voit.
+4. Déformer, mode Perspective, avec les deux calques choisis : un seul cadre autour des deux ; tirer un coin : les deux suivent ; Ctrl+Z.
+   Pareil en mode Enveloppe, avec une poignée ronde.
+5. Transformer avec les deux calques choisis : tirer le milieu du côté droit : les deux s'élargissent, le côté gauche ne bouge pas.
+   Tourner l'un d'eux puis réessayer : le geste est refusé, avec la raison.
+6. Deux calques animés (clés de position) : Transformer à une image où ils ont une clé : leurs clés de cette image bougent, les autres non.
+7. Dans la timeline, choisir plusieurs clés sur deux calques (rectangle). Gommer sur l'image courante : la barre d'état dit le nombre de
+   dessins ; aller voir les autres clés : gommées au même endroit. Un seul Ctrl+Z.
+8. Même choix de clés, Déformer : un seul cadre ; toutes les clés sont déformées pareil au lâcher.
+9. La Sélection sur plusieurs calques, puis Suppr, copier-coller, flèches : comme avant.
+10. Enregistrer, fermer, rouvrir : tout est à sa place.
+11. Choisir plus de 24 clés et gommer : le bandeau rouge « Gomme sur … dessins (Ctrl+Z annule tout) » est en haut du dessin pendant le
+    geste, et s'en va au lâcher. Avec 24 clés ou moins, pas de bandeau.
+12. Un long trait de gomme sur 20 clés : le lâcher rend la main tout de suite, la barre d'état compte les dessins ; aller voir une autre
+    clé une fois le compte fini : gommée. Gommer puis Ctrl+Z tout de suite : rien ne reste, sur aucune clé ; Ctrl+Maj+Z : tout revient.
+13. Trois calques choisis, F5 : une clé sur chacun (la barre d'état donne le compte) ; un calque verrouillé est nommé ; Ctrl+Z les
+    retire toutes.
+14. Trois calques choisis, glisser l'opacité dans le panneau Calques : les trois changent ensemble ; un seul Ctrl+Z.
+15. Choisir des clés dans la timeline, Suppr : leurs dessins sont vides, les clés restent. Clic droit, « Supprimer les clés » : elles
+    partent.
+16. Trois calques choisis : Vider le dessin, Retourner le calque, Poser une clé d'opacité agissent sur les trois.
