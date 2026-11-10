@@ -105,9 +105,14 @@ impl App {
         (multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_layers()), false)
     }
 
-    /// Plusieurs calques, ou plusieurs clés du plan courant, sont choisis.
+    /// Plusieurs dessins sont réellement visés (calques ou clés choisis, une fois écartés les cachés, verrouillés, vidéo, sans
+    /// dessin) : deux au moins. Avec un seul, la gomme et Déformer gardent le chemin d'un seul calque (sa sélection, son
+    /// enveloppe).
     pub(crate) fn plusieurs_dessins_choisis(&self) -> bool {
-        self.chosen_layers().len() >= 2 || self.cles_du_plan().len() >= 2
+        if self.chosen_layers().len() < 2 && self.cles_du_plan().len() < 2 {
+            return false;
+        }
+        self.dessins_choisis().0.list.len() >= 2
     }
 
     /// Les dessins visés, en clair : « 15 dessins (5 clés sur 3 calques) », ou « 3 calques ».

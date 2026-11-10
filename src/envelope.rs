@@ -395,6 +395,12 @@ pub fn warp_drawing_with(original: &VectorDrawing, items: Option<&[usize]>, src:
 pub struct Committed(Option<Raster>);
 
 impl Committed {
+    /// L'image posée par le dernier lâcher de la séance, ou l'original s'il n'y en a pas eu : ce que le dessin doit montrer hors
+    /// d'un geste (un geste revenu à son point de départ la remet, `deformmulti.rs`).
+    pub fn current<'a>(&'a self, original: &'a Raster) -> &'a Raster {
+        self.0.as_ref().unwrap_or(original)
+    }
+
     /// Un geste se termine : `shown` est l'image affichée (l'aperçu), `new` le résultat exact,
     /// `original` l'image du début de la séance. Rend les tuiles d'avant le geste (celles que
     /// l'annulation remet) et les tuiles changées ; `None` : rien n'a changé.

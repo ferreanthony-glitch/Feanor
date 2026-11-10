@@ -500,6 +500,171 @@ fn the_deformation_is_the_same_on_every_chosen_key() {
     assert_eq!(etapes(&b), n0 + 1, "une seule étape");
 }
 
+// ---------------------------------------------------------------------------------------------- relecture de 853bdbf
+
+#[test]
+fn a_gesture_back_to_its_start_and_a_double_reset_leave_no_floating_sheet_and_no_preview() {
+    let mut b = banc_deformer(DeformMode::Envelope, 1);
+    let (fond, encre_cel) = (cel_de(&b, 0, 0), cel_de(&b, 1, 0));
+    let (avant_fond, avant_encre) = (empreinte(&b, fond), empreinte(&b, encre_cel));
+    let n0 = etapes(&b);
+    clic(&mut b, pos2(200.0, 150.0));
+    // L'intérieur tiré de 30 px, puis ramené à son point de départ, et lâché.
+    let c = pos2(200.0, 150.0);
+    let mut aller_retour = ligne(c, c + eframe::egui::vec2(30.0, 20.0), 5);
+    aller_retour.extend(ligne(c + eframe::egui::vec2(30.0, 20.0), c, 5));
+    glisser(&mut b, &aller_retour);
+    // « Remettre droit » deux fois, puis terminer.
+    b.app.deform_multi_reset();
+    b.app.deform_multi_reset();
+    b.app.deform_multi_fermer();
+    repos(&mut b);
+    assert!(b.app.multi.floats.iter().all(|f| f.pending.is_some()), "aucune feuille flottante sans fin");
+    assert!(b.app.multi.floats.is_empty(), "les feuilles s'en vont avec le rendu exact ({})", b.app.multi.floats.len());
+    assert!(empreinte(&b, fond) == avant_fond, "les pixels du dessin bitmap sont ceux d'avant, sans aperçu resté");
+    assert!(empreinte(&b, encre_cel) == avant_encre, "les traits sont ceux d'avant");
+    assert_eq!(etapes(&b), n0, "rien n'a été posé : aucune étape");
+}
+
+#[test]
+fn a_colour_layer_with_several_keys_is_erased_once_on_each_key() {
+    let mut doc = Document::new(W, H, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 6;
+    let mut l = Layer::new("Couleur", LayerKind::Bitmap);
+    l.couleur = Some(crate::calquecouleur::CalqueCouleur::new(0));
+    for f in [0, 2, 4] {
+        let cel = dessin(&mut doc, contenu(LayerKind::Bitmap, 0));
+        l.set(f, Some(cel));
+    }
+    doc.panels[0].layers.push(l);
+    let mut b = ouvrir(doc, Tool::Eraser, 1);
+    b.app.eraser.opacity = 0.5;
+    let keys: Vec<_> = [0, 2, 4].iter().filter_map(|&f| b.app.key_ref(0, 0, f)).collect();
+    b.app.key_anchor = keys.first().copied();
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    gommer_en_200(&mut b);
+    repos(&mut b);
+    let alpha = |b: &Banc, f: usize| b.app.doc.cels[&cel_de(b, 0, f)].raster.get(200, y_de(0) as usize).a();
+    let courant = alpha(&b, 0);
+    assert!(courant > 0 && courant < 255, "la gomme à 50 % laisse de l'encre sur la clé qu'on voit ({courant})");
+    for f in [2, 4] {
+        assert_eq!(alpha(&b, f), courant, "clé de l'image {f} : gommée une seule fois, comme celle qu'on voit");
+    }
+}
+
+#[test]
+fn the_shift_straight_eraser_segment_reaches_every_chosen_layer() {
+    let kinds = [LayerKind::Bitmap, LayerKind::Bitmap];
+    let mut b = banc(&kinds, Tool::Eraser);
+    let cels: Vec<CelId> = (0..2).map(|li| cel_de(&b, li, 0)).collect();
+    let (a, z) = (ecran(&b, pos2(200.0, 20.0)), ecran(&b, pos2(200.0, 280.0)));
+    b.image(vec![Event::PointerMoved(a)], 1.0 / 60.0);
+    b.image(vec![bouton(a, true, Modifiers::NONE)], 1.0 / 60.0);
+    // Maj tenue : un segment droit jusqu'au bas de la feuille, posé au lâcher.
+    b.touches = Modifiers::SHIFT;
+    b.image(vec![Event::PointerMoved(z)], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    b.image(vec![bouton(z, false, Modifiers::SHIFT)], 1.0 / 60.0);
+    b.touches = Modifiers::NONE;
+    b.image(Vec::new(), 1.0 / 60.0);
+    repos(&mut b);
+    for (li, &cel) in cels.iter().enumerate() {
+        assert!(!encre(&b, cel, pos2(200.0, y_de(li))), "calque {li} : le segment droit l'a gommé");
+        assert!(encre(&b, cel, pos2(130.0, y_de(li))), "calque {li} : le reste est intact");
+    }
+}
+
+#[test]
+fn a_drawing_changed_while_the_frame_is_open_is_not_overwritten_by_the_old_original() {
+    let mut b = banc_deformer(DeformMode::Perspective, 1);
+    let encre_cel = cel_de(&b, 1, 0);
+    clic(&mut b, pos2(200.0, 150.0));
+    // Pendant que le cadre est ouvert, un trait de plus sur le calque vectoriel (comme un trait d'un autre outil).
+    b.app.doc.cels.get_mut(&encre_cel).unwrap().vector.as_mut().unwrap().elements.push(trait_h(130.0, 270.0, 180.0));
+    b.chauffer(2);
+    // Puis le coin du cadre d'avant est tiré.
+    glisser(&mut b, &ligne(pos2(100.0, 100.0), pos2(140.0, 130.0), 8));
+    repos(&mut b);
+    assert!(encre(&b, encre_cel, pos2(200.0, 180.0)) || vect(&b, encre_cel).elements.len() == 2, "le trait ajouté n'est pas perdu");
+    assert_eq!(vect(&b, encre_cel).elements.len(), 2, "le dessin a toujours ses deux traits");
+}
+
+#[test]
+fn two_chosen_keys_with_only_one_usable_drawing_keep_the_single_layer_envelope() {
+    let mut doc = Document::new(W, H, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 4;
+    for (i, nom) in ["Encre", "Verrouillé"].iter().enumerate() {
+        let cel = dessin(&mut doc, contenu(LayerKind::Vector, i));
+        let mut l = Layer::new(*nom, LayerKind::Vector);
+        l.set(0, Some(cel));
+        doc.panels[0].layers.push(l);
+    }
+    doc.panels[0].layers[1].locked = true;
+    let mut b = ouvrir(doc, Tool::Perspective, 1);
+    b.app.deform_mode = DeformMode::Envelope;
+    let keys: Vec<_> = (0..2).filter_map(|li| b.app.key_ref(0, li, 0)).collect();
+    assert_eq!(keys.len(), 2);
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    clic(&mut b, pos2(200.0, y_de(0)));
+    assert!(b.app.envelope.is_some(), "un seul dessin visé : l'enveloppe d'un seul calque ({})", b.app.status);
+}
+
+/// Mesure : la gomme sur 20 clés d'un calque bitmap 1920 × 1080, un long trait en zigzag sur toute la feuille.
+/// `cargo test --release --offline --locked --target-dir target\msvc --lib cout_long_trait -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn cout_long_trait_vingt_cles() {
+    use std::time::Instant;
+    let (w, h) = (1920usize, 1080usize);
+    let mut doc = Document::new(w, h, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 40;
+    let mut l = Layer::new("Dessin", LayerKind::Bitmap);
+    for f in 0..20 {
+        let mut r = Raster::new(w, h);
+        for y in (100..980).step_by(3) {
+            for x in 100..1820 {
+                let k = r.tile_index_of(x, y);
+                r.tile_mut(k)[(y % TILE) * TILE + x % TILE] = Color32::from_rgba_premultiplied(30, 30, 30, 255);
+            }
+        }
+        let cel = dessin(&mut doc, Contenu::Pixels(r));
+        l.set(f * 2, Some(cel));
+    }
+    doc.panels[0].layers.push(l);
+    let mut b = ouvrir(doc, Tool::Eraser, 1);
+    let keys: Vec<_> = (0..20).filter_map(|f| b.app.key_ref(0, 0, f * 2)).collect();
+    b.app.key_sel = keys;
+    b.chauffer(2);
+    // Un zigzag de 12 allers-retours sur toute la largeur : environ 22 000 px de trait.
+    let mut pts = Vec::new();
+    for k in 0..12 {
+        let y = 150.0 + 70.0 * k as f32;
+        let (a, z) = if k % 2 == 0 { (150.0, 1770.0) } else { (1770.0, 150.0) };
+        pts.extend(ligne(pos2(a, y), pos2(z, y + 35.0), 40));
+    }
+    let p0 = ecran(&b, pts[0]);
+    b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
+    b.image(vec![bouton(p0, true, Modifiers::NONE)], 1.0 / 60.0);
+    assert!(b.app.status.contains("Gomme"), "{}", b.app.status);
+    let mut pire: f64 = 0.0;
+    for &p in &pts[1..] {
+        let q = ecran(&b, p);
+        let t = Instant::now();
+        b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
+        pire = pire.max(t.elapsed().as_secs_f64() * 1e3);
+    }
+    let fin = ecran(&b, *pts.last().unwrap());
+    let t = Instant::now();
+    b.image(vec![bouton(fin, false, Modifiers::NONE)], 1.0 / 60.0);
+    let lacher = t.elapsed().as_secs_f64() * 1e3;
+    println!("COUT long trait, gomme sur 20 cles 1920x1080 : {} points, pire image du glisse {pire:.1} ms, lacher {lacher:.1} ms", pts.len());
+}
+
 /// Mesure : 10 calques × 20 clés (la moitié vectoriels), la gomme puis la perspective, sur une feuille de 960 × 540.
 /// `cargo test --release --offline --locked --target-dir target\msvc --lib cout_dix_calques -- --ignored --nocapture`
 #[test]

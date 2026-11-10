@@ -9509,11 +9509,30 @@ des 5 dessins bitmap qu'on voit, recomposé à chaque image comme pour un seul c
 sur le fil de l'interface (les résultats exacts) ; à moins de 20 dessins, il ne se sent pas. Le faire sur un fil de travail est possible,
 si Anthony le sent.
 
+Un long trait de gomme (un zigzag sur toute la feuille, 492 points) sur 20 clés d'un calque bitmap 1920 × 1080
+(`cout_long_trait_vingt_cles`) : pire image du glissé 2 ms, mais **lâcher 1,7 s** (les 19 clés qu'on ne voit pas reçoivent tout le
+trait d'un coup). À reprendre si Anthony gomme souvent de longs traits sur beaucoup de clés (voir « Ce qui reste »).
+
+### Relecture (après 853bdbf)
+
+- Un geste de Déformer revenu à son point de départ (ou « Remettre droit » sur un cadre déjà droit) ne laisse plus sa feuille flottante
+  ni l'aperçu bitmap derrière lui : la feuille attend le rendu exact, les pixels reprennent l'image d'avant le geste.
+- Un calque de couleur avec plusieurs clés choisies : ses autres clés suivent déjà la gomme par les miroirs de l'aplat (partie 56) ; elles
+  ne sont plus gommées une seconde fois. « Peint sur l'aplat » allumé : la gomme suit le chemin de l'aplat seul.
+- Le segment droit de la gomme (Maj) passe aussi sur les autres calques et clés.
+- Un dessin de la séance de Déformer qui change pendant que le cadre est ouvert (une clé posée ou effacée, une position, un trait) : la
+  séance se termine sans rien écrire (rien n'est perdu), la barre d'état le dit.
+- Deux clés choisies dont une seule est utilisable (l'autre cachée, verrouillée…) : la gomme et Déformer gardent le chemin d'un seul
+  calque (sa sélection, son enveloppe).
+
 ### Ce qui reste
 
 - Une **garde** pour la gomme sur beaucoup de dessins qu'on ne voit pas (proposée, pas faite) : au-delà d'un nombre de dessins (24 ?),
   le premier passage demande confirmation, ou la vue montre « Gomme sur 200 dessins » en couleur d'alerte pendant le geste. À décider avec
   Anthony.
+- Le lâcher d'un long trait de gomme sur beaucoup de clés qu'on ne voit pas (1,7 s mesuré) : proposé, pas fait — appliquer leurs points
+  sur un fil de travail, comme les remplissages de l'aplat sur plusieurs clés (le résultat rejoint l'étape du geste), ou par petites
+  tranches pendant le geste.
 - Déformer ne reprend pas une partie choisie à l'outil Sélection sur plusieurs calques (tout le dessin de chaque calque se déforme).
 - Le pot de peinture, le cutter, les pinceaux : inchangés (calque courant, ou aplat de plusieurs clés, partie 56).
 

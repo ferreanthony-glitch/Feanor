@@ -123,7 +123,8 @@ impl App {
     /// La gomme agit-elle sur plusieurs calques ? L'outil Gomme, deux calques choisis au moins, hors des Vignettes et hors de
     /// l'aplat.
     pub(crate) fn gomme_multi_voulue(&self) -> bool {
-        self.tool == Tool::Eraser && !self.in_card && !self.aplat_en_cible() && self.plusieurs_dessins_choisis()
+        // (« Peint sur l'aplat » détourne la gomme vers un aplat : ce chemin-là, pas celui-ci.)
+        self.tool == Tool::Eraser && !self.in_card && !self.aplat_en_cible() && self.sur_aplat_cible().is_none() && self.plusieurs_dessins_choisis()
     }
 
     /// Juste avant le trait du calque courant (`begin_paint`) : le geste d'avant est fini, et la marque de l'historique est prise
@@ -151,7 +152,9 @@ impl App {
         let tol = self.close_tolerance();
         let mut autres = Vec::new();
         for t in &targets.list {
-            if Some(t.cel) == deja || autres.iter().any(|a: &Autre| a.cel == t.cel) {
+            // (Un calque de couleur et plusieurs de ses clés : ses autres clés suivent déjà le trait par les miroirs de l'aplat,
+            // `aplatmulti.rs` ; elles ne sont pas gommées deux fois.)
+            if Some(t.cel) == deja || autres.iter().any(|a: &Autre| a.cel == t.cel) || self.aplat_miroirs.contient(t.cel) {
                 continue;
             }
             let Some(inv) = t.to_stage.inverse() else { continue };

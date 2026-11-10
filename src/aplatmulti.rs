@@ -58,6 +58,11 @@ impl Miroirs {
     pub(crate) fn est_vide(&self) -> bool {
         self.liste.is_empty()
     }
+
+    /// Le dessin `cel` reçoit déjà le trait en cours (la gomme sur plusieurs calques ne le reprend pas, `gommemulti.rs`).
+    pub(crate) fn contient(&self, cel: CelId) -> bool {
+        self.liste.iter().any(|m| m.cel == cel)
+    }
 }
 
 /// Ce que le fil de travail doit faire sur l'aplat d'une clé.

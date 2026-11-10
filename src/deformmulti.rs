@@ -59,6 +59,12 @@ enum Sorte {
 
 /// Un calque de la séance.
 struct Part {
+    /// Son calque (id) et l'image où son dessin se prend (celle de sa clé).
+    layer: u64,
+    frame: usize,
+    /// Le sceau du dessin après le dernier geste de la séance (`sceau`) : s'il change hors de la séance, celle-ci se termine sans
+    /// rien écrire (son original serait périmé).
+    sceau: u64,
     cel: CelId,
     /// Du dessin vers la feuille, et retour.
     to_stage: Affine,
@@ -133,6 +139,32 @@ fn bezier_at(env: &Envelope, k: usize, t: f32) -> Pos2 {
     let p = env.edge(k);
     let s = 1.0 - t;
     (p[0].to_vec2() * (s * s * s) + p[1].to_vec2() * (3.0 * s * s * t) + p[2].to_vec2() * (3.0 * s * t * t) + p[3].to_vec2() * (t * t * t)).to_pos2()
+}
+
+/// Le sceau d'un dessin : ce qui change quand on y touche hors de la séance. Bitmap : sa version (seule la séance la change
+/// pendant qu'elle est ouverte, et elle la note). Vectoriel : sa géométrie (le nombre d'éléments et leurs boîtes ; sa version
+/// change aussi quand un rendu exact arrive, ce qui ne compte pas).
+fn sceau(doc: &crate::document::Document, cel: CelId) -> u64 {
+    let Some(c) = doc.cels.get(&cel) else { return 0 };
+    match &c.vector {
+        None => c.version,
+        Some(d) => {
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ d.elements.len() as u64;
+            for e in &d.elements {
+                let b = e.bounds();
+                for v in [b.min.x, b.min.y, b.max.x, b.max.y] {
+                    h ^= v.to_bits() as u64;
+                    h = h.wrapping_mul(0x100_0000_01b3);
+                }
+            }
+            h
+        }
+    }
+}
+
+/// Deux transformations égales (au millième près).
+fn memes(a: &Affine, b: &Affine) -> bool {
+    [a.a - b.a, a.b - b.b, a.c - b.c, a.d - b.d, (a.tx - b.tx) / 1000.0, (a.ty - b.ty) / 1000.0].iter().all(|v| v.abs() < 1e-3)
 }
 
 /// La boîte où `map` envoie le rectangle `r` (une grille de 9 × 9 points, un peu élargie).
@@ -230,7 +262,7 @@ impl App {
                 continue;
             }
             src = src.union(t.to_stage.apply_rect(local));
-            parts.push(Part { cel: t.cel, to_stage: t.to_stage, from_stage, src: local, live: t.live, sorte });
+            parts.push(Part { layer: t.id, frame: t.frame, sceau: sceau(&self.doc, t.cel), cel: t.cel, to_stage: t.to_stage, from_stage, src: local, live: t.live, sorte });
         }
         let laisses = targets.skipped_text();
         if parts.is_empty() || !src.is_positive() {
@@ -336,7 +368,10 @@ impl App {
             self.deform_multi = Some(d);
             return;
         };
+        // Revenu à son point de départ (ou « Remettre droit » sur un cadre déjà droit) : rien à poser, mais l'aperçu du geste
+        // s'en va (la feuille des traits attend son rendu, les pixels reprennent l'image d'avant le geste).
         let Some(m) = d.stage_map().filter(|_| f0 != d.forme) else {
+            self.deform_multi_restaurer(&mut d);
             self.deform_multi = Some(d);
             return;
         };
@@ -374,12 +409,42 @@ impl App {
             DeformMode::Perspective => "Perspective",
         };
         let n = d.parts.len();
+        for part in &mut d.parts {
+            part.sceau = sceau(&self.doc, part.cel);
+        }
         self.deform_multi = Some(d);
         if !edits.is_empty() {
             let avant = self.history.context.replace(format!("{nom} ({n} calques)"));
             self.history.push(Edit::Group(edits));
             self.history.context = avant;
             self.modified = true;
+        }
+    }
+
+    /// Un geste qui ne pose rien : l'aperçu s'en va. La feuille de chaque dessin vectoriel attend le rendu exact de son dessin
+    /// (qui est redemandé) ; chaque dessin bitmap qu'on voit reprend l'image d'avant le geste (le résultat du geste d'avant, ou
+    /// l'original).
+    fn deform_multi_restaurer(&mut self, d: &mut DeformMulti) {
+        for part in d.parts.iter_mut().filter(|p| p.live) {
+            let cel = part.cel;
+            match &mut part.sorte {
+                Sorte::Traits { slot, .. } => {
+                    if let Some(f) = self.multi.floats.iter_mut().find(|f| f.slot == *slot && f.src == cel && f.pending.is_none()) {
+                        f.pending = Some(Pending { items: Vec::new(), originals: Vec::new() });
+                        self.rejeu_cel(cel);
+                    }
+                }
+                Sorte::Pixels { orig, committed, shown, .. } => {
+                    let img = committed.current(orig).clone();
+                    let Some(c) = self.doc.cels.get_mut(&cel) else { continue };
+                    let tiles = crate::vector::tiles_in(&c.raster, shown.union(part.src).expand(2.0));
+                    c.raster = img;
+                    c.version += 1;
+                    *shown = part.src;
+                    self.renderer.invalidate_tiles(&tiles);
+                }
+            }
+            part.sceau = sceau(&self.doc, cel);
         }
     }
 
@@ -425,6 +490,24 @@ impl App {
             && self.cles_du_plan() == d.cles;
         if !ok {
             self.deform_multi_fermer();
+            return;
+        }
+        // Un dessin de la séance a changé hors d'elle (une clé posée ou effacée, une position, un trait) : son original est
+        // périmé. La séance se termine sans rien écrire, pour ne rien perdre de ce changement. (Pendant un geste, l'aperçu change
+        // les dessins : on regarde au lâcher.)
+        if d.drag.is_some() {
+            return;
+        }
+        let Some(panel) = self.doc.panels.get(d.panel) else { return };
+        let change = d.parts.iter().any(|p| {
+            let Some(li) = panel.layers.iter().position(|l| l.id == p.layer) else { return true };
+            panel.layers[li].cel_at(p.frame) != Some(p.cel)
+                || crate::multisel::layer_to_stage(&self.doc, d.panel, p.frame, li).is_none_or(|t| !memes(&t, &p.to_stage))
+                || sceau(&self.doc, p.cel) != p.sceau
+        });
+        if change {
+            self.deform_multi = None;
+            self.status = "Déformation des calques choisis terminée : un de leurs dessins a changé depuis l'ouverture du cadre.".into();
         }
     }
 
