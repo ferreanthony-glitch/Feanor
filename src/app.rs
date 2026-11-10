@@ -845,6 +845,9 @@ pub struct App {
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
+    /// Le trait en cours a été envoyé dans l'aplat sous le trait par « Peint sur l'aplat » (`aplatsur.rs`) : s'il ne pose rien (il
+    /// n'entre pas dans la forme du trait), il ne laisse pas d'étape, et l'aplat créé pour lui est défait (partie 133).
+    pub(crate) sur_aplat_geste: Option<crate::aplatsur::GesteSurAplat>,
     /// Plusieurs clés choisies, l'aplat visé : le même trait en cours sur l'aplat des autres clés, et les remplissages qui s'y
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
@@ -1416,6 +1419,7 @@ impl App {
             aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
+            sur_aplat_geste: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
             gomme_multi: Default::default(),
@@ -2359,11 +2363,28 @@ impl App {
         let (Some(settings), Some(r)) = (self.current_brush(), self.layer().fond) else {
             return;
         };
-        let (cel, prefix) = self.ensure_cel();
         let (w, h) = (self.doc.width, self.doc.height);
-        let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h)) else { return };
+        let refus = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).";
+        // La forme de l'aplat, lue avant de créer quoi que ce soit : pas de dessin à cette image, ou pas de trait, et le geste ne laisse
+        // rien, ni dessin vide ni étape d'annulation (partie 133 : sinon une case pâle qui naissait gardait son plan vide). (Un calque de
+        // couleur reflète son trait en ouvrant son dessin : il est lu après, comme avant.)
+        let ici = self.cel_here().filter(|_| self.layer().couleur.is_none());
+        let deja = ici.and_then(|id| self.doc.cels.get(&id)).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h));
+        if self.layer().couleur.is_none() && deja.as_ref().is_none_or(|c| c.iter().all(|&v| v == 0)) {
+            self.status = refus.into();
+            return;
+        }
+        let (cel, prefix) = self.ensure_cel();
+        // (La cassure automatique rend une copie du dessin : même trait, même forme.)
+        let cover = match deja {
+            Some(c) => c,
+            None => {
+                let Some(c) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h)) else { return };
+                c
+            }
+        };
         if cover.iter().all(|&c| c == 0) {
-            self.status = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).".into();
+            self.status = refus.into();
             if let Some(p) = prefix {
                 self.history.push(p);
             }
@@ -2506,6 +2527,8 @@ impl App {
                     c.version += 1;
                 }
                 self.renderer.invalidate_tiles(&dirty);
+                // « Peint sur l'aplat » : un trait qui n'a rien posé ne laisse pas d'étape, l'aplat créé pour lui est défait (partie 133).
+                self.sur_aplat_fin(&mut edits);
                 // Peinture et coupe : une seule étape d'annulation, nommée « Aplat : … ».
                 let nom = if self.tool == Tool::Eraser { "Aplat : gomme" } else { "Aplat : peinture" };
                 let avant = self.history.context.replace(nom.to_string());
@@ -2516,6 +2539,7 @@ impl App {
                 }
                 self.history.context = avant;
             } else {
+                self.sur_aplat_geste = None;
                 let edit = match self.doc.cels.get_mut(&cel) {
                     Some(c) => stroke.finish(&mut c.raster, &mut dirty),
                     None => None,
@@ -3689,6 +3713,7 @@ impl App {
         self.stroke = None;
         self.fond_stroke = None;
         self.fond_cut = None;
+        self.sur_aplat_geste = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -3741,6 +3766,7 @@ impl App {
         self.stroke = None;
         self.fond_stroke = None;
         self.fond_cut = None;
+        self.sur_aplat_geste = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;

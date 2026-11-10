@@ -9662,6 +9662,72 @@ verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état,
     partent.
 16. Trois calques choisis : Vider le dessin, Retourner le calque, Poser une clé d'opacité agissent sur les trois.
 
+## 133. « Peint sur l'aplat » ne piège plus la planche (2026-11-10, branche `souvient-retours`)
+
+Anthony, le lendemain de la fusion de la partie 131, sur son projet « afa » : « la planche ne prend plus le trait, j'ai beau essayer de
+dessiner mais rien n'apparaît sauf à certains endroits hors des cases, mais le trait disparaît immédiatement après avoir lâché le stylet ».
+Sa vidéo d'écran montrait l'interrupteur **« Peint sur l'aplat »** allumé (le 2e bouton sous l'aperçu du pinceau, partie de 2026-10-28,
+`aplatsur.rs`). Ce n'était pas la partie 131 : rejoué sur une copie de son projet, ce seul réglage donnait ses trois symptômes. Avec lui,
+le pinceau et le crayon peignent dans l'aplat, seulement dans la forme d'un trait déjà dessiné :
+
+- dans une case sans trait (ou hors de la forme du trait), rien ne restait, et **un aplat était créé en douce** sur le calque (deux étapes
+  d'annulation à chaque essai) ;
+- dans une case pâle, **un plan vide naissait** à chaque essai (sa séquence est passée de 37 à 44 plans pendant sa vidéo) ;
+- sur le papier, le trait se voyait pendant le geste et **disparaissait au lâcher**.
+
+Son accord : « Oui, corrige ». Code : `aplatsur.rs`, `app.rs` (`begin_fond_stroke`, `end_stroke`), `boardui.rs`, `planannuleui.rs`,
+`vignettesprefs.rs`, `onglets.rs`, `cooperationui.rs`. Essais : `aplatsur_tests.rs` (3 neufs) et `souvient_retours_tests.rs` (2 neufs sur
+la planche ; les autres rejouent son projet quand on leur donne son chemin, sans quoi ils ne font rien). Le format du projet ne change pas.
+
+### Ce qui change
+
+- **Un trait posé sur le papier va au papier**, entier, comme d'habitude, même avec « Peint sur l'aplat » allumé : le papier n'a pas
+  d'aplat. (Le papier, c'est la règle de la partie 131 : hors du champ de toute case, ou sur une case écartée.) Un trait posé dans une case
+  ou dans sa marge garde « Peint sur l'aplat ».
+- **Un trait qui ne laisserait rien ne crée rien.** Pas de trait à cette image : ni aplat, ni dessin vide, ni étape d'annulation, et
+  plus de plan vide dans une case pâle (la case qui naissait se défait au lâcher, comme après un simple clic). Un trait qui reste hors de
+  la forme du trait : il ne laisse pas d'étape, et l'aplat créé pour lui est défait (la coupe d'aplat qu'il recousait en passant revient
+  comme avant). Un trait qui peint dans la forme : comme avant (l'aplat est créé s'il manquait, la peinture y va).
+- **La barre d'état dit pourquoi**, et comment l'éteindre : « Peint sur l'aplat est allumé : la peinture va sous un trait déjà dessiné,
+  et ce calque n'en a pas ici… » ou « … ce coup de pinceau n'y est pas entré (rien n'est gardé)… ».
+- **La barre du bas de la planche le montre** tant qu'il est allumé avec le pinceau ou le crayon : une pastille braise puis
+  l'interrupteur allumé, « Peint sur l'aplat ». Un clic l'éteint (la même commande que le bouton sous l'aperçu du pinceau, avec son
+  raccourci assignable). Rien quand il est éteint, ni avec la gomme ou un autre outil.
+- **Choisir la sous-ligne de l'aplat** (panneau Calques) puis peindre là où le calque n'a pas de dessin : refusé comme avant, mais sans
+  créer de dessin vide ni d'étape.
+
+### Comment
+
+- `boardui.rs` : `Vignettes::appui_papier`, posé par `noter_appui_papier` à l'appui hors des cases (entre deux rangées, sous une barre,
+  dans une bande de note, depuis le numéro d'un plan) et effacé avec `appui_bande` ; `aplatsur::sur_aplat_cible` ne détourne pas un tel
+  trait.
+- `aplatsur.rs` : `aplat_a_un_trait` (la forme de l'aplat lue sans rien créer), `GesteSurAplat` et `App::sur_aplat_geste` (le trait en
+  cours est envoyé dans l'aplat, et l'aplat a-t-il été créé pour lui), `sur_aplat_fin` à la fin du trait (`end_stroke`) :
+  `peinture_changee` compare les tuiles d'avant à celles d'après, seulement la peinture. Les textes `SANS_TRAIT` et `HORS_DE_LA_FORME`.
+  Rien de plus pendant le geste : une comparaison de tuiles au lâcher, aucun rejeu.
+- `app.rs`, `begin_fond_stroke` : la forme est lue avant `ensure_cel` (un calque de couleur, qui reflète son trait en ouvrant son
+  dessin, reste lu après).
+- `vignettesprefs.rs` : `planche_signal_sur_aplat`, appelé au bout de la barre du bas de la planche.
+
+### Limites connues
+
+- Plusieurs clés choisies, l'aplat visé (`aplatmulti.rs`) : un trait hors de la forme garde son étape, comme avant.
+- Un calque de couleur visé par « Peint sur l'aplat » (le calque de couleur du calque de trait) n'est pas concerné : il peint comme
+  avant.
+- La vue Dessin (hors de la planche) a les mêmes refus et les mêmes messages, mais pas le signal de la barre du bas : il est propre à la
+  planche.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Allume « Peint sur l'aplat » (2e bouton sous l'aperçu du pinceau) : la barre du bas de la planche montre « Peint sur l'aplat » avec une
+   pastille. Clique dessus : il s'éteint, le bouton sous l'aperçu aussi.
+2. Rallume-le. Dessine sur le papier, loin des cases : le trait reste.
+3. Dessine dans une case pâle : aucun plan ne naît, la barre d'état dit pourquoi.
+4. Dessine dans une case, hors de la forme de ton dessin : rien ne reste, Ctrl+Z n'a rien à défaire de ce geste, aucun aplat n'est
+   apparu sous le dessin du calque.
+5. Dessine dans la forme d'un personnage dessiné : la peinture va dans son aplat, comme avant.
+6. Éteins-le : tout dessine de nouveau le trait.
+
 ## 134. Ctrl+A dans les Vignettes : le choix de la planche (2026-11-10, branche `vignettes-ctrl-a`)
 
 Anthony : dans les Vignettes, Ctrl+A doit passer par le choix de la planche, prendre les traits entiers, ceux du papier et ceux qui
