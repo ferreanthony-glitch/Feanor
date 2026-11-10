@@ -10,6 +10,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   oui aux deux ; le calque actif toujours au milieu, deux fines bandes qui comptent les autres, un bouton « Toute la pile » ; la
   hauteur des plans réglable en tirant son bord, jusqu'au bandeau, retenue par onglet (`montage_rows` donne aujourd'hui aux plans la
   place qui reste, entre 56 et 170 points). La 39 remplace la 37. Rien de codé : attend son accord.
+- Ses décisions après avoir vu la maquette : « Toute la pile » gardée (comparer deux calques éloignés, en choisir plusieurs) ; plans
+  en taille moyenne ou en bandeau seulement ; l'affichage des calques réglable depuis la barre du bas de la timeline et depuis les
+  Préférences ; **un dossier n'est jamais traité comme un calque dans la timeline : toujours plus petit, il se plie et se déplie** ;
+  les touches de zoom de la timeline sont celles de la zone de dessin (41 : chez lui Maj+1 et Maj+2 ; la timeline a aujourd'hui
+  `bande.zoom_*` sur Alt+1 et Alt+2). Maquette refaite (version 3 de la page) : fenêtre de trois calques avec le calque actif au
+  milieu, ligne fine de dossier qui prend sa place à la fine bande, barre du bas, Préférences. Mes choix signalés comme à
+  contredire : les flèches sautent les dossiers, boutons de plans réduits à « Nouveau plan », réglages et « ⋯ », un seul réglage
+  pour Storyboard et Montage, fin du réglage « Calques non actifs ». Toujours rien de codé.
 
 ## 2026-11-10
 
