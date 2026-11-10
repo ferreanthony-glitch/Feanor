@@ -3284,6 +3284,16 @@ impl App {
         self.drop_bitmap_selection();
         self.vsel = None;
         self.record_step();
+        // (Le calque est dans le choix : tous les calques choisis prennent l'inverse de son état, partie 136.)
+        let lis = self.calques_du_geste(li);
+        if lis.len() >= 2 {
+            let v = !self.layers()[li].locked;
+            for &k in &lis {
+                self.layers_mut()[k].locked = v;
+            }
+            self.status = format!("{} calques {}.", lis.len(), if v { "verrouillés" } else { "déverrouillés" });
+            return;
+        }
         let layer = &mut self.layers_mut()[li];
         layer.locked = !layer.locked;
         self.status = format!(

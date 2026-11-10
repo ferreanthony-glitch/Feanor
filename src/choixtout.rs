@@ -167,8 +167,6 @@ impl App {
                 Some("verrouillé")
             } else if dessin && crate::folders::effect(layers, li).is_none() {
                 Some("masqué")
-            } else if dessin && l.trajectoire.is_some() {
-                Some("à trajectoire")
             } else {
                 None
             };
@@ -215,6 +213,18 @@ impl App {
             l.transform = miroir(l.transform);
             for k in &mut l.pos_keys {
                 k.t = miroir(k.t);
+            }
+            // Un calque à trajectoire : son chemin est retourné autour du même milieu, et le déplacement noté au départ change de
+            // sens, pour qu'un nouveau calcul des clés retrouve la même pose (partie 136).
+            if let Some(t) = &mut l.trajectoire {
+                let a = if horizontal { centre.x } else { centre.y };
+                let c = if horizontal { 0 } else { 1 };
+                t.transformer(|p| {
+                    let mut q = p;
+                    q[c] = 2.0 * a - p[c];
+                    q
+                });
+                t.decalage_depart[c] = -t.decalage_depart[c];
             }
         }
         self.renderer.invalidate_all();

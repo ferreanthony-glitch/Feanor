@@ -9787,3 +9787,34 @@ courante** seulement (une sélection de case, que la planche ne montre pas comme
    pris, comme au lasso.
 9. Mesure : 100 cases de 50 traits coupés comme avant la partie 131 (2 500 traits entiers de deux parts) : Ctrl+A en 38 à 43 ms
    (80 à 110 ms quand les parts ne se touchent pas et ne se recollent pas).
+
+## 136. Les réglages des calques, leurs effets et leurs clés sur tous les calques choisis (2026-11-10, branche `selection-tout-2`)
+
+Anthony a validé quatre points du groupe (c) de la règle « la sélection agit sur tout ». Code : `choixcalques.rs` (neuf :
+`calques_du_geste`, `basculer_calques`, `regler_mode_calques`, `calques_pour_l_effet`, `effets_du_geste`, `fx_regler`), et les appels
+dans `layerheads.rs`, `menucalque.rs`, `layersui.rs`, `layerops.rs`, `calquecouleurui.rs`, `app.rs` (`toggle_layer_lock` seulement),
+`fxui.rs` et `choixtout.rs`. Essais : `selection_tout_2_tests.rs` (7).
+
+La règle commune : un réglage fait sur un calque **qui est dans le choix** (et le choix compte deux calques au moins) va à tous les
+calques choisis ; fait sur un calque hors du choix, il ne touche que lui. Une étape d'annulation par geste ; la barre d'état dit sur
+combien de calques, et lesquels sont laissés de côté.
+
+1. **Propriétés des calques.** Mode de fusion, œil, cadenas, pelure d'oignon, pochoir et son sens : dans la timeline, le panneau
+   Calques, le menu d'un calque et le raccourci de la pelure. Un interrupteur donne à tous l'inverse de l'état du calque cliqué. Les
+   dossiers ne prennent ni le mode, ni la pelure, ni le pochoir (laissés de côté) ; l'œil et le cadenas, si.
+2. **Effets de trait, de matière, flou.** Cocher ou décocher un effet (menus Trait et Matière, tremblement, « Flou sur le calque »), un
+   préréglage de trait ou de matière : sur chaque calque choisi qui le prend ; un calque bitmap est laissé de côté pour un effet
+   vectoriel, avec un message. Un réglage de l'effet dans le panneau Effets va à l'effet de même sorte des autres calques choisis
+   (même rang parmi ceux de cette sorte, sinon le premier). « Ajouter un effet » du panneau reste sur le calque courant.
+3. **Clés d'effets.** Créer une clé (chaque calque avec ses propres valeurs à cette image) ou la supprimer : sur l'effet de même sorte
+   de chaque calque choisi.
+6. **Retourner un calque à trajectoire avec d'autres.** Il n'est plus laissé de côté : son chemin est retourné autour du milieu
+   commun, et le déplacement noté au départ change de sens, pour qu'un nouveau calcul des clés retrouve la même pose.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Trois calques choisis : clic sur l'œil de l'un d'eux, les trois se cachent ; sur l'œil d'un calque hors du choix, lui seul.
+2. Même chose avec le cadenas, la pelure, le pochoir, et le mode de fusion de la ligne d'un calque choisi.
+3. Un calque vectoriel et un bitmap choisis : Tremblement du trait, la barre d'état dit que le bitmap est laissé de côté.
+4. « Flou sur le calque » puis un réglage du flou dans le panneau Effets : les deux calques changent ; Créer une clé : une clé sur chacun.
+5. Un calque à trajectoire et un autre choisis, Retourner : le chemin et le mouvement sont retournés ensemble.

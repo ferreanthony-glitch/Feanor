@@ -189,25 +189,36 @@ impl App {
         if li >= self.layers().len() || self.content_refuses() {
             return;
         }
-        if !self.fx_allowed(li, kind) {
-            self.status = format!("« {} » ne va que sur un calque vectoriel.", kind.label());
+        // Plusieurs calques choisis : l'effet est posé (ou ôté) sur chacun qui le prend, les autres laissés de côté (partie 136).
+        let (lis, laisses) = self.calques_pour_l_effet(li, &[kind]);
+        if lis.is_empty() || !lis.contains(&li) && self.calques_du_geste(li).len() < 2 {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.{}", kind.label(), if self.calques_du_geste(li).len() >= 2 { laisses.clone() } else { String::new() });
             return;
         }
-        let on = self.fx_on(li, kind);
+        // (L'état du calque cliqué décide ; s'il ne prend pas l'effet, celui du premier qui le prend.)
+        let on = self.fx_on(if lis.contains(&li) { li } else { lis[0] }, kind);
         self.record_step();
-        let fx = &mut self.layers_mut()[li].fx;
-        match fx.iter().position(|e| e.kind == kind) {
-            Some(_) if on => fx.iter_mut().filter(|e| e.kind == kind).for_each(|e| e.enabled = false),
-            Some(i) => fx[i].enabled = true,
-            None => fx.push(Effect::new(kind)),
+        for &k in &lis {
+            let fx = &mut self.layers_mut()[k].fx;
+            match fx.iter().position(|e| e.kind == kind) {
+                Some(_) if on => fx.iter_mut().filter(|e| e.kind == kind).for_each(|e| e.enabled = false),
+                Some(i) => fx[i].enabled = true,
+                None => fx.push(Effect::new(kind)),
+            }
         }
-        if let Some(i) = self.layers()[li].fx.iter().position(|e| e.kind == kind) {
-            if li == self.cur_layer {
+        let cur = self.cur_layer;
+        if lis.contains(&cur) {
+            if let Some(i) = self.layers()[cur].fx.iter().position(|e| e.kind == kind) {
                 self.select_fx(i);
             }
         }
         self.renderer.invalidate_all();
-        self.status = format!("{} : {}.", kind.label(), if on { "décoché (le dessin n'a pas changé)" } else { "coché" });
+        let etat = if on { "décoché (le dessin n'a pas changé)" } else { "coché" };
+        self.status = if self.calques_du_geste(li).len() >= 2 {
+            format!("{} : {etat} sur {} calque{}.{laisses}", kind.label(), lis.len(), if lis.len() > 1 { "s" } else { "" })
+        } else {
+            format!("{} : {etat}.", kind.label())
+        };
     }
 
     /// Les effets par familles, en sous-menus de cases à cocher (menu d'un calque) ; on les
@@ -374,24 +385,32 @@ impl App {
     /// même sorte sont remplacés, les clés partent de l'image courante.
     pub(crate) fn apply_trait_preset(&mut self, preset: crate::fxtrait::Preset) {
         let li = self.cur_layer;
-        if self.fx_offer(li, EffectKind::Write) != Offer::Enabled {
-            self.status = format!("« {} » ne va que sur un calque vectoriel.", preset.label());
+        let built = preset.build(self.doc.fps, self.cur_frame, self.panel().frame_count());
+        let kinds: Vec<EffectKind> = built.iter().map(|e| e.kind).chain(std::iter::once(EffectKind::Write)).collect();
+        // (Sur chaque calque choisi qui le prend, partie 136.)
+        let (lis, laisses) = self.calques_pour_l_effet(li, &kinds);
+        if lis.is_empty() {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.{}", preset.label(), if self.calques_du_geste(li).len() >= 2 { laisses } else { String::new() });
             return;
         }
         if self.content_refuses() {
             return;
         }
-        let built = preset.build(self.doc.fps, self.cur_frame, self.panel().frame_count());
         self.record_step();
-        let stack = &mut self.layers_mut()[li].fx;
-        for e in built {
-            stack.retain(|x| x.kind != e.kind);
-            stack.push(e);
+        for &k in &lis {
+            let stack = &mut self.layers_mut()[k].fx;
+            for e in built.iter().cloned() {
+                stack.retain(|x| x.kind != e.kind);
+                stack.push(e);
+            }
         }
-        let last = stack.len() - 1;
-        self.select_fx(last);
+        if lis.contains(&li) {
+            let last = self.layers()[li].fx.len() - 1;
+            self.select_fx(last);
+        }
         self.renderer.invalidate_all();
-        self.status = format!("{} : posé sur le calque, les clés partent de l'image {}.", preset.label(), self.frame_label(self.cur_frame));
+        let sur = if lis.len() >= 2 { format!("posé sur {} calques", lis.len()) } else { "posé sur le calque".to_string() };
+        self.status = format!("{} : {sur}, les clés partent de l'image {}.{laisses}", preset.label(), self.frame_label(self.cur_frame));
     }
 
     /// Le menu déroulant « Matière » (`fxmatiere.rs`) : comme « Trait », juste à côté. Le liseré, le trait
@@ -429,26 +448,35 @@ impl App {
     pub(crate) fn apply_matter_preset(&mut self, preset: crate::fxmatiere::Preset) {
         let li = self.cur_layer;
         let built = preset.build();
-        if built.iter().any(|e| self.fx_offer(li, e.kind) == Offer::Absent) {
+        let plusieurs = self.calques_du_geste(li).len() >= 2;
+        if !plusieurs && built.iter().any(|e| self.fx_offer(li, e.kind) == Offer::Absent) {
             return;
         }
-        if built.iter().any(|e| !self.fx_allowed(li, e.kind)) {
-            self.status = format!("« {} » ne va que sur un calque vectoriel.", preset.label());
+        // (Sur chaque calque choisi qui le prend, partie 136.)
+        let kinds: Vec<EffectKind> = built.iter().map(|e| e.kind).collect();
+        let (lis, laisses) = self.calques_pour_l_effet(li, &kinds);
+        if lis.is_empty() {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.{}", preset.label(), if plusieurs { laisses } else { String::new() });
             return;
         }
         if self.content_refuses() {
             return;
         }
         self.record_step();
-        let stack = &mut self.layers_mut()[li].fx;
-        for e in built {
-            stack.retain(|x| x.kind != e.kind);
-            stack.push(e);
+        for &k in &lis {
+            let stack = &mut self.layers_mut()[k].fx;
+            for e in built.iter().cloned() {
+                stack.retain(|x| x.kind != e.kind);
+                stack.push(e);
+            }
         }
-        let last = stack.len() - 1;
-        self.select_fx(last);
+        if lis.contains(&li) {
+            let last = self.layers()[li].fx.len() - 1;
+            self.select_fx(last);
+        }
         self.renderer.invalidate_all();
-        self.status = format!("{} : posé sur le calque (les dessins n'ont pas changé).", preset.label());
+        let sur = if lis.len() >= 2 { format!("posé sur {} calques", lis.len()) } else { "posé sur le calque".to_string() };
+        self.status = format!("{} : {sur} (les dessins n'ont pas changé).{laisses}", preset.label());
     }
 
     /// « Appliquer pour de bon » : remplace les traits vectoriels du calque `li` par ceux que redessine la plume
@@ -524,10 +552,18 @@ impl App {
         }
         self.record_step();
         self.layers_mut()[li].fx[i].set_key(f, values);
+        // Plusieurs calques choisis : la clé va aussi sur l'effet de même sorte de chacun, avec ses propres valeurs (partie 136).
+        let autres: Vec<(usize, usize)> = self.effets_du_geste(li, i).into_iter().skip(1).collect();
+        for &(k, j) in &autres {
+            let e = &mut self.layers_mut()[k].fx[j];
+            let v = e.values_at(f);
+            e.set_key(f, v);
+        }
         // La clé qu'on vient de créer, seule, devient le choix (elle se voit, se déplace, se copie
         // et se supprime dans le montage et la timeline).
         self.select_new_fx_key(li, i, f);
-        self.status = format!("Clé de « {name} » à l'image {}.", self.frame_label(f));
+        let sur = if autres.is_empty() { String::new() } else { format!(" sur {} calques", autres.len() + 1) };
+        self.status = format!("Clé de « {name} » à l'image {}{sur}.", self.frame_label(f));
     }
 
     /// Retire la clé de l'effet choisi à l'image courante.
@@ -537,8 +573,9 @@ impl App {
             self.status = "Choisis d'abord un effet dans la pile du calque (clic sur son nom, dans le panneau Effets).".into();
             return;
         };
-        let has =self.layers().get(li).and_then(|l| l.fx.get(i)).is_some_and(|e| e.key_at(f).is_some());
-        if !has {
+        // Plusieurs calques choisis : la clé de cette image part aussi de l'effet de même sorte de chacun (partie 136).
+        let cibles: Vec<(usize, usize)> = self.effets_du_geste(li, i).into_iter().filter(|&(k, j)| self.layers().get(k).and_then(|l| l.fx.get(j)).is_some_and(|e| e.key_at(f).is_some())).collect();
+        if cibles.is_empty() {
             self.status = "Pas de clé de cet effet à l'image courante.".into();
             return;
         }
@@ -546,8 +583,10 @@ impl App {
             return;
         }
         self.record_step();
-        self.layers_mut()[li].fx[i].remove_key(f);
-        self.status = "Clé supprimée.".into();
+        for &(k, j) in &cibles {
+            self.layers_mut()[k].fx[j].remove_key(f);
+        }
+        self.status = if cibles.len() >= 2 { format!("Clé supprimée sur {} calques.", cibles.len()) } else { "Clé supprimée.".into() };
     }
 
     /// Va à la clé précédente (`dir` < 0) ou suivante de l'effet choisi.
@@ -758,17 +797,8 @@ impl App {
                                 crate::fx::note_interaction(ui.ctx());
                             }
                             if self.edited(&resp) {
-                                let mut new = values.clone();
-                                for c in 0..3 {
-                                    new[k + c] = rgb[c] as f32;
-                                }
-                                let auto = self.fx_auto_key;
-                                let effect = &mut self.layers_mut()[li].fx[i];
-                                if auto || !effect.keys.is_empty() {
-                                    effect.set_key(f, new);
-                                } else {
-                                    effect.values = new;
-                                }
+                                // (Et sur l'effet de même sorte des autres calques choisis, partie 136.)
+                                self.fx_regler(li, i, k, &[rgb[0] as f32, rgb[1] as f32, rgb[2] as f32], false);
                                 self.select_fx(i);
                             }
                             ui.end_row();
@@ -825,18 +855,10 @@ impl App {
                             self.edited(&resp)
                         };
                         if changed {
-                            let mut new = values.clone();
-                            new[k] = v;
-                            let auto = self.fx_auto_key;
-                            let effect = &mut self.layers_mut()[li].fx[i];
-                            if matches!(e.kind.param_style(k), crate::fx::ParamStyle::Switch | crate::fx::ParamStyle::Nib) {
-                                // (Un interrupteur ou un choix ne s'anime pas : il vaut pour toutes les clés.)
-                                effect.set_param(k, v);
-                            } else if auto || !effect.keys.is_empty() {
-                                effect.set_key(f, new);
-                            } else {
-                                effect.values = new;
-                            }
+                            // (Un interrupteur ou un choix ne s'anime pas : il vaut pour toutes les clés. Et sur l'effet de même sorte des
+                            // autres calques choisis, partie 136.)
+                            let fige = matches!(e.kind.param_style(k), crate::fx::ParamStyle::Switch | crate::fx::ParamStyle::Nib);
+                            self.fx_regler(li, i, k, &[v], fige);
                             self.select_fx(i);
                         }
                         ui.end_row();

@@ -101,7 +101,7 @@ fn dessin(doc: &mut Document, c: Contenu) -> CelId {
 }
 
 /// La hauteur de la ligne du calque `i` (les contenus des calques ne se touchent pas).
-fn y_de(i: usize) -> f32 {
+pub(crate) fn y_de(i: usize) -> f32 {
     60.0 + 45.0 * i as f32
 }
 
@@ -116,7 +116,7 @@ fn contenu(kind: LayerKind, i: usize) -> Contenu {
 
 /// Un plan de quatre images, un calque par sorte donnée (une seule clé, tenue sur tout le plan), dans l'espace Animation ; le
 /// calque 0 est le courant, tous les autres sont choisis (Ctrl + clic dans le panneau Calques). L'outil donné.
-fn banc(kinds: &[LayerKind], tool: Tool) -> Banc {
+pub(crate) fn banc(kinds: &[LayerKind], tool: Tool) -> Banc {
     let mut doc = Document::new(W, H, 24);
     doc.panels[0].layers.clear();
     doc.panels[0].length = 4;
@@ -185,7 +185,7 @@ fn encre(b: &Banc, cel: CelId, p: Pos2) -> bool {
     }
 }
 
-fn etapes(b: &Banc) -> usize {
+pub(crate) fn etapes(b: &Banc) -> usize {
     b.app.history.names().0.len()
 }
 
@@ -981,7 +981,7 @@ fn cout_dix_calques_vingt_cles() {
 
 /// Quatre images ; un calque vectoriel (courant), un bitmap avec un aplat, un calque de couleur (non lié), et un quatrième
 /// vectoriel : chacun une clé à l'image 0, tenue jusqu'au bout. Les quatre calques sont choisis.
-fn banc_quatre_sortes() -> Banc {
+pub(crate) fn banc_quatre_sortes() -> Banc {
     let mut doc = Document::new(W, H, 24);
     doc.panels[0].layers.clear();
     doc.panels[0].length = 4;
