@@ -41,6 +41,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   avec de faux réglages : jalon d'ouverture posé en 1,5 s (300 fichiers, en liens), aucun fichier du projet changé, pas de second
   jalon au second lancement, arrêt brutal sans reste. Pas fait : le fichier de projet unique (étape à part), l'annulation qui survit
   à la fermeture. Pas fusionné : attend son essai et son accord.
+- L'autre session a fusionné dans main `vignettes-ctrl-a` (d07678e, partie 134) puis `selection-tout-2` (d3662ef, partie 136) et l'a
+  rappelé : main fusionné dans `sans-enregistrer` (d7f1761), seul conflit dans docs/INTERFACE.md (parties rangées 134, 135, 136).
+  Vérifié dans le code reçu : ni fil, ni canal, ni travail de fond nouveau, donc rien à ajouter à `App::continu_retenu`. Vérificateur
+  sur la branche : 4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (785 s). L'exe de la branche n'a pas été
+  reconstruit : la version portable du soir (dac56c7) reste celle de son essai. Toujours pas fusionné : attend son essai et son accord.
 
 ## 2026-11-09
 
