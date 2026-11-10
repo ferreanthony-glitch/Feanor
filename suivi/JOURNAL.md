@@ -46,6 +46,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   Vérifié dans le code reçu : ni fil, ni canal, ni travail de fond nouveau, donc rien à ajouter à `App::continu_retenu`. Vérificateur
   sur la branche : 4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (785 s). L'exe de la branche n'a pas été
   reconstruit : la version portable du soir (dac56c7) reste celle de son essai. Toujours pas fusionné : attend son essai et son accord.
+- Sur son « Fusionne directement » : `sans-enregistrer` fusionné dans main (6093d46, sans avance rapide), l'autre session prévenue
+  avant ; main n'avait pas bougé depuis d3662ef : aucun conflit, contenu identique à la branche vérifiée. Vérificateur sur main :
+  4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (732 s). Poussé sur GitHub. Exe principal reconstruit
+  (`target\release\feanor.exe`, FEANOR n'était pas ouvert) et ouvert deux fois sur une copie d'afa avec de faux réglages : pas de
+  plantage, jalon d'ouverture posé au premier lancement (300 fichiers), aucun fichier du projet changé, pas de second jalon au
+  second lancement, arrêt brutal sans reste. Il n'a pas essayé la version portable avant : le stylet pendant l'écriture continue
+  reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` attend son accord pour être retiré.
 
 ## 2026-11-09
 
