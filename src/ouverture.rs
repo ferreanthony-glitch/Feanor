@@ -176,12 +176,16 @@ impl App {
                     format!("Ouvert avec {} remarque{} : {}", loaded.warnings.len(), if loaded.warnings.len() > 1 { "s" } else { "" }, loaded.warnings.join(" ; "))
                 };
                 if loaded.converted {
-                    // Rien n'est réécrit sur le disque avant « Enregistrer ».
+                    // Rien n'est réécrit sur le disque avant « Enregistrer » ; avec l'écriture continue, pas avant le jalon de
+                    // l'ouverture, qui garde le projet dans son ancien format (`jalon_d_ouverture`, plus bas).
                     self.modified = true;
-                    self.status.push_str(
+                    self.status.push_str(if self.settings.enregistrer_en_continu {
                         " — Ancien format : la feuille de dessin a été agrandie autour du cadre (même cadrage). \
-                         « Enregistrer » le passe au nouveau format.",
-                    );
+                         Le projet passe au nouveau format ; l'ancien est gardé dans un jalon (Fichier > Jalons…)."
+                    } else {
+                        " — Ancien format : la feuille de dessin a été agrandie autour du cadre (même cadrage). \
+                         « Enregistrer » le passe au nouveau format."
+                    });
                 }
                 self.remember_project(&path);
                 if let Some(m) = status_partage {
@@ -196,6 +200,8 @@ impl App {
                         }
                     }
                     self.path = Some(path);
+                    // L'écriture continue : le projet tel qu'on vient de l'ouvrir est gardé dans un jalon, avant qu'elle n'y touche.
+                    self.jalon_d_ouverture();
                 }
             }
             Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),

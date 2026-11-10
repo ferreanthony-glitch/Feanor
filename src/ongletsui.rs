@@ -39,7 +39,9 @@ impl App {
             None if info.vierge => "L'accueil : Nouveau, Ouvrir ou un projet récent.".to_string(),
             None => "Pas encore enregistré sur le disque.".to_string(),
         };
-        let etat = if info.ecriture {
+        let etat = if info.continu {
+            " FEANOR l'écrit en continu."
+        } else if info.ecriture {
             " Enregistrement en cours."
         } else if info.modifie {
             " Modifié depuis le dernier enregistrement."
@@ -124,7 +126,7 @@ impl App {
                                 // La pastille d'un projet pas enregistré (jade dans Gris sombre), puis le nom.
                                 let encre = if info.actif { pal.texte_fort } else { pal.texte_doux };
                                 let mut x = rect.left() + 9.0;
-                                if info.a_perdre() {
+                                if info.pastille() {
                                     painter.circle_filled(pos2(x + 3.0, rect.center().y), 3.0, if pal.jade_discret { pal.rehaut } else { pal.avertissement });
                                     x += 12.0;
                                 }

@@ -57,7 +57,8 @@ const fn act(id: &'static str, label: &'static str, implemented: bool, repeat: b
 pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.nouveau", "Nouveau projet", true, false),
     act("fichier.ouvrir", "Ouvrir", true, false),
-    act("fichier.enregistrer", "Enregistrer", true, false),
+    act("fichier.enregistrer", "Enregistrer, ou poser un jalon", true, false),
+    act("fichier.jalons", "Jalons du projet", true, false),
     act("fichier.enregistrer_sous", "Enregistrer sous", true, false),
     act("fichier.afficher_explorateur", "Afficher le projet dans l'Explorateur Windows", true, false),
     act("fichier.fermer", "Fermer le projet (l'onglet)", true, false),

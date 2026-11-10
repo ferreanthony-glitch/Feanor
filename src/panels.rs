@@ -126,7 +126,10 @@ impl App {
                 self.action_item(ui, "Nouveau…", "fichier.nouveau");
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
                 ui.menu_button("Projets récents", |ui| self.recent_menu(ui));
-                self.action_item(ui, "Enregistrer", "fichier.enregistrer");
+                // (Avec l'écriture continue, le projet est déjà sur le disque : la même commande pose un jalon, `continu.rs`.)
+                let enregistrer = if self.continu_actif() { "Poser un jalon" } else { "Enregistrer" };
+                self.action_item(ui, enregistrer, "fichier.enregistrer");
+                self.action_item(ui, "Jalons…", "fichier.jalons");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
                 self.action_item(ui, "Nouvel onglet", "onglet.nouveau");
@@ -838,6 +841,7 @@ impl App {
             ui.label(format!("{:.0} %", self.view.zoom * self.ppp * 100.0)).on_hover_text("Zoom de la vue (la loupe, sous le dessin, le règle).");
             self.fusion_status_ui(ui);
             self.save_status_ui(ui);
+            self.continu_status_ui(ui);
             self.recovery_status_ui(ui);
             self.cooperation_status_ui(ui);
             // Pendant la lecture : la cadence vraiment affichée (orange si la machine ne suit pas).

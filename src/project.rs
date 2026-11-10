@@ -273,6 +273,14 @@ const TEXTURES: &str = "textures";
 /// Formats de son acceptés à l'import.
 pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 
+/// Les dossiers d'un projet dont les fichiers ne sont jamais modifiés sur place : un dessin se réécrit à côté puis prend sa
+/// place d'un renommage (`write_atomic`), un son, une texture, une image collée et une image de vidéo ne changent jamais
+/// sous le même nom. Un jalon (`jalons.rs`) peut donc en garder un second nom sur le disque (lien physique) au lieu d'une
+/// copie : ce que FEANOR écrit ensuite ne touche pas à ce que le jalon voit.
+pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 5] {
+    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER]
+}
+
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Manifest {
     format: String,

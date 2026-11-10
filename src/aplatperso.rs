@@ -137,8 +137,7 @@ pub(crate) struct Etat {
 }
 
 impl Etat {
-    /// Essais : un changement est retenu ou un calcul est en route.
-    #[cfg(test)]
+    /// Un changement est retenu ou un calcul est en route (les essais ; l'écriture continue, qui attend qu'il soit posé : `continu.rs`).
     pub(crate) fn occupe(&self) -> bool {
         self.attente.is_some() || self.en_route > 0
     }
