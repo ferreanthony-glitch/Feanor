@@ -229,14 +229,14 @@ impl App {
                     }
                     if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
                         ui.close_menu();
-                        self.set_layer_flag(li, |l| l.blend = m);
+                        self.regler_mode_calques(li, m);
                     }
                 }
             });
         }
         ui.menu_button("Couleur d'étiquette", |ui| self.group_menu(ui, li));
         if !folder && ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
-            self.set_layer_flag(li, |l| l.onion = !onion);
+            self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
         }
     }
 
@@ -323,14 +323,14 @@ impl App {
             self.set_layer_flag(li, |l| l.keep_alpha = !keep_alpha);
         }
         if ui.checkbox(&mut stencil.clone(), "Pochoir").on_hover_text("Le dessin de ce calque limite où l'on peint sur les autres calques.").clicked() {
-            self.set_layer_flag(li, |l| l.stencil = !stencil);
+            self.basculer_calques(li, "Pochoir", |l| l.stencil, |l, v| l.stencil = v, false);
         }
         if ui
             .add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"))
             .on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.")
             .clicked()
         {
-            self.set_layer_flag(li, |l| l.stencil_negative = !negative);
+            self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
         }
         if ui
             .checkbox(&mut fixed.clone(), "Verrouiller la position")

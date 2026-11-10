@@ -433,7 +433,12 @@ impl MultiSel {
         }
         let Some(p) = doc.panels.get(panel) else { return false };
         self.parts.iter().all(|part| {
-            let Some(layer) = p.layers.iter().find(|l| l.id == part.layer) else { return false };
+            let Some(li) = p.layers.iter().position(|l| l.id == part.layer) else { return false };
+            let layer = &p.layers[li];
+            // (Un calque verrouillé depuis la prise : la sélection n'y vaut plus, partie 136.)
+            if layer.locked || crate::folders::locked_by_folder(&p.layers, li) {
+                return false;
+            }
             if layer.cel_at(part.frame) != Some(part.cel) {
                 return false;
             }

@@ -430,7 +430,9 @@ impl App {
     /// Pelure d'oignon du calque courant, allumée ou éteinte.
     pub(crate) fn toggle_layer_onion(&mut self) {
         let li = self.cur_layer;
-        self.set_layer_flag(li, |l| l.onion = !l.onion);
+        if self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false) >= 2 {
+            return;
+        }
         let on = self.layer().onion;
         self.status = format!("Pelure d'oignon du calque : {}.", if on { "allumée" } else { "éteinte" });
     }

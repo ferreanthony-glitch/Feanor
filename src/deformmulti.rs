@@ -93,6 +93,11 @@ pub(crate) struct DeformMulti {
 }
 
 impl DeformMulti {
+    /// La séance touche-t-elle l'un des calques `ids` ?
+    pub(crate) fn touche(&self, ids: &[u64]) -> bool {
+        self.parts.iter().any(|p| ids.contains(&p.layer))
+    }
+
     /// Un geste est en cours sur le dessin `cel` (son image est l'aperçu).
     pub(crate) fn busy_on(&self, cel: CelId) -> bool {
         self.drag.is_some() && self.parts.iter().any(|p| p.cel == cel)
@@ -466,6 +471,17 @@ impl App {
         self.deform_multi = None;
     }
 
+    /// Termine la séance sans rien écrire : un geste en cours rend à chaque dessin son image d'avant le geste (partie 136 : un
+    /// calque de la séance vient d'être verrouillé).
+    pub(crate) fn deform_multi_abandonner(&mut self) {
+        if let Some(mut d) = self.deform_multi.take() {
+            if d.drag.take().is_some() {
+                self.deform_multi_restaurer(&mut d);
+            }
+        }
+        self.status = "Déformation des calques choisis terminée : un de leurs calques est verrouillé.".into();
+    }
+
     /// Entrée ou Échap terminent la séance ; vrai si la touche a servi.
     pub(crate) fn deform_multi_key(&mut self, key: Key) -> bool {
         if self.deform_multi.is_none() || !matches!(key, Key::Enter | Key::Escape) {
@@ -491,6 +507,14 @@ impl App {
         if !ok {
             self.deform_multi_fermer();
             return;
+        }
+        // Un calque de la séance verrouillé (cadenas, dossier verrouillé) : elle se ferme sans rien écrire.
+        if let Some(panel) = self.doc.panels.get(d.panel) {
+            let verrou = d.parts.iter().any(|p| panel.layers.iter().position(|l| l.id == p.layer).is_some_and(|li| panel.layers[li].locked || crate::folders::locked_by_folder(&panel.layers, li)));
+            if verrou {
+                self.deform_multi_abandonner();
+                return;
+            }
         }
         // Un dessin de la séance a changé hors d'elle (une clé posée ou effacée, une position, un trait) : son original est
         // périmé. La séance se termine sans rien écrire, pour ne rien perdre de ce changement. (Pendant un geste, l'aperçu change

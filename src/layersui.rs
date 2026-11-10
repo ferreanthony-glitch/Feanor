@@ -253,9 +253,7 @@ impl App {
         // Calque Couleur unie : sa couleur, avec les réglages du calque.
         self.couleur_unie_ui(ui);
         if mode != self.layers()[li].blend {
-            self.record_step();
-            self.layers_mut()[li].blend = mode;
-            self.renderer.invalidate_all();
+            self.regler_mode_calques(li, mode);
         }
         ui.add_space(2.0);
         ui.separator();

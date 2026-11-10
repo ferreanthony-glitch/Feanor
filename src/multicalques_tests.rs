@@ -28,7 +28,7 @@ fn bouton(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
 }
 
 /// Un glissé du pointeur sur les points de la feuille `pts`, une image d'écran par point.
-fn glisser(b: &mut Banc, pts: &[Pos2]) {
+pub(crate) fn glisser(b: &mut Banc, pts: &[Pos2]) {
     let p0 = ecran(b, pts[0]);
     b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
     b.image(vec![bouton(p0, true, Modifiers::NONE)], 1.0 / 60.0);
@@ -42,12 +42,12 @@ fn glisser(b: &mut Banc, pts: &[Pos2]) {
 }
 
 /// Un glissé en ligne droite de `a` à `z`, en `n` pas.
-fn ligne(a: Pos2, z: Pos2, n: usize) -> Vec<Pos2> {
+pub(crate) fn ligne(a: Pos2, z: Pos2, n: usize) -> Vec<Pos2> {
     (0..=n).map(|k| a + (z - a) * (k as f32 / n as f32)).collect()
 }
 
 /// Un clic sur le point de la feuille `p`.
-fn clic(b: &mut Banc, p: Pos2) {
+pub(crate) fn clic(b: &mut Banc, p: Pos2) {
     glisser(b, &[p, p]);
 }
 
@@ -101,7 +101,7 @@ fn dessin(doc: &mut Document, c: Contenu) -> CelId {
 }
 
 /// La hauteur de la ligne du calque `i` (les contenus des calques ne se touchent pas).
-fn y_de(i: usize) -> f32 {
+pub(crate) fn y_de(i: usize) -> f32 {
     60.0 + 45.0 * i as f32
 }
 
@@ -116,7 +116,7 @@ fn contenu(kind: LayerKind, i: usize) -> Contenu {
 
 /// Un plan de quatre images, un calque par sorte donnée (une seule clé, tenue sur tout le plan), dans l'espace Animation ; le
 /// calque 0 est le courant, tous les autres sont choisis (Ctrl + clic dans le panneau Calques). L'outil donné.
-fn banc(kinds: &[LayerKind], tool: Tool) -> Banc {
+pub(crate) fn banc(kinds: &[LayerKind], tool: Tool) -> Banc {
     let mut doc = Document::new(W, H, 24);
     doc.panels[0].layers.clear();
     doc.panels[0].length = 4;
@@ -147,7 +147,7 @@ fn ouvrir(doc: Document, tool: Tool, choisis: usize) -> Banc {
     b
 }
 
-fn cel_de(b: &Banc, li: usize, f: usize) -> CelId {
+pub(crate) fn cel_de(b: &Banc, li: usize, f: usize) -> CelId {
     b.app.doc.panels[0].layers[li].cel_at(f).expect("un dessin")
 }
 
@@ -185,12 +185,12 @@ fn encre(b: &Banc, cel: CelId, p: Pos2) -> bool {
     }
 }
 
-fn etapes(b: &Banc) -> usize {
+pub(crate) fn etapes(b: &Banc) -> usize {
     b.app.history.names().0.len()
 }
 
 /// Ce que contient un dessin, pour comparer avant et après.
-fn empreinte(b: &Banc, cel: CelId) -> (Vec<Pos2>, Vec<Option<crate::raster::Tile>>) {
+pub(crate) fn empreinte(b: &Banc, cel: CelId) -> (Vec<Pos2>, Vec<Option<crate::raster::Tile>>) {
     let c = &b.app.doc.cels[&cel];
     match &c.vector {
         Some(d) => (pointes(d), Vec::new()),
@@ -199,7 +199,7 @@ fn empreinte(b: &Banc, cel: CelId) -> (Vec<Pos2>, Vec<Option<crate::raster::Tile
 }
 
 /// Les images jusqu'au repos (rendus exacts en arrière-plan compris).
-fn repos(b: &mut Banc) {
+pub(crate) fn repos(b: &mut Banc) {
     crate::perf_tests::jusqu_au_repos(b, 200);
 }
 
@@ -295,7 +295,7 @@ fn an_erased_set_of_layers_is_the_same_once_saved_and_reopened() {
 
 /// Un calque bitmap plein (x 100..300, y 100..200) et un calque vectoriel (un trait en y = 150 de 120 à 280) : leur boîte
 /// commune est celle du bitmap, coins (100, 100) et (300, 200).
-fn banc_deformer(mode: DeformMode, courant: usize) -> Banc {
+pub(crate) fn banc_deformer(mode: DeformMode, courant: usize) -> Banc {
     let mut doc = Document::new(W, H, 24);
     doc.panels[0].layers.clear();
     doc.panels[0].length = 4;
@@ -981,7 +981,7 @@ fn cout_dix_calques_vingt_cles() {
 
 /// Quatre images ; un calque vectoriel (courant), un bitmap avec un aplat, un calque de couleur (non lié), et un quatrième
 /// vectoriel : chacun une clé à l'image 0, tenue jusqu'au bout. Les quatre calques sont choisis.
-fn banc_quatre_sortes() -> Banc {
+pub(crate) fn banc_quatre_sortes() -> Banc {
     let mut doc = Document::new(W, H, 24);
     doc.panels[0].layers.clear();
     doc.panels[0].length = 4;

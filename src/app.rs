@@ -3290,8 +3290,27 @@ impl App {
         self.drop_bitmap_selection();
         self.vsel = None;
         self.record_step();
+        // (Le calque est dans le choix : tous les calques choisis prennent l'inverse de son état, partie 136.)
+        let lis = self.calques_du_geste(li);
+        if lis.len() >= 2 {
+            let v = !self.layers()[li].locked;
+            for &k in &lis {
+                self.layers_mut()[k].locked = v;
+            }
+            self.status = format!("{} calques {}.", lis.len(), if v { "verrouillés" } else { "déverrouillés" });
+            if v {
+                let ids: Vec<u64> = lis.iter().filter_map(|&k| self.layers().get(k).map(|l| l.id)).collect();
+                self.apres_verrou(&ids);
+            }
+            return;
+        }
         let layer = &mut self.layers_mut()[li];
         layer.locked = !layer.locked;
+        if layer.locked {
+            let id = layer.id;
+            self.apres_verrou(&[id]);
+        }
+        let layer = &self.layers()[li];
         self.status = format!(
             "Calque « {} » {}.",
             layer.name,
@@ -4609,6 +4628,10 @@ impl App {
             }
             // Dans la timeline : toutes les images de tous les calques (audit A2).
             "edition.tout_selectionner" if self.images_focus => self.select_whole_timeline(),
+            // Dans les Vignettes : le choix de la planche, traits entiers et papier compris (partie 134).
+            // (L'aplat visé par l'outil Sélection, et les clés choisies, gardent leur chemin : `select_all` → `multi_select_all`.)
+            "edition.tout_selectionner" if self.selp_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selp_tout(),
+            "edition.tout_selectionner" if self.selb_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selb_tout(),
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();
