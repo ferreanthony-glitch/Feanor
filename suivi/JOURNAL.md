@@ -3,6 +3,14 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-11
+
+- Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on
+  monte ou descend ; la rangée des plans trop épaisse) numérotées 39 et 40 et maquettées sur la page des propositions. Avis donné :
+  oui aux deux ; le calque actif toujours au milieu, deux fines bandes qui comptent les autres, un bouton « Toute la pile » ; la
+  hauteur des plans réglable en tirant son bord, jusqu'au bandeau, retenue par onglet (`montage_rows` donne aujourd'hui aux plans la
+  place qui reste, entre 56 et 170 points). La 39 remplace la 37. Rien de codé : attend son accord.
+
 ## 2026-11-10
 
 - Fusion de `camera-souvient` dans main (35a6e42, sans avance rapide), après l'essai d'Anthony dans la version portable du 9 novembre et
