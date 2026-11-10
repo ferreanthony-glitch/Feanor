@@ -53,8 +53,9 @@ struct Entry {
     waiting: Option<u64>,
     /// Numéro de la demande dont elle vient (une réponse plus ancienne ne la remplace pas).
     seq: u64,
-    /// Pixels de marge autour du cadre dans l'image (la planche : le trait qui déborde un peu, `texture_case`) ; zéro ailleurs.
-    marge: usize,
+    /// Pixels de marge autour du cadre dans l'image, par côté (à gauche, en haut, à droite, en bas ; la planche : le dessin de la case hors de
+    /// son cadre, jusqu'où il va, `texture_case`) ; zéro ailleurs.
+    marges: [usize; 4],
     /// La géométrie pour laquelle elle a été composée (la tuile d'un mouvement de caméra) : l'image montre ce qu'elle a montré, à la
     /// place qu'elle avait, même si les cadres ont bougé depuis.
     geom: Option<Geom>,
@@ -86,12 +87,13 @@ pub const LARGEURS_GARDEES: usize = 2;
 /// Une vignette montrée à l'une de ces dernières passes d'egui est à l'écran : elle ne part jamais.
 const PASSES_A_L_ECRAN: u64 = 2;
 
-/// La vignette d'une case de la planche : sa texture, et la marge (en pixels de la texture) qu'elle porte tout autour du
-/// cadre, où seul le trait qui déborde est peint (le reste est transparent).
+/// La vignette d'une case de la planche : sa texture, et les marges (en pixels de la texture : à gauche, en haut, à droite, en bas) qu'elle
+/// porte autour du cadre, où seul le dessin est peint (le reste est transparent). Depuis la partie 131 elles vont jusqu'où va le dessin du
+/// plan : la case le montre en entier, son cadre ne coupe rien sur la planche (`render::marges_de_l_encre`).
 #[derive(Clone, Copy, Debug)]
 pub struct CaseTex {
     pub id: TextureId,
-    pub marge: usize,
+    pub marges: [usize; 4],
     /// La taille de la texture entière, marge comprise.
     pub taille: [usize; 2],
     /// La géométrie de la tuile pour laquelle cette texture a été composée (rien pour une case ordinaire).
@@ -122,8 +124,10 @@ impl Geom {
 impl CaseTex {
     /// Le rectangle de la texture entière à l'écran, la case (le cadre) étant `thumb`.
     pub fn rect(&self, thumb: egui::Rect) -> egui::Rect {
-        let (tw, th) = (self.taille[0].saturating_sub(2 * self.marge).max(1) as f32, self.taille[1].saturating_sub(2 * self.marge).max(1) as f32);
-        thumb.expand2(egui::vec2(self.marge as f32 * thumb.width() / tw, self.marge as f32 * thumb.height() / th))
+        let [g, h, d, b] = self.marges;
+        let (tw, th) = (self.taille[0].saturating_sub(g + d).max(1) as f32, self.taille[1].saturating_sub(h + b).max(1) as f32);
+        let (kx, ky) = (thumb.width() / tw, thumb.height() / th);
+        egui::Rect::from_min_max(thumb.min - egui::vec2(g as f32 * kx, h as f32 * ky), thumb.max + egui::vec2(d as f32 * kx, b as f32 * ky))
     }
 }
 
@@ -178,6 +182,11 @@ pub struct Thumbs {
     /// Le débord du trait hors de sa case, en part de la largeur d'une case (Préférences > Vignettes) ; rien : `RING_FRACTION`.
     /// Il fait partie de la clé de la vignette (la marge en pixels) : le changer refait les cases, sur les fils de fond.
     pub debord: Option<f32>,
+    /// Le numéro de l'état du projet (`History::serial`), posé par la planche à chaque image d'écran (`regler_serie`) : ce qu'on sait du
+    /// débord d'une case ne vaut que pour lui (`debord_de_case`).
+    serie: u64,
+    /// Jusqu'où va le dessin de chaque case de la planche hors de son cadre, calculé une fois par état du projet (`debord_de_case`).
+    debords: HashMap<u64, [f32; 4]>,
     /// Essais : une autre limite que `LIMITE_OCTETS`.
     #[cfg(test)]
     pub limite: Option<u64>,
@@ -348,7 +357,7 @@ impl Thumbs {
                 e.key = d.key;
                 e.waiting = d.waiting;
                 e.seq = d.seq;
-                e.marge = d.marge;
+                e.marges = d.marges;
                 e.geom = d.geom;
                 e.used = e.used.max(pass);
             }
@@ -363,7 +372,7 @@ impl Thumbs {
                         texture,
                         waiting: d.waiting,
                         seq: d.seq,
-                        marge: d.marge,
+                        marges: d.marges,
                         geom: d.geom,
                         used: pass,
                         #[cfg(test)]
@@ -444,6 +453,8 @@ impl Thumbs {
         deadline: Instant,
     ) -> Option<CaseTex> {
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
+        // (Les dessins que la case n'est pas seule à montrer ne font pas s'étendre sa vignette, partie 131.)
+        let communs = render::dessins_communs(doc, panel, frame);
         match zone {
             Some((zone, enveloppe, part_case)) => {
                 let cadre = [zone.taille.x.round().clamp(1.0, 16384.0) as usize, zone.taille.y.round().clamp(1.0, 16384.0) as usize];
@@ -452,11 +463,11 @@ impl Thumbs {
                 let moitie = eframe::egui::vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
                 let masque: Vec<eframe::egui::Pos2> = enveloppe.iter().map(|p| ((*p - zone.centre) + moitie).to_pos2()).collect();
                 let geom = Geom::de(zone, enveloppe);
-                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT), plan, cam, width, cadre, true, Some(masque), Some((geom, part_case)), deadline)
+                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT), plan, cam, width, cadre, true, communs, Some(masque), Some((geom, part_case)), deadline)
             }
             None => {
                 let cam = doc.panel_camera(panel, frame);
-                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, None, None, deadline)
+                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, communs, None, None, deadline)
             }
         }
     }
@@ -464,12 +475,13 @@ impl Thumbs {
     /// `frame` : la taille du cadre filmé (celle du projet, ou celle d'une zone, `texture_case`).
     #[allow(clippy::too_many_arguments)]
     fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], deadline: Instant) -> Option<TextureId> {
-        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, None, None, deadline).map(|c| c.id)
+        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, Vec::new(), None, None, deadline).map(|c| c.id)
     }
 
-    /// Comme `texture_of` ; `avec_marge` : l'image porte une marge autour du cadre (`texture_case`).
+    /// Comme `texture_of` ; `avec_marge` : l'image porte une marge autour du cadre (`texture_case`). `communs` : les dessins que la case
+    /// n'est pas seule à montrer (`render::dessins_communs`), que sa vignette ne montre pas au-delà de sa marge ordinaire.
     #[allow(clippy::too_many_arguments)]
-    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, masque: Option<Vec<eframe::egui::Pos2>>, geom: Option<(Geom, f32)>, deadline: Instant) -> Option<CaseTex> {
+    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, communs: Vec<crate::document::CelId>, masque: Option<Vec<eframe::egui::Pos2>>, geom: Option<(Geom, f32)>, deadline: Instant) -> Option<CaseTex> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
         // (La marge : 12 % de la largeur d'une case. Une tuile est plus large qu'une case : `part_case` est la part de sa largeur que fait une case.)
@@ -488,6 +500,8 @@ impl Thumbs {
             .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64, marge as u64])
             // (Et l'enveloppe de la tuile : elle change la forme du papier.)
             .chain(masque.iter().flatten().flat_map(|p| [p.x.to_bits() as u64, p.y.to_bits() as u64]))
+            // (Et les dessins communs : un calque qui devient partagé, une marque d'image de plus, changent ce que la case montre loin d'elle.)
+            .chain(communs.iter().map(|c| *c ^ 0x5eed_c0de_0000_0000))
             .collect();
         let key = Key::Plan(plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let generation = crate::fxcache::generation();
@@ -499,7 +513,7 @@ impl Thumbs {
                     let Key::Plan(plan, _, _) = key else { unreachable!("une clé de plan") };
                     let mut mini = snapshot(doc, plan);
                     mini.frame = frame;
-                    Work::Plan { doc: mini, cam, size, marge, masque: masque.clone(), generation, geom }
+                    Work::Plan { doc: mini, cam, size, marge, communs: communs.clone(), masque: masque.clone(), generation, geom }
                 });
             } else {
                 self.pending = true;
@@ -509,7 +523,39 @@ impl Thumbs {
         let shown = if self.entries.contains_key(&slot) { Some(slot) } else { self.entries.keys().find(|k| k.0 == id).copied() };
         let e = self.entries.get_mut(&shown?)?;
         e.used = ctx.cumulative_pass_nr();
-        Some(CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom })
+        Some(CaseTex { id: e.texture.id(), marges: e.marges, taille: e.texture.size(), geom: e.geom })
+    }
+
+    /// L'état du projet à cette image d'écran (`History::serial`) : s'il a changé, ce qu'on savait du débord des cases ne vaut plus.
+    pub fn regler_serie(&mut self, serie: u64) {
+        if self.serie != serie {
+            self.serie = serie;
+            self.debords.clear();
+        }
+    }
+
+    /// Jusqu'où va le dessin de la case `id` de la planche (l'image `frame` du plan `panel` ; `zone` : la tuile d'un mouvement de caméra) **hors
+    /// de son cadre**, de chaque côté, en parts de la largeur (à gauche, à droite) et de la hauteur (en haut, en bas) du cadre ou de la zone.
+    /// La planche s'en sert pour savoir si la vignette d'une case hors de la vue y arrive par son dessin, **sans la demander** (partie 131 :
+    /// une case montre son dessin jusqu'où il va). Calculé ici, sur le fil de l'interface (le plan et la boîte de ses tuiles dessinées :
+    /// quelques dizaines de microsecondes, aucun pixel lu), une fois par état du projet. Un premier jet le lisait sur la vignette gardée : sous
+    /// la limite de mémoire, une case hors de la vue était redemandée, recomposée et relâchée sans fin.
+    pub fn debord_de_case(&mut self, doc: &Document, panel: usize, frame: usize, id: u64, zone: Option<&crate::vignettecam::Zone>) -> [f32; 4] {
+        let cle = if zone.is_some() { id | ZONE_BIT } else { id };
+        if let Some(d) = self.debords.get(&cle) {
+            return *d;
+        }
+        let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
+        let (cam, cadre) = match zone {
+            Some(z) => (Camera { x: z.centre.x, y: z.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 }, [z.taille.x.round().clamp(1.0, 16384.0) as usize, z.taille.y.round().clamp(1.0, 16384.0) as usize]),
+            None => (doc.panel_camera(panel, frame), doc.frame),
+        };
+        let (fw, fh) = (cadre[0].max(1) as f32, cadre[1].max(1) as f32);
+        // (Sans les dessins que la case n'est pas seule à montrer : ils ne font pas s'étendre sa vignette.)
+        let communs = render::dessins_communs(doc, panel, frame);
+        let d = render::debord_de_l_encre(doc, &plan, &cam, cadre, &communs).map_or([0.0; 4], |d| [d[0] / fw, d[1] / fh, d[2] / fw, d[3] / fh]);
+        self.debords.insert(cle, d);
+        d
     }
 
     pub fn prune(&mut self, doc: &Document) {
@@ -528,6 +574,7 @@ impl Thumbs {
     /// les calculs en cours et les images déjà finies qui n'ont pas été envoyées.
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.debords.clear();
         if let Some(pool) = &self.pool {
             pool.shared.reset();
         }
@@ -555,17 +602,17 @@ impl Thumbs {
         self.outstanding() > 0
     }
 
-    /// L'image que la vignette de la case `id` de la planche montre, et sa marge en pixels (essais).
+    /// L'image que la vignette de la case `id` de la planche montre, et ses marges en pixels (à gauche, en haut, à droite, en bas ; essais).
     #[cfg(test)]
-    pub(crate) fn case_image_of(&self, id: u64, width: usize) -> Option<(&ColorImage, usize)> {
-        self.entries.get(&(id | CASE_BIT, width)).map(|e| (&e.image, e.marge))
+    pub(crate) fn case_image_of(&self, id: u64, width: usize) -> Option<(&ColorImage, [usize; 4])> {
+        self.entries.get(&(id | CASE_BIT, width)).map(|e| (&e.image, e.marges))
     }
 
     /// La texture de la tuile (mouvement de caméra) de la case `id` de la planche, à n'importe quelle largeur (essais).
     #[cfg(test)]
     pub(crate) fn case_texs_of(&self, id: u64) -> Vec<CaseTex> {
         let slot_id = id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT);
-        self.entries.iter().filter(|(k, _)| k.0 == slot_id).map(|(_, e)| CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom }).collect()
+        self.entries.iter().filter(|(k, _)| k.0 == slot_id).map(|(_, e)| CaseTex { id: e.texture.id(), marges: e.marges, taille: e.texture.size(), geom: e.geom }).collect()
     }
 
     /// L'image que la vignette `slot` montre (essais).
@@ -659,9 +706,11 @@ pub(crate) fn cel_thumbnail(raster: &Raster, fr: egui::Rect, w: usize, h: usize)
 /// Ce qu'un fil compose.
 pub(crate) enum Work {
     /// La vignette d'un plan sur son cliché (la clé porte le plan).
-    /// `marge` : pixels autour de l'image où seul le dessin (pas le papier) est composé ; l'image entière fait donc
-    /// `size` + deux marges.
-    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, masque: Option<Vec<eframe::egui::Pos2>>, generation: u64, geom: Option<Geom> },
+    /// `marge` : pixels autour de l'image, au moins, où seul le dessin (pas le papier) est composé. Non nulle (une case de la planche), elle
+    /// s'étend de chaque côté jusqu'où va le dessin du plan (`render::marges_de_l_encre`, calculé par le fil de fond) : l'image entière fait
+    /// `size` plus ses marges (`Done::marges`). `communs` : les dessins que la case n'est pas seule à montrer (`render::dessins_communs`) :
+    /// ils ne font pas s'étendre la marge et ne sont pas composés au-delà de `marge`.
+    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, communs: Vec<crate::document::CelId>, masque: Option<Vec<eframe::egui::Pos2>>, generation: u64, geom: Option<Geom> },
     /// La miniature d'un dessin.
     Cel { raster: Raster, frame: egui::Rect, size: (usize, usize) },
 }
@@ -702,8 +751,8 @@ pub(crate) struct Done {
     /// Quelque chose manquait quand elle a été faite : le compteur de calculs de fond à partir duquel
     /// elle se refait (`Entry::waiting`).
     pub(crate) waiting: Option<u64>,
-    /// La marge de l'image autour du cadre (`Work::Plan::marge`).
-    pub(crate) marge: usize,
+    /// Les marges de l'image autour du cadre : à gauche, en haut, à droite, en bas (`Work::Plan::marge`, étendue au dessin du plan).
+    pub(crate) marges: [usize; 4],
     /// La géométrie de la tuile pour laquelle elle est composée (`Work::Plan::geom`).
     pub(crate) geom: Option<Geom>,
 }
@@ -949,7 +998,11 @@ fn worker(shared: &Shared) {
                     Work::Plan { size, marge, .. } => (size.0 + 2 * marge, size.1 + 2 * marge),
                     Work::Cel { size, .. } => *size,
                 };
-                Some((ColorImage { size: [w, h], pixels: vec![Color32::TRANSPARENT; w * h] }, None))
+                let marges = match &job.work {
+                    Work::Plan { marge, .. } => [*marge; 4],
+                    Work::Cel { .. } => [0; 4],
+                };
+                Some((ColorImage { size: [w, h], pixels: vec![Color32::TRANSPARENT; w * h] }, None, marges))
             }
         };
         #[cfg(test)]
@@ -965,13 +1018,13 @@ fn worker(shared: &Shared) {
             if ancien {
                 q.running.retain(|r| r.seq != job.seq);
             }
-            if let Some((image, waiting)) = finished {
+            if let Some((image, waiting, marges)) = finished {
                 if job.era == q.era && !job.cancel.load(Ordering::Relaxed) {
-                    let (marge, geom) = match &job.work {
-                        Work::Plan { marge, geom, .. } => (*marge, *geom),
-                        Work::Cel { .. } => (0, None),
+                    let geom = match &job.work {
+                        Work::Plan { geom, .. } => *geom,
+                        Work::Cel { .. } => None,
                     };
-                    q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image, waiting, marge, geom });
+                    q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image, waiting, marges, geom });
                 }
             }
         }
@@ -995,22 +1048,25 @@ fn worker(shared: &Shared) {
 /// Compose la vignette de `job`. Un plan comme l'écran l'a toujours fait : en mode doux (les effets pas
 /// encore calculés sont demandés au fil de fond des effets et remplacés par leur dernier résultat ou le
 /// dessin sans effet ; le fond sous le trait montre celui d'avant jusqu'à l'arrivée du nouveau). Rend
-/// l'image, et (si quelque chose manquait) le compteur de calculs à partir duquel elle se refait.
+/// l'image, (si quelque chose manquait) le compteur de calculs à partir duquel elle se refait, et les marges de l'image autour du cadre.
 /// `None` : arrêtée, personne ne l'attend plus.
-fn render_job(job: &Job) -> Option<(ColorImage, Option<u64>)> {
+fn render_job(job: &Job) -> Option<(ColorImage, Option<u64>, [usize; 4])> {
     match (&job.work, &*job.key) {
-        (Work::Plan { doc, cam, size, marge, masque, generation, .. }, Key::Plan(plan, _, _)) => {
+        (Work::Plan { doc, cam, size, marge, communs, masque, generation, .. }, Key::Plan(plan, _, _)) => {
             // (Le fil de fond laisse deux cœurs à l'interface, comme celui des effets.)
             render::set_thread_cap(crate::parallele::coeurs().saturating_sub(2).max(1));
             let cancelled = || job.cancel.load(Ordering::Relaxed);
-            let compose = || crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_marge_until(doc, plan, cam, size.0, size.1, *marge, masque.as_deref(), &cancelled)));
+            // Une case de la planche montre le dessin du plan jusqu'où il va (partie 131) : ses marges suivent l'encre, ici, sur le fil de fond.
+            let marges = if *marge > 0 { render::marges_de_l_encre(doc, plan, cam, size.0, size.1, *marge, communs, render::VIGNETTE_MAX) } else { [0; 4] };
+            let propre = (*marge > 0).then_some((communs.as_slice(), *marge));
+            let compose = || crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_marges_until(doc, plan, cam, size.0, size.1, marges, propre, masque.as_deref(), &cancelled)));
             let (image, complete) = match job.world {
                 Some(w) => crate::fxcache::avec_monde(w, compose),
                 None => compose(),
             };
-            Some((image?, (!complete).then_some(*generation)))
+            Some((image?, (!complete).then_some(*generation), marges))
         }
-        (Work::Cel { raster, frame, size }, _) => Some((cel_thumbnail(raster, *frame, size.0, size.1), None)),
+        (Work::Cel { raster, frame, size }, _) => Some((cel_thumbnail(raster, *frame, size.0, size.1), None, [0; 4])),
         _ => None,
     }
 }

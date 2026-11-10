@@ -313,12 +313,56 @@ impl Area {
 /// dessins du plan (hors de la feuille aussi), déplacées par la transformation de leur calque. Rien
 /// d'autre ne se compose : partout ailleurs, c'est le papier.
 pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
-    let mut area = Area::sheet(doc);
+    let feuille = Area::sheet(doc);
+    plan_ink_bounds(doc, plan).map_or(feuille, |encre| feuille.union(&encre))
+}
+
+/// Où le plan a de l'encre : les tuiles dessinées de ses dessins, sur la feuille et autour d'elle, déplacées par la transformation de leur
+/// calque (un dessin posé par un maillage : la feuille entière). Rien si rien n'est dessiné. La planche des Vignettes s'en sert pour montrer
+/// le dessin d'une case au-delà de son cadre, jusqu'où il va (`thumbs.rs`, partie 131).
+pub fn plan_ink_bounds(doc: &Document, plan: &Plan) -> Option<Area> {
+    plan_ink_bounds_sauf(doc, plan, &[])
+}
+
+/// Les dessins que la case du plan `panel` à l'image `frame` **n'est pas seule à montrer** : ceux d'un calque Décor (un seul dessin pour
+/// toutes les cases du plan, `decor.rs`), d'un calque partagé entre des plans (la planche-mère, `partage.rs`), d'un calque de toute la scène,
+/// et ceux qu'une autre case du même plan montre aussi (un dessin tenu d'une marque d'image à l'autre).
+///
+/// Partie 131 : « le trait entier à sa case, montré sur la planche où qu'il aille » ne vaut que pour un dessin qu'**une seule case** montre.
+/// Ceux-ci gardent la règle d'avant : chaque case en montre son cadre et sa marge ordinaire, un trait tracé sur la planche y est réparti case
+/// par case (`horschamp.rs`), la gomme de la planche n'y touche pas (`gommedebord.rs`). Sinon chaque case qui les montre en répéterait le
+/// débord autour d'elle, par-dessus ses voisines (le Décor d'une continuité, une planche-mère vue par trois caméras).
+pub fn dessins_communs(doc: &Document, panel: usize, frame: usize) -> Vec<CelId> {
+    let Some(p) = doc.panels.get(panel) else { return Vec::new() };
+    // Les cases d'un plan commencent à sa première image et à ses marques d'image : celle-ci commence à `debut`.
+    let debut = p.marks.iter().map(|m| m.frame).filter(|f| *f <= frame).max().unwrap_or(0);
+    let mut communs = Vec::new();
+    for l in &p.layers {
+        let Some(cel) = l.cel_at(frame) else { continue };
+        let partage = l.decor || l.partage.is_some() || l.scene_wide.is_some();
+        let tenu = || std::iter::once(0).chain(p.marks.iter().map(|m| m.frame)).any(|f| f != debut && l.cel_at(f) == Some(cel));
+        if (partage || tenu()) && !communs.contains(&cel) {
+            communs.push(cel);
+        }
+    }
+    communs
+}
+
+/// `plan_ink_bounds`, sans compter les dessins `sauf` (`dessins_communs` : ils ne font pas s'étendre la vignette d'une case).
+pub fn plan_ink_bounds_sauf(doc: &Document, plan: &Plan, sauf: &[CelId]) -> Option<Area> {
+    let mut encre: Option<Area> = None;
+    let mut ajoute = |r: Area| encre = Some(encre.map_or(r, |a| a.union(&r)));
     let pivot = doc.stage_center();
     let t = TILE as i64;
     for item in &plan.items {
+        if sauf.contains(&item.cel) {
+            continue;
+        }
         let Some(cel) = doc.cels.get(&item.cel) else { continue };
         let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
+        if item.warp(pivot).is_some() {
+            ajoute(Area::sheet(doc));
+        }
         // (Ce que ses effets portent autour de l'encre, pour un dessin qui passe le bord : le halo d'un flou, le déplacement d'une secousse.)
         let m = crate::fx::portee_hors_feuille(item, cel);
         let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32 - m, (ty0 as i64 * t) as f32 - m, ((tx1 as i64 + 1) * t) as f32 + m, ((ty1 as i64 + 1) * t) as f32 + m);
@@ -338,9 +382,9 @@ pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
         // Un trait qui reste dans la feuille a son aplat dans la feuille : rien de plus à composer.)
         let sort = r.x0 < 0 || r.y0 < 0 || r.x1 > doc.width as i64 || r.y1 > doc.height as i64;
         let r = if item.fond.is_some() && sort { Area { x0: r.x0 - t, y0: r.y0 - t, x1: r.x1 + t, y1: r.y1 + t } } else { r };
-        area = area.union(&r);
+        ajoute(r);
     }
-    area
+    encre
 }
 
 /// Les tuiles du monde de `area` où le plan peut montrer autre chose que du papier et qui ne sont
@@ -917,6 +961,100 @@ pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th:
 /// non plus, comme dans la marge : la tuile d'un mouvement de caméra ne montre le papier que dans son enveloppe.
 #[allow(clippy::too_many_arguments)]
 pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, masque: Option<&[egui::Pos2]>, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
+    thumbnail_marges_until(doc, plan, cam, tw, th, [marge; 4], None, masque, cancelled)
+}
+
+/// Les marges d'une case de la planche, en pixels de sa vignette (`tw` × `th` pour le cadre) : **à gauche, en haut, à droite, en bas**. Au moins
+/// `mini` de chaque côté (le débord des Préférences), et de quoi montrer **tout ce que le plan a de dessiné hors du cadre** (partie 131 : la
+/// case montre son dessin où qu'il aille, le bord du cadre ne coupe rien sur la planche), jusqu'à `MARGE_MAX_CADRES` cadres de chaque côté et
+/// `cote_max` pixels en tout (`VIGNETTE_MAX` à l'écran). `sauf` : les dessins que la case n'est pas seule à montrer (`dessins_communs`), qui
+/// ne font pas s'étendre la vignette.
+#[allow(clippy::too_many_arguments)]
+pub fn marges_de_l_encre(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, mini: usize, sauf: &[CelId], cote_max: usize) -> [usize; 4] {
+    let egales = [mini; 4];
+    if tw == 0 || th == 0 {
+        return egales;
+    }
+    let Some(dehors) = debord_de_l_encre(doc, plan, cam, doc.frame, sauf) else { return egales };
+    let [fw, fh] = doc.frame;
+    let (kx, ky) = (tw as f32 / fw.max(1) as f32, th as f32 / fh.max(1) as f32);
+    // Ce qui dépasse de chaque côté, en pixels de la vignette (un de plus : l'arrondi et le lissage du bord).
+    let voulu = [dehors[0] * kx, dehors[1] * ky, dehors[2] * kx, dehors[3] * ky].map(|v| if v > 0.0 { v.min(1e7).ceil() as usize + 1 } else { 0 });
+    let borne = |v: usize, cote: usize| v.max(mini).min((cote * MARGE_MAX_CADRES).max(mini));
+    let mut m = [borne(voulu[0], tw), borne(voulu[1], th), borne(voulu[2], tw), borne(voulu[3], th)];
+    // L'image entière garde une taille raisonnable : ce qui dépasse la marge ordinaire rétrécit, les deux côtés d'un même sens ensemble. **La
+    // marge ordinaire, elle, reste** : avant la partie 131 l'image faisait déjà `cote + 2 mini`, quelle que soit sa taille (une tuile d'export).
+    for (a, b, cote) in [(0, 2, tw), (1, 3, th)] {
+        let place = cote_max.saturating_sub(cote + 2 * mini);
+        let (ea, eb) = (m[a] - mini, m[b] - mini);
+        let somme = ea + eb;
+        if somme > place {
+            m[a] = mini + ea * place / somme;
+            m[b] = mini + eb * place / somme;
+        }
+    }
+    m
+}
+
+/// Ce que le plan a de dessiné **hors du cadre** filmé par `cam` (un cadre de `frame` pixels), en pixels du cadre, de chaque côté : à gauche,
+/// en haut, à droite, en bas (0 : rien ne dépasse de ce côté). D'après les tuiles dessinées de ses dessins : quelques microsecondes, aucun pixel
+/// lu. Une caméra basculée ou en panoramique : la boîte de l'encre vue à travers elle ; si un de ses coins passe derrière la caméra, l'encre
+/// peut se voir partout autour du cadre (une valeur infinie de chaque côté : les marges ont leur borne). Rien pour un plan sans encre.
+/// `sauf` : les dessins qui ne comptent pas (`dessins_communs`).
+pub fn debord_de_l_encre(doc: &Document, plan: &Plan, cam: &Camera, frame: [usize; 2], sauf: &[CelId]) -> Option<[f32; 4]> {
+    let encre = plan_ink_bounds_sauf(doc, plan, sauf)?;
+    let [fw, fh] = frame;
+    if !cam.is_level() {
+        let h = cam.homography_inverse(frame);
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for (x, y) in [(encre.x0, encre.y0), (encre.x1, encre.y0), (encre.x1, encre.y1), (encre.x0, encre.y1)] {
+            let (x, y) = (x as f32, y as f32);
+            let w = h[6] * x + h[7] * y + h[8];
+            let (u, v) = ((h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w);
+            if w <= 1e-6 || !u.is_finite() || !v.is_finite() {
+                return Some([f32::INFINITY; 4]);
+            }
+            (x0, y0, x1, y1) = (x0.min(u), y0.min(v), x1.max(u), y1.max(v));
+        }
+        return Some([-x0, -y0, x1 - fw as f32, y1 - fh as f32].map(|v| v.max(0.0)));
+    }
+    // Du cadre filmé à la feuille : une similitude (zoom, roulis, décalage). Son inverse, d'après trois points.
+    let (o, i, j) = (cam.to_stage(frame, 0.0, 0.0), cam.to_stage(frame, 1.0, 0.0), cam.to_stage(frame, 0.0, 1.0));
+    let vers_feuille = Affine { a: i.x - o.x, b: j.x - o.x, c: i.y - o.y, d: j.y - o.y, tx: o.x, ty: o.y };
+    let vers_cadre = vers_feuille.inverse()?;
+    let coins = [(encre.x0, encre.y0), (encre.x1, encre.y0), (encre.x1, encre.y1), (encre.x0, encre.y1)].map(|(x, y)| vers_cadre.apply(egui::pos2(x as f32, y as f32)));
+    if !coins.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+        return None;
+    }
+    let (x0, y0) = coins.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+    let (x1, y1) = coins.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
+    Some([-x0, -y0, x1 - fw as f32, y1 - fh as f32].map(|v| v.max(0.0)))
+}
+
+/// Jusqu'où la vignette d'une case s'étend pour montrer le dessin hors de son cadre : ce nombre de cadres de chaque côté, au plus.
+pub const MARGE_MAX_CADRES: usize = 4;
+/// Le plus grand côté d'une vignette de case, marges comprises (pixels), à l'écran.
+pub const VIGNETTE_MAX: usize = 4096;
+/// Le plus grand côté de la marge d'une case dans l'export de la planche (pixels) : ses tuiles sont plus grandes qu'à l'écran.
+pub const MARGE_EXPORT_MAX: usize = 12288;
+
+/// Le plan sans les dessins `sauf` (`dessins_communs`) : ce qu'une case de la planche montre au-delà de sa marge ordinaire. Rien s'il n'y a
+/// rien à retirer.
+fn plan_propre(plan: &Plan, sauf: &[CelId]) -> Option<Plan> {
+    plan.items.iter().any(|i| sauf.contains(&i.cel)).then(|| Plan { paper: plan.paper, items: plan.items.iter().filter(|i| !sauf.contains(&i.cel)).cloned().collect() })
+}
+
+/// Le point (`x`, `y`) d'une vignette de `tw` × `th` pixels de cadre, de marges `marges`, est-il **au-delà de la marge ordinaire** (`mini`) ?
+fn au_dela(x: usize, y: usize, tw: usize, th: usize, marges: [usize; 4], mini: usize) -> bool {
+    x + mini < marges[0] || x >= marges[0] + tw + mini || y + mini < marges[1] || y >= marges[1] + th + mini
+}
+
+/// Comme `thumbnail_marge_until`, avec une marge par côté (`marges` : à gauche, en haut, à droite, en bas ; l'image fait
+/// `tw + gauche + droite` sur `th + haut + bas`). `propre` : les dessins que la case n'est pas seule à montrer (`dessins_communs`) et sa
+/// marge ordinaire, en pixels ; **au-delà de cette marge, ces dessins ne sont pas composés** (partie 131 : seul ce qui est à la case seule
+/// se voit loin de son cadre).
+#[allow(clippy::too_many_arguments)]
+pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marges: [usize; 4], propre: Option<(&[CelId], usize)>, masque: Option<&[egui::Pos2]>, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
     #[cfg(test)]
     THUMBNAILS_HERE.with(|n| n.set(n.get() + 1));
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
@@ -924,16 +1062,20 @@ pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usiz
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
-    let (ow, oh) = (tw + 2 * marge, th + 2 * marge);
-    let m = marge as f32;
+    let (ow, oh) = (tw + marges[0] + marges[2], th + marges[1] + marges[3]);
+    let (mx, m) = (marges[0] as f32, marges[1] as f32);
     let mut pixels = Vec::with_capacity(ow * oh);
     // (Les dessins affichés se cherchent une fois, pas à chaque échantillon : 80 000 par vignette.)
     let layers = resolve(doc, plan);
+    // (Au-delà de la marge ordinaire : sans les dessins communs. Seulement si une marge va plus loin qu'elle.)
+    let mini = propre.map_or(0, |p| p.1);
+    let seul = propre.filter(|(_, mini)| marges.iter().any(|v| v > mini)).and_then(|(sauf, _)| plan_propre(plan, sauf));
+    let loin = seul.as_ref().map(|p| resolve(doc, p));
     let paper = paper_color(plan);
     // Une case de la planche (avec sa marge) se lit comme le dessin vivant de la case courante (`gpu.rs`, `fs_display`) : plus de lectures quand on
     // réduit fort, moyennées en lumière linéaire. (En 4 lectures moyennées en gamma, un trait fin était deux fois plus foncé ici que dans
     // la case qu'on dessine : le dernier trait tracé y paraissait pâle à côté des autres, partie 111.)
-    let comme_le_vivant = marge > 0;
+    let comme_le_vivant = marges.iter().any(|v| *v > 0);
     let n: usize = if comme_le_vivant { ((sx.max(sy) / 2.5).ceil() as usize).clamp(2, 4) } else { 2 };
     let hauteurs: Vec<f32> = (0..n).map(|k| (k as f32 + 0.5) / n as f32).collect();
     let mut lus: Vec<Color32> = Vec::with_capacity(n * n);
@@ -945,10 +1087,14 @@ pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usiz
         let bandes: Vec<_> = hauteurs.iter().map(|oy| masque.map(|poly| crate::vignettecam::intervalle_a(poly, (y as f32 - m + oy) * sy))).collect();
         for x in 0..ow {
             lus.clear();
+            let layers = match &loin {
+                Some(l) if au_dela(x, y, tw, th, marges, mini) => l,
+                _ => &layers,
+            };
             for (j, oy) in hauteurs.iter().enumerate() {
                 for ox in &hauteurs {
                     // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
-                    let (fx, fy) = ((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy);
+                    let (fx, fy) = ((x as f32 - mx + ox) * sx, (y as f32 - m + oy) * sy);
                     let dans_masque = match bandes[j] {
                         None => true,
                         Some(None) => false,
@@ -957,7 +1103,7 @@ pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usiz
                     let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
                     // (Toile infinie : le cadre peut filmer hors de la feuille.)
                     lus.push(match map.at(fx, fy) {
-                        Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),
+                        Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(layers, base, p.x.floor() as i64, p.y.floor() as i64),
                         _ => Color32::TRANSPARENT,
                     });
                 }
@@ -1016,26 +1162,35 @@ pub(crate) fn moyenne_sur_le_papier(lus: &[Color32]) -> Color32 {
 
 /// La marge seule d'une case de `tw` × `th` pixels : `marge` pixels tout autour, où se voit ce qui est dessiné (pas le papier) ; le dedans reste
 /// transparent et ne coûte rien. L'export de la planche (les images, elles, viennent du rendu de l'export). `cancelled` est demandé entre deux lignes : vrai, le calcul s'arrête et rend `None`.
-pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
+/// `propre` : comme `thumbnail_marges_until`.
+#[allow(clippy::too_many_arguments)]
+pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marges: [usize; 4], propre: Option<(&[CelId], usize)>, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
     let plan = &*resolved;
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw.max(1) as f32, fh as f32 / th.max(1) as f32);
     let map = cam.frame_map(doc.frame);
-    let (ow, oh) = (tw + 2 * marge, th + 2 * marge);
-    let m = marge as f32;
+    let (ow, oh) = (tw + marges[0] + marges[2], th + marges[1] + marges[3]);
+    let (mx, m) = (marges[0] as f32, marges[1] as f32);
     let mut pixels = vec![Color32::TRANSPARENT; ow * oh];
     let layers = resolve(doc, plan);
+    let mini = propre.map_or(0, |p| p.1);
+    let seul = propre.filter(|(_, mini)| marges.iter().any(|v| v > mini)).and_then(|(sauf, _)| plan_propre(plan, sauf));
+    let loin = seul.as_ref().map(|p| resolve(doc, p));
     for y in 0..oh {
         if cancelled() {
             return None;
         }
         for x in 0..ow {
-            if (marge..marge + tw).contains(&x) && (marge..marge + th).contains(&y) {
+            if (marges[0]..marges[0] + tw).contains(&x) && (marges[1]..marges[1] + th).contains(&y) {
                 continue;
             }
-            let lus = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)].map(|(ox, oy)| match map.at((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy) {
-                Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, Color32::TRANSPARENT, p.x.floor() as i64, p.y.floor() as i64),
+            let layers = match &loin {
+                Some(l) if au_dela(x, y, tw, th, marges, mini) => l,
+                _ => &layers,
+            };
+            let lus = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)].map(|(ox, oy)| match map.at((x as f32 - mx + ox) * sx, (y as f32 - m + oy) * sy) {
+                Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(layers, Color32::TRANSPARENT, p.x.floor() as i64, p.y.floor() as i64),
                 _ => Color32::TRANSPARENT,
             });
             pixels[y * ow + x] = moyenne_gamma(&lus);

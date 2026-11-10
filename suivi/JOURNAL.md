@@ -3,6 +3,30 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-09
+
+- La caméra se souvient (partie 131, branche `camera-souvient`, chantier `Chantiers\camera-souvient`) : à sa demande de repenser les
+  Vignettes « quitte à repartir de zéro », cinq approches présentées (A à E) ; son choix : « Ok on essaye A ». **Un trait appartient tout
+  entier à la case où le stylet s'est posé ; hors de toute case, il appartient au papier** : plus de découpe du trait au bord des cases.
+  La planche montre chaque trait en entier, par-dessus les cases qu'il traverse (« la feuille ») ; le passe-partout montre le film (chaque
+  case son plan) ; le plan, le montage et les exports du film restent coupés au cadre. La vignette d'une case s'étend à son encre (quatre
+  cadres par côté au plus). La sélection de la planche (vectorielle et bitmap), le collage et la case qui naît reposent le trait entier là
+  où il commence ; un vieux trait coupé redevient entier quand on le déplace. Le bout d'un trait ne fait plus naître la case pâle
+  suivante ; la marge de la première case pâle la fait naître. La gomme de la planche efface aussi ce que les cases ont dessiné hors de
+  leur cadre (`gommedebord.rs`). Le format du projet ne change pas. Mesure demandée par l'autre session (60 cases, 2 040 traits) : une
+  image d'écran en 0,89 ms. Onze essais neufs (`camera_souvient_tests.rs`), les essais d'avant réécrits pour dire la règle neuve. Limites
+  notées : caméra en perspective (le trait qui dépasse s'amincit), quatre cadres au plus, un débord ne se gomme pas depuis la case d'une
+  autre. **Relecture indépendante** du code avant toute proposition de fusion (demandée par l'autre session) : quinze remarques, dont
+  plusieurs sérieuses sur la gomme toute neuve (elle prenait un trait resté dans son cadre, ignorait le verrou du storyboard et le
+  passe-partout) et sur les dessins montrés par plusieurs cases. Corrigé : ces dessins-là (le Décor, une planche-mère, un calque de toute
+  la scène) gardent la règle d'avant, pour ne pas s'étaler autour de chaque case qui les montre ; un trait bitmap parti du papier n'emporte
+  plus un double du dessin qu'il traverse ; la marge ordinaire d'une case ne disparaît plus dans un grand export. Pas fusionné : exe de
+  branche à essayer par Anthony.
+- À sa demande (« fusionner sur une version portable seulement sans altérer la version principale ») : version portable d'essai
+  `Logiciel\Portable\FEANOR-portable-2026-11-09-camera-souvient` (dossier et zip), faite de l'exe de la branche (a9f3540). `main` n'avait
+  pas bougé depuis le départ de la branche (6f27220) : cet exe est déjà le FEANOR habituel plus la partie 131, sans aucune fusion. Ouverte
+  sur une copie de projet avec de faux réglages : pas de plantage. `main`, `Source` et son exe ne sont pas touchés.
+
 ## 2026-11-08
 
 - Dépôt GitHub de sauvegarde, à la demande d'Anthony (« afin de ne rien perdre ») : il a créé le dépôt privé

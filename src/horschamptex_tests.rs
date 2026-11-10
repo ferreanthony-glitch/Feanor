@@ -145,43 +145,47 @@ fn an_outside_stroke_keeps_its_brush_and_a_texture_not_a_plain_line() {
     }
 }
 
+/// Partie 131 (avant : un même trait, coupé au bord de sa case, gardait le même pinceau des deux côtés). Le trait n'est plus coupé : parti d'une
+/// case, il reste entier dans son plan, jusqu'au bord de la vue ; parti du papier, il est entier sur la planche. Tracés du même pinceau, les
+/// deux portent la même recette : le même trait dans une case et sur le papier.
 #[test]
-fn a_stroke_across_a_case_edge_has_the_same_brush_on_both_sides() {
+fn a_stroke_in_a_case_and_a_stroke_on_the_paper_carry_the_same_brush() {
     for bitmap in [false, true] {
         let doc = if bitmap { en_bitmap(quatre_plans()) } else { quatre_plans() };
         let mut b = ouvert(doc, 4);
         texturer(&mut b);
         b.app.color = [200, 40, 40];
-        let v = vignette(&b, 0);
+        // (La case 5 : le plan 3, qui n'a qu'une case. Le plan 1 en a trois, qui montreraient toutes ce dessin neuf : il garde la règle
+        // d'avant, `render::dessins_communs`.)
+        let v = vignette(&b, 4);
         let loin = pos2(b.app.vignettes.view.left() + 4.0, v.center().y);
+        // De la case jusqu'au bord de la vue : entier dans le plan, rien sur la planche.
         glisser(&mut b, &vague(v.center(), loin, 18));
+        assert!(crate::vignettes_tests::encre(&b.app.doc, 2), "bitmap {bitmap} : le trait est dans le plan de sa case");
+        assert!(hors_cadres(&b).is_empty() && b.app.doc.annotations.bitmap.morceaux.is_empty(), "bitmap {bitmap} : rien sur la planche, le trait n'est pas coupé");
+        // Du papier : entier sur la planche.
+        let (de, a) = coin(&b);
+        glisser(&mut b, &vague(de, a, 14));
         if bitmap {
-            // Partie 127 : des deux côtés, les pixels du même pinceau (dans le plan, et sur la couche bitmap de la planche).
-            assert!(crate::vignettes_tests::encre(&b.app.doc, 0), "la part dans le champ reste dans le plan");
-            assert!(!b.app.doc.annotations.bitmap.morceaux.is_empty(), "une part sur la planche, en pixels");
+            // Partie 127 : sur le papier, les pixels du même pinceau, sur la couche bitmap de la planche.
+            assert_eq!(b.app.doc.annotations.bitmap.morceaux.len(), 1, "le trait du papier, en pixels, en un seul morceau");
             continue;
         }
         let tous = hors_cadres(&b);
-        assert!(!tous.is_empty(), "bitmap {bitmap} : une part sur la planche");
+        assert_eq!(tous.len(), 1, "le trait du papier, entier");
         let t = &b.app.doc.annotations.traces[tous[0]];
         let br = t.brosse.as_ref().expect("recette");
-        if !bitmap {
-            // Côté plan : le trait du dessin vectoriel porte le même réglage, la même opacité, le même toucher.
-            let cel = b.app.doc.panels[0].layers.iter().flat_map(|l| l.frames.iter().flatten()).find_map(|id| b.app.doc.cels.get(id).filter(|c| c.vector.as_ref().is_some_and(|v| !v.elements.is_empty())))
-                .expect("un dessin vectoriel avec le trait");
-            let Some(Element::Stroke { brush, opacity, hardness, trace, color, .. }) = cel.vector.as_ref().and_then(|v| v.elements.last()).cloned() else { panic!("un trait") };
-            assert_eq!(brush.as_deref().copied(), br.recette.reglage, "même brosse, même papier, même taille des deux côtés");
-            assert_eq!((opacity, hardness, trace.feel, trace.secondary), (br.recette.opacite, br.recette.durete, br.recette.toucher, br.recette.couleur_b));
-            assert_eq!(color, t.color);
-            assert!(trace.pressure.len() > 3 && !br.appui.is_empty(), "les appuis sont gardés des deux côtés");
-        } else {
-            // Côté plan : les pixels du dessin ; côté planche : la recette du moteur, avec le papier choisi.
-            assert!(br.recette.reglage.is_some_and(|r| r.paper.is_some() && r.grain == 1.0 && r.size == 14.0));
-            assert!(crate::vignettes_tests::encre(&b.app.doc, 0), "la part dans le champ reste dans le plan");
-        }
-        // La taille de la ligne est continue d'un côté à l'autre : le rayon du premier point hors cadres (en pixels du dessin) est celui du pinceau.
+        // Le trait de la case : il porte le même réglage, la même opacité, la même dureté que celui du papier.
+        let cel = b.app.doc.panels[2].layers.iter().flat_map(|l| l.frames.iter().flatten()).find_map(|id| b.app.doc.cels.get(id).filter(|c| c.vector.as_ref().is_some_and(|v| !v.elements.is_empty())))
+            .expect("un dessin vectoriel avec le trait");
+        let Some(Element::Stroke { brush, opacity, hardness, trace, color, .. }) = cel.vector.as_ref().and_then(|v| v.elements.last()).cloned() else { panic!("un trait") };
+        assert_eq!(brush.as_deref().copied(), br.recette.reglage, "même brosse, même papier, même taille dans la case et sur le papier");
+        assert_eq!((opacity, hardness, trace.secondary), (br.recette.opacite, br.recette.durete, br.recette.couleur_b));
+        assert_eq!(color, t.color);
+        assert!(trace.pressure.len() > 3 && !br.appui.is_empty(), "les appuis sont gardés dans la case et sur le papier");
+        // La taille de la ligne du papier (en pixels du dessin) est celle du pinceau.
         let r_px = t.points[0].r * br.largeur_px;
-        assert!((r_px - 7.0).abs() < 0.8, "bitmap {bitmap} : rayon {r_px} (pinceau de 14)");
+        assert!((r_px - 7.0).abs() < 0.8, "rayon {r_px} (pinceau de 14)");
     }
 }
 

@@ -337,6 +337,11 @@ mod horschamptex;
 mod caseprend;
 #[cfg(test)]
 mod caseprend_tests;
+// La caméra se souvient (partie 131, 2026-11-09) : un trait appartient tout entier à la case où le stylet s'est posé (`horschamp.rs`) ; la
+// gomme de la planche efface aussi ce qui dépasse des cases.
+mod gommedebord;
+#[cfg(test)]
+mod camera_souvient_tests;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]

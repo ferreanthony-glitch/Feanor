@@ -185,7 +185,8 @@ impl App {
                     let doc = crate::thumbs::snapshot(&self.doc, &plan);
                     let t = planche::taille_vignette(p, k, s);
                     let cam = self.doc.panel_camera(c.plan_reel, c.place.frame);
-                    return Some(TuileATravailler { doc, plan, cam, taille: [t[0] as usize, t[1] as usize], masque: None, marge });
+                    let communs = crate::render::dessins_communs(&self.doc, c.plan_reel, c.place.frame);
+                    return Some(TuileATravailler { doc, plan, cam, taille: [t[0] as usize, t[1] as usize], masque: None, marge, communs });
                 };
                 let z = &m.tuile.zone;
                 let r = m.tuile.rect;
@@ -197,7 +198,8 @@ impl App {
                 let moitie = vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
                 let masque = Some(m.tuile.masque.iter().map(|q| ((*q - z.centre) + moitie).to_pos2()).collect());
                 let cam = crate::camera::Camera { x: z.centre.x, y: z.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
-                Some(TuileATravailler { doc, plan, cam, taille, masque, marge: marge_de(c) })
+                let communs = crate::render::dessins_communs(&self.doc, c.plan_reel, c.place.frame);
+                Some(TuileATravailler { doc, plan, cam, taille, masque, marge: marge_de(c), communs })
             })
             .collect()
     }
@@ -429,17 +431,28 @@ pub(crate) struct TuileATravailler {
     cam: crate::camera::Camera,
     taille: [usize; 2],
     masque: Option<Vec<eframe::egui::Pos2>>,
+    /// La marge d'origine (le débord des Préférences), au moins ; 0 : aucune (le passe-partout). Elle s'étend à l'encre du plan (`rendre`).
     marge: usize,
+    /// Les dessins que la case n'est pas seule à montrer (`render::dessins_communs`) : comme à l'écran, ils ne font pas s'étendre sa marge
+    /// et ne se voient pas au-delà de la marge d'origine.
+    communs: Vec<crate::document::CelId>,
 }
 
 impl TuileATravailler {
     /// La tuile (le papier dans l'enveloppe, le trait qui déborde dehors) ou la marge seule, en pixels prémultipliés ; `None` si `arrete` le demande en route.
     fn rendre(self, arrete: &dyn Fn() -> bool) -> Option<planche::TuileImage> {
+        // Comme à l'écran (partie 131) : la case montre son dessin jusqu'où il va, ses marges suivent l'encre du plan. (Le passe-partout : aucune.)
+        let marges = if self.marge == 0 {
+            [0; 4]
+        } else {
+            crate::render::marges_de_l_encre(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, &self.communs, crate::render::MARGE_EXPORT_MAX)
+        };
+        let propre = (self.marge > 0).then_some((self.communs.as_slice(), self.marge));
         let img = match &self.masque {
-            Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), arrete),
-            None => crate::render::marge_seule_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, arrete),
+            Some(masque) => crate::render::thumbnail_marges_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], marges, propre, Some(masque), arrete),
+            None => crate::render::marge_seule_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], marges, propre, arrete),
         }?;
         let rvba = img.pixels.iter().flat_map(|c| c.to_array()).collect();
-        Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], marge: self.marge as u32, rvba })
+        Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], marges: marges.map(|m| m as u32), rvba })
     }
 }

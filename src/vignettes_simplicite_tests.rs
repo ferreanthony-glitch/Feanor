@@ -164,26 +164,30 @@ fn shift_tab_is_the_bridge_both_ways_and_tab_enters_the_plan_from_the_vignettes(
     assert!(b.app.espace == Espace::Vignettes && b.app.board_shown(), "Tab en revient");
 }
 
+/// Partie 131 (avant, partie 113 : le bout d'un trait qui tombait dans la première case pâle la faisait naître). Un trait appartient à l'endroit où
+/// il commence : posé dans la **marge** de la première case pâle, il fait naître son plan, et lui seul ; posé dans la marge d'une case pâle plus
+/// lointaine, il est sur le papier, aucun plan vide ne naît devant elle.
 #[test]
-fn a_tail_of_stroke_only_makes_the_next_plan_never_farther_ones_and_the_status_counts_the_empty_plans() {
+fn a_stroke_started_in_the_margin_of_a_pale_case_only_makes_the_next_plan_never_farther_ones_and_the_status_counts_the_empty_plans() {
     let mut b = dans_les_vignettes();
     let n = b.app.doc.panels.len();
-    // Un bout de trait dans la troisième case pâle (pas la première) : rien n'est créé, le bout reste sur la planche.
+    // Un trait posé sous la troisième case pâle (pas la première), dans sa marge, qui monte dedans : rien n'est créé, il est sur la planche, entier.
     let loin = crate::vignettes_tests::case_vide(&b, 2);
-    let de = eframe::egui::pos2(loin.center().x, loin.bottom() + 40.0);
+    let de = eframe::egui::pos2(loin.center().x, loin.bottom() + loin.width() * 0.05);
     let chemin = crate::vignettes_tests::vague(de, loin.center(), 20);
     crate::vignettes_tests::glisser(&mut b, &chemin);
     b.chauffer(6);
-    assert_eq!(b.app.doc.panels.len(), n, "aucun plan vide né d'un bout de trait : {}", b.app.status);
+    assert_eq!(b.app.doc.panels.len(), n, "aucun plan vide né d'un trait posé dans la marge d'une case pâle lointaine : {}", b.app.status);
     let a = &b.app.doc.annotations;
-    assert!(a.traces.iter().any(|t| a.calque(t.calque).is_some_and(|c| c.planche)), "le bout est sur la planche, pas perdu");
-    // Un bout dans la première case pâle : exactement un plan de plus.
+    assert_eq!(a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count(), 1, "le trait est sur la planche, entier, pas perdu");
+    // Posé sous la première case pâle, dans sa marge : exactement un plan de plus, et le trait est à lui.
     let suivante = crate::vignettes_tests::case_vide(&b, 0);
-    let de = eframe::egui::pos2(suivante.center().x, suivante.bottom() + 40.0);
+    let de = eframe::egui::pos2(suivante.center().x, suivante.bottom() + suivante.width() * 0.05);
     let chemin = crate::vignettes_tests::vague(de, suivante.center(), 20);
     crate::vignettes_tests::glisser(&mut b, &chemin);
     b.chauffer(6);
-    assert_eq!(b.app.doc.panels.len(), n + 1, "le plan suivant, et lui seul");
+    assert_eq!(b.app.doc.panels.len(), n + 1, "le plan suivant, et lui seul : {}", b.app.status);
+    assert!(crate::vignettes_tests::encre(&b.app.doc, n), "le trait est dans le plan né");
     // Dessiner dans une case pâle lointaine garde sa place, comme avant, et la ligne d'état compte les plans vides.
     let loin = crate::vignettes_tests::case_vide(&b, 2);
     let chemin = crate::vignettes_tests::vague(loin.center() - eframe::egui::vec2(20.0, 0.0), loin.center() + eframe::egui::vec2(20.0, 0.0), 8);

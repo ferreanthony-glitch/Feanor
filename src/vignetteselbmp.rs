@@ -250,6 +250,8 @@ impl App {
 
     fn selb_prendre_jusqu_a(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>, limite: usize) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
+        // Le passe-partout montre le film : ce qui dépasse des cases est caché, et le papier passe sous leurs images. On ne prend que ce qu'on voit.
+        let film = self.vignettes.annot.marie;
         let cases = self.selb_cases(layout);
         let boite = if poly.len() >= 3 { Rect::from_points(poly) } else { Rect::NOTHING };
         let mut pris: Vec<(Source, Masque)> = Vec::new();
@@ -277,11 +279,14 @@ impl App {
             }
             vus.push(cel);
             let Some(champ) = champs.get(k) else { continue };
+            // La règle d'avant la partie 131 (« seulement là où la case se voit ») vaut encore quand la planche ne montre pas le dessin loin de
+            // sa case : avec le passe-partout, et pour un dessin que plusieurs cases montrent (`render::dessins_communs`).
+            let pres_de_sa_case = film || self.dessin_commun(layout, k, cel);
             let Some(d) = self.doc.cels.get(&cel) else { continue };
             let Some(inv) = a.inverse() else { continue };
             let source = Source::Dessin { cel, case: layout.cards[k].id };
             if let Some((p, tol)) = clic {
-                if !champ.contains(p) {
+                if pres_de_sa_case && !champ.contains(p) {
                     continue;
                 }
                 let q = inv.point(p);
@@ -300,24 +305,30 @@ impl App {
                 }
                 continue;
             }
-            if !champ.intersects(boite) {
+            if pres_de_sa_case && !champ.intersects(boite) {
                 continue;
             }
             let poly_px: Vec<Pos2> = poly.iter().map(|p| inv.point(*p)).collect();
-            // (Seulement là où la case se voit : son champ, en pixels de son dessin.)
-            let champ_px = Rect::from_points(&[champ.left_top(), champ.right_top(), champ.right_bottom(), champ.left_bottom()].map(|p| inv.point(p)));
-            // (Et seulement là où le dessin a des tuiles.)
+            // (Partie 131 : la case montre tout son dessin sur la planche, où qu'il aille, par-dessus les autres cases aussi : il se prend partout où il
+            // a des pixels. Avant, seulement là où la case se voyait : son image, sa marge hors de l'image d'une autre. Seulement là où le dessin a des tuiles.)
             let Some((dx0, dy0, dx1, dy1)) = crate::planchebitmap::boite_px(&d.raster) else { continue };
-            let b = Rect::from_points(&poly_px).intersect(champ_px).intersect(Rect::from_min_max(pos2(dx0 as f32, dy0 as f32), pos2(dx1 as f32, dy1 as f32)));
-            if !b.is_positive() {
+            let mut b = Rect::from_points(&poly_px).intersect(Rect::from_min_max(pos2(dx0 as f32, dy0 as f32), pos2(dx1 as f32, dy1 as f32)));
+            if pres_de_sa_case {
+                // (Seulement là où la case se voit : son champ, en pixels de son dessin.)
+                b = b.intersect(Rect::from_points(&[champ.left_top(), champ.right_top(), champ.right_bottom(), champ.left_bottom()].map(|p| inv.point(p))));
+            }
+            if !b.is_positive() || !boite.is_positive() {
                 continue;
             }
-            // L'image de la case en pixels (là, tout ce qu'on voit est à elle), et les cases voisines dont l'image peut cacher sa marge.
+            // Près de sa case : l'image de la case en pixels (là, tout ce qu'on voit est à elle), et les cases voisines dont l'image peut cacher sa marge.
             let mouvement = layout.move_of(k).is_some();
             let t = &layout.cards[k].thumb;
             let image_px = Rect::from_points(&[t.left_top(), t.right_bottom()].map(|p| inv.point(p)));
             let voisines: Vec<usize> = (0..layout.cards.len()).filter(|&j| j != k && (layout.cards[j].thumb.intersects(*champ) || layout.move_of(j).is_some())).collect();
             let vu = |x: i64, y: i64| -> bool {
+                if !pres_de_sa_case {
+                    return true;
+                }
                 let c = pos2(x as f32 + 0.5, y as f32 + 0.5);
                 if !mouvement && image_px.contains(c) {
                     return true;
@@ -366,13 +377,14 @@ impl App {
                 return Err(Echec::Limite);
             }
         }
-        // 2. La couche bitmap de la planche (montrée), là où elle se voit : par-dessus une case, ou sur le papier hors des images.
+        // 2. La couche bitmap de la planche (montrée) : partout (partie 131 : le papier se peint par-dessus les images des cases, rien ne le cache) ;
+        // avec le passe-partout, comme avant : par-dessus une case, ou sur le papier hors des images.
         if montre && seule.is_none() {
             for m in &bm.morceaux {
                 let Some(v) = m.vers_planche(layout) else { continue };
                 let Some(bornes) = m.bornes(layout) else { continue };
                 let Some(inv) = v.inverse() else { continue };
-                let visible = |p: Pos2| m.dessus || (layout.card_at(p).is_none() && layout.annulee_en(p).is_none());
+                let visible = |p: Pos2| !film || m.dessus || (layout.card_at(p).is_none() && layout.annulee_en(p).is_none());
                 if let Some((p, tol)) = clic {
                     if m.touche(layout, p, tol) && visible(p) {
                         if let Some(l) = m.lien.filter(|l| !liens.contains(l)) {
@@ -389,10 +401,7 @@ impl App {
                 for y in b.top().floor() as i64..=b.bottom().ceil() as i64 {
                     for (x0, x1) in spans(&poly_px, y) {
                         for x in x0..x1 {
-                            if crate::planchebitmap::alpha_sans_garder(&m.pixels, x, y) == 0 {
-                                continue;
-                            }
-                            if visible(v.point(pos2(x as f32 + 0.5, y as f32 + 0.5))) {
+                            if crate::planchebitmap::alpha_sans_garder(&m.pixels, x, y) != 0 && visible(v.point(pos2(x as f32 + 0.5, y as f32 + 0.5))) {
                                 ajouter(&mut pris, Source::Morceau { id: m.id }, x, y);
                             }
                         }
@@ -638,7 +647,7 @@ impl App {
                 let entiers = s.liens.len();
                 let pourquoi = match echec {
                     Some(Echec::Limite) => "Sélection trop grande pour suivre tout le trait",
-                    _ => "Ce trait a changé depuis qu'il a été réparti (pixels déplacés ou repeints ailleurs) : on ne sait plus le suivre",
+                    _ => "Ce trait a changé depuis qu'il a été tracé (pixels déplacés ou repeints ailleurs) : on ne sait plus le suivre",
                 };
                 self.status = if s.pieces.is_empty() {
                     if limite { format!("{pourquoi}, et rien n'est pris.") } else { "Rien dans le lasso.".into() }
@@ -708,9 +717,10 @@ impl App {
         if tuiles > LIMITE_TUILES { Err(Echec::Limite) } else { Ok((fondues, liens.to_vec())) }
     }
 
-    /// Où iront les pixels des pièces `pieces` menées par `g` (planche), **sans rien écrire**. **La place de chaque pixel est décidée une seule fois**, d'après
-    /// le centre du pixel source mené par le geste (comme au lever d'un trait, `partager_bitmap`) : il va tout entier à une case, ou tout entier à la planche,
-    /// jamais aux deux ni à aucune. `liberes` : les morceaux que le geste vide entièrement. Une erreur (la phrase de la ligne d'état) : rien ne bougera.
+    /// Où iront les pixels des pièces `pieces` menées par `g` (planche), **sans rien écrire**. **Chaque pièce va tout entière à un seul endroit** (partie 131 :
+    /// le bord d'une case ne coupe rien) : le dessin de la case d'où elle vient tant qu'il lui reste de l'encre dans son champ, sinon la case ou le papier à qui
+    /// revient le centre de sa boîte ; jamais deux endroits ni aucun. `liberes` : les morceaux que le geste vide entièrement. Une erreur (la phrase de la ligne
+    /// d'état) : rien ne bougera.
     fn selb_preparer(&self, layout: &BoardLayout, pieces: &[Piece], g: &A64, liberes: usize) -> Result<Plan, String> {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
         let cases = self.selb_cases(layout);
@@ -731,7 +741,8 @@ impl App {
                 return Err("Ce geste mène des pixels hors de toute place : il est refusé, rien n'a bougé.".into());
             }
             let candidats: Vec<usize> = (0..n).filter(|&k| champs[k].intersects(bornes.expand(2.0)) || layout.cards[k].thumb.intersects(bornes.expand(2.0)) || layout.move_of(k).is_some()).collect();
-            let owner = |b: Pos2| -> Option<usize> {
+            // À qui revient le point `b` de la planche : l'image d'une case d'abord, puis une marge (celle de la case d'où viennent les pixels d'abord).
+            let chez = |b: Pos2| -> Option<usize> {
                 if origine < n && crate::horschamp::dans_image(layout, origine, b) {
                     return Some(if recoit[origine] { origine } else { crate::horschamp::DESSUS + origine });
                 }
@@ -746,52 +757,52 @@ impl App {
                 }
                 candidats.iter().copied().find(|&k| recoit[k] && champs[k].contains(b))
             };
-            // 1. Chaque pixel source à son propriétaire, une fois (une tuile toute à un seul : la même mémoire).
+            // 1. Partie 131 : **la pièce va tout entière à un seul endroit**, plus aucun pixel n'est trié d'après la case qu'il recouvre. Des pixels pris
+            // dans le dessin d'une case y restent tant qu'il leur reste de l'encre dans son champ (son image, sa marge) : on les a déplacés chez elle.
+            // Sortis tout entiers de son champ, ou venus du papier : ils vont à qui revient le centre de leur boîte, une case ou le papier.
+            let encre_dans_le_champ = |k: usize| -> bool {
+                p.pixels.drawn_ids().into_iter().any(|id| {
+                    let Some(tuile) = p.pixels.slot(id) else { return false };
+                    let (ox, oy) = p.pixels.tile_origin(id);
+                    // (La tuile entière d'abord : loin du champ, aucun pixel n'est lu.)
+                    let tl = TILE as f32;
+                    let coins = [(0.0, 0.0), (tl, 0.0), (tl, tl), (0.0, tl)].map(|(u, v)| m.point(pos2(ox as f32 + u, oy as f32 + v)));
+                    if !Rect::from_points(&coins).intersects(champs[k]) && layout.move_of(k).is_none() {
+                        return false;
+                    }
+                    tuile.avec_les_pixels(|px| {
+                        px.iter().enumerate().any(|(i, c)| {
+                            c.a() != 0 && {
+                                let b = m.point(pos2((ox + (i % TILE) as i64) as f32 + 0.5, (oy + (i / TILE) as i64) as f32 + 0.5));
+                                champs[k].contains(b) || crate::horschamp::dans_image(layout, k, b)
+                            }
+                        })
+                    })
+                })
+            };
+            let qui: Option<usize> = if origine < n && recoit[origine] && encre_dans_le_champ(origine) { Some(origine) } else { chez(bornes.center()) };
+            // Un dessin que plusieurs cases montrent (Décor, planche-mère… `render::dessins_communs`) ne se voit pas loin de sa case : la pièce
+            // n'y entre que si elle tient tout entière dans le champ de la case. Sinon elle va sur la planche, par-dessus la case, où elle se voit.
+            let qui = match qui {
+                Some(k) if k < n && cases[k].is_some_and(|(rang, _)| self.calque_commun(layout, k, rang)) && !champs[k].contains_rect(bornes) && layout.move_of(k).is_none() => Some(crate::horschamp::DESSUS + k),
+                q => q,
+            };
             let mut par_case: BTreeMap<usize, Raster> = BTreeMap::new();
             let mut parts: BTreeMap<Option<usize>, Raster> = BTreeMap::new();
             for id in p.pixels.drawn_ids() {
                 let Some(tuile) = p.pixels.slot(id) else { continue };
-                let (ox, oy) = p.pixels.tile_origin(id);
-                let (tx, ty) = p.pixels.key_of(id);
-                // (Lue sans garder ouverte une tuile rangée d'un morceau.)
-                let proprietaires: Vec<(usize, Option<usize>)> = tuile.avec_les_pixels(|px| {
-                    px.iter().enumerate().filter(|(_, c)| c.a() != 0).map(|(i, _)| (i, owner(m.point(pos2((ox + (i % TILE) as i64) as f32 + 0.5, (oy + (i / TILE) as i64) as f32 + 0.5))))).collect()
-                });
-                let Some(&(_, premier)) = proprietaires.first() else { continue };
-                let seul = proprietaires.iter().all(|(_, o)| *o == premier);
-                let mut poser = |o: Option<usize>, quoi: Option<&[usize]>| {
-                    let dest: &mut Raster = match o {
-                        Some(k) if k < crate::horschamp::DESSUS => par_case.entry(k).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
-                        _ => parts.entry(o.map(|q| q - crate::horschamp::DESSUS)).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
-                    };
-                    let did = dest.id_of(tx, ty);
-                    match quoi {
-                        None => {
-                            dest.replace_slot(did, Some(tuile.clone()));
-                        }
-                        Some(rangs) => {
-                            let neuve = tuile.avec_les_pixels(|px| {
-                                let mut t = [Color32::TRANSPARENT; TILE_PIXELS];
-                                for &i in rangs {
-                                    t[i] = px[i];
-                                }
-                                t
-                            });
-                            dest.replace_slot(did, Some(Tile::new(neuve)));
-                        }
-                    }
-                };
-                if seul {
-                    poser(premier, None);
-                } else {
-                    let mut groupes: BTreeMap<Option<usize>, Vec<usize>> = BTreeMap::new();
-                    for (i, o) in &proprietaires {
-                        groupes.entry(*o).or_default().push(*i);
-                    }
-                    for (o, rangs) in groupes {
-                        poser(o, Some(&rangs));
-                    }
+                // (Lue sans garder ouverte une tuile rangée d'un morceau. Une tuile sans encre ne compte pas.)
+                if !tuile.avec_les_pixels(|px| px.iter().any(|c| c.a() != 0)) {
+                    continue;
                 }
+                let (tx, ty) = p.pixels.key_of(id);
+                let dest: &mut Raster = match qui {
+                    Some(k) if k < crate::horschamp::DESSUS => par_case.entry(k).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
+                    _ => parts.entry(qui.map(|q| q - crate::horschamp::DESSUS)).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
+                };
+                // (La même mémoire : rien n'est recopié.)
+                let did = dest.id_of(tx, ty);
+                dest.replace_slot(did, Some(tuile.clone()));
             }
             // 2. Les cases qui reçoivent : leurs pixels dans leur dessin. Même échelle et sans rotation : recopiés tels quels, au pixel le plus proche
             // (comme d'une case à l'autre au lever d'un trait) ; sinon rééchantillonnés (`Raster::transformee`).
@@ -844,7 +855,8 @@ impl App {
         }
         Ok(Plan { dessins, morceaux: a_poser })
     }
-    /// Le choix reçoit `g` (planche) : tout est calculé, puis les pixels quittent leurs dessins et se reposent, répartis. `retirer` : faux pour un collage (les
+    /// Le choix reçoit `g` (planche) : tout est calculé, puis les pixels quittent leurs dessins et se reposent, chaque pièce entière à un seul endroit
+    /// (partie 131, `selb_preparer`). `retirer` : faux pour un collage (les
     /// pièces viennent du presse-papiers). Une seule étape d'annulation, nommée `nom`.
     pub(crate) fn selb_reporter(&mut self, layout: &BoardLayout, g: &A64, nom: &str, retirer: bool) {
         let pieces: Vec<Piece> = if retirer {
@@ -1013,7 +1025,7 @@ impl App {
             }
         }
         if sans_empreinte {
-            self.status = "Trop de traits répartis sur la planche : ces pixels ne pourront plus être choisis entiers, seulement case par case.".into();
+            self.status = "Trop de traits suivis sur la planche : ces pixels ne pourront plus être choisis entiers, seulement case par case.".into();
         }
         for (cel, tiles) in vieux {
             self.history.push(Edit::Tiles { cel, tiles });
@@ -1120,11 +1132,11 @@ impl App {
         self.vignettes.selb_presse = Some(pieces.into_iter().map(|p| Piece { cle: crate::horschamp::nouveau_lien(), ..p }).collect());
         // (Le marqueur de FEANOR dans le presse-papiers du système, comme les autres copies : une image restée là d'avant ne passe plus devant au Ctrl+V.)
         self.ctx.copy_text(format!("{}pixels de la planche", crate::pasteimage::MARK));
-        self.status = "Pixels copiés : Ctrl+V les repose à leur place, répartis.".into();
+        self.status = "Pixels copiés : Ctrl+V les repose à leur place.".into();
         true
     }
 
-    /// Ctrl+V dans les Vignettes, calque bitmap, après un Ctrl+C de la planche : les pixels reviennent à leur place, répartis. Vrai si collé.
+    /// Ctrl+V dans les Vignettes, calque bitmap, après un Ctrl+C de la planche : les pixels reviennent à leur place. Vrai si collé.
     pub(crate) fn selb_coller(&mut self) -> bool {
         if !self.selb_possible() || self.vignettes.selb_presse.is_none() {
             return false;

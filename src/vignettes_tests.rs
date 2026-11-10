@@ -241,9 +241,9 @@ fn a_stroke_draws_in_any_image_the_moment_the_pen_goes_down_without_a_prior_clic
     b.image(vec![appui(c.center(), false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     assert!(encre(&b.app.doc, 1));
-    // (Depuis le 2026-10-30, la part du trait qui tombe dans le champ de la vignette voisine va à son plan : `horschamp.rs`.)
-    assert!(encre(&b.app.doc, 0), "le trait traverse les cases du plan 1 : il en a sa part");
-    for i in [2, 3] {
+    // (Partie 131 : le trait reste tout entier dans le plan où il a commencé, comme à l'origine. Entre le 2026-10-30 et la partie 131, sa part dans
+    // le champ d'une vignette voisine allait au plan de celle-ci : `horschamp.rs`.)
+    for i in [0, 2, 3] {
         assert!(!encre(&b.app.doc, i), "plan {} : rien", i + 1);
     }
     assert_eq!(b.app.cur_panel, 1);
