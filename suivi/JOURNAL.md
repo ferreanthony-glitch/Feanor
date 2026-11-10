@@ -26,8 +26,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Sur son « Fusionne directement » : `souvient-retours` fusionné dans main (cc9e505, sans avance rapide), l'autre session prévenue
   avant ; main n'avait pas bougé depuis 00a047e : aucun conflit. Vérificateur sur main : 4 385 essais réussis, 0 échec, aucun
   avertissement, fiabilité OK (985 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`, FEANOR n'était pas
-  ouvert) et ouvert sur une copie d'afa avec de faux réglages : pas de plantage. Le dossier `Chantiers\souvient-retours` attend son
-  accord pour être retiré.
+  ouvert) et ouvert sur une copie d'afa avec de faux réglages : pas de plantage. Le dossier `Chantiers\souvient-retours` retiré avec
+  son accord (« Oui, retire-le ») ; la branche est gardée.
 
 ## 2026-11-09
 
