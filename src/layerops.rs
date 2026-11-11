@@ -212,6 +212,14 @@ impl App {
             self.select_layer(li);
             // Un clic sur le calque (panneau Calques, timeline) : on dessine de nouveau le trait, pas l'aplat.
             self.aplat_cible = None;
+            // Un seul calque choisi : les clés restées choisies sur d'autres calques ne le sont plus. Deux clés choisies gardent
+            // l'outil Sélection sur les dessins de ces clés (« calque par clé ») ; après une nouvelle clé posée sur deux calques,
+            // revenir à un seul calque par son nom laissait ce mode en place sans qu'on le voie (2026-11-11).
+            let avant = self.key_sel.len();
+            self.key_sel.retain(|k| k.layer == id);
+            if self.key_sel.len() != avant {
+                self.key_anchor = self.key_sel.first().copied();
+            }
         }
     }
 

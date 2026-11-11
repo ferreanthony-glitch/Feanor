@@ -858,7 +858,8 @@ pub(crate) fn copy_selection(doc: &Document, sel: &MultiSel) -> MultiClip {
 pub(crate) fn paste_clip(doc: &mut Document, targets: &Targets, clip: &MultiClip) -> (Vec<Part>, Vec<Edit>) {
     let (mut parts, mut edits) = (Vec::new(), Vec::new());
     for (layer, what) in &clip.items {
-        let Some(t) = targets.list.iter().find(|t| t.id == *layer) else { continue };
+        // (Plusieurs clés d'un même calque sont visées : le dessin qu'on voit à l'image courante d'abord — ce qu'on colle se voit.)
+        let Some(t) = targets.list.iter().find(|t| t.id == *layer && t.live).or_else(|| targets.list.iter().find(|t| t.id == *layer)) else { continue };
         let (w, h) = (doc.width, doc.height);
         if let (ClipWhat::Pixels(f), false) = (what, t.vector) {
             // Des pixels : dans le dessin, ou dans la strate d'aplat de ce dessin.

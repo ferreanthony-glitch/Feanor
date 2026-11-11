@@ -170,6 +170,78 @@ pub fn folder_at(layers: &[Layer], at: usize) -> Option<u64> {
     }
 }
 
+/// Où poser des calques qu'on glisse dans une liste de calques (`poser`). Les calques sont désignés par leur identifiant : plusieurs
+/// peuvent partir ensemble, et les rangs changent dès qu'on les retire de la pile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pose {
+    /// Juste au-dessus de ce calque : le trait d'insertion est au-dessus de sa ligne.
+    AuDessusDe(u64),
+    /// Juste sous ce calque : le trait est sous la dernière ligne.
+    Sous(u64),
+    /// Dans ce dossier, en haut de ses calques : lâchés sur sa ligne.
+    Dans(u64),
+}
+
+/// Où les calques `ids` se posent une fois retirés de la pile : la pile sans eux, le rang où ils s'y insèrent et le dossier qu'ils
+/// prennent. Entre deux lignes, le dossier est celui de `folder_at` (entre deux calques d'un dossier, ou juste sous un dossier) ; sur
+/// la ligne d'un dossier, c'est lui. Rien si aucun de ces calques n'est dans la pile, si le repère n'y est pas, ou si un dossier
+/// devait entrer dans un dossier (un seul niveau).
+fn lieu_de_pose(layers: &[Layer], ids: &[u64], pose: Pose) -> Option<(Vec<Layer>, usize, Option<u64>)> {
+    let part = |l: &Layer| ids.contains(&l.id);
+    if !layers.iter().any(part) {
+        return None;
+    }
+    let reste: Vec<Layer> = layers.iter().filter(|l| !part(l)).cloned().collect();
+    let rang_dans_le_reste = |id: u64| reste.iter().position(|l| l.id == id);
+    // Le premier calque qui reste en descendant depuis le rang `i` de la pile : les calques glissés se posent juste au-dessus de lui
+    // (tout en bas s'il n'y en a pas).
+    let au_dessus_du_reste_sous = |i: usize| layers[..=i].iter().rev().find(|l| !part(l)).and_then(|l| rang_dans_le_reste(l.id)).map_or(0, |k| k + 1);
+    let (at, dossier) = match pose {
+        Pose::Dans(f) => {
+            if layers.iter().any(|l| part(l) && l.folder) {
+                return None;
+            }
+            (reste.iter().position(|l| l.folder && l.id == f)?, Some(f))
+        }
+        Pose::AuDessusDe(r) => {
+            let at = au_dessus_du_reste_sous(layers.iter().position(|l| l.id == r)?);
+            (at, folder_at(&reste, at))
+        }
+        Pose::Sous(r) => {
+            let i = layers.iter().position(|l| l.id == r)?;
+            let at = if part(&layers[i]) { au_dessus_du_reste_sous(i) } else { rang_dans_le_reste(r)? };
+            (at, folder_at(&reste, at))
+        }
+    };
+    Some((reste, at, dossier))
+}
+
+/// Le dossier que prendraient les calques `ids` posés à `pose` (pour le montrer pendant le glissé : le trait d'insertion se met en
+/// retrait). Rien : hors dossier, ou une pose qui n'a pas de sens.
+pub fn dossier_de_pose(layers: &[Layer], ids: &[u64], pose: Pose) -> Option<u64> {
+    lieu_de_pose(layers, ids, pose).and_then(|(_, _, dossier)| dossier)
+}
+
+/// La pile une fois les calques `ids` posés à `pose` : ils sortent de leur place et se posent ensemble, dans leur ordre ; ils
+/// prennent le dossier de l'endroit (`lieu_de_pose`), un dossier glissé emmène ses calques (`normalize`). Rien si la pile n'en est
+/// pas changée (ni l'ordre, ni les dossiers) : pas d'étape d'annulation pour rien.
+pub fn poser(layers: &[Layer], ids: &[u64], pose: Pose) -> Option<Vec<Layer>> {
+    let (mut pile, at, dossier) = lieu_de_pose(layers, ids, pose)?;
+    let bloc: Vec<Layer> = layers
+        .iter()
+        .filter(|l| ids.contains(&l.id))
+        .cloned()
+        .map(|mut l| {
+            l.parent = if l.folder { None } else { dossier };
+            l
+        })
+        .collect();
+    pile.splice(at..at, bloc);
+    normalize(&mut pile);
+    let pareil = pile.len() == layers.len() && pile.iter().zip(layers).all(|(a, b)| a.id == b.id && a.parent == b.parent);
+    (!pareil).then_some(pile)
+}
+
 impl App {
     /// Pose une nouvelle pile de calques (une étape d'annulation) ; `current` redevient le
     /// calque courant.

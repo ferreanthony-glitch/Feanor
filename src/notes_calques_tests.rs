@@ -300,14 +300,16 @@ fn the_new_folder_button_creates_one_folder_in_one_undo_step() {
 fn dragging_a_layer_in_and_out_of_a_folder_and_moving_the_folder_carries_its_layers() {
     let mut app = app_with_folder("deplacer");
     let folder_id = app.layers()[2].id;
-    // « Hors dossier » (rang 3) se glisse entre C1 et C2 (rang 1) : il entre dans le dossier.
-    app.move_layer_to(3, 1);
+    // « Hors dossier » (rang 3) se glisse entre C1 et C2 (juste au-dessus de C1) : il entre dans le dossier.
+    let sur_c1 = crate::folders::Pose::AuDessusDe(app.layers()[0].id);
+    app.poser_les_calques(3, sur_c1);
     let l = app.layers();
     assert_eq!(l.iter().find(|x| x.name == "Hors dossier").and_then(|x| x.parent), Some(folder_id), "{:?}", l.iter().map(|x| (&x.name, x.parent.is_some())).collect::<Vec<_>>());
     // Il en ressort quand on le pose au-dessus du dossier.
     let top = app.layers().len() - 1;
     let rank = app.layers().iter().position(|x| x.name == "Hors dossier").unwrap();
-    app.move_layer_to(rank, top);
+    let sur_le_dossier = crate::folders::Pose::AuDessusDe(app.layers()[top].id);
+    app.poser_les_calques(rank, sur_le_dossier);
     assert_eq!(app.layers().iter().find(|x| x.name == "Hors dossier").unwrap().parent, None);
     // Choisir le dossier et le monter emmène ses calques avec lui (ils restent d'un seul tenant sous lui).
     let fi = app.layers().iter().position(|x| x.folder).unwrap();

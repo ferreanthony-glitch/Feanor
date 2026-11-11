@@ -72,24 +72,69 @@ pub(crate) fn row_at(rows: &[Row], y: f32) -> Option<Row> {
     rows.iter().copied().find(|r| y >= r.top && y < r.top + r.h)
 }
 
-/// Rang que prend le calque `from` lâché à `y` (depuis le haut des lignes) : il se glisse entre
-/// les deux lignes dont les milieux encadrent `y`, juste au-dessus du calque de la ligne d'en
-/// dessous (ou juste sous la dernière ligne). Des calques sans ligne (groupe caché) peuvent
-/// être entre deux lignes : ils ne bougent pas.
-pub(crate) fn drop_index(rows: &[Row], from: usize, y: f32) -> usize {
-    if rows.is_empty() {
-        return from;
+/// Où tombe ce qu'on glisse dans une liste de calques (panneau Calques, colonne de la bande du montage, en-têtes de la timeline),
+/// lu sous le pointeur (Anthony, 2026-11-11 : « glisser des calques dans un dossier ne fonctionne pas »).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Cible {
+    /// Entre deux lignes : où poser, et l'ordonnée du trait d'insertion (depuis le haut des lignes).
+    Trait(crate::folders::Pose, f32),
+    /// Sur la ligne d'un dossier : dedans. Le haut et la hauteur de sa ligne, pour l'encadrer.
+    Dossier(crate::folders::Pose, f32, f32),
+}
+
+/// Le haut de la ligne d'un dossier qui reste « au-dessus de lui » pour un glissé (le quart de la ligne si elle est plus fine) : le
+/// reste de la ligne est « dedans ».
+pub(crate) const BORD_DU_DOSSIER: f32 = 6.0;
+
+impl Cible {
+    pub(crate) fn pose(&self) -> crate::folders::Pose {
+        match *self {
+            Cible::Trait(p, _) | Cible::Dossier(p, _, _) => p,
+        }
+    }
+}
+
+/// La cible d'un glissé lâché à `y` (depuis le haut des lignes). Sur la ligne d'un dossier, hors de son bord du haut (six points au
+/// plus, qui restent « au-dessus de lui ») : dans le dossier, qu'il soit ouvert ou fermé, vide ou non (`dans_un_dossier` : faux quand c'est un dossier
+/// qu'on glisse, un dossier n'entre jamais dans un dossier). Sinon entre les deux lignes dont les milieux encadrent `y` : juste
+/// au-dessus du calque de la ligne d'en dessous, ou juste sous la dernière ligne (des calques sans ligne, groupe caché ou dossier
+/// fermé, peuvent être entre deux lignes : ils ne bougent pas). Rien sur la ligne d'un des calques glissés (`parts`, leurs rangs) :
+/// un clic qui a tremblé ne range ni ne sort rien.
+pub(crate) fn cible_du_glisse(rows: &[Row], layers: &[Layer], parts: &[usize], y: f32, dans_un_dossier: bool) -> Option<Cible> {
+    use crate::folders::Pose;
+    let last = rows.last()?;
+    if let Some(r) = row_at(rows, y) {
+        if parts.contains(&r.li) {
+            return None;
+        }
+        if dans_un_dossier && layers.get(r.li).is_some_and(|l| l.folder) && y >= r.top + (r.h * 0.25).min(BORD_DU_DOSSIER) {
+            return Some(Cible::Dossier(Pose::Dans(layers[r.li].id), r.top, r.h));
+        }
     }
     let slot = rows.iter().filter(|r| r.top + r.h * 0.5 < y).count();
-    // Lâché juste au-dessus ou juste au-dessous de lui-même : il ne bouge pas.
-    if rows.get(slot).is_some_and(|r| r.li == from) || (slot > 0 && rows[slot - 1].li == from) {
-        return from;
-    }
-    // Rang du voisin une fois le calque retiré de la pile.
-    let after_removal = |li: usize| if from < li { li - 1 } else { li };
-    match rows.get(slot) {
-        Some(below) => after_removal(below.li) + 1,
-        None => after_removal(rows[rows.len() - 1].li),
+    Some(match rows.get(slot) {
+        Some(dessous) => Cible::Trait(Pose::AuDessusDe(layers.get(dessous.li)?.id), dessous.top),
+        None => Cible::Trait(Pose::Sous(layers.get(last.li)?.id), last.top + last.h),
+    })
+}
+
+/// Montre où ce qu'on glisse va se poser : un trait entre deux lignes, en retrait de `retrait` points quand il tombe dans un dossier
+/// (`dans`), ou le cadre de la ligne du dossier visé. `x` : la largeur de la liste ; `top` : l'ordonnée écran du haut des lignes.
+pub(crate) fn peindre_cible(painter: &egui::Painter, x: egui::Rangef, top: f32, cible: Cible, dans: bool, retrait: f32) {
+    let trait_ = Stroke::new(2.0_f32, theme::contour());
+    match cible {
+        Cible::Trait(_, y) => {
+            let gauche = x.min + if dans { retrait } else { 0.0 };
+            painter.line_segment([pos2(gauche, top + y), pos2(x.max, top + y)], trait_);
+            if dans {
+                // (Un petit crochet : le trait part du bord du dossier.)
+                painter.line_segment([pos2(gauche, top + y - 4.0), pos2(gauche, top + y + 4.0)], trait_);
+            }
+        }
+        Cible::Dossier(_, haut, h) => {
+            let r = Rect::from_min_max(pos2(x.min, top + haut), pos2(x.max, top + haut + h));
+            painter.rect(r, 3.0, theme::contour().gamma_multiply(0.18), trait_, StrokeKind::Inside);
+        }
     }
 }
 
@@ -274,20 +319,18 @@ impl App {
             ui.ctx().request_repaint();
         }
 
-        // Glisser une ligne : un trait montre où le calque va se poser.
+        // Glisser une ligne : un trait montre où le calque va se poser (entre deux lignes), ou le cadre du dossier où il va entrer
+        // (sur la ligne d'un dossier) ; les calques choisis partent ensemble (`poser_les_calques`).
         if let Some(from) = self.head_drag.filter(|_| tient) {
             let pointer = ui.input(|i| i.pointer.interact_pos());
-            if let Some(p) = pointer {
-                // Le trait est entre les deux lignes où le calque va se glisser.
-                let slot = rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - top).count();
-                let y = top + rows.get(slot).map_or(rows_height(&rows), |r| r.top);
-                painter.line_segment([pos2(rect.left(), y), pos2(rect.right(), y)], Stroke::new(2.0_f32, theme::contour()));
+            let cible = pointer.and_then(|p| self.cible_des_calques_glisses(&rows, from, p.y - top));
+            if let Some((c, dans)) = cible {
+                peindre_cible(&painter, egui::Rangef::new(rect.left(), rect.right()), top, c, dans, INDENT);
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.head_drag = None;
-                if let Some(p) = pointer {
-                    let to = drop_index(&rows, from, p.y - top);
-                    self.move_layer_to(from, to);
+                if let Some((c, _)) = cible {
+                    self.poser_les_calques(from, c.pose());
                 }
             }
         }
@@ -707,30 +750,65 @@ impl App {
         }
     }
 
-    /// Change le rang du calque `from` : il prend la place `to` (les autres se décalent). Le
-    /// calque courant reste le même calque. Posé entre les calques d'un dossier (ou juste sous
-    /// lui), un calque entre dans ce dossier ; posé ailleurs, il en sort ; un dossier emmène ses
-    /// calques (13b-5).
-    pub(crate) fn move_layer_to(&mut self, from: usize, to: usize) {
-        let n = self.layers().len();
-        if from >= n || to >= n || from == to {
-            return;
+    /// Les calques qui partent avec le calque `li` quand on le glisse dans une liste de calques : lui seul ; ou, s'il est un des
+    /// calques choisis, tous les calques choisis (la sélection agit sur tout ce qui est choisi) — sauf les dossiers et les calques
+    /// de couleur, qui suivent leur calque de trait. Un dossier se glisse seul, avec ses calques.
+    pub(crate) fn calques_glisses(&self, li: usize) -> Vec<u64> {
+        let layers = self.layers();
+        let Some(l) = layers.get(li) else { return Vec::new() };
+        if l.folder || !self.is_chosen_layer(li) {
+            return vec![l.id];
         }
-        if self.layers()[from].keys_follow_line() {
+        let choisis: Vec<u64> = self.chosen_layers().into_iter().filter(|&k| !layers[k].folder && !layers[k].keys_follow_line()).map(|k| layers[k].id).collect();
+        if choisis.len() >= 2 && choisis.contains(&l.id) {
+            choisis
+        } else {
+            vec![l.id]
+        }
+    }
+
+    /// La cible du glissé parti du calque `from`, le pointeur à `y` (depuis le haut des lignes `rows`), et si le trait d'insertion
+    /// tombe dans un dossier (il se peint en retrait). Rien : sur la ligne d'un des calques glissés, ou sans ligne.
+    pub(crate) fn cible_des_calques_glisses(&self, rows: &[Row], from: usize, y: f32) -> Option<(Cible, bool)> {
+        let layers = self.layers();
+        let l = layers.get(from)?;
+        let ids = self.calques_glisses(from);
+        let parts: Vec<usize> = layers.iter().enumerate().filter(|(_, x)| ids.contains(&x.id)).map(|(i, _)| i).collect();
+        let cible = cible_du_glisse(rows, layers, &parts, y, !l.folder)?;
+        let dans = matches!(cible, Cible::Trait(..)) && crate::folders::dossier_de_pose(layers, &ids, cible.pose()).is_some();
+        Some((cible, dans))
+    }
+
+    /// Pose les calques glissés depuis le calque `from` (`calques_glisses`) à `pose` : entre deux lignes, ou dans un dossier quand
+    /// ils sont lâchés sur sa ligne (`folders::poser`). Posés entre les calques d'un dossier (ou juste sous lui), ils y entrent ;
+    /// posés ailleurs, ils en sortent ; un dossier emmène ses calques (13b-5). Une étape d'annulation ; rien si la pile n'en est pas
+    /// changée. Le calque courant reste le même calque, les calques choisis le restent. La barre d'état dit ce qui est entré dans un
+    /// dossier ou en est sorti.
+    pub(crate) fn poser_les_calques(&mut self, from: usize, pose: crate::folders::Pose) {
+        let Some((id, suit_son_trait, avant)) = self.layers().get(from).map(|l| (l.id, l.keys_follow_line(), l.parent)) else { return };
+        if suit_son_trait {
             self.status = "Un calque de couleur reste sous son calque de trait : déplace le trait, la couleur le suit.".into();
             return;
         }
         self.end_stroke();
+        let ids = self.calques_glisses(from);
+        let Some(pile) = crate::folders::poser(self.layers(), &ids, pose) else { return };
         let current = self.layers()[self.cur_layer].id;
         let snap = self.snapshot();
-        let mut layers = self.layers().to_vec();
-        let mut layer = layers.remove(from);
-        layer.parent = if layer.folder { None } else { crate::folders::folder_at(&layers, to) };
-        layers.insert(to, layer);
-        crate::folders::normalize(&mut layers);
-        *self.layers_mut() = layers;
-        self.cur_layer = self.layers().iter().position(|l| l.id == current).unwrap_or(to);
+        *self.layers_mut() = pile;
+        self.cur_layer = self.layers().iter().position(|l| l.id == current).unwrap_or(0);
         self.vsel = None;
         self.commit_structure(snap);
+        let n = ids.len();
+        let s = if n > 1 { "s" } else { "" };
+        let apres = self.layers().iter().find(|l| l.id == id).and_then(|l| l.parent);
+        let nom = |d: Option<u64>| d.and_then(|d| self.layers().iter().find(|l| l.id == d)).map(|l| l.name.clone());
+        let (dedans, dehors) = (nom(apres), nom(avant));
+        let texte = match (dedans, dehors) {
+            (Some(d), _) if apres != avant => format!("{n} calque{s} rangé{s} dans « {d} »."),
+            (None, Some(d)) => format!("{n} calque{s} sorti{s} de « {d} »."),
+            _ => format!("{n} calque{s} déplacé{s}."),
+        };
+        self.status = texte;
     }
 }

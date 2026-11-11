@@ -262,18 +262,18 @@ impl App {
         if let Some(from) = self.montage_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             let base = rect.top() + rows.layers_top();
+            // Un trait entre deux pistes, ou le cadre de la ligne d'un dossier : lâchés dessus, les calques y entrent ; les calques
+            // choisis partent ensemble (`layerheads::cible_du_glisse`, `poser_les_calques`).
             let pointer = ui.input(|i| i.pointer.interact_pos());
-            if let Some(p) = pointer {
-                let slot = grid.iter().filter(|g| g.top + g.h * 0.5 < p.y - base).count();
-                let y = base + grid.get(slot).map_or(grid.last().map_or(0.0, |g| g.top + g.h), |g| g.top);
-                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.right() - 6.0, y)], Stroke::new(2.0_f32, theme::contour()));
+            let cible = pointer.and_then(|p| self.cible_des_calques_glisses(&grid, from, p.y - base));
+            if let Some((c, dans)) = cible {
+                crate::layerheads::peindre_cible(&painter, egui::Rangef::new(rect.left() + 2.0, rect.right() - 6.0), base, c, dans, 10.0);
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.montage_layer_drag = None;
-                if let Some(p) = pointer {
-                    let to = crate::layerheads::drop_index(&grid, from, p.y - base);
-                    if to != from && !self.content_refuses() {
-                        self.move_layer_to(from, to);
+                if let Some((c, _)) = cible {
+                    if !self.content_refuses() {
+                        self.poser_les_calques(from, c.pose());
                     }
                 }
             }

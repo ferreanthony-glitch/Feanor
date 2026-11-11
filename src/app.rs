@@ -4568,7 +4568,12 @@ impl App {
             "edition.copier" if self.multi.sel.is_some() => {
                 self.multi_copy();
             }
-            "edition.coller" if self.multi_clip.is_some() && self.chosen_layers().len() >= 2 => self.multi_paste(),
+            // La dernière copie est celle d'une sélection sur plusieurs dessins (plusieurs calques choisis, ou plusieurs clés choisies
+            // dans la timeline) : c'est elle qu'on colle, quel que soit le nombre de calques choisis à cet instant. Avant, il en
+            // fallait deux : avec deux clés restées choisies et un seul calque choisi, Ctrl+V ne collait rien — la copie n'était
+            // pas dans le presse-papiers d'un seul calque (Anthony, 2026-11-11 : « le Ctrl+C / Ctrl+V ne fonctionne plus pour
+            // copier-coller plusieurs lignes vectorielles »). Une copie d'un seul calque la remplace (`copy_selection`).
+            "edition.coller" if self.multi_clip.is_some() => self.multi_paste(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {

@@ -10121,3 +10121,62 @@ partagé, un plan tenu par quelqu'un d'autre est laissé de côté avec un messa
 6. Clic droit sur des clés > « Modifier la durée des clés d'images… », 12, Entrée ; puis une durée qui fait dépasser la fin : le plan
    s'allonge, le suivant se décale. Ctrl+Z rend tout.
 7. Trois plans choisis de durées différentes > « Changer la durée des plans choisis… » : champ vide « durées différentes », taper 2:12.
+
+## 139. Glisser des calques dans un dossier ; copier-coller de traits avec des clés restées choisies (2026-11-11, branche `dossier-glisser`)
+
+Deux retours d'Anthony après l'essai des parties 137 et 138. Code : `folders.rs` (`Pose`, `poser`, `dossier_de_pose`), `layerheads.rs` (`Cible`, `cible_du_glisse`, `peindre_cible`, `calques_glisses`, `poser_les_calques` ; `drop_index` et `move_layer_to` retirés), `layersui.rs`, `montagerows.rs`, `app.rs` (Ctrl+V), `multitools.rs` (`multi_paste`), `multisel.rs` (`paste_clip`), `layerops.rs` (`click_layer_head`). Essais : `dossierglisser_tests.rs` (neuf, 5), `multicalques_tests.rs` (3 de plus).
+
+### 139.1 Glisser des calques dans un dossier
+
+« glisser des calques dans un dossier ne fonctionne pas » (capture : trois calques choisis sous un dossier ouvert et vide, un dossier fermé au-dessus).
+
+**Avant**, quatre choses s'y opposaient :
+
+1. **Pris par son nom, un calque ne partait pas** dans le panneau Calques : les textes du rang se sélectionnaient à la souris (réglage d'origine de la bibliothèque d'interface), et un glissé parti du nom sélectionnait ses lettres. Il fallait le prendre par sa vignette ou par le vide du rang.
+2. **Lâcher sur le rang d'un dossier ne rangeait pas dedans.** Le seul chemin était le trait d'insertion juste sous le dossier, ou entre deux de ses calques.
+3. **Le calque posé juste sous un dossier vide ne pouvait pas y entrer** : ce trait-là était « juste au-dessus de lui-même », où un calque ne bouge pas.
+4. **Un seul calque partait**, même avec plusieurs calques choisis. Et rien n'entrait dans un dossier fermé (le trait sous lui est déjà hors du dossier).
+
+**Maintenant**, dans le panneau Calques, la colonne de la bande du montage et les en-têtes de la timeline de l'Animation :
+
+- **Lâchés sur la ligne d'un dossier, les calques y entrent**, en haut de ses calques, qu'il soit ouvert ou fermé, vide ou non. Pendant le geste, la ligne du dossier est encadrée. Seul le bord du haut de la ligne (six points, ou le quart d'une ligne fine) reste « au-dessus du dossier ». Un dossier fermé reste fermé : son compte de calques augmente, la barre d'état dit « 3 calques rangés dans « Dossier 2 » ».
+- **Les calques choisis partent ensemble**, dans leur ordre, quand celui qu'on prend est l'un d'eux (la sélection agit sur tout ce qui est choisi). Les dossiers choisis et les calques de couleur liés n'en sont pas (un calque de couleur suit son trait). Un calque pris hors du choix part seul. Un dossier se glisse seul, avec ses calques ; il n'entre jamais dans un dossier.
+- **Entre deux lignes, rien ne change** : entre deux calques d'un dossier ou juste sous un dossier ouvert, dedans ; ailleurs, dehors. Le trait d'insertion se met en retrait, avec un petit crochet, quand il tombe dans un dossier.
+- **Sur la ligne d'un des calques qu'on glisse : rien.** Un clic qui a tremblé ne range ni ne sort rien.
+- Une étape d'annulation par lâcher ; rien si la pile n'en est pas changée. Le calque courant reste le même, les calques choisis le restent. « 2 calques sortis de « Dossier 1 » », « 1 calque déplacé ».
+- Le nom d'un calque du panneau Calques ne se sélectionne plus à la souris (double-clic : le renommer, comme avant).
+
+**Limites.** Sous le dernier calque d'un dossier, le trait est hors du dossier : on ne pose pas un calque tout en bas d'un dossier d'un seul geste (on le lâche sur le dossier, puis on le descend). Avec « trois calques » dans la bande du montage, on ne peut viser que les lignes qu'on voit ; « Toute la pile » ou le panneau Calques montrent tout. Les Vignettes gardent leur panneau à part.
+
+### 139.2 Ctrl+C / Ctrl+V de traits qui ne collait plus rien
+
+« le ctrl+c/ctrl+v ne fonctionne plus pour copier/coller plusieurs lignes vectorielles »
+
+**Ce qui se passait.** Dès que deux clés sont choisies dans la timeline ou le montage, l'outil Sélection prend sur les dessins de ces clés (« calque par clé », partie 132), et Ctrl+C copie alors « une sélection sur plusieurs dessins », rangée à part de la copie d'un seul calque. Ctrl+V ne lisait cette copie-là que si **deux calques au moins** étaient choisis ; avec un seul, il lisait l'autre presse-papiers, vide : rien ne se collait, sans un mot. Or deux clés restent choisies sans qu'on l'ait demandé après une nouvelle clé posée sur deux calques (elles s'éclairent), après un changement de durée, après un glissé de clés : il suffisait ensuite de revenir à un seul calque en cliquant son nom.
+
+**Maintenant.**
+
+- **Ctrl+V colle la dernière copie**, quel que soit le nombre de calques choisis : chaque calque en face reçoit sa part, à la même place, et ce qui est collé est choisi (« déplace-les »). Avec un seul calque en face qui n'est pas un de ceux de la copie, tout ce qui est de sa sorte s'y colle, comme une copie d'un seul calque. Ce qui n'a pas de calque en face est laissé de côté, et la barre d'état le dit. Plusieurs morceaux pour un même calque (deux clés d'un même calque copiées ensemble) n'en font qu'un, collé sur le dessin qu'on voit.
+- **Un clic sur le nom d'un calque lâche les clés choisies sur les autres calques** : un seul calque choisi, plus de mode « plusieurs dessins » resté en place sans qu'on le voie. Les clés de ce calque-là restent choisies.
+
+**Pas vérifié** : son geste exact n'est pas connu. C'est le seul chemin trouvé dans le code où Ctrl+C puis Ctrl+V sur des traits ne colle rien ; l'essai le reproduit (deux clés choisies, un calque choisi).
+
+**Limite.** Coller sur une image où le calque n'a pas de dessin : la copie « sur plusieurs dessins » ne crée pas le dessin (la copie d'un seul calque le crée) ; la barre d'état dit pourquoi rien n'a été collé.
+
+### 139.3 À vérifier à l'écran (par Anthony)
+
+1. Panneau Calques : prendre un calque **par son nom** et le lâcher sur un dossier : le dossier s'encadre pendant le geste, le calque y entre.
+2. Trois calques choisis (Ctrl + clic), en prendre un, le lâcher sur un dossier **vide** : les trois y entrent, dans leur ordre. Ctrl+Z les ressort d'un coup.
+3. Lâcher un calque sur un dossier **fermé** : le compte du dossier augmente, la barre d'état le dit.
+4. Sortir un calque d'un dossier : le lâcher au-dessus du dossier, ou sous son dernier calque.
+5. La même chose dans la colonne de la timeline (« Toute la pile ») : lâcher sur la ligne fine d'un dossier.
+6. Poser une nouvelle clé sur deux calques (F5), cliquer le nom d'un des deux, choisir des traits au lasso, Ctrl+C, Ctrl+V : les traits sont collés et choisis.
+7. Deux calques choisis, des traits pris sur les deux, Ctrl+C, Ctrl+V : chacun reçoit les siens.
+
+### 139.4 Essais
+
+`dossierglisser_tests.rs` : la pile après un lâcher (trois calques dans un dossier vide, le calque du dessous, un dossier fermé, deux calques venus de deux endroits, déjà en haut du dossier, jamais un dossier dans un dossier ; entre deux lignes comme avant, pour un calque ou plusieurs ; un dossier emmène ses calques) ; la cible lue sous le pointeur (sur la ligne d'un dossier, son bord du haut, sa propre ligne, la ligne fine de 13 points, un dossier glissé) ; **à l'écran** : dans le panneau Calques, deux calques choisis pris par le nom de l'un et lâchés sur un dossier, puis un calque dans un dossier fermé ; dans la colonne de la bande, un calque sur la ligne fine d'un dossier, puis ressorti.
+
+`multicalques_tests.rs` : Ctrl+C puis Ctrl+V avec deux clés choisies et un seul calque choisi ; avec un seul calque choisi après une copie sur deux calques (sa part, et ce qui est laissé de côté est dit) ; sur un autre calque que ceux de la copie ; le clic sur le nom d'un calque qui lâche les clés des autres.
+
+**Adaptés** : `layerflags_tests.rs` (le rang d'un calque lâché se lit par `cible_du_glisse` et `poser`), `calquecouleur_tests.rs` et `notes_calques_tests.rs` (`poser_les_calques` à la place de `move_layer_to`).

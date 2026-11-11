@@ -25,7 +25,7 @@ use crate::workspace::Espace;
 
 /// La pile du plan de retakes, du bas vers le haut. Du haut vers le bas (les rangées) : 0 « Dossier 2 » [1 V11, 2 V10, 3 V9, 4 V8],
 /// 5 V13, 6 « Dossier 1 » [7 Dessin, 8 V5, 9 V4], 10 Réf.
-fn pile_de_retakes(dossier_2_ferme: bool) -> Vec<Layer> {
+pub(crate) fn pile_de_retakes(dossier_2_ferme: bool) -> Vec<Layer> {
     let mut d2 = Layer::new_folder("Dossier 2");
     d2.collapsed = dossier_2_ferme;
     let d1 = Layer::new_folder("Dossier 1");
@@ -51,7 +51,7 @@ fn pile_de_retakes(dossier_2_ferme: bool) -> Vec<Layer> {
 }
 
 /// Un film de deux plans : le premier a la pile de retakes (un dessin tenu sur chaque calque), le second un seul calque.
-fn film_de_retakes(dossier_2_ferme: bool) -> Document {
+pub(crate) fn film_de_retakes(dossier_2_ferme: bool) -> Document {
     let mut doc = doc_with(&[&["x"], &["Autre"]]);
     doc.panels[0].layers = pile_de_retakes(dossier_2_ferme);
     doc.panels[0].set_length(24);
@@ -63,7 +63,7 @@ fn film_de_retakes(dossier_2_ferme: bool) -> Document {
     doc
 }
 
-fn rang(app: &App, nom: &str) -> usize {
+pub(crate) fn rang(app: &App, nom: &str) -> usize {
     app.layers().iter().position(|l| l.name == nom).unwrap_or_else(|| panic!("pas de calque « {nom} »"))
 }
 
@@ -264,7 +264,7 @@ fn the_zoom_keys_of_the_image_zoom_the_strip_when_the_pointer_is_over_it() {
 
 // ------------------------------------------------------------------------------------ à l'écran
 
-fn banc_de_retakes(dossier_2_ferme: bool, courant: &str) -> Banc {
+pub(crate) fn banc_de_retakes(dossier_2_ferme: bool, courant: &str) -> Banc {
     let mut b = banc_taille(film_de_retakes(dossier_2_ferme), false, 1920, 1080);
     b.app.set_espace(Espace::Montage);
     b.app.montage_zoom = PPF;
@@ -278,13 +278,13 @@ fn banc_de_retakes(dossier_2_ferme: bool, courant: &str) -> Banc {
     b
 }
 
-fn trouver(t: &[(String, Rect)], texte: &str) -> Vec<Rect> {
+pub(crate) fn trouver(t: &[(String, Rect)], texte: &str) -> Vec<Rect> {
     t.iter().filter(|(s, _)| s.contains(texte)).map(|(_, r)| *r).collect()
 }
 
 /// Les textes de la colonne de gauche de la bande du montage (les noms des pistes, les lignes de dossier, les fines bandes) : en bas
 /// de l'écran, dans les 180 points de la colonne. Le panneau Calques, plus haut et à droite, écrit les mêmes noms : il n'en est pas.
-fn colonne(b: &Banc) -> Vec<(String, Rect)> {
+pub(crate) fn colonne(b: &Banc) -> Vec<(String, Rect)> {
     textes(b).into_iter().filter(|(_, r)| r.left() < 190.0 && r.center().y > 600.0).collect()
 }
 
@@ -371,7 +371,7 @@ fn on_screen_the_bottom_bar_sets_the_stack_and_the_height_of_the_plans() {
 // ------------------------------------------------------------------------------------ suites du 11 novembre
 
 /// Les rectangles pleins de cette couleur peints par la dernière image.
-fn pleins(shape: &Shape, fill: Color32, out: &mut Vec<Rect>) {
+pub(crate) fn pleins(shape: &Shape, fill: Color32, out: &mut Vec<Rect>) {
     match shape {
         Shape::Rect(r) if r.fill == fill => out.push(r.rect),
         Shape::Vec(v) => v.iter().for_each(|s| pleins(s, fill, out)),
@@ -381,7 +381,7 @@ fn pleins(shape: &Shape, fill: Color32, out: &mut Vec<Rect>) {
 
 /// Le nom `nom` écrit dans le panneau Calques : à droite de l'écran, loin de la colonne de la bande du montage (en bas à gauche), qui
 /// écrit les mêmes noms.
-fn nom_au_panneau(b: &Banc, nom: &str) -> Rect {
+pub(crate) fn nom_au_panneau(b: &Banc, nom: &str) -> Rect {
     let partout: Vec<Rect> = textes(b).into_iter().filter(|(s, r)| s == nom && r.left() > 600.0).map(|(_, r)| r).collect();
     partout.into_iter().max_by(|a, c| a.left().total_cmp(&c.left())).unwrap_or_else(|| panic!("« {nom} » n'est pas dans le panneau Calques : {:?}", textes(b)))
 }
