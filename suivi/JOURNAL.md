@@ -163,6 +163,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   ouvert deux fois sur une copie fraîche de son projet avec de faux réglages : pas de plantage. Pas de version portable. Pas
   vérifié : aucun geste fait à la main dans le vrai exe (sa liste 142.4) ; la copie de projet ouverte n'a pas de case de continuité
   qui porte un mouvement. Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent.
+- Son retour après l'essai du mouvement B vers C, avec deux captures : « sur le plan 5 par exemple, je ne peux pas créer de mouvement de
+  caméra depuis la deuxième vignette, il s'applique automatiquement à la première », et sa règle : « un mouvement de caméra peut démarrer
+  d'une vignette même si la vignette n'est pas la première vignette du plan. Le mouvement de caméra démarre alors du début de la clé
+  d'image et termine à la fin de la clé d'image ». J'avais gardé l'ancienne règle pour un plan qui ne bouge pas encore (le premier
+  mouvement naissait sur la première case) : elle est retirée. Chantier `camera-case` (partie 142.6), branche du même nom dans
+  `Chantiers\calques-place`. Le mouvement naît sur la case où on le demande, de sa première à sa dernière image, que le plan bouge déjà
+  ou non ; le « + » de Maj sert toujours la case survolée ; un mouvement vit sur la case où il commence. Une case qu'un mouvement
+  commencé ailleurs traverse refuse le geste et dit de quelle image à quelle image. Trouvé dans son projet (lu seulement) : la clé B de
+  son plan 3 est à l'image 108, au-delà de sa première case (elle était à l'image 48 à 18 h 43) ; c'est pour cela que sa dernière case ne
+  prenait pas de mouvement tant qu'il n'avait pas ajouté un cadre sur la première. Sur une copie fraîche de son projet : son plan 5 prend
+  son mouvement sur la deuxième case (clés aux images 49 et 96), son plan 3 dit pourquoi. Vérificateur sur la branche : 4 500 essais
+  réussis, 0 échec, aucun avertissement (un premier passage, la machine chargée, avait un échec sur un essai de capture d'écran qui passe
+  seul et au second passage). Fusion dans main : à son accord.
 
 ## 2026-11-10
 

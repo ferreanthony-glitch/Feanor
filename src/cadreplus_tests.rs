@@ -361,31 +361,35 @@ fn a_plan_with_several_cases_gets_its_plus_from_any_case() {
     assert_eq!(dernier_nom(&b), "Mouvement de caméra");
 }
 
+/// (Avant la règle d'Anthony du 11 novembre au soir, le « + » d'un plan qui bouge restait à côté du dernier cadre de sa première case,
+/// quelle que soit la case survolée, et le clic y ajoutait un cadre. Maintenant il sert la case survolée : partie 142.)
 #[test]
-fn a_moving_plan_keeps_its_plus_beside_its_last_frame_whatever_case_is_hovered() {
+fn the_plus_serves_the_hovered_case_and_a_case_crossed_by_a_move_started_elsewhere_says_why_nothing_happens() {
     let mut doc = quatre_plans();
     let n = doc.panels[0].frame_count();
     let a = doc.panel_camera(0, 0);
     let b_cam = a.shifted(60.0, 0.0);
+    // Des clés posées sur tout le plan (trois cases) : la caméra va de A à B en traversant les trois.
     doc.panels[0].camera = vec![CameraKey::new(0, a), CameraKey::new(n - 1, b_cam)];
     let mut b = ouvert(doc, 6);
     let l = b.app.board_layout();
     assert!(l.cards[0].mouvement && l.cards[1].plan == l.cards[0].plan && l.cards[1].frame > 0);
-    // Survol de la case 0 puis d'une autre case du plan : le même + (à côté du dernier cadre de la case 0).
+    // Survol de la première case : le + est à côté de son dernier cadre.
     let sur_0 = survoler(&mut b, 0).expect("sur la première case");
     let place = b.app.vignettes.plus.place.unwrap();
     assert_eq!(place.ancre, 0);
     let (cadres, _) = b.app.cadres_sur_la_planche(&b.app.board_layout(), 0);
     let dernier = Rect::from_points(&cadres.last().unwrap().map(|p| b.app.vignettes.xf.to_screen(p)));
     assert!(dernier.expand(40.0).contains(sur_0), "à côté du dernier cadre : {sur_0:?} {dernier:?}");
-    let sur_1 = survoler(&mut b, 1);
-    if let Some(p) = sur_1 {
-        assert_eq!(b.app.vignettes.plus.place.unwrap().ancre, 0, "les cadres vivent sur la première case");
-        assert!(p.distance(sur_0) < 1.0 || p.distance(dernier.center()) < dernier.width() + 60.0, "{p:?}");
-    }
-    // Un clic dessus : C.
+    // Survol d'une autre case du plan : le + est pour elle. Le mouvement de la première case la traverse : le clic ne fait rien et le dit.
+    survoler(&mut b, 1).expect("le + reste visible sur la case survolée");
+    assert_eq!(b.app.vignettes.plus.place.unwrap().ancre, 1, "le + sert la case survolée");
     cliquer_plus(&mut b, 1);
-    assert_eq!(b.app.doc.panels[0].camera.len(), 3);
+    assert_eq!(b.app.doc.panels[0].camera.len(), 2, "{}", b.app.status);
+    assert!(b.app.status.contains("déjà en mouvement") && b.app.status.contains("de l'image 1 à l'image"), "{}", b.app.status);
+    // Sur la première case, où sont ses cadres : C.
+    cliquer_plus(&mut b, 0);
+    assert_eq!(b.app.doc.panels[0].camera.len(), 3, "{}", b.app.status);
     assert_eq!(dernier_nom(&b), "Cadre C");
     let _: Document = quatre_plans();
 }

@@ -10339,3 +10339,27 @@ Rien de plus dans le fichier. Une case de continuité porte un mouvement quand u
 ### 142.5 Essais
 
 `camerasuite_tests.rs` : les mouvements se lisent dans les clés, case par case (tenue au début d'une case, lettres, clés posées à la main qui restent à la première case) ; recoller un mouvement garde la continuité du suivant ; par de vrais gestes sur le banc : une case de continuité prend B vers C (clés, empreinte, caméra à l'arrêt puis en route, une étape, annulation) ; le « + » de Maj ajoute B vers C, puis un cadre de plus, et celui de la première case n'y touche pas ; déplacer B emmène le départ du mouvement suivant, le premier cadre d'une continuité ne se déplace pas ; retirer C rend la case à l'arrêt ; un mouvement créé sur une case du milieu met les cases de derrière dans un plan à part, en une étape ; une case où la caméra est en route refuse le geste.
+
+### 142.6 Sa règle, après son essai du 11 novembre au soir (branche `camera-case`)
+
+Son retour, avec deux captures : « sur le plan 5 par exemple, je ne peux pas créer de mouvement de caméra depuis la deuxième vignette, il s'applique automatiquement à la première. » Et sa règle : « un mouvement de caméra peut démarrer d'une vignette même si la vignette n'est pas la première vignette du plan. Le mouvement de caméra démarre alors du début de la clé d'image et termine à la fin de la clé d'image. »
+
+J'avais gardé l'ancienne règle pour un plan qui ne bouge pas encore (son premier mouvement naissait sur sa première case, et le « + » d'un plan qui bouge revenait à la première case quand la case survolée ne pouvait pas le prendre). Elle est retirée. **Ce paragraphe remplace, dans 142.1, « Rien ne change pour un plan qui ne bouge pas encore ».**
+
+- **Le mouvement naît sur la case où on le demande**, qu'elle soit la première du plan ou non, que le plan bouge déjà ou non. Il part du cadre que la case montre, à sa première image, et finit à sa dernière image.
+- **Le « + » de Maj sert toujours la case survolée.** Pointeur loin des cases : la première case du plan choisi, comme avant.
+- **Un mouvement vit sur la case où il commence** (`vignettecam::groupes` : la case qui contient l'image de sa première clé). Le premier mouvement d'un plan peut donc être sur sa deuxième ou sa troisième case ; les cases d'avant restent à l'arrêt sur le cadre dont il part.
+- **Une case peut commencer un mouvement quand la caméra y est à l'arrêt** (`App::mouvement_de_case`) : toutes les clés de la case, celle d'avant et celle d'après tiennent la même caméra, ou il n'y en a pas.
+- **Une case qu'un mouvement commencé ailleurs traverse** (des clés déplacées au montage au-delà de leur case) refuse le geste. Le « + » reste visible, et la ligne d'état donne les images du mouvement qui la traverse, pour savoir quelles clés ramener dans leur case.
+- Le premier cadre d'un mouvement qui n'est pas sur la première case du plan reste la case : il ne se déplace pas.
+- Un mouvement créé sur une case qui a d'autres cases derrière elle les met toujours dans un plan à part (22 octobre) ; si l'une d'elles porte son propre mouvement, elle le garde dans le plan neuf.
+
+Ce que j'ai trouvé dans son projet (lu seulement) : la clé B de son plan 3 était à l'image 108, au-delà de sa première case (elle était à l'image 48 à 18 h 43). Le mouvement A vers B traversait donc ses trois cases, et la dernière refusait d'en commencer un tant qu'un cadre ajouté sur la première case n'avait pas ramené les clés dans cette case. Avec la règle ci-dessus, la dernière case le dit au lieu de renvoyer le « + » à la première.
+
+Essais : `camerasuite_tests.rs` passe à 11 (un plan sans mouvement prend son mouvement sur la case où on le demande ; le « + » sert la deuxième case, puis un mouvement sur la première met la deuxième dans un plan à part avec son mouvement ; une caméra fixe posée au début du plan laisse la troisième case commencer un mouvement) ; `cadreplus_tests.rs` : l'essai qui tenait le « + » sur la première case vérifie maintenant qu'il sert la case survolée et que le refus se dit.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Son plan 5 (deux cases, pas de caméra) : Maj sur la deuxième case, le « + », un clic. Le cadre B est sur la deuxième case ; la première ne bouge pas.
+2. Lire le plan : arrêt pendant la première case, puis A vers B pendant la deuxième.
+3. Son plan 3 : sur la dernière case, le « + » puis un clic. Si la ligne d'état dit que la caméra est déjà en mouvement, ramener la clé B dans la première case au montage (ou ajouter un cadre sur la première case), puis recommencer.

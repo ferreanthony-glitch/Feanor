@@ -83,7 +83,7 @@ pub(crate) struct CamGeste {
 }
 
 /// Le mouvement d'une case (partie 142, `vignettecam::groupes`) : celui qu'elle porte, ou celui qu'elle peut commencer.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct MouvementCase {
     /// L'image du plan où commence la case.
     pub debut: usize,
@@ -95,6 +95,11 @@ pub(crate) struct MouvementCase {
     /// (le mouvement suivant, ou la fin du plan), comptées depuis `debut`.
     pub len: usize,
     pub total: usize,
+    /// La case porte déjà ce mouvement (deux clés au moins). Sinon elle va le commencer : `rangs` sont alors les clés de la case qui
+    /// tenaient la caméra à l'arrêt (souvent aucune), que le mouvement remplace.
+    pub porte: bool,
+    /// La caméra dont le mouvement part : son premier cadre (la case).
+    pub depart: Camera,
 }
 
 impl App {
@@ -102,55 +107,55 @@ impl App {
         self.layout.card_size.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX)
     }
 
-    /// Le mouvement que porte, ou peut commencer, la case qui commence à l'image `debut` du plan `pi` (partie 142). La première case : toujours
-    /// (le mouvement du plan, comme avant). Une case de continuité : le sien si elle en porte un ; sinon celui qu'elle peut commencer, quand
-    /// la caméra y est à l'arrêt après un mouvement (aucune clé du plan de son début jusqu'au mouvement suivant, et une clé avant elle).
-    /// Rien : la caméra est en route sur cette case, ou le plan ne bouge pas encore (son premier mouvement naît sur sa première case).
+    /// Le mouvement que porte, ou peut commencer, la case qui commence à l'image `debut` du plan `pi` (partie 142 ; sa règle du 11 novembre
+    /// au soir : « un mouvement de caméra peut démarrer d'une vignette même si la vignette n'est pas la première vignette du plan. Le
+    /// mouvement de caméra démarre alors du début de la clé d'image et termine à la fin de la clé d'image »).
+    /// - **La case porte déjà un mouvement** (`vignettecam::groupes` : un mouvement de deux clés au moins commence chez elle) : c'est lui.
+    /// - **Sinon elle peut en commencer un si la caméra y est à l'arrêt** : toutes les clés de la case, celle d'avant et celle d'après
+    ///   tiennent la même caméra (ou il n'y en a pas). Le mouvement part alors de cette caméra à la première image de la case et finit à
+    ///   sa dernière ; que le plan bouge déjà ailleurs ou non, que la case soit la première ou non.
+    /// - Rien : la caméra est en route sur cette case (un mouvement commencé sur une autre case la traverse).
     pub(crate) fn mouvement_de_case(&self, pi: usize, debut: usize) -> Option<MouvementCase> {
         let p = self.doc.panels.get(pi)?;
         let plan = p.frame_count();
         let cases = vignettecam::cases_du_plan(&self.doc, pi);
-        let gs = vignettecam::groupes(&p.camera, &cases);
-        let fin_case = cases.iter().copied().find(|&f| f > debut).unwrap_or(plan);
-        if let Some(g) = gs.iter().find(|g| g.debut == debut) {
-            let limite = gs.get(g.numero + 1).map_or(plan, |s| s.debut);
-            let (span, total) = (fin_case.min(limite).saturating_sub(debut), limite.saturating_sub(debut));
-            return Some(MouvementCase { debut, rangs: g.rangs.clone(), lettre0: g.lettre0(), len: vignettecam::etendue_du_mouvement(span, total), total });
-        }
         if !cases.contains(&debut) {
             return None;
         }
-        let limite = gs.iter().map(|g| g.debut).find(|&d| d > debut).unwrap_or(plan);
-        let at = p.camera.iter().position(|k| k.frame >= debut).unwrap_or(p.camera.len());
-        if at == 0 || p.camera.len() < 2 || p.camera.iter().any(|k| k.frame >= debut && k.frame < limite) {
+        let keys = &p.camera;
+        let gs = vignettecam::groupes(keys, &cases);
+        let fin_case = cases.iter().copied().find(|&f| f > debut).unwrap_or(plan);
+        if let Some(g) = gs.iter().find(|g| g.debut == debut && g.rangs.len() >= 2) {
+            // (Ses cadres ne vont pas au-delà de la clé qui suit : le mouvement d'après.)
+            let limite = keys.get(g.rangs.end).map_or(plan, |k| k.frame);
+            let (span, total) = (fin_case.min(limite).saturating_sub(debut), limite.saturating_sub(debut));
+            let len = vignettecam::etendue_du_mouvement(span, total);
+            return Some(MouvementCase { debut, rangs: g.rangs.clone(), lettre0: g.lettre0(), len, total, porte: true, depart: keys[g.rangs.start].cam });
+        }
+        // Les clés de la case, et ses voisines : la caméra est à l'arrêt si toutes tiennent la même.
+        let i0 = keys.iter().position(|k| k.frame >= debut).unwrap_or(keys.len());
+        let i1 = keys.iter().position(|k| k.frame >= fin_case).unwrap_or(keys.len());
+        let voisines = &keys[i0.saturating_sub(1)..(i1 + 1).min(keys.len())];
+        if voisines.windows(2).any(|w| w[0].cam != w[1].cam) {
             return None;
         }
-        let (span, total) = (fin_case.min(limite) - debut, limite - debut);
-        Some(MouvementCase { debut, rangs: at..at, lettre0: vignettecam::rang_de_lettre(&gs, at - 1), len: vignettecam::etendue_du_mouvement(span, total), total })
+        let depart = voisines.first().map_or_else(|| self.doc.panel_camera(pi, debut), |k| k.cam);
+        let limite = keys.get(i1).map_or(plan, |k| k.frame);
+        let (span, total) = (fin_case.saturating_sub(debut), limite.saturating_sub(debut));
+        // (La lettre du cadre qu'elle tient : celle de la clé d'avant, A s'il n'y en a pas.)
+        let lettre0 = if i0 > 0 { vignettecam::rang_de_lettre(&gs, i0 - 1) } else { 0 };
+        Some(MouvementCase { debut, rangs: i0..i1, lettre0, len: vignettecam::etendue_du_mouvement(span, total), total, porte: false, depart })
     }
 
-    /// L'image où commence la case qui porte (ou portera) le mouvement qu'un geste fait sur la case `frame` du plan `pi` retouche : 0 pour
-    /// la première case et pour un plan qui ne bouge pas encore (son premier mouvement naît sur sa première case, comme avant) ; sinon
-    /// la case elle-même (partie 142 : une case de continuité porte le sien).
-    pub(crate) fn case_du_mouvement(&self, pi: usize, frame: usize) -> usize {
-        if frame == 0 || self.doc.panels.get(pi).is_none_or(|p| p.camera.len() < 2) {
-            0
-        } else {
-            frame
-        }
-    }
-
-    /// Les clés du mouvement `m` du plan `pi`, comptées depuis le début de sa case et rangées sur sa durée (`vignettecam::recale`), et la
-    /// caméra dont il part : le premier cadre (la case), qui pour une case de continuité est le dernier cadre d'avant.
+    /// Les clés du mouvement `m` du plan `pi`, comptées depuis le début de sa case et rangées sur sa durée (`vignettecam::recale`) ; aucune
+    /// s'il n'existe pas encore (la case va le commencer). Et la caméra dont il part : son premier cadre, la case.
     fn cles_du_mouvement(&self, pi: usize, m: &MouvementCase) -> (Vec<CameraKey>, Camera) {
+        if !m.porte {
+            return (Vec::new(), m.depart);
+        }
         let orig = &self.doc.panels[pi].camera;
         let locales: Vec<CameraKey> = orig[m.rangs.clone()].iter().map(|k| CameraKey { frame: k.frame.saturating_sub(m.debut), ..*k }).collect();
-        let keys0 = vignettecam::recale(&locales, m.len, m.total);
-        let a = match m.rangs.start.checked_sub(1).filter(|_| m.debut > 0) {
-            Some(avant) => orig[avant].cam,
-            None => keys0.first().map_or_else(|| self.doc.panel_camera(pi, 0), |k| k.cam),
-        };
-        (keys0, a)
+        (vignettecam::recale(&locales, m.len, m.total), m.depart)
     }
 
     /// La marge autour d'une case où un appui de caméra la prend encore (3 % de sa largeur, au moins 6 points : moins que la marge de
@@ -169,16 +174,33 @@ impl App {
         }
     }
 
-    /// Un mouvement de caméra peut-il se dessiner sur cette case ? Sa première : toujours ; une autre case du plan (une
-    /// marque d'image) : si le plan ne bouge pas encore, ou (partie 142) si elle porte son propre mouvement ou peut en commencer un (la
-    /// caméra y est à l'arrêt après un mouvement : elle part du cadre qu'elle montre).
+    /// Ce que dit la ligne d'état quand la case qui commence à l'image `debut` du plan `pi` ne peut pas porter de mouvement : la caméra y
+    /// est en route, avec les images du mouvement qui la traverse (pour qu'on sache quelles clés ramener dans leur case, au montage).
+    fn refus_camera_en_route(&self, pi: usize, debut: usize) -> String {
+        let Some(p) = self.doc.panels.get(pi) else { return String::new() };
+        let cases = vignettecam::cases_du_plan(&self.doc, pi);
+        let fin = cases.iter().copied().find(|&f| f > debut).unwrap_or(p.frame_count());
+        let traverse = p.camera.windows(2).find(|w| w[0].cam != w[1].cam && w[0].frame < fin && w[1].frame >= debut);
+        match traverse {
+            Some(w) => format!(
+                "La caméra est déjà en mouvement sur cette case : un mouvement commencé ailleurs la traverse (de l'image {} à l'image {} du plan). Règle-le sur la case où sont ses cadres, ou ramène ses clés dans sa case au montage.",
+                w[0].frame + 1,
+                w[1].frame + 1
+            ),
+            None => "La caméra est déjà en mouvement sur cette case : il se règle sur la case où sont ses cadres.".into(),
+        }
+    }
+
+    /// Un mouvement de caméra peut-il se dessiner sur cette case ? Oui si elle porte son mouvement, ou si la caméra y est à l'arrêt (elle
+    /// peut alors en commencer un, de sa première à sa dernière image), qu'elle soit la première case du plan ou non (`mouvement_de_case`).
+    /// Non si un mouvement commencé sur une autre case la traverse.
     pub(crate) fn cam_possible(&self, place: &CardPlace) -> bool {
         self.cam_possible_ici(place.panel, place.frame)
     }
 
     /// Comme `cam_possible`, pour la case qui commence à l'image `frame` du plan `pi`.
     pub(crate) fn cam_possible_ici(&self, pi: usize, frame: usize) -> bool {
-        frame == 0 || self.doc.panels.get(pi).is_some_and(|p| p.camera.len() < 2) || self.mouvement_de_case(pi, frame).is_some()
+        self.mouvement_de_case(pi, frame).is_some()
     }
 
     /// Maj seule tenue (partie 113, proposition A) : l'appui en `p` (planche) sur la case `k` prend-il la caméra plutôt que le plan ? Oui à
@@ -216,9 +238,10 @@ impl App {
         // plan), comme une case ordinaire. Un plan qui bouge déjà se règle sur sa première case, où ses cadres sont.
         // (Partie 142 : une case de continuité porte son propre mouvement, ou en commence un, quand la caméra y est à l'arrêt après un
         // mouvement ; sinon, la caméra y est en route, et le mouvement se règle là où sont ses cadres.)
-        let debut = self.case_du_mouvement(place.panel, place.frame);
-        let Some(mvt) = self.mouvement_de_case(place.panel, debut).filter(|_| self.cam_possible(&place)) else {
-            self.status = "La caméra est déjà en mouvement sur cette case : il se règle sur la case où sont ses cadres.".into();
+        // (Sa règle du 11 novembre au soir : le mouvement naît sur la case où on le demande, de sa première à sa dernière image.)
+        let debut = place.frame;
+        let Some(mvt) = self.mouvement_de_case(place.panel, debut) else {
+            self.status = self.refus_camera_en_route(place.panel, debut);
             return false;
         };
         let (cadres, simple) = self.cadres_sur_la_planche(layout, k);
@@ -478,7 +501,7 @@ impl App {
             return;
         }
         let Some(mvt) = self.mouvement_de_case(pi, debut) else {
-            self.status = "La caméra est déjà en mouvement sur cette case : il se règle sur la case où sont ses cadres.".into();
+            self.status = self.refus_camera_en_route(pi, debut);
             return;
         };
         let (keys0, a) = self.cles_du_mouvement(pi, &mvt);
@@ -520,7 +543,7 @@ impl App {
         if self.content_refuses() || !self.partage_peut_toucher(&[id]) {
             return;
         }
-        let Some(mvt) = self.mouvement_de_case(pi, debut).filter(|m| local < m.rangs.len()) else { return };
+        let Some(mvt) = self.mouvement_de_case(pi, debut).filter(|m| m.porte && local < m.rangs.len()) else { return };
         if debut > 0 && local == 0 {
             self.status = "Ce cadre est la case : il tient la caméra de la case d'avant. Retire plutôt les cadres suivants.".into();
             return;
@@ -581,7 +604,7 @@ impl App {
             }
             let (cadres, _) = self.cadres_sur_la_planche(layout, k);
             // (La lettre du premier cadre : A, ou celle du cadre que tient une case de continuité qui a son mouvement, partie 142.)
-            let lettre0 = self.mouvement_de_case(place.panel, self.case_du_mouvement(place.panel, place.frame)).map_or(0, |m| m.lettre0);
+            let lettre0 = self.mouvement_de_case(place.panel, place.frame).map_or(0, |m| m.lettre0);
             let clip = painter.with_clip_rect(xf.rect(place.foot).expand(40.0).intersect(view));
             for (i, q) in cadres.iter().enumerate() {
                 let pts: Vec<Pos2> = q.iter().map(|p| xf.to_screen(*p)).collect();
