@@ -137,6 +137,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   l'Espace 3D et la vue de dessus montrent le calque à sa pose dans le cadre ; pendant un geste du Transformer, la ligne d'état donne
   les valeurs vues sur la feuille. Les dossiers `Chantiers\cle-masques` et `Chantiers\calques-place` (qui porte ce chantier) restent.
   Fusion dans main : à son accord.
+- Fusion de `calque-camera` dans main (c6cca20, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 19 h 44) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages, dont une fois avec un calque accroché sous sa caméra à
+  deux clés : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (sa liste 141.6).
+  Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent ; le second est repris pour le sujet suivant
+  (un mouvement de caméra B vers C dans les Vignettes).
 
 ## 2026-11-10
 
