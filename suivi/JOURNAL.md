@@ -90,6 +90,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   continue). Exe principal reconstruit (`target\release\feanor.exe`, 14 h 48) et ouvert deux fois sur une copie de « retakes
   brawlydays » avec de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le
   vrai exe (sa liste 139.3). Le dossier de chantier `Chantiers\dossier-glisser` attend son accord pour être retiré.
+- Sur son « Oui, retire-le » : le dossier de chantier `Chantiers\dossier-glisser` retiré (propre, sa branche entièrement dans main).
+  La branche `dossier-glisser` (0293edd) reste. Il ne reste que `Source`.
 
 ## 2026-11-10
 
