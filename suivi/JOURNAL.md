@@ -117,6 +117,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   projet, regardées et envoyées. Vérificateur sur la branche : 4 478 essais réussis, 0 échec, aucun avertissement. Exe de la
   branche (16 h 27) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Son « Fusionne directement »
   est arrivé pendant le vérificateur : fusion dans main à suivre. Limite dite : deux hauteurs seulement (grande ou en bande).
+- Fusion de `calques-place` dans main (7e96224, sans avance rapide) : `main` n'avait pas bougé, même contenu que la branche
+  vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR n'était pas ouvert. Exe principal
+  reconstruit (`target\release\feanor.exe`, 16 h 34) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de
+  plantage. Pas de version portable. Pas vérifié : la bande tirée à la main dans le vrai exe (sa liste 140.4). Les dossiers de
+  chantier `Chantiers\cle-masques` et `Chantiers\calques-place` attendent son accord pour être retirés.
 
 ## 2026-11-10
 
