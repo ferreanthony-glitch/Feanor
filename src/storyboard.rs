@@ -443,6 +443,8 @@ impl App {
         if self.bande_film_vide(ui) {
             return;
         }
+        // Le pointeur sur la bande : les touches du zoom de l'image zooment le montage (`run_action`).
+        self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
         ui.add_space(2.0);
         // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
         // `barres.rs`, le reste sous « Plus… ».
@@ -558,6 +560,12 @@ impl App {
             }
             // La hauteur des pistes son : petite, moyenne, grande (`montagehauteur.rs`).
             self.hauteur_pistes_bouton(ui);
+            // L'affichage des calques (trois, ou toute la pile) et la hauteur des plans (moyenne ou bandeau), à portée de main
+            // (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi dans Préférences > Montage, `pistes.rs`).
+            ui.add_space(8.0);
+            self.pile_choix_ui(ui, true);
+            ui.add_space(6.0);
+            self.plans_choix_ui(ui, true);
         });
     }
 
@@ -802,7 +810,9 @@ impl App {
         // Plans. (Les numéros du film, trouvés une fois pour les titres et la barre des séquences.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
-        let thumb_h = (block_h - 24.0).max(10.0);
+        // En bandeau (`pistes::HauteurPlans`), la vignette tient dans la hauteur du bloc ; le titre et la durée sont à sa droite, sur une ligne.
+        let bandeau = block_h < 40.0;
+        let thumb_h = if bandeau { (block_h - 8.0).max(10.0) } else { (block_h - 24.0).max(10.0) };
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         // Les repères « modifié depuis le dernier envoi » posés ce coup-ci : où, et à quel plan (`envoisui.rs`).
@@ -886,11 +896,13 @@ impl App {
                 visuals.weak_text_color(),
             );
             // La durée n'est affichée que si elle tient à côté du titre.
-            if title.size().x + duration.size().x + 20.0 < rect.width() {
-                let at = pos2(rect.right() - 7.0 - duration.size().x, rect.bottom() - 7.0 - duration.size().y);
+            let gauche = if bandeau { rect.left() + 3.0 + thumb_h * aspect + 5.0 } else { rect.left() + 5.0 };
+            let y_de = |h: f32| if bandeau { rect.center().y - h * 0.5 - 1.0 } else { rect.bottom() - 7.0 - h };
+            if (gauche - rect.left()) + title.size().x + duration.size().x + 15.0 < rect.width() {
+                let at = pos2(rect.right() - 7.0 - duration.size().x, y_de(duration.size().y));
                 clip.galley(at, duration, visuals.weak_text_color());
             }
-            let at = pos2(rect.left() + 5.0, rect.bottom() - 7.0 - title.size().y);
+            let at = pos2(gauche, y_de(title.size().y));
             clip.galley(at, title, visuals.text_color());
             // Les clés de tous les calques du plan, en petits traits le long du bas du bloc (`clesplan.rs`), de la couleur de leur calque ;
             // calculées une fois par changement du document.

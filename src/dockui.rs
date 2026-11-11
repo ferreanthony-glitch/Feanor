@@ -204,6 +204,8 @@ impl App {
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         // (Le panneau Références se redit à chaque image où il est dessiné ici.)
         self.refs.pane_rect = None;
+        // (La bande du bas redit si le pointeur est sur elle, quand elle est dessinée : `montage_panel`, `timeline_panel`.)
+        self.bande_survolee = false;
         // Mon panneau (essai du Labo) : ouvert ou non, et les ajouts demandés par un clic droit (`monpanneauui.rs`).
         self.mon_panneau_suivre(ctx);
         // L'anneau sous le stylet : ses huit commandes dites aux menus du clic droit, et celle qu'un menu y envoie (`anneauui.rs`).

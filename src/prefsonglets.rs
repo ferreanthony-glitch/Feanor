@@ -264,8 +264,9 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Anneau, G::AnneauCommandes, "anneau.commandes", "Commande de chaque direction", "huit directions haut bas gauche droite outil crayon gomme plan pastilles choisir"),
     r(O::Anneau, G::AnneauCommandes, "anneau.origine", "Rétablir les commandes d'origine", "défaut remettre départ"),
     // ---- Montage
-    r(O::Montage, G::Pistes, "montage.repliage", "Calques non actifs", "replier cacher calques actif bande autres"),
-    r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
+    r(O::Montage, G::Pistes, "montage.repliage", "Calques dans la timeline", "trois toute pile calques actif fenêtre voisins bande replier cacher dossiers autres"),
+    r(O::Montage, G::Pistes, "montage.hauteur_plans", "Hauteur des plans", "plans moyenne bandeau vignette épaisseur hauteur rangée"),
+    r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique toute pile"),
     r(O::Montage, G::PlansNeufs, "montage.duree_nouveau_plan", "Durée d'un nouveau plan", "secondes images deux défaut créer plan neuf long court"),
     r(O::Montage, G::PlansNeufs, "montage.numerotation_neufs", "Verrouiller la numérotation des projets neufs", "numéro plan 2A insérer renuméroter studio verrou nouveau projet"),
     r(O::Montage, G::Pistes, "montage.hauteur_pistes", "Hauteur des pistes son", "petite moyenne grande taille piste son boutons M S défilement"),
