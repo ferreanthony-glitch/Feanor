@@ -10276,6 +10276,7 @@ Format 53 : `accroche_camera` du calque (absent : calque ordinaire). Une version
 - **Vignettes** : un trait parti d'une autre case ne peut pas finir dans un calque accroché d'une case dont la caméra n'est pas au centre (c'est la règle des calques transformés, partie 122) ; il reste sur la planche, par-dessus la case, et la ligne d'état le dit.
 - **Espace 3D et vue de dessus** : un calque accroché y est montré à sa pose dans le cadre, pas sous la caméra.
 - La piste d'un calque accroché, dans le Montage, ne porte pas de marque.
+- Pendant un geste de l'outil Transformer sur un calque accroché, la ligne d'état donne les valeurs vues sur la feuille ; les champs de Réglages donnent sa pose dans le cadre.
 - Rien n'a été fait à la main dans le vrai logiciel : la règle tient par les essais ; l'écran reste à juger.
 
 ### 141.6 À vérifier à l'écran (par Anthony)
