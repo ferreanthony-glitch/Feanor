@@ -24,6 +24,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   sens au même endroit ; la bande garde la couleur du type ; le dossier a un filet de couleur dans la colonne de gauche, pris dans
   les treize groupes de couleur existants (`groups.rs`, `Layer::group`, déjà peints en filet dans la timeline de l'Animation, jamais
   utilisés dans ses projets), attribué tout seul à la création du dossier. Attend son avis et son accord pour coder.
+- Sur son « code, pas besoin de version portable jusqu'à nouvel ordre » : **les calques dans la timeline** (partie 137, branche
+  `calques-timeline`, chantier `Chantiers\calques-timeline`, depuis main 8da4f1d). Trois calques à la fois (le calque actif au milieu,
+  toujours à la même place ; deux fines bandes comptent les autres) ou toute la pile ; un dossier est une ligne fine qui se ferme
+  et s'ouvre, jamais un calque ; un dossier fermé se traverse avec « calque du dessus / du dessous » et se referme à la sortie,
+  sans rien écrire ; la bande garde la couleur du type, le dossier a son filet à gauche (groupes de couleur, d'office par
+  dossier) ; plans de hauteur moyenne ou en bandeau ; réglages dans la barre du bas de la bande et dans Préférences > Montage ;
+  les touches du zoom de l'image zooment la bande quand le pointeur est dessus. Annoncé puis corrigé auprès de lui : la bande du
+  bas ne rétrécit pas toute seule (sa hauteur est le bord tiré à la main), le chantier ne rend donc pas de place à l'image. Trouvé
+  en passant : la fenêtre des Préférences s'élargissait de 9 points par image pendant une recherche (défaut d'avant, corrigé) ;
+  `ahead_capacity` s'arrêtait net sur une feuille de moins de 64 Ko (corrigé). Un travers du banc d'essai noté : le premier clic
+  après l'apparition du pointeur se perd. Captures sur une copie de « retakes brawlydays ». Vérificateur sur la branche : 4 444
+  essais réussis, 0 échec, aucun avertissement. Pas fait : les propositions 34, 35, 36 et 38 ; la bande qui prendrait la hauteur
+  de son contenu. Pas fusionné : attend son essai ou son accord.
 
 ## 2026-11-10
 

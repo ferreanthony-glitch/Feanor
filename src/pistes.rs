@@ -799,7 +799,7 @@ impl App {
             ui.label(RichText::new(self.settings.montage_plans.nom().to_lowercase()).small().weak());
         });
         let mut auto = self.settings.montage_auto_open;
-        let resp = ui.checkbox(&mut auto, "Toute la pile : déplier le calque courant tout seul").on_hover_text("Dans « Toute la pile », seul le calque actif est déplié ; les autres sont en bandes.");
+        let resp = ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Dans « Toute la pile », seul le calque actif est déplié ; les autres sont en bandes. « Trois calques » montre toujours le calque actif au milieu.");
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
         }
