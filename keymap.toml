@@ -2389,6 +2389,11 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "cles.duree"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "sequence.nouvelle_avec_plans"
 touches = []
 source = "FEANOR (sans touche)"

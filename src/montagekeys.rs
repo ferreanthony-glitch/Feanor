@@ -114,6 +114,9 @@ pub(crate) struct KeysDrag {
     /// Le geste en cours (touches tenues à la dernière image d'écran).
     mode: KeyMove,
     snap: crate::history::Edit,
+    /// La clé prise : son calque (rang dans `layers`) et l'image du plan sous la souris à la prise. C'est sur son calque que se
+    /// lit l'insertion avant ou après un autre dessin (partie 138).
+    lead: Option<(usize, usize)>,
 }
 
 /// Un calque touché : plan (id), calque (id), son état d'avant, la durée du plan, le début de
@@ -155,6 +158,8 @@ pub(crate) fn key_move_name(mode: KeyMove, several: bool) -> &'static str {
         (KeyMove::Reorder, _) => "Réordonner les clés",
         (KeyMove::Copy, false) => "Dupliquer une clé",
         (KeyMove::Copy, true) => "Dupliquer des clés",
+        (KeyMove::Insert, false) => "Déplacer une clé avant ou après une autre",
+        (KeyMove::Insert, true) => "Déplacer des clés avant ou après une autre",
     }
 }
 
@@ -442,10 +447,17 @@ impl App {
         if layers.is_empty() {
             return false;
         }
+        // La clé prise : celle des choisies qui est sous la souris (l'image `grab` du montage).
+        let lead = layers.iter().enumerate().find_map(|(i, d)| {
+            let pi = self.doc.panels.iter().position(|p| p.id == d.panel)?;
+            let local = grab.checked_sub(self.doc.panel_start(pi))?;
+            d.before.frames.get(local).copied().flatten()?;
+            d.starts.contains(&d.before.run_bounds(local).0).then_some((i, local))
+        });
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        self.keys_drag = Some(KeysDrag { layers, grab, delta: 0, mode: self.key_move_now(), snap });
+        self.keys_drag = Some(KeysDrag { layers, grab, delta: 0, mode: self.key_move_now(), snap, lead });
         true
     }
 
@@ -466,13 +478,37 @@ impl App {
     pub(crate) fn drag_keys_mode(&mut self, at: usize, mode: KeyMove) {
         let Some(d) = self.keys_drag.as_mut() else { return };
         let want = at as isize - d.grab as isize;
+        // Sans touche, la souris sur un autre dessin du calque de la clé prise : les clés s'insèrent avant ou après lui (partie 138).
+        // Le décalage est alors celui de la limite d'insertion depuis la première clé prise, le même pour chaque calque.
+        let insert = match (mode, d.lead) {
+            (KeyMove::Ripple, Some((i, local))) => {
+                let l = &d.layers[i];
+                let pointer = local as isize + want;
+                let first = l.starts.iter().copied().min().unwrap_or(0) as isize;
+                (pointer >= 0).then(|| crate::clesordre::insertion_at(&l.before, &l.starts, pointer as usize)).flatten().map(|x| x as isize - first)
+            }
+            _ => None,
+        };
+        let mode = if insert.is_some() { KeyMove::Insert } else { mode };
         // Un seul décalage pour tous les calques : le plus serré décide.
-        let delta = d.layers.iter().fold(want, |acc, l| clamp_key_delta(&l.before, &l.starts, acc, mode, l.plan_len));
+        let delta = insert.unwrap_or_else(|| d.layers.iter().fold(want, |acc, l| clamp_key_delta(&l.before, &l.starts, acc, mode, l.plan_len)));
         if delta == d.delta && mode == d.mode {
             return;
         }
         d.delta = delta;
         d.mode = mode;
+        if mode == KeyMove::Insert {
+            let n = d.layers.iter().map(|l| l.starts.len()).sum::<usize>();
+            let (i, _) = d.lead.unwrap_or((0, 0));
+            let l = &d.layers[i];
+            let x = (l.starts.iter().copied().min().unwrap_or(0) as isize + delta).max(0) as usize;
+            let before = l.before.clone();
+            let starts = l.starts.clone();
+            let place = crate::clesordre::place_text(&before, &starts, x, |f| self.frame_label(f));
+            let who = if n > 1 { format!("les {n} clés s'insèrent") } else { "la clé s'insère".to_string() };
+            self.status = format!("Lâcher : {who} {place} (ligne), chacune garde sa durée ; les clés d'entre se décalent.");
+            return;
+        }
         let n = d.layers.iter().map(|l| l.starts.len()).sum::<usize>();
         let marks = d.layers.iter().map(|l| key_preview(&l.before, &l.starts, delta, mode, l.plan_len).1.len()).sum::<usize>();
         let who = if n > 1 { format!("les {n} clés") } else { "la clé".to_string() };
@@ -484,6 +520,7 @@ impl App {
             (KeyMove::Single, _) => format!("Lâcher : {img} pour {who} seule{} (Maj tenue), la suite reste en place.", if n > 1 { "s" } else { "" }),
             (KeyMove::Reorder, _) => format!("Lâcher : {who} se pose aux repères, durée gardée (Ctrl+Maj tenues)."),
             (KeyMove::Copy, _) => format!("Lâcher : {img}, une copie de {who} avec son dessin (Alt ou Ctrl tenue) ; les originales restent."),
+            (KeyMove::Insert, _) => String::new(),
         };
     }
 
@@ -497,12 +534,37 @@ impl App {
         // Les dessins qu'un geste de clés fait sortir de leur calque (posés par-dessus, ou poussés hors du plan) : dits dans la barre
         // d'état, car seule l'annulation les rend (règle du montage : rien ne se perd sans qu'on le voie).
         let mut sortis: Vec<(u64, usize, Layer)> = Vec::new();
+        // Insérer : la phrase de la barre d'état se lit sur le calque de la clé prise, avant de rien poser ; les calques verrouillés ou
+        // masqués sont laissés de côté (partie 138).
+        let mut de_cote: Vec<String> = Vec::new();
+        let place = match (d.mode, d.lead) {
+            (KeyMove::Insert, Some((i, _))) => {
+                let l = &d.layers[i];
+                let x = (l.starts.iter().copied().min().unwrap_or(0) as isize + d.delta).max(0) as usize;
+                Some(crate::clesordre::place_text(&l.before, &l.starts, x, |f| self.frame_label(f)))
+            }
+            _ => None,
+        };
+        let mut bougees = 0usize;
         for dl in d.layers {
             let Some(pi) = self.doc.panels.iter().position(|p| p.id == dl.panel) else { continue };
             let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == dl.layer) else { continue };
             // Chaque calque repart de son état d'avant le geste.
             self.doc.panels[pi].layers[li] = dl.before.clone();
-            let new = if d.mode == KeyMove::Copy {
+            if d.mode == KeyMove::Insert && crate::clesordre::laisse_de_cote(&dl.before) {
+                de_cote.push(dl.before.name.clone());
+                sel.extend(dl.starts.iter().map(|&start| KeyRef { panel: dl.panel, layer: dl.layer, start }));
+                continue;
+            }
+            let new = if d.mode == KeyMove::Insert {
+                let new = apply_key_move(&mut self.doc.panels[pi].layers[li], &dl.starts, d.delta, d.mode, dl.plan_len);
+                if self.doc.panels[pi].layers[li].frames != dl.before.frames {
+                    bougees += dl.starts.len();
+                }
+                // Les dessins changent d'ordre : les dessins des jalons d'une trajectoire se reposent d'après elle.
+                self.trajectoire_recalculer_dans(pi, li);
+                new
+            } else if d.mode == KeyMove::Copy {
                 // Dupliquer : les originales restent, les copies (nouveaux dessins) deviennent le choix.
                 copy_keys_by(&mut self.doc, pi, li, &dl.starts, d.delta, dl.plan_len)
             } else {
@@ -538,6 +600,17 @@ impl App {
             }
         } else {
             self.key_sel = sel;
+        }
+        if d.mode == KeyMove::Insert {
+            let mut m = if bougees > 0 {
+                format!("{bougees} clé{} déplacée{} {}.", s(bougees), s(bougees), place.clone().unwrap_or_default())
+            } else {
+                "Rien n'a bougé.".to_string()
+            };
+            if !de_cote.is_empty() {
+                m += &format!(" Laissé{} de côté (verrouillé ou masqué) : {}.", s(de_cote.len()), de_cote.iter().map(|n| format!("« {n} »")).collect::<Vec<_>>().join(", "));
+            }
+            self.status = m;
         }
         if changed {
             let remplaces: usize = sortis.iter().map(|(_, _, l)| l.frames.iter().flatten().collect::<std::collections::BTreeSet<_>>().len()).sum();

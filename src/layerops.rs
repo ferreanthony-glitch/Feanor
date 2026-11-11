@@ -195,7 +195,17 @@ impl App {
                 Some(k) => {
                     self.layer_sel.remove(k);
                 }
-                None => self.layer_sel.push(id),
+                None => {
+                    // Le calque courant est inscrit dans le choix : il y reste quand un autre calque choisi devient le courant (un
+                    // clic dans sa piste pour y placer la tête de lecture ne réduit plus le choix à un seul calque, 2026-11-11).
+                    self.inscrire_le_calque_courant();
+                    self.layer_sel.push(id);
+                }
+            }
+            // Plus que le calque courant : il n'y a plus de choix de plusieurs calques.
+            let courant = self.layers().get(self.cur_layer).map(|l| l.id);
+            if self.layer_sel.len() == 1 && self.layer_sel.first().copied() == courant {
+                self.layer_sel.clear();
             }
         } else {
             self.layer_sel.clear();
@@ -203,6 +213,31 @@ impl App {
             // Un clic sur le calque (panneau Calques, timeline) : on dessine de nouveau le trait, pas l'aplat.
             self.aplat_cible = None;
         }
+    }
+
+    /// Le calque courant est inscrit parmi les calques choisis (`layer_sel`) : il le reste quand un autre devient le courant.
+    fn inscrire_le_calque_courant(&mut self) {
+        if let Some(id) = self.layers().get(self.cur_layer).map(|l| l.id) {
+            if !self.layer_sel.contains(&id) {
+                self.layer_sel.push(id);
+            }
+        }
+    }
+
+    /// Un clic dans la piste du calque `li` du plan courant (montage) : il devient le calque courant. Avec plusieurs calques choisis :
+    /// sur l'un d'eux, ou avec Ctrl ou Maj (`garde` : on prend une clé de plus), le choix reste entier, le calque qu'on quitte compris
+    /// (on vient placer la tête de lecture ou prendre une clé, pas défaire le choix ; Anthony, 2026-11-11 : une nouvelle clé sur
+    /// plusieurs calques ne se posait que sur un seul après un tel clic) ; sans touche sur un calque hors du choix, lui seul reste
+    /// choisi, comme après un clic sur son nom.
+    pub(crate) fn clic_dans_la_piste(&mut self, li: usize, garde: bool) {
+        if !self.layer_sel.is_empty() && li != self.cur_layer && li < self.layers().len() {
+            if garde || self.is_chosen_layer(li) {
+                self.inscrire_le_calque_courant();
+            } else {
+                self.layer_sel.clear();
+            }
+        }
+        self.select_layer(li);
     }
 
     /// Choisit des calques du plan (menu « Choisir »).

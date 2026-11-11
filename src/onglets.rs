@@ -213,6 +213,7 @@ etat_projet! {
     res_edit: Option<crate::projetui::ResolutionEdit> = None,
     duration_dialog: Option<crate::rognageui::DurationDialog> = None,
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
+    duree_cles: Option<crate::clesduree::DureeCles> = None,
     fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
     corbeille_ui: Option<crate::corbeilleui::Fenetre> = None,
     corbeille_charge: Option<crate::corbeilleui::Chargement> = None,

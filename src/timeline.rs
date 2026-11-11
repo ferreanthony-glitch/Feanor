@@ -1089,7 +1089,13 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 let (c0, c1) = self.image_drag.take().unwrap_or((c0, c0));
                 let m = ui.input(|i| i.modifiers);
-                self.drop_images(c1 as isize - c0 as isize, crate::images::DropMode::de_touches(&m));
+                let mode = crate::images::DropMode::de_touches(&m);
+                // Sans touche, lâchées sur un autre dessin du calque pointé : les clés prises s'insèrent avant ou après lui (partie 138).
+                let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);
+                match (mode, self.image_insertion(pointed, c1)) {
+                    (crate::images::DropMode::Move, Some(d)) => self.insert_chosen_images(pointed, d),
+                    _ => self.drop_images(c1 as isize - c0 as isize, mode),
+                }
             }
         }
         // Choisir au rectangle (chantier 3) : un glisser qui part d'une case d'un calque (hors
@@ -1130,7 +1136,7 @@ impl App {
                 let (a, b) = self.image_range();
                 let (n, m) = (b - a, self.image_layers().len());
                 self.status = format!(
-                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (Ctrl ou Alt : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
+                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (sur un autre dessin : avant ou après lui ; Ctrl ou Alt : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
                     if n > 1 { "s" } else { "" },
                     if m > 1 { "s" } else { "" }
                 );
@@ -1204,6 +1210,26 @@ impl App {
             }
         }
 
+        // Pendant un glisser sans touche sur un autre dessin : la ligne d'insertion sur chaque calque choisi (partie 138).
+        let insertion = match self.image_drag.filter(|(c0, c1)| c0 != c1) {
+            Some((_, c1)) if ui.input(|i| i.modifiers.is_none()) => {
+                let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);
+                self.image_insertion(pointed, c1).map(|d| self.image_insertion_lines(d))
+            }
+            _ => None,
+        };
+        if let Some(lines) = &insertion {
+            for &(li, x) in lines {
+                if let Some(row) = rows.iter().find(|row| row.li == li) {
+                    let px = r.left() + x as f32 * cell;
+                    let (top, bottom) = (grid_top + row.top, grid_top + row.top + row.h);
+                    painter.line_segment([pos2(px, top), pos2(px, bottom)], Stroke::new(3.0_f32, theme::contour()));
+                    let t = 4.0;
+                    painter.add(egui::Shape::convex_polygon(vec![pos2(px - t, top), pos2(px + t, top), pos2(px, top + t)], theme::contour(), Stroke::NONE));
+                    painter.add(egui::Shape::convex_polygon(vec![pos2(px - t, bottom), pos2(px, bottom - t), pos2(px + t, bottom)], theme::contour(), Stroke::NONE));
+                }
+            }
+        }
         // Images choisies : un cadre blanc sur les calques choisis.
         if let Some((a, b)) = self.frame_sel {
             for row in rows.iter().filter(|row| self.is_chosen_layer(row.li) && !self.layers()[row.li].folder) {
@@ -1213,7 +1239,7 @@ impl App {
                 );
                 painter.rect(sel, 2.0, theme::contour().gamma_multiply(0.11), Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
                 // Pendant un glisser : là où elles vont se poser.
-                if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1) {
+                if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1 && insertion.is_none()) {
                     let dx = (c1 as f32 - c0 as f32) * cell;
                     let ghost = sel.translate(vec2(dx, 0.0));
                     painter.rect(ghost, 2.0, theme::marque().gamma_multiply(0.25), Stroke::new(1.5_f32, theme::marque()), StrokeKind::Inside);

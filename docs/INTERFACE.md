@@ -9581,7 +9581,8 @@ verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état,
   calques choisis : une clé sur chaque calque choisi, selon sa sorte (copie du dessin montré, ou dessin vide bitmap ou vectoriel ; l'aplat
   et le calque de couleur suivent leur dessin), en une étape : « Nouvelle clé sur 4 calques ». Laissés de côté : verrouillés, masqués,
   dossiers, vidéo, calques de couleur liés (leurs images suivent leur trait), et ceux qui ont déjà une clé à cette image (la règle d'un
-  seul calque : refus), chacun nommé. Le double-clic sur une piste reste pour ce calque-là (un geste à une place). Avec un seul calque :
+  seul calque : refus), chacun nommé. Le double-clic sur une piste reste pour ce calque-là (un geste à une place) *(changé le 2026-11-11,
+  partie 137.11 : sur la piste d'un des calques choisis, une clé sur chacun)*. Avec un seul calque :
   comme avant. Rien dans les Vignettes (la commande n'y existe pas).
 - **L'opacité du calque** (champ du panneau Calques, glissé ou tapé) : tous les calques choisis prennent **la même valeur** (valeur
   absolue, comme les logiciels de dessin) ; chacun la prend comme un seul calque la prendrait (sa valeur fixe, ou sa clé d'opacité de
@@ -10004,3 +10005,119 @@ Les touches du zoom de l'image (`vue.zoom_avant`, `vue.zoom_arriere` ; chez Anth
 **Un travers du banc d'essai, à connaître** : le pointeur n'y existe pas avant le premier événement. À l'image où il apparaît, ce qu'on vise ne se sait pas encore sous lui, et un clic donné tout de suite se perd (vu deux fois : la ligne d'un dossier, un lien de la recherche des Préférences ; les clics suivants passent). Les essais qui cliquent font donc arriver le pointeur de loin et le laissent se poser. Ce qui recouvre la cible pendant cette image n'a pas été identifié jusqu'au bout.
 
 Vérificateur sur la branche : 4 444 essais réussis, 0 échec, aucun avertissement.
+
+### 137.11 Suites de son essai du 11 novembre (branche `cles-glisser`)
+
+**Le filet du dossier dans le panneau Calques** (« Ajoute les bandes de couleur du dossier dans le panneau calque également »). Le même filet que dans la colonne de la timeline, de la même couleur (`folders::couleur_du_rangement`) : tout à gauche du rang, il part du rang du dossier et descend sans coupure jusqu'à son dernier calque (la sous-ligne d'un aplat comprise) ; l'icône du dossier, à la place de la vignette, prend cette couleur. Un calque hors dossier rangé dans un groupe de couleur a le filet de son groupe.
+
+- **Jamais les deux sens au même endroit**, comme dans la timeline : le filet du dossier est tout à gauche, la bande de la sorte du calque (vectoriel, bitmap…) vient juste après, six points plus à droite. Cette place n'est prise que dans un plan qui a au moins un dossier ou un calque rangé dans un groupe : dans les autres plans, les rangs sont exactement comme avant.
+- Un dossier fermé ne montre que son rang (et le calque courant s'il est dedans, avec le filet : on voit de quel dossier il vient).
+- Code : `layersui.rs` (`layer_list`, `GOUTTIERE`, `FILET`).
+
+**Une nouvelle clé sur plusieurs calques qui n'allait que sur un seul** (« Sélectionner plusieurs calques et créer une nouvelle image clé (vides également) n'a pas été intégré »). La commande était dans main depuis la partie 132 (`nouvellescles.rs`, F5 et F4) et ses essais passaient, mais deux gestes courants la réduisaient à un seul calque :
+
+1. **Un clic dans la piste d'un des calques choisis.** Ctrl + clic sur un nom ajoutait ce calque au choix sans y inscrire le calque courant, qui n'était « choisi » que parce qu'il était le courant. Dès qu'un clic dans la piste de l'autre calque (pour y placer la tête de lecture) en faisait le calque courant, le premier sortait du choix : il ne restait qu'un calque, et F5 ne posait qu'une clé. Maintenant le calque courant est inscrit dans le choix au premier Ctrl + clic (`click_layer_head`), et un clic dans une piste (`clic_dans_la_piste` : clic, clic droit, poignée prise) garde le choix entier quand la piste est celle d'un des calques choisis. Sans touche sur la piste d'un calque hors du choix, lui seul reste choisi, comme après un clic sur son nom (avant : il s'ajoutait au choix sans le dire).
+2. **Des clés prises sur plusieurs pistes** (clic, Ctrl + clic, Maj + clic, rectangle), sans cliquer un seul nom : leurs calques n'étaient pas des calques choisis. Maintenant, dès que deux clés au moins sont choisies, la nouvelle clé va aussi sur les calques du plan courant qui portent une de ces clés (`calques_de_nouvelle_cle` : « calque par clé », la règle des outils de la partie 132).
+3. **Le double-clic sur une piste** posait la clé sur ce seul calque (choix de la partie 132 : « un geste à une place ») et, au passage, défaisait le choix des calques. **Changement de règle** : sur la piste d'un des calques choisis, le double-clic pose une clé sur chacun, comme F5 et comme « Nouvelle clé ici » du clic droit ; sur la piste d'un calque hors du choix, ce calque seul, comme avant. À noter : deux clics à moins de trois dixièmes de seconde font un double-clic même à deux endroits différents (règle de la bibliothèque d'interface) ; un Ctrl + clic sur un nom suivi très vite d'un clic dans une piste y pose donc une clé.
+
+Les règles de la partie 132 ne changent pas : une clé par calque à l'image courante, une seule étape d'annulation, calques verrouillés, masqués, vidéo, dossiers et calques qui ont déjà une clé à cette image laissés de côté et nommés dans la barre d'état. **Pas vérifié** : le geste exact d'Anthony n'est pas connu (son compteur d'usage dit seulement qu'il a fait F5 au clavier) ; ces deux gestes sont ceux que le code laissait échouer.
+
+**À vérifier à l'écran (par Anthony)**
+
+1. Un plan avec des dossiers, panneau Calques : un filet de la couleur de chaque dossier, tout à gauche, du rang du dossier à son dernier calque ; la même couleur que dans la colonne de la timeline. La bande de la sorte du calque juste à sa droite.
+2. Un plan sans dossier : le panneau Calques n'a pas changé.
+3. « Toute la pile », Ctrl + clic sur le nom d'un second calque, puis un clic dans la piste de l'un des deux, à l'image voulue ; F5 : une clé sur chacun, la barre d'état dit « Nouvelle clé sur 2 calques ». F4 : deux clés vides. Ctrl+Z retire les deux d'un coup.
+4. Sans cliquer de nom : un clic sur une clé d'une piste, Ctrl + clic sur une clé d'une autre piste ; F5 : une clé sur chacun des deux calques.
+5. Deux calques choisis, double-clic dans la piste de l'un d'eux : une clé sur chacun. Double-clic dans la piste d'un autre calque : une clé sur lui seul.
+
+**Essais** (`calques_timeline_tests.rs`, quatre de plus) : à l'écran, le filet du dossier dans le panneau Calques (continu du dossier à son dernier calque, absent des calques hors dossier, la bande de la sorte six points à sa droite, rien de changé dans un plan sans dossier) ; la nouvelle clé (F5 puis F4) sur les deux calques choisis après un clic dans la piste de l'un d'eux, une étape, le Ctrl + clic qui retire, le clic hors du choix ; la nouvelle clé sur les calques de deux clés prises sur deux pistes ; à l'écran, par les vrais gestes : Ctrl + clic sur un nom, clic dans une piste, F5.
+
+## 138. Glisser une clé avant ou après une autre ; étirer un plan étire ses dernières clés ; durée des clés et des plans choisis (2026-11-10, branche `cles-glisser`)
+
+*(Codé par une autre session le 10 novembre et resté tel quel dans son dossier de chantier, ni validé ni vérifié ; Anthony, le 11, après l'essai de la partie 137 : « Modifier la durée des images clés et la durée des plans n'est pas intégré », « Déplacer une image clé avant ou après la suivante n'a pas été intégré ». Repris le 11 : validé tel que trouvé, main ramené dans la branche — un seul conflit, cette partie, renumérotée 138 — puis vérifié avec les suites de la partie 137.11.)*
+
+Quatre demandes d'Anthony. Code : `clesordre.rs` et `clesduree.rs` (neufs), `handles.rs` (`KeyMove::Insert`, la clé prise, la poignée de
+durée), `montagekeys.rs` (plusieurs clés prises), `timeline.rs` (le lâcher d'images, la ligne d'insertion), `rognage.rs` (`rogner` :
+Tail et Duration), `rognageui.rs`, `dureeplans.rs`, menus (`panels.rs`, `images.rs`, `storyboard.rs`), action `cles.duree`
+(`keymap.rs`, `app.rs`), un champ `App::duree_cles` (`app.rs`, `onglets.rs`). Essais : `clesglisser_tests.rs` (16).
+
+### 1. Glisser une clé avant ou après une autre clé
+
+« j'aimerais pouvoir décaler des clés d'images en les faisant glisser avant ou après une autre clé d'image. Actuellement ça ne marche pas »
+
+**Avant.** Dans le montage (la timeline du Storyboard), une clé prise par son milieu glissait avec toute la suite de son calque (« Décaler
+les clés ») : vers la droite elle ne pouvait jamais passer sa voisine (la voisine partait avec elle) ; vers la gauche elle butait quand la
+clé d'avant n'avait plus qu'une image. Changer l'ordre existait, caché sous Ctrl + Maj pressées en cours de geste. Dans la timeline
+d'Animation, des images choisies lâchées sur une autre clé l'écrasaient (sans touche) ; Maj les insérait image par image.
+
+**Maintenant.** Sans touche, la souris lâchée sur un AUTRE dessin du calque : la clé (ou les clés choisies) s'insère avant ce dessin si la
+souris est dans sa première moitié, après lui dans la seconde. On insère, on n'écrase pas : chaque dessin garde sa durée, les clés d'entre
+l'ancienne et la nouvelle place se décalent, la durée du calque et celle du plan ne changent pas (le glissé ne peut donc jamais faire
+dépasser la fin du plan). Pendant le geste, une ligne d'insertion (le trait épais à deux pointes) montre la limite, la barre d'état dit
+« avant l'image 12 » ou « après l'image 9 » ; rien n'est posé ni rejoué avant le lâcher. Au lâcher : une étape d'annulation, « 3 clés
+déplacées avant l'image 12 ».
+
+- **Ailleurs, l'ancien geste reste** : sur la clé elle-même, sur des images vides ou après la fin du calque, le montage décale la clé et la
+  suite comme avant, la timeline pose les images là où on les lâche. Maj (la clé seule), Alt ou Ctrl (copier), Ctrl + Maj (réordonner
+  au milieu) ne changent pas.
+- **Plusieurs clés, plusieurs calques** : elles se posent ensemble, dans leur ordre ; chaque calque se réordonne de son côté, sa limite à
+  la même distance de sa première clé prise que sur le calque de la clé tenue. Un calque verrouillé ou masqué est laissé de côté et nommé.
+- **Timeline d'Animation** : les images choisies doivent couvrir des clés entières sur chaque calque choisi (sinon l'ancien geste).
+- **Ce qui suit** : les rôles des images suivent leur dessin. Les clés d'effets, de position et d'opacité restent à leur image : elles
+  sont au calque, pas au dessin. Un dessin réutilisé reste le même dessin ; deux expositions du même dessin qui se retrouvent côte à côte
+  n'en font plus qu'une.
+- Pas dans les Vignettes.
+
+### 2. Étirer un plan étire ses dernières clés
+
+« Étirer un plan étire également toutes les dernières clés d'image du plan. Il ne laisse plus de vide. »
+
+**Avant.** En allongeant un plan, seuls les calques tenus jusqu'à l'ancienne fin étaient prolongés ; un calque qui s'arrêtait plus tôt
+laissait un vide jusqu'à la nouvelle fin.
+
+**Maintenant.** Allonger la fin (poignée de durée de la timeline, bord de fin dans le montage, « Durée… », « Changer la durée des plans
+choisis… ») tient le dernier dessin de chaque calque jusqu'à la nouvelle fin, même s'il s'arrêtait avant l'ancienne. Une clé vide (F4)
+tenue reste vide à l'écran. Un calque verrouillé reste tel quel, la barre d'état le dit. Ctrl tenue sur la poignée ne change pas (les
+clés suivent la poignée, partie 123). Raccourcir puis rallonger : la réserve revient d'abord, puis les fins s'étirent ; rien ne se perd.
+Les clés de caméra, d'opacité et d'effets ne bougent pas. Le champ de durée de la barre de la timeline et l'ajout d'une case dans les
+Vignettes gardent l'ancienne règle.
+
+### 3. « Modifier la durée des clés d'images… »
+
+Clic droit sur des clés de la timeline (sous-menu « Instances », en tête : le menu des images a déjà dix entrées, la limite des menus
+courts) ou du montage (menu d'une piste, premier niveau), menu Storyboard. Une petite fenêtre demande
+la durée en images et montre l'équivalent en secondes et images (« = 1 s 4 i à 24 i/s »). Le champ montre la durée commune des clés
+choisies, ou reste vide avec « durées différentes ». Entrée valide, Échap annule ; 0 est refusé (au moins une image).
+
+- Chaque clé choisie prend cette durée, sur tous les calques concernés ; les clés suivantes du calque se décalent d'autant, rien n'est
+  écrasé. Les rôles et les clés d'effets, de position et d'opacité d'après se décalent avec elles ; la caméra (au plan) ne bouge pas.
+- Un calque tenu jusqu'à la fin du plan le reste : sa dernière exposition, si elle n'est pas choisie, absorbe le décalage (la règle de
+  « Décaler les clés »).
+- Si une clé dépasse alors la fin du plan, **le plan s'allonge** (décision d'Anthony) : les plans suivants se décalent, les autres calques
+  étirent leur dernière clé jusqu'à la nouvelle fin. « …, plan 1 allongé à 1 s 11 i ».
+- Calques verrouillés laissés de côté, nommés. Une étape d'annulation. « 5 clés passées à 12 images sur 2 calques ».
+- Action `cles.duree`, sans raccourci par défaut (aucun n'est évident et libre) ; on peut lui en donner un (clic droit sur l'entrée).
+
+### 4. La durée de plusieurs plans choisis
+
+**Avant.** « Changer la durée des plans choisis… » existait déjà (partie sur `dureeplans.rs`, clic droit sur un plan, menu Plans) : une
+durée pour tous les plans choisis, champ prérempli de la durée d'un plan neuf. « Durée… » visait un seul plan.
+
+**Maintenant.** Le champ montre la durée commune des plans choisis, ou reste vide avec « durées différentes ». « Durée… » avec plusieurs
+plans choisis (dont celui visé) ouvre cette même fenêtre. Les plans suivants se décalent comme pour un seul plan ; allonger étire les
+dernières clés (point 2) ; raccourcir fait comme pour un plan : la fin est rognée et reste en réserve, rien n'est perdu. Dans un film
+partagé, un plan tenu par quelqu'un d'autre est laissé de côté avec un message (avant : tout était refusé). Une étape d'annulation ;
+« 3 plans passés à 2 s 12 i (60 i) ».
+
+### À vérifier à l'écran (par Anthony)
+
+1. Storyboard : prendre une clé par son milieu, la lâcher sur la seconde moitié de sa voisine : la ligne d'insertion apparaît pendant le
+   geste, la clé passe après elle au lâcher. Sur la première moitié de la première clé : elle passe en tête.
+2. La même chose avec trois clés choisies sur deux calques ; avec un des calques verrouillé : il ne bouge pas, la barre d'état le nomme.
+3. Lâcher une clé sur des images vides : elle glisse avec la suite, comme avant.
+4. Animation : choisir les images d'une clé entière (rectangle), les glisser sur une autre clé : ligne d'insertion, puis insertion.
+5. Un plan à trois calques de longueurs différentes : tirer la poignée de durée ; les trois tiennent leur dernier dessin jusqu'au bout.
+   Avec Ctrl : les clés suivent la poignée, comme avant.
+6. Clic droit sur des clés > « Modifier la durée des clés d'images… », 12, Entrée ; puis une durée qui fait dépasser la fin : le plan
+   s'allonge, le suivant se décale. Ctrl+Z rend tout.
+7. Trois plans choisis de durées différentes > « Changer la durée des plans choisis… » : champ vide « durées différentes », taper 2:12.

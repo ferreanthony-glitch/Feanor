@@ -792,12 +792,25 @@ impl Document {
         }
         Ok(match op {
             Rogner::Head(d) => self.trim_head(pi, d),
-            Rogner::Tail(d) => self.trim_tail(pi, d),
+            // Allonger la fin étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 138) : aucun calque ne reste vide au bout.
+            Rogner::Tail(d) => {
+                let done = self.trim_tail(pi, d);
+                if done > 0 {
+                    let fin = self.panels[pi].frame_count();
+                    crate::clesduree::etirer_fins(&mut self.panels[pi], fin);
+                }
+                done
+            }
             Rogner::Roll(d) => self.roll(pi, d),
             Rogner::Slip(d) => self.slip(pi, d),
             Rogner::Duration(n) => {
                 let old = self.panels[pi].frame_count();
-                self.set_duration(pi, n) as isize - old as isize
+                let done = self.set_duration(pi, n) as isize - old as isize;
+                if done > 0 {
+                    let fin = self.panels[pi].frame_count();
+                    crate::clesduree::etirer_fins(&mut self.panels[pi], fin);
+                }
+                done
             }
             Rogner::RestoreAll => {
                 let (h, t) = self.restore_all(pi);

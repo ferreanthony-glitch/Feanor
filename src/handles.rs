@@ -392,6 +392,11 @@ pub(crate) enum KeyMove {
     /// les clés sont dupliquées à l'endroit lâché, par-dessus ce qui y était ; les originales
     /// restent, les copies ont leurs propres dessins (`montagekeys::copy_keys_by`).
     Copy,
+    /// Sans touche, lâchée sur un AUTRE dessin du même calque (partie 138, Anthony 2026-11-10 : « décaler des clés d'images en les faisant
+    /// glisser avant ou après une autre clé d'image ») : les clés prises s'insèrent avant ce dessin (première moitié) ou après lui
+    /// (seconde moitié), chacune gardant sa durée ; celles d'entre se décalent pour leur laisser la place, la durée du calque ne change
+    /// pas (`clesordre::insert_keys_at`). Le décalage dit alors où est la limite d'insertion : la première clé prise + `delta`.
+    Insert,
 }
 
 /// Le geste que les touches tenues demandent pour des clés de dessins : Alt, ou Ctrl seule, copie
@@ -536,7 +541,7 @@ pub fn move_keys_only(layer: &mut Layer, starts: &[usize], delta: isize) -> Vec<
 /// proche de `want` dont chaque clé arrive vraiment où il l'envoie. `Reorder` n'a pas de borne.
 pub(crate) fn clamp_key_delta(layer: &Layer, starts: &[usize], want: isize, mode: KeyMove, plan_len: usize) -> isize {
     match mode {
-        KeyMove::Reorder => want,
+        KeyMove::Reorder | KeyMove::Insert => want,
         // Chaque copie commence dans le plan : la première clé ne passe pas avant 0, la dernière reste dans le plan.
         KeyMove::Copy => {
             let lo = -(starts.iter().copied().min().unwrap_or(0) as isize);
@@ -566,6 +571,10 @@ pub(crate) fn clamp_key_delta(layer: &Layer, starts: &[usize], want: isize, mode
 pub(crate) fn apply_key_move(layer: &mut Layer, starts: &[usize], delta: isize, mode: KeyMove, plan_len: usize) -> Vec<usize> {
     match mode {
         KeyMove::Reorder => shift_runs(layer, starts, delta),
+        KeyMove::Insert => {
+            let first = starts.iter().copied().min().unwrap_or(0);
+            crate::clesordre::insert_keys_at(layer, starts, (first as isize + delta).max(0) as usize)
+        }
         // Copier crée des dessins : c'est `montagekeys::copy_keys_by` (il a le document). Ici, rien ne bouge.
         KeyMove::Copy => starts.iter().map(|&s| (s as isize + delta).max(0) as usize).collect(),
         KeyMove::Single => move_keys_only(layer, starts, delta),
@@ -585,6 +594,18 @@ pub(crate) fn key_preview(layer: &Layer, starts: &[usize], delta: isize, mode: K
     if mode == KeyMove::Reorder {
         let ghosts = starts.iter().map(|&s| (s as isize + delta, layer.run_bounds(s).1 as isize + delta)).collect();
         return (ghosts, drop_marks(layer, starts, delta));
+    }
+    if mode == KeyMove::Insert {
+        // La ligne d'insertion, dans le calque tel qu'il est, et les clés à leur nouvelle place (rien n'est posé avant le lâcher).
+        let first = starts.iter().copied().min().unwrap_or(0);
+        let x = (first as isize + delta).max(0) as usize;
+        let mut after = layer.clone();
+        let landed = apply_key_move(&mut after, starts, delta, mode, plan_len);
+        if after.frames == layer.frames {
+            return (Vec::new(), Vec::new());
+        }
+        let ghosts = landed.iter().map(|&a| (a as isize, after.run_bounds(a).1 as isize)).collect();
+        return (ghosts, vec![x]);
     }
     if delta == 0 {
         return (Vec::new(), Vec::new());
@@ -701,6 +722,14 @@ pub fn sound_shift_note(doc: &Document, i: usize, old: usize, new: usize) -> Opt
             if d.abs() > 1 { "s" } else { "" }
         )
     })
+}
+
+fn ss(n: usize) -> &'static str {
+    if n > 1 {
+        "s"
+    } else {
+        ""
+    }
 }
 
 impl App {
@@ -831,9 +860,21 @@ impl App {
             // tenue : elle est copiée ; Ctrl + Maj : l'ancien geste, elle prend sa place parmi les autres (`KeyMove`).
             Handle::Key { layer, start, grab, .. } => {
                 let Some((l, plan_len)) = self.layer_before(layer) else { return };
-                let mode = self.key_move_now();
+                let mut mode = self.key_move_now();
+                // Sans touche, lâchée sur un autre dessin du calque : elle s'insère avant ou après lui (partie 138).
+                let insert = (mode == KeyMove::Ripple).then(|| crate::clesordre::insertion_at(&l, &[start], frame)).flatten();
+                if insert.is_some() {
+                    mode = KeyMove::Insert;
+                }
                 self.key_drag_mode = mode;
-                self.key_drag_delta = clamp_key_delta(&l, &[start], frame as isize - grab as isize, mode, plan_len);
+                self.key_drag_delta = match insert {
+                    Some(x) => x as isize - start as isize,
+                    None => clamp_key_delta(&l, &[start], frame as isize - grab as isize, mode, plan_len),
+                };
+                if let Some(x) = insert {
+                    self.status = format!("Lâcher : la clé s'insère {} (ligne), sa durée gardée ; les clés d'entre se décalent.", crate::clesordre::place_text(&l, &[start], x, |f| label(self, f)));
+                    return;
+                }
                 let marks = key_preview(&l, &[start], self.key_drag_delta, mode, plan_len).1;
                 let d = self.key_drag_delta;
                 match (mode, marks.first()) {
@@ -845,6 +886,7 @@ impl App {
                     (KeyMove::Single, Some(&m)) => format!("Lâcher : la clé seule passe à l'image {} (Maj tenue), la suite reste en place.", label(self, m)),
                     (KeyMove::Reorder, Some(&m)) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée (Ctrl+Maj tenues).", label(self, m)),
                     (KeyMove::Copy, Some(&m)) => format!("Lâcher : une copie de la clé, avec son dessin, à l'image {} (Alt ou Ctrl tenue) ; l'originale reste.", label(self, m)),
+                    (KeyMove::Insert, Some(_)) => String::new(),
                 }
             }
             // La limite entre deux expositions est le début d'une clé : par défaut les clés d'après
@@ -878,6 +920,11 @@ impl App {
                     self.doc.slide_plan_end(pi, n);
                 } else {
                     self.doc.set_duration(pi, n);
+                    // Allonger étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 138) ; Ctrl ne change pas.
+                    let fin = self.doc.panels[pi].frame_count();
+                    if fin > old {
+                        crate::clesduree::etirer_fins(&mut self.doc.panels[pi], fin);
+                    }
                 }
                 if let Some(d) = self.handle_drag.as_mut() {
                     d.glisse = glisse;
@@ -895,7 +942,15 @@ impl App {
                         " (Ctrl tenue : les clés suivent la poignée, le rythme ne change pas)".to_string()
                     }
                 } else {
-                    " (Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                    let fin = self.doc.panels[pi].frame_count();
+                    let laisses = crate::clesduree::verrouilles_courts(&self.doc.panels[pi], fin);
+                    if fin > old && laisses > 0 {
+                        format!(" (dernières clés étirées ; {laisses} calque{} verrouillé{} laissé{} tel{} quel{} ; Ctrl pendant le geste : les clés suivent la poignée)", ss(laisses), ss(laisses), ss(laisses), ss(laisses), ss(laisses))
+                    } else if fin > old {
+                        " (dernières clés étirées ; Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                    } else {
+                        " (Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                    }
                 };
                 match sound_shift_note(&self.doc, pi, old, n) {
                     Some(note) => format!("{base}{how}. {note}"),
@@ -986,6 +1041,23 @@ impl App {
                     if let (Some(&at), Some(l)) = (made.first(), self.doc.panels[pi].layers.get(layer)) {
                         self.key_sel = vec![crate::montagekeys::KeyRef { panel: d.panel, layer: l.id, start: at }];
                         self.status = "Clé copiée : la copie a son propre dessin.".into();
+                    }
+                }
+            } else if mode == KeyMove::Insert {
+                // Insérer avant ou après une autre clé : jamais sur un calque verrouillé ou masqué (partie 138).
+                let before = d.before.layers.get(layer).cloned();
+                let label = before.as_ref().map(|l| crate::clesordre::place_text(l, &[start], (start as isize + delta).max(0) as usize, |f| self.frame_label(f)));
+                if let (Some(p), Some(b)) = (self.doc.panels.iter_mut().find(|p| p.id == d.panel), before) {
+                    if let Some(l) = p.layers.get_mut(layer) {
+                        if crate::clesordre::laisse_de_cote(&b) {
+                            self.status = format!("« {} » est verrouillé ou masqué : sa clé reste à sa place.", b.name);
+                        } else {
+                            let new = apply_key_move(l, &[start], delta, mode, plan_len);
+                            self.status = format!("1 clé déplacée {}.", label.unwrap_or_default());
+                            if let Some(&at) = new.first() {
+                                self.key_sel = vec![crate::montagekeys::KeyRef { panel: d.panel, layer: l.id, start: at }];
+                            }
+                        }
                     }
                 }
             } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
