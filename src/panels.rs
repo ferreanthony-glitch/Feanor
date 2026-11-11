@@ -194,6 +194,7 @@ impl App {
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
                 self.action_item(ui, "Fiche du plan", "panneau.proprietes");
                 ui.menu_button("Plans", |ui| self.plans_menu(ui));
+                self.action_item(ui, "Modifier la durée des clés d'images…", "cles.duree");
                 self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 self.action_item(ui, "Nouveau commentaire ici", "commentaire.ajouter");
                 self.action_item(ui, "Commentaires…", "vue.commentaires");
@@ -923,6 +924,8 @@ impl App {
         self.duration_dialog_ui(ctx);
         // Changer la durée des plans choisis (`dureeplans.rs`) ; réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
         self.plans_duration_dialog_ui(ctx);
+        // La durée des clés d'images choisies (`clesduree.rs`, partie 137).
+        self.key_duration_dialog_ui(ctx);
         self.fusion_noms_ui(ctx);
         self.corbeille_fenetre_ui(ctx);
         self.coupe_versions_ui(ctx);

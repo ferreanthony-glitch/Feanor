@@ -51,6 +51,13 @@ pub(crate) fn images(secs: f32, fps: u32) -> usize {
     }
 }
 
+/// La durée commune des plans `ids` (en images), rien s'ils n'ont pas tous la même.
+pub(crate) fn duree_commune(doc: &crate::document::Document, ids: &[u64]) -> Option<usize> {
+    let mut d = ids.iter().filter_map(|id| doc.panels.iter().find(|p| p.id == *id)).map(|p| p.frame_count());
+    let first = d.next()?;
+    d.all(|n| n == first).then_some(first)
+}
+
 /// La fenêtre « Changer la durée des plans choisis… » : les plans visés (leurs numéros), le texte du champ, le focus à donner au champ.
 pub(crate) struct DureePlans {
     pub ids: Vec<u64>,
@@ -65,7 +72,8 @@ impl App {
             return;
         }
         let ids = self.board_selection();
-        let text = images(self.settings.new_plan_secs, self.doc.fps).to_string();
+        // Le champ montre la durée commune des plans choisis ; s'ils diffèrent, il est vide (« durées différentes », partie 137).
+        let text = duree_commune(&self.doc, &ids).map(|n| n.to_string()).unwrap_or_default();
         self.duree_plans = Some(DureePlans { ids, text, focus: true });
     }
 
@@ -92,9 +100,23 @@ impl App {
     /// Donne aux plans `ids` la durée que dit `text` (voir le haut de ce fichier), en une étape d'annulation. Renvoie combien de plans ont
     /// changé de durée ; rien si le texte n'est pas une durée ou si le storyboard est verrouillé.
     pub(crate) fn change_plans_duration(&mut self, ids: &[u64], text: &str) -> Option<usize> {
-        if self.storyboard_refuses() || !self.partage_peut_toucher(ids) {
+        if self.storyboard_refuses() {
             return None;
         }
+        // Film partagé : un plan tenu par quelqu'un d'autre est laissé de côté, les autres changent (partie 137).
+        let mut libres = Vec::new();
+        let mut tenus = 0usize;
+        for &id in ids {
+            if self.partage_peut_toucher(&[id]) {
+                libres.push(id);
+            } else {
+                tenus += 1;
+            }
+        }
+        if libres.is_empty() {
+            return None;
+        }
+        let ids = &libres[..];
         let Some(voulues) = self.durees_voulues(ids, text) else {
             self.status = "Durée à retaper (au moins une image : 36, 1:12, +12, -4).".into();
             return None;
@@ -119,14 +141,23 @@ impl App {
         self.length_origin = None;
         self.commit_as(snap, "Durée des plans");
         let n = voulues.len();
+        let pl = if n > 1 { "s" } else { "" };
         let uniforme = voulues.iter().all(|&(pi, _, _)| self.doc.panels[pi].frame_count() == self.doc.panels[voulues[0].0].frame_count());
-        let quoi = if uniforme {
+        let mut msg = if uniforme {
             let d = self.doc.panels[voulues[0].0].frame_count();
-            format!("{} ({d} i) chacun", duration_label(d, fps))
+            format!("{n} plan{pl} passé{pl} à {} ({d} i)", crate::clesduree::duree_texte(d, fps))
         } else {
-            "selon leur durée d'avant".to_string()
+            format!("{n} plan{pl} : durée changée selon leur durée d'avant")
         };
-        self.status = format!("{n} plan{} : durée {quoi}.{}", if n > 1 { "s" } else { "" }, note.map(|t| format!(" {t}")).unwrap_or_default());
+        // Les dernières clés s'étirent en allongeant ; un calque verrouillé reste tel quel (partie 137).
+        let laisses: usize = voulues.iter().filter(|&&(pi, old, _)| self.doc.panels[pi].frame_count() > old).map(|&(pi, _, _)| crate::clesduree::verrouilles_courts(&self.doc.panels[pi], self.doc.panels[pi].frame_count())).sum();
+        if laisses > 0 {
+            msg += &format!(" ; {laisses} calque{} verrouillé{} laissé{} sans étirer {} dernière clé", if laisses > 1 { "s" } else { "" }, if laisses > 1 { "s" } else { "" }, if laisses > 1 { "s" } else { "" }, if laisses > 1 { "leur" } else { "sa" });
+        }
+        if tenus > 0 {
+            msg += &format!(" ; {tenus} plan{} tenu{} par quelqu'un d'autre laissé{} de côté", if tenus > 1 { "s" } else { "" }, if tenus > 1 { "s" } else { "" }, if tenus > 1 { "s" } else { "" });
+        }
+        self.status = format!("{msg}.{}", note.map(|t| format!(" {t}")).unwrap_or_default());
         Some(changes)
     }
 
@@ -148,12 +179,14 @@ impl App {
             .show(ctx, |ui| {
                 let total: usize = dlg.ids.iter().filter_map(|id| self.doc.panels.iter().find(|p| p.id == *id)).map(|p| p.frame_count()).sum();
                 ui.label(format!("{} plan{} choisi{} : {} en tout ({total} i, {fps} i/s).", dlg.ids.len(), if dlg.ids.len() > 1 { "s" } else { "" }, if dlg.ids.len() > 1 { "s" } else { "" }, duration_label(total, fps)));
-                let resp = ui.add(egui::TextEdit::singleline(&mut dlg.text).desired_width(160.0).hint_text("36, 1:12, +12, -4"));
+                let commune = duree_commune(&self.doc, &dlg.ids);
+                let hint = if commune.is_none() { "durées différentes" } else { "36, 1:12, +12, -4" };
+                let resp = ui.add(egui::TextEdit::singleline(&mut dlg.text).desired_width(160.0).hint_text(hint));
                 if dlg.focus {
                     resp.request_focus();
                     dlg.focus = false;
                 }
-                ui.label(egui::RichText::new("La durée de chaque plan : des images (36), des secondes et des images (1:12 ou 1s12), ou un écart (+12, -4). Le champ part de la durée d'un nouveau plan (Préférences > Montage).").weak().small());
+                ui.label(egui::RichText::new("La durée de chaque plan : des images (36), des secondes et des images (1:12 ou 1s12), ou un écart (+12, -4). Le champ montre la durée commune des plans choisis. En allongeant, la dernière clé de chaque calque s'étire jusqu'à la nouvelle fin.").weak().small());
                 match &voulues {
                     Some(v) => {
                         let apres: usize = v.iter().map(|&(_, _, n)| n).sum();

@@ -679,6 +679,11 @@ mod timeline_cles_tests;
 // Alt + glisser les clés de dessins du montage (dupliquer), Ctrl + Maj (réordonner).
 #[cfg(test)]
 mod montage_alt_tests;
+// Glisser des clés avant ou après une autre clé ; étirer les dernières clés ; durée des clés choisies (partie 137).
+mod clesordre;
+mod clesduree;
+#[cfg(test)]
+mod clesglisser_tests;
 // Durée d'un nouveau plan, durée des plans choisis.
 mod dureeplans;
 #[cfg(test)]

@@ -1758,6 +1758,7 @@ impl App {
                             self.colorier_comme_precedente();
                         }
                     }
+                    self.action_item(ui, "Modifier la durée des clés d'images…", "cles.duree");
                     let resp = ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide"));
                     if crate::bulles::bulle(resp, "Laisser un vide", "Leurs images restent vides ; les autres clés ne bougent pas.", "").clicked() {
                         ui.close_menu();

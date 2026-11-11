@@ -926,6 +926,8 @@ pub struct App {
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
     /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
+    /// La fenêtre « Modifier la durée des clés d'images… » (`clesduree.rs`, partie 137).
+    pub(crate) duree_cles: Option<crate::clesduree::DureeCles>,
     /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
     /// La fenêtre de la corbeille du projet (`corbeilleui.rs`).
@@ -1461,6 +1463,7 @@ impl App {
             snap_on: true,
             duration_dialog: None,
             duree_plans: None,
+            duree_cles: None,
             fusion_noms: None,
             corbeille_ui: None,
             corbeille_charge: None,
@@ -5076,6 +5079,7 @@ impl App {
             "sequence.afficher_aucune_autre" => self.affichage_aucune_autre(),
             "sequence.afficher_ordre_film" => self.affichage_ordre_du_film(),
             "montage.duree_plans" => self.open_plans_duration_dialog(),
+            "cles.duree" => self.open_key_duration_dialog(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),

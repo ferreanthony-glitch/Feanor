@@ -1142,6 +1142,9 @@ impl App {
             self.action_item(ui, "Supprimer l'image (ou les images choisies)", "images.supprimer_plan");
         });
         ui.menu_button("Instances (dessin et ses expositions)", |ui| {
+            // La durée des clés touchées par les images choisies (partie 137) : en tête, c'est la commande de ce sous-menu qu'on cherche.
+            self.action_item(ui, "Modifier la durée des clés d'images…", "cles.duree");
+            ui.separator();
             self.action_item(ui, "Instance précédente", "instance.precedente");
             self.action_item(ui, "Instance suivante", "instance.suivante");
             self.action_item(ui, "Clé précédente (tous les calques)", "cle.precedente");

@@ -9925,3 +9925,91 @@ combien de calques, et lesquels sont laissés de côté.
 5. L'effet équivalent est celui de même rang parmi ceux de même sorte, sans repli sur le premier.
 6. Un préréglage sur plusieurs calques dit combien d'effets de même sorte il a remplacés.
 7. La raison d'un refus est la vraie : dossier (pas d'effets), calque bitmap ou vidéo (effet vectoriel seulement).
+
+## 137. Glisser une clé avant ou après une autre ; étirer un plan étire ses dernières clés ; durée des clés et des plans choisis (2026-11-10, branche `cles-glisser`)
+
+Quatre demandes d'Anthony. Code : `clesordre.rs` et `clesduree.rs` (neufs), `handles.rs` (`KeyMove::Insert`, la clé prise, la poignée de
+durée), `montagekeys.rs` (plusieurs clés prises), `timeline.rs` (le lâcher d'images, la ligne d'insertion), `rognage.rs` (`rogner` :
+Tail et Duration), `rognageui.rs`, `dureeplans.rs`, menus (`panels.rs`, `images.rs`, `storyboard.rs`), action `cles.duree`
+(`keymap.rs`, `app.rs`), un champ `App::duree_cles` (`app.rs`, `onglets.rs`). Essais : `clesglisser_tests.rs` (16).
+
+### 1. Glisser une clé avant ou après une autre clé
+
+« j'aimerais pouvoir décaler des clés d'images en les faisant glisser avant ou après une autre clé d'image. Actuellement ça ne marche pas »
+
+**Avant.** Dans le montage (la timeline du Storyboard), une clé prise par son milieu glissait avec toute la suite de son calque (« Décaler
+les clés ») : vers la droite elle ne pouvait jamais passer sa voisine (la voisine partait avec elle) ; vers la gauche elle butait quand la
+clé d'avant n'avait plus qu'une image. Changer l'ordre existait, caché sous Ctrl + Maj pressées en cours de geste. Dans la timeline
+d'Animation, des images choisies lâchées sur une autre clé l'écrasaient (sans touche) ; Maj les insérait image par image.
+
+**Maintenant.** Sans touche, la souris lâchée sur un AUTRE dessin du calque : la clé (ou les clés choisies) s'insère avant ce dessin si la
+souris est dans sa première moitié, après lui dans la seconde. On insère, on n'écrase pas : chaque dessin garde sa durée, les clés d'entre
+l'ancienne et la nouvelle place se décalent, la durée du calque et celle du plan ne changent pas (le glissé ne peut donc jamais faire
+dépasser la fin du plan). Pendant le geste, une ligne d'insertion (le trait épais à deux pointes) montre la limite, la barre d'état dit
+« avant l'image 12 » ou « après l'image 9 » ; rien n'est posé ni rejoué avant le lâcher. Au lâcher : une étape d'annulation, « 3 clés
+déplacées avant l'image 12 ».
+
+- **Ailleurs, l'ancien geste reste** : sur la clé elle-même, sur des images vides ou après la fin du calque, le montage décale la clé et la
+  suite comme avant, la timeline pose les images là où on les lâche. Maj (la clé seule), Alt ou Ctrl (copier), Ctrl + Maj (réordonner
+  au milieu) ne changent pas.
+- **Plusieurs clés, plusieurs calques** : elles se posent ensemble, dans leur ordre ; chaque calque se réordonne de son côté, sa limite à
+  la même distance de sa première clé prise que sur le calque de la clé tenue. Un calque verrouillé ou masqué est laissé de côté et nommé.
+- **Timeline d'Animation** : les images choisies doivent couvrir des clés entières sur chaque calque choisi (sinon l'ancien geste).
+- **Ce qui suit** : les rôles des images suivent leur dessin. Les clés d'effets, de position et d'opacité restent à leur image : elles
+  sont au calque, pas au dessin. Un dessin réutilisé reste le même dessin ; deux expositions du même dessin qui se retrouvent côte à côte
+  n'en font plus qu'une.
+- Pas dans les Vignettes.
+
+### 2. Étirer un plan étire ses dernières clés
+
+« Étirer un plan étire également toutes les dernières clés d'image du plan. Il ne laisse plus de vide. »
+
+**Avant.** En allongeant un plan, seuls les calques tenus jusqu'à l'ancienne fin étaient prolongés ; un calque qui s'arrêtait plus tôt
+laissait un vide jusqu'à la nouvelle fin.
+
+**Maintenant.** Allonger la fin (poignée de durée de la timeline, bord de fin dans le montage, « Durée… », « Changer la durée des plans
+choisis… ») tient le dernier dessin de chaque calque jusqu'à la nouvelle fin, même s'il s'arrêtait avant l'ancienne. Une clé vide (F4)
+tenue reste vide à l'écran. Un calque verrouillé reste tel quel, la barre d'état le dit. Ctrl tenue sur la poignée ne change pas (les
+clés suivent la poignée, partie 123). Raccourcir puis rallonger : la réserve revient d'abord, puis les fins s'étirent ; rien ne se perd.
+Les clés de caméra, d'opacité et d'effets ne bougent pas. Le champ de durée de la barre de la timeline et l'ajout d'une case dans les
+Vignettes gardent l'ancienne règle.
+
+### 3. « Modifier la durée des clés d'images… »
+
+Clic droit sur des clés de la timeline (sous-menu « Instances », en tête : le menu des images a déjà dix entrées, la limite des menus
+courts) ou du montage (menu d'une piste, premier niveau), menu Storyboard. Une petite fenêtre demande
+la durée en images et montre l'équivalent en secondes et images (« = 1 s 4 i à 24 i/s »). Le champ montre la durée commune des clés
+choisies, ou reste vide avec « durées différentes ». Entrée valide, Échap annule ; 0 est refusé (au moins une image).
+
+- Chaque clé choisie prend cette durée, sur tous les calques concernés ; les clés suivantes du calque se décalent d'autant, rien n'est
+  écrasé. Les rôles et les clés d'effets, de position et d'opacité d'après se décalent avec elles ; la caméra (au plan) ne bouge pas.
+- Un calque tenu jusqu'à la fin du plan le reste : sa dernière exposition, si elle n'est pas choisie, absorbe le décalage (la règle de
+  « Décaler les clés »).
+- Si une clé dépasse alors la fin du plan, **le plan s'allonge** (décision d'Anthony) : les plans suivants se décalent, les autres calques
+  étirent leur dernière clé jusqu'à la nouvelle fin. « …, plan 1 allongé à 1 s 11 i ».
+- Calques verrouillés laissés de côté, nommés. Une étape d'annulation. « 5 clés passées à 12 images sur 2 calques ».
+- Action `cles.duree`, sans raccourci par défaut (aucun n'est évident et libre) ; on peut lui en donner un (clic droit sur l'entrée).
+
+### 4. La durée de plusieurs plans choisis
+
+**Avant.** « Changer la durée des plans choisis… » existait déjà (partie sur `dureeplans.rs`, clic droit sur un plan, menu Plans) : une
+durée pour tous les plans choisis, champ prérempli de la durée d'un plan neuf. « Durée… » visait un seul plan.
+
+**Maintenant.** Le champ montre la durée commune des plans choisis, ou reste vide avec « durées différentes ». « Durée… » avec plusieurs
+plans choisis (dont celui visé) ouvre cette même fenêtre. Les plans suivants se décalent comme pour un seul plan ; allonger étire les
+dernières clés (point 2) ; raccourcir fait comme pour un plan : la fin est rognée et reste en réserve, rien n'est perdu. Dans un film
+partagé, un plan tenu par quelqu'un d'autre est laissé de côté avec un message (avant : tout était refusé). Une étape d'annulation ;
+« 3 plans passés à 2 s 12 i (60 i) ».
+
+### À vérifier à l'écran (par Anthony)
+
+1. Storyboard : prendre une clé par son milieu, la lâcher sur la seconde moitié de sa voisine : la ligne d'insertion apparaît pendant le
+   geste, la clé passe après elle au lâcher. Sur la première moitié de la première clé : elle passe en tête.
+2. La même chose avec trois clés choisies sur deux calques ; avec un des calques verrouillé : il ne bouge pas, la barre d'état le nomme.
+3. Lâcher une clé sur des images vides : elle glisse avec la suite, comme avant.
+4. Animation : choisir les images d'une clé entière (rectangle), les glisser sur une autre clé : ligne d'insertion, puis insertion.
+5. Un plan à trois calques de longueurs différentes : tirer la poignée de durée ; les trois tiennent leur dernier dessin jusqu'au bout.
+   Avec Ctrl : les clés suivent la poignée, comme avant.
+6. Clic droit sur des clés > « Modifier la durée des clés d'images… », 12, Entrée ; puis une durée qui fait dépasser la fin : le plan
+   s'allonge, le suivant se décale. Ctrl+Z rend tout.
+7. Trois plans choisis de durées différentes > « Changer la durée des plans choisis… » : champ vide « durées différentes », taper 2:12.
