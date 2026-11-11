@@ -102,6 +102,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   la branche : 4 473 essais réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`,
   15 h 59) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
   Ma correction du matin (partie 137.11) visait d'autres gestes : elle n'était pas la cause de son cas.
+- Fusion de `cle-masques` dans main (02c1ceb, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé, même
+  contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR, ouvert
+  depuis 15 h 35, fermé sans enregistrer pour reconstruire (il était prévenu). Exe principal reconstruit (`target\release\feanor.exe`,
+  16 h 05) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas de version portable. Sa question
+  ouverte : la clé sur les calques verrouillés. Le dossier de chantier `Chantiers\cle-masques` attend son accord pour être retiré.
 
 ## 2026-11-10
 
