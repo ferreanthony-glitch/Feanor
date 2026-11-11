@@ -60,6 +60,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   sorte juste après, rien de changé dans un plan sans dossier ; regardé sur une capture d'une copie de « retakes brawlydays ».
   Vérificateur sur la branche : 4 464 essais réussis, 0 échec, aucun avertissement (669 s). Sur son second « Fusionne directement »
   (donné pendant le travail) : fusion dans main à suivre.
+- Fusion de `cles-glisser` dans main (805b8e3, sans avance rapide) : `main` n'avait pas bougé, même contenu que la branche vérifiée
+  (le vérificateur n'a donc pas été relancé sur main). L'autre session prévenue par deux messages, sans réponse. Poussé sur GitHub.
+  Exe principal reconstruit (`target\release\feanor.exe`, 13 h 54) et ouvert deux fois sur une copie de « retakes brawlydays » avec
+  de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (ses listes
+  137.11 et 138) ; la partie 138 n'a été ni écrite ni essayée par moi au-delà de ses 16 essais et du vérificateur. Les dossiers de
+  chantier `Chantiers\calques-timeline` et `Chantiers\multi-calques` attendent son accord pour être retirés.
 
 ## 2026-11-10
 
