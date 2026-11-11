@@ -776,6 +776,35 @@ fn the_view_with_ten_cards_stays_within_the_frame_budget() {
     println!("PERF Espace 3D : choisir à la souris (10 cartes) : {pick:.2} ms");
     assert!(pick < 5.0, "{pick:.2} ms pour choisir");
 }
+/// Mesure de l'étape A0 du plan en espace (`docs/ESPACE-LIBRE.md`) : dans un plan en espace, toute carte passe par le
+/// maillage dès que la caméra tourne. Ce que coûte de construire le plan d'une image avec 20 cartes inclinées, à la
+/// taille d'un vrai projet (cadre 1920 × 1080).
+#[test]
+fn the_plan_of_an_image_with_twenty_tilted_cards_stays_within_the_frame_budget() {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    doc.panels[0].layers = Vec::new();
+    for k in 0..20usize {
+        let mut layer = Layer::new(format!("Carte {k}"), LayerKind::Bitmap);
+        let cel = doc.new_cel(LayerKind::Bitmap);
+        fill_rect(&mut doc, cel, 200 + k * 150, 300, 600 + k * 150, 1500, if k % 2 == 0 { RED } else { GREEN });
+        layer.frames = vec![Some(cel); 12];
+        layer.depth = k as f32 * 0.2 - 0.8;
+        layer.transform = LayerTransform { tilt_x: 5.0 + k as f32 * 2.0, tilt_y: -40.0 + k as f32 * 4.0, ..Default::default() };
+        doc.panels[0].layers.push(layer);
+    }
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { dolly: 30.0, tilt: 4.0, pan: -6.0, ..doc.default_camera() })];
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert_eq!(plan.items.iter().filter(|i| i.pre.as_ref().is_some_and(|p| p.card)).count(), 20, "les 20 cartes sont posées par un maillage");
+    let t = std::time::Instant::now();
+    const N: usize = 50;
+    for f in 0..N {
+        std::hint::black_box(render::panel_plan_at(&doc, 0, f % 12, None));
+    }
+    let ms = t.elapsed().as_secs_f64() * 1000.0 / N as f64;
+    println!("PERF Espace 3D : plan d'une image, 20 cartes inclinées (1920 × 1080) : {ms:.2} ms ({:.3} ms par carte)", ms / 20.0);
+    assert!(ms < 8.0, "{ms:.2} ms pour poser 20 cartes inclinées : la moitié d'une image à 60 images par seconde");
+}
+
 #[test]
 fn the_export_composes_the_same_image_as_the_plan_of_the_screen_with_tilted_cards_and_a_turned_camera() {
     use crate::exportrender::{self, Papier, Rendu};
