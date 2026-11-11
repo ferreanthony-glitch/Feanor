@@ -84,6 +84,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   reproduit par un essai (écrit après la correction : je ne l'ai pas vu échouer avant). Vérificateur sur la branche : 4 472 essais
   réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`, 14 h 41) ouvert deux fois sur
   une copie de « retakes brawlydays » avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
+- Fusion de `dossier-glisser` dans main (b78ea38, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée (vérificateur non relancé sur main). L'autre session prévenue (message déposé, sans réponse).
+  Poussé sur GitHub. Son FEANOR, ouvert depuis 13 h 59, fermé sans enregistrer pour reconstruire (il était prévenu ; l'écriture est
+  continue). Exe principal reconstruit (`target\release\feanor.exe`, 14 h 48) et ouvert deux fois sur une copie de « retakes
+  brawlydays » avec de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le
+  vrai exe (sa liste 139.3). Le dossier de chantier `Chantiers\dossier-glisser` attend son accord pour être retiré.
 
 ## 2026-11-10
 
