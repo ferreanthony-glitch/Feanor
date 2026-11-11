@@ -102,11 +102,14 @@ pub struct Settings {
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
-    /// Les calques qui ne sont pas actifs, dans le Storyboard et le Montage : en bandes fines (d'office) ou cachés derrière une
-    /// ligne « N autres calques » (`pistes.rs`, Préférences > Montage). Un réglage du poste : rien n'est écrit dans le projet.
-    /// (L'ancien réglage « repliage_pistes », commun ou propre à chaque plan, n'existe plus : une vieille clé est ignorée.)
-    #[serde(default, rename = "calques_non_actifs", skip_serializing_if = "crate::pistes::Inactifs::est_replie")]
-    pub montage_inactifs: crate::pistes::Inactifs,
+    /// Les calques dans la timeline du Storyboard et du Montage (`pistes.rs`, barre du bas de la bande et Préférences > Montage) : trois
+    /// à la fois, le calque actif entre ses deux voisins (d'office), ou toute la pile. Un réglage du poste : rien n'est écrit dans le
+    /// projet. (Les anciens réglages « calques_non_actifs » et « repliage_pistes » n'existent plus : une vieille clé est ignorée.)
+    #[serde(default = "default_pile", rename = "calques_timeline", skip_serializing_if = "crate::pistes::Pile::est_trois")]
+    pub montage_pile: crate::pistes::Pile,
+    /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
+    #[serde(default, rename = "hauteur_plans", skip_serializing_if = "crate::pistes::HauteurPlans::est_moyenne")]
+    pub montage_plans: crate::pistes::HauteurPlans,
     /// Pinceau et crayon : « Peindre derrière » (`brushfill`), retenu d'une séance à l'autre (Anthony, 2026-10-17).
     /// La clé garde son nom d'avant le 2026-10-23, quand l'interrupteur s'appelait « Peint sur l'aplat » : les anciens
     /// réglages donnent donc « Peindre derrière ».
@@ -331,6 +334,16 @@ fn default_continu() -> bool {
     !cfg!(test)
 }
 
+/// Trois calques à la fois dans l'application ; « Toute la pile » dans les essais : ceux d'avant visent les pistes par leur rangée et
+/// toutes doivent y être (les essais de la fenêtre des trois calques l'allument eux-mêmes, `calques_timeline_tests.rs`).
+fn default_pile() -> crate::pistes::Pile {
+    if cfg!(test) {
+        crate::pistes::Pile::Toute
+    } else {
+        crate::pistes::Pile::Trois
+    }
+}
+
 fn default_head_w() -> f32 {
     crate::soundtrack::HEADERS_W
 }
@@ -372,7 +385,8 @@ impl Default for Settings {
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             montage_auto_open: true,
-            montage_inactifs: Default::default(),
+            montage_pile: default_pile(),
+            montage_plans: Default::default(),
             paint_behind: false,
             paint_on_aplat: false,
             ancien_remplir_la_forme: false,

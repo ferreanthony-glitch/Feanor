@@ -76,6 +76,8 @@ impl App {
         if self.bande_film_vide(ui) {
             return;
         }
+        // Le pointeur sur la bande : les touches du zoom de l'image zooment la timeline (`run_action`).
+        self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
         ui.separator();

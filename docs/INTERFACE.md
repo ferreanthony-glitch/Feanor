@@ -9925,3 +9925,67 @@ combien de calques, et lesquels sont laissés de côté.
 5. L'effet équivalent est celui de même rang parmi ceux de même sorte, sans repli sur le premier.
 6. Un préréglage sur plusieurs calques dit combien d'effets de même sorte il a remplacés.
 7. La raison d'un refus est la vraie : dossier (pas d'effets), calque bitmap ou vidéo (effet vectoriel seulement).
+
+## 137. Les calques dans la timeline : trois à la fois, les dossiers en lignes fines, des plans moins hauts (2026-11-11, branche `calques-timeline`)
+
+Demande d'Anthony, sur deux jours. Le 10 novembre : « comment s'organisent les calques dans la timeline : un peu bordélique, pas très simple de s'y retrouver quand il y a beaucoup de calques ; le fait que ceux qui sont inactifs restent pliés est une bonne idée mais ça manque parfois de lisibilité ». Le 11, après une page de maquettes (propositions 31 à 41) : « trois calques maximum affichés sur la timeline ; ceux qui sont au-dessus ou en dessous apparaissent quand on se déplace » ; « l'épaisseur de la partie plan est trop importante » ; l'affichage se règle « depuis le bas de la timeline et la fenêtre paramètre » ; « les dossiers ne sont jamais traités comme des calques dans la timeline, ils sont toujours plus petits et peuvent se déplier / replier » ; « un dossier fermé doit pouvoir se traverser avec calque du dessus et dessous et se referme quand on en sort » ; « les raccourcis de zoom et dézoom dans la timeline sont les mêmes que pour la zone de dessin ». Sa question : d'accord pour les couleurs par dossier, mais sans confusion avec les couleurs par type de calque.
+
+Fichiers : `src/pistes.rs` (les lignes de la timeline, les réglages, la colonne de gauche), `src/montagerows.rs` (rangées, fines bandes, lignes de dossier, colonne des plans), `src/storyboard.rs` (bloc d'un plan en bandeau, barre du bas, pointeur sur la bande), `src/folders.rs` (`couleur_du_rangement`), `src/layerheads.rs` (le même filet dans la timeline de l'animation), `src/settings.rs`, `src/app.rs` (actions, zoom), `src/keymap.rs` + `keymap.toml`, `src/dockui.rs`, `src/timeline.rs` ; essais dans `calques_timeline_tests.rs` (neuf), `pistes_tests.rs` et `timeline_repliee_tests.rs` (adaptés). Remplace le mode « cachés » et la ligne « N autres calques » de la § 68.2 ; le reste de la § 68 (clés sur le bloc du plan, liseré de l'aplat, noms des blocs) ne change pas.
+
+### 137.1 Trois calques à la fois
+
+Dans les onglets **Storyboard** et **Montage**, la pile ne montre plus que **trois calques** : le **calque actif** au milieu (40 points, ses losanges, sa barre), **son voisin du dessus et celui du dessous** (19 points : leurs dessins, leurs clés en petits traits, leur nom en 11 points). Le calque actif est **toujours à la même place** ; la fenêtre fait **toujours 130 points de haut**, quel que soit le nombre de calques.
+
+- Au-dessus et au-dessous, une **fine bande** : « ▴ 4 au-dessus », « ▾ 2 au-dessous ». Elle compte tous les calques hors de la fenêtre (jamais les dossiers ; ceux d'un dossier fermé compris) et les montre en **traits fins** de la couleur de leur sorte, le long de leurs dessins. **Un clic y saute de trois calques.** Au bout de la pile elle dit « Haut de la pile » ou « Bas de la pile ».
+- **Cliquer un voisin** (son nom ou l'un de ses dessins) le rend actif : il vient au milieu quand la souris est relâchée. « Calque du dessus » et « du dessous » font défiler la fenêtre.
+- **« Toute la pile »** rouvre tout : le calque actif déplié, les autres en bandes de 17 points (11 avant ; leur nom passe de 9 à 11 points). Pour comparer deux calques éloignés ou en choisir plusieurs. Les gestes d'avant (double-clic à côté du nom, « Replier / déplier toutes les pistes », « Déplier le calque courant tout seul ») ne valent que là.
+- Un calque **verrouillé** (ou dans un dossier verrouillé) porte un **cadenas** à droite de son nom.
+
+### 137.2 Un dossier n'est jamais un calque
+
+Un dossier est une **ligne fine** (13 points), plus petite que toute piste : un triangle, le carré de sa couleur, son nom, son cadenas, le nombre de ses calques. Dans les pistes, un trait gris résume les dessins de ses calques (plus épais quand il est fermé).
+
+- **Un clic sur la ligne** ferme ou ouvre le dossier (le même drapeau que dans le panneau Calques : il s'enregistre avec le projet). Elle se glisse pour monter ou descendre avec ses calques ; clic droit : son menu.
+- Elle **ne compte pas dans les trois** et n'est **jamais le calque actif** : un clic sur elle ne la rend pas courante, « calque du dessus / du dessous » ne s'y arrêtent pas.
+- Quand elle tombe entre deux calques de la fenêtre, c'est **la fine bande qui lui cède sa place** : le calque actif ne bouge pas. Sinon, le **nom du dossier** s'écrit en petit au-dessus du nom du calque actif.
+- **Un dossier fermé se traverse** : « calque du dessus » ou « du dessous » entre dedans. Tant que le calque courant est l'un des siens, il se montre ouvert (triangle de biais, « de passage ») ; dès qu'on en sort, il est de nouveau fermé. **Rien n'est écrit pour cela** : le drapeau du dossier ne bouge pas, le projet n'est pas marqué modifié.
+
+### 137.3 La bande dit le type, le filet dit le dossier
+
+Les deux sens ne sont jamais au même endroit. **La bande d'un calque garde la couleur de sa sorte** (vectoriel, bitmap…, § 98). **Le dossier a sa couleur dans la colonne de gauche** : un filet le long de ses calques, le carré de sa ligne, son nom au-dessus du calque actif. Cette couleur est celle de son **groupe de couleur** (13b) ; un dossier resté dans le groupe « Défaut » en prend une **d'office**, d'après sa place parmi les dossiers du plan : bleu, magenta, vert, rouge, violet… (celles qui s'éloignent le plus des couleurs des sortes). Un calque hors dossier n'a un filet que si on lui a choisi un groupe. Rien n'est écrit dans le projet ; choisir un groupe à la main passe avant. La timeline de l'onglet Animation montre le même filet.
+
+### 137.4 Des plans moins hauts
+
+La rangée des plans ne prend plus la place que les pistes laissent (jusqu'à 170 points) : elle a **la hauteur du réglage**, **moyenne** (56 points : la vignette, le nom et la durée dessous) ou **en bandeau** (28 points : une petite vignette, le nom et la durée sur une ligne). Dans sa colonne de gauche, sur une ligne : **« Nouveau plan »**, **« ⋯ »** (nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard ; un cadenas à sa place quand le storyboard est verrouillé), les **réglages du projet** et son nom. Les commandes rangées restent au clic droit sur un plan et dans le menu « Plans » de la barre.
+
+### 137.5 Les réglages : en bas de la timeline, et dans les Préférences
+
+**Barre du bas de la bande**, à droite du zoom : deux paires de petites icônes, avec leur bulle — **trois calques / toute la pile**, **plans moyens / en bandeau**. Les mêmes dans **Fichier > Préférences… > Montage** (« Calques dans la timeline », « Hauteur des plans ») et au clic droit sur une piste. Deux actions à qui donner une touche : `piste.toute_la_pile`, `bande.plans_en_bandeau` (sans touche d'office). Réglages du poste (`reglages.toml` : `calques_timeline`, `hauteur_plans` ; les valeurs d'office ne s'écrivent pas) ; l'ancien réglage « Calques non actifs : repliés / cachés » n'existe plus (une vieille clé est ignorée).
+
+### 137.6 Le zoom suit le pointeur
+
+Les touches du zoom de l'image (`vue.zoom_avant`, `vue.zoom_arriere` ; chez Anthony Maj+2 et Maj+1) **zooment la bande du bas** quand le pointeur est sur elle (le montage, ou la timeline en animation), et l'image partout ailleurs. Les touches à part de la bande (`bande.zoom_avant`, Alt+2…) marchent toujours.
+
+### 137.7 Limites connues
+
+- **La hauteur de la bande du bas ne change pas toute seule** : c'est le bord tiré à la main, retenu par espace de travail. Ce chantier ne rend donc pas de place à l'image ; il empêche la pile de déborder et de sauter. Avec des plans moyens, la fenêtre des trois calques et une piste son, la bande d'origine (290 points pour 820 de haut) est juste assez haute.
+- **Le panneau Calques et la timeline de l'animation** gardent leur règle pour un dossier fermé (seul le calque courant y garde sa ligne) : « ouvert le temps du passage » ne vaut que dans le Storyboard et le Montage.
+- **« Calque du dessus / du dessous » ne s'arrêtent plus sur un dossier**, où que l'on soit : un dossier se choisit d'un clic dans le panneau Calques.
+- La ligne d'un dossier n'a **pas d'œil** : cacher un dossier passe par son menu (clic droit) ou le panneau Calques.
+- Un calque verrouillé a son cadenas, pas de hachures sur sa bande.
+- La colonne de gauche à sa largeur d'origine (104 points) coupe un nom comme « Vectoriel 10 » depuis que les noms sont en 11 points : son bord droit se tire (double-clic : l'élargir).
+- Une rangée reste « le n-ième calque de chaque plan » : sous un autre plan que le plan courant, la même ligne peut être un autre calque (proposition 38, pas faite). Les propositions 34 (calques cachés en une ligne), 35 (noms sans les taper) et 36 (retrouver un calque par son dessin) ne sont pas faites.
+- Dans les essais, le réglage d'office est « Toute la pile » (ceux d'avant visent les pistes par leur rangée) ; l'application, elle, montre trois calques.
+
+### 137.8 À vérifier à l'écran (par Anthony)
+
+1. Storyboard, ton projet de retakes : trois calques, le calque actif au milieu avec le nom de son dossier en couleur au-dessus du sien ; « N au-dessus » et « N au-dessous ».
+2. « Calque du dessus » et « du dessous » plusieurs fois : le calque actif ne change pas de place, les autres défilent ; la hauteur de la timeline ne bouge pas.
+3. Va jusqu'à un dossier fermé et continue : il s'ouvre quand tu y entres (triangle de biais, « de passage »), tu passes par ses calques, il se referme quand tu en sors.
+4. Clique la ligne fine d'un dossier : il se ferme, ou s'ouvre. Elle ne devient jamais le calque actif.
+5. Clique un voisin : il vient au milieu. Clique « N au-dessous » : tu descends de trois calques.
+6. Barre du bas de la timeline, à droite du zoom : « Toute la pile » montre tout, les dossiers en lignes fines ; « Trois calques » y revient. Puis les plans « en bandeau » et « moyens ».
+7. Fichier > Préférences… > Montage : les deux mêmes réglages.
+8. Les couleurs : les bandes ont la couleur du type (vectoriel, bitmap) ; le filet à gauche et le nom du dossier ont la couleur du dossier. Dis si les deux se confondent.
+9. Le stylet sur la timeline, Maj+2 et Maj+1 : la timeline zoome. Le stylet sur l'image : l'image zoome.
+10. La colonne des plans : « Nouveau plan », « ⋯ » (les autres commandes), la roue des réglages.

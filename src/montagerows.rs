@@ -114,15 +114,14 @@ impl Rows {
 
 impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
-    pub(crate) fn montage_rows(&self, available: f32) -> Rows {
+    pub(crate) fn montage_rows(&self, _available: f32) -> Rows {
         // (La hauteur des pistes son : celle du réglage, montagehauteur.rs.)
         self.poser_hauteur_pistes();
         let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
         let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
-        let mut rows = Rows { block_h: 0.0, lanes };
-        let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
-        rows.block_h = (available - fixed).clamp(56.0, 170.0);
-        rows
+        // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
+        // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »).
+        Rows { block_h: self.settings.montage_plans.points(), lanes }
     }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
@@ -177,7 +176,7 @@ impl App {
             let row = track.row;
             let r = lane(rows.layers_top() + track.top, track.h);
             if track.is_more() {
-                self.more_line(ui, &painter, r);
+                self.bande_head(ui, r, &track);
                 continue;
             }
             let Some(k) = item else {
@@ -186,6 +185,27 @@ impl App {
                     .on_hover_text("Le plan courant a moins de calques : cette rangée est à d'autres plans.");
                 continue;
             };
+            // La ligne fine d'un dossier : jamais un calque. Un clic la ferme ou l'ouvre ; elle se glisse et a son menu comme une piste.
+            if track.est_dossier() {
+                grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
+                let resp = ui.interact(r, ui.id().with(("ligne_dossier", row)), Sense::click_and_drag());
+                if resp.drag_started() {
+                    self.montage_layer_drag = Some(k);
+                }
+                let resp = crate::bulles::bulle(
+                    resp,
+                    "Dossier",
+                    "Un clic le ferme ou l'ouvre. Fermé, il s'ouvre quand tu y entres avec « calque du dessus » ou « du dessous » et se referme quand tu en sors. Glisser : il monte ou descend avec ses calques. Clic droit : son menu.",
+                    "",
+                );
+                if resp.clicked() {
+                    self.basculer_dossier(k);
+                }
+                let survol = resp.hovered();
+                resp.context_menu(|ui| self.montage_layer_menu(ui, k));
+                self.dossier_head(ui, r, k, survol);
+                continue;
+            }
             grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
             // (Le calque de couleur courant est « actif » par la rangée de son trait.)
             let current = Some(row) == cur_row;
@@ -212,9 +232,12 @@ impl App {
             if resp.drag_started() {
                 self.montage_layer_drag = Some(k);
             }
-            let resp = resp.on_hover_text(
-                "Calque du plan courant : clic, il devient actif (la piste se déplie) ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…).",
-            );
+            let toute = self.settings.montage_pile == crate::pistes::Pile::Toute;
+            let resp = resp.on_hover_text(if toute {
+                "Calque du plan courant : clic, il devient actif (la piste se déplie) ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…)."
+            } else {
+                "Calque du plan courant : clic, il devient actif et vient au milieu ; double-clic sur le nom, le renommer ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…)."
+            });
             if resp.clicked() || resp.secondary_clicked() {
                 pick = Some((k, resp.secondary_clicked()));
             }
@@ -223,7 +246,7 @@ impl App {
                 if self.double_click_is_on_name(ui, p, name_rect, &name, crate::pistes::name_size(track.folded)) {
                     let id = self.doc.panels[self.cur_panel].layers[k].id;
                     self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
-                } else {
+                } else if toute {
                     self.toggle_track_fold(row, false);
                 }
             }
@@ -265,77 +288,79 @@ impl App {
         }
     }
 
-    /// La ligne « ▾ N autres calques » (mode « cachés ») : un clic montre les autres calques en bandes fines, un autre les cache.
-    fn more_line(&mut self, ui: &mut egui::Ui, painter: &Painter, r: Rect) {
-        use egui_phosphor::regular as ph;
-        let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
-        let n = crate::pistes::others_count(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
-        let shown = self.pistes.autres_montres;
-        painter.rect_filled(r, 3.0, theme::etiquette());
-        let text = match (shown, n) {
-            (false, 1) => format!("{} 1 autre calque", ph::CARET_DOWN),
-            (false, n) => format!("{} {n} autres calques", ph::CARET_DOWN),
-            (true, _) => format!("{} Cacher les autres", ph::CARET_UP),
-        };
-        let resp = ui.interact(r, ui.id().with("autres_calques"), Sense::click());
-        let ink = if resp.hovered() { theme::texte_fort() } else { ui.visuals().weak_text_color() };
-        painter.with_clip_rect(r).text(pos2(r.left() + 8.0, r.center().y), Align2::LEFT_CENTER, text, FontId::proportional(10.5), ink);
-        let resp = resp.on_hover_text("Les calques non actifs sont cachés (Préférences > Montage). Un clic les montre en bandes fines, un autre les cache de nouveau.");
-        if resp.clicked() {
-            self.pistes.autres_montres = !shown;
-        }
-    }
-
     /// À la place du mot « Storyboard », en face des plans (choix d'Anthony, 2026-10-16, comme
-    /// la colonne de gauche du panneau Projet de TVPaint) : les commandes des plans et le nom du
-    /// projet, qui ouvre ses réglages.
+    /// la colonne de gauche du panneau Projet de TVPaint) : « Nouveau plan », les autres commandes des plans derrière « ⋯ », et le nom
+    /// du projet, qui ouvre ses réglages. Sur une seule ligne depuis que la rangée des plans est moins haute (2026-11-11 : moyenne ou
+    /// bandeau) ; les commandes rangées restent au clic droit sur un plan et dans le menu « Plans » de la barre.
     fn project_header(&mut self, ui: &mut egui::Ui, r: Rect) {
         use egui_phosphor::regular as ph;
-        let inner = r.shrink2(vec2(4.0, 3.0));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("entete_projet").layout(egui::Layout::top_down(egui::Align::Min)));
+        let inner = r.shrink2(vec2(4.0, 1.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("entete_projet").layout(egui::Layout::left_to_right(egui::Align::Center)));
         child.set_clip_rect(r.intersect(ui.clip_rect()));
         child.spacing_mut().item_spacing = vec2(3.0, 3.0);
         let ui = &mut child;
         let mut run: Option<&str> = None;
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
-                run = Some("panneau.nouveau");
-            }
-            if self.bouton(ui, ph::ARROW_LINE_LEFT, "Nouveau plan avant", "Avant le plan courant, dans la même séquence.", "plan.nouveau_avant").clicked() {
-                run = Some("plan.nouveau_avant");
-            }
-            if self.bouton(ui, ph::COPY_SIMPLE, "Dupliquer le plan", "Une copie du plan courant, juste après lui.", "panneau.dupliquer").clicked() {
-                run = Some("panneau.dupliquer");
-            }
+        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
+            run = Some("panneau.nouveau");
+        }
+        // Le cadenas quand le storyboard est verrouillé : l'état reste visible, et un clic ouvre le même menu.
+        let locked = self.doc.storyboard_locked;
+        let menu = ui.menu_button(egui::RichText::new(if locked { ph::LOCK } else { ph::DOTS_THREE }).size(15.0), |ui| {
+            self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+            self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
+            self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
+            ui.separator();
+            self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+            ui.separator();
+            self.action_item(ui, if locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" }, "storyboard.verrouiller");
         });
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::TRASH, "Supprimer les plans", "Les plans choisis, sinon le plan courant.", "panneau.supprimer").clicked() {
-                run = Some("panneau.supprimer");
-            }
-            if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
-                run = Some("sequence.nouvelle");
-            }
-            let locked = self.doc.storyboard_locked;
-            let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
-            let what = "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.";
-            if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
-                run = Some("storyboard.verrouiller");
-            }
-        });
+        let aide = if locked {
+            "Le storyboard est verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus. Ce menu le déverrouille."
+        } else {
+            "Nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard. Aussi au clic droit sur un plan."
+        };
+        crate::bulles::bulle(menu.response, "Plans", aide, "");
         let title = self.doc.properties.title.trim().to_string();
         let name = if title.is_empty() { self.base_name_or("Sans titre") } else { title };
         let plans = self.doc.panels.len();
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::GEAR_SIX, "Réglages du projet", "Propriétés, résolution, cadence.", "projet.proprietes").clicked() {
-                run = Some("projet.proprietes");
-            }
-            let resp = ui.add(egui::Label::new(egui::RichText::new(&name).small().strong()).truncate().sense(Sense::click()));
-            if resp.on_hover_text(format!("{name} : {plans} plan(s). Clic : réglages du projet.")).clicked() {
-                run = Some("projet.proprietes");
-            }
-        });
+        if self.bouton(ui, ph::GEAR_SIX, "Réglages du projet", "Propriétés, résolution, cadence.", "projet.proprietes").clicked() {
+            run = Some("projet.proprietes");
+        }
+        let resp = ui.add(egui::Label::new(egui::RichText::new(&name).small().strong()).truncate().sense(Sense::click()));
+        if resp.on_hover_text(format!("{name} : {plans} plan(s). Clic : réglages du projet.")).clicked() {
+            run = Some("projet.proprietes");
+        }
         if let Some(action) = run {
             self.run_action(action);
+        }
+    }
+
+    /// Une fine bande de la fenêtre des trois calques (`pistes.rs`), dans `lr` : sous chaque plan, un trait par calque des rangées qu'elle
+    /// résume, de la couleur de sa sorte, le long de ses dessins. La ligne d'un dossier y laisse un vide : on y lit la forme de la pile.
+    fn paint_bande(&self, painter: &Painter, lr: Rect, blocks: &[Rect], ppf: f32, track: &Lane) {
+        let (de, a) = track.rangees;
+        let n = a.saturating_sub(de);
+        if n == 0 {
+            return;
+        }
+        let pas = ((lr.height() - 2.0) / n as f32).min(3.0);
+        let ep = (pas - 1.0).max(1.0);
+        for (i, b) in blocks.iter().enumerate() {
+            let cell = Rect::from_min_max(pos2(b.left(), lr.top()), pos2(b.right(), lr.bottom()));
+            if !painter.clip_rect().intersects(cell) {
+                continue;
+            }
+            let p = &self.doc.panels[i];
+            let x0 = cell.left() - 1.0;
+            for (j, row) in (de..a).enumerate() {
+                let Some(l) = layer_in_row(&p.layers, row).map(|k| &p.layers[k]).filter(|l| !l.folder) else { continue };
+                let Some((s, e)) = content_bounds(l) else { continue };
+                let y = lr.top() + 1.0 + j as f32 * pas;
+                let seg = Rect::from_min_max(pos2((x0 + s as f32 * ppf).max(cell.left()), y), pos2((x0 + e as f32 * ppf - 1.0).min(cell.right()), y + ep));
+                if seg.width() > 0.0 {
+                    painter.rect_filled(seg, 0.0, theme::couleur_du_calque(l).gamma_multiply(if l.visible { 0.8 } else { 0.3 }));
+                }
+            }
         }
     }
 
@@ -400,6 +425,7 @@ impl App {
             let lr = lane(rows.layers_top() + track.top, track.h);
             painter.rect_filled(lr, 0.0, theme::rangee_sombre());
             if track.is_more() {
+                self.paint_bande(painter, lr, blocks, ppf, track);
                 continue;
             }
             // Le nom de la rangée : celui du calque du plan courant, que la colonne de gauche écrit. Un bloc n'écrit son nom que s'il en diffère.
@@ -411,6 +437,12 @@ impl App {
                 }
                 let p = &self.doc.panels[i];
                 let Some(k) = layer_in_row(&p.layers, row) else { continue };
+                // Un dossier n'a pas de dessin : un trait résume ceux de ses calques (plus épais quand il est fermé).
+                if p.layers[k].folder {
+                    let ferme = crate::pistes::dossier_ferme(&p.layers, k, if i == self.cur_panel { self.cur_layer } else { usize::MAX });
+                    paint_dossier_cell(painter, cell, &p.layers, k, ppf, ferme);
+                    continue;
+                }
                 let current = i == self.cur_panel && k == self.cur_layer;
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
@@ -602,7 +634,9 @@ impl App {
     pub(crate) fn layer_row_hit(&self, p: Pos2, top: f32, blocks: &[Rect], rows: &Rows) -> Option<(usize, usize)> {
         let row = self.row_at(p, top, rows)?;
         let i = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0)?;
-        Some((i, layer_in_row(&self.doc.panels[i].layers, row)?))
+        // (Jamais un dossier : dans la timeline il n'est pas un calque, un clic sur sa ligne ne le rend pas courant.)
+        let layers = &self.doc.panels[i].layers;
+        layer_in_row(layers, row).filter(|&k| !layers[k].folder).map(|k| (i, k))
     }
 
     /// La rangée de calques sous le point `p` (`top` : haut de la bande).
@@ -634,6 +668,20 @@ impl App {
             let k = layer_in_row(layers, row)?;
             cell_handle_in(&layers[k], k, p, blocks[i].left() - 1.0, lane_top, ppf, tol, lane.bar_from()).map(|h| (i, k, h))
         })
+    }
+}
+
+/// La ligne fine d'un dossier sous un plan (`fi` : son rang dans la pile `stack`) : un trait gris du premier au dernier dessin de ses
+/// calques, plus épais quand le dossier est fermé (il résume alors ce qu'on ne voit plus).
+fn paint_dossier_cell(painter: &Painter, cell: Rect, stack: &[Layer], fi: usize, ppf: f32, ferme: bool) {
+    let bornes = crate::folders::children_of(stack, fi).into_iter().filter_map(|c| content_bounds(&stack[c])).reduce(|(a, b), (s, e)| (a.min(s), b.max(e)));
+    let Some((a, b)) = bornes else { return };
+    let x0 = cell.left() - 1.0;
+    let demi = if ferme { 2.5 } else { 1.0 };
+    let y = cell.center().y;
+    let seg = Rect::from_min_max(pos2((x0 + a as f32 * ppf).max(cell.left()), y - demi), pos2((x0 + b as f32 * ppf - 1.0).min(cell.right()), y + demi));
+    if seg.width() > 0.0 {
+        painter.rect_filled(seg, 1.0, theme::texte_doux().gamma_multiply(if ferme { 0.75 } else { 0.45 }));
     }
 }
 
