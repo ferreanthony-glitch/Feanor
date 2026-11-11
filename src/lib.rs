@@ -947,6 +947,8 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+#[cfg(test)]
+mod calques_timeline_tests;
 mod clesplan;
 #[cfg(test)]
 mod timeline_repliee_tests;

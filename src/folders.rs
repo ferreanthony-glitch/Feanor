@@ -64,6 +64,28 @@ pub fn locked_by_folder(layers: &[Layer], li: usize) -> bool {
     parent_index(layers, li).is_some_and(|fi| layers[fi].locked)
 }
 
+/// L'ordre dans lequel un dossier resté dans le groupe « Défaut » prend une couleur d'office : d'abord celles qui s'éloignent le plus
+/// des couleurs des sortes de calques (Bleu, Magenta, Vert, Rouge, Violet, Bleu foncé, Orange, Cyan ; rangs de `groups::defaults`).
+const COULEURS_D_OFFICE: [usize; 8] = [7, 11, 8, 10, 5, 1, 12, 9];
+
+/// La couleur du rangement du calque `li` (Anthony, 2026-11-11 : la bande dit le type du calque, un filet à sa gauche dit son
+/// dossier) : celle du groupe de couleur de son dossier, ou du sien s'il n'est pas rangé. Un dossier resté dans le groupe « Défaut »
+/// en prend une d'office, d'après sa place parmi les dossiers du plan (du haut de la pile vers le bas). Rien : un calque hors dossier
+/// du groupe « Défaut ». Rien n'est écrit dans le projet.
+pub fn couleur_du_rangement(layers: &[Layer], li: usize, groups: &[crate::groups::LayerGroup]) -> Option<eframe::egui::Color32> {
+    let base = parent_index(layers, li).or_else(|| layers.get(li).map(|_| li))?;
+    let b = &layers[base];
+    let rang = if b.group != 0 {
+        b.group as usize
+    } else if b.folder {
+        COULEURS_D_OFFICE[layers[base + 1..].iter().filter(|l| l.folder).count() % COULEURS_D_OFFICE.len()]
+    } else {
+        return None;
+    };
+    let c = groups.get(rang)?.color;
+    Some(eframe::egui::Color32::from_rgb(c[0], c[1], c[2]))
+}
+
 /// Remet la pile en ordre : un `parent` qui ne désigne pas un dossier du plan est oublié, un
 /// dossier n'a pas de dossier, et les calques de chaque dossier sont rassemblés juste sous lui
 /// (dans leur ordre). Les autres calques gardent leur ordre.

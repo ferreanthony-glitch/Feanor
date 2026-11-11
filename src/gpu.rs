@@ -1005,7 +1005,8 @@ impl GpuCanvas {
         // (Les textures de résultat des effets ne comptent pas : on n'en envoie pas d'avance.)
         let cels = || res.textures.values().filter(|t| t.fx.is_none());
         let n = cels().count() as u64;
-        let per = if n >= 8 { (cels().map(CelTexture::bytes).sum::<u64>() / n).clamp(64 << 10, sheet) } else { sheet / 4 };
+        // (Une feuille de moins de 64 Ko — moins de 128 × 128 pixels — : le plancher ne dépasse pas la feuille, sinon `clamp` s'arrête net.)
+        let per = if n >= 8 { (cels().map(CelTexture::bytes).sum::<u64>() / n).clamp(sheet.min(64 << 10), sheet) } else { sheet / 4 };
         ((res.limit() / per) as usize).saturating_sub(shown + 4) / 2
     }
 

@@ -69,7 +69,12 @@ fn contient(vus: &BTreeSet<String>, morceau: &str) -> bool {
 }
 
 fn clic(b: &mut Banc, p: Pos2) {
+    // (Le pointeur arrive de loin et se pose : à l'image où il apparaît, ce qu'on vise ne se sait pas encore sous lui — un travers du
+    // banc d'essai, où le pointeur n'existe pas avant le premier clic ; un vrai pointeur a toujours bougé avant.)
+    b.image(vec![Event::PointerMoved(Pos2::new(20.0, 1060.0))], 1.0 / 60.0);
+    b.chauffer(2);
     b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    b.chauffer(2);
     b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
     b.chauffer(4);
@@ -107,7 +112,8 @@ const D_AVANT: &[&str] = &[
     "Dire dans la barre d'état ce que font les autres",
     "Croix du système sur le pinceau",
     "Opacité du passe-partout",
-    "Calques non actifs",
+    "Calques dans la timeline",
+    "Hauteur des plans",
     "Déplier le calque courant tout seul",
     "Ajuster les panneaux à leur contenu",
     "Réajuster les panneaux",
@@ -319,7 +325,7 @@ fn the_search_ignores_case_and_accents_and_needs_every_word() {
     // Le titre d'un groupe répond pour tous ses réglages.
     let r = chercher("pistes du montage");
     let g = r.iter().find(|t| t.groupe == Groupe::Pistes).expect("le groupe Pistes");
-    assert_eq!(g.libelles.len(), 3);
+    assert_eq!(g.libelles.len(), 4);
     // Chaque étiquette se retrouve en la cherchant.
     for reg in REGLAGES {
         let r = chercher(reg.libelle);
@@ -341,9 +347,23 @@ fn the_search_field_shows_the_groups_that_answer_on_every_tab_and_a_link_jumps_t
     assert!(!contient(&vus, "Rouvrir le dernier projet au lancement"));
     // La liste montre le nombre de réponses sur l'onglet Performance.
     assert!(vus.iter().any(|t| t.contains("Performance") && t.contains("(")), "{vus:#?}");
-    // Le lien « Performance › » ouvre l'onglet et vide la recherche.
+    // Le lien « Performance › » ouvre l'onglet et vide la recherche. (La liste des réponses se pose en quelques images : on attend
+    // qu'elle ne bouge plus avant de viser le lien, et elle ne doit pas osciller.)
     let fen = fenetre(&b);
-    let p = place(&b, |t, r| t.contains("Performance") && t.contains('\u{203a}') && r.min.x > fen.min.x + 150.0).expect("le lien vers l'onglet");
+    // (Dans la colonne des réponses, à droite de la liste des onglets : posée, elle commence à 148 points du bord de la fenêtre.)
+    let lien = |b: &Banc| place(b, |t, r| t.contains("Performance") && t.contains('\u{203a}') && r.min.x > fen.min.x + 120.0);
+    b.chauffer(8);
+    let places: Vec<Option<Pos2>> = (0..6)
+        .map(|_| {
+            b.chauffer(1);
+            lien(&b)
+        })
+        .collect();
+    // (Elle glissait de 4,5 points par image : le champ de recherche dépassait de 9 points dès qu'un mot était tapé, et la fenêtre
+    // s'élargissait d'autant à chaque image. Corrigé le 2026-11-11, `preferences_contenu`.)
+    assert!(places.windows(2).all(|w| w[0] == w[1]), "la liste des réponses bouge encore d'une image à l'autre : {places:?}");
+    assert_eq!(fenetre(&b), fen, "la fenêtre ne grandit pas pendant une recherche");
+    let p = places[0].expect("le lien vers l'onglet");
     clic(&mut b, p);
     assert_eq!(b.app.settings.prefs_onglet, Onglet::Performance);
     assert_eq!(recherche(&b.ctx), "");

@@ -499,7 +499,9 @@ impl App {
         egui::TopBottomPanel::top("prefs_haut").frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4))).show_separator_line(false).show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 crate::bulles::etiquette(ui, ph::MAGNIFYING_GLASS, "Chercher un réglage", "Tape un mot (couleur, cache, clé, équipe…) : les groupes de réglages qui répondent s'affichent, de tous les onglets.");
-                let large = (ui.available_width() - 34.0).max(80.0);
+                // (La place de la croix « effacer », avec ses marges : à 34 points la ligne dépassait de 9 dès qu'un mot était tapé, et la
+                // fenêtre, qui grandit pour contenir ce qu'elle montre, s'élargissait de 9 points à chaque image tant que la recherche durait.)
+                let large = (ui.available_width() - 52.0).max(80.0);
                 let champ = ui.add(egui::TextEdit::singleline(&mut q).hint_text("Chercher un réglage…").desired_width(large));
                 crate::bulles::bulle(champ, "Chercher un réglage", "Un ou plusieurs mots, avec ou sans accents. Les onglets qui répondent montrent le nombre de réglages trouvés.", "");
                 if !q.is_empty() && crate::bulles::icone(ui, ph::X, "Effacer la recherche", "Revenir à l'onglet ouvert.", "").clicked() {

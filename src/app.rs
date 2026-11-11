@@ -873,6 +873,9 @@ pub struct App {
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
     pub(crate) fit_set: std::collections::HashMap<(crate::dock::Pane, crate::dock::Pane), f32>,
     pub(crate) fit_busy: bool,
+    /// Le pointeur est sur la bande du bas (le montage, ou la timeline en animation) à cette image d'écran : les touches du zoom de
+    /// l'image y zooment la bande (`run_action`, « vue.zoom_avant »). Remis à faux avant chaque affichage des panneaux.
+    pub(crate) bande_survolee: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
     /// Les projets récents sont-ils encore là ? (Vérifié sur un autre fil : `recents.rs`.)
@@ -1439,6 +1442,7 @@ impl App {
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
+            bande_survolee: false,
             messages: Vec::new(),
             last_status: String::new(),
             toasts: Vec::new(),
@@ -4642,6 +4646,11 @@ impl App {
                 self.drop_bitmap_selection();
                 self.drop_multi();
             }
+            // Le zoom suit le pointeur (Anthony, 2026-11-11 : « les raccourcis de zoom et dézoom dans la timeline sont les mêmes que pour la
+            // zone de dessin ») : sur la bande du bas (le montage, ou la timeline en animation), les touches du zoom de l'image zooment
+            // la bande. `bande.zoom_avant` / `bande.zoom_arriere` gardent leurs touches à elles, où que soit le pointeur.
+            "vue.zoom_avant" if self.bande_survolee => self.zoom_strip(1.25),
+            "vue.zoom_arriere" if self.bande_survolee => self.zoom_strip(1.0 / 1.25),
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
             "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),
@@ -4779,8 +4788,9 @@ impl App {
             "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
             "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
             "calque.supprimer" => self.delete_chosen_layers(),
-            "calque.dessus" => self.select_layer(self.cur_layer + 1),
-            "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            // De dessin en dessin : jamais sur un dossier, et l'on traverse un dossier fermé (`pistes.rs`, 2026-11-11).
+            "calque.dessus" => self.aller_au_calque(1, 1),
+            "calque.dessous" => self.aller_au_calque(-1, 1),
             // Calques choisis et opérations sur plusieurs calques (13b, `layerops.rs`).
             "calque.nouveau" => self.open_new_layer_dialog(),
             "calque.dupliquer" => self.duplicate_chosen_layers(),
@@ -4945,6 +4955,9 @@ impl App {
                 self.set_all_tracks_folded(false);
             }
             "piste.auto_deplier" => self.toggle_auto_open(),
+            // Trois calques ou toute la pile ; les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
+            "piste.toute_la_pile" => self.basculer_pile(),
+            "bande.plans_en_bandeau" => self.basculer_hauteur_plans(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Panneau de la pelure d'oignon (13f, `onionui.rs`).

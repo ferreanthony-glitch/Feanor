@@ -11,7 +11,7 @@ use crate::clesplan::{cles_du_plan, ClesBlocs};
 use crate::document::{Cel, LayerKind};
 use crate::montagerows::{layer_in_row, row_count, row_of_layer, LAYER_H};
 use crate::perf_tests::Banc;
-use crate::pistes::{Inactifs, FOLDED_H};
+use crate::pistes::{Pile, FOLDED_H};
 use crate::pistes_tests::{app_with, banc_montage, clic, doc_with, lieu, losanges, textes};
 use crate::poskeys::PosKey;
 use crate::workspace::Espace;
@@ -240,24 +240,27 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
     assert!(b.app.doc.panels[0].layers.iter().all(|l| !l.collapsed), "rien n'a été écrit dans les calques");
 }
 
+/// (2026-11-11, branche `calques-timeline` : le mode « cachés » n'existe plus ; « trois calques » le remplace. Le calque actif — « Perso »,
+/// en haut de la pile — a son voisin du dessous, et une fine bande compte les deux autres ; un clic dessus y saute.)
 #[test]
-fn the_hidden_mode_shows_a_line_that_a_click_unfolds_into_the_other_layers() {
+fn the_three_layers_mode_shows_a_strip_that_a_click_jumps_into() {
     let mut b = banc_montage();
-    let base = combien(&b, "Décor");
-    b.app.settings.montage_inactifs = Inactifs::Caches;
+    let base = combien(&b, "Fond");
+    b.app.settings.montage_pile = Pile::Trois;
     b.chauffer(6);
     let t = textes(&b);
     let ligne = |t: &[(String, Rect)], fin: &str| t.iter().find(|(s, _)| s.contains(fin)).map(|(_, r)| *r);
-    assert!(ligne(&t, "3 autres calques").is_some(), "{t:?}");
-    assert_eq!(combien(&b, "Décor"), base - 1, "les autres calques sont cachés");
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 2);
-    clic(&mut b, ligne(&t, "3 autres calques").unwrap().center(), Modifiers::NONE);
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 5, "les trois autres, la ligne et le calque actif");
-    assert_eq!(combien(&b, "Décor"), base);
-    let t = textes(&b);
-    let cacher = ligne(&t, "Cacher les autres").expect("la ligne qui les cache de nouveau");
-    clic(&mut b, cacher.center(), Modifiers::NONE);
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 2);
+    assert!(ligne(&t, "2 au-dessous").is_some(), "{t:?}");
+    assert!(ligne(&t, "Haut de la pile").is_some(), "{t:?}");
+    assert!(combien(&b, "Fond") < base, "« Fond » n'est plus dans la fenêtre");
+    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 4, "la bande du haut, le calque actif, son voisin, la bande du bas");
     // Les losanges du calque actif restent ceux d'une piste dépliée.
     assert_eq!(losanges(&b, crate::theme::POIGNEE_CALQUE).len(), 3);
+    // Un clic sur la fine bande descend de trois calques : au bout de la pile.
+    let avant = b.app.cur_layer;
+    clic(&mut b, ligne(&t, "2 au-dessous").unwrap().center(), Modifiers::NONE);
+    b.chauffer(4);
+    assert_eq!(b.app.cur_layer, 0, "de {avant} au dernier calque");
+    let t = textes(&b);
+    assert!(ligne(&t, "Bas de la pile").is_some() && ligne(&t, "2 au-dessus").is_some(), "{t:?}");
 }

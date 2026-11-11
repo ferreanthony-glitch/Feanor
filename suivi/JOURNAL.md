@@ -3,6 +3,49 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-11
+
+- Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on
+  monte ou descend ; la rangée des plans trop épaisse) numérotées 39 et 40 et maquettées sur la page des propositions. Avis donné :
+  oui aux deux ; le calque actif toujours au milieu, deux fines bandes qui comptent les autres, un bouton « Toute la pile » ; la
+  hauteur des plans réglable en tirant son bord, jusqu'au bandeau, retenue par onglet (`montage_rows` donne aujourd'hui aux plans la
+  place qui reste, entre 56 et 170 points). La 39 remplace la 37. Rien de codé : attend son accord.
+- Ses décisions après avoir vu la maquette : « Toute la pile » gardée (comparer deux calques éloignés, en choisir plusieurs) ; plans
+  en taille moyenne ou en bandeau seulement ; l'affichage des calques réglable depuis la barre du bas de la timeline et depuis les
+  Préférences ; **un dossier n'est jamais traité comme un calque dans la timeline : toujours plus petit, il se plie et se déplie** ;
+  les touches de zoom de la timeline sont celles de la zone de dessin (41 : chez lui Maj+1 et Maj+2 ; la timeline a aujourd'hui
+  `bande.zoom_*` sur Alt+1 et Alt+2). Maquette refaite (version 3 de la page) : fenêtre de trois calques avec le calque actif au
+  milieu, ligne fine de dossier qui prend sa place à la fine bande, barre du bas, Préférences. Mes choix signalés comme à
+  contredire : les flèches sautent les dossiers, boutons de plans réduits à « Nouveau plan », réglages et « ⋯ », un seul réglage
+  pour Storyboard et Montage, fin du réglage « Calques non actifs ». Toujours rien de codé.
+- Troisième tour : sa règle, à la place de mon « dossier fermé traversé d'un pas » : **un dossier fermé se traverse avec « calque du
+  dessus / du dessous » et se referme quand on en sort**. Sa question : d'accord pour les couleurs par dossier, mais risque de
+  confusion avec les couleurs par type de calque (partie 98). Réponse proposée et maquettée (version 4 de la page) : jamais les deux
+  sens au même endroit ; la bande garde la couleur du type ; le dossier a un filet de couleur dans la colonne de gauche, pris dans
+  les treize groupes de couleur existants (`groups.rs`, `Layer::group`, déjà peints en filet dans la timeline de l'Animation, jamais
+  utilisés dans ses projets), attribué tout seul à la création du dossier. Attend son avis et son accord pour coder.
+- Sur son « code, pas besoin de version portable jusqu'à nouvel ordre » : **les calques dans la timeline** (partie 137, branche
+  `calques-timeline`, chantier `Chantiers\calques-timeline`, depuis main 8da4f1d). Trois calques à la fois (le calque actif au milieu,
+  toujours à la même place ; deux fines bandes comptent les autres) ou toute la pile ; un dossier est une ligne fine qui se ferme
+  et s'ouvre, jamais un calque ; un dossier fermé se traverse avec « calque du dessus / du dessous » et se referme à la sortie,
+  sans rien écrire ; la bande garde la couleur du type, le dossier a son filet à gauche (groupes de couleur, d'office par
+  dossier) ; plans de hauteur moyenne ou en bandeau ; réglages dans la barre du bas de la bande et dans Préférences > Montage ;
+  les touches du zoom de l'image zooment la bande quand le pointeur est dessus. Annoncé puis corrigé auprès de lui : la bande du
+  bas ne rétrécit pas toute seule (sa hauteur est le bord tiré à la main), le chantier ne rend donc pas de place à l'image. Trouvé
+  en passant : la fenêtre des Préférences s'élargissait de 9 points par image pendant une recherche (défaut d'avant, corrigé) ;
+  `ahead_capacity` s'arrêtait net sur une feuille de moins de 64 Ko (corrigé). Un travers du banc d'essai noté : le premier clic
+  après l'apparition du pointeur se perd. Captures sur une copie de « retakes brawlydays ». Vérificateur sur la branche : 4 444
+  essais réussis, 0 échec, aucun avertissement. Pas fait : les propositions 34, 35, 36 et 38 ; la bande qui prendrait la hauteur
+  de son contenu. Pas fusionné : attend son essai ou son accord.
+- Fusion de `calques-timeline` dans main (c410030, sans avance rapide) sur son « Fusionne directement », sans qu'il ait essayé l'exe
+  de la branche ; pas de version portable (sa consigne du jour). `main` n'avait pas bougé depuis le départ de la branche : aucun
+  conflit, même contenu que la branche. L'autre session prévenue avant (message déposé, pas de réponse attendue) ; son chantier
+  `cles-glisser` (`Chantiers\multi-calques`, non validé) touche les mêmes fichiers et devra ramener main avant d'être fusionné.
+  Vérificateur sur main : 4 444 essais réussis, 0 échec, aucun avertissement, tous les groupes de fiabilité OK (712 s). Poussé sur
+  GitHub. Exe principal reconstruit (`target\release\feanor.exe`, 11 h 53) et ouvert deux fois sur une copie de « retakes brawlydays »
+  avec de faux réglages : pas de plantage. Pas vérifié : la timeline manipulée à la main dans le vrai exe (sa liste 137.8). Le
+  dossier de chantier `Chantiers\calques-timeline` attend son accord pour être retiré.
+
 ## 2026-11-10
 
 - Fusion de `camera-souvient` dans main (35a6e42, sans avance rapide), après l'essai d'Anthony dans la version portable du 9 novembre et
@@ -54,6 +97,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   second lancement, arrêt brutal sans reste. Il n'a pas essayé la version portable avant : le stylet pendant l'écriture continue
   reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` retiré avec son accord (« Oui,
   retire-le ») ; la branche est gardée.
+- Sa remarque sur les calques dans la timeline (« un peu bordélique », les bandes repliées « manquent parfois de lisibilité ») : relevé
+  du code (parties 29 et 68, `pistes.rs`, `montagerows.rs`) et de ses projets en lecture seule (13 calques dans le plan le plus chargé
+  de « retakes brawlydays », dix bandes de la même couleur, aucun nom donné par lui, 172 montées et descentes de calque au clavier).
+  Huit propositions numérotées 31 à 38 (couleur par dossier, bandes et noms plus lisibles, dossiers visibles, calques cachés en une
+  ligne, noms sans les taper, retrouver un calque par son dessin, pile qui ne saute plus, un plan à la fois) et une page de maquettes
+  cliquables. Rien de codé : attend son choix par numéros.
 
 ## 2026-11-09
 

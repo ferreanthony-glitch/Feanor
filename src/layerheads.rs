@@ -362,7 +362,10 @@ impl App {
         let off = fg.gamma_multiply(0.35);
         let shade = |on: bool| if on { fg } else { off };
         let group = self.doc.groups[h.group].clone();
-        painter.rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, group_color(group.color));
+        // Le filet de gauche : la couleur du rangement du calque — celle de son dossier, sinon celle de son groupe (la même règle que
+        // dans le Storyboard et le Montage, `folders::couleur_du_rangement`, 2026-11-11).
+        let filet = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups).unwrap_or_else(|| group_color(group.color));
+        painter.rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, filet);
 
         // Le fond de la ligne : choisir, glisser, menu, double-clic sur le nom. Posé avant les
         // boutons, qui restent au-dessus.
