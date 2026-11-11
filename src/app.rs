@@ -1652,6 +1652,29 @@ impl App {
         if let Some((world, mx, eye)) = self.tilted_card() {
             return world.sheet_to_card_m(eye, &mx, stage).unwrap_or(stage);
         }
+        self.to_layer_a_plat(stage)
+    }
+
+    /// Comme `to_layer`, mais **rien** quand le regard qui passe par ce point de la feuille ne touche pas la carte du
+    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Dans un plan en Espace 3D
+    /// (`docs/ESPACE-LIBRE.md`, étape A5), rien non plus quand le regard touche le plan de la carte à plus d'une feuille de
+    /// ses bords : près de l'horizon d'une carte au sol, un petit geste de la main ferait un trait de plusieurs
+    /// kilomètres. Ce qui peint (pinceau, crayon, gomme, pot, dégradé) passe par ici : pas de trait là où il n'y a pas de
+    /// carte.
+    pub(crate) fn to_layer_opt(&self, stage: Pos2) -> Option<Pos2> {
+        let Some((world, mx, eye)) = self.tilted_card() else { return Some(self.to_layer_a_plat(stage)) };
+        let p = world.sheet_to_card_m(eye, &mx, stage)?;
+        if self.doc.plan_en_espace(self.cur_panel) {
+            let [w, h] = world.stage;
+            if !(p.x.is_finite() && p.y.is_finite() && p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h) {
+                return None;
+            }
+        }
+        Some(p)
+    }
+
+    /// `to_layer` pour un calque posé par une affinité (ni carte inclinée, ni plan en Espace 3D à la caméra tournée).
+    fn to_layer_a_plat(&self, stage: Pos2) -> Pos2 {
         if self.layer_seen().is_identity() {
             return stage;
         }
@@ -1674,6 +1697,23 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
+        // Plan en Espace 3D : la carte est vue en perspective, un pixel de son dessin n'a pas partout la même taille à
+        // l'écran. On prend celle qu'il a sous le pointeur (au centre de la carte s'il n'y est pas) : le curseur du
+        // pinceau a la taille du trait qu'il va laisser à cet endroit.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            if let Some((world, mx, eye)) = self.tilted_card() {
+                let [w, h] = world.stage;
+                let ici = self.hover_canvas.and_then(|s| self.to_layer_opt(s)).unwrap_or(egui::pos2(w / 2.0, h / 2.0));
+                let sur_la_feuille = |p: Pos2| world.card_to_sheet_m(eye, &mx, p);
+                if let (Some(o), Some(a), Some(b)) = (sur_la_feuille(ici), sur_la_feuille(ici + vec2(1.0, 0.0)), sur_la_feuille(ici + vec2(0.0, 1.0))) {
+                    let (u, v) = (a - o, b - o);
+                    let aire = (u.x * v.y - u.y * v.x).abs();
+                    if aire.is_finite() && aire > 1e-12 {
+                        return self.view.zoom * aire.sqrt();
+                    }
+                }
+            }
+        }
         // (Un calque accroché à la caméra, `accroche.rs` : sa taille à l'écran est celle qu'on voit, grossissement de la caméra compris.)
         let t = if self.layer().accroche { self.layer_seen() } else { self.layer().pose(self.cur_frame) };
         self.view.zoom * t.scale * (t.stretch_x * t.stretch_y).abs().sqrt()

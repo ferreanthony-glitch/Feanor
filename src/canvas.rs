@@ -471,6 +471,12 @@ impl App {
                     } else {
                         p
                     };
+                    // Plan en Espace 3D, carte inclinée : le regard ne touche pas la carte du calque courant ici (elle est
+                    // derrière la caméra, vue par la tranche, ou trop loin de ses bords) : ce qui peint ne commence pas.
+                    if matches!(self.tool, Tool::Fill | Tool::Gradient | Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser) && self.to_layer_opt(stage).is_none() {
+                        self.status = "Rien à peindre ici : la carte du calque courant n'est pas sous le pointeur (elle est derrière la caméra, ou vue par la tranche).".into();
+                        continue;
+                    }
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
                         Tool::Gradient => self.degrade_press(p, modifiers.alt),
@@ -533,18 +539,25 @@ impl App {
                         // Trait aligné sur le guide (sur la feuille) : rien tant que la direction
                         // n'est pas choisie.
                         if let Some(q) = self.guided_point(stage) {
-                            self.stroke_point(self.to_layer(q), pressure, &mods, false);
+                            // (Le trait ne suit pas le pointeur là où il quitte la carte : ces points sont laissés.)
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.stroke_point(l, pressure, &mods, false);
+                            }
                         }
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
-                            self.stroke_point(self.to_layer(q), pressure, &mods, true);
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.stroke_point(l, pressure, &mods, true);
+                            }
                         }
                     } else if self.gomme_multi.actif() {
                         // (La gomme sur les autres calques choisis, quand le calque courant n'a rien à gommer.)
                         let pressure = if self.gomme_multi.pen() { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
-                            self.gomme_multi_point(self.to_layer(q), pressure);
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.gomme_multi_point(l, pressure);
+                            }
                         }
                     } else if self.cutter_drag(p) {
                     } else if self.sculpt_drag(p) {

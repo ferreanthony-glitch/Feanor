@@ -1516,3 +1516,132 @@ fn an_adjustment_layer_acts_on_what_is_farther_than_itself_in_a_plan_in_space() 
     // Éléments : [0] le fond, [1] la carte loin du dossier, [2] le repère (portée depuis 1, dans un dossier), [3] la proche.
     assert_eq!(reglage_de(&plan), vec![(2, 1, false)]);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A5 : dessiner par la caméra
+
+/// Ce que le dessin du calque courant a d'encre : le nombre de pixels qui ne sont pas vides.
+fn encre(b: &Banc) -> usize {
+    let cel = b.app.layer().frames[0].expect("dessin");
+    let r = &b.app.doc.cels[&cel].raster;
+    let (w, h) = (b.app.doc.width, b.app.doc.height);
+    (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| r.get_i(x as i64, y as i64).a() > 0).count()
+}
+
+/// Un trait de pinceau à la souris en travers du dessin (de vrais événements, comme une main).
+fn trait_en_travers(b: &mut Banc) {
+    b.app.tool = crate::app::Tool::Brush;
+    let zone = b.app.canvas_rect;
+    for k in 0..10 {
+        b.image(crate::perf_tests::trait_souris(k, 10, 6, zone), 1.0 / 60.0);
+    }
+    b.chauffer(2);
+}
+
+#[test]
+fn the_brush_finds_the_card_from_the_front_tilted_and_almost_flat_on_the_ground() {
+    let base = Camera::centered(640, 360);
+    let cas = [
+        // De face, caméra décalée et zoomée.
+        (LayerTransform::default(), Camera { x: 380.0, zoom: 1.4, ..base }),
+        // Carte inclinée, caméra qui tourne autour.
+        (LayerTransform { tilt_y: 40.0, tilt_x: -10.0, ..pose(20.0, 10.0) }, Camera { x: 480.0, pan: 35.0, ..base }),
+        // Carte presque couchée au sol (80°, la borne des 85° tombe à l'étape A6), caméra en hauteur qui regarde vers le bas.
+        (LayerTransform { tilt_x: -80.0, ..pose(0.0, 60.0) }, Camera { y: 60.0, tilt: -30.0, ..base }),
+    ];
+    for (t, cam) in cas {
+        let mut d = doc_espace(&[(RED, [300, 170, 340, 190], 0.2)]);
+        d.panels[0].espace = true;
+        d.panels[0].layers[0].transform = t;
+        d.panels[0].camera = vec![CameraKey::new(0, cam)];
+        let mut b = banc_taille(d, false, 1280, 720);
+        b.chauffer(2);
+        let w = b.app.e3_world();
+        let mx = w.carte_dans_le_repere(&cam, &w.card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)));
+        let mut seen = 0;
+        for p in [pos2(320.0, 180.0), pos2(250.0, 150.0), pos2(400.0, 230.0), pos2(120.0, 300.0)] {
+            let Some(sheet) = w.card_to_sheet_m(w.eye_reference(), &mx, p) else { continue };
+            let back = b.app.to_layer_opt(sheet).expect("le regard touche la carte");
+            assert!((back - p).length() < 0.05, "carte {t:?} : le pinceau peint en {back:?} au lieu de {p:?}");
+            assert_eq!(b.app.to_layer(sheet), back);
+            seen += 1;
+        }
+        assert!(seen >= 2, "carte {t:?} : {seen} points devant la caméra");
+    }
+}
+
+#[test]
+fn a_stroke_lands_on_the_card_in_front_and_is_refused_when_the_card_is_behind_the_camera() {
+    // La caméra a tourné de 30° : le trait, de vrais événements de souris, laisse de l'encre sur la carte.
+    let projet = |cam: Camera| {
+        let mut doc = doc_espace(&[(RED, [318, 178, 322, 182], 0.0)]);
+        doc.panels[0].espace = true;
+        doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+        doc
+    };
+    let base = Camera::centered(640, 360);
+    let mut b = banc_taille(projet(Camera { pan: 30.0, x: 470.0, ..base }), false, 1280, 720);
+    b.chauffer(2);
+    let avant = encre(&b);
+    trait_en_travers(&mut b);
+    assert!(encre(&b) > avant + 20, "le trait a laissé de l'encre sur la carte : {} pixels, {avant} avant", encre(&b));
+
+    // La caméra s'est retournée : la carte est derrière elle. Le trait ne commence pas, rien n'est peint, et on sait pourquoi.
+    let mut b = banc_taille(projet(Camera { pan: 180.0, ..base }), false, 1280, 720);
+    b.chauffer(2);
+    assert!(b.app.to_layer_opt(pos2(320.0, 180.0)).is_none(), "le regard ne touche pas la carte");
+    let avant = encre(&b);
+    trait_en_travers(&mut b);
+    assert_eq!(encre(&b), avant, "aucun trait sur une carte derrière la caméra");
+    assert!(b.app.status.contains("Rien à peindre ici"), "{}", b.app.status);
+}
+
+#[test]
+fn near_the_horizon_of_a_card_on_the_ground_the_brush_stops_instead_of_running_away() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    doc.panels[0].layers[0].transform = LayerTransform { tilt_x: -80.0, ..pose(0.0, 80.0) };
+    let cam = Camera { y: 80.0, tilt: -15.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    let (w, h) = (640.0, 360.0);
+    // En bas de l'image, le regard touche la carte ; en remontant vers l'horizon, il la touche de plus en plus loin, puis
+    // plus du tout : jamais à plus d'une feuille de ses bords.
+    let mut touche = 0;
+    let mut refuse = 0;
+    for k in 0..=60 {
+        let s = pos2(320.0, 270.0 - k as f32 * 3.0);
+        match b.app.to_layer_opt(s) {
+            Some(p) => {
+                assert!(p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h, "le pinceau irait en {p:?}");
+                touche += 1;
+            }
+            None => refuse += 1,
+        }
+    }
+    assert!(touche >= 5 && refuse >= 5, "{touche} points sur la carte, {refuse} refusés");
+    // Un plan ordinaire avec la même carte inclinée : rien n'a changé, le pinceau n'est pas borné.
+    b.app.doc.panels[0].espace = false;
+    b.app.doc.panels[0].camera.clear();
+    assert!((0..=60).all(|k| b.app.to_layer_opt(pos2(320.0, 270.0 - k as f32 * 3.0)).is_some() || b.app.layer().pose(0).is_tilted()));
+}
+
+#[test]
+fn the_brush_cursor_has_the_size_of_the_stroke_it_will_leave_on_a_far_card() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    // Caméra de référence : la carte du plan z = 0 est vue à sa taille, comme dans un plan ordinaire.
+    let z0 = b.app.layer_zoom();
+    assert!((z0 - b.app.view.zoom).abs() < 1e-4 * z0);
+    // La caméra recule de la distance de référence : la carte est deux fois plus loin, le trait deux fois plus fin à l'écran.
+    let d0 = b.app.e3_world().d0_px;
+    let cam = Camera { dolly: -d0, ..b.app.doc.default_camera() };
+    b.app.doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    let z = b.app.layer_zoom();
+    assert!((z / z0 - 0.5).abs() < 0.01, "taille à l'écran : {z} contre {z0}");
+    // Zoom deux fois plus serré : retour à la taille d'origine.
+    b.app.doc.panels[0].camera = vec![CameraKey::new(0, Camera { zoom: 2.0, ..cam })];
+    assert!((b.app.layer_zoom() / z0 - 1.0).abs() < 0.01);
+}

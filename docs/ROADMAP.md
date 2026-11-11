@@ -3430,4 +3430,6 @@ et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le mote
   Pas regardé à l'écran ; limites dans `docs/ESPACE-LIBRE.md`.
 - ✅ **A4** (2026-11-11) : ce qui est devant cache ce qui est derrière (`espace3d::ordre_par_distance`). Les cartes d'un même plan gardent l'ordre de la pile ; un dossier passe en
   bloc ; un calque d'ajustement agit sur ce qui est plus loin que lui (`calqueffet::Portees`). Pas regardé à l'écran.
-- À faire : A5 (le reste du dessin par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).
+- ✅ **A5** (2026-11-11) : dessiner par la caméra. Pas de trait là où le regard ne touche pas la carte (`App::to_layer_opt`), ni au-delà d'une feuille de ses bords près de
+  l'horizon ; le curseur du pinceau a la taille du trait en perspective (`App::layer_zoom`). Pas regardé à l'écran.
+- À faire : A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).

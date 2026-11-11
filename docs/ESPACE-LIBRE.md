@@ -345,6 +345,39 @@ leur place quand la caméra fait le tour ; pile gardée à égalité ; couleur a
 Dans un plan en Espace 3D, la vue de dessin est « Regarder par la caméra ». Essais : aller-retour du pinceau sur une carte
 de face, inclinée, au sol, derrière une autre ; un trait sur une carte derrière la caméra est refusé.
 
+#### Fait (2026-11-11)
+
+Le passage du pinceau par le repère de la caméra est fait depuis A3 (`App::to_layer`). A5 ajoute ce qui manquait.
+
+- **La vue de dessin** : rien à faire. Dans un plan en Espace 3D, la feuille montre déjà ce que la caméra filme, le
+  cadre au centre (A3) : on y dessine comme dans un plan ordinaire. « Regarder par la caméra » de la vue Espace 3D reste
+  une vue de réglage, pas de dessin.
+- **Pas de trait là où il n'y a pas de carte** : `App::to_layer_opt` ne rend rien quand le regard ne touche pas la carte
+  du calque courant (derrière la caméra, vue par la tranche). Le pinceau, le crayon, la gomme, le pot et le dégradé ne
+  commencent pas (`canvas.rs`), avec un message ; pendant un trait, les points qui quittent la carte sont laissés.
+  Avant, le trait partait à un endroit sans rapport.
+- **L'horizon** : dans un plan en Espace 3D, `to_layer_opt` refuse aussi un point à plus d'une feuille des bords de la
+  carte. Sans cela, près de l'horizon d'une carte au sol, un petit geste ferait un trait immense. Un plan ordinaire
+  n'est pas borné (inchangé).
+- **La taille du pinceau** : `App::layer_zoom` rend, pour un plan en Espace 3D, la taille qu'un pixel de la carte a à
+  l'écran sous le pointeur (au centre de la carte sinon). Le curseur a la taille du trait qu'il va laisser : deux fois
+  plus fin sur une carte deux fois plus loin. Les tolérances des autres outils (sélection de couleur, cutter, dégradé)
+  lisent la même valeur.
+- **Essais** (`espace3d_tests.rs`, 4 de plus) : aller-retour du pinceau à 0,05 px de face, sur une carte inclinée
+  caméra tournée, sur une carte presque au sol (80°) ; **un vrai trait de souris laisse de l'encre** sur la carte caméra
+  tournée de 30°, et **n'en laisse aucune** carte derrière la caméra, avec le message ; près de l'horizon, jamais plus
+  d'une feuille au-delà des bords ; taille du pinceau divisée par deux à distance double, rétablie par un zoom double.
+- **Suite complète sur le Mac** : 4 430 passent, 87 échouent : les 86 du Mac, plus
+  `enregistrement_tests::the_application_is_idle_again_once_the_save_is_done`, qui passe seul trois fois de suite
+  (instable sous charge, un troisième essai différent de ceux de A3 et A4, qui repassent).
+- **Limites** :
+  - les autres appels de `to_layer` (coller une image, formes, trait droit, trajectoire) gardent l'ancien repli quand le
+    regard manque la carte ;
+  - la carte au sol à 90° exactement attend l'étape A6 (borne des ±85°) ;
+  - on peint sur le calque courant même s'il est caché derrière une autre carte : c'est voulu, mais rien ne le dit à
+    l'écran ;
+  - **rien n'a été regardé à l'écran**, en particulier le curseur du pinceau.
+
 ### A6. Poser une surface
 
 Trois commandes, chacune crée un calque et le choisit, en une étape d'annulation : « Nouvelle surface face à la caméra »
