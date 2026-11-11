@@ -45,6 +45,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   GitHub. Exe principal reconstruit (`target\release\feanor.exe`, 11 h 53) et ouvert deux fois sur une copie de « retakes brawlydays »
   avec de faux réglages : pas de plantage. Pas vérifié : la timeline manipulée à la main dans le vrai exe (sa liste 137.8). Le
   dossier de chantier `Chantiers\calques-timeline` attend son accord pour être retiré.
+- Son essai de l'exe de midi, quatre retours : « Ajoute les bandes de couleur du dossier dans le panneau calque également » ;
+  « Modifier la durée des images clés et la durée des plans n'est pas intégré » ; « Sélectionner plusieurs calques et créer une
+  nouvelle image clé (vides également) n'a pas été intégré » ; « Déplacer une image clé avant ou après la suivante n'a pas été
+  intégré ». Ce que j'ai trouvé : la durée des clés et des plans et les clés glissées avant ou après une autre étaient codées par
+  une autre session depuis le 10 au soir, mais restées **non validées** dans `Chantiers\multi-calques` (branche `cles-glisser`,
+  16 fichiers modifiés, 3 neufs, dernière écriture le 11 à 0 h 03), jamais vérifiées ni fusionnées ; aucune session ne s'en réclame
+  (l'une hors ligne, l'autre sans chantier en cours). Repris : validé tel que trouvé (4bc6fbf), main ramené dedans (d8aaf8f ; un
+  seul conflit, `docs/INTERFACE.md` : sa partie devient la 138), ses 16 essais passent. La nouvelle clé sur plusieurs calques, elle,
+  **était dans main** (partie 132) mais trois gestes courants la réduisaient à un seul calque : un clic dans la piste d'un des
+  calques choisis (le calque courant n'était pas inscrit dans le choix), des clés prises sur plusieurs pistes sans cliquer de nom,
+  et le double-clic sur une piste (qui défaisait en plus le choix) ; corrigés (partie 137.11). Son geste exact n'est pas connu : son
+  compteur d'usage dit seulement F5 au clavier. Le filet du dossier dans le panneau Calques : tout à gauche du rang, la bande de la
+  sorte juste après, rien de changé dans un plan sans dossier ; regardé sur une capture d'une copie de « retakes brawlydays ».
+  Vérificateur sur la branche : 4 464 essais réussis, 0 échec, aucun avertissement (669 s). Sur son second « Fusionne directement »
+  (donné pendant le travail) : fusion dans main à suivre.
 
 ## 2026-11-10
 

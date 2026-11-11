@@ -13,10 +13,29 @@ use crate::app::App;
 use crate::handles::{key_at, key_source, key_start_taken};
 
 impl App {
-    /// Le calque `li` est parmi les calques choisis, et ils sont plusieurs : la nouvelle clé va sur tous.
+    /// Les calques que vise une nouvelle clé, du plus bas au plus haut : les calques choisis et, dès que deux clés au moins sont
+    /// choisies dans la timeline ou le montage, les calques du plan courant qui portent une de ces clés (« calque par clé », la règle
+    /// des outils, partie 132 ; 2026-11-11 : des clés prises sur plusieurs pistes ne faisaient pas de leurs calques des calques
+    /// choisis, la nouvelle clé n'allait que sur le calque courant).
+    pub(crate) fn calques_de_nouvelle_cle(&self) -> Vec<usize> {
+        let mut vises = self.chosen_layers();
+        if self.key_sel.len() >= 2 {
+            if let Some(p) = self.doc.panels.get(self.cur_panel) {
+                for (li, l) in p.layers.iter().enumerate() {
+                    if !l.folder && !vises.contains(&li) && self.key_sel.iter().any(|k| k.panel == p.id && k.layer == l.id) {
+                        vises.push(li);
+                    }
+                }
+            }
+            vises.sort_unstable();
+        }
+        vises
+    }
+
+    /// Le calque `li` est parmi les calques visés (`calques_de_nouvelle_cle`), et ils sont plusieurs : la nouvelle clé va sur tous.
     pub(crate) fn nouvelle_cle_sur_tous(&self, li: usize) -> bool {
-        let choisis = self.chosen_layers();
-        choisis.len() >= 2 && choisis.contains(&li)
+        let vises = self.calques_de_nouvelle_cle();
+        vises.len() >= 2 && vises.contains(&li)
     }
 
     /// Une nouvelle clé à l'image courante sur chaque calque choisi (`copie` : une copie du dessin montré ; sinon vide).
@@ -27,7 +46,7 @@ impl App {
         let (pi, f) = (self.cur_panel, self.cur_frame);
         let Some(len) = self.doc.panels.get(pi).map(|p| p.frame_count()) else { return };
         let f = f.min(len.saturating_sub(1));
-        let choisis = self.chosen_layers();
+        let choisis = self.calques_de_nouvelle_cle();
         // Qui reçoit une clé, et qui est laissé de côté (et pourquoi) : tout est décidé avant d'écrire.
         let mut vises = Vec::new();
         let mut laisses: Vec<(String, &'static str)> = Vec::new();

@@ -72,7 +72,7 @@ impl App {
             return;
         }
         let ids = self.board_selection();
-        // Le champ montre la durée commune des plans choisis ; s'ils diffèrent, il est vide (« durées différentes », partie 137).
+        // Le champ montre la durée commune des plans choisis ; s'ils diffèrent, il est vide (« durées différentes », partie 138).
         let text = duree_commune(&self.doc, &ids).map(|n| n.to_string()).unwrap_or_default();
         self.duree_plans = Some(DureePlans { ids, text, focus: true });
     }
@@ -103,7 +103,7 @@ impl App {
         if self.storyboard_refuses() {
             return None;
         }
-        // Film partagé : un plan tenu par quelqu'un d'autre est laissé de côté, les autres changent (partie 137).
+        // Film partagé : un plan tenu par quelqu'un d'autre est laissé de côté, les autres changent (partie 138).
         let mut libres = Vec::new();
         let mut tenus = 0usize;
         for &id in ids {
@@ -149,7 +149,7 @@ impl App {
         } else {
             format!("{n} plan{pl} : durée changée selon leur durée d'avant")
         };
-        // Les dernières clés s'étirent en allongeant ; un calque verrouillé reste tel quel (partie 137).
+        // Les dernières clés s'étirent en allongeant ; un calque verrouillé reste tel quel (partie 138).
         let laisses: usize = voulues.iter().filter(|&&(pi, old, _)| self.doc.panels[pi].frame_count() > old).map(|&(pi, _, _)| crate::clesduree::verrouilles_courts(&self.doc.panels[pi], self.doc.panels[pi].frame_count())).sum();
         if laisses > 0 {
             msg += &format!(" ; {laisses} calque{} verrouillé{} laissé{} sans étirer {} dernière clé", if laisses > 1 { "s" } else { "" }, if laisses > 1 { "s" } else { "" }, if laisses > 1 { "s" } else { "" }, if laisses > 1 { "leur" } else { "sa" });

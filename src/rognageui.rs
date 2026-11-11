@@ -265,7 +265,7 @@ impl App {
                     (EdgeKind::Head, true) => " Ctrl tenue : les clés gardent leur place depuis le début, la fin change.",
                     _ => "",
                 };
-                // Allongée sans Ctrl : les dernières clés s'étirent (partie 137) ; un calque verrouillé reste tel quel, on le dit.
+                // Allongée sans Ctrl : les dernières clés s'étirent (partie 138) ; un calque verrouillé reste tel quel, on le dit.
                 let etire = if d.kind == EdgeKind::Tail && !glisse && d.applied > 0 {
                     let fin = self.doc.panels[pi].frame_count();
                     match crate::clesduree::verrouilles_courts(&self.doc.panels[pi], fin) {
@@ -569,7 +569,7 @@ impl App {
         if self.storyboard_refuses() {
             return;
         }
-        // Plusieurs plans choisis, dont celui-ci : la durée s'applique à chacun (partie 137, `dureeplans.rs`).
+        // Plusieurs plans choisis, dont celui-ci : la durée s'applique à chacun (partie 138, `dureeplans.rs`).
         let choisis = self.board_selection();
         if choisis.len() > 1 && choisis.contains(&self.doc.panels[pi].id) {
             self.open_plans_duration_dialog();

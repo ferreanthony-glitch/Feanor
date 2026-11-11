@@ -792,7 +792,7 @@ impl Document {
         }
         Ok(match op {
             Rogner::Head(d) => self.trim_head(pi, d),
-            // Allonger la fin étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 137) : aucun calque ne reste vide au bout.
+            // Allonger la fin étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 138) : aucun calque ne reste vide au bout.
             Rogner::Tail(d) => {
                 let done = self.trim_tail(pi, d);
                 if done > 0 {

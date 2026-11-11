@@ -1258,7 +1258,8 @@ impl App {
                     self.begin_keys_drag(free_frame_at(origin.x));
                 } else {
                     self.set_panel(i);
-                    self.select_layer(k);
+                    // (Une poignée d'un des calques choisis : le choix des calques reste entier, `clic_dans_la_piste`.)
+                    self.clic_dans_la_piste(k, false);
                     self.begin_handle_drag(h);
                 }
             } else {
@@ -1517,7 +1518,8 @@ impl App {
                     let mods = ui.input(|i| i.modifiers);
                     self.goto_global(frame_at(p.x));
                     if self.cur_panel == i {
-                        self.select_layer(k);
+                        // (Parmi plusieurs calques choisis, le choix reste entier : `clic_dans_la_piste`.)
+                        self.clic_dans_la_piste(k, mods.command || mods.shift);
                     }
                     self.click_key(key, mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
@@ -1594,9 +1596,15 @@ impl App {
                     // Ni sur un losange vert de clé de position.
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows).filter(|_| p.y < r.top() + rows.background_top()) {
                     // Double-clic sur la piste d'un calque : une nouvelle clé à cette image, copie du
-                    // dessin comme F5.
+                    // dessin comme F5. Sur la piste d'un des calques choisis : une clé sur chacun, comme F5 et le menu de la piste
+                    // (2026-11-11 ; avant, ce calque seul recevait la clé et le choix des calques était défait).
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
-                    self.montage_new_key(i, k, f, true);
+                    if i == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                        self.cur_frame = f.min(self.doc.panels[i].frame_count().saturating_sub(1));
+                        self.nouvelle_cle_choisis(true);
+                    } else {
+                        self.montage_new_key(i, k, f, true);
+                    }
                 } else if let Some((track, Some((id, _)))) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Double-clic sur un extrait de son : une clé de volume là où l'on a cliqué.
                     self.double_click_clip(track, id, p, left, ppf, lanes_top);
@@ -1681,7 +1689,8 @@ impl App {
                     }
                     self.goto_global(frame_at(p.x));
                     (self.cur_panel == i).then(|| {
-                        self.select_layer(k);
+                        // (Clic droit dans la piste d'un des calques choisis : le choix reste, le menu les vise tous.)
+                        self.clic_dans_la_piste(k, false);
                         MenuTarget::Layer(self.layers()[k].id)
                     })
                 } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {

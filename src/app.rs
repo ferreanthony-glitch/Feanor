@@ -929,7 +929,7 @@ pub struct App {
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
     /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
-    /// La fenêtre « Modifier la durée des clés d'images… » (`clesduree.rs`, partie 137).
+    /// La fenêtre « Modifier la durée des clés d'images… » (`clesduree.rs`, partie 138).
     pub(crate) duree_cles: Option<crate::clesduree::DureeCles>,
     /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,

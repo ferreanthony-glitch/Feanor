@@ -392,7 +392,7 @@ pub(crate) enum KeyMove {
     /// les clés sont dupliquées à l'endroit lâché, par-dessus ce qui y était ; les originales
     /// restent, les copies ont leurs propres dessins (`montagekeys::copy_keys_by`).
     Copy,
-    /// Sans touche, lâchée sur un AUTRE dessin du même calque (partie 137, Anthony 2026-11-10 : « décaler des clés d'images en les faisant
+    /// Sans touche, lâchée sur un AUTRE dessin du même calque (partie 138, Anthony 2026-11-10 : « décaler des clés d'images en les faisant
     /// glisser avant ou après une autre clé d'image ») : les clés prises s'insèrent avant ce dessin (première moitié) ou après lui
     /// (seconde moitié), chacune gardant sa durée ; celles d'entre se décalent pour leur laisser la place, la durée du calque ne change
     /// pas (`clesordre::insert_keys_at`). Le décalage dit alors où est la limite d'insertion : la première clé prise + `delta`.
@@ -861,7 +861,7 @@ impl App {
             Handle::Key { layer, start, grab, .. } => {
                 let Some((l, plan_len)) = self.layer_before(layer) else { return };
                 let mut mode = self.key_move_now();
-                // Sans touche, lâchée sur un autre dessin du calque : elle s'insère avant ou après lui (partie 137).
+                // Sans touche, lâchée sur un autre dessin du calque : elle s'insère avant ou après lui (partie 138).
                 let insert = (mode == KeyMove::Ripple).then(|| crate::clesordre::insertion_at(&l, &[start], frame)).flatten();
                 if insert.is_some() {
                     mode = KeyMove::Insert;
@@ -920,7 +920,7 @@ impl App {
                     self.doc.slide_plan_end(pi, n);
                 } else {
                     self.doc.set_duration(pi, n);
-                    // Allonger étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 137) ; Ctrl ne change pas.
+                    // Allonger étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 138) ; Ctrl ne change pas.
                     let fin = self.doc.panels[pi].frame_count();
                     if fin > old {
                         crate::clesduree::etirer_fins(&mut self.doc.panels[pi], fin);
@@ -1044,7 +1044,7 @@ impl App {
                     }
                 }
             } else if mode == KeyMove::Insert {
-                // Insérer avant ou après une autre clé : jamais sur un calque verrouillé ou masqué (partie 137).
+                // Insérer avant ou après une autre clé : jamais sur un calque verrouillé ou masqué (partie 138).
                 let before = d.before.layers.get(layer).cloned();
                 let label = before.as_ref().map(|l| crate::clesordre::place_text(l, &[start], (start as isize + delta).max(0) as usize, |f| self.frame_label(f)));
                 if let (Some(p), Some(b)) = (self.doc.panels.iter_mut().find(|p| p.id == d.panel), before) {

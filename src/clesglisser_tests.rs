@@ -1,4 +1,4 @@
-//! Essais de la partie 137 (`clesordre.rs`, `clesduree.rs`) : glisser des clés avant ou après une autre clé ; étirer un plan étire ses
+//! Essais de la partie 138 (`clesordre.rs`, `clesduree.rs`) : glisser des clés avant ou après une autre clé ; étirer un plan étire ses
 //! dernières clés ; « Modifier la durée des clés d'images… » ; la durée de plusieurs plans choisis.
 //!
 //! Les gestes passent par les mêmes appels que l'écran : `begin_handle_drag` / `drag_handle` / `end_handle_drag` (une clé prise

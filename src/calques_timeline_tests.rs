@@ -11,7 +11,7 @@
 //! une référence tout en bas. Les premiers essais sont purs ; les derniers passent par la vraie fenêtre sans écran (`Banc`). Le dernier,
 //! ignoré, écrit des captures à regarder (`FEANOR_CAPTURE_DIR` ; `FEANOR_PROJET_ESSAI` : le manifeste d'une COPIE de projet).
 
-use eframe::egui::{pos2, vec2, Event, Modifiers, Rect};
+use eframe::egui::{pos2, vec2, Color32, Event, Key, Modifiers, Rect, Shape};
 
 use crate::app::App;
 use crate::document::{Document, Layer, LayerKind};
@@ -368,6 +368,196 @@ fn on_screen_the_bottom_bar_sets_the_stack_and_the_height_of_the_plans() {
     assert_eq!((b.app.settings.montage_pile, b.app.settings.montage_plans), (Pile::Trois, HauteurPlans::Moyenne));
 }
 
+// ------------------------------------------------------------------------------------ suites du 11 novembre
+
+/// Les rectangles pleins de cette couleur peints par la dernière image.
+fn pleins(shape: &Shape, fill: Color32, out: &mut Vec<Rect>) {
+    match shape {
+        Shape::Rect(r) if r.fill == fill => out.push(r.rect),
+        Shape::Vec(v) => v.iter().for_each(|s| pleins(s, fill, out)),
+        _ => {}
+    }
+}
+
+/// Le nom `nom` écrit dans le panneau Calques : à droite de l'écran, loin de la colonne de la bande du montage (en bas à gauche), qui
+/// écrit les mêmes noms.
+fn nom_au_panneau(b: &Banc, nom: &str) -> Rect {
+    let partout: Vec<Rect> = textes(b).into_iter().filter(|(s, r)| s == nom && r.left() > 600.0).map(|(_, r)| r).collect();
+    partout.into_iter().max_by(|a, c| a.left().total_cmp(&c.left())).unwrap_or_else(|| panic!("« {nom} » n'est pas dans le panneau Calques : {:?}", textes(b)))
+}
+
+/// Les filets de trois points de large de cette couleur dans le panneau Calques : à gauche des noms de ses rangs (`ancre` : un de ces
+/// noms), pas ceux de la colonne de la bande du montage, qui sont de la même couleur.
+fn filets_du_panneau(b: &Banc, fill: Color32, ancre: Rect) -> Vec<Rect> {
+    let mut out = Vec::new();
+    for s in &b.formes {
+        pleins(&s.shape, fill, &mut out);
+    }
+    out.retain(|r| (r.width() - 3.0).abs() < 0.01 && r.left() < ancre.left() && r.left() > ancre.left() - 260.0);
+    out
+}
+
+#[test]
+fn on_screen_the_layers_panel_shows_the_rail_of_the_folder_left_of_the_band_of_the_kind() {
+    // « Dossier 2 » fermé : le panneau montre, de haut en bas, Dossier 2, V13, Dossier 1, Dessin, V5, V4, Réf.
+    let mut b = banc_de_retakes(true, "V5");
+    // (Le panneau Calques n'est pas de l'espace Montage : on le regarde dans le Storyboard, où Anthony travaille.)
+    b.app.set_espace(Espace::Storyboard);
+    b.app.show_pane(crate::dock::Pane::Layers);
+    b.chauffer(8);
+    assert!(b.app.pane_shown(crate::dock::Pane::Layers), "le panneau Calques est ouvert");
+    let ancre = nom_au_panneau(&b, "Dossier 1");
+    let couleur = |b: &Banc, nom: &str| crate::folders::couleur_du_rangement(b.app.layers(), rang(&b.app, nom), &b.app.doc.groups);
+    let (c2, c1) = (couleur(&b, "Dossier 2").expect("la couleur de Dossier 2"), couleur(&b, "Dossier 1").expect("la couleur de Dossier 1"));
+    assert_ne!(c1, c2);
+    assert_eq!(couleur(&b, "V4"), Some(c1), "un calque rangé a la couleur de son dossier");
+    assert_eq!((couleur(&b, "V13"), couleur(&b, "Réf")), (None, None));
+    let couvre = |filets: &[Rect], y: f32| filets.iter().any(|r| r.top() <= y && y <= r.bottom());
+    let y = |b: &Banc, nom: &str| nom_au_panneau(b, nom).center().y;
+    // Le filet de « Dossier 1 » court du rang du dossier à son dernier calque, sans coupure.
+    let f1 = filets_du_panneau(&b, c1, ancre);
+    let mut de_cette_couleur = Vec::new();
+    for s in &b.formes {
+        pleins(&s.shape, c1, &mut de_cette_couleur);
+    }
+    assert!(!f1.is_empty(), "pas de filet de la couleur de Dossier 1 dans le panneau Calques (le nom du dossier y est en {ancre:?}) : {de_cette_couleur:?}");
+    let (haut, bas) = (y(&b, "Dossier 1"), y(&b, "V4"));
+    for k in 0..=20 {
+        let yy = haut + (bas - haut) * k as f32 / 20.0;
+        assert!(couvre(&f1, yy), "le filet de Dossier 1 est coupé à {yy} (de {haut} à {bas}) : {f1:?}");
+    }
+    // Il s'arrête là : ni « Réf » dessous, ni « V13 » dessus n'en ont.
+    let f2 = filets_du_panneau(&b, c2, ancre);
+    for nom in ["Réf", "V13"] {
+        assert!(!couvre(&f1, y(&b, nom)) && !couvre(&f2, y(&b, nom)), "« {nom} » n'est dans aucun dossier : pas de filet");
+    }
+    assert!(couvre(&f2, y(&b, "Dossier 2")), "le rang de Dossier 2 a son filet : {f2:?}");
+    // Jamais les deux sens au même endroit : le filet du dossier est tout à gauche, la bande de la sorte du calque juste après.
+    let gauche = f1[0].left();
+    assert!(f1.iter().chain(&f2).all(|r| (r.left() - gauche).abs() < 0.01), "les filets sont alignés : {f1:?} {f2:?}");
+    let sorte = crate::theme::couleur_calque(LayerKind::Vector, false);
+    let bandes = filets_du_panneau(&b, sorte, ancre);
+    let de = |bandes: &[Rect], yy: f32| bandes.iter().copied().find(|r| r.top() <= yy && yy <= r.bottom());
+    let (rangee, seule) = (de(&bandes, y(&b, "V4")).expect("la bande de V4"), de(&bandes, y(&b, "V13")).expect("la bande de V13"));
+    assert!((rangee.left() - gauche - 6.0).abs() < 0.01 && (seule.left() - gauche - 6.0).abs() < 0.01, "la bande de la sorte vient après la place du filet : {rangee:?} {seule:?} {gauche}");
+    // Un plan sans dossier : pas de place perdue, la bande de la sorte est tout à gauche, comme avant.
+    b.app.select_panel(1);
+    b.chauffer(6);
+    let autre = y(&b, "Autre");
+    let bandes = filets_du_panneau(&b, sorte, ancre);
+    let bande = de(&bandes, autre).expect("la bande de « Autre »");
+    assert!((bande.left() - gauche).abs() < 0.01, "sans dossier dans le plan, la bande reste au bord : {bande:?} {gauche}");
+}
+
+#[test]
+fn a_new_key_goes_on_every_chosen_layer_after_a_click_in_the_track_of_one_of_them() {
+    use crate::handles::key_start_taken;
+    let mut app = app_de_retakes("cles-pistes", false, "V5");
+    let (v5, v4, dessin) = (rang(&app, "V5"), rang(&app, "V4"), rang(&app, "Dessin"));
+    let choisis = |app: &App| app.chosen_layers();
+    // Ctrl + clic sur le nom de « V4 » : deux calques choisis, « V5 » reste le calque courant.
+    app.click_layer_head(v4, true, false);
+    assert_eq!((choisis(&app), app.cur_layer), (vec![v4, v5], v5));
+    // Un clic dans la piste de « V4 », pour y placer la tête de lecture : il devient le calque courant et « V5 » reste choisi (avant :
+    // le choix se réduisait à « V4 », et la nouvelle clé n'allait que sur lui).
+    app.cur_frame = 10;
+    app.clic_dans_la_piste(v4, false);
+    assert_eq!((choisis(&app), app.cur_layer), (vec![v4, v5], v4));
+    app.run_action("dessin.nouvelle_cle");
+    assert!(key_start_taken(&app.layers()[v4], 10) && key_start_taken(&app.layers()[v5], 10), "une clé sur chacun : {}", app.status);
+    assert!(!key_start_taken(&app.layers()[dessin], 10), "« Dessin » n'est pas choisi");
+    assert!(app.status.contains("2 calques"), "{}", app.status);
+    // Une seule étape : Ctrl+Z retire les deux.
+    app.undo();
+    assert!(!key_start_taken(&app.layers()[v4], 10) && !key_start_taken(&app.layers()[v5], 10));
+    // La clé vide (F4), deux images plus loin : sur les deux aussi.
+    app.cur_frame = 12;
+    app.run_action("dessin.nouvelle_cle_vide");
+    assert!(key_start_taken(&app.layers()[v4], 12) && key_start_taken(&app.layers()[v5], 12), "{}", app.status);
+    // Ctrl + clic une seconde fois sur « V5 » le retire du choix : plus de choix de plusieurs calques.
+    app.key_sel.clear();
+    app.click_layer_head(v5, true, false);
+    assert_eq!(choisis(&app), vec![v4]);
+    assert!(app.layer_sel.is_empty(), "il ne reste que le calque courant : {:?}", app.layer_sel);
+    // Un clic dans la piste d'un calque hors du choix : lui seul reste choisi, comme après un clic sur son nom.
+    app.click_layer_head(v5, true, false);
+    app.clic_dans_la_piste(dessin, false);
+    assert_eq!(choisis(&app), vec![dessin]);
+}
+
+#[test]
+fn a_new_key_goes_on_the_layers_of_the_keys_taken_on_several_tracks() {
+    use crate::handles::key_start_taken;
+    let mut app = app_de_retakes("cles-prises", false, "V5");
+    let (v5, v13, v4) = (rang(&app, "V5"), rang(&app, "V13"), rang(&app, "V4"));
+    // Un clic sur la clé de « V5 », puis Ctrl + clic sur celle de « V13 » : deux clés prises sur deux pistes, aucun nom cliqué.
+    let cle = |app: &App, li: usize| app.key_ref(0, li, 0).expect("la clé du calque");
+    app.clic_dans_la_piste(v5, false);
+    app.click_key(Some(cle(&app, v5)), false, false);
+    app.clic_dans_la_piste(v13, true);
+    app.click_key(Some(cle(&app, v13)), true, false);
+    assert_eq!(app.key_sel.len(), 2);
+    assert_eq!(app.calques_de_nouvelle_cle(), vec![v5.min(v13), v5.max(v13)], "les calques des clés prises");
+    app.cur_frame = 6;
+    app.run_action("dessin.nouvelle_cle_vide");
+    assert!(key_start_taken(&app.layers()[v5], 6) && key_start_taken(&app.layers()[v13], 6), "une clé vide sur chacun : {}", app.status);
+    assert!(!key_start_taken(&app.layers()[v4], 6));
+    assert!(app.status.contains("2 calques"), "{}", app.status);
+    // Une seule clé prise : la nouvelle clé reste pour le calque courant.
+    let mut app = app_de_retakes("cle-seule", false, "V5");
+    app.click_key(Some(cle(&app, v5)), false, false);
+    app.cur_frame = 6;
+    app.run_action("dessin.nouvelle_cle");
+    assert!(key_start_taken(&app.layers()[v5], 6) && !key_start_taken(&app.layers()[v13], 6));
+}
+
+#[test]
+fn on_screen_two_layers_chosen_by_their_names_then_a_click_in_a_track_then_f5_makes_two_keys() {
+    use crate::handles::key_start_taken;
+    let mut b = banc_de_retakes(false, "V5");
+    b.app.settings.montage_pile = Pile::Toute;
+    b.chauffer(6);
+    let (v5, v4) = (rang(&b.app, "V5"), rang(&b.app, "V4"));
+    let ctrl = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
+    // (Le pointeur arrive d'ailleurs : le premier clic après son apparition se perd dans le banc d'essai.)
+    b.image(vec![Event::PointerMoved(pos2(900.0, 300.0))], 1.0 / 60.0);
+    b.chauffer(2);
+    // Ctrl + clic sur le nom de « V4 », dans la colonne de la bande.
+    let nom = trouver(&colonne(&b), "V4")[0];
+    clic(&mut b, nom.center(), ctrl);
+    assert_eq!((b.app.chosen_layers(), b.app.cur_layer), (vec![v4, v5], v5), "deux calques choisis");
+    // Un clic dans la piste de « V4 », à l'image 10 du premier plan.
+    let bloc = crate::storyboard::BLOCS_DU_MONTAGE.with(|v| v.borrow().first().copied()).expect("le bloc du premier plan");
+    let nom = trouver(&colonne(&b), "V4")[0];
+    // (Une demi-seconde passe : deux clics à moins de trois dixièmes de seconde, même à deux endroits, font un double-clic, et un
+    // double-clic sur une piste y pose une clé, pour ce calque seul.)
+    b.image(Vec::new(), 0.5);
+    clic(&mut b, pos2(bloc.left() + 10.5 * PPF, nom.center().y), Modifiers::NONE);
+    assert_eq!((b.app.cur_panel, b.app.cur_frame, b.app.cur_layer), (0, 10, v4), "la tête de lecture est à l'image 10, sur « V4 »");
+    assert!(!crate::handles::key_start_taken(&b.app.layers()[v4], 10), "un simple clic ne pose pas de clé : {}", b.app.status);
+    assert_eq!(b.app.chosen_layers(), vec![v4, v5], "le choix des deux calques est resté");
+    // F5 : une clé sur chacun.
+    b.image(vec![Event::Key { key: Key::F5, physical_key: Some(Key::F5), pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.image(vec![Event::Key { key: Key::F5, physical_key: Some(Key::F5), pressed: false, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.chauffer(3);
+    assert!(key_start_taken(&b.app.layers()[v4], 10) && key_start_taken(&b.app.layers()[v5], 10), "une nouvelle clé sur chacun : {}", b.app.status);
+    assert_eq!(b.app.chosen_layers(), vec![v4, v5], "les deux calques restent choisis après la nouvelle clé");
+    // Un double-clic dans la piste de « V5 », à l'image 16 : une clé sur chacun aussi (avant : sur « V5 » seul, et le choix des calques
+    // était défait).
+    b.image(Vec::new(), 0.5);
+    let nom = trouver(&colonne(&b), "V5")[0];
+    crate::pistes_tests::double_clic(&mut b, pos2(bloc.left() + 16.5 * PPF, nom.center().y));
+    assert!(key_start_taken(&b.app.layers()[v4], 16) && key_start_taken(&b.app.layers()[v5], 16), "le double-clic pose une clé sur chacun : {}", b.app.status);
+    assert_eq!(b.app.chosen_layers(), vec![v4, v5], "le choix des deux calques est resté");
+    // Sur la piste d'un calque hors du choix : ce calque seul, comme avant.
+    b.image(Vec::new(), 0.5);
+    let dessin = rang(&b.app, "Dessin");
+    let nom = trouver(&colonne(&b), "Dessin")[0];
+    crate::pistes_tests::double_clic(&mut b, pos2(bloc.left() + 20.5 * PPF, nom.center().y));
+    assert!(key_start_taken(&b.app.layers()[dessin], 20), "{}", b.app.status);
+    assert!(!key_start_taken(&b.app.layers()[v4], 20) && !key_start_taken(&b.app.layers()[v5], 20), "les autres calques n'ont pas reçu de clé");
+}
+
 // ------------------------------------------------------------------------------------ à regarder
 
 /// Des images de la bande du montage dans le dossier `FEANOR_CAPTURE_DIR` : trois calques ou toute la pile, plans moyens ou en bandeau,
@@ -393,7 +583,7 @@ fn calques_timeline_captures() {
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (plan, depart, 0);
     b.app.montage_fit = true;
     b.chauffer(10);
-    let mut sauver = |b: &mut Banc, nom: &str| {
+    let sauver = |b: &mut Banc, nom: &str| {
         b.chauffer(8);
         let Some(rgba) = b.capturer() else { return println!("CALQUES pas de carte graphique : {nom} ignorée") };
         let img = image::RgbaImage::from_raw(1920, 1080, rgba).expect("image");
@@ -412,4 +602,17 @@ fn calques_timeline_captures() {
     b.app.settings.montage_pile = Pile::Toute;
     b.app.settings.montage_plans = HauteurPlans::Moyenne;
     sauver(&mut b, "4-toute-la-pile");
+    // Le panneau Calques et le filet de ses dossiers (suites du 11 novembre) : dans le Storyboard, le panneau ouvert, l'écran entier.
+    b.app.set_espace(Espace::Storyboard);
+    b.app.show_pane(crate::dock::Pane::Layers);
+    b.app.settings.montage_pile = Pile::Trois;
+    b.chauffer(16);
+    match b.capturer() {
+        Some(rgba) => {
+            let img = image::RgbaImage::from_raw(1920, 1080, rgba).expect("image");
+            img.save(dossier.join(format!("calques-{origine}-5-panneau-calques.png"))).expect("png");
+            println!("CALQUES 5-panneau-calques : panneau ouvert, {}", b.app.pane_shown(crate::dock::Pane::Layers));
+        }
+        None => println!("CALQUES pas de carte graphique : 5-panneau-calques ignorée"),
+    }
 }

@@ -1,4 +1,4 @@
-//! Glisser des clés de dessins avant ou après une autre clé du même calque (partie 137, Anthony 2026-11-10 : « j'aimerais pouvoir
+//! Glisser des clés de dessins avant ou après une autre clé du même calque (partie 138, Anthony 2026-11-10 : « j'aimerais pouvoir
 //! décaler des clés d'images en les faisant glisser avant ou après une autre clé d'image. Actuellement ça ne marche pas »).
 //!
 //! - **Où.** Dans les pistes de calques du montage (la timeline du Storyboard) et dans la timeline d'Animation. Pas dans les Vignettes.

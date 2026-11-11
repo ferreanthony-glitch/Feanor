@@ -1090,7 +1090,7 @@ impl App {
                 let (c0, c1) = self.image_drag.take().unwrap_or((c0, c0));
                 let m = ui.input(|i| i.modifiers);
                 let mode = crate::images::DropMode::de_touches(&m);
-                // Sans touche, lâchées sur un autre dessin du calque pointé : les clés prises s'insèrent avant ou après lui (partie 137).
+                // Sans touche, lâchées sur un autre dessin du calque pointé : les clés prises s'insèrent avant ou après lui (partie 138).
                 let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);
                 match (mode, self.image_insertion(pointed, c1)) {
                     (crate::images::DropMode::Move, Some(d)) => self.insert_chosen_images(pointed, d),
@@ -1210,7 +1210,7 @@ impl App {
             }
         }
 
-        // Pendant un glisser sans touche sur un autre dessin : la ligne d'insertion sur chaque calque choisi (partie 137).
+        // Pendant un glisser sans touche sur un autre dessin : la ligne d'insertion sur chaque calque choisi (partie 138).
         let insertion = match self.image_drag.filter(|(c0, c1)| c0 != c1) {
             Some((_, c1)) if ui.input(|i| i.modifiers.is_none()) => {
                 let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);

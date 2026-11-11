@@ -115,7 +115,7 @@ pub(crate) struct KeysDrag {
     mode: KeyMove,
     snap: crate::history::Edit,
     /// La clé prise : son calque (rang dans `layers`) et l'image du plan sous la souris à la prise. C'est sur son calque que se
-    /// lit l'insertion avant ou après un autre dessin (partie 137).
+    /// lit l'insertion avant ou après un autre dessin (partie 138).
     lead: Option<(usize, usize)>,
 }
 
@@ -478,7 +478,7 @@ impl App {
     pub(crate) fn drag_keys_mode(&mut self, at: usize, mode: KeyMove) {
         let Some(d) = self.keys_drag.as_mut() else { return };
         let want = at as isize - d.grab as isize;
-        // Sans touche, la souris sur un autre dessin du calque de la clé prise : les clés s'insèrent avant ou après lui (partie 137).
+        // Sans touche, la souris sur un autre dessin du calque de la clé prise : les clés s'insèrent avant ou après lui (partie 138).
         // Le décalage est alors celui de la limite d'insertion depuis la première clé prise, le même pour chaque calque.
         let insert = match (mode, d.lead) {
             (KeyMove::Ripple, Some((i, local))) => {
@@ -535,7 +535,7 @@ impl App {
         // d'état, car seule l'annulation les rend (règle du montage : rien ne se perd sans qu'on le voie).
         let mut sortis: Vec<(u64, usize, Layer)> = Vec::new();
         // Insérer : la phrase de la barre d'état se lit sur le calque de la clé prise, avant de rien poser ; les calques verrouillés ou
-        // masqués sont laissés de côté (partie 137).
+        // masqués sont laissés de côté (partie 138).
         let mut de_cote: Vec<String> = Vec::new();
         let place = match (d.mode, d.lead) {
             (KeyMove::Insert, Some((i, _))) => {

@@ -13,6 +13,15 @@ use crate::document::CelId;
 /// Taille des vignettes de calque.
 const THUMB: [usize; 2] = [64, 36];
 
+/// La place du filet du dossier, tout à gauche de chaque rang (Anthony, 2026-11-11 : « les bandes de couleur du dossier dans le panneau
+/// Calques également »). Comme dans la timeline, la couleur du dossier et celle de la sorte du calque ne sont jamais au même endroit :
+/// le filet du dossier est tout à gauche, la bande de la sorte vient juste après. La place n'est prise que dans un plan qui a au
+/// moins un dossier (ou un calque rangé dans un groupe de couleur) : ailleurs, les rangs restent comme avant.
+const GOUTTIERE: f32 = 6.0;
+
+/// La largeur du filet du dossier (celle du filet de la colonne des pistes, `pistes::montage_head`).
+const FILET: f32 = 3.0;
+
 /// Vignettes des dessins (par dessin et version), refaites quand le dessin change. Elles se composent
 /// sur des fils de fond (`thumbs.rs`) : l'ancienne reste à l'écran en attendant la neuve, et un dessin
 /// qui n'en a pas encore montre un cadre vide.
@@ -333,6 +342,11 @@ impl App {
         // sauf le calque courant, qu'on ne perd pas de vue.
         let closed: Vec<u64> = self.layers().iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
         let mut fold: Option<usize> = None;
+        // Le filet du dossier (`folders::couleur_du_rangement`, la même couleur que dans la timeline) : il court du rang du dossier
+        // jusqu'à son dernier calque, sans coupure entre les rangs. `filet_d_avant` : le dossier du rang d'avant et son bas.
+        let filets: Vec<Option<Color32>> = (0..self.layers().len()).map(|i| crate::folders::couleur_du_rangement(self.layers(), i, &self.doc.groups)).collect();
+        let gouttiere = if filets.iter().any(Option::is_some) { GOUTTIERE } else { 0.0 };
+        let mut filet_d_avant: Option<(usize, f32)> = None;
         // Le menu du clic droit d'un rang se montre au milieu des rangs : s'il change les calques (en supprimer, en fusionner,
         // en ajouter), les rangs d'après ne désignent plus les mêmes calques. La liste s'arrête là, les clics de cette image (qui
         // visaient les rangs d'avant) sont lâchés ; l'image suivante refait la liste (passe de débogage, 2026-10-22).
@@ -412,6 +426,9 @@ impl App {
                     }
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
+                        if gouttiere > 0.0 {
+                            ui.add_space(gouttiere);
+                        }
                         if colour_of.is_some() {
                             ui.add_space(14.0);
                         }
@@ -463,9 +480,16 @@ impl App {
                             None => {
                                 ui.painter().rect_filled(rect, 0.0, crate::theme::controle());
                                 // Un dossier n'a pas de dessin : son icône à la place de la vignette.
+                                // (De la couleur du dossier, celle de son filet et de sa ligne dans la timeline.)
                                 if folder {
                                     let icon = if shut { ph::FOLDER } else { ph::FOLDER_OPEN };
-                                    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(18.0), if visible { crate::theme::texte() } else { crate::theme::texte_doux() });
+                                    let encre = match filets.get(li).copied().flatten() {
+                                        Some(c) if visible => c,
+                                        Some(c) => c.gamma_multiply(0.5),
+                                        None if visible => crate::theme::texte(),
+                                        None => crate::theme::texte_doux(),
+                                    };
+                                    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(18.0), encre);
                                 }
                             }
                         }
@@ -533,10 +557,20 @@ impl App {
                 });
             let rect = shown.response.rect;
             if !folder {
-                // La bande de sa sorte, au bord gauche du rang.
-                let band = egui::Rect::from_min_size(rect.left_top() + vec2(0.0, 2.0), vec2(3.0, rect.height() - 4.0));
+                // La bande de sa sorte, au bord gauche du rang (après la place du filet du dossier, quand le plan en a).
+                let band = egui::Rect::from_min_size(rect.left_top() + vec2(gouttiere, 2.0), vec2(3.0, rect.height() - 4.0));
                 ui.painter().rect_filled(band, 1.0, hue);
             }
+            // Le filet du dossier, tout à gauche : il reprend au bas du rang d'avant quand c'est le même dossier.
+            let dossier_du_rang = crate::folders::parent_index(self.layers(), li).unwrap_or(li);
+            filet_d_avant = filets.get(li).copied().flatten().map(|c| {
+                let haut = match filet_d_avant {
+                    Some((d, bas)) if d == dossier_du_rang => bas,
+                    _ => rect.top(),
+                };
+                ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(rect.left(), haut), egui::pos2(rect.left() + FILET, rect.bottom())), 0.0, c);
+                (dossier_du_rang, rect.bottom())
+            });
             ui.ctx().data_mut(|d| d.insert_temp(grip_id, rect));
             drag_rows.push(crate::layerheads::Row { li, top: rect.top() - list_top, h: rect.height() });
             if let Some(grip) = grip {
@@ -551,9 +585,14 @@ impl App {
             // La sous-ligne de l'aplat, fine, juste sous son calque (ce panneau seulement : ni la timeline ni le
             // montage). Dossier fermé : elle suit son calque, qui n'a pas de rang non plus.
             if has_fond {
-                let resp = self.aplat_subrow(ui, li, hue, (in_folder as u8 + colour_of.is_some() as u8) as f32 * 14.0);
+                let resp = self.aplat_subrow(ui, li, hue, gouttiere + (in_folder as u8 + colour_of.is_some() as u8) as f32 * 14.0);
                 if resp.clicked() {
                     aplat_choisi = Some(li);
+                }
+                // (Le filet du dossier longe aussi la sous-ligne.)
+                if let (Some(c), Some((d, bas))) = (filets.get(li).copied().flatten(), filet_d_avant) {
+                    ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(rect.left(), bas), egui::pos2(rect.left() + FILET, resp.rect.bottom())), 0.0, c);
+                    filet_d_avant = Some((d, resp.rect.bottom()));
                 }
                 resp.context_menu(|ui| self.aplat_menu(ui, li));
             }

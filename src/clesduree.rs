@@ -1,4 +1,4 @@
-//! La fin des calques quand un plan s'allonge, et « Modifier la durée des clés d'images… » (partie 137, Anthony 2026-11-10).
+//! La fin des calques quand un plan s'allonge, et « Modifier la durée des clés d'images… » (partie 138, Anthony 2026-11-10).
 //!
 //! - **Étirer un plan étire ses dernières clés** (« Étirer un plan étire également toutes les dernières clés d'image du plan. Il ne
 //!   laisse plus de vide. ») : quand la fin d'un plan s'allonge (poignée de durée de la timeline, bord de fin dans le montage,

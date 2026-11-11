@@ -924,7 +924,7 @@ impl App {
         self.duration_dialog_ui(ctx);
         // Changer la durée des plans choisis (`dureeplans.rs`) ; réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
         self.plans_duration_dialog_ui(ctx);
-        // La durée des clés d'images choisies (`clesduree.rs`, partie 137).
+        // La durée des clés d'images choisies (`clesduree.rs`, partie 138).
         self.key_duration_dialog_ui(ctx);
         self.fusion_noms_ui(ctx);
         self.corbeille_fenetre_ui(ctx);
