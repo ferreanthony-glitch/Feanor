@@ -10236,3 +10236,58 @@ Préférences > Montage : « Agrandir les calques proches quand il y a de la pla
 ### 140.5 Essais
 
 `calquesplace_tests.rs` : les calques grandissent un à un du plus proche au plus loin, le dessus avant le dessous, par-dessus la ligne d'un dossier, jamais au-delà de la place offerte ni de la grande hauteur ; dans « Trois calques », les deux voisins grandissent et les fines bandes gardent leur hauteur et leurs comptes ; rien ne grandit autour d'un calque actif replié à la main ; les rangées de la bande suivent la hauteur du panneau quand le réglage est allumé, et les grands calques suivent le calque actif ; **à l'écran** : les calques remplissent la bande sans la faire défiler. `prefsui_tests.rs` : la case et sa ligne dans la recherche.
+
+## 141. Un calque accroché à la caméra (2026-11-11, branche `calque-camera`)
+
+« Je voudrais qu'on ajoute une option de calque qui permet d'accrocher le calque à la caméra. Quand la caméra bouge, le calque suit naturellement car il y est accroché. »
+
+Code : `accroche.rs` (la règle, la commande, le bouton), `document.rs` (`Layer::accroche`, `CameraSeen`, `pose_seen`), `layertools.rs` (`pose_du_geste`, `poser_du_geste`), `layersui.rs`, `layerheads.rs`, `menucalque.rs`, `calquecouleur.rs`, `partage.rs`, `fusioncalques.rs`, `trajectoireui.rs`, `project.rs` (format 53). Essais : `accroche_tests.rs` (11).
+
+### 141.1 La règle
+
+- **Un calque accroché garde sa place dans l'image filmée, quoi que fasse la caméra du plan** : elle se déplace, zoome, tourne ou avance, et le calque reste au même endroit du cadre, à la même taille. Sur la feuille, on le voit suivre le cadre de la caméra.
+- **Accrocher ne déplace rien à l'image courante** : le calque reste où on le voit, et c'est cette place dans le cadre qu'il garde ensuite. **Décrocher non plus** : il reste sur la feuille là où il est à cette image, et ne suit plus la caméra.
+- Un calque animé (clés de position) garde son mouvement : il se lit désormais dans le cadre de la caméra.
+- **On dessine dessus comme sur un autre calque** : le trait tombe sous la pointe, à toute image, où que soit la caméra. La sélection, la gomme, le pot de peinture, les pochoirs, la pelure d'oignon suivent.
+- **L'outil Transformer** déplace, agrandit et tourne ce qu'on voit : la boîte suit la main même sous une caméra zoomée ou tournée. Ctrl+R remet le calque à sa place d'origine dans le cadre.
+- Le multiplan (la profondeur du calque) ne fait plus défiler un calque accroché : rien ne le fait bouger dans l'image.
+- Les vignettes, la lecture, l'animatique et tous les exports montrent la même chose que l'écran (ils passent par le même calcul).
+- **Plusieurs calques choisis** : tous prennent l'inverse de l'état du calque sur lequel on agit, en une seule étape d'annulation. **Un dossier** compte pour ses calques.
+- **Un calque de couleur suit son calque de trait**, accroche comprise ; demandée sur lui, la commande agit sur son trait.
+
+### 141.2 Où c'est
+
+- **Panneau Calques** : un petit bouton caméra sur la ligne de chaque calque, à côté de celui de l'aplat ; allumé quand le calque est accroché. Un clic accroche ou décroche.
+- **En-tête de la timeline de l'Animation** : la même icône caméra, dans la rangée des réglages du calque.
+- **Menu du calque** : Plus > Réglages avancés > « Accrocher à la caméra » (avec « Verrouiller la position » et « Profondeur »).
+- **Commande** `calque.accrocher_camera` (palette Ctrl+K), sans touche par défaut : clic droit sur le bouton pour lui en donner une.
+
+### 141.3 Ce qui ne s'accroche pas
+
+La commande le dit et laisse ces calques de côté : un calque d'effet (il n'a pas de place à lui), le calque Décor des Vignettes (il reste sur la feuille), un calque qui a une trajectoire (elle se trace sur la feuille : la retirer d'abord), une carte inclinée de l'Espace 3D. L'outil Trajectoire refuse un calque accroché, avec la raison. Deux calques ne se fusionnent que s'ils sont tous les deux accrochés, ou aucun ; fusionnés, ils restent accrochés.
+
+### 141.4 Le fichier
+
+Format 53 : `accroche_camera` du calque (absent : calque ordinaire). Une version d'avant refuse le projet au lieu de montrer le calque ailleurs. Un projet d'avant s'ouvre tel quel.
+
+### 141.5 Limites
+
+- **Bascule et panoramique de la caméra** (9f) : non suivis. Le calque accroché suit la position, le zoom, la rotation et l'avancée ; si la caméra bascule ou fait un panoramique, il est filmé en perspective avec la feuille.
+- **Vignettes** : un trait parti d'une autre case ne peut pas finir dans un calque accroché d'une case dont la caméra n'est pas au centre (c'est la règle des calques transformés, partie 122) ; il reste sur la planche, par-dessus la case, et la ligne d'état le dit.
+- **Espace 3D et vue de dessus** : un calque accroché y est montré à sa pose dans le cadre, pas sous la caméra.
+- La piste d'un calque accroché, dans le Montage, ne porte pas de marque.
+- Rien n'a été fait à la main dans le vrai logiciel : la règle tient par les essais ; l'écran reste à juger.
+
+### 141.6 À vérifier à l'écran (par Anthony)
+
+1. Un plan avec un mouvement de caméra (deux clés) et un calque dessiné. Cliquer le petit bouton caméra du calque dans le panneau Calques : rien ne bouge à l'image courante.
+2. Lire le plan, ou glisser dans le temps : le calque reste à la même place dans le cadre ; les autres calques défilent.
+3. À une image où la caméra est ailleurs et zoomée, dessiner sur le calque accroché : le trait tombe sous la pointe.
+4. Outil Transformer sur le calque accroché, la caméra zoomée : la boîte suit la main.
+5. Recliquer le bouton : le calque se décroche sans bouger, puis ne suit plus la caméra.
+6. Ctrl+Z après avoir accroché : tout revient.
+7. Enregistrer, fermer, rouvrir : le calque est toujours accroché.
+
+### 141.7 Essais
+
+`accroche_tests.rs` : la pose accrochée est celle que filme la caméra (comparée à `Camera::to_stage`) et son inverse la rend ; un calque accroché garde sa place et sa taille dans l'image (caméra décalée, zoomée, tournée, avancée) et suit le cadre sur la feuille ; accrocher et décrocher ne déplacent rien à l'image courante, une étape d'annulation ; un calque animé garde son mouvement ; le trait tombe sous la pointe ; l'outil Transformer déplace le calque de ce que fait la main sous une caméra zoomée et tournée ; l'accroche s'enregistre et se relit ; les calques choisis s'accrochent ensemble, un dossier compte pour ses calques ; ce qui ne s'accroche pas le dit ; pas de fusion entre un calque accroché et un autre ; le calque de couleur suit son trait.

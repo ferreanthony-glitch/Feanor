@@ -244,7 +244,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// préréglage (tremblement, explosion, zoom…), ses réglages et son image de départ, calculés à l'évaluation de la caméra, sans clé.
 /// Une version précédente qui ouvrirait le projet ne montrerait pas l'effet et le perdrait à l'enregistrement : elle le refuse
 /// donc. Un projet de version 51 ou moins s'ouvre tel quel : ses effets déjà posés sont des clés, et le restent.
-pub const VERSION: u32 = 52;
+/// 53 (2026-11-11, `docs/INTERFACE.md` partie 141) : **calque accroché à la caméra** — `accroche_camera` d'un calque (`accroche.rs`) :
+/// il garde sa place dans l'image filmée, sa pose se lit dans le cadre de la caméra. Une version précédente qui ouvrirait le projet
+/// montrerait le calque à sa place sur la feuille (le film changerait sans prévenir) et perdrait le réglage à l'enregistrement : elle
+/// le refuse donc. Un projet de version 52 ou moins s'ouvre tel quel, aucun calque accroché.
+pub const VERSION: u32 = 53;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -807,6 +811,9 @@ struct LayerEntry {
     /// (une version d'avant l'ouvre comme un calque vectoriel ordinaire, avec ses notes).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     annotation: bool,
+    /// Calque accroché à la caméra (format 53, `accroche.rs`) : il garde sa place dans l'image filmée ; absent : calque ordinaire.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    accroche_camera: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2502,6 +2509,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 decor: l.decor,
                 personnage: l.personnage,
                 annotation: l.annotation,
+                accroche_camera: l.accroche,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3330,6 +3338,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         decor: l.decor,
                         personnage: l.personnage,
                         annotation: l.annotation,
+                        accroche: l.accroche_camera,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

@@ -287,6 +287,9 @@ mod aplatmulti;
 mod gommemulti;
 mod deformmulti;
 mod nouvellescles;
+mod accroche;
+#[cfg(test)]
+mod accroche_tests;
 mod choixtout;
 mod choixcalques;
 #[cfg(test)]

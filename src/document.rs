@@ -319,12 +319,15 @@ impl LayerTransform {
 }
 
 /// Où est la caméra, pour le multiplan (`Layer::transform_seen`) : son décalage depuis le centre
-/// de la feuille, son avancée, et la distance de référence (pixels de la feuille).
+/// de la feuille, son avancée, et la distance de référence (pixels de la feuille). Pour un calque accroché à la caméra
+/// (`accroche.rs`, partie 141) : son grossissement (l'objectif et l'avancée) et sa rotation, en degrés.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CameraSeen {
     pub offset: Vec2,
     pub dolly: f32,
     pub d0: f32,
+    pub grossissement: f32,
+    pub angle: f32,
 }
 
 /// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
@@ -442,6 +445,9 @@ pub struct Layer {
     /// Calque d'annotation (`calqueannot.rs`) : des notes de réalisateur sur le plan, vectorielles, peintes par-dessus tout à l'écran et
     /// jamais dans un export ni dans les vignettes (sauf si on le demande). Un calque vectoriel ordinaire pour le reste.
     pub annotation: bool,
+    /// Accroché à la caméra (`accroche.rs`, Anthony 2026-11-11) : le calque garde sa place dans l'image filmée, quoi que fasse la caméra
+    /// (déplacement, zoom, rotation, avancée). Sa pose se lit alors dans le cadre de la caméra, et le multiplan ne le fait plus défiler.
+    pub accroche: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -517,6 +523,7 @@ impl Layer {
             decor: false,
             personnage: None,
             annotation: false,
+            accroche: false,
         }
     }
 
@@ -614,7 +621,11 @@ impl Layer {
     /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`). Pour une carte inclinée
     /// (`LayerTransform::is_tilted`), c'est la pose à plat : l'inclinaison se pose par un maillage
     /// (`espace3d.rs`), pas par une affinité.
-    fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
+    pub(crate) fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
+        // Accroché à la caméra (`accroche.rs`) : sa pose se lit dans le cadre de la caméra, où qu'elle soit ; pas de multiplan.
+        if self.accroche {
+            return Some(seen.accrochee(t));
+        }
         let depth = self.depth + t.dz;
         if depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
             return Some(t);
@@ -1786,14 +1797,14 @@ impl Document {
     /// Comme `camera_seen`, pour un plan rangé.
     pub fn camera_seen_du_plan_range(&self, p: &Panel, frame: usize) -> CameraSeen {
         let c = self.camera_du_plan_range(p, frame);
-        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
+        CameraSeen::de(&c, self.stage_center(), self.frame)
     }
 
     /// Où est la caméra du plan `index` à l'image `frame`, pour le multiplan : décalage depuis
     /// le centre de la feuille, avancée, distance de référence.
     pub fn camera_seen(&self, index: usize, frame: usize) -> CameraSeen {
         let c = self.panel_camera(index, frame);
-        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
+        CameraSeen::de(&c, self.stage_center(), self.frame)
     }
 
     pub fn structure(&self) -> Structure {

@@ -194,6 +194,8 @@ struct Head {
     stencil: bool,
     negative: bool,
     fixed: bool,
+    /// Accroché à la caméra (`accroche.rs`).
+    accroche: bool,
     group: usize,
     collapsed: bool,
     opacity: f32,
@@ -357,6 +359,7 @@ impl App {
                 stencil: l.stencil,
                 negative: l.stencil_negative,
                 fixed: l.position_locked,
+                accroche: l.accroche,
                 group: (l.group as usize).min(crate::groups::COUNT - 1),
                 collapsed: l.collapsed,
                 opacity: l.opacity_at(self.cur_frame),
@@ -595,6 +598,13 @@ impl App {
         if let Some(resp) = self.fx_switch(ui, li, Some(slot(8)), fg) {
             if resp.clicked() {
                 self.toggle_layer_fx(li);
+            }
+        }
+        // Accroché à la caméra (`accroche.rs`) : le calque garde sa place dans l'image, quoi que fasse la caméra.
+        if !h.folder && !h.cfx && !h.sous_trait {
+            let resp = icon_at(ui, slot(9), ph::VIDEO_CAMERA, shade(h.accroche));
+            if self.aide(resp, crate::accroche::NOM, crate::accroche::PHRASE, crate::accroche::ACTION).clicked() {
+                self.basculer_accroche(li);
             }
         }
 

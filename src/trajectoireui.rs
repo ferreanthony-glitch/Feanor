@@ -115,6 +115,11 @@ impl App {
             self.status = "Ce calque de couleur suit son calque de trait : trace la trajectoire sur le calque de trait.".into();
             return;
         }
+        // (Le chemin se trace sur la feuille ; la pose d'un calque accroché se lit dans le cadre de la caméra, `accroche.rs`.)
+        if self.layer().accroche {
+            self.status = "Ce calque est accroché à la caméra : décroche-le pour lui tracer une trajectoire (elle se trace sur la feuille).".into();
+            return;
+        }
         let p = [stage.x, stage.y];
         // Le point d'ancrage se choisit d'un clic sur le dessin (bouton des réglages).
         if std::mem::take(&mut self.traj.choisir_ancre) {

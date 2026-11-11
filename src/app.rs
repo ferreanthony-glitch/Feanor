@@ -1667,7 +1667,8 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
-        let t = self.layer().pose(self.cur_frame);
+        // (Un calque accroché à la caméra, `accroche.rs` : sa taille à l'écran est celle qu'on voit, grossissement de la caméra compris.)
+        let t = if self.layer().accroche { self.layer_seen() } else { self.layer().pose(self.cur_frame) };
         self.view.zoom * t.scale * (t.stretch_x * t.stretch_y).abs().sqrt()
     }
 
@@ -2701,7 +2702,9 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         // Les contours de tous les calques sont pris sur la feuille : sur un calque transformé, ils
         // ne tomberaient pas au bon endroit de son dessin ; on prend alors le calque seul.
-        if self.fill.sample_all && self.layer().pose(self.cur_frame).is_identity() {
+        // (Un calque accroché à la caméra, `accroche.rs` : « transformé » se lit sur ce qu'on voit, la caméra comprise.)
+        let a_plat = if self.layer().accroche { self.layer_seen().is_identity() } else { self.layer().pose(self.cur_frame).is_identity() };
+        if self.fill.sample_all && a_plat {
             return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
         }
         match self.cel_here() {
@@ -5108,6 +5111,8 @@ impl App {
             "outil.camera" => self.set_tool(Tool::Camera),
             "outil.transformer" => self.set_tool(Tool::Transform),
             "calque.reinit_transformation" => self.reset_layer_transform(),
+            // Accrocher les calques choisis à la caméra, ou les décrocher (`accroche.rs`).
+            "calque.accrocher_camera" => self.basculer_accroche(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.

@@ -265,7 +265,9 @@ impl App {
         let corners = self.box_corners();
         // Centre de la boîte telle qu'on la voit, ramené au repère de la transformation du calque
         // (sans le défilement multiplan, qui ne dépend que de la caméra).
-        let (seen, own) = (self.layer_seen(), self.layer().pose(self.cur_frame));
+        // (Un calque accroché à la caméra, `accroche.rs` : le geste se fait sur la pose qu'on voit ; elle est ramenée dans le cadre de
+        // la caméra quand elle est écrite, `poser_du_geste`.)
+        let (seen, own) = (self.layer_seen(), self.pose_du_geste(self.cur_layer));
         let seen_center = pos2(
             corners.iter().map(|c| c.x).sum::<f32>() / 4.0,
             corners.iter().map(|c| c.y).sum::<f32>() / 4.0,
@@ -290,8 +292,7 @@ impl App {
     fn transform_many_press(&mut self, stage: Pos2, handle: BoxHandle, peers: &[usize]) {
         // Un côté étire dans un seul sens, celui de la feuille : chaque calque l'étire dans le sien, ce qui n'est juste que pour
         // des calques sans rotation (partie 132). Un calque tourné : le geste est refusé, le message le dit.
-        let f = self.cur_frame;
-        if matches!(handle, BoxHandle::Edge(_)) && peers.iter().any(|&li| !droit(self.layers()[li].pose(f).angle)) {
+        if matches!(handle, BoxHandle::Edge(_)) && peers.iter().any(|&li| !droit(self.pose_du_geste(li).angle)) {
             self.status = "Étirer par le milieu d'un côté : un des calques choisis est tourné, il ne peut pas s'étirer dans le sens de la feuille. Un coin agrandit tous les calques choisis.".into();
             return;
         }
@@ -301,7 +302,8 @@ impl App {
             .iter()
             .map(|&li| {
                 let l = &self.layers()[li];
-                let own = l.pose(self.cur_frame);
+                // (Un calque accroché à la caméra : sa pose du geste est celle qu'on voit, sans écart.)
+                let own = self.pose_du_geste(li);
                 let seen = l.transform_seen_at(&camera, self.cur_frame).unwrap_or(own);
                 Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y) }
             })
@@ -314,7 +316,7 @@ impl App {
             handle,
             start: stage,
             many: Some(Many { peers: list, box0, a: crate::vector::Affine::IDENTITY }),
-            t0: self.layer().pose(self.cur_frame),
+            t0: self.pose_du_geste(self.cur_layer),
             center: Pos2::ZERO,
             seen_center: Pos2::ZERO,
             content: box0,
@@ -412,7 +414,7 @@ impl App {
             .collect();
         d.changed = true;
         for (li, t) in moved {
-            self.set_layer_pose(li, t);
+            self.poser_du_geste(li, t);
         }
         self.modified = true;
         self.status = format!("{n} calques {text}.");
@@ -473,7 +475,7 @@ impl App {
         };
         d.changed = true;
         let li = self.cur_layer;
-        self.set_layer_pose(li, t);
+        self.poser_du_geste(li, t);
         self.modified = true;
         self.status = format!(
             "Calque : décalage {:+.0} × {:+.0} px, largeur {:.0} %, hauteur {:.0} %, rotation {:.1}°",
@@ -568,6 +570,26 @@ impl App {
     pub(crate) fn set_layer_pose(&mut self, li: usize, t: LayerTransform) {
         let f = self.cur_frame;
         self.layers_mut()[li].set_pose(f, t);
+    }
+
+    /// La pose du calque `li` à l'image courante telle que l'outil Transformer la travaille : la sienne ; pour un calque accroché à la
+    /// caméra (`accroche.rs`), celle qu'on voit sur la feuille (sa pose se lit dans le cadre de la caméra, qui peut être ailleurs,
+    /// zoomée ou tournée : un geste fait sur la feuille ne s'y ajoute pas tel quel).
+    pub(crate) fn pose_du_geste(&self, li: usize) -> LayerTransform {
+        let l = &self.layers()[li];
+        let own = l.pose(self.cur_frame);
+        if l.accroche {
+            l.transform_seen_at(&self.doc.camera_seen(self.cur_panel, self.cur_frame), self.cur_frame).unwrap_or(own)
+        } else {
+            own
+        }
+    }
+
+    /// Le calque `li` prend à l'image courante la pose `t` que donne le geste de l'outil Transformer (`pose_du_geste`) : pour un
+    /// calque accroché à la caméra, elle est ramenée dans le cadre de la caméra avant d'être écrite.
+    pub(crate) fn poser_du_geste(&mut self, li: usize, t: LayerTransform) {
+        let t = if self.layers()[li].accroche { self.doc.camera_seen(self.cur_panel, self.cur_frame).decrochee(t) } else { t };
+        self.set_layer_pose(li, t);
     }
 
     /// Boîte et poignées de l'outil Transformer.

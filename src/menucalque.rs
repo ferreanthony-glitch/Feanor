@@ -339,6 +339,13 @@ impl App {
         {
             self.set_layer_flag(li, |l| l.position_locked = !fixed);
         }
+        // Accrocher à la caméra (`accroche.rs`) : le calque garde sa place dans l'image, quoi que fasse la caméra.
+        let accroche = self.est_accroche(li);
+        let raison = self.layers().get(li).filter(|l| !l.accroche).and_then(|l| l.raison_sans_accroche()).map(|r| format!("Ce calque ne s'accroche pas à la caméra : {r}."));
+        let case = if accroche { egui_phosphor::regular::CHECK_SQUARE } else { egui_phosphor::regular::SQUARE };
+        if self.entree(ui, case, crate::accroche::NOM, crate::accroche::ACTION, raison, crate::accroche::PHRASE) {
+            self.basculer_accroche(li);
+        }
         self.depth_item(ui, li);
     }
 }
