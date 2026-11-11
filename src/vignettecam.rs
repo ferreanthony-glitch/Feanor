@@ -103,8 +103,13 @@ impl Groupe {
 /// Rien de plus n'est enregistré : tout se lit dans les clés. Une case de continuité **porte son propre mouvement** quand une clé est posée
 /// exactement à sa première image, **tient la caméra de la clé d'avant** (c'est la continuité : la case part du cadre qu'elle montrait) et
 /// est suivie d'une clé au moins qui n'est pas elle-même le début d'un mouvement. Ses clés, jusqu'au mouvement suivant, sont les siennes.
-/// Tout le reste est le mouvement de la première case, comme avant : des clés posées à la main au montage ne changent pas de case. Il y a
-/// toujours un premier mouvement (vide si le plan n'a pas de clé).
+/// Tout le reste forme le premier mouvement : des clés posées à la main au montage ne se coupent pas en plusieurs. Il y a toujours un
+/// premier mouvement (vide si le plan n'a pas de clé).
+///
+/// **La case qui porte un mouvement est celle où il commence** (sa règle du 11 novembre au soir : « un mouvement de caméra peut démarrer
+/// d'une vignette même si la vignette n'est pas la première vignette du plan. Le mouvement de caméra démarre alors du début de la clé
+/// d'image et termine à la fin de la clé d'image ») : la case qui contient l'image de sa première clé. Le premier mouvement d'un plan peut
+/// donc vivre sur sa deuxième ou sa troisième case ; avant, il était toujours montré sur la première.
 pub fn groupes(keys: &[CameraKey], cases: &[usize]) -> Vec<Groupe> {
     let n = keys.len();
     let tenue = |i: usize| i >= 1 && keys[i].frame > 0 && cases.contains(&keys[i].frame) && keys[i].cam == keys[i - 1].cam;
@@ -113,15 +118,17 @@ pub fn groupes(keys: &[CameraKey], cases: &[usize]) -> Vec<Groupe> {
     for i in (1..n).rev() {
         commence[i] = tenue(i) && i + 1 < n && !commence[i + 1];
     }
+    // La case où commence le mouvement dont la première clé est `premiere` : celle qui contient son image.
+    let case_de = |premiere: usize| keys.get(premiere).map_or(0, |k| cases.iter().copied().filter(|&c| c <= k.frame).max().unwrap_or(0));
     let mut out = Vec::new();
     let mut debut = 0;
     for i in 1..n {
         if commence[i] {
-            out.push(Groupe { debut: if out.is_empty() { 0 } else { keys[debut].frame }, rangs: debut..i, numero: out.len() });
+            out.push(Groupe { debut: case_de(debut), rangs: debut..i, numero: out.len() });
             debut = i;
         }
     }
-    out.push(Groupe { debut: if out.is_empty() { 0 } else { keys[debut].frame }, rangs: debut..n, numero: out.len() });
+    out.push(Groupe { debut: case_de(debut), rangs: debut..n, numero: out.len() });
     out
 }
 

@@ -2690,7 +2690,7 @@ impl App {
         // La caméra du plan : un cadre de plus (C, D… : le glissé ne crée plus rien), ou celui qu'on a visé en moins.
         // (Partie 142 : une case de continuité d'un plan qui bouge porte son propre mouvement, ou peut en commencer un : B vers C.)
         let possible = self.cam_possible_ici(i, frame);
-        let debut = self.case_du_mouvement(i, frame);
+        let debut = frame;
         if let Some(rang) = cadre.filter(|_| possible) {
             item(self, ui, "Retirer ce cadre", &move |a| a.cam_retirer_cadre_case(i, debut, rang));
         }
