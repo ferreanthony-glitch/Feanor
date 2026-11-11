@@ -953,6 +953,12 @@ touches = ["Ctrl+E"]
 action = "calque.reinit_transformation"
 touches = ["Ctrl+R"]
 
+# Accrocher le calque à la caméra (partie 141) : il garde sa place dans l'image, quoi que fasse la caméra.
+[[raccourci]]
+action = "calque.accrocher_camera"
+touches = []
+source = "FEANOR (sans touche ; le petit bouton caméra du calque dans le panneau Calques, ou Plus > Réglages avancés)"
+
 [[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]

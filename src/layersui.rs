@@ -327,6 +327,8 @@ impl App {
         let mut rename_done: Option<bool> = None;
         // Sous-ligne d'aplat cliquée : sa cible du dessin.
         let mut aplat_choisi: Option<usize> = None;
+        // Le bouton « Accrocher à la caméra » d'un rang, cliqué (`accroche.rs`) : fait après la liste, les rangs ne changent pas sous elle.
+        let mut accrocher: Option<usize> = None;
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = crate::theme::accent();
@@ -555,6 +557,13 @@ impl App {
                                         self.toggle_fond(li);
                                     }
                                 }
+                                // Accroché à la caméra (`accroche.rs`) : un bouton par calque, allumé s'il l'est ; c'est ici qu'on
+                                // l'accroche d'un clic (Anthony, 2026-11-11 : « une option de calque »).
+                                if let Some(resp) = self.bouton_accroche(ui, li) {
+                                    if resp.clicked() {
+                                        accrocher = Some(li);
+                                    }
+                                }
                             });
                         });
                     });
@@ -646,6 +655,9 @@ impl App {
         self.finish_layer_rename(rename_done);
         if let Some(li) = aplat_choisi {
             self.select_aplat(li);
+        }
+        if let Some(li) = accrocher {
+            self.basculer_accroche(li);
         }
 
         // Clic droit dans le vide sous la liste : de nouveaux calques.

@@ -122,6 +122,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   reconstruit (`target\release\feanor.exe`, 16 h 34) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de
   plantage. Pas de version portable. Pas vérifié : la bande tirée à la main dans le vrai exe (sa liste 140.4). Les dossiers de
   chantier `Chantiers\cle-masques` et `Chantiers\calques-place` attendent son accord pour être retirés.
+- Sa demande du soir : « une option de calque qui permet d'accrocher le calque à la caméra. Quand la caméra bouge, le calque suit
+  naturellement car il y est accroché ». Chantier `calque-camera` (partie 141 de l'interface), sur une branche du même nom dans le
+  dossier `Chantiers\calques-place` réutilisé. La règle : un calque accroché garde sa place dans l'image filmée, quoi que fasse la
+  caméra (déplacement, zoom, rotation, avancée) ; l'accrocher ou le décrocher ne le déplace pas à l'image courante ; un calque animé
+  garde son mouvement ; l'outil Transformer travaille sur ce qu'on voit ; les calques choisis s'accrochent ensemble, un dossier compte
+  pour ses calques, un calque de couleur suit son trait. Un petit bouton caméra par calque dans le panneau Calques, la même icône
+  dans l'en-tête de la timeline, Plus > Réglages avancés, une commande sans touche. Format de projet 53 (un projet ouvert par cette
+  version ne s'ouvre plus avec une version d'avant). Vérificateur sur la branche : 4 489 essais réussis, 0 échec, aucun
+  avertissement (un premier passage avait 7 échecs : des essais anciens qui comptaient sur le numéro de format 52, mis à jour).
+  Quatre captures d'un plan d'essai regardées et envoyées. Exe de la branche (19 h 26) ouvert deux fois sur une copie fraîche de
+  son projet avec de faux réglages, dont une fois avec un calque accroché sous sa caméra à deux clés : pas de plantage. Pas vérifié :
+  aucun geste fait à la main dans le vrai exe. Limites dites : la bascule et le panoramique de la caméra ne sont pas suivis ;
+  l'Espace 3D et la vue de dessus montrent le calque à sa pose dans le cadre ; pendant un geste du Transformer, la ligne d'état donne
+  les valeurs vues sur la feuille. Les dossiers `Chantiers\cle-masques` et `Chantiers\calques-place` (qui porte ce chantier) restent.
+  Fusion dans main : à son accord.
 
 ## 2026-11-10
 

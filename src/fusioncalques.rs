@@ -87,6 +87,11 @@ fn raison_paire(panel: &Panel, below: &Layer, above: &Layer) -> Option<String> {
     if below.parent != above.parent {
         return Some(format!("« {} » et « {} » ne sont pas dans le même dossier.", below.name, above.name));
     }
+    // (Accroché à la caméra, `accroche.rs` : l'un suit la caméra, l'autre reste sur la feuille ; ils ne se fondent pas en un dessin.)
+    if below.accroche != above.accroche {
+        let (accroche, libre) = if below.accroche { (below, above) } else { (above, below) };
+        return Some(format!("« {} » est accroché à la caméra et « {} » ne l'est pas : accroche ou décroche les deux d'abord.", accroche.name, libre.name));
+    }
     // (Les notes ne se fondent pas dans le dessin du film : un calque d'annotation ne se fusionne qu'avec un autre.)
     if below.annotation != above.annotation {
         return Some("Un calque d'annotation ne se fusionne qu'avec un autre calque d'annotation : ses notes n'entrent pas dans le dessin.".into());
