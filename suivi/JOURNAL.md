@@ -144,6 +144,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   deux clés : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (sa liste 141.6).
   Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent ; le second est repris pour le sujet suivant
   (un mouvement de caméra B vers C dans les Vignettes).
+- Son sujet suivant, avec une capture annotée : « ajouter un mouvement de caméra dans Vignettes après une continuité de vignettes qui a
+  déjà un mouvement A vers B. Ajouter possibilité de B vers C etc. » Chantier `camera-suite` (partie 142 de l'interface), branche du
+  même nom dans le dossier `Chantiers\calques-place` réutilisé. Avant, un plan ne portait qu'un mouvement, sur sa première case, et une
+  case de continuité refusait la caméra. Maintenant une case de continuité porte son propre mouvement : il part du cadre qu'elle montre
+  (B) et va vers un nouveau cadre (C) sur la durée de la case ; la case d'après montre C et peut porter C vers D. Mêmes gestes que
+  d'habitude, faits sur la case (Ctrl + Maj + glisser, le « + » de Maj, « Ajouter un cadre »). Les lettres courent d'un bout à l'autre du
+  plan. Le premier cadre d'un mouvement de continuité est la case : il ne se déplace pas. Déplacer B emmène le départ de B vers C. Un
+  mouvement créé sur une case du milieu met les cases de derrière dans un plan à part (la règle du 22 octobre). Le format du projet ne
+  change pas : tout se lit dans les clés de caméra. Vérificateur sur la branche : 4 497 essais réussis, 0 échec, aucun avertissement.
+  Captures de la planche regardées et envoyées. Exe de la branche (20 h 32) ouvert deux fois sur une copie fraîche de son projet avec de
+  faux réglages : pas de plantage (une première construction avait échoué sur un caractère parasite dans un commentaire, corrigé ; les
+  essais de la caméra repassés ensuite). Pas vérifié : aucun geste fait à la main dans le vrai exe ; la lecture à la japonaise
+  et l'export de la planche n'ont pas d'essai propre à ce cas. Fusion dans main : à son accord.
 
 ## 2026-11-10
 

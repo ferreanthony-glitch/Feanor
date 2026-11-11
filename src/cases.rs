@@ -89,6 +89,25 @@ impl Document {
         suite
     }
 
+    /// Comme `scinder_apres_mouvement`, pour un mouvement créé sur la case qui commence à l'image `apres` du plan (partie 142 : une case de
+    /// continuité porte son propre mouvement, B vers C) : les cases **derrière elle** deviennent un plan à part, avec la caméra qu'elles
+    /// montraient avant (le cadre que la case tenait) ; les cases d'avant et celle du mouvement restent. `finale` : les clés du plan après
+    /// le geste ; le premier plan garde celles d'avant la coupe.
+    pub fn scinder_apres_mouvement_de(&mut self, index: usize, avant: &[CameraKey], finale: Vec<CameraKey>, apres: usize) -> Option<usize> {
+        if apres == 0 {
+            return self.scinder_apres_mouvement(index, avant, finale);
+        }
+        let p = self.panels.get(index)?;
+        let id = p.id;
+        let at = p.marks.iter().map(|m| m.frame).filter(|&f| f > apres).min()?;
+        self.panels[index].camera = avant.to_vec();
+        let suite = self.split_plan(index, at);
+        if let Some(premier) = self.panels.iter_mut().find(|p| p.id == id) {
+            premier.camera = finale.into_iter().filter(|k| k.frame < at).collect();
+        }
+        suite
+    }
+
     /// Les cases suivent leurs clés (Anthony, 2026-10-24 : « une clé du Storyboard doit rester sa propre case dans les Vignettes »).
     /// Une case (marque d'image) et sa clé de dessin sont la même chose vue de deux côtés ; or le montage et la timeline ne connaissent que
     /// les clés : en glisser une, tirer la limite entre deux expositions (les clés d'après suivent), ou en supprimer une laissait la marque

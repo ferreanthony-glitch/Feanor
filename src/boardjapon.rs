@@ -91,14 +91,14 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
 
     // Les empreintes (la première image d'un plan dont la caméra bouge), à l'échelle des cases.
     let place = Place { card_w, thumb_h, row_w: large_max, total: (haut_max - thumb_h).max(0.0), max_h: haut_max };
-    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None }).collect();
+    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| vignettecam::empreinte_de_la_case(doc, b.0, b.2, &place)).collect();
     // L'enveloppe (élargie à ce que le geste en cours a déjà couvert : elle ne rétrécit pas tant qu'il dure).
     let polys: Vec<Option<Vec<Pos2>>> = prints
         .iter()
         .enumerate()
         .map(|(k, e)| {
             let e = e.as_ref()?;
-            let hold = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id);
+            let hold = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && h.image == boards[k].2);
             Some(match hold {
                 None => e.enveloppe.clone(),
                 Some(h) => {
@@ -124,7 +124,7 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
                     let droite_env = crate::viewbar::clip_to_rect(poly, Rect::from_min_max(pos2(-1e6, b.top()), pos2(1e6, b.bottom()))).iter().map(|q| q.x).fold(b.right(), f32::max);
                     let note = Rect::from_min_size(pos2(droite_env + ng_texte, b.top()), vec2(texte_w, hauteur_texte));
                     // (Pendant un geste, A garde le retrait qu'elle avait à l'appui : elle ne bouge pas, `Reserve::pose_dec`.)
-                    let dec = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose_dec).unwrap_or_else(|| (-boite.left()).max(0.0));
+                    let dec = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == h.image).and_then(|h| h.pose_dec).unwrap_or_else(|| (-boite.left()).max(0.0));
                     Etendue { x_lo: boite.left().min(0.0), dec, droite: dec + boite.right().max(card_w).max(note.right()), monte: (-boite.top()).max(0.0), bas: boite.bottom().max(thumb_h).max(note.bottom()), note }
                 }
                 _ => {
@@ -138,7 +138,7 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
     // Le geste de caméra en cours : la case A du plan reste où elle était (colonne, x, haut de l'image).
     let forces: Vec<Option<(usize, f32, f32)>> = (0..n)
         .map(|k| {
-            let h = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0)?;
+            let h = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == h.image)?;
             let (c, x) = h.pose?;
             Some((c, x, h.pose_y?))
         })

@@ -16,6 +16,10 @@
 //! Plan à plusieurs cases : les cadres d'un mouvement vivent sur la **première** case du plan. Le « + » se pose à côté du dernier cadre
 //! de cette case ; si elle n'est pas dans la vue, à côté de la case survolée. Un plan qui ne bouge pas encore et qu'on survole par une
 //! de ses autres cases : le « + » est à côté de cette case (le futur B naît de la caméra du plan).
+//!
+//! **Partie 142** : une case de continuité d'un plan qui bouge déjà porte son propre mouvement, ou peut en commencer un quand la caméra y
+//! est à l'arrêt (`App::mouvement_de_case`) : survolée, le « + » est pour elle, à côté de son dernier cadre (ou d'elle). Un clic ou un glissé y
+//! pose B vers C, puis C vers D sur la case d'après.
 
 use eframe::egui::{vec2, Color32, Painter, Pos2, Rect, Stroke};
 
@@ -46,6 +50,8 @@ pub(crate) struct PlusPlace {
 pub(crate) struct PlusGeste {
     pub plan: u64,
     pub ancre: usize,
+    /// L'image du plan où commence la case qui porte le mouvement (0 : la première ; partie 142 : une case de continuité porte le sien).
+    pub image: usize,
     /// Le pointeur à l'appui (écran).
     pub depart: Pos2,
     /// Le geste de caméra est lancé (le pointeur a passé le seuil).
@@ -138,10 +144,14 @@ impl App {
     fn plus_calculer(&self, layout: &BoardLayout, xf: Xf, view: Rect, over: Option<Pos2>) -> Option<PlusPlace> {
         let (plan, survol) = self.plus_plan(layout, xf, over)?;
         let k0 = layout.cards.iter().position(|c| c.plan == plan && c.frame == 0)?;
-        let (cadres, simple) = self.cadres_sur_la_planche(layout, k0);
+        // (Partie 142) Une case de continuité d'un plan qui bouge déjà, survolée : si elle porte son propre mouvement, ou peut en commencer
+        // un (la caméra y est à l'arrêt), le « + » est pour elle, à côté de son dernier cadre (ou d'elle) : B vers C, puis C vers D.
+        let s = layout.cards[survol];
+        let pour_elle = s.plan == plan && s.frame > 0 && self.case_du_mouvement(s.panel, s.frame) > 0 && self.cam_possible(&s);
+        let (cadres, simple) = self.cadres_sur_la_planche(layout, if pour_elle { survol } else { k0 });
         // Un plan qui ne bouge pas encore, survolé par une autre de ses cases : le « + » est à côté de cette case-là.
-        let autre_case = simple && layout.cards[survol].plan == plan && layout.cards[survol].frame > 0;
-        let ancre = if autre_case { survol } else { k0 };
+        let autre_case = !pour_elle && simple && s.plan == plan && s.frame > 0;
+        let ancre = if autre_case || pour_elle { survol } else { k0 };
         if !self.cam_possible(&layout.cards[ancre]) {
             return None;
         }
@@ -177,7 +187,9 @@ impl App {
         }
         self.commit_note_text(layout);
         self.commit_card_note();
-        self.vignettes.plus.geste = Some(PlusGeste { plan: pl.plan, ancre: pl.ancre, depart: pos, lance: false });
+        // (L'image où commence la case qui porte le mouvement que le « + » allonge : `case_du_mouvement`.)
+        let image = layout.cards.get(pl.ancre).map_or(0, |c| self.case_du_mouvement(c.panel, c.frame));
+        self.vignettes.plus.geste = Some(PlusGeste { plan: pl.plan, ancre: pl.ancre, image, depart: pos, lance: false });
         self.vignettes.press = Press::Dead;
         true
     }
@@ -228,7 +240,7 @@ impl App {
             return;
         }
         if let Some(pi) = self.doc.panels.iter().position(|p| p.id == g.plan) {
-            self.cam_ajouter_cadre(pi);
+            self.cam_ajouter_cadre_case(pi, g.image);
         }
     }
 }
