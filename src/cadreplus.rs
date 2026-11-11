@@ -13,13 +13,12 @@
 //! sinon dans le cadre, contre son bord droit. Dans sa zone, il passe avant les autres gestes de Maj. Les refus (storyboard verrouillé,
 //! plan pris par un autre) sont ceux de `cam_ajouter_cadre` : ils parlent dans la ligne d'état au clic.
 //!
-//! Plan à plusieurs cases : les cadres d'un mouvement vivent sur la **première** case du plan. Le « + » se pose à côté du dernier cadre
-//! de cette case ; si elle n'est pas dans la vue, à côté de la case survolée. Un plan qui ne bouge pas encore et qu'on survole par une
-//! de ses autres cases : le « + » est à côté de cette case (le futur B naît de la caméra du plan).
-//!
-//! **Partie 142** : une case de continuité d'un plan qui bouge déjà porte son propre mouvement, ou peut en commencer un quand la caméra y
-//! est à l'arrêt (`App::mouvement_de_case`) : survolée, le « + » est pour elle, à côté de son dernier cadre (ou d'elle). Un clic ou un glissé y
-//! pose B vers C, puis C vers D sur la case d'après.
+//! Plan à plusieurs cases (partie 142, règle d'Anthony du 11 novembre au soir : « un mouvement de caméra peut démarrer d'une vignette même
+//! si la vignette n'est pas la première vignette du plan ») : **le « + » sert la case survolée**, à côté de son dernier cadre (ou d'elle),
+//! que le plan bouge déjà ou non. Un clic ou un glissé y pose un mouvement qui va de sa première à sa dernière image
+//! (`App::mouvement_de_case`) : A vers B sur la deuxième case d'un plan sans mouvement, B vers C sur une case de continuité, puis C vers D
+//! sur la suivante. Si un mouvement commencé sur une autre case traverse la case survolée, le « + » reste visible et le clic dit pourquoi
+//! rien ne se passe. Pointeur loin des cases : le « + » est à côté de la première case du plan choisi.
 
 use eframe::egui::{vec2, Color32, Painter, Pos2, Rect, Stroke};
 
@@ -99,8 +98,8 @@ impl App {
     }
 
     /// La place du « + » à côté du cadre `r` (écran) : à droite, dessous, dessus, à gauche, puis dans le cadre ; la première où il tient dans la
-    /// vue sans mordre sur la vignette d'un autre plan (ni sur une autre case de ce plan que `ancre`).
-    fn plus_chercher(&self, layout: &BoardLayout, xf: Xf, view: Rect, r: Rect, plan: u64, ancre: usize) -> Option<Pos2> {
+    /// vue sans mordre sur une autre case que `ancre` (son image ni son empreinte).
+    fn plus_chercher(&self, layout: &BoardLayout, xf: Xf, view: Rect, r: Rect, ancre: usize) -> Option<Pos2> {
         let sur = view.shrink(RAYON_PRISE);
         let en_x = |x: f32| x.clamp(sur.left(), sur.right()).clamp(r.left().min(r.right() - 1.0), r.right());
         let en_y = |y: f32| y.clamp(sur.top(), sur.bottom()).clamp(r.top().min(r.bottom() - 1.0), r.bottom());
@@ -124,7 +123,8 @@ impl App {
             sur.contains(p)
                 && !sur_une_barre(p)
                 && !layout.cards.iter().enumerate().any(|(j, o)| {
-                    let cible = if o.plan != plan { o.foot } else if j == ancre || o.frame == 0 { return false } else { o.thumb };
+                    // (La case servie ne se gêne pas elle-même ; toutes les autres, du même plan ou non, gardent leur image et leur empreinte.)
+                    let cible = if j == ancre { return false } else { o.foot };
                     xf.rect(cible).distance_to_pos(p) < RAYON_VU + 1.0
                 })
         })
@@ -144,23 +144,17 @@ impl App {
     fn plus_calculer(&self, layout: &BoardLayout, xf: Xf, view: Rect, over: Option<Pos2>) -> Option<PlusPlace> {
         let (plan, survol) = self.plus_plan(layout, xf, over)?;
         let k0 = layout.cards.iter().position(|c| c.plan == plan && c.frame == 0)?;
-        // (Partie 142) Une case de continuité d'un plan qui bouge déjà, survolée : si elle porte son propre mouvement, ou peut en commencer
-        // un (la caméra y est à l'arrêt), le « + » est pour elle, à côté de son dernier cadre (ou d'elle) : B vers C, puis C vers D.
+        // (Partie 142, sa règle du 11 novembre au soir) **Le « + » sert la case survolée**, qu'elle soit la première du plan ou non, que le
+        // plan bouge déjà ou non : le mouvement naît sur elle, de sa première à sa dernière image ; il est à côté de son dernier cadre (ou
+        // d'elle). Si la caméra est en route sur cette case (un mouvement venu d'une autre case la traverse), il reste visible et le clic
+        // dit pourquoi rien ne se passe (`cam_ajouter_cadre_case`).
         let s = layout.cards[survol];
-        let pour_elle = s.plan == plan && s.frame > 0 && self.case_du_mouvement(s.panel, s.frame) > 0 && self.cam_possible(&s);
-        let (cadres, simple) = self.cadres_sur_la_planche(layout, if pour_elle { survol } else { k0 });
-        // Un plan qui ne bouge pas encore, survolé par une autre de ses cases : le « + » est à côté de cette case-là.
-        let autre_case = !pour_elle && simple && s.plan == plan && s.frame > 0;
-        let ancre = if autre_case || pour_elle { survol } else { k0 };
-        if !self.cam_possible(&layout.cards[ancre]) {
-            return None;
-        }
-        let dernier = if autre_case { vignettecam::coins_de(layout.cards[ancre].thumb) } else { *cadres.last()? };
+        let ancre = if s.plan == plan { survol } else { k0 };
+        let (cadres, _) = self.cadres_sur_la_planche(layout, ancre);
+        let dernier = *cadres.last()?;
         let boite = |q: &[Pos2; 4]| vignettecam::boite(&q.map(|p| xf.to_screen(p)));
-        // À côté du dernier cadre ; s'il n'est pas dans la vue, à côté de la case survolée.
-        let centre = self
-            .plus_chercher(layout, xf, view, boite(&dernier), plan, ancre)
-            .or_else(|| (survol != ancre).then(|| self.plus_chercher(layout, xf, view, xf.rect(layout.cards[survol].thumb), plan, ancre)).flatten())?;
+        // À côté du dernier cadre de la case.
+        let centre = self.plus_chercher(layout, xf, view, boite(&dernier), ancre)?;
         Some(PlusPlace { plan, survol, ancre, centre })
     }
 
@@ -187,8 +181,8 @@ impl App {
         }
         self.commit_note_text(layout);
         self.commit_card_note();
-        // (L'image où commence la case qui porte le mouvement que le « + » allonge : `case_du_mouvement`.)
-        let image = layout.cards.get(pl.ancre).map_or(0, |c| self.case_du_mouvement(c.panel, c.frame));
+        // (L'image où commence la case que le « + » sert : son mouvement naît ou s'allonge sur elle.)
+        let image = layout.cards.get(pl.ancre).map_or(0, |c| c.frame);
         self.vignettes.plus.geste = Some(PlusGeste { plan: pl.plan, ancre: pl.ancre, image, depart: pos, lance: false });
         self.vignettes.press = Press::Dead;
         true
