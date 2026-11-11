@@ -1693,8 +1693,47 @@ impl Document {
     /// C'est la caméra **montrée** : avec la postérisation temporelle du plan (`Panel::saccade`), elle ne change
     /// que toutes les N images ; tout ce qui montre ou exporte l'image passe par ici. Ce qui règle les clés
     /// (outil Caméra, pose d'une clé, réunion) lit la caméra douce : `panel_camera_douce`.
+    ///
+    /// **Plan en Espace 3D** (`Panel::espace`, `docs/ESPACE-LIBRE.md`) : la caméra qui **cadre** l'image est la caméra de
+    /// référence (au centre de la feuille, de face), parce que les cartes sont déjà posées comme la caméra du plan les voit
+    /// (`repere_du_plan`). Ce qui décrit ou règle la caméra du plan elle-même lit `panel_camera_reelle`.
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
+        if self.plan_en_espace(index) {
+            return self.default_camera();
+        }
         self.panel_camera_selon(index, frame, true, true)
+    }
+
+    /// La caméra du plan `index` à l'image `frame` telle qu'elle est dans l'espace (paliers et effet vivant compris), même
+    /// pour un plan en Espace 3D : pour ce qui la décrit (fiche, export de caméra, vue de dessus, tracé de son chemin).
+    /// Pour un plan ordinaire, c'est `panel_camera`.
+    pub fn panel_camera_reelle(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, true, true)
+    }
+
+    /// Le plan `index` est un plan en Espace 3D (`Panel::espace`).
+    pub fn plan_en_espace(&self, index: usize) -> bool {
+        self.panels.get(index).is_some_and(|p| p.espace)
+    }
+
+    /// Le changement de repère de la caméra du plan `index` à l'image `frame`, s'il en faut un : le plan est en Espace 3D
+    /// et sa caméra n'est pas la caméra de référence. Rien sinon : le plan se compose par le chemin de toujours (mêmes
+    /// pixels). Les deux constructeurs de plan le passent à `espace3d::place_dans`.
+    pub fn repere_du_plan(&self, index: usize, frame: usize) -> Option<crate::espace3dmath::M4> {
+        if !self.plan_en_espace(index) {
+            return None;
+        }
+        let cam = self.panel_camera_reelle(index, frame);
+        (cam != self.default_camera()).then(|| crate::espace3d::Monde::of(self).repere_camera(&cam))
+    }
+
+    /// Comme `repere_du_plan`, pour un plan rangé (une version qui n'est pas dans `panels`).
+    pub fn repere_du_plan_range(&self, p: &Panel, frame: usize) -> Option<crate::espace3dmath::M4> {
+        if !p.espace {
+            return None;
+        }
+        let cam = self.camera_reelle_du_plan_range(p, frame);
+        (cam != self.default_camera()).then(|| crate::espace3d::Monde::of(self).repere_camera(&cam))
     }
 
     /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la
@@ -1785,7 +1824,17 @@ impl Document {
 
     /// Caméra d'un plan rangé (une version qui n'est pas dans `panels`) à son image `frame` : ses propres clés,
     /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une, et son effet vivant).
+    ///
+    /// Plan en Espace 3D : la caméra de référence, comme `panel_camera` ; la sienne est `camera_reelle_du_plan_range`.
     pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
+        if p.espace {
+            return self.default_camera();
+        }
+        self.camera_reelle_du_plan_range(p, frame)
+    }
+
+    /// La caméra d'un plan rangé telle qu'elle est dans l'espace (voir `panel_camera_reelle`).
+    pub fn camera_reelle_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
         let default = self.default_camera();
         let base = |f: usize| camera::camera_at(&p.camera, f, default);
         let vivantes = p.effet_camera.and_then(|v| crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base));

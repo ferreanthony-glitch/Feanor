@@ -131,7 +131,7 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
         if s.per_frame || panel.effet_camera.is_some() {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {
-                let c = doc.panel_camera(p, f);
+                let c = doc.panel_camera_reelle(p, f);
                 frames_csv.push_str(&format!("{},{f},{},{},{},{},{},{},{},{}\n", csv_text(&name), start + f, c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan));
                 frames.push(frame_json(f, &c));
             }

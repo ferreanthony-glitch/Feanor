@@ -157,7 +157,7 @@ impl App {
     fn top_fit(&self, rect: Rect, items: &[Item]) -> Fit {
         let unit = self.doc.frame[0] as f32;
         let d_max = items.iter().map(|it| it.shown).fold(1.5_f32, f32::max) * 1.12;
-        let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
+        let cam = self.doc.panel_camera_reelle(self.cur_panel, self.cur_frame);
         let cam_x = cam.x - self.doc.stage_center().x;
         let [(a, _), (b, _)] = field_edges(cam_x, self.camera_advance(&cam), d_max, cam.zoom, cam.pan, unit);
         let (mut lo, mut hi) = (a.min(b).min(cam_x), a.max(b).max(cam_x));
@@ -296,7 +296,7 @@ impl App {
         let unit = fit.unit;
         let cx = self.doc.stage_center().x;
         let cone = |frame: usize| {
-            let cam = self.doc.panel_camera(self.cur_panel, frame);
+            let cam = self.doc.panel_camera_reelle(self.cur_panel, frame);
             let x = cam.x - cx;
             // La caméra avancée (travelling) est plus haut, plus près des calques ; le
             // panoramique tourne son champ.

@@ -1627,23 +1627,30 @@ impl App {
 
     /// Le calque courant est une carte inclinée (Espace 3D) : le monde, son placement, l'œil de la caméra. Il ne se pose
     /// plus par une affinité mais par une projection (`espace3d.rs`).
-    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3d::Xf, [f32; 3])> {
+    ///
+    /// Dans un plan en Espace 3D dont la caméra n'est pas la caméra de référence (`Document::repere_du_plan`), toute carte
+    /// est dans ce cas, même à plat : sa matrice est passée dans le repère de la caméra, et l'œil est celui de référence
+    /// (comme `espace3d::place_dans` la pose dans l'image). Un calque accroché à la caméra reste dans le cadre.
+    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
         let l = self.layer();
         let t = l.pose(self.cur_frame);
-        if !t.is_tilted() {
+        let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame).filter(|_| !l.accroche);
+        if !t.is_tilted() && repere.is_none() {
             return None;
         }
         let world = crate::espace3d::Monde::of(&self.doc);
         let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
-        let eye = world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame));
-        Some((world, xf, eye))
+        match repere {
+            Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
+            None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
+        }
     }
 
     /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre). Sur une carte inclinée, le
     /// regard de la caméra qui passe par ce point de la feuille traverse la carte au point où l'on peint.
     pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
-        if let Some((world, xf, eye)) = self.tilted_card() {
-            return world.sheet_to_card(eye, &xf, stage).unwrap_or(stage);
+        if let Some((world, mx, eye)) = self.tilted_card() {
+            return world.sheet_to_card_m(eye, &mx, stage).unwrap_or(stage);
         }
         if self.layer_seen().is_identity() {
             return stage;
@@ -1653,8 +1660,8 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
-        if let Some((world, xf, eye)) = self.tilted_card() {
-            let stage = world.card_to_sheet(eye, &xf, p).unwrap_or(p);
+        if let Some((world, mx, eye)) = self.tilted_card() {
+            let stage = world.card_to_sheet_m(eye, &mx, p).unwrap_or(p);
             return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
         }
         let stage = if self.layer_seen().is_identity() {
@@ -1812,6 +1819,8 @@ impl App {
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
         let world = crate::espace3d::Monde::of(&self.doc);
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : le changement de repère de sa caméra, comme les sorties (`render.rs`).
+        let repere = self.doc.repere_du_plan(self.cur_panel, frame);
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1839,7 +1848,7 @@ impl App {
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
             // (Carte inclinée de l'Espace 3D : posée par un maillage, `espace3d::place`.)
-            let Some(placed) = crate::espace3d::place(&world, layer, frame, &camera) else { continue };
+            let Some(placed) = crate::espace3d::place_dans(&world, layer, frame, &camera, repere.as_ref()) else { continue };
             let (transform, card_pre) = (placed.transform, placed.pre);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();

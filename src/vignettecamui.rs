@@ -139,7 +139,7 @@ impl App {
         if voisines.windows(2).any(|w| w[0].cam != w[1].cam) {
             return None;
         }
-        let depart = voisines.first().map_or_else(|| self.doc.panel_camera(pi, debut), |k| k.cam);
+        let depart = voisines.first().map_or_else(|| self.doc.panel_camera_reelle(pi, debut), |k| k.cam);
         let limite = keys.get(i1).map_or(plan, |k| k.frame);
         let (span, total) = (fin_case.saturating_sub(debut), limite.saturating_sub(debut));
         // (La lettre du cadre qu'elle tient : celle de la clé d'avant, A s'il n'y en a pas.)

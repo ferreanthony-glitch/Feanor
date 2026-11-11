@@ -827,13 +827,13 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
 /// Comme `panel_plan_at`, avec ou sans les calques d'annotation du plan : `annotations` vrai, ils sont posés par-dessus tout le reste.
 pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>, annotations: bool) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps, annotations)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations)
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
 /// vignette d'une carte de la pile des versions.
 pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps, false)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.repere_du_plan_range(panel, frame).as_ref(), doc.fps, false)
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
@@ -864,8 +864,8 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     Some(Plan { paper: None, items: griffon_item(&panel.layers, li, frame, &line).into_iter().chain(fond_item(l, &line)).chain([line]).collect() })
 }
 
-fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> Plan {
-    plan_with_camera_layers(world, panel, frame, paper, camera, fps, annotations).0
+fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> Plan {
+    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations).0
 }
 
 /// Les calques d'un plan que l'export des calques séparés (`exportlayers.rs`) écrit chacun à part, du plus bas au plus haut : ni dossier, ni
@@ -887,13 +887,13 @@ pub fn separable_layers(panel: &Panel, annotations: bool) -> Vec<usize> {
 pub fn panel_layer_plans(doc: &Document, index: usize, frame: usize, annotations: bool) -> Vec<(usize, Plan)> {
     let camera = doc.camera_seen(index, frame);
     let panel = &doc.panels[index];
-    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.fps, annotations);
+    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations);
     let keep = separable_layers(panel, annotations);
     ranges.into_iter().filter(|(li, r)| keep.contains(li) && !r.is_empty()).map(|(li, r)| (li, Plan { paper: None, items: plan.items[r].to_vec() })).collect()
 }
 
 /// Comme `plan_with_camera`, avec pour chaque calque traité (dans l'ordre de pose) la plage de ses éléments dans `Plan::items`.
-fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
+fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
     let mut items: Vec<PlanItem> = Vec::new();
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
@@ -912,7 +912,8 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
         }
         // Derrière la caméra : rien. Sinon l'affinité d'avant (carte à plat) ou le maillage d'une carte inclinée
         // de l'Espace 3D (`espace3d::place`).
-        let Some(placed) = crate::espace3d::place(world, l, frame, camera) else { continue };
+        // (Plan en Espace 3D : `repere`, le changement de repère de sa caméra ; sinon rien, le chemin de toujours.)
+        let Some(placed) = crate::espace3d::place_dans(world, l, frame, camera, repere) else { continue };
         // Couleur unie du calque (`couleurunie.rs`) : sous ses dessins, même s'il n'en a pas à cette image.
         items.extend(unie_item(l, (opacity * 255.0).round() as u8));
         // Calque vidéo (13k) : l'image de la vidéo qui tombe là.

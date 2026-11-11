@@ -250,6 +250,51 @@ fonction dit « ce que filme ce plan à cette image » (le `Plan` et la caméra 
 vignettes et l'export l'appellent tous. Essais : case cochée sans rien bouger = mêmes pixels ; processeur contre carte
 graphique ≤ 2 niveaux ; l'export compose la même image que l'écran ; vignette = composition ; parallaxe gardée.
 
+#### Fait (2026-11-11)
+
+**Cocher la case change maintenant l'image, dès que la caméra du plan n'est plus la caméra de référence.**
+
+- **Poser les cartes** : `espace3d::place_dans(…, repere)` ; `place` l'appelle sans repère (inchangé). Avec un repère,
+  chaque carte, à plat ou inclinée, est passée dans le repère de la caméra et posée par un maillage vu de l'œil de
+  référence. Les deux constructeurs de plan (`render::plan_with_camera_layers`, `App::build_plan_avec`) lui passent
+  `Document::repere_du_plan` (ou `repere_du_plan_range` pour la version rangée d'un plan).
+- **Cadrer** : plutôt qu'une fonction de plus à appeler dans une douzaine de fichiers, c'est `Document::panel_camera`
+  (« la caméra montrée : tout ce qui montre ou exporte passe par ici ») qui rend la caméra de référence pour un plan en
+  Espace 3D, et `camera_du_plan_range` de même. Tout ce qui filme (exports, lecture, vignettes, planche, comparaison,
+  image fixe) est donc juste sans y toucher, et le code à venir aussi. Ce qui **décrit** la caméra du plan lit
+  `panel_camera_reelle` : la fiche technique, l'export de caméra, la vue de dessus, le tracé du chemin de la caméra dans
+  l'Espace 3D, le point de départ d'un mouvement de caméra des Vignettes. Ce qui la **règle** (`panel_camera_douce`,
+  `current_camera`) n'a pas changé.
+- **L'écran** : `App::camera_montree` rend la caméra de référence (le cadre est au centre de la feuille, qui montre ce
+  que la caméra filme). L'outil Caméra du canevas ne tire plus le cadre dans un plan en Espace 3D : un message renvoie à
+  la vue Espace 3D. `set_current_camera` ne bride plus la caméra d'un plan en Espace 3D (`Camera::limited`).
+- **Le pinceau** (`App::to_layer`, `layer_to_screen`) passe par le repère : le trait tombe sur la carte, caméra tournée
+  (avancé de l'étape A5).
+- **Calque accroché à la caméra** : il ne reçoit pas le changement de repère, il reste dans le cadre.
+- **Garantie corrigée par rapport à la partie 4** : les pixels sont **identiques** quand la caméra du plan est la caméra
+  de référence (pas de repère, le chemin de toujours). Avec une autre caméra, restée dans les limites d'avant, l'image
+  a la **même géométrie** mais pas les mêmes pixels au bord des formes (une interpolation au lieu de deux) : 152 pixels
+  sur 57 600 dans l'essai.
+- **Essais** (`espace3d_tests.rs`, 6 de plus) : caméra qui cadre, caméra réelle et repère ; image gardée pour une caméra
+  dans les limites d'avant (moins de 1 % de pixels à plus de 48 niveaux) ; caméra passée derrière la feuille, qui voit
+  la carte de dos, en miroir, et quart de tour qui la sort du champ ; **l'export et un plan rangé composent la même image
+  que l'écran, pixel pour pixel**, caméra tournée de 55° ; calque accroché ; plan de l'écran = plan des sorties, pinceau
+  aller-retour à 0,05 px, caméra non bridée.
+- **Suite complète sur le Mac** : 4 422 passent, 87 échouent. Les 86 d'avant, plus
+  `horschamp_tests::a_stroke_outside_every_field…`, qui passe seul trois fois de suite (instable sous la charge de la
+  suite entière, sans rapport).
+- **Limites de A3, à lever ensuite** :
+  - l'ordre reste celui de la pile (A4) ;
+  - une carte ne montre que ce qui est dans la feuille : le dessin hors feuille (toile infinie) n'est pas filmé dans un
+    plan en Espace 3D dont la caméra a bougé ;
+  - les outils 2D (sélection, Transformer, gomme de débord, multisélection) posent leurs boîtes comme sous la caméra de
+    référence : justes seulement tant que la caméra n'a pas bougé ;
+  - les poignées de la vue Espace 3D gardent leur borne de bascule (±89°) ; les mouvements de caméra des Vignettes et la
+    vue de dessus ne sont pas encore désactivés pour ces plans (A8) ;
+  - processeur contre carte graphique : pas d'essai propre aux plans en Espace 3D (le chemin est celui des cartes
+    inclinées, déjà couvert) ;
+  - **rien n'a été regardé à l'écran**.
+
 ### A4. Ce qui est devant cache ce qui est derrière
 
 Pour un plan en Espace 3D, les éléments du plan sont ordonnés du plus loin au plus près de la caméra, à chaque image ; à

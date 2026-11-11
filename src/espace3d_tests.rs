@@ -1219,3 +1219,164 @@ fn a_card_behind_the_camera_has_no_mesh_and_the_xf_variants_are_the_matrix_ones(
     let s = w.card_to_sheet(eye, &xf, p).expect("devant");
     assert_eq!(w.sheet_to_card(eye, &xf, s), w.sheet_to_card_m(eye, &xf.matrix(), s));
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A3 : le rendu
+
+/// Un projet d'essai : cadre 320 × 180 sur une feuille 640 × 360, une carte par (couleur, rectangle sur la feuille, profondeur).
+fn doc_espace(cards: &[(Color32, [usize; 4], f32)]) -> Document {
+    let mut doc = Document::with_frame(320, 180, 24);
+    doc.panels[0].layers = Vec::new();
+    for (k, (color, r, depth)) in cards.iter().enumerate() {
+        let mut layer = Layer::new(format!("Carte {k}"), LayerKind::Bitmap);
+        let cel = doc.new_cel(LayerKind::Bitmap);
+        fill_rect(&mut doc, cel, r[0], r[1], r[2], r[3], *color);
+        layer.frames = vec![Some(cel); 12];
+        layer.depth = *depth;
+        doc.panels[0].layers.push(layer);
+    }
+    doc
+}
+
+/// L'image finale du plan 0 à l'image `frame`, par le chemin de toutes les sorties.
+fn filmee(doc: &Document, frame: usize) -> Vec<Color32> {
+    let plan = render::panel_plan_at(doc, 0, frame, None);
+    render::camera_image(doc, &plan, &doc.panel_camera(0, frame))
+}
+
+fn px(image: &[Color32], x: usize, y: usize) -> Color32 {
+    image[y * 320 + x]
+}
+
+fn rouge(c: Color32) -> bool {
+    c.a() > 200 && c.r() > 150 && c.g() < 80
+}
+
+#[test]
+fn a_plan_in_space_is_framed_by_the_reference_camera_and_keeps_its_own_camera_for_the_rest() {
+    let mut doc = doc_espace(&[(RED, [200, 100, 300, 200], 0.0)]);
+    let cam = Camera { x: 400.0, pan: 30.0, zoom: 1.5, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    // Plan ordinaire : rien ne change, la caméra qui cadre est la sienne.
+    assert_eq!(doc.panel_camera(0, 0), cam);
+    assert_eq!(doc.panel_camera_reelle(0, 0), cam);
+    assert!(doc.repere_du_plan(0, 0).is_none());
+    // Plan en Espace 3D : la caméra de référence cadre, la sienne reste lisible, et le repère existe.
+    doc.panels[0].espace = true;
+    assert_eq!(doc.panel_camera(0, 0), doc.default_camera());
+    assert_eq!(doc.panel_camera_reelle(0, 0), cam);
+    assert_eq!(doc.camera_seen(0, 0), CameraSeen::de(&doc.default_camera(), doc.stage_center(), doc.frame));
+    let repere = doc.repere_du_plan(0, 0).expect("un repère");
+    assert_eq!(repere, Monde::of(&doc).repere_camera(&cam));
+    // Sa caméra à la référence : pas de repère, le plan d'une image est celui d'un plan ordinaire (mêmes pixels).
+    doc.panels[0].camera.clear();
+    assert!(doc.repere_du_plan(0, 0).is_none());
+    let en_espace = render::panel_plan_at(&doc, 0, 0, None);
+    doc.panels[0].espace = false;
+    assert!(render::panel_plan_at(&doc, 0, 0, None) == en_espace);
+}
+
+#[test]
+fn checking_plan_in_space_keeps_the_image_of_a_camera_within_the_old_limits() {
+    let mut doc = doc_espace(&[(RED, [180, 90, 330, 220], 0.5), (GREEN, [330, 140, 470, 270], -0.2)]);
+    doc.panels[0].layers[1].transform = LayerTransform { tilt_y: -25.0, tilt_x: 8.0, ..pose(10.0, -6.0) };
+    let cam = Camera { x: 340.0, y: 170.0, zoom: 1.3, angle: 8.0, dolly: 20.0, tilt: 4.0, pan: -6.0 };
+    assert_eq!(cam.limited(doc.frame), cam);
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    let avant = filmee(&doc, 0);
+    doc.panels[0].espace = true;
+    let apres = filmee(&doc, 0);
+    let plein = apres.iter().filter(|c| c.a() > 200).count();
+    assert!(plein > 2000, "l'image n'est pas vide : {plein} pixels pleins");
+    // Même géométrie : seuls les bords des formes diffèrent (une seule interpolation au lieu de deux).
+    let ecart = |a: Color32, b: Color32| (0..4).map(|k| (a.to_array()[k] as i32 - b.to_array()[k] as i32).abs()).max().unwrap_or(0);
+    let differents = avant.iter().zip(&apres).filter(|(a, b)| ecart(**a, **b) > 48).count();
+    println!("plan en Espace 3D contre plan ordinaire, caméra dans les limites : {differents} pixels différents sur {} ({plein} pleins)", apres.len());
+    assert!(differents * 100 < apres.len(), "{differents} pixels diffèrent de plus de 48 niveaux : la géométrie n'est pas la même");
+}
+
+#[test]
+fn a_free_camera_films_the_back_of_a_card_mirrored() {
+    // Un rectangle rouge à droite du centre de la feuille (centre : 320, 180), sur une carte au plan z = 0.
+    let mut doc = doc_espace(&[(RED, [350, 150, 430, 210], 0.0)]);
+    doc.panels[0].espace = true;
+    let w = Monde::of(&doc);
+    // De face : il est à droite du centre de l'image (centre : 160, 90).
+    let face = filmee(&doc, 0);
+    assert!(rouge(px(&face, 230, 90)) && !rouge(px(&face, 90, 90)));
+    // La caméra passe derrière la feuille et se retourne : elle le voit de dos, donc à gauche.
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { dolly: w.d0_px * 2.0, pan: 180.0, ..doc.default_camera() })];
+    let dos = filmee(&doc, 0);
+    assert!(rouge(px(&dos, 90, 90)), "vu de dos, le rectangle est à gauche : {:?}", px(&dos, 90, 90));
+    assert!(!rouge(px(&dos, 230, 90)), "et plus à droite : {:?}", px(&dos, 230, 90));
+    // Un quart de tour sur place : la carte, qui était devant, sort du champ (35 mm : 54° de champ).
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { pan: 90.0, ..doc.default_camera() })];
+    assert!(filmee(&doc, 0).iter().all(|c| c.a() == 0), "la caméra tournée d'un quart de tour ne voit plus la carte");
+}
+
+#[test]
+fn the_export_and_a_stored_plan_compose_the_image_of_a_plan_in_space() {
+    use crate::exportrender::{self, Papier, Rendu};
+    let mut doc = doc_espace(&[(RED, [200, 100, 340, 230], 0.4), (GREEN, [300, 150, 460, 260], -0.3)]);
+    doc.panels[0].layers[1].transform = LayerTransform { tilt_x: 15.0, tilt_y: -25.0, ..Default::default() };
+    doc.panels[0].espace = true;
+    let start = Camera { x: 300.0, y: 170.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(5, Camera { x: 520.0, pan: -55.0, tilt: 12.0, dolly: 60.0, zoom: 0.8, ..start })];
+    let rendu = Rendu::new(exportrender::snapshot_of(&doc, &[0]), Papier::Fond, false, Vec::new(), Arc::default());
+    for f in [0usize, 2, 5] {
+        let plan = render::panel_plan_at(&doc, 0, f, doc.render_paper());
+        let want = render::camera_image(&doc, &plan, &doc.panel_camera(0, f));
+        let got = crate::fxcache::avec_privee(256 << 20, || rendu.image(0, f)).expect("image");
+        assert!(want.iter().any(|c| c.a() > 0), "l'image {f} n'est pas vide");
+        assert!(*got == want, "l'image {f} de l'export est celle de l'écran, pixel pour pixel");
+        // Un plan rangé (la version d'un plan) : même plan d'image, même caméra qui cadre.
+        let range = doc.panels[0].clone();
+        assert!(render::stored_panel_plan(&doc, &range, f, doc.render_paper()) == plan);
+        assert_eq!(doc.camera_du_plan_range(&range, f), doc.panel_camera(0, f));
+    }
+}
+
+#[test]
+fn a_layer_hooked_to_the_camera_stays_in_the_frame_of_a_plan_in_space() {
+    let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], 0.0)]);
+    doc.panels[0].espace = true;
+    doc.panels[0].layers[0].accroche = true;
+    let reference = filmee(&doc, 0);
+    assert!(rouge(px(&reference, 160, 90)));
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 500.0, pan: 70.0, tilt: -20.0, zoom: 2.0, ..doc.default_camera() })];
+    assert!(filmee(&doc, 0) == reference, "accroché à la caméra : la même image où que soit la caméra");
+}
+
+#[test]
+fn the_brush_and_the_camera_follow_a_plan_in_space_on_screen() {
+    let mut doc = doc_espace(&[(RED, [200, 100, 340, 230], 0.3)]);
+    doc.panels[0].espace = true;
+    let cam = Camera { x: 420.0, pan: 35.0, tilt: -10.0, zoom: 1.2, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    // Le plan de l'écran est celui des sorties.
+    assert!(b.app.build_plan_avec(0, false, false, false) == render::panel_plan_at(&b.app.doc, 0, 0, None));
+    // Le pinceau : un point de la carte va sur la feuille par le repère de la caméra, et le pinceau y retrouve ce point.
+    let w = b.app.e3_world();
+    let xf = w.card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0));
+    let mx = w.carte_dans_le_repere(&cam, &xf);
+    let mut seen = 0;
+    for p in [pos2(270.0, 165.0), pos2(210.0, 110.0), pos2(330.0, 220.0)] {
+        let Some(sheet) = w.card_to_sheet_m(w.eye_reference(), &mx, p) else { continue };
+        let back = b.app.to_layer(sheet);
+        assert!((back - p).length() < 0.05, "le pinceau peint en {back:?} au lieu de {p:?}");
+        seen += 1;
+    }
+    assert!(seen >= 2);
+    // L'écran montre le cadre de référence ; l'outil Caméra de la vue lit la vraie caméra.
+    assert_eq!(b.app.camera_montree(), b.app.doc.default_camera());
+    assert_eq!(b.app.current_camera(), cam);
+    // La caméra d'un plan en Espace 3D n'est pas bridée ; celle d'un plan ordinaire l'est toujours.
+    let libre = Camera { tilt: 85.0, pan: 170.0, ..cam };
+    b.app.set_current_camera(libre);
+    assert_eq!(b.app.current_camera(), libre);
+    b.app.doc.panels[0].espace = false;
+    b.app.set_current_camera(libre);
+    assert_eq!(b.app.current_camera(), libre.limited(b.app.doc.frame));
+    assert_ne!(b.app.current_camera(), libre);
+}

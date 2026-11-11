@@ -150,7 +150,13 @@ impl App {
     /// postérisation temporelle du plan (`Panel::saccade`), comme les exports et la lecture. Seul l'outil Caméra arrêté lit
     /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire. L'effet de caméra vivant du
     /// plan (partie 129), lui, se voit aussi avec l'outil Caméra : c'est là qu'on le règle.
+    ///
+    /// Plan en Espace 3D : la caméra de référence (`Document::panel_camera`), le cadre au centre de la feuille, puisque
+    /// la feuille montre déjà ce que la caméra du plan filme.
     pub(crate) fn camera_montree(&self) -> Camera {
+        if self.doc.plan_en_espace(self.cur_panel) {
+            return self.doc.default_camera();
+        }
         if self.tool == crate::app::Tool::Camera && !self.playing {
             self.doc.panel_camera_vivante(self.cur_panel, self.cur_frame)
         } else {
@@ -162,8 +168,9 @@ impl App {
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
     pub(crate) fn set_current_camera(&mut self, cam: Camera) {
-        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre.
-        let cam = cam.limited(self.doc.frame);
+        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre. Sauf dans un plan en
+        // Espace 3D (`docs/ESPACE-LIBRE.md`) : sa caméra est libre, elle n'a plus à voir la feuille.
+        let cam = if self.doc.plan_en_espace(self.cur_panel) { cam } else { cam.limited(self.doc.frame) };
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let keys = &mut self.doc.panels[self.cur_panel].camera;
         if keys.len() >= 2 {
@@ -258,6 +265,12 @@ impl App {
     pub(crate) fn camera_press(&mut self, p: Pos2, screen: Pos2) {
         self.end_stroke();
         self.playing = false;
+        // Plan en Espace 3D : la feuille montre ce que la caméra filme, le cadre y reste au centre. Sa caméra se règle
+        // dans la vue Espace 3D (outil Caméra de la vue) et par les champs de Réglages, pas en tirant le cadre ici.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            self.status = "Plan en Espace 3D : la caméra se règle dans la vue Espace 3D (bouton cube) ou par ses champs dans Réglages.".into();
+            return;
+        }
         let Some(handle) = self.camera_handle_at(screen) else {
             self.status = "Outil Caméra : glisser dans le cadre pour le déplacer, un coin pour zoomer, \
                            la poignée ronde pour tourner."

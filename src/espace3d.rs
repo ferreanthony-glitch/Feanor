@@ -475,6 +475,22 @@ pub struct Placed {
 ///
 /// Carte à plat : exactement `Layer::transform_seen_at` (les mêmes pixels qu'avant l'Espace 3D).
 pub fn place(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen) -> Option<Placed> {
+    place_dans(world, layer, frame, camera, None)
+}
+
+/// Comme `place`, pour un plan qui peut être un **plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A3) : `repere` est
+/// alors le changement de repère de sa caméra (`Document::repere_du_plan`), et `camera` la caméra de référence.
+///
+/// Sans repère (plan ordinaire, ou plan en Espace 3D dont la caméra est la caméra de référence) : exactement `place`.
+/// Avec : chaque carte, à plat ou inclinée, est passée dans le repère de la caméra et posée par un maillage, vue de l'œil
+/// de référence ; rien si elle est tout entière derrière la caméra. Un calque accroché à la caméra (`accroche.rs`) ne
+/// reçoit pas le changement de repère : sa pose se lit dans le cadre, il y reste.
+pub fn place_dans(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen, repere: Option<&m::M4>) -> Option<Placed> {
+    if let Some(repere) = repere.filter(|_| !layer.accroche) {
+        let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+        let warp = world.card_warp_m(world.eye_reference(), &m::mul(repere, &xf.matrix()))?;
+        return Some(Placed { transform: None, pre: Some(Pre { aff: Affine::IDENTITY, dims: None, warp: Some(Arc::new(warp)), card: true }) });
+    }
     let seen = layer.transform_seen_at(camera, frame)?;
     let t = layer.pose(frame);
     if !t.is_tilted() {

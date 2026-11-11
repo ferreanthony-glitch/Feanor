@@ -590,7 +590,7 @@ impl App {
         if self.doc.panels[self.cur_panel].camera.len() >= 2 {
             let world = self.e3_world();
             let n = self.frame_count().max(1);
-            let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera(self.cur_panel, f)))).collect();
+            let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera_reelle(self.cur_panel, f)))).collect();
             painter.add(Shape::line(pts, Stroke::new(1.0_f32, color.gamma_multiply(0.7))));
         }
         let corners = self.e3_camera_corners(cam, view);
