@@ -107,6 +107,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   depuis 15 h 35, fermé sans enregistrer pour reconstruire (il était prévenu). Exe principal reconstruit (`target\release\feanor.exe`,
   16 h 05) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas de version portable. Sa question
   ouverte : la clé sur les calques verrouillés. Le dossier de chantier `Chantiers\cle-masques` attend son accord pour être retiré.
+- Sa demande, capture à l'appui (la bande tirée très haut, à moitié vide) : « que la taille des calques dans la timeline s'adapte
+  aussi à la taille du panneau. La taille la plus grande reste la même mais quand il y a plus de place […] les calques les plus
+  proches du calque sélectionné prennent aussi la taille la plus grande », puis « il faut que ce soit toujours le plus confortable
+  possible à utiliser ». Codé (partie 140, branche `calques-place`, chantier `Chantiers\calques-place`) : quand la bande est plus
+  haute que ses pistes, les calques grandissent un à un autour du calque actif (le dessus, le dessous, puis les suivants) tant
+  qu'il reste de la place ; dans « Trois calques », les deux voisins ; pas assez de place : rien ne grandit, la bande défile comme
+  avant. Une case dans Préférences > Montage, allumée d'office (éteinte dans les essais). Captures sur une copie fraîche de son
+  projet, regardées et envoyées. Vérificateur sur la branche : 4 478 essais réussis, 0 échec, aucun avertissement. Exe de la
+  branche (16 h 27) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Son « Fusionne directement »
+  est arrivé pendant le vérificateur : fusion dans main à suivre. Limite dite : deux hauteurs seulement (grande ou en bande).
 
 ## 2026-11-10
 

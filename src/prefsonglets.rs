@@ -267,6 +267,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Montage, G::Pistes, "montage.repliage", "Calques dans la timeline", "trois toute pile calques actif fenêtre voisins bande replier cacher dossiers autres"),
     r(O::Montage, G::Pistes, "montage.hauteur_plans", "Hauteur des plans", "plans moyenne bandeau vignette épaisseur hauteur rangée"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique toute pile"),
+    r(O::Montage, G::Pistes, "montage.calques_grands", "Agrandir les calques proches quand il y a de la place", "hauteur taille timeline panneau voisins confortable grand remplir"),
     r(O::Montage, G::PlansNeufs, "montage.duree_nouveau_plan", "Durée d'un nouveau plan", "secondes images deux défaut créer plan neuf long court"),
     r(O::Montage, G::PlansNeufs, "montage.numerotation_neufs", "Verrouiller la numérotation des projets neufs", "numéro plan 2A insérer renuméroter studio verrou nouveau projet"),
     r(O::Montage, G::Pistes, "montage.hauteur_pistes", "Hauteur des pistes son", "petite moyenne grande taille piste son boutons M S défilement"),

@@ -952,6 +952,9 @@ mod calques_timeline_tests;
 // Glisser des calques dans un dossier (partie 139) : `folders::poser`, `layerheads::cible_du_glisse`.
 #[cfg(test)]
 mod dossierglisser_tests;
+// Les calques de la timeline prennent la place du panneau (partie 140) : `pistes::agrandir`.
+#[cfg(test)]
+mod calquesplace_tests;
 mod clesplan;
 #[cfg(test)]
 mod timeline_repliee_tests;

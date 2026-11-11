@@ -615,4 +615,20 @@ fn calques_timeline_captures() {
         }
         None => println!("CALQUES pas de carte graphique : 5-panneau-calques ignorée"),
     }
+    // Les calques prennent la place du panneau (partie 140) : dans l'espace Montage, où la bande est haute ; l'écran entier.
+    b.app.set_espace(Espace::Montage);
+    b.app.settings.montage_grands = true;
+    for (mode, nom) in [(Pile::Toute, "6-place-toute-la-pile"), (Pile::Trois, "7-place-trois-calques")] {
+        b.app.settings.montage_pile = mode;
+        b.chauffer(16);
+        match b.capturer() {
+            Some(rgba) => {
+                let img = image::RgbaImage::from_raw(1920, 1080, rgba).expect("image");
+                img.save(dossier.join(format!("calques-{origine}-{nom}.png"))).expect("png");
+                let (contenu, vue) = crate::montagehauteur::DEFILEMENT.with(|c| c.get());
+                println!("CALQUES {nom} : contenu {contenu} points dans {vue}");
+            }
+            None => println!("CALQUES pas de carte graphique : {nom} ignorée"),
+        }
+    }
 }

@@ -315,6 +315,39 @@ pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: us
     out
 }
 
+/// Quand la bande a plus de place que ses pistes n'en prennent, les calques les plus proches du calque actif prennent aussi la grande
+/// hauteur (`LAYER_H`, qui reste la plus grande) : celui du dessus, celui du dessous, puis les suivants, tant qu'il reste de la place
+/// (Anthony, 2026-11-11 : « quand il y a plus de place pour afficher les calques, les calques les plus proches du calque sélectionné
+/// prennent aussi la taille la plus grande », « il faut que ce soit toujours le plus confortable possible »). `place` : la hauteur
+/// offerte aux pistes de calques. Les lignes de dossier et les fines bandes gardent leur hauteur ; dans « Trois calques », ce sont
+/// donc les deux voisins qui grandissent. Sans calque actif déplié (replié à la main), rien ne grandit. Les hauts sont recalculés.
+pub(crate) fn agrandir(lanes: &mut [Lane], place: f32) {
+    let calques: Vec<usize> = (0..lanes.len()).filter(|&i| lanes[i].sorte == Sorte::Calque).collect();
+    let Some(centre) = calques.iter().position(|&i| !lanes[i].folded) else { return };
+    let mut reste = place - lanes.iter().map(|l| l.h).sum::<f32>();
+    // Du plus proche au plus loin, le dessus avant le dessous ; le premier qui ne tient pas arrête tout (les grands calques restent
+    // d'un seul tenant autour du calque actif).
+    let proches = (1..calques.len()).flat_map(|d| [centre.checked_sub(d), Some(centre + d).filter(|&k| k < calques.len())]).flatten();
+    for k in proches {
+        let l = &mut lanes[calques[k]];
+        if !l.folded {
+            continue;
+        }
+        let gain = LAYER_H - l.h;
+        if gain > reste {
+            break;
+        }
+        reste -= gain;
+        l.h = LAYER_H;
+        l.folded = false;
+    }
+    let mut top = 0.0;
+    for l in lanes.iter_mut() {
+        l.top = top;
+        top += l.h;
+    }
+}
+
 /// « Trois calques » : la fine bande du dessus, le voisin du dessus, la ligne d'un dossier s'il y en a une entre lui et le calque
 /// actif, le calque actif, puis la même chose en miroir. Rien si le plan courant n'a aucun calque à montrer.
 fn fenetre(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen) -> Option<Vec<Lane>> {
@@ -802,6 +835,19 @@ impl App {
         let resp = ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Dans « Toute la pile », seul le calque actif est déplié ; les autres sont en bandes. « Trois calques » montre toujours le calque actif au milieu.");
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
+        }
+        // Les calques proches du calque actif prennent la grande hauteur quand la bande a de la place (`agrandir`).
+        let mut grands = self.settings.montage_grands;
+        let resp = ui
+            .checkbox(&mut grands, "Agrandir les calques proches quand il y a de la place")
+            .on_hover_text("Quand la timeline est plus haute que ses pistes, les calques les plus proches du calque actif prennent aussi la grande hauteur, tant qu'il reste de la place. La grande hauteur ne change pas.");
+        if resp.clicked() {
+            self.settings.montage_grands = grands;
+            if let Err(e) = self.settings.save() {
+                self.status = format!("Réglages non enregistrés : {e}");
+            } else {
+                self.status = if grands { "Les calques proches du calque actif grandissent quand la timeline a de la place." } else { "Seul le calque actif est grand dans la timeline." }.into();
+            }
         }
         self.hauteur_pistes_pref_ui(ui);
     }
