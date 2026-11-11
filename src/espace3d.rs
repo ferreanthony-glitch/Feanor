@@ -183,6 +183,25 @@ pub fn is_card(layer: &Layer) -> bool {
     !layer.folder && layer.effet.is_none()
 }
 
+/// Une surface à dessiner qu'on pose d'un geste dans un plan en Espace 3D (`Monde::surface_xf`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Surface {
+    Face,
+    Sol,
+    Mur,
+}
+
+impl Surface {
+    /// Le nom du calque créé et de l'étape d'annulation.
+    pub fn nom(self) -> &'static str {
+        match self {
+            Surface::Face => "Surface face à la caméra",
+            Surface::Sol => "Surface au sol",
+            Surface::Mur => "Surface en mur",
+        }
+    }
+}
+
 /// Les dimensions du monde d'un plan : la feuille, le cadre, et l'échelle qui lie les pixels aux mètres.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Monde {
@@ -315,6 +334,69 @@ impl Monde {
         Some(pos2(s.x - self.stage[0] / 2.0 + self.frame[0] as f32 / 2.0, s.y - self.stage[1] / 2.0 + self.frame[1] as f32 / 2.0))
     }
 
+    // ------------------------------------------------------------------------------ plan en Espace 3D : poser une surface
+
+    /// La hauteur du **sol** d'un plan en Espace 3D : le bas du cadre de la caméra de référence, sur la feuille. La caméra
+    /// de référence est donc à mi-hauteur du cadre au-dessus du sol, et une surface au sol se voit dès qu'on la pose.
+    pub fn sol_y(&self) -> f32 {
+        -(self.frame[1] as f32 * self.k) / 2.0
+    }
+
+    /// Le plus près de la caméra de référence qu'une carte peut être posée (mètres le long de Z) : la profondeur d'un
+    /// calque s'arrête à `Layer::MIN_DEPTH`, sa taille en dépend. Au-delà (derrière la caméra de référence), pas de carte.
+    pub fn z_max(&self) -> f32 {
+        -self.d0 * Layer::MIN_DEPTH
+    }
+
+    /// Le placement d'une **surface à dessiner** neuve pour la caméra `cam` (prise telle quelle), à `distance` mètres
+    /// (`docs/ESPACE-LIBRE.md`, étape A6). Elle a la taille de la feuille à l'échelle où un pixel de son dessin fait un
+    /// pixel de l'image à cette distance : posée face à la caméra, le cadre tombe en son centre, avec la marge de la
+    /// feuille autour.
+    ///
+    /// - `Face` : face à la caméra, sur son axe, à `distance` ; elle suit sa bascule et sa rotation.
+    /// - `Sol` : couchée au sol (`sol_y`), devant la caméra à `distance` à l'horizontale, son haut vers le fond.
+    /// - `Mur` : debout sur le sol, face à la caméra à l'horizontale (sans sa bascule), à `distance`.
+    ///
+    /// Rien si la surface tomberait derrière la caméra de référence (`z_max`) : une carte ne peut pas y être.
+    pub fn surface_xf(&self, cam: &Camera, sorte: Surface, distance: f32) -> Option<Xf> {
+        let distance = if distance.is_finite() { distance.clamp(self.d0 * 0.05, self.d0 * 200.0) } else { self.d0 };
+        let eye = self.eye(cam);
+        let (sr, cr) = cam.angle.to_radians().sin_cos();
+        let (st, ct) = cam.tilt.to_radians().sin_cos();
+        let (sp, cp) = cam.pan.to_radians().sin_cos();
+        // Les axes de la caméra (voir `repere_camera`) et sa direction à l'horizontale.
+        let right = [cp, 0.0, sp];
+        let up = [-sp * st, ct, cp * st];
+        let back = [-sp * ct, -st, cp * ct];
+        let fond = [sp, 0.0, -cp];
+        // La largeur du cadre à cette distance, puis celle de la feuille à la même échelle.
+        let cadre = PLATE_WIDTH_M * (distance / self.d0) / cam.zoom.max(0.01);
+        let w = cadre * self.stage[0] / self.frame[0].max(1) as f32;
+        let h = w * self.stage[1] / self.stage[0].max(1.0);
+        let devant = m::add([eye[0], self.sol_y(), eye[2]], m::scale(fond, distance));
+        let (pos, x, y, z) = match sorte {
+            Surface::Face => (
+                m::add(eye, m::scale(back, -distance)),
+                m::add(m::scale(right, cr), m::scale(up, -sr)),
+                m::add(m::scale(right, sr), m::scale(up, cr)),
+                back,
+            ),
+            Surface::Sol => (devant, right, fond, [0.0, 1.0, 0.0]),
+            Surface::Mur => (m::add(devant, [0.0, h / 2.0, 0.0]), right, [0.0, 1.0, 0.0], m::scale(fond, -1.0)),
+        };
+        if !(pos[2] < self.z_max() - 1e-3) {
+            return None;
+        }
+        #[rustfmt::skip]
+        let axes: m::M4 = [
+            x[0], x[1], x[2], 0.0,
+            y[0], y[1], y[2], 0.0,
+            z[0], z[1], z[2], 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ];
+        Some(Xf { pos, rot: m::euler_of(&axes), size: [w, h, 1.0] })
+    }
+
     // ------------------------------------------------------------------------------ cartes
 
     /// Le placement 3D d'une carte : `t` sa pose, `depth` sa profondeur totale (`Layer::depth_at`).
@@ -335,6 +417,17 @@ impl Monde {
     /// Taille : le placement garde la taille que la carte a dans le monde (elle rapetisse si on la recule). Si les deux
     /// axes ont changé du même rapport, c'est l'échelle uniforme qui bouge ; sinon, les étirements.
     pub fn card_from_xf(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf) -> (LayerTransform, f32) {
+        self.card_from_xf_selon(prev, prev_depth, xf, false)
+    }
+
+    /// Comme `card_from_xf`, pour une carte d'un plan en Espace 3D : l'inclinaison va jusqu'au demi-tour
+    /// (`MAX_TILT_LIBRE`), la carte se couche au sol ou se tourne face à la caméra où qu'elle regarde.
+    pub fn card_from_xf_libre(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf) -> (LayerTransform, f32) {
+        self.card_from_xf_selon(prev, prev_depth, xf, true)
+    }
+
+    fn card_from_xf_selon(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf, libre: bool) -> (LayerTransform, f32) {
+        let borne = if libre { LayerTransform::clamp_tilt_libre } else { LayerTransform::clamp_tilt };
         let d = (-xf.pos[2] / self.d0).max(Layer::MIN_DEPTH);
         let s = 1.0 + d;
         let s0 = 1.0 + prev_depth.max(Layer::MIN_DEPTH);
@@ -358,8 +451,8 @@ impl Monde {
             angle: -xf.rot[2],
             stretch_x,
             stretch_y,
-            tilt_x: LayerTransform::clamp_tilt(xf.rot[0]),
-            tilt_y: LayerTransform::clamp_tilt(xf.rot[1]),
+            tilt_x: borne(xf.rot[0]),
+            tilt_y: borne(xf.rot[1]),
             dz: prev.dz,
         };
         (t, d)
@@ -368,9 +461,18 @@ impl Monde {
     /// Pose la carte `xf` sur `layer` à l'image `frame` : sa clé de cette image (créée au besoin) s'il est animé, sa
     /// pose fixe et sa profondeur sinon.
     pub fn apply_card_xf(&self, layer: &mut Layer, frame: usize, xf: &Xf) {
+        self.apply_card_xf_selon(layer, frame, xf, false)
+    }
+
+    /// Comme `apply_card_xf`, pour une carte d'un plan en Espace 3D (inclinaison libre, `card_from_xf_libre`).
+    pub fn apply_card_xf_libre(&self, layer: &mut Layer, frame: usize, xf: &Xf) {
+        self.apply_card_xf_selon(layer, frame, xf, true)
+    }
+
+    fn apply_card_xf_selon(&self, layer: &mut Layer, frame: usize, xf: &Xf, libre: bool) {
         let t0 = layer.pose(frame);
         let d0 = layer.depth_at(frame);
-        let (mut t, d) = self.card_from_xf(&t0, d0, xf);
+        let (mut t, d) = self.card_from_xf_selon(&t0, d0, xf, libre);
         t.dz = d - layer.depth;
         layer.set_pose(frame, t);
     }

@@ -265,6 +265,10 @@ impl Default for LayerTransform {
 
 /// Inclinaison la plus grande d'une carte (au-delà, elle est vue par la tranche).
 pub const MAX_TILT: f32 = 85.0;
+/// Inclinaison la plus grande d'une carte d'un **plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A6) : un demi-tour.
+/// Une carte s'y couche au sol (90°) et se tourne face à une caméra qui regarde n'importe où. C'est aussi la borne de ce
+/// qui se lit d'un fichier : un plan ordinaire n'écrit jamais plus de `MAX_TILT`.
+pub const MAX_TILT_LIBRE: f32 = 180.0;
 
 impl LayerTransform {
     pub fn is_identity(&self) -> bool {
@@ -279,6 +283,11 @@ impl LayerTransform {
     /// Une inclinaison ramenée entre −`MAX_TILT` et `MAX_TILT` (une valeur abîmée : 0).
     pub fn clamp_tilt(v: f32) -> f32 {
         if v.is_finite() { v.clamp(-MAX_TILT, MAX_TILT) } else { 0.0 }
+    }
+
+    /// Une inclinaison d'un plan en Espace 3D, ou lue d'un fichier : entre −`MAX_TILT_LIBRE` et `MAX_TILT_LIBRE`.
+    pub fn clamp_tilt_libre(v: f32) -> f32 {
+        if v.is_finite() { v.clamp(-MAX_TILT_LIBRE, MAX_TILT_LIBRE) } else { 0.0 }
     }
 
     /// Un étirement ramené entre 1 % et 100 fois, son signe gardé (négatif : calque retourné).

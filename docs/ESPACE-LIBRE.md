@@ -385,6 +385,41 @@ Trois commandes, chacune crée un calque et le choisit, en une étape d'annulati
 à la caméra, verticale, posée au sol). Inclinaison libre jusqu'à 90°. Bulles, palette, `keymap.toml` sans touche par
 défaut. Essais : la surface face à la caméra remplit le cadre ; le sol passe par y = sol ; annulation.
 
+#### Fait (2026-11-12)
+
+- **Trois commandes**, chacune un calque neuf en une étape d'annulation : `espace3d.surface_face`, `espace3d.surface_sol`,
+  `espace3d.surface_mur` (`App::espace3d_nouvelle_surface`). Le calque est créé juste au-dessus du calque courant, du
+  même genre que lui (vectoriel ou bitmap), il devient le calque courant et la carte choisie. Noms : « Surface face à la
+  caméra », « Surface au sol », « Surface en mur », numérotés s'il y en a déjà. Refusé hors d'un plan en Espace 3D (le
+  message dit de cocher la case) et storyboard verrouillé.
+- **Où elles se posent** (`Monde::surface_xf`, la caméra réelle du plan à l'image courante) : face à la caméra, sur son
+  axe, avec sa bascule et sa rotation ; au sol, devant elle à l'horizontale, le haut de la carte vers le fond ; en mur,
+  debout sur le sol, de face à l'horizontale. **Taille** : celle de la feuille, à l'échelle où un pixel du dessin fait
+  un pixel de l'image à cette distance : de face, le cadre tombe en son centre avec la marge de la feuille autour.
+- **La distance** : un champ en mètres à côté des trois boutons (Réglages de l'Espace 3D, montrés seulement dans un plan
+  en Espace 3D) ; par défaut la distance d'origine de la caméra, celle de la feuille.
+- **Le sol** (`Monde::sol_y`) : le bas du cadre de la caméra de référence. Le quadrillage de la vue Espace 3D est tracé
+  à cette hauteur pour un plan en Espace 3D (il reste à la hauteur du centre de la feuille pour un plan ordinaire).
+- **L'inclinaison est libre dans un plan en Espace 3D** : jusqu'au demi-tour (`MAX_TILT_LIBRE`, `clamp_tilt_libre`,
+  `card_from_xf_libre`, `apply_card_xf_libre`) pour les surfaces, les poignées et les champs de Réglages. Un plan
+  ordinaire garde ±85°. Ce qui se lit d'un fichier (pose, clés de position) est borné au demi-tour : un plan ordinaire
+  n'écrit jamais plus de 85°, rien ne change pour lui.
+- **Limite trouvée** : une carte ne peut pas être derrière la caméra d'origine du plan. La profondeur d'un calque
+  s'arrête à −0,9 (`Layer::MIN_DEPTH`) et sa taille en dépend : la scène se construit dans le demi-espace devant la
+  caméra de référence. La caméra, elle, va partout. Une surface qui tomberait derrière est refusée, avec un message.
+  Lever cette limite demande de séparer la taille d'une carte de sa profondeur : à voir avec l'étape B.
+- **Essais** (`espace3d_tests.rs`, 5 de plus) : de face à la caméra de référence, la surface est la feuille ; **le cadre
+  d'une caméra tournée (35°, −50° avec zoom et rotation, 120° passée derrière la feuille) tombe aux quatre coins prévus
+  de la surface, à 0,3 px** ; au sol : quatre coins à la hauteur du sol, couchée à 90°, haut vers le fond ; en mur :
+  pied au sol, verticale, de face ; la commande (refus, calque courant, noms, annulation, **pinceau sur le sol à 90°**,
+  enregistrement qui garde les 90°) ; borne à 85° dans un plan ordinaire, libre dans un plan en Espace 3D.
+- **Suite complète sur le Mac** : 4 436 passent, 86 échouent, les 86 du Mac, deux passes de suite. (Une première passe
+  a compté un échec de plus, `enregistrement_tests::the_application_is_idle_again…`, un essai de minutage qui passe seul
+  et avec la famille Espace 3D en parallèle.)
+- **Pas fait** : les trois commandes n'ont pas de touche ; pas d'entrée dans le menu des calques ; les poignées près de
+  ±90° peuvent sauter (angles d'Euler, `ESPACE3D.md` 11.5) ; **rien n'a été regardé à l'écran**, les trois icônes
+  (cadre, alignement bas, mur) comprises.
+
 ### A7. La vue Espace 3D
 
 Pour un plan en Espace 3D : cartes tracées du plus loin au plus près de l'œil de la vue ; poignées de la caméra sans les

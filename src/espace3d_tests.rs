@@ -1645,3 +1645,163 @@ fn the_brush_cursor_has_the_size_of_the_stroke_it_will_leave_on_a_far_card() {
     b.app.doc.panels[0].camera = vec![CameraKey::new(0, Camera { zoom: 2.0, ..cam })];
     assert!((b.app.layer_zoom() / z0 - 1.0).abs() < 0.01);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A6 : poser une surface
+
+use crate::espace3d::Surface;
+
+/// Un calque neuf posé par `xf` (inclinaison libre), et son placement relu de ses champs : le chemin complet d'une surface.
+fn carte_posee(w: &Monde, xf: &Xf) -> (Layer, Xf) {
+    let mut l = Layer::new("Surface", LayerKind::Bitmap);
+    w.apply_card_xf_libre(&mut l, 0, xf);
+    let relu = w.card_xf(&l.pose(0), l.depth_at(0));
+    (l, relu)
+}
+
+#[test]
+fn a_surface_facing_the_reference_camera_is_an_ordinary_layer_on_the_sheet() {
+    let w = monde_a2();
+    let xf = w.surface_xf(&w.camera_reference(), Surface::Face, w.d0).expect("devant");
+    let (l, relu) = carte_posee(&w, &xf);
+    // À la distance de référence, face à la caméra de référence : c'est la feuille elle-même.
+    let t = l.pose(0);
+    assert!(t.x.abs() < 1e-3 && t.y.abs() < 1e-3 && (t.scale - 1.0).abs() < 1e-4 && t.angle.abs() < 1e-3, "{t:?}");
+    assert!(t.tilt_x.abs() < 1e-3 && t.tilt_y.abs() < 1e-3 && l.depth_at(0).abs() < 1e-4);
+    assert!((relu.size[0] - 640.0 * w.k).abs() < 1e-3 && (relu.size[1] - 360.0 * w.k).abs() < 1e-3);
+    // Deux fois plus loin : deux fois plus grande, et vue pareil.
+    let loin = w.surface_xf(&w.camera_reference(), Surface::Face, w.d0 * 2.0).expect("devant");
+    assert!((loin.size[0] - 2.0 * xf.size[0]).abs() < 1e-3 && (loin.pos[2] + w.d0).abs() < 1e-3);
+}
+
+#[test]
+fn a_surface_facing_a_turned_camera_fills_its_frame_whatever_the_camera_does() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    let cams = [
+        Camera { x: 420.0, pan: 35.0, tilt: -12.0, ..base },
+        Camera { zoom: 1.6, angle: 20.0, tilt: 25.0, pan: -50.0, ..base },
+        // Avancée au-delà de la feuille et tournée de 120° : la surface lui fait face, inclinée de plus de 85° pour la feuille.
+        Camera { dolly: w.d0_px * 1.5, pan: 120.0, ..base },
+    ];
+    for cam in &cams {
+        let distance = w.d0 * 0.6;
+        let xf = w.surface_xf(cam, Surface::Face, distance).expect("devant la caméra d'origine");
+        let (l, relu) = carte_posee(&w, &xf);
+        // Le centre de la surface est au centre de l'image, et le cadre (320 × 180 au centre de son dessin) aux coins de l'image.
+        let mx = relu.matrix();
+        let image = |px: f32, py: f32| w.to_frame(cam, m::point(&mx, [px / 640.0 - 0.5, -(py / 360.0 - 0.5), 0.0])).expect("devant la caméra");
+        for (carte, attendu) in [((320.0, 180.0), (160.0, 90.0)), ((160.0, 90.0), (0.0, 0.0)), ((480.0, 90.0), (320.0, 0.0)), ((480.0, 270.0), (320.0, 180.0)), ((160.0, 270.0), (0.0, 180.0))] {
+            let p = image(carte.0, carte.1);
+            assert!((p - pos2(attendu.0, attendu.1)).length() < 0.3, "caméra {cam:?} : le point {carte:?} de la surface tombe en {p:?}, pas en {attendu:?}");
+        }
+        if cam.pan.abs() > 90.0 {
+            assert!(l.pose(0).tilt_y.abs() > 85.0, "l'inclinaison passe la borne des plans ordinaires : {:?}", l.pose(0));
+        }
+    }
+    // Derrière la caméra d'origine du plan : pas de carte possible, pas de surface.
+    assert!(w.surface_xf(&Camera { pan: 180.0, ..base }, Surface::Face, w.d0).is_none());
+    assert!(w.surface_xf(&Camera { pan: 180.0, ..base }, Surface::Mur, w.d0).is_none());
+}
+
+#[test]
+fn a_surface_on_the_ground_lies_flat_and_a_wall_stands_on_it() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    for cam in [base, Camera { x: 380.0, pan: 30.0, tilt: -10.0, angle: 15.0, ..base }] {
+        let d = w.d0 * 0.7;
+        let eye = w.eye(&cam);
+        let (sp, cp) = cam.pan.to_radians().sin_cos();
+        let fond = [sp, 0.0, -cp];
+        // Au sol : les quatre coins à la hauteur du sol, le centre devant la caméra, le haut de la carte vers le fond.
+        let (l, sol) = carte_posee(&w, &w.surface_xf(&cam, Surface::Sol, d).expect("devant"));
+        let coins = w.card_corners(&sol);
+        assert!(coins.iter().all(|c| (c[1] - w.sol_y()).abs() < 2e-3), "{coins:?} contre le sol {}", w.sol_y());
+        assert!((l.pose(0).tilt_x.abs() - 90.0).abs() < 1e-2, "couchée à 90° : {:?}", l.pose(0));
+        let centre = m::add([eye[0], w.sol_y(), eye[2]], m::scale(fond, d));
+        assert!(m::length(m::sub(sol.pos, centre)) < 2e-3);
+        let haut = m::sub(m::scale(m::add(coins[0], coins[1]), 0.5), sol.pos);
+        assert!(m::dot(m::normalize(haut), fond) > 0.999, "le haut de la carte part vers le fond");
+        // La caméra la voit : sous le centre de l'image.
+        let vu = w.to_frame(&Camera { tilt: cam.tilt.min(-10.0), ..cam }, sol.pos).expect("devant");
+        assert!(vu.y > 90.0, "{vu:?}");
+        // En mur : debout sur le sol, de face à l'horizontale.
+        let (_, mur) = carte_posee(&w, &w.surface_xf(&cam, Surface::Mur, d).expect("devant"));
+        let c = w.card_corners(&mur);
+        assert!((c[2][1] - w.sol_y()).abs() < 2e-3 && (c[3][1] - w.sol_y()).abs() < 2e-3, "le bas du mur est au sol : {c:?}");
+        assert!((c[0][1] - w.sol_y() - mur.size[1]).abs() < 2e-3 && (c[0][1] - c[1][1]).abs() < 2e-3, "il est vertical : {c:?}");
+        let normale = m::normalize(m::cross(m::sub(c[1], c[0]), m::sub(c[3], c[0])));
+        assert!(m::dot(normale, fond).abs() > 0.999, "il fait face à la caméra, à l'horizontale");
+    }
+}
+
+#[test]
+fn the_new_surface_command_adds_the_current_layer_in_one_undo_step_and_survives_a_save() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { tilt: -15.0, y: 100.0, ..doc.default_camera() })];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    // Hors d'un plan en Espace 3D : refusé, avec la marche à suivre.
+    b.app.run_action("espace3d.surface_sol");
+    assert_eq!(b.app.layers().len(), 1);
+    assert!(b.app.status.contains("Plan en Espace 3D"), "{}", b.app.status);
+    // Dans un plan en Espace 3D : un calque de plus, juste au-dessus, du même genre, courant et choisi.
+    b.app.run_action("espace3d.plan_en_espace");
+    b.app.run_action("espace3d.surface_sol");
+    assert_eq!(b.app.layers().len(), 2);
+    assert_eq!(b.app.cur_layer, 1);
+    assert_eq!(b.app.layer().name, "Surface au sol");
+    assert_eq!(b.app.layer().kind, LayerKind::Bitmap);
+    assert!((b.app.layer().pose(0).tilt_x.abs() - 90.0).abs() < 1e-2);
+    assert_eq!(b.app.espace3d.sel, vec![espace3d::card_selection(b.app.layer().id)]);
+    // On dessine dessus tout de suite : le pinceau y retrouve son point, à 90°.
+    let w = b.app.e3_world();
+    let cam = b.app.current_camera();
+    let mx = w.carte_dans_le_repere(&cam, &w.card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)));
+    let p = pos2(320.0, 250.0);
+    let feuille = w.card_to_sheet_m(w.eye_reference(), &mx, p).expect("la caméra voit le sol devant elle");
+    let back = b.app.to_layer_opt(feuille).expect("le regard touche le sol");
+    assert!((back - p).length() < 0.05, "{back:?}");
+    // Une deuxième, puis un mur et une surface de face : chacune son nom.
+    b.app.run_action("espace3d.surface_sol");
+    b.app.run_action("espace3d.surface_mur");
+    b.app.run_action("espace3d.surface_face");
+    let noms: Vec<&str> = b.app.layers().iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(noms, vec!["Carte 0", "Surface au sol", "Surface au sol 2", "Surface en mur", "Surface face à la caméra"]);
+    // Une étape d'annulation par surface.
+    b.app.undo();
+    assert_eq!(b.app.layers().len(), 4);
+    b.app.redo();
+    assert_eq!(b.app.layers().len(), 5);
+    // L'enregistrement garde les 90° (la borne des 85° ne s'applique plus à ce qui se lit du fichier).
+    let dir = dir_for("surfaces");
+    let manifest = dir.join("P.pelure");
+    project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
+    let relu = project::load(&manifest).expect("relu").doc;
+    for (a, c) in relu.panels[0].layers.iter().zip(&b.app.doc.panels[0].layers) {
+        assert_eq!(a.transform, c.transform, "calque {}", c.name);
+    }
+    assert!((relu.panels[0].layers[1].transform.tilt_x.abs() - 90.0).abs() < 1e-2);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_tilt_of_a_card_is_free_only_in_a_plan_in_space() {
+    let w = monde_a2();
+    let xf = Xf { pos: [0.0, 0.0, 0.0], rot: [-90.0, 140.0, 0.0], size: [6.0, 3.0, 1.0] };
+    let prev = LayerTransform::default();
+    // Plan ordinaire : la borne de toujours.
+    let (t, _) = w.card_from_xf(&prev, 0.0, &xf);
+    assert_eq!((t.tilt_x, t.tilt_y), (-85.0, 85.0));
+    // Plan en Espace 3D : jusqu'au demi-tour.
+    let (t, _) = w.card_from_xf_libre(&prev, 0.0, &xf);
+    assert_eq!((t.tilt_x, t.tilt_y), (-90.0, 140.0));
+    // À l'écran : les poignées d'une carte suivent le plan.
+    let mut b = banc_taille(doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]), false, 1280, 720);
+    b.chauffer(2);
+    let id = espace3d::card_selection(b.app.layer().id);
+    b.app.e3_set_xfs(&[(id, xf)]);
+    assert_eq!(b.app.layer().pose(0).tilt_y, 85.0);
+    b.app.doc.panels[0].espace = true;
+    b.app.e3_set_xfs(&[(id, xf)]);
+    assert_eq!(b.app.layer().pose(0).tilt_y, 140.0);
+}

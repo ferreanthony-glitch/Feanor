@@ -3296,8 +3296,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                                 angle: t.rotation,
                                 stretch_x: LayerTransform::clamp_stretch(t.etirement_x),
                                 stretch_y: LayerTransform::clamp_stretch(t.etirement_y),
-                                tilt_x: LayerTransform::clamp_tilt(t.inclinaison_x),
-                                tilt_y: LayerTransform::clamp_tilt(t.inclinaison_y),
+                                tilt_x: LayerTransform::clamp_tilt_libre(t.inclinaison_x),
+                                tilt_y: LayerTransform::clamp_tilt_libre(t.inclinaison_y),
                                 dz: 0.0,
                             })
                             .unwrap_or_default(),

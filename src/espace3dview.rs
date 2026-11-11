@@ -478,7 +478,10 @@ impl App {
         if self.espace3d.show_grid {
             let distance = self.espace3d.cam.map_or(8.0, |c| c.distance);
             let target = self.espace3d.cam.map_or([0.0; 3], |c| c.target);
+            // (Plan en Espace 3D : le quadrillage est à la hauteur du sol des surfaces, `Monde::sol_y`.)
+            let sol = if self.doc.plan_en_espace(self.cur_panel) { self.e3_world().sol_y() } else { 0.0 };
             for l in grid_lines(target, if through { 8.0 } else { distance }) {
+                let l = GridLine { a: [l.a[0], l.a[1] + sol, l.a[2]], b: [l.b[0], l.b[1] + sol, l.b[2]], color: l.color };
                 if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
                     let [r, g, bl, alpha] = l.color;
                     let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);

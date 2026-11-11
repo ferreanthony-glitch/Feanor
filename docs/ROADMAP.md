@@ -3432,4 +3432,6 @@ et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le mote
   bloc ; un calque d'ajustement agit sur ce qui est plus loin que lui (`calqueffet::Portees`). Pas regardé à l'écran.
 - ✅ **A5** (2026-11-11) : dessiner par la caméra. Pas de trait là où le regard ne touche pas la carte (`App::to_layer_opt`), ni au-delà d'une feuille de ses bords près de
   l'horizon ; le curseur du pinceau a la taille du trait en perspective (`App::layer_zoom`). Pas regardé à l'écran.
-- À faire : A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).
+- ✅ **A6** (2026-11-12) : poser une surface à dessiner face à la caméra, au sol ou en mur (`espace3d.surface_*`, `Monde::surface_xf`), à une distance choisie ; inclinaison libre
+  jusqu'au demi-tour dans un plan en Espace 3D (85° ailleurs). Limite : pas de carte derrière la caméra d'origine du plan. Pas regardé à l'écran.
+- À faire : A7 (vue Espace 3D), A8 (finitions).

@@ -59,6 +59,8 @@ pub(crate) struct Espace3dState {
     pub step_move: f32,
     pub step_rot: f32,
     pub step_scale: f32,
+    /// Distance (mètres) où poser une surface neuve dans un plan en Espace 3D ; 0 : la distance de référence de la caméra.
+    pub surface_distance: f32,
     pub drag: Option<Drag>,
     pub hover: Option<Handle>,
     /// Plan de la dernière image (la sélection ne passe pas d'un plan à l'autre).
@@ -82,6 +84,7 @@ impl Default for Espace3dState {
             step_move: 0.25,
             step_rot: 15.0,
             step_scale: 0.1,
+            surface_distance: 0.0,
             drag: None,
             hover: None,
             last_panel: 0,
@@ -195,7 +198,12 @@ impl App {
                 self.set_current_camera(cam);
             } else if let Some(li) = self.e3_card_layer(*id).filter(|&li| !self.layers()[li].locked && !self.layers()[li].position_locked) {
                 // (Un calque verrouillé, ou de position verrouillée, ne bouge pas, même avec les poignées d'un groupe.)
-                world.apply_card_xf(&mut self.layers_mut()[li], frame, xf);
+                // (Plan en Espace 3D : l'inclinaison est libre, la carte se couche au sol ou fait un demi-tour.)
+                if self.doc.plan_en_espace(self.cur_panel) {
+                    world.apply_card_xf_libre(&mut self.layers_mut()[li], frame, xf);
+                } else {
+                    world.apply_card_xf(&mut self.layers_mut()[li], frame, xf);
+                }
             }
         }
         self.modified = true;
@@ -265,6 +273,55 @@ impl App {
         };
     }
 
+    /// La distance où une surface neuve se pose (mètres) : celle des Réglages, sinon la distance de référence.
+    pub(crate) fn espace3d_distance_surface(&self) -> f32 {
+        let d = self.espace3d.surface_distance;
+        if d.is_finite() && d > 0.0 { d } else { self.e3_world().d0 }
+    }
+
+    /// **Pose une surface à dessiner** dans le plan en Espace 3D courant (`docs/ESPACE-LIBRE.md`, étape A6) : un calque
+    /// neuf, juste au-dessus du calque courant, du même genre que lui (vectoriel ou bitmap), posé face à la caméra, au sol
+    /// ou en mur (`Monde::surface_xf`) ; il devient le calque courant et la carte choisie. Une étape d'annulation.
+    /// Refusé hors d'un plan en Espace 3D, storyboard verrouillé, ou si la surface tomberait derrière la caméra de référence.
+    pub(crate) fn espace3d_nouvelle_surface(&mut self, sorte: espace3d::Surface) {
+        if !self.doc.plan_en_espace(self.cur_panel) {
+            self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans Réglages.", sorte.nom());
+            return;
+        }
+        if self.content_refuses() {
+            return;
+        }
+        let world = self.e3_world();
+        let distance = self.espace3d_distance_surface();
+        let Some(xf) = world.surface_xf(&self.current_camera(), sorte, distance) else {
+            self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait derrière la caméra d'origine du plan, où une carte ne peut pas être. Rapproche-la ou tourne la caméra.", sorte.nom());
+            return;
+        };
+        self.end_stroke();
+        let snap = self.snapshot();
+        let frame = self.cur_frame;
+        let kind = match self.layers().get(self.cur_layer) {
+            Some(l) if !l.folder && l.effet.is_none() => l.kind,
+            _ => crate::document::LayerKind::Vector,
+        };
+        let deja = self.layers().iter().filter(|l| l.name.starts_with(sorte.nom())).count();
+        let nom = if deja == 0 { sorte.nom().to_string() } else { format!("{} {}", sorte.nom(), deja + 1) };
+        let mut layer = crate::document::Layer::new(nom.clone(), kind);
+        layer.parent = self.layers().get(self.cur_layer).and_then(|l| if l.folder { None } else { l.parent });
+        world.apply_card_xf_libre(&mut layer, frame, &xf);
+        let id = layer.id;
+        let at = (self.cur_layer + 1).min(self.layers().len());
+        self.layers_mut().insert(at, layer);
+        self.cur_layer = at;
+        self.vsel = None;
+        let before = self.history.context.replace(sorte.nom().to_string());
+        self.commit_structure(snap);
+        self.history.context = before;
+        self.espace3d.sel = vec![espace3d::card_selection(id)];
+        self.espace3d.last_layer = id;
+        self.status = format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.");
+    }
+
     /// Les commandes de l'Espace 3D. Vrai si l'action est la sienne.
     pub(crate) fn espace3d_action(&mut self, action: &str) -> bool {
         // Les anciens noms (plateau en 3D, scène 3D) mènent à l'original (`keymap::ALIASES`).
@@ -289,6 +346,9 @@ impl App {
             }
             "espace3d.ordonner_profondeur" => self.espace3d_order_by_depth(),
             "espace3d.plan_en_espace" => self.espace3d_basculer_plan_en_espace(),
+            "espace3d.surface_face" => self.espace3d_nouvelle_surface(espace3d::Surface::Face),
+            "espace3d.surface_sol" => self.espace3d_nouvelle_surface(espace3d::Surface::Sol),
+            "espace3d.surface_mur" => self.espace3d_nouvelle_surface(espace3d::Surface::Mur),
             "espace3d.aimanter" => {
                 self.espace3d.snap = !self.espace3d.snap;
                 self.status = if self.espace3d.snap { "Aimantation à la grille : allumée.".into() } else { "Aimantation : éteinte.".into() };
@@ -411,6 +471,26 @@ impl App {
                 crate::bulles::bulle(r, "Pas de rotation", "Rotations aimantées à ce pas.", "");
                 let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_scale).speed(0.01).range(0.01..=2.0));
                 crate::bulles::bulle(r, "Pas de taille", "Tailles aimantées à ce pas.", "");
+            });
+        }
+        // Poser une surface à dessiner (plan en Espace 3D seulement) : face à la caméra, au sol, en mur, à la distance dite.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{}  Nouvelle surface", ph::PLUS)).strong());
+                for (sorte, icone, action, description) in [
+                    (espace3d::Surface::Face, ph::FRAME_CORNERS, "espace3d.surface_face", "Un calque neuf posé face à la caméra, à la distance choisie : le cadre tombe en son centre."),
+                    (espace3d::Surface::Sol, ph::ALIGN_BOTTOM, "espace3d.surface_sol", "Un calque neuf couché au sol, devant la caméra, à la distance choisie."),
+                    (espace3d::Surface::Mur, ph::WALL, "espace3d.surface_mur", "Un calque neuf debout sur le sol, face à la caméra, à la distance choisie."),
+                ] {
+                    if self.bouton(ui, icone, sorte.nom(), description, action).clicked() {
+                        self.espace3d_nouvelle_surface(sorte);
+                    }
+                }
+                let mut d = self.espace3d_distance_surface();
+                let r = ui.add(egui::DragValue::new(&mut d).speed(0.05).range(0.3..=500.0).suffix(" m"));
+                if crate::bulles::bulle(r, "Distance de la surface", "À combien de mètres devant la caméra la surface neuve se pose. La distance d'origine de la caméra : celle de la feuille.", "").changed() {
+                    self.espace3d.surface_distance = d;
+                }
             });
         }
         ui.separator();
@@ -538,9 +618,14 @@ impl App {
         });
         if moved || scaled || deepened || flat {
             self.modified = true;
+            let libre = self.doc.plan_en_espace(self.cur_panel);
             let layer = &mut self.layers_mut()[li];
             if moved {
-                world.apply_card_xf(layer, frame, &xf);
+                if libre {
+                    world.apply_card_xf_libre(layer, frame, &xf);
+                } else {
+                    world.apply_card_xf(layer, frame, &xf);
+                }
             }
             if scaled || flat {
                 let mut p = layer.pose(frame);

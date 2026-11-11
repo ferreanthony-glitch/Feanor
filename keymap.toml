@@ -1909,6 +1909,21 @@ touches = []
 source = "FEANOR (mettre le plan courant en Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.surface_face"
+touches = []
+source = "FEANOR (nouvelle surface face à la caméra, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.surface_sol"
+touches = []
+source = "FEANOR (nouvelle surface au sol, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.surface_mur"
+touches = []
+source = "FEANOR (nouvelle surface en mur, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.aimanter"
 touches = []
 source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"
