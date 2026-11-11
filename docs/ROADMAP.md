@@ -3423,4 +3423,6 @@ et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le mote
 - ✅ **A0** (2026-11-11) : vérifications par lecture ; le plan tient (deux constructeurs de plan seulement, zone filmée dans la feuille, dossiers en bloc, format 54).
 - ✅ **A1** (2026-11-11) : la case `Panel::espace`, enregistrée (**format 54**), commande `espace3d.plan_en_espace`, bouton dans Réglages de l'Espace 3D, une étape d'annulation ;
   l'image n'en dépend pas encore. Pas regardé à l'écran.
-- À faire : A2 (maths), A3 (rendu), A4 (ordre par distance), A5 (dessiner par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).
+- ✅ **A2** (2026-11-11) : les maths du changement de repère (`Monde::repere_camera`, variantes à matrice) ; rien ne les appelle encore. Une caméra dans les limites d'avant
+  filme la même image par le repère, à 0,05 px près ; caméra retournée, derrière la feuille, carte au sol à 90° (essais).
+- À faire : A3 (rendu), A4 (ordre par distance), A5 (dessiner par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).

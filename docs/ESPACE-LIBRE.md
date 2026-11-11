@@ -222,6 +222,27 @@ Dans `espace3d.rs` : le déplacement `C` d'une caméra (`Monde::repere_camera`),
 distance. Essais (`espace3dmath_tests.rs`) : caméra droite = identité ; aller-retour d'un point à 0,05 px ; caméra
 tournée de 90° et de 180° ; caméra derrière le plan z = 0 ; carte derrière la caméra écartée ; carte à 90°.
 
+#### Fait (2026-11-11)
+
+Des maths seulement, dans `espace3d.rs` : **rien ne les appelle encore**, l'image et l'interface ne changent pas.
+
+- `Monde::repere_camera(cam)` : la matrice du changement de repère (partie 2). La caméra est prise telle quelle, sans
+  `limited` ni borne de distance ; mêmes conventions que `Camera::homography` (panoramique, bascule, rotation, œil de
+  `Monde::eye`) ; le zoom y est compté. Caméra de référence : l'identité.
+- `Monde::eye_reference`, `Monde::camera_reference` : l'œil et la caméra de référence (au centre de la feuille, de face).
+- `Monde::carte_dans_le_repere(cam, xf)` : la matrice d'une carte dans ce repère ; `Monde::to_frame(cam, p)` : où un
+  point du monde tombe dans l'image, caméra libre.
+- `card_warp_m`, `card_to_sheet_m`, `sheet_to_card_m` : les variantes à matrice. Les fonctions d'avant (à `Xf`) les
+  appellent : mêmes calculs, mêmes maillages (essai).
+- **Essais** (`espace3d_tests.rs`, 5 de plus) : caméra de référence = identité ; **7 caméras dans les limites d'avant
+  filment la même image par le repère que par le chemin d'avant, à 0,05 px près** (feuille, hors feuille, carte
+  inclinée) ; caméra tournée de 90° et de 180°, basculée de 85°, passée derrière la feuille (vue en miroir), zoom ;
+  aller-retour carte ↔ feuille pour une carte inclinée, **couchée au sol (90°)** et en mur ; carte derrière la caméra
+  sans maillage, carte traversée par la caméra posée pour sa moitié visible.
+- **Suite complète sur le Mac** : 4 417 passent, 86 échouent (les mêmes 86 qu'avant A2, propres au Mac).
+- **Pas dans A2** : l'inclinaison d'une carte reste bornée à ±85° dans `LayerTransform` (les essais à 90° passent par
+  un `Xf`) ; la borne sera levée pour les plans en Espace 3D en A6, avec les surfaces au sol et en mur.
+
 ### A3. Le rendu
 
 `espace3d::place` et `render::panel_plan_at` prennent le chemin de la partie 2 quand `espace` est vrai. Une seule

@@ -1072,3 +1072,150 @@ fn plan_in_space_is_refused_when_the_frame_does_not_fit_in_the_sheet() {
     assert!(!b.app.doc.panels[0].espace, "la case reste décochée");
     assert!(b.app.status.contains("refusé"), "et l'utilisateur sait pourquoi : {}", b.app.status);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A2 : le repère de la caméra
+
+/// Un monde d'essai : feuille 640 × 360, cadre 320 × 180.
+fn monde_a2() -> Monde {
+    Monde::new([640, 360], [320, 180])
+}
+
+/// Où un point du monde tombe dans l'image par le chemin d'avant : posé sur la feuille depuis l'œil de la caméra, puis
+/// cadré par l'homographie de la caméra (`Camera::homography_inverse`).
+fn image_d_avant(w: &Monde, cam: &Camera, p: m::V3) -> Option<eframe::egui::Pos2> {
+    let s = w.to_sheet(w.eye(cam), p)?;
+    Some(crate::persp::apply(&cam.homography_inverse(w.frame), s))
+}
+
+#[test]
+fn the_reference_camera_leaves_the_world_where_it_is() {
+    let w = monde_a2();
+    let r = w.repere_camera(&w.camera_reference());
+    for (a, b) in r.iter().zip(m::IDENT.iter()) {
+        assert!((a - b).abs() < 1e-5, "le repère de la caméra de référence est l'identité : {r:?}");
+    }
+    assert_eq!(w.camera_reference(), Camera::centered(640, 360));
+    // Le centre de la feuille tombe au centre de l'image, un point du plan z = 0 à sa place dans le cadre.
+    let c = w.to_frame(&w.camera_reference(), [0.0, 0.0, 0.0]).expect("devant");
+    assert!((c - pos2(160.0, 90.0)).length() < 1e-3);
+    let p = w.to_frame(&w.camera_reference(), [40.0 * w.k, -25.0 * w.k, 0.0]).expect("devant");
+    assert!((p - pos2(200.0, 115.0)).length() < 1e-2, "{p:?}");
+}
+
+#[test]
+fn a_camera_within_the_old_limits_films_the_same_image_through_the_camera_frame() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    let cams = [
+        Camera { x: 300.0, y: 200.0, ..base },
+        Camera { zoom: 2.0, ..base },
+        Camera { zoom: 0.6, angle: 25.0, ..base },
+        Camera { dolly: 60.0, x: 350.0, ..base },
+        Camera { dolly: -80.0, angle: -140.0, ..base },
+        Camera { tilt: 6.0, pan: -9.0, dolly: 30.0, x: 340.0, ..base },
+        Camera { tilt: -12.0, pan: 15.0, zoom: 1.4, angle: 10.0, y: 150.0, ..base },
+    ];
+    // Des points sur la feuille, devant et derrière elle, et sur une carte inclinée.
+    let xf = Xf { pos: [0.4, -0.2, -1.5], rot: [20.0, -35.0, 12.0], size: [5.0, 3.0, 1.0] };
+    let mut points: Vec<m::V3> = vec![[0.0, 0.0, 0.0], [1.2, 0.7, 0.0], [-2.0, -1.0, 0.0], [0.5, 0.5, 1.0], [-1.0, 0.3, -3.0]];
+    points.extend(w.card_corners(&xf));
+    let mut seen = 0;
+    for cam in &cams {
+        assert_eq!(cam.limited(w.frame), *cam, "une caméra dans les limites d'avant");
+        for p in &points {
+            let (Some(old), Some(new)) = (image_d_avant(&w, cam, *p), w.to_frame(cam, *p)) else { continue };
+            assert!((old - new).length() < 0.05, "caméra {cam:?}, point {p:?} : {old:?} par le chemin d'avant, {new:?} par le repère");
+            seen += 1;
+        }
+    }
+    assert!(seen >= 50, "{seen} points comparés");
+}
+
+#[test]
+fn a_free_camera_turns_round_and_goes_behind_the_sheet() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    let eye = w.eye(&base);
+    let centre = pos2(160.0, 90.0);
+    // Un quart de tour à droite : ce qui était à droite de la caméra est au centre de l'image.
+    let droite = Camera { pan: 90.0, ..base };
+    let p = w.to_frame(&droite, m::add(eye, [5.0, 0.0, 0.0])).expect("devant la caméra tournée");
+    assert!((p - centre).length() < 1e-2, "{p:?}");
+    assert!(w.to_frame(&droite, m::add(eye, [-5.0, 0.0, 0.0])).is_none(), "ce qui est à gauche est derrière elle");
+    // Un point un peu plus loin sur l'axe du monde −Z est maintenant à gauche de l'image.
+    let q = w.to_frame(&droite, m::add(eye, [5.0, 0.0, -1.0])).expect("devant");
+    assert!(q.x < centre.x - 1.0 && (q.y - centre.y).abs() < 1e-2, "{q:?}");
+    // Un demi-tour : la feuille est derrière, ce qui était derrière la caméra est au centre.
+    let demi = Camera { pan: 180.0, ..base };
+    assert!(w.to_frame(&demi, [0.0, 0.0, 0.0]).is_none(), "la feuille est derrière la caméra retournée");
+    let p = w.to_frame(&demi, m::add(eye, [0.0, 0.0, 4.0])).expect("devant");
+    assert!((p - centre).length() < 1e-2, "{p:?}");
+    // Bascule de 85° vers le haut (au-delà de ce que l'homographie d'avant acceptait) : un point au-dessus est au centre.
+    let haut = Camera { tilt: 85.0, ..base };
+    assert_ne!(haut.limited(w.frame), haut, "cette caméra était bridée avant");
+    let (s, c) = 85f32.to_radians().sin_cos();
+    let p = w.to_frame(&haut, m::add(eye, [0.0, 3.0 * s, -3.0 * c])).expect("devant");
+    assert!((p - centre).length() < 1e-2, "{p:?}");
+    // La caméra passe derrière le plan z = 0 et se retourne : elle voit le dos de la feuille, en miroir.
+    let derriere = Camera { dolly: w.d0_px * 2.0, pan: 180.0, ..base };
+    assert!(w.eye(&derriere)[2] < 0.0, "l'œil est derrière la feuille");
+    let p = w.to_frame(&derriere, [0.0, 0.0, 0.0]).expect("la feuille est devant la caméra retournée");
+    assert!((p - centre).length() < 1e-2, "{p:?}");
+    let q = w.to_frame(&derriere, [1.0, 0.0, 0.0]).expect("devant");
+    assert!(q.x < centre.x - 1.0, "vu de dos, la droite de la feuille est à gauche : {q:?}");
+    // Le zoom est compté dans le repère : deux fois plus serré, deux fois plus loin du centre.
+    let large = w.to_frame(&Camera { tilt: 20.0, ..base }, [0.6, 1.4, 0.0]).expect("devant");
+    let serre = w.to_frame(&Camera { tilt: 20.0, zoom: 2.0, ..base }, [0.6, 1.4, 0.0]).expect("devant");
+    assert!(((serre - centre) - (large - centre) * 2.0).length() < 1e-2);
+}
+
+#[test]
+fn a_card_goes_to_the_sheet_and_back_through_the_camera_frame_even_laid_flat_on_the_ground() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    let eye = w.eye_reference();
+    let cas = [
+        // Une carte inclinée, caméra tournée d'un quart de tour autour d'elle.
+        (Xf { pos: [3.0, 0.0, 2.0], rot: [10.0, -70.0, 0.0], size: [5.0, 3.0, 1.0] }, Camera { pan: 80.0, ..base }),
+        // Une carte couchée au sol (90°), caméra en hauteur qui regarde vers le bas.
+        (Xf { pos: [0.0, -1.2, 0.0], rot: [-90.0, 0.0, 0.0], size: [6.0, 4.0, 1.0] }, Camera { y: 80.0, tilt: -25.0, ..base }),
+        // Un mur de côté (90° autour de la verticale), caméra qui le regarde en biais.
+        (Xf { pos: [-2.0, 0.0, 1.0], rot: [0.0, 90.0, 0.0], size: [6.0, 3.0, 1.0] }, Camera { pan: -50.0, zoom: 0.8, ..base }),
+    ];
+    for (xf, cam) in &cas {
+        let mx = w.carte_dans_le_repere(cam, xf);
+        let mut seen = 0;
+        for p in [pos2(320.0, 180.0), pos2(200.0, 120.0), pos2(450.0, 250.0), pos2(40.0, 30.0), pos2(600.0, 330.0)] {
+            let Some(s) = w.card_to_sheet_m(eye, &mx, p) else { continue };
+            // Le même point, par la matrice de la carte et le changement de repère fait à la main.
+            let monde = m::point(&xf.matrix(), [p.x / 640.0 - 0.5, -(p.y / 360.0 - 0.5), 0.0]);
+            let direct = w.to_sheet(eye, m::point(&w.repere_camera(cam), monde)).expect("devant");
+            assert!((s - direct).length() < 1e-3);
+            let back = w.sheet_to_card_m(eye, &mx, s).expect("le regard retrouve la carte");
+            assert!((back - p).length() < 0.05, "carte {xf:?} : parti de {p:?}, revenu en {back:?}");
+            seen += 1;
+        }
+        assert!(seen >= 2, "carte {xf:?} : {seen} points devant la caméra");
+        assert!(w.card_warp_m(eye, &mx).is_some(), "la carte a un maillage");
+    }
+}
+
+#[test]
+fn a_card_behind_the_camera_has_no_mesh_and_the_xf_variants_are_the_matrix_ones() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    let xf = Xf { pos: [0.0, 0.0, -1.0], rot: [15.0, -20.0, 5.0], size: [5.0, 3.0, 1.0] };
+    // Devant la caméra de référence : un maillage ; la caméra retournée ne la voit plus du tout.
+    assert!(w.card_warp_m(w.eye_reference(), &w.carte_dans_le_repere(&base, &xf)).is_some());
+    assert!(w.card_warp_m(w.eye_reference(), &w.carte_dans_le_repere(&Camera { pan: 180.0, ..base }, &xf)).is_none(), "carte tout entière derrière la caméra");
+    // Une carte que la caméra traverse : la partie devant garde son maillage.
+    let travers = Xf { pos: w.eye(&base), rot: [0.0, 90.0, 0.0], size: [6.0, 3.0, 1.0] };
+    assert!(w.card_warp_m(w.eye_reference(), &w.carte_dans_le_repere(&base, &travers)).is_some(), "la moitié devant la caméra est posée");
+    // Les fonctions d'avant (à `Xf`) sont celles à matrice : mêmes maillages, mêmes points.
+    let eye = w.eye(&Camera { x: 300.0, dolly: 20.0, ..base });
+    assert!(w.card_warp(eye, &xf) == w.card_warp_m(eye, &xf.matrix()));
+    let p = pos2(123.0, 77.0);
+    assert_eq!(w.card_to_sheet(eye, &xf, p), w.card_to_sheet_m(eye, &xf.matrix(), p));
+    let s = w.card_to_sheet(eye, &xf, p).expect("devant");
+    assert_eq!(w.sheet_to_card(eye, &xf, s), w.sheet_to_card_m(eye, &xf.matrix(), s));
+}

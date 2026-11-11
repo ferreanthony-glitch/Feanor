@@ -249,6 +249,72 @@ impl Monde {
         }
     }
 
+    // ------------------------------------------------------------------------------ plan en Espace 3D : le repère de la caméra
+
+    /// L'œil de la **caméra de référence** : au-dessus du centre de la feuille, à la distance de référence, qui regarde
+    /// la feuille de face. C'est l'œil dont on pose les cartes d'un plan en Espace 3D (`docs/ESPACE-LIBRE.md`, 2).
+    pub fn eye_reference(&self) -> V3 {
+        [0.0, 0.0, self.d0]
+    }
+
+    /// La caméra de référence comme caméra du plan : au centre de la feuille, sans zoom, avancée, rotation, bascule ni
+    /// panoramique. Elle filme le cadre au centre de la feuille ; c'est elle qui cadre un plan en Espace 3D, une fois les
+    /// cartes passées dans le repère de la caméra réelle (`repere_camera`).
+    pub fn camera_reference(&self) -> Camera {
+        Camera { x: self.stage[0] / 2.0, y: self.stage[1] / 2.0, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 }
+    }
+
+    /// **Le changement de repère d'un plan en Espace 3D** : la matrice qui amène le monde devant la caméra de référence
+    /// comme la caméra `cam` le voit. « La caméra ne bouge pas, c'est le monde qui tourne devant elle. »
+    ///
+    /// Un point `p` du monde, vu par `cam`, tombe dans l'image là où le point `repere · p`, vu par la caméra de référence,
+    /// tombe (`to_frame`). On pose donc les cartes par `repere · carte` avec l'œil de référence, et tout le rendu d'avant
+    /// (maillages, composition, effets) sert tel quel, quelle que soit l'orientation de la caméra.
+    ///
+    /// `cam` est prise **telle quelle** : ni `Camera::limited` (elle n'a plus à voir la feuille), ni la borne de
+    /// `Camera::distance` (elle peut passer derrière le plan z = 0). Mêmes conventions que `Camera::homography` : le
+    /// panoramique autour de la verticale, la bascule autour de l'axe horizontal de la caméra, la rotation dans le sens
+    /// horaire à l'écran, l'œil de `Monde::eye`. Le zoom (la focale) est compté ici : la zone filmée reste le cadre au
+    /// centre de la feuille.
+    ///
+    /// Caméra de référence : l'identité.
+    pub fn repere_camera(&self, cam: &Camera) -> m::M4 {
+        let eye = self.eye(cam);
+        let (sr, cr) = cam.angle.to_radians().sin_cos();
+        let (st, ct) = cam.tilt.to_radians().sin_cos();
+        let (sp, cp) = cam.pan.to_radians().sin_cos();
+        let zoom = cam.zoom.max(0.01);
+        // Les axes de la caméra dans le monde (les colonnes de panoramique · bascule de `Camera::homography`) : sa
+        // droite, son haut, son arrière (elle regarde vers −arrière).
+        let right = [cp, 0.0, sp];
+        let up = [-sp * st, ct, cp * st];
+        let back = [-sp * ct, -st, cp * ct];
+        // Dans le repère de la caméra, la rotation du cadre (roulis) puis le zoom ; la profondeur n'est pas touchée.
+        let r0 = m::scale(m::add(m::scale(right, cr), m::scale(up, -sr)), zoom);
+        let r1 = m::scale(m::add(m::scale(right, sr), m::scale(up, cr)), zoom);
+        let r2 = back;
+        // p' = L · (p − œil) + (0, 0, d0) ; matrice rangée par colonnes (`espace3dmath`).
+        [
+            r0[0], r1[0], r2[0], 0.0,
+            r0[1], r1[1], r2[1], 0.0,
+            r0[2], r1[2], r2[2], 0.0,
+            -m::dot(r0, eye), -m::dot(r1, eye), -m::dot(r2, eye) + self.d0, 1.0,
+        ]
+    }
+
+    /// La matrice de la carte `xf` dans le repère de la caméra `cam` : à donner à `card_warp_m`, `card_to_sheet_m` et
+    /// `sheet_to_card_m` avec l'œil de référence (`eye_reference`).
+    pub fn carte_dans_le_repere(&self, cam: &Camera, xf: &Xf) -> m::M4 {
+        m::mul(&self.repere_camera(cam), &xf.matrix())
+    }
+
+    /// Où le point `p` du monde tombe dans l'image finale (pixels du cadre, origine en haut à gauche), filmé par la
+    /// caméra `cam` prise telle quelle (libre). Rien s'il est derrière la caméra ou trop près d'elle.
+    pub fn to_frame(&self, cam: &Camera, p: V3) -> Option<Pos2> {
+        let s = self.to_sheet(self.eye_reference(), m::point(&self.repere_camera(cam), p))?;
+        Some(pos2(s.x - self.stage[0] / 2.0 + self.frame[0] as f32 / 2.0, s.y - self.stage[1] / 2.0 + self.frame[1] as f32 / 2.0))
+    }
+
     // ------------------------------------------------------------------------------ cartes
 
     /// Le placement 3D d'une carte : `t` sa pose, `depth` sa profondeur totale (`Layer::depth_at`).
@@ -331,25 +397,40 @@ impl Monde {
     /// Le maillage qui pose la carte `xf` sur la feuille, vue de l'œil `eye` ; rien si elle est tout entière derrière
     /// l'œil. `dessin` : la taille de l'image de la carte (la feuille, d'ordinaire).
     pub fn card_warp(&self, eye: V3, xf: &Xf) -> Option<Warp> {
+        self.card_warp_m(eye, &xf.matrix())
+    }
+
+    /// Comme `card_warp`, la carte étant donnée par sa matrice (du carré unité de la carte vers le monde) : celle d'un
+    /// `Xf`, ou la même passée dans le repère de la caméra (`carte_dans_le_repere`, plan en Espace 3D).
+    pub fn card_warp_m(&self, eye: V3, mx: &m::M4) -> Option<Warp> {
         let [w, h] = self.stage;
-        let mx = xf.matrix();
         // (Un pixel de plus que le dessin : le bord adouci en fait partie.)
         let src = Rect::from_min_size(pos2(0.0, 0.0), vec2(w, h)).expand(1.0);
-        Warp::partial(src, CARD_CELLS, |p| self.to_sheet(eye, m::point(&mx, [p.x / w - 0.5, -(p.y / h - 0.5), 0.0])))
+        Warp::partial(src, CARD_CELLS, |p| self.to_sheet(eye, m::point(mx, [p.x / w - 0.5, -(p.y / h - 0.5), 0.0])))
     }
 
     /// Le point `p` de la carte (pixels de son dessin) vu de l'œil `eye`, sur la feuille (pixels).
     pub fn card_to_sheet(&self, eye: V3, xf: &Xf, p: Pos2) -> Option<Pos2> {
+        self.card_to_sheet_m(eye, &xf.matrix(), p)
+    }
+
+    /// Comme `card_to_sheet`, la carte étant donnée par sa matrice.
+    pub fn card_to_sheet_m(&self, eye: V3, mx: &m::M4, p: Pos2) -> Option<Pos2> {
         let [w, h] = self.stage;
-        self.to_sheet(eye, m::point(&xf.matrix(), [p.x / w - 0.5, -(p.y / h - 0.5), 0.0]))
+        self.to_sheet(eye, m::point(mx, [p.x / w - 0.5, -(p.y / h - 0.5), 0.0]))
     }
 
     /// Le chemin inverse : le point `s` de la feuille, retrouvé sur la carte (pixels de son dessin), là où le regard de
     /// l'œil `eye` qui passe par `s` traverse le plan de la carte. C'est ce qui sert à dessiner sur une carte inclinée.
     pub fn sheet_to_card(&self, eye: V3, xf: &Xf, s: Pos2) -> Option<Pos2> {
+        self.sheet_to_card_m(eye, &xf.matrix(), s)
+    }
+
+    /// Comme `sheet_to_card`, la carte étant donnée par sa matrice.
+    pub fn sheet_to_card_m(&self, eye: V3, mx: &m::M4, s: Pos2) -> Option<Pos2> {
         let on_sheet = [(s.x - self.stage[0] / 2.0) * self.k, -(s.y - self.stage[1] / 2.0) * self.k, 0.0];
         let ray = Ray::new(eye, m::sub(on_sheet, eye));
-        let (o, d) = ray.to_local(&m::inverse_affine(&xf.matrix()));
+        let (o, d) = ray.to_local(&m::inverse_affine(mx));
         if d[2].abs() < 1e-9 {
             return None;
         }
