@@ -536,7 +536,7 @@ fn options_au_hasard(doc: &Document, h: &mut Hasard) -> crate::board::Options {
     let hold = (h.n(3) == 0).then(|| {
         let p = &doc.panels[h.n(doc.panels.len())];
         let r = Rect::from_min_size(pos2(h.f(-200.0, 0.0), h.f(-150.0, 0.0)), eframe::egui::vec2(h.f(100.0, 900.0), h.f(80.0, 600.0)));
-        crate::board::Reserve { plan: p.id, rect: r, pose: (h.n(2) == 0).then(|| (h.n(4), h.f(0.0, 600.0))), pose_y: None, pose_dec: (h.n(2) == 0).then(|| h.f(0.0, 150.0)) }
+        crate::board::Reserve { plan: p.id, image: 0, rect: r, pose: (h.n(2) == 0).then(|| (h.n(4), h.f(0.0, 600.0))), pose_y: None, pose_dec: (h.n(2) == 0).then(|| h.f(0.0, 150.0)) }
     });
     crate::board::Options { pale_rows: (h.n(4) != 0).then(|| 1 + h.n(5)), hold, ..Default::default() }
 }

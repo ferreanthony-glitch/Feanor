@@ -10292,3 +10292,50 @@ Format 53 : `accroche_camera` du calque (absent : calque ordinaire). Une version
 ### 141.7 Essais
 
 `accroche_tests.rs` : la pose accrochée est celle que filme la caméra (comparée à `Camera::to_stage`) et son inverse la rend ; un calque accroché garde sa place et sa taille dans l'image (caméra décalée, zoomée, tournée, avancée) et suit le cadre sur la feuille ; accrocher et décrocher ne déplacent rien à l'image courante, une étape d'annulation ; un calque animé garde son mouvement ; le trait tombe sous la pointe ; l'outil Transformer déplace le calque de ce que fait la main sous une caméra zoomée et tournée ; l'accroche s'enregistre et se relit ; les calques choisis s'accrochent ensemble, un dossier compte pour ses calques ; ce qui ne s'accroche pas le dit ; pas de fusion entre un calque accroché et un autre ; le calque de couleur suit son trait.
+
+## 142. Un mouvement de caméra de plus sur une case de continuité : B vers C, C vers D (2026-11-11, branche `camera-suite`)
+
+« Prochain sujet : ajouter un mouvement de caméra dans Vignettes après une continuité de vignettes qui a déjà un mouvement A vers B. Ajouter possibilité de B vers C etc. » Sa capture : un plan dont la première case porte A vers B, deux cases de continuité qui montrent B, et, dessiné en rouge sur la dernière, « + ajout cam » vers un cadre C.
+
+Avant : un plan ne portait qu'un mouvement, sur sa première case ; une case de continuité d'un plan qui bouge refusait la caméra (« Le mouvement de caméra de ce plan se règle sur sa première case »), et le « + » de Maj y ajoutait un cadre au mouvement de la première case.
+
+Code : `vignettecam.rs` (`groupes`, `cadres_de_la_case`, `empreinte_de_la_case`, `recolle`, `lettre_du_cadre`), `vignettecamui.rs` (`mouvement_de_case`, `case_du_mouvement`, `cam_press`, `cam_ajouter_cadre_case`, `cam_retirer_cadre_case`), `cadreplus.rs`, `boardui.rs` (menu de la case), `board.rs` et `boardjapon.rs` (une empreinte par case qui en porte une, `Reserve::image`), `cases.rs` (`scinder_apres_mouvement_de`). Essais : `camerasuite_tests.rs` (8, plus un essai ignoré qui écrit quatre captures). **Le format du projet ne change pas** : tout se lit dans les clés de caméra.
+
+### 142.1 La règle
+
+- **Une case de continuité peut porter son propre mouvement.** Il part du cadre qu'elle montre (le dernier cadre d'avant : B) et va vers un nouveau cadre (C), **sur la durée de cette case**. La case d'après, en continuité, montre C ; elle peut à son tour porter C vers D, et ainsi de suite.
+- **Les gestes sont ceux d'un mouvement ordinaire**, faits sur la case : Ctrl + Maj + glisser (ou T tenue), le « + » de Maj (un clic pose le cadre à côté, un glissé le pose où l'on lâche), « Ajouter un cadre » au clic droit. Refaits sur une case qui a déjà son mouvement, ils lui ajoutent un cadre (B, C, D dans la même case), déplacent un cadre, changent son zoom.
+- **Les lettres courent d'un bout à l'autre du plan** : A, B sur la première case ; B, C sur la case de continuité ; C, D sur la suivante.
+- **Le premier cadre d'un mouvement de continuité est la case** : il tient la caméra de la case d'avant, il ne se déplace pas et ne se retire pas ici (la ligne d'état le dit). Pour recadrer cette case, on coupe le plan devant elle.
+- **La continuité tient** : déplacer B sur la première case, lui ajouter ou lui retirer un cadre, emmène le départ du mouvement de la case de continuité (elle part toujours du dernier cadre d'avant).
+- **Retirer C** d'un mouvement B vers C : la case redevient une case à l'arrêt sur B.
+- **Un mouvement créé sur une case qui a d'autres cases derrière elle** : ces cases deviennent un plan à part, avec la caméra qu'elles montraient (la règle du 22 octobre, inchangée), dans la même étape d'annulation.
+- **Une étape d'annulation par geste**, nommée comme avant (« Mouvement de caméra », « Cadre D »…).
+- **Une case où la caméra est déjà en route** (des clés posées à la main au montage, qui traversent la case) refuse le geste et le dit ; son mouvement se règle où sont ses cadres.
+- **Rien ne change pour un plan qui ne bouge pas encore** : son premier mouvement naît sur sa première case, comme avant.
+
+### 142.2 Comment c'est rangé
+
+Rien de plus dans le fichier. Une case de continuité porte un mouvement quand une clé de caméra est posée exactement à sa première image, tient la caméra de la clé d'avant, et est suivie d'une clé au moins (`vignettecam::groupes`). Ses clés, jusqu'au mouvement suivant, sont les siennes ; tout le reste est le mouvement de la première case. Des clés posées à la main au début des cases, sans tenue, ne changent donc pas de case : les projets d'avant s'affichent comme avant. Au montage et dans la timeline, ce sont des clés de caméra ordinaires.
+
+### 142.3 Limites
+
+- Le mouvement d'une case dure toute la case. Pour un autre rythme, on déplace les clés au montage.
+- Si l'on déplace au montage la clé qui tient le cadre d'avant (ou si on change sa caméra), la case ne « porte » plus son mouvement : ses cadres se montrent de nouveau sur la première case.
+- L'outil Caméra des Vignettes souligne toujours la première case du plan choisi.
+- La lecture à la japonaise et l'export de la planche passent par le même calcul, sans essai propre à ce cas.
+- Rien n'a été fait à la main dans le vrai logiciel.
+
+### 142.4 À vérifier à l'écran (par Anthony, au stylet)
+
+1. Un plan avec un mouvement A vers B, puis deux cases de continuité (clic sur la barre grise après la case). Maj tenue sur la dernière : le « + » est à côté d'elle. Un clic : le cadre C apparaît, la case porte B vers C.
+2. Glisser depuis le « + », ou Ctrl + Maj + glisser dans la case : C suit le pointeur.
+3. Lire le plan : A vers B, arrêt sur B, puis B vers C.
+4. Une case de continuité de plus : elle montre C. Le « + » sur elle : C vers D.
+5. Déplacer B sur la première case : le départ de B vers C suit.
+6. Clic droit sur C > « Retirer ce cadre » : la case revient à l'arrêt sur B.
+7. Ctrl+Z après chaque geste : une seule étape.
+
+### 142.5 Essais
+
+`camerasuite_tests.rs` : les mouvements se lisent dans les clés, case par case (tenue au début d'une case, lettres, clés posées à la main qui restent à la première case) ; recoller un mouvement garde la continuité du suivant ; par de vrais gestes sur le banc : une case de continuité prend B vers C (clés, empreinte, caméra à l'arrêt puis en route, une étape, annulation) ; le « + » de Maj ajoute B vers C, puis un cadre de plus, et celui de la première case n'y touche pas ; déplacer B emmène le départ du mouvement suivant, le premier cadre d'une continuité ne se déplace pas ; retirer C rend la case à l'arrêt ; un mouvement créé sur une case du milieu met les cases de derrière dans un plan à part, en une étape ; une case où la caméra est en route refuse le geste.

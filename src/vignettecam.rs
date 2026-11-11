@@ -31,6 +31,10 @@
 //! traverse l'intérieur ; une flèche pour un travelling pur.
 //!
 //! Rien n'est enregistré dans le projet pour cela : tout se déduit des clés (en supprimer au montage fait rétrécir l'empreinte).
+//!
+//! **Un mouvement par case de continuité** (partie 142, Anthony, 2026-11-11 : « B vers C etc. ») : un plan peut porter plusieurs mouvements,
+//! un par case. Celui de la première case, comme avant ; et celui d'une case de continuité qui tient, à sa première image, le dernier cadre
+//! d'avant, puis va vers d'autres cadres (`groupes`, `cadres_de_la_case`, `empreinte_de_la_case`, `recolle`).
 
 use eframe::egui::{vec2, Pos2, Rect, Vec2};
 
@@ -63,13 +67,122 @@ fn cadre_de(doc: &Document, rang: usize, k: &CameraKey) -> Cadre {
 }
 
 /// Les cadres du plan `panel` : une clé chacun, dans l'ordre des images. Rien s'il a moins de deux clés (une caméra qui
-/// ne bouge pas n'est pas un mouvement).
+/// ne bouge pas n'est pas un mouvement). (Les essais ; la planche lit cadres_de_la_case, partie 142.)
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn cadres(doc: &Document, panel: usize) -> Vec<Cadre> {
     let Some(p) = doc.panels.get(panel) else { return Vec::new() };
     if p.camera.len() < 2 {
         return Vec::new();
     }
     p.camera.iter().enumerate().map(|(i, k)| cadre_de(doc, i, k)).collect()
+}
+
+// ------------------------------------------------------------------ un mouvement par case de continuité (partie 142)
+
+/// Un mouvement du plan : des clés qui se suivent (`rangs`, dans les clés du plan), portées par la case qui commence à l'image `debut`
+/// (0 : la première case). `numero` : son rang parmi les mouvements du plan.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Groupe {
+    pub debut: usize,
+    pub rangs: std::ops::Range<usize>,
+    pub numero: usize,
+}
+
+impl Groupe {
+    /// Le rang de la lettre de son premier cadre : la première clé d'un mouvement de continuité tient le dernier cadre d'avant et porte sa
+    /// lettre (A, B sur la première case ; B, C sur la suivante).
+    pub fn lettre0(&self) -> usize {
+        self.rangs.start.saturating_sub(self.numero)
+    }
+}
+
+/// Les mouvements d'un plan, case par case (Anthony, 2026-11-11 : « ajouter un mouvement de caméra dans Vignettes après une continuité de
+/// vignettes qui a déjà un mouvement A vers B. Ajouter possibilité de B vers C etc. »). `cases` : les images où commencent les cases du plan
+/// (`debuts_des_cases`).
+///
+/// Rien de plus n'est enregistré : tout se lit dans les clés. Une case de continuité **porte son propre mouvement** quand une clé est posée
+/// exactement à sa première image, **tient la caméra de la clé d'avant** (c'est la continuité : la case part du cadre qu'elle montrait) et
+/// est suivie d'une clé au moins qui n'est pas elle-même le début d'un mouvement. Ses clés, jusqu'au mouvement suivant, sont les siennes.
+/// Tout le reste est le mouvement de la première case, comme avant : des clés posées à la main au montage ne changent pas de case. Il y a
+/// toujours un premier mouvement (vide si le plan n'a pas de clé).
+pub fn groupes(keys: &[CameraKey], cases: &[usize]) -> Vec<Groupe> {
+    let n = keys.len();
+    let tenue = |i: usize| i >= 1 && keys[i].frame > 0 && cases.contains(&keys[i].frame) && keys[i].cam == keys[i - 1].cam;
+    // (De la fin vers le début : une tenue que suit tout de suite le début d'un autre mouvement n'a pas de mouvement à elle.)
+    let mut commence = vec![false; n];
+    for i in (1..n).rev() {
+        commence[i] = tenue(i) && i + 1 < n && !commence[i + 1];
+    }
+    let mut out = Vec::new();
+    let mut debut = 0;
+    for i in 1..n {
+        if commence[i] {
+            out.push(Groupe { debut: if out.is_empty() { 0 } else { keys[debut].frame }, rangs: debut..i, numero: out.len() });
+            debut = i;
+        }
+    }
+    out.push(Groupe { debut: if out.is_empty() { 0 } else { keys[debut].frame }, rangs: debut..n, numero: out.len() });
+    out
+}
+
+/// Les images où commencent les cases d'un plan de `total` images : la première à 0, puis ses marques d'image (`marques`).
+pub fn debuts_des_cases(marques: impl Iterator<Item = usize>, total: usize) -> Vec<usize> {
+    std::iter::once(0).chain(marques.filter(|&f| f > 0 && f < total)).collect()
+}
+
+/// Les images où commencent les cases du plan `panel`.
+pub fn cases_du_plan(doc: &Document, panel: usize) -> Vec<usize> {
+    doc.panels.get(panel).map_or_else(|| vec![0], |p| debuts_des_cases(p.marks.iter().map(|m| m.frame), p.frame_count()))
+}
+
+/// Les mouvements du plan `panel` (`groupes`).
+pub fn groupes_du_plan(doc: &Document, panel: usize) -> Vec<Groupe> {
+    match doc.panels.get(panel) {
+        Some(p) => groupes(&p.camera, &cases_du_plan(doc, panel)),
+        None => groupes(&[], &[0]),
+    }
+}
+
+/// Les cadres du mouvement que porte la case qui commence à l'image `debut` du plan `panel` : une clé chacun (leur `rang` est celui de la
+/// clé dans le plan). Rien si la case ne porte pas de mouvement (moins de deux clés).
+pub fn cadres_de_la_case(doc: &Document, panel: usize, debut: usize) -> Vec<Cadre> {
+    let Some(p) = doc.panels.get(panel) else { return Vec::new() };
+    match groupes_du_plan(doc, panel).into_iter().find(|g| g.debut == debut) {
+        Some(g) if g.rangs.len() >= 2 => g.rangs.map(|i| cadre_de(doc, i, &p.camera[i])).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// La lettre du cadre de rang `rang` (une clé du plan) : A, B, C… d'un bout à l'autre du plan ; la première clé d'un mouvement de continuité
+/// porte la lettre du cadre qu'elle tient.
+pub fn lettre_du_cadre(groupes: &[Groupe], rang: usize) -> char {
+    lettre(rang_de_lettre(groupes, rang))
+}
+
+/// Le rang de la lettre du cadre de rang `rang` (0 : A) : son rang, moins une lettre par mouvement de continuité commencé jusqu'à lui (sa
+/// première clé tient le cadre d'avant, sans lettre à elle).
+pub fn rang_de_lettre(groupes: &[Groupe], rang: usize) -> usize {
+    let tenues = groupes.iter().filter(|g| g.numero > 0 && g.rangs.start <= rang).count();
+    rang.saturating_sub(tenues)
+}
+
+/// Les clés du plan une fois les clés `rangs` d'un mouvement remplacées par `locales` (comptées depuis l'image `debut`). `avant` : la
+/// caméra que tenait le dernier cadre de ce mouvement avant la retouche (ou celle de la case, s'il n'existait pas). La continuité est
+/// gardée : le mouvement suivant, qui partait de ce cadre, part du nouveau dernier cadre.
+pub fn recolle(orig: &[CameraKey], rangs: &std::ops::Range<usize>, debut: usize, locales: &[CameraKey], avant: Camera) -> Vec<CameraKey> {
+    let mut out: Vec<CameraKey> = orig[..rangs.start.min(orig.len())].to_vec();
+    out.extend(locales.iter().map(|k| CameraKey { frame: k.frame + debut, ..*k }));
+    let dernier = out.last().map(|k| k.cam);
+    for (j, k) in orig[rangs.end.min(orig.len())..].iter().enumerate() {
+        let mut k = *k;
+        if j == 0 && k.cam == avant {
+            if let Some(c) = dernier {
+                k.cam = c;
+            }
+        }
+        out.push(k);
+    }
+    out
 }
 
 /// La taille, sur la feuille, du cadre de la caméra `cam` (le cadre final divisé par le grossissement).
@@ -263,8 +376,15 @@ pub struct Empreinte {
 /// L'empreinte du plan `panel` (rien s'il n'a pas de mouvement). Les cadres sont à l'échelle de la case : un cadre A fait une
 /// largeur de case. Chaque cadre est à sa vraie place par rapport à A (même quand il tombe à mi-rangée) ; seuls un cadre
 /// plus grand qu'une rangée (réduit) et un décalage trop grand pour la planche (resserré) s'écartent de la feuille.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
-    let cads = cadres(doc, panel);
+    empreinte_de_la_case(doc, panel, 0, p)
+}
+
+/// L'empreinte de la case qui commence à l'image `debut` du plan `panel` (rien si elle ne porte pas de mouvement, `cadres_de_la_case`) : la
+/// première case, ou une case de continuité qui a son propre mouvement (partie 142). Son premier cadre est la case elle-même.
+pub fn empreinte_de_la_case(doc: &Document, panel: usize, debut: usize, p: &Place) -> Option<Empreinte> {
+    let cads = cadres_de_la_case(doc, panel, debut);
     let a = cads.first()?;
     let ra = rect_feuille(a)?;
     let echelle = p.card_w / taille_cadre(doc, &a.cam).x.max(1e-3);
@@ -787,12 +907,19 @@ pub fn applique(frame: [usize; 2], keys0: &[CameraKey], a: Camera, prise: Prise,
 }
 
 /// Le nom de l'étape d'annulation d'un geste ; `avant` : le nombre de cadres avant lui.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn nom_etape(prise: Prise, avant: usize) -> String {
+    nom_etape_depuis(prise, avant, 0)
+}
+
+/// Comme `nom_etape`, pour un mouvement dont le premier cadre porte la lettre de rang `lettre0` (une case de continuité qui a son
+/// mouvement repart de la lettre qu'elle tient : partie 142).
+pub fn nom_etape_depuis(prise: Prise, avant: usize, lettre0: usize) -> String {
     match prise {
         Prise::Nouveau | Prise::NouveauZoom if avant < 2 => "Mouvement de caméra".into(),
-        Prise::Nouveau | Prise::NouveauZoom => format!("Cadre {}", lettre(avant)),
-        Prise::Deplace(i) => format!("Cadre {}", lettre(i)),
-        Prise::Zoom(i) => format!("Zoom du cadre {}", lettre(i)),
+        Prise::Nouveau | Prise::NouveauZoom => format!("Cadre {}", lettre(lettre0 + avant)),
+        Prise::Deplace(i) => format!("Cadre {}", lettre(lettre0 + i)),
+        Prise::Zoom(i) => format!("Zoom du cadre {}", lettre(lettre0 + i)),
     }
 }
 

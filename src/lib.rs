@@ -290,6 +290,8 @@ mod nouvellescles;
 mod accroche;
 #[cfg(test)]
 mod accroche_tests;
+#[cfg(test)]
+mod camerasuite_tests;
 mod choixtout;
 mod choixcalques;
 #[cfg(test)]

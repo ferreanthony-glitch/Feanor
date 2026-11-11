@@ -2688,12 +2688,14 @@ impl App {
             }
         }
         // La caméra du plan : un cadre de plus (C, D… : le glissé ne crée plus rien), ou celui qu'on a visé en moins.
-        let possible = frame == 0 || self.doc.panels.get(i).is_some_and(|p| p.camera.len() < 2);
+        // (Partie 142 : une case de continuité d'un plan qui bouge porte son propre mouvement, ou peut en commencer un : B vers C.)
+        let possible = self.cam_possible_ici(i, frame);
+        let debut = self.case_du_mouvement(i, frame);
         if let Some(rang) = cadre.filter(|_| possible) {
-            item(self, ui, "Retirer ce cadre", &move |a| a.cam_retirer_cadre(i, rang));
+            item(self, ui, "Retirer ce cadre", &move |a| a.cam_retirer_cadre_case(i, debut, rang));
         }
         if possible {
-            item(self, ui, "Ajouter un cadre", &|a| a.cam_ajouter_cadre(i));
+            item(self, ui, "Ajouter un cadre", &move |a| a.cam_ajouter_cadre_case(i, debut));
         }
         // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
         if self.partage.is_some() {
