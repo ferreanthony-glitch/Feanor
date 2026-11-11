@@ -566,6 +566,15 @@ impl Monde {
 
 // ---------------------------------------------------------------------------------- plan en Espace 3D : l'ordre par distance
 
+/// D'où l'on regarde les cartes pour les ordonner (`ordre_vu`).
+pub enum Regard<'a> {
+    /// La caméra du plan : son changement de repère (`Document::repere_du_plan` ; rien : la caméra de référence). C'est
+    /// l'ordre de l'image.
+    Camera(Option<&'a m::M4>),
+    /// Un œil quelconque de l'espace et la direction où il regarde : la vue d'édition de l'Espace 3D (`espace3dview.rs`).
+    Vue { eye: V3, forward: V3 },
+}
+
 /// Ce que l'ordre par distance sait d'un calque : la distance de son centre à la caméra (le long de son axe), et le plan
 /// où il est posé (normale, écart), dans le repère de la caméra.
 #[derive(Clone, Copy)]
@@ -580,15 +589,24 @@ struct Bloc {
     vu: Vu,
 }
 
-fn vu_du_calque(world: &Monde, layer: &Layer, frame: usize, repere: Option<&m::M4>) -> Vu {
+fn vu_du_calque(world: &Monde, layer: &Layer, frame: usize, regard: &Regard) -> Vu {
     let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
-    // (Un calque accroché à la caméra reste dans le cadre : il se lit sans le changement de repère, comme `place_dans`.)
-    let mx = match repere.filter(|_| !layer.accroche) {
-        Some(r) => m::mul(r, &xf.matrix()),
-        None => xf.matrix(),
+    let (mx, dist) = match regard {
+        // (Un calque accroché à la caméra reste dans le cadre : il se lit sans le changement de repère, comme `place_dans`.)
+        Regard::Camera(repere) => {
+            let mx = match repere.filter(|_| !layer.accroche) {
+                Some(r) => m::mul(r, &xf.matrix()),
+                None => xf.matrix(),
+            };
+            let centre = m::point(&mx, [0.0, 0.0, 0.0]);
+            (mx, world.d0 - centre[2])
+        }
+        Regard::Vue { eye, forward } => {
+            let mx = xf.matrix();
+            let centre = m::point(&mx, [0.0, 0.0, 0.0]);
+            (mx, m::dot(m::sub(centre, *eye), *forward))
+        }
     };
-    let centre = m::point(&mx, [0.0, 0.0, 0.0]);
-    let dist = world.d0 - centre[2];
     let (a, b, c) = (m::point(&mx, [-0.5, 0.5, 0.0]), m::point(&mx, [0.5, 0.5, 0.0]), m::point(&mx, [-0.5, -0.5, 0.0]));
     let n = m::cross(m::sub(b, a), m::sub(c, a));
     let len = m::length(n);
@@ -647,7 +665,13 @@ fn ordonner(blocs: Vec<Bloc>) -> Vec<usize> {
 /// - Les **calques d'annotation** restent posés après tous les autres, dans leur ordre.
 /// - Deux cartes qui se traversent ne sont pas départagées point par point : l'une passe entière devant l'autre.
 pub fn ordre_par_distance(world: &Monde, layers: &[Layer], ordre: &[usize], frame: usize, repere: Option<&m::M4>) -> Vec<usize> {
-    let vu = |li: usize| vu_du_calque(world, &layers[li], frame, repere);
+    ordre_vu(world, layers, ordre, frame, &Regard::Camera(repere))
+}
+
+/// Comme `ordre_par_distance`, d'où que l'on regarde (`Regard`) : mêmes règles (même plan = ordre de la pile, dossier en
+/// bloc, annotations en dernier), la distance étant celle du centre de la carte le long du regard.
+pub fn ordre_vu(world: &Monde, layers: &[Layer], ordre: &[usize], frame: usize, regard: &Regard) -> Vec<usize> {
+    let vu = |li: usize| vu_du_calque(world, &layers[li], frame, regard);
     let ordinaires: Vec<usize> = ordre.iter().copied().filter(|&li| layers.get(li).is_some_and(|l| !l.annotation)).collect();
     let dans_un_dossier = |li: usize| crate::folders::parent_index(layers, li).filter(|fi| ordinaires.contains(fi));
     let mut blocs: Vec<Bloc> = Vec::new();

@@ -87,6 +87,27 @@ impl App {
         Some(Gizmo { origin, axes: gz::axes_for(local, &first.1), len: Gizmo::size_for(view, origin), mode })
     }
 
+    /// Les cartes visibles du plan courant dans l'ordre où la vue les trace.
+    ///
+    /// Plan ordinaire : du fond vers le dessus de la pile, l'ordre où l'image les compose (`e3_visible_cards`).
+    ///
+    /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A7) : du plus loin au plus près de l'œil de la vue, comme
+    /// l'image les compose vues de la caméra (`espace3d::ordre_vu` : même plan = ordre de la pile, dossier en bloc,
+    /// annotations en dernier). « Regarder par la caméra » : l'œil est la caméra du plan, l'ordre est exactement celui de
+    /// l'image.
+    pub(crate) fn e3_cartes_a_tracer(&self, view: &View) -> Vec<usize> {
+        let visibles = self.e3_visible_cards();
+        if !self.doc.plan_en_espace(self.cur_panel) {
+            return visibles;
+        }
+        let layers = self.layers();
+        let pile = crate::calqueannot::ordre(layers, true);
+        let world = self.e3_world();
+        let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame);
+        let regard = if self.espace3d.through_camera { espace3d::Regard::Camera(repere.as_ref()) } else { espace3d::Regard::Vue { eye: view.eye, forward: view.forward } };
+        espace3d::ordre_vu(&world, layers, &pile, self.cur_frame, &regard).into_iter().filter(|li| visibles.contains(li)).collect()
+    }
+
     /// La carte touchée par le rayon : la plus proche dont le dessin est touché, sinon la plus proche dont la feuille
     /// l'est (en dernier recours, pour attraper un calque vide).
     pub(crate) fn e3_pick(&mut self, ray: &Ray) -> Option<u64> {
@@ -538,7 +559,7 @@ impl App {
         }
         let world = self.e3_world();
         let frame = self.cur_frame;
-        for li in self.e3_visible_cards() {
+        for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
             let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
             let (id, name, cel) = (layer.id, layer.name.clone(), layer.shown_at(frame));

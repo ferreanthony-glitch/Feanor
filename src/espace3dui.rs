@@ -135,7 +135,9 @@ impl App {
         }
         self.espace3d.on = on;
         self.espace3d.drag = None;
-        self.status = if on {
+        self.status = if on && self.doc.plan_en_espace(self.cur_panel) {
+            "Espace 3D : ce plan est en Espace 3D. La caméra est libre (choisis-la pour la déplacer ou la tourner), ce qui est devant cache ce qui est derrière, et « Nouvelle surface » dans Réglages pose un calque face à la caméra, au sol ou en mur.".into()
+        } else if on {
             "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. Réglages : panneau Réglages.".into()
         } else {
             "Espace 3D quitté.".into()
@@ -693,6 +695,9 @@ impl App {
             ui.end_row();
         });
         ui.label(RichText::new(format!("Champ horizontal {:.0}° (pellicule de 36 mm).{}", cam.angle_of_view(), if keys >= 2 { format!(" {keys} clés de caméra : on règle la clé de l'image courante.") } else { String::new() })).small().weak());
+        if self.doc.plan_en_espace(self.cur_panel) {
+            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre. Elle tourne tout autour (panoramique sans borne), passe derrière les cartes, et l'image la suit. La bascule s'arrête à 89° : elle ne regarde pas à la verticale.").small().weak());
+        }
         if changed {
             let sc = cam.sanitized();
             let mut new = world.camera_from_scene(&sc);

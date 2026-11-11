@@ -1805,3 +1805,79 @@ fn the_tilt_of_a_card_is_free_only_in_a_plan_in_space() {
     b.app.e3_set_xfs(&[(id, xf)]);
     assert_eq!(b.app.layer().pose(0).tilt_y, 140.0);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A7 : la vue d'édition
+
+/// Un œil de la vue d'édition : placé en `eye`, qui regarde vers `vers`.
+fn vue_depuis(eye: m::V3, vers: m::V3) -> m::View {
+    let forward = m::normalize(m::sub(vers, eye));
+    let right = m::normalize(m::cross(forward, [0.0, 1.0, 0.0]));
+    m::View { eye, right, up: m::cross(right, forward), forward, focal: 35.0, ref_width: 1280.0 }
+}
+
+#[test]
+fn the_edit_view_draws_the_cards_of_a_plan_in_space_from_the_farthest_to_the_nearest_of_its_own_eye() {
+    // De bas en haut de la pile : la verte (proche de la caméra du plan), la rouge (loin), et deux cartes du même plan.
+    let mut doc = doc_espace(&[(GREEN, [280, 150, 360, 210], -0.2), (RED, [280, 150, 360, 210], 0.6), (RED, [100, 100, 200, 200], 0.2), (GREEN, [400, 100, 500, 200], 0.2)]);
+    doc.panels[0].layers[2].transform = pose(-150.0, 0.0);
+    doc.panels[0].layers[3].transform = pose(150.0, 0.0);
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.basculer");
+    b.chauffer(4);
+    let w = b.app.e3_world();
+    // Trois yeux : devant la feuille, derrière elle, et de côté (là où les centres des deux cartes du même plan n'ont
+    // plus la même distance).
+    let devant = vue_depuis([0.0, 1.0, w.d0 * 2.0], [0.0, 0.0, 0.0]);
+    let derriere = vue_depuis([0.0, 1.0, -w.d0 * 3.0], [0.0, 0.0, 0.0]);
+    let cote = vue_depuis([w.d0 * 2.0, 1.0, w.d0], [0.0, 0.0, -1.0]);
+    // Plan ordinaire : l'ordre de la pile, d'où qu'on regarde (c'est celui de l'image).
+    for v in [&devant, &derriere, &cote] {
+        assert_eq!(b.app.e3_cartes_a_tracer(v), vec![0, 1, 2, 3]);
+    }
+    // Plan en Espace 3D : du plus loin au plus près de l'œil de la vue.
+    b.app.run_action("espace3d.plan_en_espace");
+    assert_eq!(b.app.e3_cartes_a_tracer(&devant), vec![1, 2, 3, 0]);
+    assert_eq!(b.app.e3_cartes_a_tracer(&derriere), vec![0, 2, 3, 1]);
+    // De côté : les deux cartes du même plan gardent l'ordre de la pile.
+    let o = b.app.e3_cartes_a_tracer(&cote);
+    assert!(o.iter().position(|&k| k == 2) < o.iter().position(|&k| k == 3), "{o:?}");
+    // « Regarder par la caméra » : l'ordre est celui de l'image, quel que soit l'œil d'orbite.
+    b.app.set_current_camera(Camera { dolly: w.d0_px * 2.5, pan: 180.0, ..b.app.doc.default_camera() });
+    b.app.espace3d.through_camera = true;
+    let layers = &b.app.doc.panels[0].layers;
+    let image = espace3d::ordre_par_distance(&w, layers, &crate::calqueannot::ordre(layers, true), 0, b.app.doc.repere_du_plan(0, 0).as_ref());
+    assert_eq!(image, vec![0, 2, 3, 1], "la caméra est passée derrière");
+    assert_eq!(b.app.e3_cartes_a_tracer(&devant), image);
+    // Une carte cachée n'est pas tracée.
+    b.app.doc.panels[0].layers[2].visible = false;
+    assert_eq!(b.app.e3_cartes_a_tracer(&devant), vec![0, 3, 1]);
+}
+
+#[test]
+fn the_edit_view_opens_on_a_plan_in_space_with_its_surfaces_and_says_what_it_is() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { y: 100.0, tilt: -15.0, pan: 20.0, ..doc.default_camera() })];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.basculer");
+    assert!(b.app.status.contains("ce plan est en Espace 3D"), "{}", b.app.status);
+    // Un sol, un mur, une surface de face : la vue les trace (cartes à 90° comprises), d'orbite puis par la caméra.
+    for a in ["espace3d.surface_sol", "espace3d.surface_mur", "espace3d.surface_face"] {
+        b.app.run_action(a);
+    }
+    assert_eq!(b.app.layers().len(), 4);
+    b.chauffer(6);
+    b.app.run_action("espace3d.vue_camera");
+    b.chauffer(6);
+    assert!(b.app.espace3d.on && b.app.espace3d.through_camera);
+    // Choisir à la souris prend la carte la plus proche le long du regard, comme la vue les trace.
+    let ray = vue_depuis(b.app.e3_world().eye(&b.app.current_camera()), [0.0, 0.0, 0.0]);
+    let _ = b.app.e3_pick(&m::Ray::new(ray.eye, ray.forward));
+    // Un plan ordinaire garde son message d'avant.
+    b.app.run_action("espace3d.basculer");
+    b.app.doc.panels[0].espace = false;
+    b.app.run_action("espace3d.basculer");
+    assert!(b.app.status.starts_with("Espace 3D : clic sur une carte"), "{}", b.app.status);
+}

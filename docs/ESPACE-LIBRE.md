@@ -426,6 +426,29 @@ Pour un plan en Espace 3D : cartes tracées du plus loin au plus près de l'œil
 limites (`MAX_TILT`, `limited`) ; champs de Réglages ; message de la barre d'état. Essais : choix au rayon, caméra
 tournée de 180° par la poignée, repos de l'application.
 
+#### Fait (2026-11-12)
+
+- **Les cartes sont tracées du plus loin au plus près de l'œil de la vue** dans un plan en Espace 3D
+  (`App::e3_cartes_a_tracer`, `espace3d::ordre_vu` avec `Regard::Vue`) : mêmes règles que l'image (même plan = ordre de
+  la pile, dossier en bloc, annotations en dernier). Avec « Regarder par la caméra », l'œil est la caméra du plan et
+  l'ordre est exactement celui de l'image (`Regard::Camera`). Un plan ordinaire garde l'ordre de la pile.
+  `ordre_par_distance` appelle maintenant `ordre_vu` : un seul code pour l'image et pour la vue.
+- **Choisir à la souris** prenait déjà la carte la plus proche le long du regard (`e3_pick`) : il s'accorde à ce tracé
+  sans changement.
+- **La caméra** : ses poignées ne la brident plus depuis A3 (`set_current_camera`) ; ses champs de Réglages n'avaient
+  pas de borne sur le panoramique ni la rotation. Reste la bascule à ±89° (`espace3d::MAX_TILT`) : la caméra est décrite
+  par un panoramique et une bascule, elle ne regarde pas à la verticale. Une note le dit sous ses champs.
+- **Messages** : en ouvrant l'Espace 3D sur un plan en Espace 3D, la barre d'état dit ce qui change (caméra libre,
+  devant cache derrière, « Nouvelle surface »). Le quadrillage est à la hauteur du sol depuis A6.
+- **Essais** (`espace3d_tests.rs`, 2 de plus) : ordre de tracé vu de devant, de derrière (inversé) et de côté (deux
+  cartes du même plan gardent l'ordre de la pile) ; plan ordinaire inchangé d'où qu'on regarde ; « Regarder par la
+  caméra » = l'ordre de l'image, caméra passée derrière ; carte cachée non tracée ; la vue s'ouvre et se trace avec un
+  sol, un mur et une surface de face (cartes à 90°), d'orbite puis par la caméra, avec son message.
+- **Suite complète sur le Mac** : 4 438 passent, 86 échouent, les 86 du Mac.
+- **Pas fait** : la vue montre toujours le dessin brut des cartes, sans effets ni modes de fusion (`ESPACE3D.md` 11.3) ;
+  pas d'essai de la poignée de la caméra tirée à la souris sur un demi-tour (le réglage direct de la caméra l'est) ;
+  **rien n'a été regardé à l'écran**.
+
 ### A8. Finitions
 
 Ce qui est désactivé pour un plan en Espace 3D (partie 5) dit pourquoi. Essai de budget (20 cartes, écran et lecture).
