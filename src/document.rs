@@ -844,7 +844,7 @@ pub struct Panel {
     pub cues: Cues,
     /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
     pub color: Option<u8>,
-    /// **Plan en espace** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
+    /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
     /// se cachent selon leur distance. Étape A1 : la case seulement, l'image n'en dépend pas encore. Faux : un plan ordinaire.
     pub espace: bool,
 }
@@ -2661,8 +2661,8 @@ impl Document {
         self.panels.iter().position(|p| p.id == id).unwrap_or(0)
     }
 
-    /// Un plan peut-il devenir un plan en espace (`Panel::espace`) ? Il faut que le cadre tienne dans la feuille : la zone
-    /// filmée d'un plan en espace est le cadre au centre de la feuille (`docs/ESPACE-LIBRE.md`, A0 point 2). Toujours vrai
+    /// Un plan peut-il devenir un plan en Espace 3D (`Panel::espace`) ? Il faut que le cadre tienne dans la feuille : la zone
+    /// filmée d'un plan en Espace 3D est le cadre au centre de la feuille (`docs/ESPACE-LIBRE.md`, A0 point 2). Toujours vrai
     /// pour un projet créé ou redimensionné par FEANOR (la feuille fait au moins le double du cadre).
     pub fn accepte_plan_en_espace(&self) -> bool {
         self.frame[0] <= self.width && self.frame[1] <= self.height

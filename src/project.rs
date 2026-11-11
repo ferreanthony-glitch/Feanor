@@ -248,10 +248,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// il garde sa place dans l'image filmée, sa pose se lit dans le cadre de la caméra. Une version précédente qui ouvrirait le projet
 /// montrerait le calque à sa place sur la feuille (le film changerait sans prévenir) et perdrait le réglage à l'enregistrement : elle
 /// le refuse donc. Un projet de version 52 ou moins s'ouvre tel quel, aucun calque accroché.
-/// 54 (2026-11-11, `docs/ESPACE-LIBRE.md`, étape A1) : **plan en espace** — `espace` d'un plan (`Panel::espace`) : sa caméra est libre
+/// 54 (2026-11-11, `docs/ESPACE-LIBRE.md`, étape A1) : **plan en Espace 3D** — `espace` d'un plan (`Panel::espace`) : sa caméra est libre
 /// dans l'Espace 3D et ses cartes se cachent selon leur distance (le rendu vient aux étapes A3 et A4 ; A1 pose la case). Une version
 /// précédente qui ouvrirait le projet ignorerait le champ sans rien dire, montrerait le plan à plat et perdrait le réglage à
-/// l'enregistrement : elle le refuse donc. Un projet de version 53 ou moins s'ouvre tel quel, aucun plan en espace.
+/// l'enregistrement : elle le refuse donc. Un projet de version 53 ou moins s'ouvre tel quel, aucun plan en Espace 3D.
 pub const VERSION: u32 = 54;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
@@ -568,7 +568,7 @@ pub(crate) struct PanelEntry {
     /// Notes dessinées sur la timeline (format 17 ; absentes : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes_dessinees: Vec<TimeNoteEntry>,
-    /// Plan en espace (format 54, `Panel::espace` ; absent : un plan ordinaire).
+    /// Plan en Espace 3D (format 54, `Panel::espace` ; absent : un plan ordinaire).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     espace: bool,
 }

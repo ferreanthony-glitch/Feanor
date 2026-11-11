@@ -776,7 +776,7 @@ fn the_view_with_ten_cards_stays_within_the_frame_budget() {
     println!("PERF Espace 3D : choisir à la souris (10 cartes) : {pick:.2} ms");
     assert!(pick < 5.0, "{pick:.2} ms pour choisir");
 }
-/// Mesure de l'étape A0 du plan en espace (`docs/ESPACE-LIBRE.md`) : dans un plan en espace, toute carte passe par le
+/// Mesure de l'étape A0 du plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : dans un plan en Espace 3D, toute carte passe par le
 /// maillage dès que la caméra tourne. Ce que coûte de construire le plan d'une image avec 20 cartes inclinées, à la
 /// taille d'un vrai projet (cadre 1920 × 1080).
 #[test]
@@ -991,7 +991,7 @@ fn the_space_toolbar_is_one_row_of_tools_and_the_application_rests_with_it_open(
         assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
     }
 }
-// ------------------------------------------------------------------------------ plan en espace, étape A1 (`docs/ESPACE-LIBRE.md`)
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A1 (`docs/ESPACE-LIBRE.md`)
 
 #[test]
 fn the_plan_in_space_flag_survives_a_save_and_a_reload_and_an_ordinary_plan_writes_nothing() {
@@ -1004,15 +1004,15 @@ fn the_plan_in_space_flag_survives_a_save_and_a_reload_and_an_ordinary_plan_writ
     let text = std::fs::read_to_string(&manifest).expect("manifeste");
     assert!(!text.contains("\"espace\""), "un plan ordinaire n'écrit pas le champ");
     assert!(!project::load(&manifest).expect("relu").doc.panels[0].espace);
-    // Un projet du format d'avant (53) : même texte, ancien numéro ; il s'ouvre, aucun plan en espace, mêmes pixels.
-    assert!(project::VERSION >= 54, "le plan en espace est du format 54");
+    // Un projet du format d'avant (53) : même texte, ancien numéro ; il s'ouvre, aucun plan en Espace 3D, mêmes pixels.
+    assert!(project::VERSION >= 54, "le plan en Espace 3D est du format 54");
     std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 53")).expect("écrit");
     let old = project::load(&manifest).expect("un projet d'avant s'ouvre").doc;
     assert!(!old.panels[0].espace);
     for (f, want) in before.iter().enumerate() {
         assert!(sheet(&old, f) == *want, "l'image {f} d'un projet d'avant est la même, pixel pour pixel");
     }
-    // Un plan en espace : le champ est écrit et relu.
+    // Un plan en Espace 3D : le champ est écrit et relu.
     doc.panels[0].espace = true;
     project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
     let text = std::fs::read_to_string(&manifest).expect("manifeste");
@@ -1047,9 +1047,9 @@ fn splitting_duplicating_and_swapping_versions_keep_the_plan_in_space_flag() {
     let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5)]);
     doc.panels[0].espace = true;
     let second = doc.split_panel(0, 6).expect("coupé");
-    assert!(doc.panels[0].espace && doc.panels[second].espace, "les deux moitiés d'un plan en espace le restent");
+    assert!(doc.panels[0].espace && doc.panels[second].espace, "les deux moitiés d'un plan en Espace 3D le restent");
     let copy = doc.duplicate_panel_after(0);
-    assert!(doc.panels[copy].espace, "la copie d'un plan en espace en est un");
+    assert!(doc.panels[copy].espace, "la copie d'un plan en Espace 3D en est un");
     // Deux versions d'un plan : la case va avec la caméra et les calques, donc avec la version.
     let (mut a, mut c) = (doc.panels[0].clone(), doc.panels[0].clone());
     c.espace = false;

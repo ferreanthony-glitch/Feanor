@@ -246,22 +246,22 @@ impl App {
         self.status = "Les cartes sont dans l'ordre de la profondeur : le plus loin en bas de la pile.".into();
     }
 
-    /// Coche ou décoche « Plan en espace » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
+    /// Coche ou décoche « Plan en Espace 3D » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
     /// d'annulation. Étape A1 : la case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; l'image
     /// n'en dépend pas encore. Refusé si le cadre ne tient pas dans la feuille (`Document::accepte_plan_en_espace`).
     pub(crate) fn espace3d_basculer_plan_en_espace(&mut self) {
         let on = !self.panel().espace;
         if on && !self.doc.accepte_plan_en_espace() {
-            self.status = "Plan en espace refusé : le cadre du projet est plus grand que la feuille. Agrandis la feuille (Fichier > Réglages du projet).".into();
+            self.status = "Plan en Espace 3D refusé : le cadre du projet est plus grand que la feuille. Agrandis la feuille (Fichier > Réglages du projet).".into();
             return;
         }
         let pi = self.cur_panel;
-        self.espace3d_step("Plan en espace", |s| s.doc.panels[pi].espace = on);
+        self.espace3d_step("Plan en Espace 3D", |s| s.doc.panels[pi].espace = on);
         self.renderer.invalidate_all();
         self.status = if on {
-            "Plan en espace : coché pour ce plan. (En construction : l'image ne change pas encore.)".into()
+            "Plan en Espace 3D : coché pour ce plan. (En construction : l'image ne change pas encore.)".into()
         } else {
-            "Plan en espace : décoché, le plan est de nouveau un plan ordinaire.".into()
+            "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire.".into()
         };
     }
 
@@ -390,13 +390,13 @@ impl App {
             if r.clicked() {
                 self.espace3d.show_grid = !self.espace3d.show_grid;
             }
-            // Plan en espace (`docs/ESPACE-LIBRE.md`) : une case du plan courant. Étape A1 : l'image n'en dépend pas encore.
+            // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : une case du plan courant. Étape A1 : l'image n'en dépend pas encore.
             let r = self.bouton_etat(
                 ui,
                 self.panel().espace,
                 ph::CUBE_TRANSPARENT,
-                "Plan en espace",
-                "Ce plan devient un plan en espace : caméra libre, cartes qui se cachent selon leur distance. En construction : pour l'instant la case est retenue et enregistrée avec le plan, l'image ne change pas encore.",
+                "Plan en Espace 3D",
+                "Ce plan devient un plan en Espace 3D : caméra libre, cartes qui se cachent selon leur distance. En construction : pour l'instant la case est retenue et enregistrée avec le plan, l'image ne change pas encore.",
                 "espace3d.plan_en_espace",
             );
             if r.clicked() {

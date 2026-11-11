@@ -106,7 +106,7 @@ pub(crate) fn echanger(a: &mut Panel, b: &mut Panel) {
     std::mem::swap(ma, mb);
     std::mem::swap(cua, cub);
     std::mem::swap(coa, cob);
-    // (Plan en espace : la case va avec la caméra et les calques, donc avec la version.)
+    // (Plan en Espace 3D : la case va avec la caméra et les calques, donc avec la version.)
     std::mem::swap(ea3, eb3);
 }
 

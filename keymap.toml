@@ -1906,7 +1906,7 @@ source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touc
 [[raccourci]]
 action = "espace3d.plan_en_espace"
 touches = []
-source = "FEANOR (Espace 3D, plan en espace pour le plan courant ; aucune touche choisie)"
+source = "FEANOR (mettre le plan courant en Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.aimanter"
