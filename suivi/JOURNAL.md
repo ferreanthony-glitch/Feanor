@@ -66,6 +66,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (ses listes
   137.11 et 138) ; la partie 138 n'a été ni écrite ni essayée par moi au-delà de ses 16 essais et du vérificateur. Les dossiers de
   chantier `Chantiers\calques-timeline` et `Chantiers\multi-calques` attendent son accord pour être retirés.
+- Sur son « Oui, retire-les » : les deux dossiers de chantier retirés (propres, leurs branches entièrement dans main ; 21 Go de
+  fichiers de construction rendus au disque). Les branches `calques-timeline` (7e89e7b) et `cles-glisser` (49472b8) restent. Il ne
+  reste que `Source`.
 
 ## 2026-11-10
 
