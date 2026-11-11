@@ -176,6 +176,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   son mouvement sur la deuxième case (clés aux images 49 et 96), son plan 3 dit pourquoi. Vérificateur sur la branche : 4 500 essais
   réussis, 0 échec, aucun avertissement (un premier passage, la machine chargée, avait un échec sur un essai de capture d'écran qui passe
   seul et au second passage). Fusion dans main : à son accord.
+- Fusion de `camera-case` dans main (2777b27, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 22 h 26) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages : pas de plantage. Pas de version portable. Pas
+  vérifié : aucun geste fait à la main dans le vrai exe (sa liste 142.6). À lui de voir : la clé B de son plan 3 est à l'image 108,
+  au-delà de sa première case. Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent.
 
 ## 2026-11-10
 
