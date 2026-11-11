@@ -139,7 +139,7 @@ fn the_budget_is_saved_only_when_set_and_old_projects_open_the_same() {
     crate::project::save(&doc, &manifeste, &mut written).unwrap();
     let texte = std::fs::read_to_string(&manifeste).unwrap();
     assert!(!texte.contains("budget"), "sans cible, rien n'est écrit : {texte}");
-    assert_eq!(crate::project::VERSION, 53);
+    assert_eq!(crate::project::VERSION, 54);
     // Un projet de version 45 s'ouvre sans budget.
     let ancien = texte.replace(&format!("\"version\": {}", crate::project::VERSION), "\"version\": 45");
     assert_ne!(ancien, texte);

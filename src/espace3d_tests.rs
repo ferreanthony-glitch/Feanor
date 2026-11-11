@@ -991,3 +991,84 @@ fn the_space_toolbar_is_one_row_of_tools_and_the_application_rests_with_it_open(
         assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
     }
 }
+// ------------------------------------------------------------------------------ plan en espace, étape A1 (`docs/ESPACE-LIBRE.md`)
+
+#[test]
+fn the_plan_in_space_flag_survives_a_save_and_a_reload_and_an_ordinary_plan_writes_nothing() {
+    let dir = dir_for("plan-en-espace");
+    let manifest = dir.join("P.pelure");
+    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5), (GREEN, [100, 40, 200, 120], 1.0)]);
+    let before: Vec<Vec<Color32>> = (0..3).map(|f| sheet(&doc, f)).collect();
+    // Un plan ordinaire : rien de nouveau dans le fichier.
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    assert!(!text.contains("\"espace\""), "un plan ordinaire n'écrit pas le champ");
+    assert!(!project::load(&manifest).expect("relu").doc.panels[0].espace);
+    // Un projet du format d'avant (53) : même texte, ancien numéro ; il s'ouvre, aucun plan en espace, mêmes pixels.
+    assert!(project::VERSION >= 54, "le plan en espace est du format 54");
+    std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 53")).expect("écrit");
+    let old = project::load(&manifest).expect("un projet d'avant s'ouvre").doc;
+    assert!(!old.panels[0].espace);
+    for (f, want) in before.iter().enumerate() {
+        assert!(sheet(&old, f) == *want, "l'image {f} d'un projet d'avant est la même, pixel pour pixel");
+    }
+    // Un plan en espace : le champ est écrit et relu.
+    doc.panels[0].espace = true;
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    assert!(text.contains("\"espace\": true"), "le champ est écrit");
+    assert!(text.contains(&format!("\"version\": {}", project::VERSION)));
+    let back = project::load(&manifest).expect("relu").doc;
+    assert!(back.panels[0].espace, "la case est relue");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn checking_plan_in_space_is_one_undo_step_and_does_not_change_the_image_yet() {
+    let doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5), (GREEN, [100, 40, 200, 120], -0.3)]);
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    let plan_before = render::panel_plan_at(&b.app.doc, 0, 0, None);
+    let pixels_before = sheet(&b.app.doc, 0);
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(b.app.doc.panels[0].espace, "la commande coche la case du plan courant");
+    assert!(render::panel_plan_at(&b.app.doc, 0, 0, None) == plan_before, "étape A1 : le plan d'une image ne dépend pas encore de la case");
+    assert!(sheet(&b.app.doc, 0) == pixels_before, "mêmes pixels");
+    b.app.undo();
+    assert!(!b.app.doc.panels[0].espace, "une seule étape d'annulation");
+    b.app.redo();
+    assert!(b.app.doc.panels[0].espace);
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(!b.app.doc.panels[0].espace, "la même commande décoche");
+}
+
+#[test]
+fn splitting_duplicating_and_swapping_versions_keep_the_plan_in_space_flag() {
+    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5)]);
+    doc.panels[0].espace = true;
+    let second = doc.split_panel(0, 6).expect("coupé");
+    assert!(doc.panels[0].espace && doc.panels[second].espace, "les deux moitiés d'un plan en espace le restent");
+    let copy = doc.duplicate_panel_after(0);
+    assert!(doc.panels[copy].espace, "la copie d'un plan en espace en est un");
+    // Deux versions d'un plan : la case va avec la caméra et les calques, donc avec la version.
+    let (mut a, mut c) = (doc.panels[0].clone(), doc.panels[0].clone());
+    c.espace = false;
+    crate::planvers::echanger(&mut a, &mut c);
+    assert!(!a.espace && c.espace);
+    // Un plan neuf est un plan ordinaire.
+    let scene = doc.panels[0].scene;
+    assert!(!doc.make_panel(scene).espace);
+}
+
+#[test]
+fn plan_in_space_is_refused_when_the_frame_does_not_fit_in_the_sheet() {
+    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5)]);
+    assert!(doc.accepte_plan_en_espace(), "un projet ordinaire : le cadre tient dans la feuille");
+    doc.frame = [doc.width * 2, doc.height];
+    assert!(!doc.accepte_plan_en_espace());
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(!b.app.doc.panels[0].espace, "la case reste décochée");
+    assert!(b.app.status.contains("refusé"), "et l'utilisateur sait pourquoi : {}", b.app.status);
+}

@@ -3414,8 +3414,13 @@ d'une case vide dépendant de la dernière vignette suit cette dernière si le n
 place du lâcher à la fenêtre) ; l'export en pages A4 / A3 ne coupe qu'en hauteur ; la bande des couleurs dominantes est un histogramme (pas un partitionnement k-means) ; pas encore de réglages mémorisés d'une
 séance à l'autre pour les deux fenêtres d'export, ni d'annotations dans les envois de relecture.
 
-## Plan en espace : dessiner dans un décor que la caméra traverse (demandé par Anthony le 2026-11-11, branche `espace-libre`) — proposé, pas validé
+## Plan en espace : dessiner dans un décor que la caméra traverse (demandé par Anthony le 2026-11-11, branche `espace-libre`) — en cours
 
 Sa demande : pousser dans FEANOR le dessin dans un environnement 3D (à la manière d'un add-on de storyboard 3D pour Blender), sans rien casser. Plan de l'étape A (un plan dont la
 caméra est libre, cartes ordonnées par distance, surfaces posées face à la caméra, au sol ou en mur) : `docs/ESPACE-LIBRE.md`. Rien n'est codé. Étapes B (décor partagé par séquence)
 et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le moteur 3D en V2.
+
+- ✅ **A0** (2026-11-11) : vérifications par lecture ; le plan tient (deux constructeurs de plan seulement, zone filmée dans la feuille, dossiers en bloc, format 54).
+- ✅ **A1** (2026-11-11) : la case `Panel::espace`, enregistrée (**format 54**), commande `espace3d.plan_en_espace`, bouton dans Réglages de l'Espace 3D, une étape d'annulation ;
+  l'image n'en dépend pas encore. Pas regardé à l'écran.
+- À faire : A2 (maths), A3 (rendu), A4 (ordre par distance), A5 (dessiner par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).

@@ -246,6 +246,25 @@ impl App {
         self.status = "Les cartes sont dans l'ordre de la profondeur : le plus loin en bas de la pile.".into();
     }
 
+    /// Coche ou décoche « Plan en espace » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
+    /// d'annulation. Étape A1 : la case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; l'image
+    /// n'en dépend pas encore. Refusé si le cadre ne tient pas dans la feuille (`Document::accepte_plan_en_espace`).
+    pub(crate) fn espace3d_basculer_plan_en_espace(&mut self) {
+        let on = !self.panel().espace;
+        if on && !self.doc.accepte_plan_en_espace() {
+            self.status = "Plan en espace refusé : le cadre du projet est plus grand que la feuille. Agrandis la feuille (Fichier > Réglages du projet).".into();
+            return;
+        }
+        let pi = self.cur_panel;
+        self.espace3d_step("Plan en espace", |s| s.doc.panels[pi].espace = on);
+        self.renderer.invalidate_all();
+        self.status = if on {
+            "Plan en espace : coché pour ce plan. (En construction : l'image ne change pas encore.)".into()
+        } else {
+            "Plan en espace : décoché, le plan est de nouveau un plan ordinaire.".into()
+        };
+    }
+
     /// Les commandes de l'Espace 3D. Vrai si l'action est la sienne.
     pub(crate) fn espace3d_action(&mut self, action: &str) -> bool {
         // Les anciens noms (plateau en 3D, scène 3D) mènent à l'original (`keymap::ALIASES`).
@@ -269,6 +288,7 @@ impl App {
                 self.espace3d_fit();
             }
             "espace3d.ordonner_profondeur" => self.espace3d_order_by_depth(),
+            "espace3d.plan_en_espace" => self.espace3d_basculer_plan_en_espace(),
             "espace3d.aimanter" => {
                 self.espace3d.snap = !self.espace3d.snap;
                 self.status = if self.espace3d.snap { "Aimantation à la grille : allumée.".into() } else { "Aimantation : éteinte.".into() };
@@ -369,6 +389,18 @@ impl App {
             let r = self.bouton_etat(ui, self.espace3d.show_grid, ph::GRID_FOUR, "Grille du sol", "Quadrillage au sol, un trait plus marqué tous les cinq.", "espace3d.grille");
             if r.clicked() {
                 self.espace3d.show_grid = !self.espace3d.show_grid;
+            }
+            // Plan en espace (`docs/ESPACE-LIBRE.md`) : une case du plan courant. Étape A1 : l'image n'en dépend pas encore.
+            let r = self.bouton_etat(
+                ui,
+                self.panel().espace,
+                ph::CUBE_TRANSPARENT,
+                "Plan en espace",
+                "Ce plan devient un plan en espace : caméra libre, cartes qui se cachent selon leur distance. En construction : pour l'instant la case est retenue et enregistrée avec le plan, l'image ne change pas encore.",
+                "espace3d.plan_en_espace",
+            );
+            if r.clicked() {
+                self.espace3d_basculer_plan_en_espace();
             }
         });
         if self.espace3d.snap {

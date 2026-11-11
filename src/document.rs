@@ -844,6 +844,9 @@ pub struct Panel {
     pub cues: Cues,
     /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
     pub color: Option<u8>,
+    /// **Plan en espace** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
+    /// se cachent selon leur distance. Étape A1 : la case seulement, l'image n'en dépend pas encore. Faux : un plan ordinaire.
+    pub espace: bool,
 }
 
 /// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
@@ -2468,6 +2471,7 @@ impl Document {
             // sortie restent au premier.
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
+            espace: source.espace,
         };
         // Le contenu rogné à la fin du plan est celui de la fin du second (qui finit où le plan finissait) : il lui passe, avec
         // les numéros de ses calques. Rien n'est oublié.
@@ -2657,6 +2661,13 @@ impl Document {
         self.panels.iter().position(|p| p.id == id).unwrap_or(0)
     }
 
+    /// Un plan peut-il devenir un plan en espace (`Panel::espace`) ? Il faut que le cadre tienne dans la feuille : la zone
+    /// filmée d'un plan en espace est le cadre au centre de la feuille (`docs/ESPACE-LIBRE.md`, A0 point 2). Toujours vrai
+    /// pour un projet créé ou redimensionné par FEANOR (la feuille fait au moins le double du cadre).
+    pub fn accepte_plan_en_espace(&self) -> bool {
+        self.frame[0] <= self.width && self.frame[1] <= self.height
+    }
+
     /// Un panneau vide de deux secondes dans la scène `scene`, avec un calque vectoriel.
     pub fn make_panel(&mut self, scene: u64) -> Panel {
         Panel {
@@ -2673,6 +2684,7 @@ impl Document {
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,
+            espace: false,
         }
     }
 

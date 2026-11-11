@@ -246,6 +246,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             marks: Vec::new(),
             cues: Default::default(),
             color: None,
+            espace: false,
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

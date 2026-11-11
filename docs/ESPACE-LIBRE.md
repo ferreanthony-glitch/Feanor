@@ -2,7 +2,8 @@
 
 Branche `espace-libre` (depuis `main` 7d8a7d2), 2026-11-11. **Plan validé par Anthony le 2026-11-11 pour l'étape A0
 (vérifications), faite le même jour : résultats en partie 6. Les décisions de la partie 7 restent à trancher avant A1.
-Rien du logiciel n'est changé ; un essai de mesure est ajouté (`espace3d_tests.rs`).**
+Étape A1 (la case « Plan en espace », sans effet sur l'image) faite le 2026-11-11 à la demande d'Anthony, avec les
+propositions de la partie 7 prises par défaut.**
 
 Sa demande : pousser dans FEANOR la possibilité de dessiner dans un environnement 3D, à la manière d'un add-on de
 storyboard 3D pour Blender (StoryLiner), sans rien casser de ce que FEANOR propose.
@@ -157,11 +158,11 @@ que le cadre ; la case « Plan en espace » est refusée dans ce cas (essai en A
 une version d'avant refuse le projet. `PanelEntry` ignore un champ inconnu sans rien dire : une version d'avant
 montrerait un plan en espace à plat, avec une autre image. **Donc `VERSION` 53 → 54, dès A1.**
 
-**5. Budget : pas encore mesuré.** L'essai est écrit
-(`the_plan_of_an_image_with_twenty_tilted_cards_stays_within_the_frame_budget`, `espace3d_tests.rs` : 20 cartes
-inclinées, cadre 1920 × 1080, seuil 8 ms). Il n'a pas pu tourner sur le Mac (voir point 6) ; il se compile sans erreur.
-À lancer sur le poste Windows : `cargo test --lib twenty_tilted_cards -- --nocapture`, et noter ici la ligne `PERF`.
-Repère connu : 0,15 à 0,25 ms par carte inclinée (`ESPACE3D.md`, 8), soit 3 à 5 ms attendus pour 20.
+**5. Budget : tenu sur le Mac, à confirmer sur le poste Windows.** L'essai
+`the_plan_of_an_image_with_twenty_tilted_cards_stays_within_the_frame_budget` (`espace3d_tests.rs` : 20 cartes
+inclinées, cadre 1920 × 1080, seuil 8 ms) donne **1,14 ms pour les 20 cartes** (0,057 ms par carte) sur le Mac d'Anthony
+(Apple Silicon, 2026-11-11). Le poste Windows est la référence du projet : y lancer
+`cargo test --lib twenty_tilted_cards -- --nocapture` et noter ici la ligne `PERF`.
 
 **6. Trouvé en chemin.**
 
@@ -171,8 +172,12 @@ Repère connu : 0,15 à 0,25 ms par carte inclinée (`ESPACE3D.md`, 8), soit 3 �
 - *Compiler sur le Mac* : `rust-toolchain.toml` impose la chaîne Windows et `.cargo/config.toml` un réglage de
   processeur Intel ; `cargo` échoue tel quel sur ce Mac (Apple Silicon). En passant `cargo +stable-aarch64-apple-darwin`
   et `RUSTFLAGS="-Awarnings"`, sans toucher aux fichiers : l'application se vérifie sans erreur (`cargo check --lib`), mais
-  les essais ne se compilent pas, à cause de deux essais écrits pour Windows seulement (`exportrender_tests.rs:1504`,
-  `planchebitmap_tests.rs:234`). Aucun essai n'a donc tourné sur le Mac. Hors sujet ici, à régler avant la bêta Mac.
+  les essais ne se compilaient pas, à cause de deux essais écrits pour Windows seulement (`exportrender_tests.rs`,
+  `planchebitmap_tests.rs`) : ils sont maintenant gardés par `#[cfg(windows)]` (rien ne change sous Windows). Il reste
+  des fonctions de Windows appelées par des essais de mesure (`lourd_tests.rs`, `exportrender_tests.rs` : mémoire et
+  temps du processus) ; pour lier les essais sur le Mac, on leur donne des remplaçants vides **hors du dépôt**
+  (`-L native=<dossier>` dans `RUSTFLAGS`). Les essais tournent alors sur le Mac ; une partie échoue pour des raisons
+  propres au Mac, sans rapport avec ce chantier (voir A1). À régler pour de bon avant la bêta Mac.
 
 ### A1. La case « Plan en espace »
 
@@ -180,6 +185,30 @@ Repère connu : 0,15 à 0,25 ms par carte inclinée (`ESPACE3D.md`, 8), soit 3 �
 menu du plan, panneau Réglages de l'Espace 3D), une étape d'annulation « Plan en espace ». Aucun effet sur l'image.
 Essais : aller-retour du fichier, octet pour octet quand la case est décochée ; un ancien projet inchangé ; annulation ;
 couper, réunir, dupliquer un plan garde la case.
+
+#### Fait (2026-11-11)
+
+- **La case** : `Panel::espace` (`document.rs`), faux pour un plan neuf, importé ou rouvert d'un ancien projet. Elle
+  suit le plan : les deux moitiés d'une coupe (`split_panel`), une copie (`duplicate_panel`), le plan léger des exports
+  (`exportrender::plan_leger`), les plans annulés (`planannule.rs`). Entre deux versions d'un plan (`planvers::echanger`),
+  elle va avec la caméra et les calques, donc avec la version.
+- **Le fichier** : `"espace": true` dans l'entrée du plan (`project::PanelEntry`, la même pour le projet classique, la
+  copie de secours et le fichier d'un plan de projet partagé), absent si faux. **Format 54** (`project::VERSION`) : une
+  version d'avant refuse le projet. Si `main` prend le numéro 54 pour autre chose avant la fusion, celui-ci devient 55.
+- **La commande** : `espace3d.plan_en_espace` (et non `plan.espace` : elle vit avec les autres commandes de l'Espace 3D),
+  dans la palette et `keymap.toml` (sans touche), et un bouton à bascule dans Réglages de l'Espace 3D (icône cube
+  transparent). Une étape d'annulation « Plan en espace ». Le message de la barre d'état et la bulle disent que l'image
+  ne change pas encore.
+- **Le refus** : `Document::accepte_plan_en_espace` (le cadre tient dans la feuille), avec un message.
+- **Pas fait** : l'entrée dans le menu du plan (elle viendra avec A3, quand la case aura un effet visible).
+- **Essais** (`espace3d_tests.rs`, 4 de plus) : le fichier (rien d'écrit pour un plan ordinaire, champ écrit et relu,
+  projet du format 53 ouvert avec les mêmes pixels) ; une étape d'annulation et **le même plan d'image, les mêmes pixels**
+  case cochée ; couper, dupliquer, échanger deux versions, plan neuf ; refus quand le cadre dépasse la feuille.
+- **Essais existants touchés** : le numéro de format épinglé (53 → 54, et « plus récent » 54 → 55) dans
+  `camera_retours_tests`, `corbeille_tests`, `partage_tests`, `petits_livrables_tests`, `pipeline_tests`,
+  `planannule_tests`, comme à chaque nouveau format ; les deux gardes `#[cfg(windows)]` de A0, point 6.
+- **Rien n'a été regardé à l'écran** (FEANOR n'a pas été lancé). À voir une fois : le bouton dans Réglages de l'Espace 3D,
+  sa bulle, son état coché, le message de la barre d'état, Ctrl+Z.
 
 ### A2. Les maths
 

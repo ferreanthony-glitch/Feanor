@@ -1904,6 +1904,11 @@ touches = []
 source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.plan_en_espace"
+touches = []
+source = "FEANOR (Espace 3D, plan en espace pour le plan courant ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.aimanter"
 touches = []
 source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"

@@ -87,6 +87,7 @@ pub(crate) fn plan_leger(p: &Panel) -> Panel {
         marks: p.marks.clone(),
         cues: p.cues.clone(),
         color: p.color,
+        espace: p.espace,
     }
 }
 

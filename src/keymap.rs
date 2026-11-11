@@ -653,6 +653,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.cadrer", "Espace 3D : recadrer la vue sur tout l'espace", true, false),
     act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),
+    act("espace3d.plan_en_espace", "Espace 3D : plan en espace (oui / non) pour le plan courant", true, false),
     act("espace3d.aimanter", "Espace 3D : aimantation à la grille (oui / non)", true, false),
     act("espace3d.grille", "Espace 3D : grille du sol (oui / non)", true, false),
     act("vue.3d", "Espace 3D (ancien plateau en 3D)", true, false),

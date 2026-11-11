@@ -93,8 +93,8 @@ pub fn etiquette(numero: u32) -> String {
 pub(crate) fn echanger(a: &mut Panel, b: &mut Panel) {
     // (Exhaustif exprès : un champ ajouté au plan ne compile plus ici tant qu'on n'a pas dit s'il est du plan ou de la version.
     // Les commentaires et le contenu rogné ne sont pas dans `Panel` : ils restent au plan, à toute version.)
-    let Panel { id: _, scene: _, length: la, layers: ya, action: aa, dialogue: da, notes: na, camera: ca, saccade: sa, effet_camera: ea, marks: ma, cues: cua, color: coa } = a;
-    let Panel { id: _, scene: _, length: lb, layers: yb, action: ab, dialogue: db, notes: nb, camera: cb, saccade: sb, effet_camera: eb, marks: mb, cues: cub, color: cob } = b;
+    let Panel { id: _, scene: _, length: la, layers: ya, action: aa, dialogue: da, notes: na, camera: ca, saccade: sa, effet_camera: ea, marks: ma, cues: cua, color: coa, espace: ea3 } = a;
+    let Panel { id: _, scene: _, length: lb, layers: yb, action: ab, dialogue: db, notes: nb, camera: cb, saccade: sb, effet_camera: eb, marks: mb, cues: cub, color: cob, espace: eb3 } = b;
     std::mem::swap(ea, eb);
     std::mem::swap(ya, yb);
     std::mem::swap(la, lb);
@@ -106,6 +106,8 @@ pub(crate) fn echanger(a: &mut Panel, b: &mut Panel) {
     std::mem::swap(ma, mb);
     std::mem::swap(cua, cub);
     std::mem::swap(coa, cob);
+    // (Plan en espace : la case va avec la caméra et les calques, donc avec la version.)
+    std::mem::swap(ea3, eb3);
 }
 
 impl Document {

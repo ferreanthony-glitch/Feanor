@@ -585,6 +585,7 @@ pub(crate) fn document_de_la_planche(doc: &Document) -> (Document, Vec<Rang>) {
                 marks: p.marks.clone(),
                 cues: Default::default(),
                 color: None,
+                espace: p.espace,
             }
         })
         .collect();
