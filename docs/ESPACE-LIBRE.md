@@ -302,6 +302,43 @@ distance égale, l'ordre de la pile. Un calque et ce qui lui est attaché (coule
 Un calque d'ajustement et un mode de fusion agissent sur ce qui est plus loin qu'eux. Essais : deux cartes qui échangent
 leur place quand la caméra fait le tour ; pile gardée à égalité ; couleur attachée à son trait ; ajustement.
 
+#### Fait (2026-11-11)
+
+**Dans un plan en Espace 3D, ce qui est devant cache ce qui est derrière, sans ranger la pile.**
+
+- `espace3d::ordre_par_distance` donne l'ordre de pose, du plus loin de la caméra au plus près ; les deux constructeurs
+  de plan l'appellent quand `Panel::espace` est vrai (caméra de référence comprise), **avant** leur boucle. Un plan
+  ordinaire ne passe pas par là.
+- **La distance** d'un calque est celle du centre de sa carte, le long de l'axe de la caméra.
+- **Même plan, ordre de la pile.** C'est plus fort que le « à distance égale » prévu : dès que la caméra tourne, les
+  centres de deux cartes posées dans le même plan (même profondeur, même inclinaison) n'ont plus la même distance. Un
+  tri sur le centre seul aurait fait passer la couleur devant son trait. Les cartes d'un même plan forment donc un
+  groupe, qui a une seule distance (la moyenne) : elles gardent l'ordre de la pile, où que soit la caméra. Un calque de
+  couleur suit ainsi son trait sans cas particulier (tant qu'ils ont la même pose).
+- **Dossier** : d'un seul tenant, à la distance de son calque le plus loin ; ses calques ordonnés entre eux de même.
+- **Calque d'ajustement** : il a sa place dans l'ordre (sa profondeur) et agit sur ce qui est plus loin que lui.
+  `calqueffet::Portees` donne sa portée dans les deux constructeurs : « depuis le premier calque **posé** de son
+  dossier » (hors dossier : depuis le début). `marker` est inchangé pour un plan ordinaire.
+- **Annotations** : toujours posées après tout le reste.
+- **Essais** (`espace3d_tests.rs`, 4 de plus) : la carte proche cache la carte loin quoi que dise la pile, et l'ordre
+  s'inverse quand la caméra passe derrière (pixels) ; trois cartes d'un même plan gardent l'ordre de la pile caméra
+  tournée à +40° et −40°, cartes inclinées pareil comprises ; dossier en bloc, annotation en dernier, plan ordinaire
+  dans l'ordre de la pile ; calque d'ajustement à la racine (n'inverse que la carte derrière lui, pixels) et dans un
+  dossier (portée depuis le premier calque posé). L'écran pose dans le même ordre que les sorties.
+- **Suite complète sur le Mac** : 4 426 passent, 87 échouent : les 86 du Mac, plus
+  `colorscript::tests_sortie::cancelling_leaves_no_file…`, qui passe seul trois fois de suite (instable sous charge ;
+  ce n'est pas le même essai qu'à A3, qui repasse).
+- **Limites** :
+  - deux cartes qui se traversent, ou un personnage debout sur une carte au sol, ne sont pas départagés point par
+    point : l'une passe entière devant l'autre (partie 5) ;
+  - un dossier passe en bloc : une carte hors dossier située entre deux calques du dossier est devant ou derrière tout
+    le dossier ;
+  - la vue d'édition de l'Espace 3D trace encore les cartes dans l'ordre de la pile (A7) ; « Ordonner la pile selon la
+    profondeur » reste utile pour un plan ordinaire, sans effet sur l'image d'un plan en Espace 3D ;
+  - cocher la case change l'image d'un plan dont la pile et les profondeurs ne disent pas la même chose : c'est le but,
+    mais ce n'est plus « rien ne change » ;
+  - **rien n'a été regardé à l'écran**.
+
 ### A5. Dessiner par la caméra
 
 `App::to_layer` (aujourd'hui `tilted_card` + `sheet_to_card`) passe par le repère de la caméra pour un plan en Espace 3D.

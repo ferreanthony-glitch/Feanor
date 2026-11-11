@@ -1833,14 +1833,20 @@ impl App {
         // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
         let mut starts: Vec<usize> = vec![0; layers.len()];
         // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
-        for li in crate::calqueannot::ordre(layers, annotations) {
+        let order = crate::calqueannot::ordre(layers, annotations);
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près, comme les sorties (`render.rs`).
+        let par_distance = self.doc.plan_en_espace(self.cur_panel);
+        let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
+        let mut portees = crate::calqueffet::Portees::new(par_distance);
+        for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
+            portees.visiter(layers, li, items.len());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
             if layer.effet.is_some() {
-                items.extend(crate::calqueffet::marker(layers, li, frame, opacity, &starts));
+                items.extend(portees.marker(layers, li, frame, opacity, &starts));
                 continue;
             }
             if washed && li != cur {

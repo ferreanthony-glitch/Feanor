@@ -898,16 +898,20 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
+    // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près ; sinon l'ordre de la pile.
+    let order = if panel.espace { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
+    let mut portees = crate::calqueffet::Portees::new(panel.espace);
     // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
     for &li in &order {
         let l = &panel.layers[li];
         starts[li] = items.len();
+        portees.visiter(&panel.layers, li, items.len());
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect_at(&panel.layers, li, frame) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
         // finale, `incrustation.rs`).
         if l.effet.is_some() {
-            items.extend(crate::calqueffet::marker(&panel.layers, li, frame, opacity, &starts));
+            items.extend(portees.marker(&panel.layers, li, frame, opacity, &starts));
             continue;
         }
         // Derrière la caméra : rien. Sinon l'affinité d'avant (carte à plat) ou le maillage d'une carte inclinée

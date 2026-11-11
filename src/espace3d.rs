@@ -462,6 +462,112 @@ impl Monde {
     }
 }
 
+// ---------------------------------------------------------------------------------- plan en Espace 3D : l'ordre par distance
+
+/// Ce que l'ordre par distance sait d'un calque : la distance de son centre à la caméra (le long de son axe), et le plan
+/// où il est posé (normale, écart), dans le repère de la caméra.
+#[derive(Clone, Copy)]
+struct Vu {
+    dist: f32,
+    plan: Option<(V3, f32)>,
+}
+
+/// Une chose à poser d'un seul tenant : un calque, ou un dossier avec ses calques (déjà ordonnés entre eux).
+struct Bloc {
+    membres: Vec<usize>,
+    vu: Vu,
+}
+
+fn vu_du_calque(world: &Monde, layer: &Layer, frame: usize, repere: Option<&m::M4>) -> Vu {
+    let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+    // (Un calque accroché à la caméra reste dans le cadre : il se lit sans le changement de repère, comme `place_dans`.)
+    let mx = match repere.filter(|_| !layer.accroche) {
+        Some(r) => m::mul(r, &xf.matrix()),
+        None => xf.matrix(),
+    };
+    let centre = m::point(&mx, [0.0, 0.0, 0.0]);
+    let dist = world.d0 - centre[2];
+    let (a, b, c) = (m::point(&mx, [-0.5, 0.5, 0.0]), m::point(&mx, [0.5, 0.5, 0.0]), m::point(&mx, [-0.5, -0.5, 0.0]));
+    let n = m::cross(m::sub(b, a), m::sub(c, a));
+    let len = m::length(n);
+    let plan = (len.is_finite() && len > 1e-9).then(|| {
+        let n = m::scale(n, 1.0 / len);
+        // (Un seul sens par plan : la normale qui regarde vers la caméra de référence, ou sinon vers la droite, vers le haut.)
+        let signe = [n[2], n[0], n[1]].into_iter().find(|v| v.abs() > 1e-6).map_or(1.0, f32::signum);
+        let n = m::scale(n, signe);
+        (n, m::dot(n, a))
+    });
+    Vu { dist: if dist.is_finite() { dist } else { 0.0 }, plan }
+}
+
+/// Deux calques sont posés dans le même plan (deux cartes à la même profondeur et de même inclinaison, par exemple).
+fn meme_plan(a: (V3, f32), b: (V3, f32)) -> bool {
+    const TOLERANCE: f32 = 1e-3;
+    m::length(m::sub(a.0, b.0)) < TOLERANCE && (a.1 - b.1).abs() < TOLERANCE
+}
+
+/// Ordonne des blocs du plus loin au plus près. Les blocs posés dans un même plan forment un groupe, qui a une seule
+/// distance (la moyenne des leurs) : ils gardent donc entre eux l'ordre où ils sont donnés (celui de la pile). Le tri
+/// est stable : à distance égale, l'ordre donné.
+fn ordonner(blocs: Vec<Bloc>) -> Vec<usize> {
+    // Les groupes : (plan, somme des distances, nombre de blocs).
+    let mut groupes: Vec<((V3, f32), f32, usize)> = Vec::new();
+    let rangs: Vec<Option<usize>> = blocs
+        .iter()
+        .map(|b| {
+            let plan = b.vu.plan?;
+            let k = groupes.iter().position(|g| meme_plan(g.0, plan)).unwrap_or_else(|| {
+                groupes.push((plan, 0.0, 0));
+                groupes.len() - 1
+            });
+            groupes[k].1 += b.vu.dist;
+            groupes[k].2 += 1;
+            Some(k)
+        })
+        .collect();
+    let mut cles: Vec<(f32, Bloc)> = blocs.into_iter().zip(rangs).map(|(b, k)| (k.map_or(b.vu.dist, |k| groupes[k].1 / groupes[k].2 as f32), b)).collect();
+    cles.sort_by(|a, b| b.0.total_cmp(&a.0));
+    cles.into_iter().flat_map(|(_, b)| b.membres).collect()
+}
+
+/// **L'ordre de pose des calques d'un plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A4) : du plus loin de la caméra
+/// au plus près, pour que ce qui est devant cache ce qui est derrière. `ordre` : l'ordre de la pile
+/// (`calqueannot::ordre`) ; `repere` : le changement de repère de la caméra du plan (`Document::repere_du_plan` ; rien :
+/// la caméra de référence).
+///
+/// - La distance d'un calque est celle du centre de sa carte, le long de l'axe de la caméra.
+/// - Les calques posés **dans un même plan** (même profondeur, même inclinaison : un trait et sa couleur, des éléments
+///   d'un même décor) gardent entre eux l'ordre de la pile, où que soit la caméra.
+/// - Un **dossier** se déplace d'un seul tenant, à la distance de son calque le plus loin ; ses calques sont ordonnés
+///   entre eux de la même façon.
+/// - Un **calque d'ajustement** a sa place dans l'ordre comme les autres (sa pose, sa profondeur) : il agit sur ce qui
+///   est plus loin que lui (`calqueffet::Portees`).
+/// - Les **calques d'annotation** restent posés après tous les autres, dans leur ordre.
+/// - Deux cartes qui se traversent ne sont pas départagées point par point : l'une passe entière devant l'autre.
+pub fn ordre_par_distance(world: &Monde, layers: &[Layer], ordre: &[usize], frame: usize, repere: Option<&m::M4>) -> Vec<usize> {
+    let vu = |li: usize| vu_du_calque(world, &layers[li], frame, repere);
+    let ordinaires: Vec<usize> = ordre.iter().copied().filter(|&li| layers.get(li).is_some_and(|l| !l.annotation)).collect();
+    let dans_un_dossier = |li: usize| crate::folders::parent_index(layers, li).filter(|fi| ordinaires.contains(fi));
+    let mut blocs: Vec<Bloc> = Vec::new();
+    for &li in &ordinaires {
+        if dans_un_dossier(li).is_some() {
+            continue;
+        }
+        if layers[li].folder {
+            let enfants: Vec<usize> = ordinaires.iter().copied().filter(|&c| dans_un_dossier(c) == Some(li)).collect();
+            let loin = enfants.iter().map(|&c| vu(c).dist).fold(f32::MIN, f32::max);
+            let mut membres = ordonner(enfants.iter().map(|&c| Bloc { membres: vec![c], vu: vu(c) }).collect());
+            membres.push(li);
+            blocs.push(Bloc { membres, vu: Vu { dist: if enfants.is_empty() { 0.0 } else { loin }, plan: None } });
+        } else {
+            blocs.push(Bloc { membres: vec![li], vu: vu(li) });
+        }
+    }
+    let mut out = ordonner(blocs);
+    out.extend(ordre.iter().copied().filter(|&li| layers.get(li).is_some_and(|l| l.annotation)));
+    out
+}
+
 /// Comment un calque se pose dans le plan d'une image : l'affinité d'avant (carte à plat), ou le maillage d'une carte
 /// inclinée.
 #[derive(Clone, Debug, PartialEq)]

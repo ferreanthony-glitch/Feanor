@@ -3428,4 +3428,6 @@ et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le mote
 - ✅ **A3** (2026-11-11) : le rendu. Les cartes d'un plan en Espace 3D sont posées dans le repère de sa caméra (`espace3d::place_dans`), `Document::panel_camera` rend la caméra de
   référence pour ces plans (`panel_camera_reelle` pour ce qui décrit la caméra) ; caméra non bridée ; le pinceau suit. L'export compose l'image de l'écran pixel pour pixel (essai).
   Pas regardé à l'écran ; limites dans `docs/ESPACE-LIBRE.md`.
-- À faire : A4 (ordre par distance), A5 (le reste du dessin par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).
+- ✅ **A4** (2026-11-11) : ce qui est devant cache ce qui est derrière (`espace3d::ordre_par_distance`). Les cartes d'un même plan gardent l'ordre de la pile ; un dossier passe en
+  bloc ; un calque d'ajustement agit sur ce qui est plus loin que lui (`calqueffet::Portees`). Pas regardé à l'écran.
+- À faire : A5 (le reste du dessin par la caméra), A6 (surfaces), A7 (vue Espace 3D), A8 (finitions).

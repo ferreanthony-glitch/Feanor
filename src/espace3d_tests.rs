@@ -1380,3 +1380,139 @@ fn the_brush_and_the_camera_follow_a_plan_in_space_on_screen() {
     assert_eq!(b.app.current_camera(), libre.limited(b.app.doc.frame));
     assert_ne!(b.app.current_camera(), libre);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A4 : l'ordre par distance
+
+/// L'ordre de pose des calques du plan 0 à l'image 0, annotations comprises.
+fn ordre_de_pose(doc: &Document) -> Vec<usize> {
+    let layers = &doc.panels[0].layers;
+    let pile = crate::calqueannot::ordre(layers, true);
+    espace3d::ordre_par_distance(&Monde::of(doc), layers, &pile, 0, doc.repere_du_plan(0, 0).as_ref())
+}
+
+fn vert(c: Color32) -> bool {
+    c.a() > 200 && c.g() > 150 && c.r() < 80
+}
+
+#[test]
+fn in_a_plan_in_space_what_is_in_front_hides_what_is_behind_whatever_the_stack_says() {
+    // Deux cartes qui se recouvrent au centre de l'image. En bas de la pile : la verte, la plus proche de la caméra.
+    // Au-dessus : la rouge, plus loin.
+    let mut doc = doc_espace(&[(GREEN, [280, 150, 360, 210], -0.2), (RED, [280, 150, 360, 210], 0.3)]);
+    // Plan ordinaire : la pile décide, la rouge (au-dessus) cache la verte.
+    assert!(rouge(px(&filmee(&doc, 0), 160, 90)));
+    assert_eq!(doc.panels[0].layers.len(), 2);
+    // Plan en Espace 3D : la verte, devant, cache la rouge.
+    doc.panels[0].espace = true;
+    assert_eq!(ordre_de_pose(&doc), vec![1, 0], "la plus loin d'abord");
+    assert!(vert(px(&filmee(&doc, 0), 160, 90)), "{:?}", px(&filmee(&doc, 0), 160, 90));
+    // La caméra passe derrière et se retourne : c'est maintenant la rouge qui est devant.
+    let w = Monde::of(&doc);
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { dolly: w.d0_px * 2.0, pan: 180.0, ..doc.default_camera() })];
+    assert_eq!(ordre_de_pose(&doc), vec![0, 1]);
+    assert!(rouge(px(&filmee(&doc, 0), 160, 90)), "{:?}", px(&filmee(&doc, 0), 160, 90));
+    // L'écran pose les calques dans le même ordre que les sorties.
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    assert!(b.app.build_plan_avec(0, false, false, false) == render::panel_plan_at(&b.app.doc, 0, 0, None));
+}
+
+#[test]
+fn cards_in_the_same_plane_keep_the_order_of_the_stack_wherever_the_camera_is() {
+    // Trois cartes à la même profondeur, décalées (un trait, sa couleur, un élément du même décor), et une plus loin au-dessus de la pile.
+    let mut doc = doc_espace(&[(RED, [100, 100, 200, 200], 0.0), (GREEN, [300, 100, 400, 200], 0.0), (RED, [450, 100, 560, 200], 0.0), (GREEN, [200, 60, 300, 120], 0.6)]);
+    doc.panels[0].layers[0].transform = pose(-120.0, 10.0);
+    doc.panels[0].layers[2].transform = pose(140.0, -20.0);
+    doc.panels[0].espace = true;
+    // Caméra de référence, puis tournée d'un côté et de l'autre : les centres des trois cartes n'ont plus la même
+    // distance à la caméra, mais elles sont dans le même plan et gardent l'ordre de la pile ; la carte du fond passe dessous.
+    for cam in [None, Some(Camera { pan: 40.0, x: 200.0, ..doc.default_camera() }), Some(Camera { pan: -40.0, x: 460.0, tilt: 10.0, ..doc.default_camera() })] {
+        doc.panels[0].camera = cam.map(|c| vec![CameraKey::new(0, c)]).unwrap_or_default();
+        assert_eq!(ordre_de_pose(&doc), vec![3, 0, 1, 2], "caméra {cam:?}");
+    }
+    // Deux cartes inclinées pareil, à la même profondeur : même plan, ordre de la pile.
+    let incline = LayerTransform { tilt_y: 30.0, ..Default::default() };
+    doc.panels[0].layers[0].transform = incline;
+    doc.panels[0].layers[1].transform = incline;
+    let o = ordre_de_pose(&doc);
+    assert!(o.iter().position(|&k| k == 0) < o.iter().position(|&k| k == 1), "{o:?}");
+}
+
+#[test]
+fn a_folder_moves_as_one_block_and_annotations_stay_on_top() {
+    let mut doc = doc_espace(&[(GREEN, [100, 100, 200, 200], -0.3), (RED, [300, 100, 400, 200], 0.5), (RED, [200, 60, 300, 120], 0.1), (GREEN, [400, 200, 500, 300], 0.9)]);
+    // La pile, de bas en haut : [0] et [1] dans un dossier [2'], puis [3'] une carte entre les deux, [4'] la plus loin, [5'] une annotation.
+    let mut dossier = Layer::new("Dossier", LayerKind::Bitmap);
+    dossier.folder = true;
+    let mut layers = std::mem::take(&mut doc.panels[0].layers);
+    layers[0].parent = Some(dossier.id);
+    layers[1].parent = Some(dossier.id);
+    let (milieu, fond) = (layers.remove(2), layers.remove(2));
+    let mut note = Layer::new_annotation("Annotations");
+    note.depth = 2.0;
+    doc.panels[0].layers = vec![layers.remove(0), layers.remove(0), dossier, milieu, fond, note];
+    doc.panels[0].espace = true;
+    // Du plus loin au plus près : la carte du fond (0,9) ; le dossier, à la distance de son calque le plus loin (0,5),
+    // ses calques ordonnés entre eux (le plus loin d'abord) puis lui ; la carte du milieu (0,1) ; l'annotation, toujours
+    // dernière, même si sa profondeur dit le contraire.
+    assert_eq!(ordre_de_pose(&doc), vec![4, 1, 0, 2, 3, 5]);
+    // Sans les annotations (les sorties) : elle n'y est pas.
+    let layers = &doc.panels[0].layers;
+    let sorties = espace3d::ordre_par_distance(&Monde::of(&doc), layers, &crate::calqueannot::ordre(layers, false), 0, None);
+    assert_eq!(sorties, vec![4, 1, 0, 2, 3]);
+    // Un plan ordinaire ne passe pas par là : l'ordre de la pile.
+    doc.panels[0].espace = false;
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    let cels: Vec<_> = [0usize, 1, 3, 4].iter().map(|&k| doc.panels[0].layers[k].frames[0].expect("dessin")).collect();
+    assert_eq!(plan.items.iter().map(|i| i.cel).collect::<Vec<_>>(), cels);
+}
+
+#[test]
+fn an_adjustment_layer_acts_on_what_is_farther_than_itself_in_a_plan_in_space() {
+    use crate::fx::{Effect, EffectKind};
+    let reglage_de = |plan: &render::Plan| -> Vec<(usize, usize, bool)> {
+        plan.items.iter().enumerate().filter_map(|(k, i)| match &i.fond { Some(render::FondPart::Reglage(r)) => Some((k, r.from, r.root)), _ => None }).collect()
+    };
+    let ajustement = |doc: &mut Document, depth: f32| {
+        let cel = doc.new_cel(LayerKind::Bitmap);
+        let mut l = Layer::new_effect("Négatif", crate::calqueffet::CalqueEffet::ajustement(""));
+        l.frames = vec![Some(cel); 12];
+        l.fx = vec![Effect::new(EffectKind::Invert)];
+        l.depth = depth;
+        l
+    };
+    // La pile, de bas en haut : la verte (proche), la rouge (loin), le calque d'ajustement (entre les deux).
+    let mut doc = doc_espace(&[(GREEN, [200, 110, 280, 170], -0.3), (RED, [400, 200, 470, 260], 0.5)]);
+    let adj = ajustement(&mut doc, 0.0);
+    doc.panels[0].layers.push(adj);
+    // Plan ordinaire : il agit sur toute la pile sous lui (les deux cartes).
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert_eq!(reglage_de(&plan), vec![(2, 0, true)]);
+    // Plan en Espace 3D : posé entre les deux, il n'agit que sur la rouge, plus loin que lui ; la verte reste telle quelle.
+    doc.panels[0].espace = true;
+    assert_eq!(ordre_de_pose(&doc), vec![1, 2, 0]);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert_eq!(reglage_de(&plan), vec![(1, 0, true)]);
+    let image = filmee(&doc, 0);
+    // (Le cadre commence en (160, 90) sur la feuille : le centre de la verte, (240, 140), est en (80, 50) dans l'image.)
+    assert!(vert(px(&image, 80, 50)), "la verte, devant le calque d'ajustement, n'est pas inversée : {:?}", px(&image, 80, 50));
+    assert!(!rouge(px(&image, 275, 140)) && px(&image, 275, 140).a() > 200, "la rouge, derrière lui, est inversée : {:?}", px(&image, 275, 140));
+
+    // Dans un dossier : la portée commence au premier calque **posé** du dossier, pas au premier de la pile.
+    let mut doc = doc_espace(&[(GREEN, [60, 60, 160, 160], 0.9), (GREEN, [200, 60, 300, 160], -0.3), (RED, [400, 200, 520, 300], 0.5)]);
+    let mut dossier = Layer::new("Dossier", LayerKind::Bitmap);
+    dossier.folder = true;
+    let mut adj = ajustement(&mut doc, 0.0);
+    adj.parent = Some(dossier.id);
+    let mut layers = std::mem::take(&mut doc.panels[0].layers);
+    layers[1].parent = Some(dossier.id);
+    layers[2].parent = Some(dossier.id);
+    // De bas en haut : [0] une carte du fond hors dossier ; dans le dossier [4] : [1] proche, [2] ajustement, [3] loin.
+    let (proche, loin) = (layers.remove(1), layers.remove(1));
+    doc.panels[0].layers = vec![layers.remove(0), proche, adj, loin, dossier];
+    doc.panels[0].espace = true;
+    assert_eq!(ordre_de_pose(&doc), vec![0, 3, 2, 1, 4]);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    // Éléments : [0] le fond, [1] la carte loin du dossier, [2] le repère (portée depuis 1, dans un dossier), [3] la proche.
+    assert_eq!(reglage_de(&plan), vec![(2, 1, false)]);
+}
