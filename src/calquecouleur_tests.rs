@@ -498,10 +498,12 @@ fn the_colour_layer_cannot_leave_its_line_and_follows_it_when_it_moves() {
     app.move_layer(true);
     assert!(app.status.contains("reste sous"), "{}", app.status);
     assert_eq!(app.layers()[1].name, "Trait couleur");
-    app.move_layer_to(1, 0);
+    let sous_autre = crate::folders::Pose::Sous(app.layers()[0].id);
+    app.poser_les_calques(1, sous_autre);
     assert_eq!(app.layers()[1].name, "Trait couleur");
     // Déposer un autre calque entre le trait et sa couleur : la couleur reste collée au trait.
-    app.move_layer_to(0, 1);
+    let sur_la_couleur = crate::folders::Pose::AuDessusDe(app.layers()[1].id);
+    app.poser_les_calques(0, sur_la_couleur);
     let names: Vec<&str> = app.layers().iter().map(|l| l.name.as_str()).collect();
     assert_eq!(names, ["Autre", "Trait couleur", "Trait"], "{names:?}");
 }

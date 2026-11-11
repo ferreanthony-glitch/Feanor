@@ -1569,3 +1569,82 @@ fn select_all_leaves_a_locked_layer_aside_and_says_so() {
     assert_eq!(sel.parts.len(), 2, "le verrouillé est laissé de côté");
     assert!(b.app.status.contains("1 trait et 1 zone sur 2 calques") && b.app.status.contains("verrouillé"), "{}", b.app.status);
 }
+
+// ------------------------------------------------------------------------------------ copier, coller (2026-11-11)
+
+/// Le nombre d'éléments du dessin du calque `li` à l'image 0.
+fn nb(b: &Banc, li: usize) -> usize {
+    vect(b, cel_de(b, li, 0)).elements.len()
+}
+
+/// Anthony, 2026-11-11 : « le Ctrl+C / Ctrl+V ne fonctionne plus pour copier-coller plusieurs lignes vectorielles ». Deux clés restées
+/// choisies dans la timeline (une par calque, comme après une nouvelle clé posée sur deux calques) gardent l'outil Sélection sur les
+/// dessins de ces clés ; la copie est alors celle d'une sélection sur plusieurs dessins, que Ctrl+V ne collait qu'avec deux calques
+/// choisis : avec un seul, rien ne se passait.
+#[test]
+fn ctrl_v_pastes_a_copy_made_with_keys_chosen_even_with_a_single_chosen_layer() {
+    let mut b = banc(&[LayerKind::Vector, LayerKind::Vector], Tool::Select);
+    b.app.layer_sel.clear();
+    let cles: Vec<_> = (0..2).map(|li| b.app.key_ref(0, li, 0).expect("la clé du calque")).collect();
+    b.app.key_sel = cles;
+    b.chauffer(2);
+    assert_eq!(b.app.chosen_layers().len(), 1, "un seul calque choisi");
+    assert!(b.app.keys_mode(), "deux clés choisies : l'outil Sélection prend leurs dessins");
+    b.app.run_action("edition.tout_selectionner");
+    assert!(b.app.multi.sel.is_some(), "{}", b.app.status);
+    let n0 = etapes(&b);
+    b.app.run_action("edition.copier");
+    b.app.run_action("edition.coller");
+    assert_eq!((nb(&b, 0), nb(&b, 1)), (2, 2), "chaque calque a reçu la copie de son trait : {}", b.app.status);
+    assert!(b.app.status.contains("collés"), "{}", b.app.status);
+    assert_eq!(etapes(&b), n0 + 1, "une seule étape d'annulation");
+    b.app.undo();
+    assert_eq!((nb(&b, 0), nb(&b, 1)), (1, 1), "Ctrl+Z retire tout ce qui a été collé");
+}
+
+#[test]
+fn ctrl_v_with_a_single_layer_chosen_pastes_what_fits_and_says_what_it_left() {
+    // Copié avec deux calques choisis ; puis un clic sur le nom du premier : lui seul reste choisi.
+    let mut b = banc(&[LayerKind::Vector, LayerKind::Vector], Tool::Select);
+    b.app.run_action("edition.tout_selectionner");
+    b.app.run_action("edition.copier");
+    assert!(b.app.multi_clip.is_some(), "{}", b.app.status);
+    b.app.click_layer_head(0, false, false);
+    b.chauffer(2);
+    assert_eq!(b.app.chosen_layers(), vec![0]);
+    b.app.run_action("edition.coller");
+    assert_eq!((nb(&b, 0), nb(&b, 1)), (2, 1), "le calque choisi reçoit sa part, l'autre rien : {}", b.app.status);
+    assert!(b.app.status.contains("laissé de côté"), "{}", b.app.status);
+    // Collé sur un autre calque que ceux de la copie : tout ce qui est de sa sorte s'y colle, comme une copie d'un seul calque.
+    let mut b = banc(&[LayerKind::Vector, LayerKind::Vector, LayerKind::Vector], Tool::Select);
+    let troisieme = b.app.layers()[2].id;
+    b.app.layer_sel.retain(|id| *id != troisieme);
+    b.chauffer(2);
+    assert_eq!(b.app.chosen_layers(), vec![0, 1]);
+    b.app.run_action("edition.tout_selectionner");
+    b.app.run_action("edition.copier");
+    b.app.click_layer_head(2, false, false);
+    b.chauffer(2);
+    b.app.run_action("edition.coller");
+    assert_eq!((nb(&b, 0), nb(&b, 1), nb(&b, 2)), (1, 1, 3), "les deux traits copiés sont sur le troisième calque : {}", b.app.status);
+    assert!(!b.app.status.contains("laissé"), "{}", b.app.status);
+}
+
+#[test]
+fn clicking_the_name_of_a_layer_lets_go_of_the_keys_chosen_on_the_other_layers() {
+    let mut b = banc(&[LayerKind::Vector, LayerKind::Vector], Tool::Select);
+    let cles: Vec<_> = (0..2).map(|li| b.app.key_ref(0, li, 0).expect("la clé du calque")).collect();
+    b.app.key_sel = cles.clone();
+    assert!(b.app.keys_mode());
+    // Un clic sur le nom du premier calque : lui seul est choisi, et la clé de l'autre calque n'est plus choisie.
+    b.app.click_layer_head(0, false, false);
+    b.chauffer(2);
+    assert!(b.app.key_sel == vec![cles[0]], "seule la clé du calque cliqué reste choisie");
+    assert!(!b.app.keys_mode());
+    // L'outil Sélection revient au dessin du calque courant : Ctrl+A, Ctrl+C, Ctrl+V d'un seul calque.
+    b.app.run_action("edition.tout_selectionner");
+    assert!(b.app.multi.sel.is_none() && b.app.vsel.is_some(), "{}", b.app.status);
+    b.app.run_action("edition.copier");
+    b.app.run_action("edition.coller");
+    assert_eq!((nb(&b, 0), nb(&b, 1)), (2, 1), "{}", b.app.status);
+}

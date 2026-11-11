@@ -588,7 +588,9 @@ impl App {
         }
     }
 
-    /// Colle sur les calques choisis ce que la copie avait pris sur eux, à la même place.
+    /// Colle sur les calques choisis ce que la copie avait pris sur eux, à la même place. Avec un seul calque en face (un seul
+    /// calque choisi, sans plusieurs clés choisies) et aucun calque de la copie parmi eux : tout ce qui est de sa sorte s'y colle.
+    /// Ce qui n'a pas de calque en face est laissé de côté, et la barre d'état le dit.
     pub(crate) fn multi_paste(&mut self) {
         if self.content_refuses() {
             return;
@@ -615,22 +617,48 @@ impl App {
         // calque choisi de même sorte (vectoriel pour des éléments, bitmap pour des pixels) encore libre, dans l'ordre ;
         // ce qui n'a pas de calque en face est laissé de côté.
         if !clip.items.iter().any(|(l, _)| targets.list.iter().any(|t| t.id == *l)) {
-            let mut pris = vec![false; targets.list.len()];
-            for item in &mut clip.items {
-                let vectoriel = matches!(item.1, crate::multisel::ClipWhat::Vector(_));
-                let place = targets.list.iter().enumerate().find(|(i, t)| !pris[*i] && t.vector == vectoriel);
-                item.0 = match place {
-                    Some((i, t)) => {
-                        pris[i] = true;
-                        t.id
-                    }
-                    None => 0,
-                };
+            if let [seul] = targets.list.as_slice() {
+                // Un seul calque en face (on est revenu à un seul calque, ou on colle sur un autre) : tout ce qui est de sa sorte
+                // s'y colle, comme une copie d'un seul calque.
+                for item in &mut clip.items {
+                    item.0 = if matches!(item.1, crate::multisel::ClipWhat::Vector(_)) == seul.vector { seul.id } else { 0 };
+                }
+            } else {
+                let mut pris = vec![false; targets.list.len()];
+                for item in &mut clip.items {
+                    let vectoriel = matches!(item.1, crate::multisel::ClipWhat::Vector(_));
+                    let place = targets.list.iter().enumerate().find(|(i, t)| !pris[*i] && t.vector == vectoriel);
+                    item.0 = match place {
+                        Some((i, t)) => {
+                            pris[i] = true;
+                            t.id
+                        }
+                        None => 0,
+                    };
+                }
             }
         }
+        // Plusieurs morceaux de la copie pour un même calque (deux clés d'un même calque copiées ensemble, ou regroupés ci-dessus) :
+        // un seul morceau, les éléments à la suite — une seule part par dessin, une seule étape d'annulation par dessin. Des
+        // pixels ne se regroupent pas : le premier morceau seul est gardé.
+        let mut regroupes: Vec<(u64, crate::multisel::ClipWhat)> = Vec::new();
+        let mut laisses = 0usize;
+        for (calque, quoi) in std::mem::take(&mut clip.items) {
+            if !targets.list.iter().any(|t| t.id == calque) {
+                laisses += 1;
+                continue;
+            }
+            match (regroupes.iter_mut().find(|(c, _)| *c == calque), quoi) {
+                (Some((_, crate::multisel::ClipWhat::Vector(deja))), crate::multisel::ClipWhat::Vector(els)) => deja.extend(els),
+                (Some(_), _) => laisses += 1,
+                (None, quoi) => regroupes.push((calque, quoi)),
+            }
+        }
+        clip.items = regroupes;
         let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, &clip);
         if parts.is_empty() {
-            self.status = "Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.".into();
+            let pourquoi = targets.skipped_text().map(|t| format!(" {t}")).unwrap_or_default();
+            self.status = format!("Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.{pourquoi}");
             return;
         }
         self.renderer.invalidate_all();
@@ -639,7 +667,12 @@ impl App {
         self.named_step("Coller", |app| app.history.push(crate::history::Edit::Group(edits)));
         self.modified = true;
         let summary = self.multi_summary().unwrap_or_default();
-        self.status = format!("{summary} collés : déplace-les.");
+        let reste = match laisses {
+            0 => String::new(),
+            1 => " Un morceau de la copie n'avait pas de calque choisi en face : laissé de côté.".to_string(),
+            n => format!(" {n} morceaux de la copie n'avaient pas de calque choisi en face : laissés de côté."),
+        };
+        self.status = format!("{summary} collés : déplace-les.{reste}");
     }
 
     /// Suppr : ce qui est choisi sur chaque calque s'efface, en une seule étape.

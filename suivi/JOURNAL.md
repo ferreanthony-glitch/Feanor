@@ -69,6 +69,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Sur son « Oui, retire-les » : les deux dossiers de chantier retirés (propres, leurs branches entièrement dans main ; 21 Go de
   fichiers de construction rendus au disque). Les branches `calques-timeline` (7e89e7b) et `cles-glisser` (49472b8) restent. Il ne
   reste que `Source`.
+- Deux nouveaux retours de son essai de l'exe de 13 h 54 (partie 139, branche `dossier-glisser`, chantier
+  `Chantiers\dossier-glisser`, depuis main 8c2417d ; le dossier de construction est celui de `Source`, pour ne pas tout
+  recompiler). **« glisser des calques dans un dossier ne fonctionne pas »** (capture : trois calques choisis sous un dossier vide) :
+  quatre causes dans le code — pris par son nom, un calque ne partait pas du panneau Calques (le texte du nom se sélectionnait) ; le
+  lâcher sur le rang d'un dossier ne rangeait pas dedans ; le calque posé juste sous un dossier vide ne pouvait pas y entrer ; un
+  seul calque partait, et rien n'entrait dans un dossier fermé. Corrigé aux trois endroits (panneau Calques, colonne de la bande,
+  en-têtes de l'Animation) : lâchés sur la ligne d'un dossier, les calques choisis y entrent ensemble (`folders::poser`,
+  `layerheads::cible_du_glisse`). **« le ctrl+c/ctrl+v ne fonctionne plus pour copier/coller plusieurs lignes vectorielles »** :
+  avec deux clés restées choisies dans la timeline (ce que laisse une nouvelle clé posée sur deux calques) et un seul calque choisi,
+  la copie partait dans le presse-papiers « plusieurs dessins » que Ctrl+V ne lisait qu'avec deux calques choisis : rien ne se
+  collait. Ctrl+V colle maintenant la dernière copie quel que soit le nombre de calques choisis, et un clic sur le nom d'un calque
+  lâche les clés choisies sur les autres. Son geste exact n'est pas connu : c'est le seul chemin trouvé où le collage ne fait rien,
+  reproduit par un essai (écrit après la correction : je ne l'ai pas vu échouer avant). Vérificateur sur la branche : 4 472 essais
+  réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`, 14 h 41) ouvert deux fois sur
+  une copie de « retakes brawlydays » avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
 
 ## 2026-11-10
 

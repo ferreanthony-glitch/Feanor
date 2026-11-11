@@ -157,13 +157,19 @@ fn header_rows_follow_collapsed_layers() {
 
 #[test]
 fn a_dragged_header_row_lands_between_rows() {
-    use crate::layerheads::{drop_index, rows_of, ROW_FULL};
+    use crate::layerheads::{cible_du_glisse, rows_of, Row, ROW_FULL};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
     let rows = rows_of(&layers, &groups::defaults());
-    assert_eq!(drop_index(&rows, 0, 1.0), 2, "le plus bas lâché tout en haut devient le plus haut");
-    assert_eq!(drop_index(&rows, 2, ROW_FULL * 3.0), 0, "le plus haut lâché tout en bas devient le plus bas");
-    assert_eq!(drop_index(&rows, 2, ROW_FULL * 0.9), 2, "juste sous lui-même : il ne bouge pas");
-    assert_eq!(drop_index(&rows, 0, ROW_FULL * 1.2), 1, "entre le premier et le deuxième");
+    // La pile (les noms, du bas vers le haut) une fois le calque `from` lâché à `y` ; rien : elle ne change pas.
+    let lache = |layers: &[Layer], rows: &[Row], from: usize, y: f32| -> Option<Vec<String>> {
+        let cible = cible_du_glisse(rows, layers, &[from], y, true)?;
+        crate::folders::poser(layers, &[layers[from].id], cible.pose()).map(|pile| pile.iter().map(|l| l.name.clone()).collect())
+    };
+    assert_eq!(lache(&layers, &rows, 0, 1.0).unwrap(), ["C1", "C2", "C0"], "le plus bas lâché tout en haut devient le plus haut");
+    assert_eq!(lache(&layers, &rows, 2, ROW_FULL * 3.0).unwrap(), ["C2", "C0", "C1"], "le plus haut lâché tout en bas devient le plus bas");
+    assert_eq!(lache(&layers, &rows, 2, ROW_FULL * 0.9), None, "sur sa propre ligne : il ne bouge pas");
+    assert_eq!(lache(&layers, &rows, 2, ROW_FULL * 1.2), None, "juste sous lui-même : il ne bouge pas");
+    assert_eq!(lache(&layers, &rows, 0, ROW_FULL * 1.2).unwrap(), ["C1", "C0", "C2"], "entre le premier et le deuxième");
 
     // C1 dans un groupe caché de la timeline : seules C2 et C0 ont une ligne.
     let mut hidden = groups::defaults();
@@ -173,9 +179,9 @@ fn a_dragged_header_row_lands_between_rows() {
     let rows = rows_of(&layers, &hidden);
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [3, 2, 0]);
     // C0 lâché entre C3 et C2 : juste au-dessus de C2 (C1, sans ligne, ne bouge pas).
-    assert_eq!(drop_index(&rows, 0, ROW_FULL * 1.2), 2);
+    assert_eq!(lache(&layers, &rows, 0, ROW_FULL * 1.2).unwrap(), ["C1", "C2", "C0", "C3"]);
     // C3 lâché tout en bas : sous C0.
-    assert_eq!(drop_index(&rows, 3, ROW_FULL * 3.0), 0);
+    assert_eq!(lache(&layers, &rows, 3, ROW_FULL * 3.0).unwrap(), ["C3", "C0", "C1", "C2"]);
 }
 
 #[test]

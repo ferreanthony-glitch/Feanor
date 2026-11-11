@@ -949,6 +949,9 @@ mod pistes;
 mod pistes_tests;
 #[cfg(test)]
 mod calques_timeline_tests;
+// Glisser des calques dans un dossier (partie 139) : `folders::poser`, `layerheads::cible_du_glisse`.
+#[cfg(test)]
+mod dossierglisser_tests;
 mod clesplan;
 #[cfg(test)]
 mod timeline_repliee_tests;

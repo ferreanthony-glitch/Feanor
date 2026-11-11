@@ -415,6 +415,10 @@ impl App {
                 .corner_radius(3.0)
                 .inner_margin(egui::Margin::symmetric(3, 2))
                 .show(ui, |ui| {
+                    // Les textes du rang ne se sélectionnent pas à la souris : pris par son nom, le calque se glisse (sans cela, un
+                    // glissé parti du nom sélectionnait ses lettres et le calque ne bougeait pas ; Anthony, 2026-11-11 : « glisser
+                    // des calques dans un dossier ne fonctionne pas »).
+                    ui.style_mut().interaction.selectable_labels = false;
                     if let Some((fond, encre)) = plein {
                         let v = ui.visuals_mut();
                         v.override_text_color = Some(encre);
@@ -604,19 +608,18 @@ impl App {
         }
         if let Some(from) = self.panel_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            // Un trait entre deux rangs, ou le cadre du dossier quand on est sur son rang : lâchés là, les calques y entrent
+            // (Anthony, 2026-11-11 : « glisser des calques dans un dossier ne fonctionne pas »). Les calques choisis partent ensemble.
             let pointer = ui.input(|i| i.pointer.interact_pos());
-            if let Some(p) = pointer {
-                let slot = drag_rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - list_top).count();
-                let y = list_top + drag_rows.get(slot).map_or_else(|| drag_rows.last().map_or(0.0, |r| r.top + r.h), |r| r.top);
-                let x = ui.max_rect().x_range();
-                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, crate::theme::contour()));
+            let cible = pointer.and_then(|p| self.cible_des_calques_glisses(&drag_rows, from, p.y - list_top));
+            if let Some((c, dans)) = cible {
+                crate::layerheads::peindre_cible(ui.painter(), ui.max_rect().x_range(), list_top, c, dans, gouttiere + 14.0);
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.panel_layer_drag = None;
-                if let Some(p) = pointer {
-                    let to = crate::layerheads::drop_index(&drag_rows, from, p.y - list_top);
-                    if to != from && !self.content_refuses() {
-                        self.move_layer_to(from, to);
+                if let Some((c, _)) = cible {
+                    if !self.content_refuses() {
+                        self.poser_les_calques(from, c.pose());
                     }
                 }
             }
