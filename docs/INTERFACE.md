@@ -10195,3 +10195,44 @@ Deux retours d'Anthony après l'essai des parties 137 et 138. Code : `folders.rs
 **À vérifier à l'écran** : trois calques choisis dont deux masqués, F5 : trois clés, la barre d'état dit « Nouvelle clé sur 3 calques ». F4 : trois clés vides.
 
 **Essai** (`multicalques_tests.rs`) : quatre calques choisis dont deux masqués, F5 puis F4, une étape ; un calque verrouillé reste de côté et la barre d'état le nomme.
+
+## 140. Les calques de la timeline prennent la place du panneau (2026-11-11, branche `calques-place`)
+
+« Je voudrais que la taille des calques dans la timeline s'adapte aussi à la taille du panneau. La taille la plus grande reste la même mais quand il y a plus de place pour afficher les calques, les calques les plus proches du calque sélectionné prennent aussi la taille la plus grande. » Puis : « en fait il faut que ce soit toujours le plus confortable possible à utiliser ». Sa capture : la bande du montage tirée très haut, « Toute la pile », un seul calque à la grande hauteur et la moitié du panneau vide dessous.
+
+Code : `pistes.rs` (`agrandir`), `montagerows.rs` (`montage_rows`, `SOUS_LA_BANDE`), `settings.rs` (`montage_grands`), Préférences (`pistes.rs`, `prefsonglets.rs`). Essais : `calquesplace_tests.rs` (5).
+
+### 140.1 La règle
+
+- **La grande hauteur ne change pas** (40 points, celle du calque actif).
+- **Quand la bande est plus haute que ses pistes**, les calques grandissent un à un en partant du calque actif : celui du dessus, celui du dessous, puis les suivants de proche en proche, tant qu'il reste la place d'un calque de plus. Les grands calques restent d'un seul tenant autour du calque actif.
+- Un calque devenu grand est une piste dépliée comme celle du calque actif : son nom en grand (et celui de son dossier au-dessus), ses clés plus hautes à prendre, ses poignées. Le calque actif reste reconnaissable à son cadre.
+- **Les lignes fines des dossiers et les fines bandes « N au-dessus / au-dessous » gardent leur hauteur.**
+- **« Trois calques »** : ce sont les deux voisins qui prennent la grande hauteur ; on reste à trois calques.
+- **Pas assez de place pour toutes les pistes** : rien ne grandit, la bande défile comme avant.
+- Quand on change de calque actif, les grands calques le suivent.
+- La place comptée est celle du panneau moins ce que la bande montre d'autre (règle, séquences, caméra, plans, pistes son) et la barre de défilement du bas : la bande ne se met jamais à défiler de haut en bas à cause des calques agrandis.
+- Rien de lourd : un calcul sur la liste des pistes, à chaque image d'écran.
+
+### 140.2 Le réglage
+
+Préférences > Montage : « Agrandir les calques proches quand il y a de la place », allumé d'office (`reglages.toml` : `calques_grands_si_place`). Éteint : seul le calque actif est grand, comme avant. Dans les essais, il est éteint d'office : ceux d'avant comptent sur les hauteurs fixes des pistes.
+
+### 140.3 Limites
+
+- Deux hauteurs seulement : grande ou en bande. Un calque ne prend pas une hauteur intermédiaire pour finir de remplir le panneau ; il peut donc rester moins que la place d'un calque sous la bande.
+- La hauteur du panneau reste celle du bord qu'on tire à la main : la bande ne se dimensionne pas toute seule.
+- Le menu d'une piste devenue grande propose encore « Déplier la piste » (elle l'est déjà, par la place et non à la main).
+- La timeline de l'Animation n'est pas concernée.
+
+### 140.4 À vérifier à l'écran (par Anthony)
+
+1. « Toute la pile », la bande tirée haut : les calques autour du calque actif sont grands, il ne reste pas de grand vide sous les pistes.
+2. Tirer le bord vers le bas : les calques repassent en bandes un à un, les plus loin d'abord ; vers le haut : ils regrandissent.
+3. Changer de calque actif (dessus, dessous) : les grands calques suivent.
+4. « Trois calques », la bande haute : les deux voisins sont grands.
+5. Préférences > Montage : la case « Agrandir les calques proches quand il y a de la place ».
+
+### 140.5 Essais
+
+`calquesplace_tests.rs` : les calques grandissent un à un du plus proche au plus loin, le dessus avant le dessous, par-dessus la ligne d'un dossier, jamais au-delà de la place offerte ni de la grande hauteur ; dans « Trois calques », les deux voisins grandissent et les fines bandes gardent leur hauteur et leurs comptes ; rien ne grandit autour d'un calque actif replié à la main ; les rangées de la bande suivent la hauteur du panneau quand le réglage est allumé, et les grands calques suivent le calque actif ; **à l'écran** : les calques remplissent la bande sans la faire défiler. `prefsui_tests.rs` : la case et sa ligne dans la recherche.

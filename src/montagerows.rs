@@ -37,6 +37,9 @@ pub(crate) const BAR_H: f32 = 5.0;
 pub(crate) const BAR_OFF: f32 = 3.0;
 /// Hauteur du liseré d'un calque de couleur lié, sous le bloc de son calque de trait.
 const LISERE_H: f32 = 3.0;
+/// La place laissée sous la bande quand les calques grandissent pour remplir le panneau (`App::montage_rows`) : la barre de
+/// défilement horizontale et un peu d'air, pour que la bande ne se mette pas à défiler de haut en bas à cause d'eux.
+pub(crate) const SOUS_LA_BANDE: f32 = 18.0;
 /// La couleur des clés de caméra (celle du thème).
 fn cam_color() -> Color32 {
     theme::camera()
@@ -113,15 +116,23 @@ impl Rows {
 
 
 impl App {
-    /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
-    pub(crate) fn montage_rows(&self, _available: f32) -> Rows {
+    /// Rangées pour une bande haute de `available` : les plans ont la hauteur de leur réglage, et les pistes de calques prennent la
+    /// place qui reste — les calques les plus proches du calque actif à la grande hauteur tant qu'il y en a (`pistes::agrandir`).
+    pub(crate) fn montage_rows(&self, available: f32) -> Rows {
         // (La hauteur des pistes son : celle du réglage, montagehauteur.rs.)
         self.poser_hauteur_pistes();
         let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
-        let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
+        let mut lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
         // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
         // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »).
-        Rows { block_h: self.settings.montage_plans.points(), lanes }
+        let block_h = self.settings.montage_plans.points();
+        if self.settings.montage_grands {
+            // Ce que la bande montre en plus des pistes de calques : la règle, les séquences, la caméra, les plans, les pistes son,
+            // et la barre de défilement horizontale sous la bande. Le reste est aux calques.
+            let sans_calques = Rows { block_h, lanes: Vec::new() }.height(self.doc.audio_tracks.len());
+            crate::pistes::agrandir(&mut lanes, available - sans_calques - SOUS_LA_BANDE);
+        }
+        Rows { block_h, lanes }
     }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque

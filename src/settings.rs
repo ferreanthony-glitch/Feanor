@@ -110,6 +110,10 @@ pub struct Settings {
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
     #[serde(default, rename = "hauteur_plans", skip_serializing_if = "crate::pistes::HauteurPlans::est_moyenne")]
     pub montage_plans: crate::pistes::HauteurPlans,
+    /// Quand la bande a de la place, les calques les plus proches du calque actif prennent aussi la grande hauteur (`pistes::agrandir`,
+    /// Préférences > Montage). Allumé d'office (Anthony, 2026-11-11 : « il faut que ce soit toujours le plus confortable possible »).
+    #[serde(default = "default_grands", rename = "calques_grands_si_place")]
+    pub montage_grands: bool,
     /// Pinceau et crayon : « Peindre derrière » (`brushfill`), retenu d'une séance à l'autre (Anthony, 2026-10-17).
     /// La clé garde son nom d'avant le 2026-10-23, quand l'interrupteur s'appelait « Peint sur l'aplat » : les anciens
     /// réglages donnent donc « Peindre derrière ».
@@ -344,6 +348,12 @@ fn default_pile() -> crate::pistes::Pile {
     }
 }
 
+/// Les calques proches du calque actif grandissent quand la bande a de la place : dans l'application. Pas dans les essais : ceux
+/// d'avant comptent sur les hauteurs fixes des pistes (les essais de cette règle l'allument eux-mêmes, `calquesplace_tests.rs`).
+fn default_grands() -> bool {
+    !cfg!(test)
+}
+
 fn default_head_w() -> f32 {
     crate::soundtrack::HEADERS_W
 }
@@ -387,6 +397,7 @@ impl Default for Settings {
             montage_auto_open: true,
             montage_pile: default_pile(),
             montage_plans: Default::default(),
+            montage_grands: default_grands(),
             paint_behind: false,
             paint_on_aplat: false,
             ancien_remplir_la_forme: false,
