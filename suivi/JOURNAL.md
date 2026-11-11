@@ -157,6 +157,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   faux réglages : pas de plantage (une première construction avait échoué sur un caractère parasite dans un commentaire, corrigé ; les
   essais de la caméra repassés ensuite). Pas vérifié : aucun geste fait à la main dans le vrai exe ; la lecture à la japonaise
   et l'export de la planche n'ont pas d'essai propre à ce cas. Fusion dans main : à son accord.
+- Fusion de `camera-suite` dans main (2066ecf, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 20 h 57) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages : pas de plantage. Pas de version portable. Pas
+  vérifié : aucun geste fait à la main dans le vrai exe (sa liste 142.4) ; la copie de projet ouverte n'a pas de case de continuité
+  qui porte un mouvement. Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent.
 
 ## 2026-11-10
 
