@@ -92,6 +92,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   vrai exe (sa liste 139.3). Le dossier de chantier `Chantiers\dossier-glisser` attend son accord pour être retiré.
 - Sur son « Oui, retire-le » : le dossier de chantier `Chantiers\dossier-glisser` retiré (propre, sa branche entièrement dans main).
   La branche `dossier-glisser` (0293edd) reste. Il ne reste que `Source`.
+- Nouveau retour, deux captures à l'appui : « Sélectionner 3 calques et cliquer sur F5 ne crée une clé d'image que sur un seul
+  calque au lieu des trois ». Sur ses captures, les pistes de deux des trois calques choisis sont ternes : c'est ainsi que la bande
+  peint un calque masqué. Son projet le confirme (lu sans y toucher) : « Vectoriel 14 » et « Vectoriel 15 » ont l'œil fermé. La
+  nouvelle clé sur plusieurs calques (partie 132) laissait de côté les calques masqués, en le disant seulement dans la barre
+  d'état, alors qu'un calque masqué seul la reçoit. Corrigé (partie 139.5, branche `cle-masques`, chantier `Chantiers\cle-masques`,
+  depuis main 4395c46) : un calque masqué reçoit sa clé ; les calques verrouillés restent de côté (à décider par lui). Vérifié sur
+  une copie fraîche de son projet : les trois calques de ses captures choisis, F5, « Nouvelle clé sur 3 calques ». Vérificateur sur
+  la branche : 4 473 essais réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`,
+  15 h 59) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
+  Ma correction du matin (partie 137.11) visait d'autres gestes : elle n'était pas la cause de son cas.
 
 ## 2026-11-10
 

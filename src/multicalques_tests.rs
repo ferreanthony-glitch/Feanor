@@ -1648,3 +1648,74 @@ fn clicking_the_name_of_a_layer_lets_go_of_the_keys_chosen_on_the_other_layers()
     b.app.run_action("edition.coller");
     assert_eq!((nb(&b, 0), nb(&b, 1)), (2, 1), "{}", b.app.status);
 }
+
+/// Anthony, 2026-11-11 : « Sélectionner 3 calques et cliquer sur F5 ne crée une clé d'image que sur un seul calque au lieu des trois ».
+/// Dans son projet, deux des trois calques choisis avaient l'œil fermé, et la nouvelle clé sur plusieurs calques laissait de côté
+/// les calques masqués (un calque masqué seul la recevait pourtant).
+#[test]
+fn a_new_key_goes_on_the_hidden_chosen_layers_too() {
+    let mut b = banc_quatre_sortes();
+    b.app.doc.panels[0].layers[1].visible = false;
+    b.app.doc.panels[0].layers[3].visible = false;
+    b.chauffer(1);
+    let n0 = etapes(&b);
+    b.app.run_action("dessin.nouvelle_cle");
+    for li in [0, 1, 3] {
+        assert!(cle_ici(&b, li, 2), "calque {li} : une nouvelle clé à l'image 2, masqué ou non ({})", b.app.status);
+    }
+    assert!(!b.app.status.contains("masqué"), "{}", b.app.status);
+    assert_eq!(etapes(&b), n0 + 1, "une seule étape");
+    // La clé vide (F4) aussi.
+    b.app.cur_frame = 3;
+    b.app.run_action("dessin.nouvelle_cle_vide");
+    for li in [0, 1, 3] {
+        assert!(cle_ici(&b, li, 3), "calque {li} : une clé vide à l'image 3 ({})", b.app.status);
+    }
+    // Un calque verrouillé, lui, reste de côté, et la barre d'état le nomme.
+    let mut b = banc_quatre_sortes();
+    b.app.doc.panels[0].layers[3].locked = true;
+    b.app.doc.panels[0].layers[1].visible = false;
+    b.chauffer(1);
+    b.app.run_action("dessin.nouvelle_cle");
+    assert!(cle_ici(&b, 0, 2) && cle_ici(&b, 1, 2) && !cle_ici(&b, 3, 2), "{}", b.app.status);
+    assert!(b.app.status.contains("verrouillé"), "{}", b.app.status);
+}
+
+/// Sur une COPIE de son projet (`FEANOR_PROJET_ESSAI` : son manifeste) : les trois calques de ses captures choisis, F5 au milieu d'une
+/// exposition des trois : une clé sur chacun, masqué ou non. Sans la variable : rien.
+#[test]
+#[ignore = "lit une copie de projet : FEANOR_PROJET_ESSAI"]
+fn nouvelle_cle_sur_trois_calques_d_une_copie_de_projet() {
+    let Some(p) = std::env::var_os("FEANOR_PROJET_ESSAI") else { return println!("CLES pas de projet : rien") };
+    let doc = crate::project::load(std::path::Path::new(&p)).expect("le projet s'ouvre").doc;
+    let mut app = crate::pistes_tests::app_with("cles-projet", doc);
+    app.cur_panel = 0;
+    let rangs: Vec<usize> = ["Vectoriel 13", "Vectoriel 14", "Vectoriel 15"]
+        .iter()
+        .map(|n| app.layers().iter().position(|l| l.name == *n).unwrap_or_else(|| panic!("pas de calque « {n} » dans le premier plan")))
+        .collect();
+    for &li in &rangs {
+        let l = &app.layers()[li];
+        println!("CLES {} : visible {}, verrouillé {}, {} images", l.name, l.visible, l.locked, l.frames.len());
+    }
+    app.cur_layer = rangs[0];
+    app.click_layer_head(rangs[1], true, false);
+    app.click_layer_head(rangs[2], true, false);
+    assert_eq!(app.chosen_layers().len(), 3);
+    // Une image tenue par les trois, qui n'est le début d'une clé sur aucun.
+    let n = app.doc.panels[0].frame_count();
+    let f = (1..n)
+        .find(|&f| {
+            rangs.iter().all(|&li| {
+                let l = &app.layers()[li];
+                l.frames.get(f).copied().flatten().is_some() && !crate::handles::key_start_taken(l, f)
+            })
+        })
+        .expect("une image tenue par les trois calques");
+    app.cur_frame = f;
+    app.run_action("dessin.nouvelle_cle");
+    println!("CLES image {f} : {}", app.status);
+    for &li in &rangs {
+        assert!(crate::handles::key_start_taken(&app.layers()[li], f), "« {} » n'a pas reçu de clé : {}", app.layers()[li].name, app.status);
+    }
+}

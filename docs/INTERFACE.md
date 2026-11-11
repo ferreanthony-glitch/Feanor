@@ -9579,7 +9579,8 @@ verrouillés ou masqués laissés de côté avec leur nom dans la barre d'état,
 **Fait sur cette branche, en plus des quatre outils :**
 - **Nouvelle clé à l'image courante** (F5) et **Nouvelle clé vide** (F4), par la touche, le bouton ou le menu de la piste d'un des
   calques choisis : une clé sur chaque calque choisi, selon sa sorte (copie du dessin montré, ou dessin vide bitmap ou vectoriel ; l'aplat
-  et le calque de couleur suivent leur dessin), en une étape : « Nouvelle clé sur 4 calques ». Laissés de côté : verrouillés, masqués,
+  et le calque de couleur suivent leur dessin), en une étape : « Nouvelle clé sur 4 calques ». Laissés de côté : verrouillés, masqués
+  *(plus depuis le 2026-11-11, partie 139.5 : un calque masqué reçoit sa clé)*,
   dossiers, vidéo, calques de couleur liés (leurs images suivent leur trait), et ceux qui ont déjà une clé à cette image (la règle d'un
   seul calque : refus), chacun nommé. Le double-clic sur une piste reste pour ce calque-là (un geste à une place) *(changé le 2026-11-11,
   partie 137.11 : sur la piste d'un des calques choisis, une clé sur chacun)*. Avec un seul calque :
@@ -10180,3 +10181,17 @@ Deux retours d'Anthony après l'essai des parties 137 et 138. Code : `folders.rs
 `multicalques_tests.rs` : Ctrl+C puis Ctrl+V avec deux clés choisies et un seul calque choisi ; avec un seul calque choisi après une copie sur deux calques (sa part, et ce qui est laissé de côté est dit) ; sur un autre calque que ceux de la copie ; le clic sur le nom d'un calque qui lâche les clés des autres.
 
 **Adaptés** : `layerflags_tests.rs` (le rang d'un calque lâché se lit par `cible_du_glisse` et `poser`), `calquecouleur_tests.rs` et `notes_calques_tests.rs` (`poser_les_calques` à la place de `move_layer_to`).
+
+### 139.5 Suite du même jour : la nouvelle clé sur des calques masqués (branche `cle-masques`)
+
+« Sélectionner 3 calques et cliquer sur F5 ne crée une clé d'image que sur un seul calque au lieu des trois » (deux captures : trois calques choisis, leurs trois clés choisies, la tête de lecture dedans ; après F5, une seule clé, sur le calque actif).
+
+**Ce qui se passait.** Dans son projet, deux des trois calques choisis (« Vectoriel 14 » et « Vectoriel 15 ») avaient l'œil fermé : leurs pistes sont ternes sur ses captures, et son projet le confirme. La nouvelle clé sur plusieurs calques (partie 132) laissait de côté les calques **masqués**, en le disant seulement dans la barre d'état. Un calque masqué seul, lui, recevait sa clé (`montage_new_key` ne regarde pas l'œil) : la règle n'était pas la même pour un calque et pour plusieurs.
+
+**Maintenant.** Un calque masqué (lui ou son dossier) reçoit sa clé comme les autres : une clé est une affaire de durée, pas de dessin qu'on ne voit pas. Restent laissés de côté, et nommés dans la barre d'état : les calques **verrouillés** (eux ou leur dossier), les dossiers, les calques vidéo, les calques de couleur liés, et ceux qui ont déjà une clé à cette image. `nouvellescles.rs`.
+
+**À décider par Anthony** : un calque verrouillé choisi reste de côté (un calque verrouillé seul, lui, reçoit la clé : là aussi la règle diffère). Le dire s'il veut la clé sur les calques verrouillés aussi, ou au contraire un refus sur un calque verrouillé seul.
+
+**À vérifier à l'écran** : trois calques choisis dont deux masqués, F5 : trois clés, la barre d'état dit « Nouvelle clé sur 3 calques ». F4 : trois clés vides.
+
+**Essai** (`multicalques_tests.rs`) : quatre calques choisis dont deux masqués, F5 puis F4, une étape ; un calque verrouillé reste de côté et la barre d'état le nomme.

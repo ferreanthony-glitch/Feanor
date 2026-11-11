@@ -4,10 +4,12 @@
 //!
 //! - Avec un seul calque choisi : `montage_new_key`, comme avant.
 //! - Avec plusieurs : chacun reçoit sa clé à l'image courante, selon son genre (une copie de son dessin montré, ou un dessin
-//!   vide de sa sorte, bitmap ou vectoriel), en **une seule étape d'annulation**. Les calques verrouillés ou masqués (eux ou leur
-//!   dossier), les dossiers, les calques vidéo et les calques de couleur liés (leurs images suivent leur calque de trait) sont
-//!   laissés de côté ; un calque qui a déjà une clé à cette image suit la règle d'un seul calque (refus) : la barre d'état donne
-//!   ces comptes.
+//!   vide de sa sorte, bitmap ou vectoriel), en **une seule étape d'annulation**. Les calques verrouillés (eux ou leur dossier),
+//!   les dossiers, les calques vidéo et les calques de couleur liés (leurs images suivent leur calque de trait) sont laissés de
+//!   côté ; un calque qui a déjà une clé à cette image suit la règle d'un seul calque (refus) : la barre d'état donne ces comptes.
+//! - Un calque **masqué** reçoit sa clé comme les autres (Anthony, 2026-11-11 : « Sélectionner 3 calques et cliquer sur F5 ne crée
+//!   une clé d'image que sur un seul calque au lieu des trois » — deux des trois avaient l'œil fermé). Une clé est une affaire de
+//!   durée, pas de dessin qu'on ne voit pas ; et un calque masqué seul la reçoit déjà (`montage_new_key`).
 
 use crate::app::App;
 use crate::handles::{key_at, key_source, key_start_taken};
@@ -60,8 +62,6 @@ impl App {
                     Some("vidéo")
                 } else if l.locked || crate::folders::locked_by_folder(layers, li) {
                     Some("verrouillé")
-                } else if crate::folders::effect(layers, li).is_none() {
-                    Some("masqué")
                 } else if l.keys_follow_line() {
                     Some("suit son calque de trait")
                 } else if key_start_taken(l, f) {
