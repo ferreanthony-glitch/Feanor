@@ -17,7 +17,7 @@ const HOT: Color32 = Color32::from_rgb(255, 214, 70);
 /// Distance (pixels d'écran) à laquelle on attrape une poignée.
 const GRAB: f32 = 9.0;
 /// Un point plus près de l'œil que cela n'est pas dessiné.
-const NEAR: f32 = 0.05;
+pub(crate) const NEAR: f32 = 0.05;
 /// Geste « déplacer la caméra du plan » dans la vue par la caméra (une seule étape d'annulation).
 const GESTURE_CAMERA: u64 = 0x5c3d_0001;
 
@@ -543,9 +543,12 @@ impl App {
             let selected = self.espace3d.sel.contains(&espace3d::card_selection(id));
             let mx = xf.matrix();
             let at = |u: f32, v: f32| m::point(&mx, [u - 0.5, 0.5 - v, 0.0]);
-            painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 }))));
-            if let Some(tex) = cel.and_then(|c| self.e3_card_texture(ctx, c)) {
-                painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))));
+            // (Rien de la carte devant l'œil : pas de maillage du tout, `card_mesh`.)
+            if let Some(voile) = card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 })) {
+                painter.add(Shape::mesh(voile));
+                if let Some(dessin) = cel.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                    painter.add(Shape::mesh(dessin));
+                }
             }
             let corners = world.card_corners(&xf);
             let stroke = if selected { Stroke::new(2.0_f32, ACCENT) } else { Stroke::new(1.0_f32, crate::viewbar::veil(90)) };
@@ -673,7 +676,12 @@ fn seg_dist(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
 /// Une carte subdivisée : les points `at(u, v)` (u, v de 0 à 1, v vers le bas), texturée ou d'une couleur. La texture est
 /// posée par triangles : sans subdivision, la perspective la déformerait. Un morceau qui passe derrière l'œil n'est pas
 /// dessiné.
-fn card_mesh(view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, at: &dyn Fn(f32, f32) -> V3, texture: Option<egui::TextureId>, color: Color32) -> egui::Mesh {
+///
+/// Rien (`None`) quand il ne reste devant l'œil **aucun carreau entier** : un maillage qui a des sommets et pas un
+/// triangle ne doit jamais partir à la carte graphique. egui ne jette que les maillages sans sommet ni triangle ; celui-là
+/// arrivait à wgpu, qui refuse une tranche vide (« Buffer slices can not be empty ») et arrêtait FEANOR — le plantage
+/// « quand on se balade dans l'Espace 3D » (`docs/INTERFACE.md`, partie 147).
+pub(crate) fn card_mesh(view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, at: &dyn Fn(f32, f32) -> V3, texture: Option<egui::TextureId>, color: Color32) -> Option<egui::Mesh> {
     const SUBDIV: usize = 16;
     let mut mesh = egui::Mesh::with_texture(texture.unwrap_or_default());
     let n = SUBDIV;
@@ -699,5 +707,5 @@ fn card_mesh(view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2
             }
         }
     }
-    mesh
+    (!mesh.indices.is_empty()).then_some(mesh)
 }
