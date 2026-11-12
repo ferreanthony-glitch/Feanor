@@ -5,6 +5,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Parties 148 et 149 regardées à l'écran par Claude** (22 h 15 à 22 h 20, souris simulée, exe de la branche construit à 22 h 14,
+  copie du projet `afa`, réglages à part). Partie 148 : la carte rouge du plan 6 mise à Z 8 m par son champ (profondeur −1,37,
+  derrière la caméra d'origine) : acceptée, elle sort de l'image du plan ; annulé. Remarque : son champ « Échelle » affiche alors
+  1000 %, la valeur interne. Partie 149 : outil Trajectoire dans la vue Espace 3D, « Clés d'interpolation » ; un chemin tracé au sol
+  avec la carte rouge choisie : elle le suit, sa profondeur passe de 0 à −0,82 ; un petit trait en travers pose une marque (trois
+  jalons sur la timeline). Caméra choisie par le bouton « choisir » des Réglages, chemin tracé au sol : elle le suit, « Regarder
+  par la caméra » le montre, aucune clé de plus sur sa piste ; Ctrl+Z retire le chemin en une étape, Ctrl+Y le rend. Fermé puis
+  rouvert : les deux chemins sont là (copie au format 55). Défaut vu : Ctrl+clic sur la caméra, avec l'outil, a choisi la surface
+  au sol qui était dessous, pas la caméra. Pas essayé à l'écran : tordre ou déplacer le chemin, glisser ou retirer une marque,
+  plusieurs cartes à la fois, carte et caméra ensemble, un chemin sur un mur, les « Clés d'images », le stylet.
 - **La Trajectoire dans l'Espace 3D** (partie 149, branche `trajectoire-espace`, toujours le format 55). Anthony : « Je voudrais
   qu'on essaye d'intégrer l'outil trajectoire dans l'environnement 3D, afin de générer des mouvements dans l'espace », puis « Un
   calque ou la caméra, les deux. Ce qui est sélectionné est sujet à la trajectoire. » Dans la vue Espace 3D d'un plan en Espace 3D,
