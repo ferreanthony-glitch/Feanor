@@ -50,6 +50,10 @@ pub(crate) const CARTE_DERRIERE: &str = "Rien à peindre ici : la carte du calqu
 pub(crate) const PAS_UNE_CARTE: &str = "Ce calque n'est pas une carte de l'Espace 3D (un dossier ou un calque d'effet) : choisis un calque de dessin.";
 pub(crate) const CARTES_CACHEES: &str = "Les cartes sont cachées dans cette vue (« Montrer les cartes », dans Réglages) : montre-les pour dessiner.";
 pub(crate) const AUCUNE_CARTE_ICI: &str = "Ctrl+clic : aucune carte sous le pointeur.";
+/// Sur la feuille (hors de la vue Espace 3D), plan en Espace 3D : les deux raisons de `App::to_layer_opt` de ne rien
+/// rendre (`App::rien_a_peindre`).
+pub(crate) const HORS_CARTE_FEUILLE: &str = "Rien à peindre ici : le pointeur est hors des bords de la carte du calque courant. Dans un plan en Espace 3D, une carte ne montre que sa feuille : un trait au-delà ne se verrait pas.";
+pub(crate) const PAS_SOUS_LE_POINTEUR: &str = "Rien à peindre ici : la carte du calque courant n'est pas sous le pointeur (elle est derrière la caméra, ou vue par la tranche).";
 pub(crate) const MANIPULE: &str = "Espace 3D : le pointeur manipule de nouveau les cartes. Le pinceau, le crayon ou la gomme (leur case ou leur touche) le font dessiner sur la carte.";
 
 /// L'outil dessine un trait : pinceau, mélangeur, crayon, gomme.
@@ -80,10 +84,11 @@ impl Regard3d {
     }
 }
 
-/// **Ce qu'une carte montre de son dessin** : la feuille, bords compris (`taille` : la feuille, en pixels). Hors de là,
-/// un trait serait de l'encre que la carte ne montre pas : il ne commence pas, et ses points sont laissés. C'est la
-/// seule règle « où peut-on peindre » de la vue Espace 3D (`CarteVue::sur_la_carte`). (La feuille d'un plan en Espace
-/// 3D a la sienne, plus large d'une feuille, dans `App::to_layer_opt` : c'est là qu'elle se remplacerait par celle-ci.)
+/// **Ce qu'une carte montre de son dessin** : la feuille, bords compris (`taille` : la feuille, en pixels). C'est le
+/// rectangle que `Monde::card_warp_m` pose dans l'image (son pixel de marge est le bord adouci) et celui que la vue
+/// Espace 3D texture. Hors de là, un trait serait de l'encre que la carte ne montre pas : il ne commence pas, et ses
+/// points sont laissés. **La seule règle « où peut-on peindre sur une carte »** : la vue Espace 3D
+/// (`CarteVue::sur_la_carte`) et la feuille d'un plan en Espace 3D (`App::to_layer_opt`) l'appellent toutes deux.
 pub(crate) fn carte_montre(p: Pos2, taille: [f32; 2]) -> bool {
     p.x.is_finite() && p.y.is_finite() && p.x >= 0.0 && p.y >= 0.0 && p.x <= taille[0] && p.y <= taille[1]
 }

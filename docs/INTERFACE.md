@@ -10537,13 +10537,13 @@ dans la vue). Il tombe là où le regard de la vue
 qui passe par la pointe traverse la carte, quelle que soit son inclinaison : de face, penchée, au sol, en mur. Le trait
 se voit pendant qu'on le trace : la texture de la carte sur laquelle on dessine est tenue à jour par morceaux (les
 tuiles que le trait vient de changer), sans rejouer le moteur de brosses ; elle est aussi plus fine que celle des autres
-cartes (2 048 pixels de large au lieu de 1 024).
+cartes (2 048 pixels de large au lieu de 1 024). Mesure sur le banc d'essai (sans carte graphique, feuille
+3 840 × 2 160, écran 1 280 × 720) : une image d'écran pendant le trait prend 1,4 ms (médiane), 1,6 ms au plus. Pas
+mesuré dans le vrai logiciel ni au stylet.
 
 **Jamais d'encre qu'on ne voit pas.** Un trait ne commence, et ne reçoit de points, que là où la carte le montrera :
-dans ses bords, vue de face. Une seule règle dans le code, `espace3ddessin::CarteVue::sur_la_carte` (`carte_montre`).
-(La feuille d'un plan en Espace 3D, étape A5, accepte encore un trait jusqu'à une feuille au-delà des bords de la
-carte, dans `App::to_layer_opt` : de l'encre que la carte ne montre pas. Ce n'est pas corrigé ici ; la correction
-tiendrait en une ligne, à cet endroit, en y appelant `carte_montre`.)
+dans ses bords, vue de face. Une seule règle dans le code, `espace3ddessin::carte_montre` : la vue Espace 3D l'appelle
+par `CarteVue::sur_la_carte`, la feuille d'un plan en Espace 3D par `App::to_layer_opt` (partie 146.1).
 
 **Là où le trait ne commence pas**, la barre d'état dit pourquoi :
 
@@ -10612,3 +10612,47 @@ morceaux sur une feuille 3 840 × 2 160, et le retour au repos ; calque vectorie
 9. Ctrl+Z après un trait : il part. Quitter la vue : le trait est sur la feuille, au même endroit du dessin.
 10. Un calque vectoriel : le trait, puis son rendu exact quelques instants après, sans saut visible.
 11. Sur un gros projet (feuille 3 840 × 2 160, plusieurs cartes) : pas de saccade en dessinant dans la vue.
+
+### 146.1. Sur la feuille d'un plan en Espace 3D : plus de trait que la carte ne montre pas (correction de l'étape A5)
+
+**Le défaut, vu à l'écran le 2026-11-12** (point 9 de la liste de la partie 143, sur la branche `espace-libre`) : plan
+en Espace 3D, caméra tournée dos aux cartes (panoramique 180°), pinceau sur « Surface au sol », hors de la vue Espace
+3D. Rien ne se voyait, mais un trait **était enregistré** hors de la surface (des points à y = 2 541 à 3 153 pour une
+feuille de 2 160 de haut), et la barre d'état ne disait rien. Anthony a répondu « Oui » à « Je corrige le défaut du
+point 9, le trait invisible hors de la carte ? ».
+
+**La cause.** `App::to_layer_opt` (étape A5) acceptait un point jusqu'à **une feuille au-delà des bords** de la carte
+(pour arrêter un trait qui file vers l'horizon). Or une carte posée par un maillage (`Monde::card_warp_m` : une carte
+inclinée, ou toute carte d'un plan en Espace 3D dont la caméra n'est pas la caméra de référence) ne montre que **sa
+feuille**. Entre les deux, le trait était de l'encre qu'on ne voit pas.
+
+**La règle.** Dans un plan en Espace 3D, pour une carte posée par un maillage, un point de trait n'est accepté que là
+où la carte le montrera : dans les bords de sa feuille, sans marge (`espace3ddessin::carte_montre`, la même condition
+que pour le dessin dans la vue Espace 3D). Donc :
+
+- un trait commencé hors des bords de la carte ne commence pas, et la barre d'état le dit : « Rien à peindre ici : le
+  pointeur est hors des bords de la carte du calque courant. Dans un plan en Espace 3D, une carte ne montre que sa
+  feuille : un trait au-delà ne se verrait pas. » (Carte derrière la caméra ou vue par la tranche : le message
+  d'avant, « … n'est pas sous le pointeur… ». `App::rien_a_peindre` choisit.) ;
+- pendant un trait, les points qui sortent de la carte sont laissés, comme avant ; rien n'est enregistré au-delà du
+  bord (à la largeur du pinceau près) ;
+- le pot de peinture, le dégradé, le segment droit (Maj) et l'ancre d'une trajectoire passent par la même fonction ;
+- **rien ne change** quand le plan passe par le chemin de toujours (caméra de référence et carte à plat : la toile
+  infinie reste peinte et filmée), ni dans un plan ordinaire (une carte inclinée d'un plan ordinaire n'est pas bornée,
+  comme avant).
+
+**Limites.** Dans un plan ordinaire, une carte inclinée ne montre que sa feuille elle aussi : un trait au-delà de ses
+bords y est toujours accepté et ne se voit pas (hors de la demande, laissé tel quel). Près de l'horizon, la dernière
+maille d'une carte coupée par l'œil n'est pas posée : un trait tout au bord de cette coupure peut ne pas se voir.
+**Pas regardé à l'écran.**
+
+**Essais** : `src/espace3ddessin_tests.rs`,
+`on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_not_show_it` : le cas vu à l'écran
+(panoramique 180°, surface au sol, trait sous le cadre là où l'étape A5 l'acceptait : aucun élément ajouté au dessin,
+aucune encre, le message, pas d'étape d'annulation) ; caméra tournée, trait commencé quatre pixels au-delà du bord :
+refusé ; trait parti de la carte et qui en sort : rien au-delà du bord ; caméra de référence et carte à plat : un
+trait hors de la feuille s'enregistre comme avant ; plan ordinaire, carte inclinée : inchangé.
+
+À vérifier à l'écran (par Anthony) : refaire le point 9 de la partie 143 (caméra dos aux cartes, pinceau sur la
+surface au sol, sur la feuille) : rien ne se trace, la barre d'état dit pourquoi, et le dessin de la surface n'a pas
+gagné de trait (Ctrl+Z n'a rien à défaire).

@@ -514,6 +514,8 @@ impl Monde {
     pub fn card_warp_m(&self, eye: V3, mx: &m::M4) -> Option<Warp> {
         let [w, h] = self.stage;
         // (Un pixel de plus que le dessin : le bord adouci en fait partie.)
+        // (Une carte ne montre donc que sa feuille : c'est aussi là seulement qu'un trait est accepté sur elle,
+        // `espace3ddessin::carte_montre`.)
         let src = Rect::from_min_size(pos2(0.0, 0.0), vec2(w, h)).expand(1.0);
         Warp::partial(src, CARD_CELLS, |p| self.to_sheet(eye, m::point(mx, [p.x / w - 0.5, -(p.y / h - 0.5), 0.0])))
     }

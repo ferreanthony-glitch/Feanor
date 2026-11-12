@@ -5,6 +5,7 @@
 use eframe::egui::{pos2, vec2, Event, Modifiers, PointerButton, Pos2};
 
 use crate::app::Tool;
+use crate::camera::Camera;
 use crate::document::{Document, Layer, LayerKind, LayerTransform};
 use crate::espace3ddessin::{self as d3, CarteVue, Manque, Regard3d};
 use crate::espace3dgizmo::Mode as GizmoMode;
@@ -475,6 +476,126 @@ fn the_card_texture_follows_the_stroke_piece_by_piece_and_the_application_rests_
     let morceaux = b.app.e3d.morceaux;
     b.chauffer(5);
     assert_eq!(b.app.e3d.morceaux, morceaux, "au repos, la texture n'est pas retouchée");
+}
+
+// ------------------------------------------------------------------------------ sur la feuille d'un plan en Espace 3D (partie 146.1)
+
+/// Un point de la feuille → l'écran du dessin à plat (hors de la vue Espace 3D).
+fn ecran_feuille(b: &Banc, stage: Pos2) -> Pos2 {
+    b.app.view.to_screen(b.app.canvas_rect, b.app.canvas_size(), stage)
+}
+
+/// Le nombre d'éléments du dessin vectoriel du calque `li` à l'image courante (0 sans dessin).
+fn elements(b: &Banc, li: usize) -> usize {
+    b.app.layers()[li].shown_at(b.app.cur_frame).and_then(|c| b.app.doc.cels[&c].vector.as_ref()).map_or(0, |d| d.elements.len())
+}
+
+/// Le banc sur la feuille (pas la vue Espace 3D), le plan en Espace 3D, le pinceau, la vue dézoomée pour voir toute la
+/// feuille et un peu de la toile autour.
+fn feuille_en_espace(doc: Document) -> Banc {
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.cur_layer = 0;
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
+    b.app.run_action("outil.pinceau");
+    let (rect, size) = (b.app.canvas_rect, b.app.canvas_size());
+    b.app.view.zoom_around(rect, size, rect.center(), 0.45);
+    b.chauffer(2);
+    assert!(!b.app.espace3d.on && !b.app.e3_dessine(), "on dessine sur la feuille, hors de la vue Espace 3D");
+    b
+}
+
+/// Le point `p` du dessin de la carte du calque courant, là où la feuille du plan en Espace 3D le montre (caméra `cam`).
+fn sur_la_feuille(b: &Banc, cam: &Camera, p: Pos2) -> Option<Pos2> {
+    let w = b.app.e3_world();
+    let mx = w.carte_dans_le_repere(cam, &w.card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)));
+    w.card_to_sheet_m(w.eye_reference(), &mx, p)
+}
+
+#[test]
+fn on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_not_show_it() {
+    // 1. Le défaut vu à l'écran le 2026-11-12 : caméra dos aux cartes (panoramique 180°), pinceau sur une surface au
+    //    sol. Sous le cadre, le regard touche le plan du sol derrière la caméra, hors de la surface : à moins d'une
+    //    feuille de son bord, ce que l'étape A5 acceptait. Rien ne se voyait, un trait s'enregistrait, sans un mot.
+    let mut b = feuille_en_espace(doc_cartes(1, LayerKind::Vector));
+    b.app.run_action("espace3d.surface_sol");
+    assert_eq!(b.app.layer().name, "Surface au sol", "{}", b.app.status);
+    let li = b.app.cur_layer;
+    let dos = Camera { pan: 180.0, ..b.app.current_camera() };
+    b.app.set_current_camera(dos);
+    b.chauffer(2);
+    // Les points de la feuille où le regard touche le plan de la surface à moins d'une feuille au-delà de son bord.
+    let w = b.app.e3_world();
+    let mx = w.carte_dans_le_repere(&dos, &w.card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)));
+    let [_, h] = w.stage;
+    let zone = b.app.canvas_rect.shrink(6.0);
+    let pres_du_bord: Vec<Pos2> = (0..=140)
+        .map(|k| pos2(320.0, 220.0 + k as f32))
+        .filter(|s| w.sheet_to_card_m(w.eye_reference(), &mx, *s).is_some_and(|p| p.y > h && p.y <= 2.0 * h) && zone.contains(ecran_feuille(&b, *s)))
+        .collect();
+    assert!(pres_du_bord.len() >= 8, "des points de la feuille visent le sol juste au-delà de la surface : {pres_du_bord:?}");
+    let (sa, sc) = (pres_du_bord[1] + vec2(-50.0, 0.0), pres_du_bord[pres_du_bord.len() - 2] + vec2(50.0, 0.0));
+    for s in [sa, sc, sa + (sc - sa) * 0.5] {
+        assert!(b.app.to_layer_opt(s).is_none(), "le point {s:?} de la feuille n'est plus accepté");
+        assert_eq!(b.app.rien_a_peindre(s), d3::HORS_CARTE_FEUILLE, "en {s:?}, le regard touche le plan de la surface hors de ses bords");
+    }
+    let etapes = b.app.history.undo_len();
+    b.app.status.clear();
+    let (ea, ec) = (ecran_feuille(&b, sa), ecran_feuille(&b, sc));
+    assert!(zone.contains(ea) && zone.contains(ec), "le geste tient dans le dessin : {ea:?} → {ec:?}");
+    geste(&mut b, &[ea, ec], Modifiers::NONE);
+    assert_eq!(elements(&b, li), 0, "aucun élément ajouté au dessin");
+    assert_eq!(encre(&b, li) + encre_hors_feuille(&b, li), 0, "aucune encre, ni sur la feuille ni hors d'elle");
+    assert_eq!(b.app.status, d3::HORS_CARTE_FEUILLE);
+    assert_eq!(b.app.history.undo_len(), etapes, "ni étape d'annulation");
+    // Carte derrière la caméra, regard qui ne touche pas son plan (au-dessus de l'horizon) : le message d'avant.
+    assert_eq!(b.app.rien_a_peindre(pos2(320.0, 120.0)), d3::PAS_SOUS_LE_POINTEUR);
+
+    // 2. Caméra tournée, carte à plat : un trait commencé juste au-delà du bord de la carte est refusé ; un trait qui
+    //    part de la carte et en sort ne laisse rien au-delà du bord.
+    let mut b = feuille_en_espace(doc_cartes(1, LayerKind::Bitmap));
+    let tournee = Camera { pan: -18.0, ..b.app.current_camera() };
+    b.app.set_current_camera(tournee);
+    b.chauffer(2);
+    let zone = b.app.canvas_rect.shrink(6.0);
+    let vers = |b: &Banc, p: Pos2| {
+        let s = sur_la_feuille(b, &tournee, p).unwrap_or_else(|| panic!("le point {p:?} de la carte se voit sur la feuille"));
+        let e = ecran_feuille(b, s);
+        assert!(zone.contains(e), "le point {p:?} de la carte est dans le dessin : {e:?}");
+        (s, e)
+    };
+    let ((s_bord, e_bord), (s_dedans, e_dedans), (_, e_dehors)) = (vers(&b, pos2(-4.0, 180.0)), vers(&b, pos2(70.0, 180.0)), vers(&b, pos2(-60.0, 180.0)));
+    assert!(b.app.to_layer_opt(s_bord).is_none(), "quatre pixels au-delà du bord : pas accepté");
+    assert!(b.app.to_layer_opt(s_dedans).is_some_and(|p| (p - pos2(70.0, 180.0)).length() < 0.05), "dans la carte : accepté, au bon endroit");
+    let etapes = b.app.history.undo_len();
+    b.app.status.clear();
+    geste(&mut b, &[e_bord, e_dedans], Modifiers::NONE);
+    assert_eq!(encre(&b, 0) + encre_hors_feuille(&b, 0), 0, "un trait commencé juste au-delà du bord ne laisse aucune encre");
+    assert_eq!(b.app.status, d3::HORS_CARTE_FEUILLE);
+    assert_eq!(b.app.history.undo_len(), etapes);
+    geste(&mut b, &[e_dedans, e_dehors], Modifiers::NONE);
+    assert!(encre_pres(&b, 0, pos2(35.0, 180.0), 6), "le trait parti de la carte est tracé dans la carte : {}", b.app.status);
+    assert!(!encre_pres(&b, 0, pos2(-50.0, 180.0), 12), "rien n'est enregistré au-delà du bord, là où le pointeur est allé");
+    assert_eq!(b.app.history.undo_len(), etapes + 1);
+
+    // 3. Caméra de référence et carte à plat : le chemin de toujours, la toile infinie reste peinte. Comme avant.
+    let mut b = feuille_en_espace(doc_cartes(1, LayerKind::Bitmap));
+    let (sa, sc) = (pos2(-60.0, 180.0), pos2(-20.0, 200.0));
+    assert_eq!(b.app.to_layer_opt(sa), Some(sa), "hors de la feuille, le point est accepté tel quel");
+    let (ea, ec) = (ecran_feuille(&b, sa), ecran_feuille(&b, sc));
+    assert!(b.app.canvas_rect.contains(ea) && b.app.canvas_rect.contains(ec), "{ea:?} → {ec:?}");
+    geste(&mut b, &[ea, ec], Modifiers::NONE);
+    assert!(encre_hors_feuille(&b, 0) > 0, "un trait hors de la feuille s'enregistre, comme avant : {}", b.app.status);
+
+    // 4. Plan ordinaire, carte inclinée : rien n'a changé, le pinceau n'y est pas borné aux bords de la carte.
+    let mut doc = doc_cartes(1, LayerKind::Bitmap);
+    doc.panels[0].layers[0].transform = LayerTransform { tilt_y: 30.0, ..LayerTransform::default() };
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.cur_layer = 0;
+    let hors = (0..=180).map(|k| pos2(-400.0 + k as f32 * 8.0, 180.0)).filter_map(|s| b.app.to_layer_opt(s)).filter(|p| p.x < -1.0 || p.x > 641.0).count();
+    assert!(hors > 0, "plan ordinaire : des points au-delà des bords de la carte inclinée sont acceptés, comme avant");
 }
 
 #[test]

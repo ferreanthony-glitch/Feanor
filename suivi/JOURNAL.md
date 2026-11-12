@@ -5,8 +5,23 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
-- **Dessiner dans la vue Espace 3D** (partie 146, branche locale `espace-libre-cles`, à la suite des boutons de clés ; EN COURS, voir la
-  fin de cette puce). Sa demande, pendant le même essai : « il est impossible de dessiner dans l'espace 3D pour l'instant. C'est quelque
+- **Sur la feuille d'un plan en Espace 3D, plus de trait que la carte ne montre pas** (partie 146.1, même branche ; correction de
+  l'étape A5 de la session du Mac). Le défaut vu à l'écran ce jour, point 9 de la liste de la partie 143 : caméra dos aux cartes
+  (panoramique 180°), pinceau sur « Surface au sol », sur la feuille : rien ne se voyait, mais un trait était enregistré hors de la
+  surface (y = 2 541 à 3 153 pour une feuille de 2 160), sans un mot. Son « Oui » à « Je corrige le défaut du point 9, le trait
+  invisible hors de la carte ? ». Cause : `App::to_layer_opt` acceptait un point jusqu'à une feuille au-delà des bords de la carte, alors
+  qu'une carte posée par un maillage ne montre que sa feuille (`Monde::card_warp_m`). Règle : dans un plan en Espace 3D, un point n'est
+  accepté que dans les bords de la carte (`espace3ddessin::carte_montre`, la même condition que dans la vue Espace 3D, une seule
+  fonction) ; un trait commencé au-delà ne commence pas et la barre d'état le dit (message neuf pour le bord de la carte,
+  `App::rien_a_peindre`) ; pendant un trait les points qui sortent sont laissés. Rien ne change sous la caméra de référence avec une carte
+  à plat (la toile infinie reste peinte), ni dans un plan ordinaire. Essai neuf
+  `on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_not_show_it` (le cas vu à l'écran, le bord de la carte
+  caméra tournée, le trait qui sort de la carte, la caméra de référence, le plan ordinaire). Un essai existant de l'étape A5 touché :
+  `near_the_horizon_of_a_card_on_the_ground_the_brush_stops_instead_of_running_away` (`espace3d_tests.rs`) vérifiait « jamais à plus
+  d'une feuille des bords » ; il vérifie maintenant « jamais hors des bords » (il passait aussi sans ce changement). Pas regardé à
+  l'écran. Limite laissée : une carte inclinée d'un plan ordinaire accepte encore un trait hors de ses bords, qui ne se voit pas.
+- **Dessiner dans la vue Espace 3D** (partie 146, branche locale `espace-libre-cles`, à la suite des boutons de clés). Sa demande,
+  pendant le même essai : « il est impossible de dessiner dans l'espace 3D pour l'instant. C'est quelque
   chose qui doit être faisable en permanence, le trait s'appliquant sur la carte », et « Oui, ici » à « je le code ici ? ». La règle :
   **l'outil décide**. Dans la vue (orbite ou « Regarder par la caméra », plan ordinaire ou plan en Espace 3D), le pinceau, le crayon, la
   gomme ou le mélangeur (case, touche, ou le bouton neuf « Dessiner sur la carte », commande `espace3d.dessiner`, sans touche) font
@@ -17,12 +32,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   tant qu'on dessine dans la vue. Le trait se voit pendant le geste sans rejeu du moteur : la texture de la carte dessinée est refaite
   par morceaux, les tuiles changées seulement (`render::cel_image_zone`). Le cercle du pinceau est posé sur la carte (ellipse sur une
   carte penchée). Refus avec un mot : hors de la carte, de dos, par la tranche, derrière l'œil, cartes cachées, calque verrouillé ou caché.
+  Jamais d'encre qu'on ne voit pas : un trait ne commence et ne reçoit de points que dans les bords de la carte.
   Fichiers : `src/espace3ddessin.rs` et `src/espace3ddessin_tests.rs` (neufs), quelques lignes dans `espace3dview.rs`, `espace3dui.rs`,
   `app.rs` (`set_tool`, `layer_to_screen`, `layer_zoom`), `canvas.rs`, `tracedroit.rs`, `render.rs`, `onglets.rs`, `keymap.rs`,
   `keymap.toml`, `lib.rs`. Hors de cette étape : pot de peinture, dégradé, formes, sélection, Transformer, coller une image dans la vue.
-  **État au premier commit « en cours » : 7 essais neufs sur 8 passent ; celui du trait « par la caméra » échoue (le point de la carte
-  tombe hors de la vue dans l'essai, en cours de diagnostic). Restent : cet essai, les familles voisines, `cargo check`, la relecture de
-  la partie 146.** Rien n'a été regardé à l'écran ni essayé au stylet ; l'exe n'est pas construit ; pas poussé, pas fusionné.
+  Essais : 9 neufs (`espace3ddessin_tests.rs` : de vrais traits de souris dans la vue d'orbite et par la caméra, carte de face, penchée,
+  surface au sol ; les refus ; l'outil qui décide ; Alt+glisser et Ctrl+clic ; la taille du pinceau ; la texture par morceaux et le
+  retour au repos ; calque vectoriel et segment droit ; la feuille d'un plan en Espace 3D, puce ci-dessus), et les familles voisines,
+  0 échec (les nombres sont dans le dernier commit). Commits sur `espace-libre-cles` : 7b6800e et 072cbda (en cours), e6755ff (la règle
+  des bords dans la vue), puis celui de la partie 146.1. Limites : pot de peinture, dégradé, formes, sélection, Transformer absents de
+  la vue ; à l'entrée dans la vue le pointeur manipule et la barre d'outils de gauche garde son outil allumé ; carte vue de dos refusée
+  dans la vue. **Rien n'a été regardé à l'écran ni essayé au stylet** (liste en 11 points, partie 146) ; la suite de référence entière
+  n'a pas été relancée ; l'exe n'est pas construit (son FEANOR d'essai tournait) ; pas poussé, pas fusionné.
 - Pendant son essai à l'écran de la branche `espace-libre` (plan en Espace 3D), sa remarque : « les clés de caméras et de transformation
   des objets ont disparu avec la vue 3D », puis « j'aimerais qu'un bouton y apparaisse » (vue Espace 3D ouverte, le panneau Réglages
   n'avait aucun bouton de clés, sur `main` non plus). Chantier `espace-libre-cles` (partie 145), branche locale du même nom depuis

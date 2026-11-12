@@ -1659,21 +1659,34 @@ impl App {
     }
 
     /// Comme `to_layer`, mais **rien** quand le regard qui passe par ce point de la feuille ne touche pas la carte du
-    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Dans un plan en Espace 3D
-    /// (`docs/ESPACE-LIBRE.md`, étape A5), rien non plus quand le regard touche le plan de la carte à plus d'une feuille de
-    /// ses bords : près de l'horizon d'une carte au sol, un petit geste de la main ferait un trait de plusieurs
-    /// kilomètres. Ce qui peint (pinceau, crayon, gomme, pot, dégradé) passe par ici : pas de trait là où il n'y a pas de
-    /// carte.
+    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Ce qui peint (pinceau, crayon, gomme, pot,
+    /// dégradé) passe par ici : pas de trait là où il n'y a pas de carte.
+    ///
+    /// **Plan en Espace 3D : rien non plus hors des bords de la carte** (`docs/INTERFACE.md`, partie 146.1). Une carte
+    /// posée par un maillage (inclinée, ou vue par une caméra qui n'est pas la caméra de référence) ne montre que sa
+    /// feuille (`Monde::card_warp_m`) : un point au-delà de ses bords serait de l'encre qu'on ne voit pas. La condition
+    /// est celle de la vue Espace 3D, `espace3ddessin::carte_montre`. (Avant le 2026-11-12, l'étape A5 acceptait un point
+    /// jusqu'à une feuille au-delà des bords : caméra dos aux cartes, un trait dans le bas du cadre s'enregistrait hors
+    /// d'une surface au sol, sans rien montrer ni rien dire.) Carte à plat sous la caméra de référence, ou plan
+    /// ordinaire : inchangé, la toile infinie reste peinte et filmée.
     pub(crate) fn to_layer_opt(&self, stage: Pos2) -> Option<Pos2> {
         let Some((world, mx, eye)) = self.tilted_card() else { return Some(self.to_layer_a_plat(stage)) };
         let p = world.sheet_to_card_m(eye, &mx, stage)?;
-        if self.doc.plan_en_espace(self.cur_panel) {
-            let [w, h] = world.stage;
-            if !(p.x.is_finite() && p.y.is_finite() && p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h) {
-                return None;
-            }
+        if self.doc.plan_en_espace(self.cur_panel) && !crate::espace3ddessin::carte_montre(p, world.stage) {
+            return None;
         }
         Some(p)
+    }
+
+    /// Pourquoi `to_layer_opt` ne rend rien en ce point de la feuille : le mot de la barre d'état. Le regard touche le
+    /// plan de la carte hors de ses bords, ou ne le touche pas du tout (carte derrière la caméra, vue par la tranche).
+    pub(crate) fn rien_a_peindre(&self, stage: Pos2) -> &'static str {
+        let hors_des_bords = self.tilted_card().is_some_and(|(world, mx, eye)| world.sheet_to_card_m(eye, &mx, stage).is_some());
+        if hors_des_bords {
+            crate::espace3ddessin::HORS_CARTE_FEUILLE
+        } else {
+            crate::espace3ddessin::PAS_SOUS_LE_POINTEUR
+        }
     }
 
     /// `to_layer` pour un calque posé par une affinité (ni carte inclinée, ni plan en Espace 3D à la caméra tournée).

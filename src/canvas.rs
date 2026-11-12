@@ -476,9 +476,10 @@ impl App {
                         p
                     };
                     // Plan en Espace 3D, carte inclinée : le regard ne touche pas la carte du calque courant ici (elle est
-                    // derrière la caméra, vue par la tranche, ou trop loin de ses bords) : ce qui peint ne commence pas.
+                    // derrière la caméra, vue par la tranche, ou le pointeur est hors de ses bords) : ce qui peint ne
+                    // commence pas, et la barre d'état dit lequel (`App::rien_a_peindre`).
                     if matches!(self.tool, Tool::Fill | Tool::Gradient | Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser) && self.to_layer_opt(stage).is_none() {
-                        self.status = "Rien à peindre ici : la carte du calque courant n'est pas sous le pointeur (elle est derrière la caméra, ou vue par la tranche).".into();
+                        self.status = self.rien_a_peindre(stage).into();
                         continue;
                     }
                     match self.tool {

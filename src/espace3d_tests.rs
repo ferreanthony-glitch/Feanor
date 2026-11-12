@@ -1606,14 +1606,15 @@ fn near_the_horizon_of_a_card_on_the_ground_the_brush_stops_instead_of_running_a
     b.chauffer(2);
     let (w, h) = (640.0, 360.0);
     // En bas de l'image, le regard touche la carte ; en remontant vers l'horizon, il la touche de plus en plus loin, puis
-    // plus du tout : jamais à plus d'une feuille de ses bords.
+    // plus du tout : jamais hors de ses bords. (Partie 146.1, 2026-11-12 : l'étape A5 acceptait un point jusqu'à une
+    // feuille au-delà des bords ; la carte n'y montre rien, le trait s'enregistrait sans se voir.)
     let mut touche = 0;
     let mut refuse = 0;
     for k in 0..=60 {
         let s = pos2(320.0, 270.0 - k as f32 * 3.0);
         match b.app.to_layer_opt(s) {
             Some(p) => {
-                assert!(p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h, "le pinceau irait en {p:?}");
+                assert!(p.x >= 0.0 && p.x <= w && p.y >= 0.0 && p.y <= h, "le pinceau irait en {p:?}, hors de la carte");
                 touche += 1;
             }
             None => refuse += 1,
