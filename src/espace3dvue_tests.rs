@@ -7,11 +7,13 @@
 //! graphique, et wgpu refuse une tranche vide. Ces essais regardent ce que la vue envoie : jamais un tel morceau.
 
 use eframe::egui::epaint::Primitive;
+use eframe::egui::{pos2, vec2, Event, Modifiers, PointerButton, Pos2, Vec2};
 
 use crate::document::{Document, Layer, LayerKind};
+use crate::espace3dgizmo::{Mode as GizmoMode, CAMERA_ID};
 use crate::espace3dmath::{Orbite, V3};
 use crate::espace3dview::NEAR;
-use crate::perf_tests::{banc_taille, Banc};
+use crate::perf_tests::{banc_taille, se_reposer, Banc, Mesure};
 
 fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -147,4 +149,112 @@ fn walking_through_the_surfaces_of_a_plan_en_espace_never_sends_a_piece_without_
     let (mediane, max) = (temps[N / 2], temps[N - 1]);
     println!("PERF vue Espace 3D : se promener dans un plan en Espace 3D (11 cartes, feuille 3840 × 2160, écran 1280 × 720, sans carte graphique) : médiane {mediane:.2} ms, max {max:.2} ms par image");
     assert!(mediane < 16.0, "{mediane:.2} ms par image : la promenade doit tenir 60 images par seconde");
+}
+
+/// Médiane et maximum (ms) de ce que des images ont coûté, et la part de chaque étape dans la médiane.
+fn resume(titre: &str, mesures: &[Mesure], b: &Banc) -> f64 {
+    let mut t: Vec<f64> = mesures.iter().map(|m| m.total()).collect();
+    t.sort_by(|a, b| a.total_cmp(b));
+    let n = t.len().max(1);
+    let moy = |f: &dyn Fn(&Mesure) -> f64| mesures.iter().map(f).sum::<f64>() / n as f64;
+    println!(
+        "PERF vue Espace 3D, {titre} (carte graphique {}) : médiane {:.2} ms, max {:.2} ms par image ; en moyenne interface {:.2}, découpage {:.2}, carte graphique {:.2} ; textures refaites {} ({} Ko)",
+        b.app.gpu.is_some(),
+        t[n / 2],
+        t[n - 1],
+        moy(&|m| m.construction),
+        moy(&|m| m.decoupage),
+        moy(&|m| m.carte),
+        mesures.iter().map(|m| m.textures).sum::<usize>(),
+        mesures.iter().map(|m| m.octets).sum::<usize>() / 1024,
+    );
+    t[n / 2]
+}
+
+/// Un glisser du bouton `bouton` dans la vue : on appuie en `de`, puis `n` images où le pointeur avance de `pas` (aller
+/// et retour, pour rester dans la vue). Ce que chaque image du geste a coûté.
+fn glisser(b: &mut Banc, bouton: PointerButton, de: Pos2, pas: Vec2, n: usize) -> Vec<Mesure> {
+    let m = Modifiers::default();
+    let dt = 1.0 / 60.0;
+    b.image(vec![Event::PointerMoved(de)], dt);
+    b.image(vec![Event::PointerButton { pos: de, button: bouton, pressed: true, modifiers: m }], dt);
+    let mut p = de;
+    let mut out = Vec::with_capacity(n);
+    for k in 0..n {
+        p += if (k / 40) % 2 == 0 { pas } else { -pas };
+        out.push(b.image(vec![Event::PointerMoved(p)], dt));
+    }
+    b.image(vec![Event::PointerButton { pos: p, button: bouton, pressed: false, modifiers: m }], dt);
+    out
+}
+
+/// Les gestes d'une promenade, un par un, dans un plan en Espace 3D à la taille d'un vrai projet (feuille 3840 × 2160,
+/// huit calques dessinés et trois surfaces) : tourner et glisser la vue, avancer, puis la même chose en regardant par
+/// la caméra (c'est alors la caméra du plan qui bouge : l'image du plan change à chaque image d'écran), et tirer la
+/// caméra par sa poignée. Avec la carte graphique quand il y en a une.
+#[test]
+fn every_gesture_of_a_walk_in_a_plan_en_espace_stays_within_the_frame_budget() {
+    let mut b = banc_taille(doc_cartes(8, 1920, 1080), true, 1280, 720);
+    b.chauffer(2);
+    b.app.cur_layer = 0;
+    b.app.run_action("espace3d.basculer");
+    b.app.run_action("espace3d.plan_en_espace");
+    for a in ["espace3d.surface_sol", "espace3d.surface_mur", "espace3d.surface_face"] {
+        b.app.run_action(a);
+    }
+    b.app.run_action("espace3d.cadrer");
+    b.chauffer(8);
+    let r = b.app.canvas_rect;
+    let c = r.center();
+    let dt = 1.0 / 60.0;
+    let mut pire: f64 = 0.0;
+
+    let repos: Vec<Mesure> = (0..60).map(|k| b.image(vec![Event::PointerMoved(c + vec2(k as f32, 0.0))], dt)).collect();
+    pire = pire.max(resume("le pointeur passe sur la vue", &repos, &b));
+    let m = glisser(&mut b, PointerButton::Secondary, c, vec2(3.0, 1.0), 120);
+    pire = pire.max(resume("tourner la vue (clic droit)", &m, &b));
+    let m = glisser(&mut b, PointerButton::Middle, c, vec2(2.0, 1.0), 120);
+    pire = pire.max(resume("glisser la vue (bouton du milieu)", &m, &b));
+    let m: Vec<Mesure> = (0..120)
+        .map(|k| {
+            let ev = b.molette(vec2(0.0, if (k / 30) % 2 == 0 { 30.0 } else { -30.0 }), Modifiers::default());
+            b.image(ev, dt)
+        })
+        .collect();
+    pire = pire.max(resume("avancer (molette)", &m, &b));
+
+    // Tirer la caméra du plan par sa poignée : le plan change à chaque image.
+    b.app.espace3d.sel = vec![CAMERA_ID];
+    b.app.espace3d.mode = GizmoMode::Move;
+    b.chauffer(2);
+    let view = b.app.espace3d.cam.expect("la vue d'orbite").view(r.width());
+    let centre = [r.width() / 2.0, r.height() / 2.0];
+    let gizmo = b.app.e3_gizmo(&view).expect("le manipulateur de la caméra");
+    let bout = view.project(gizmo.axis_tip(0), centre).expect("la poignée est devant l'œil");
+    let avant = b.app.current_camera();
+    let m = glisser(&mut b, PointerButton::Primary, pos2(r.left() + bout[0], r.top() + bout[1]), vec2(2.0, 0.0), 120);
+    assert_ne!(b.app.current_camera(), avant, "la poignée a bien déplacé la caméra du plan : {}", b.app.status);
+    pire = pire.max(resume("tirer la caméra du plan par sa poignée", &m, &b));
+
+    // Regarder par la caméra : la promenade déplace la caméra du plan elle-même.
+    b.app.run_action("espace3d.vue_camera");
+    b.chauffer(4);
+    assert!(b.app.espace3d.through_camera, "on regarde par la caméra");
+    let avant = b.app.current_camera();
+    let m = glisser(&mut b, PointerButton::Secondary, c, vec2(2.0, 1.0), 120);
+    assert_ne!(b.app.current_camera(), avant, "le clic droit a bien tourné la caméra du plan");
+    pire = pire.max(resume("par la caméra : tourner la caméra (clic droit)", &m, &b));
+    let m = glisser(&mut b, PointerButton::Middle, c, vec2(2.0, 1.0), 120);
+    pire = pire.max(resume("par la caméra : déplacer la caméra (bouton du milieu)", &m, &b));
+    let m: Vec<Mesure> = (0..120)
+        .map(|k| {
+            let ev = b.molette(vec2(0.0, if (k / 30) % 2 == 0 { 30.0 } else { -30.0 }), Modifiers::default());
+            b.image(ev, dt)
+        })
+        .collect();
+    pire = pire.max(resume("par la caméra : avancer (molette)", &m, &b));
+
+    let images = se_reposer(&mut b, 600);
+    println!("PERF vue Espace 3D : repos retrouvé {images} images après la promenade");
+    assert!(pire < 16.0, "{pire:.2} ms de médiane pour le geste le plus lent : la promenade doit tenir 60 images par seconde");
 }

@@ -10693,15 +10693,38 @@ des sommets et aucun triangle.
   face), à hauteur d'homme, en tournant la tête. Elle ne mordait pas avant la correction : elle garde la suite et donne
   la mesure.
 
-**Vitesse.** Sur le PC de l'atelier, la promenade de 360 images coûte 1,14 ms par image en médiane et 2,43 ms au pire
-(toute l'interface et son découpage en triangles, écran 1280 × 720, sans le temps de la carte graphique). La vue n'est
-donc pas lente par elle-même sur cette machine.
+- *Chaque geste de la promenade, un par un*, carte graphique comprise, dans le même plan : le pointeur qui passe, tourner
+  la vue (clic droit), la glisser (bouton du milieu), avancer (molette), tirer la caméra du plan par sa poignée, puis
+  « Regarder par la caméra » avec les trois mêmes gestes (c'est alors la caméra du plan qui bouge). Chacun doit tenir
+  60 images par seconde.
+
+**Vitesse.** Sur le PC de l'atelier (carte RTX 2080 Super, écran d'essai 1280 × 720, feuille 3840 × 2160, 11 cartes) :
+
+| Geste | Médiane par image | Pire image |
+|---|---|---|
+| La promenade de 360 images (sans la carte graphique) | 1,14 ms | 2,43 ms |
+| Le pointeur passe sur la vue | 1,50 ms | 2,06 ms |
+| Tourner la vue (clic droit) | 1,47 ms | 1,82 ms |
+| Glisser la vue (bouton du milieu) | 1,47 ms | 1,97 ms |
+| Avancer (molette) | 1,55 ms | 1,98 ms |
+| Tirer la caméra du plan par sa poignée | 2,30 ms | 3,13 ms |
+| Par la caméra : tourner la caméra | 2,19 ms | 3,14 ms |
+| Par la caméra : déplacer la caméra | 2,20 ms | 3,35 ms |
+| Par la caméra : avancer | 2,22 ms | 4,95 ms |
+
+Une image d'écran à 60 par seconde laisse 16,7 ms : sur cette machine la vue en prend moins d'un septième, et le repos
+revient 6 images après la promenade. Le ralentissement dont parle Anthony n'est donc ni dans le calcul de la vue ni dans
+ses gestes tels qu'ils se mesurent ici ; il tient à sa machine (carte graphique, taille d'écran) ou à son projet (nombre
+et poids des calques), qu'il reste à connaître.
 
 **Suite de référence** : 4 552 essais réussis, 0 échec, les dix groupes de fiabilité passent (Espace 3D : 97 essais) ; le
 vérificateur ne signale que l'avertissement de compilation venu de la branche du Mac (`espace3d.rs`).
 
 **Ce qui n'est pas fait.** Les ralentissements dont parle Anthony n'ont pas été retrouvés sur le PC de l'atelier : sans
-savoir sur quelle machine ni pendant quel geste, rien n'a été changé pour eux. Un garde-fou général (retirer tout
+savoir sur quelle machine ni pendant quel geste, rien n'a été changé pour eux. Une piste non vérifiée : chaque carte est
+peinte deux fois sur toute sa surface (son voile, puis son dessin), en transparence ; quand on marche au milieu de
+cartes qui couvrent chacune tout l'écran, une petite carte graphique peut ne pas suivre. Aide > Diagnostic des
+performances, lancé sur la machine lente, dira ce qu'elle vaut. Un garde-fou général (retirer tout
 maillage sans triangle juste avant l'envoi à la carte graphique, où qu'il vienne) n'est pas posé : egui ne donne pas de
 passage propre pour cela.
 
