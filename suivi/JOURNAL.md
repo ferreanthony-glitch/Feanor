@@ -5,6 +5,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **plantage-carte-vide fusionné dans `main`** (41fe5a9) sur le « Oui, corrige-le » d'Anthony, poussé sur GitHub. Exe principal
+  reconstruit (18 h 37, aucun avertissement) et ouvert deux fois sur une copie de son projet `afa`, réglages à part : pas de
+  plantage, la copie reste au format 52. La promenade dans la vue Espace 3D n'a pas été refaite à l'écran avec cet exe : les essais
+  la couvrent, et Anthony l'a faite sur un autre PC avec la même correction. Pas de version portable (sa consigne). À tester par
+  Anthony : la liste de la partie 147.
 - **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, branche `plantage-carte-vide`).
   Anthony, pendant l'essai de « Plan en Espace 3D » : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ».
   Son rapport du 12 novembre, 0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage
