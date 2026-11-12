@@ -3,6 +3,24 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-12
+
+- **plantage-carte-vide fusionné dans `main`** (41fe5a9) sur le « Oui, corrige-le » d'Anthony, poussé sur GitHub. Exe principal
+  reconstruit (18 h 37, aucun avertissement) et ouvert deux fois sur une copie de son projet `afa`, réglages à part : pas de
+  plantage, la copie reste au format 52. La promenade dans la vue Espace 3D n'a pas été refaite à l'écran avec cet exe : les essais
+  la couvrent, et Anthony l'a faite sur un autre PC avec la même correction. Pas de version portable (sa consigne). À tester par
+  Anthony : la liste de la partie 147.
+- **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, branche `plantage-carte-vide`).
+  Anthony, pendant l'essai de « Plan en Espace 3D » : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ».
+  Son rapport du 12 novembre, 0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage
+  avec des sommets et aucun triangle quand il ne restait pas un carreau entier de la carte devant l'œil ; egui le laisse passer,
+  wgpu le refuse. Corrigé d'abord sur la branche d'essai `espace-libre-cles` (il a confirmé sur un autre PC : « Non, plus de
+  plantage »), puis porté ici à sa demande (« Oui, corrige-le ») : la vue (`espace3dview.rs`) et le canevas (`canvas.rs`, même
+  maillage), ligne pour ligne la même correction. Essai dirigé rouge sur le code d'avant, vert après (`espace3dvue_tests.rs`) ; une
+  promenade de 360 images à travers les cartes en plus (0,94 ms par image en médiane). Vérificateur : 4 502 réussis, 0 échec, aucun
+  avertissement, dix groupes OK. Le Plan en Espace 3D, les boutons de clés et le dessin dans la vue Espace 3D ne sont pas dans
+  `main` : ils restent sur `espace-libre-cles`, envoyée sur GitHub le même jour à sa demande. Format inchangé : 53.
+
 ## 2026-11-11
 
 - Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on

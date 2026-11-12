@@ -236,7 +236,11 @@ impl App {
                     }
                 }
             }
-            painter.add(Shape::mesh(mesh));
+            // (Pas un carreau entier devant la caméra : rien à peindre. Un maillage qui a des sommets et aucun triangle
+            // arrête la carte graphique — `docs/INTERFACE.md`, partie 147.)
+            if !mesh.indices.is_empty() {
+                painter.add(Shape::mesh(mesh));
+            }
         }
 
         // (La grande case d'un mouvement de caméra a ses propres cadres, A, B, C… : `vignettecamui.rs`.)
