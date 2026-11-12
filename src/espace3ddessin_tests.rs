@@ -154,17 +154,21 @@ fn a_mouse_stroke_through_the_camera_inks_the_card_in_an_ordinary_plan_and_in_a_
     dessiner(&mut b);
     verifier_un_trait(&mut b, "par la caméra, plan ordinaire", pos2(260.0, 150.0), pos2(380.0, 210.0));
 
-    // Plan en Espace 3D, caméra tournée, surface en mur : par la caméra.
+    // Plan en Espace 3D, caméra tournée, surface posée face à elle (donc penchée dans le monde) : par la caméra.
     let mut b = ouvert(doc_cartes(1, LayerKind::Bitmap));
     b.app.run_action("espace3d.plan_en_espace");
     let tournee = crate::camera::Camera { pan: 12.0, tilt: -6.0, ..b.app.current_camera() };
     b.app.set_current_camera(tournee);
-    b.app.run_action("espace3d.surface_mur");
-    assert_eq!(b.app.layer().name, "Surface en mur", "{}", b.app.status);
+    b.app.run_action("espace3d.surface_face");
+    assert_eq!(b.app.layer().name, "Surface face à la caméra", "{}", b.app.status);
     b.app.run_action("espace3d.vue_camera");
     b.chauffer(2);
     dessiner(&mut b);
-    verifier_un_trait(&mut b, "par la caméra, plan en Espace 3D", pos2(280.0, 150.0), pos2(360.0, 200.0));
+    // Le cadre tombe au centre de la surface : on trace autour du point de la carte que vise le centre de la vue.
+    let vue = carte(&b);
+    let milieu = vue.vers_dessin(b.app.canvas_rect.center()).expect("le regard du centre de la vue touche la surface");
+    assert!(vue.dans_la_carte(milieu), "le centre de la vue est sur la surface : {milieu:?}");
+    verifier_un_trait(&mut b, "par la caméra, plan en Espace 3D", milieu + vec2(-50.0, -25.0), milieu + vec2(50.0, 25.0));
 }
 
 #[test]
