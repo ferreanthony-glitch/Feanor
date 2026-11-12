@@ -10531,22 +10531,29 @@ pour qui ne dessine pas. Le choix est gardé quand on sort de la vue et qu'on y 
 La commande `espace3d.dessiner` n'a pas de touche par défaut (palette Ctrl+K, `keymap.toml`) : les touches du pinceau,
 du crayon et de la gomme font le même travail.
 
-**Le trait.** Il passe par le moteur de toujours : appui du stylet, lissage, segment droit avec Maj, « peindre
-derrière », « peint sur l'aplat », annulation (une étape par trait), enregistrement. Il tombe là où le regard de la vue
+**Le trait.** Il passe par le moteur de toujours : appui du stylet, lissage, segment droit avec Maj, annulation (une
+étape par trait), enregistrement ; « peindre derrière » et « peint sur l'aplat » suivent le même chemin (non essayés
+dans la vue). Il tombe là où le regard de la vue
 qui passe par la pointe traverse la carte, quelle que soit son inclinaison : de face, penchée, au sol, en mur. Le trait
 se voit pendant qu'on le trace : la texture de la carte sur laquelle on dessine est tenue à jour par morceaux (les
 tuiles que le trait vient de changer), sans rejouer le moteur de brosses ; elle est aussi plus fine que celle des autres
 cartes (2 048 pixels de large au lieu de 1 024).
 
+**Jamais d'encre qu'on ne voit pas.** Un trait ne commence, et ne reçoit de points, que là où la carte le montrera :
+dans ses bords, vue de face. Une seule règle dans le code, `espace3ddessin::CarteVue::sur_la_carte` (`carte_montre`).
+(La feuille d'un plan en Espace 3D, étape A5, accepte encore un trait jusqu'à une feuille au-delà des bords de la
+carte, dans `App::to_layer_opt` : de l'encre que la carte ne montre pas. Ce n'est pas corrigé ici ; la correction
+tiendrait en une ligne, à cet endroit, en y appelant `carte_montre`.)
+
 **Là où le trait ne commence pas**, la barre d'état dit pourquoi :
 
-- le pointeur n'est pas sur la carte du calque courant (hors de ses bords) ;
+- le pointeur n'est pas sur la carte du calque courant (hors de ses bords, même de peu) ;
 - la carte est vue de dos, par la tranche (à moins de deux degrés), ou elle est derrière l'œil de la vue ;
 - les cartes sont cachées dans la vue (« Montrer les cartes ») ;
 - le calque est un dossier, verrouillé, caché, de position verrouillée… : les refus habituels du dessin.
 
-Pendant un trait, les points où le pointeur quitte la carte de plus d'une feuille (ou la voit de dos, par la tranche)
-sont laissés ; le trait reprend quand il y revient.
+Pendant un trait, les points où le pointeur quitte la carte (hors de ses bords, de dos, par la tranche) sont laissés :
+rien n'est enregistré hors de la carte, le trait reprend quand le pointeur y revient.
 
 **Messages** (barre d'état) : « Espace 3D : Pinceau sur la carte « … » (elle est entourée). Ctrl+clic : prendre une
 autre carte… », « Espace 3D : le pointeur manipule de nouveau les cartes… », « Rien à peindre ici : le pointeur n'est

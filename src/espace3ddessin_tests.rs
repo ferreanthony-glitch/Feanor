@@ -62,6 +62,12 @@ fn encre(b: &Banc, li: usize) -> usize {
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| raster.get_i(x, y).a() > 0).count()
 }
 
+/// Le nombre de pixels encrés **hors de la feuille** du dessin du calque `li` à l'image courante (la toile infinie).
+fn encre_hors_feuille(b: &Banc, li: usize) -> usize {
+    let Some(cel) = b.app.layers()[li].shown_at(b.app.cur_frame) else { return 0 };
+    b.app.doc.cels[&cel].raster.outer.values().map(|t| t.iter().filter(|c| c.a() > 0).count()).sum()
+}
+
 /// Un geste de souris qui passe par ces points de l'écran, touches `mods` tenues : appui au premier, relâché au dernier.
 fn geste(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
     b.touches = mods;
@@ -142,6 +148,21 @@ fn a_mouse_stroke_in_the_orbit_view_inks_the_card_from_the_front_tilted_and_flat
     b.chauffer(2);
     dessiner(&mut b);
     verifier_un_trait(&mut b, "surface au sol", pos2(220.0, 140.0), pos2(420.0, 220.0));
+
+    // Juste au-delà du bord du fond de la surface : la carte ne montrerait pas ce trait, il ne commence pas. Aucune
+    // encre n'est enregistrée, ni sur la surface ni hors d'elle, et la barre d'état le dit.
+    let li = b.app.cur_layer;
+    let vue = carte(&b);
+    let au_dela = vue.vers_ecran(pos2(320.0, -5.0)).expect("juste au-delà du bord du fond");
+    let dedans = vue.vers_ecran(pos2(320.0, 60.0)).expect("dans la surface");
+    assert!(b.app.canvas_rect.contains(au_dela) && b.app.canvas_rect.contains(dedans), "{au_dela:?} et {dedans:?} dans la vue");
+    assert_eq!(vue.sur_la_carte(au_dela), Err(Manque::HorsCarte));
+    let etapes = b.app.history.undo_len();
+    b.app.status.clear();
+    geste(&mut b, &[au_dela, dedans], Modifiers::NONE);
+    assert_eq!(encre(&b, li) + encre_hors_feuille(&b, li), 0, "aucune encre, ni sur la surface ni hors d'elle");
+    assert_eq!(b.app.status, d3::HORS_CARTE);
+    assert_eq!(b.app.history.undo_len(), etapes, "ni étape d'annulation");
 }
 
 #[test]
@@ -166,8 +187,7 @@ fn a_mouse_stroke_through_the_camera_inks_the_card_in_an_ordinary_plan_and_in_a_
     dessiner(&mut b);
     // Le cadre tombe au centre de la surface : on trace autour du point de la carte que vise le centre de la vue.
     let vue = carte(&b);
-    let milieu = vue.vers_dessin(b.app.canvas_rect.center()).expect("le regard du centre de la vue touche la surface");
-    assert!(vue.dans_la_carte(milieu), "le centre de la vue est sur la surface : {milieu:?}");
+    let milieu = vue.sur_la_carte(b.app.canvas_rect.center()).expect("le regard du centre de la vue touche la surface");
     verifier_un_trait(&mut b, "par la caméra, plan en Espace 3D", milieu + vec2(-50.0, -25.0), milieu + vec2(50.0, 25.0));
 }
 
@@ -185,17 +205,31 @@ fn nothing_is_painted_off_the_card_from_behind_edge_on_on_hidden_cards_or_on_a_l
     let vue = carte(&b);
     let dehors = vue.vers_ecran(pos2(-60.0, 180.0)).expect("un point à gauche de la carte se voit");
     assert!(b.app.canvas_rect.contains(dehors));
-    assert_eq!(vue.vers_dessin(dehors).map(|p| vue.dans_la_carte(p)), Ok(false));
+    assert_eq!(vue.sur_la_carte(dehors), Err(Manque::HorsCarte));
+    assert!(vue.vers_dessin(dehors).is_ok(), "le regard touche bien le plan de la carte, hors de ses bords");
     let dedans = vue.vers_ecran(pos2(200.0, 180.0)).expect("dans la carte");
     geste(&mut b, &[dehors, dedans], Modifiers::NONE);
     sans_encre(&b, "appui hors de la carte");
     assert_eq!(b.app.status, d3::HORS_CARTE);
 
-    // Un trait commencé sur la carte et qui en sort : les points d'au-delà d'une feuille sont laissés, le reste est tracé.
+    // Juste au-delà du bord (quatre pixels du dessin) : la carte ne montrerait pas ce trait, il ne commence pas non plus.
+    // Aucune encre n'est enregistrée, ni sur la feuille ni hors d'elle, et la barre d'état le dit.
+    b.app.status.clear();
+    let au_bord = vue.vers_ecran(pos2(-4.0, 180.0)).expect("un point juste à gauche de la carte se voit");
+    assert_eq!(vue.sur_la_carte(au_bord), Err(Manque::HorsCarte));
+    geste(&mut b, &[au_bord, dedans], Modifiers::NONE);
+    sans_encre(&b, "appui juste au-delà du bord");
+    assert_eq!(encre_hors_feuille(&b, 0), 0, "aucune encre hors de la feuille non plus");
+    assert_eq!(b.app.status, d3::HORS_CARTE);
+
+    // Un trait commencé sur la carte et qui en sort : ses points hors de la carte sont laissés. Ce qui est dans la carte
+    // est tracé, rien n'est enregistré au-delà du bord (à plus que la largeur du pinceau).
     geste(&mut b, &[dedans, dehors], Modifiers::NONE);
     assert!(encre_pres(&b, 0, pos2(150.0, 180.0), 6), "le trait commencé sur la carte est tracé");
+    assert!(!encre_pres(&b, 0, pos2(-50.0, 180.0), 12), "rien n'est tracé hors de la carte, là où le pointeur est allé");
     b.app.run_action("edition.annuler");
     b.chauffer(2);
+    assert_eq!(encre(&b, 0) + encre_hors_feuille(&b, 0), 0);
 
     // Vue de dos : la vue a fait un demi-tour.
     let devant = b.app.espace3d.cam.expect("la vue");
@@ -316,6 +350,24 @@ fn alt_drag_turns_the_view_and_ctrl_click_takes_another_card_without_a_stroke() 
     let mut b = ouvert(doc);
     b.app.run_action("espace3d.cadrer");
     b.chauffer(2);
+
+    // Avant de dessiner, avec l'outil de la vue : un clic sur une carte en fait le calque courant (comme avant).
+    b.app.run_action("espace3d.outil_choisir");
+    b.chauffer(2);
+    let orbite = Regard3d { rect: b.app.canvas_rect, view: b.app.espace3d.cam.expect("la vue").view(b.app.canvas_rect.width()) };
+    let world = b.app.e3_world();
+    let vue_de = |b: &Banc, li: usize| {
+        let l = &b.app.layers()[li];
+        CarteVue::new(orbite, world.card_xf(&l.pose(0), l.depth_at(0)).matrix(), world.stage)
+    };
+    let sur_1 = vue_de(&b, 1).vers_ecran(pos2(600.0, 180.0)).expect("la droite de la carte 1 se voit");
+    let sur_0 = vue_de(&b, 0).vers_ecran(pos2(60.0, 180.0)).expect("la gauche de la carte 0 se voit");
+    geste(&mut b, &[sur_1, sur_1], Modifiers::NONE);
+    assert_eq!(b.app.cur_layer, 1, "un clic sur une carte en fait le calque courant");
+    geste(&mut b, &[sur_0, sur_0], Modifiers::NONE);
+    assert_eq!(b.app.cur_layer, 0);
+    assert_eq!(encre(&b, 0) + encre(&b, 1), 0);
+
     dessiner(&mut b);
     let vue = carte(&b);
     let (a, c) = (vue.vers_ecran(pos2(250.0, 160.0)).expect("a"), vue.vers_ecran(pos2(390.0, 200.0)).expect("c"));

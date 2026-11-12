@@ -14,6 +14,10 @@
 //! `App::layer_zoom` passent par là tant qu'on dessine dans la vue : la pointe du trait, le segment droit (Maj) et la
 //! taille du pinceau suivent.
 //!
+//! **Jamais d'encre qu'on ne voit pas.** Un trait ne commence, et ne reçoit de points, que là où la carte le montrera :
+//! dans ses bords, vue de face (`CarteVue::sur_la_carte`, la seule règle, `carte_montre`). Ailleurs rien n'est
+//! enregistré et la barre d'état dit pourquoi.
+//!
 //! `Regard3d` est le regard d'**une** vue (son rectangle à l'écran, sa prise de vue) : quand la vue Espace 3D en
 //! montrera plusieurs côte à côte, chacune donnera le sien à `e3_dessin_pointeur`.
 //!
@@ -76,7 +80,15 @@ impl Regard3d {
     }
 }
 
-/// Pourquoi le regard ne touche pas la carte.
+/// **Ce qu'une carte montre de son dessin** : la feuille, bords compris (`taille` : la feuille, en pixels). Hors de là,
+/// un trait serait de l'encre que la carte ne montre pas : il ne commence pas, et ses points sont laissés. C'est la
+/// seule règle « où peut-on peindre » de la vue Espace 3D (`CarteVue::sur_la_carte`). (La feuille d'un plan en Espace
+/// 3D a la sienne, plus large d'une feuille, dans `App::to_layer_opt` : c'est là qu'elle se remplacerait par celle-ci.)
+pub(crate) fn carte_montre(p: Pos2, taille: [f32; 2]) -> bool {
+    p.x.is_finite() && p.y.is_finite() && p.x >= 0.0 && p.y >= 0.0 && p.x <= taille[0] && p.y <= taille[1]
+}
+
+/// Pourquoi on ne peut pas peindre à cet endroit de l'écran.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Manque {
     /// Le plan de la carte est derrière l'œil.
@@ -85,8 +97,8 @@ pub(crate) enum Manque {
     Tranche,
     /// La carte est vue de dos.
     Dos,
-    /// Le regard touche le plan de la carte à plus d'une feuille de ses bords (près de l'horizon d'une carte au sol).
-    Loin,
+    /// Le regard touche le plan de la carte hors de ses bords : la carte ne montrerait pas ce trait.
+    HorsCarte,
 }
 
 impl Manque {
@@ -95,7 +107,7 @@ impl Manque {
             Manque::Derriere => CARTE_DERRIERE,
             Manque::Tranche => CARTE_PAR_LA_TRANCHE,
             Manque::Dos => CARTE_DE_DOS,
-            Manque::Loin => HORS_CARTE,
+            Manque::HorsCarte => HORS_CARTE,
         }
     }
 }
@@ -127,8 +139,15 @@ impl CarteVue {
         self.regard.ecran(self.monde(p))
     }
 
-    /// Écran → point du dessin de la carte, là où le regard qui passe par ce point de l'écran traverse la carte vue de
-    /// face. Le point peut tomber hors des bords de la carte (`dans_la_carte`), jusqu'à une feuille au-delà.
+    /// Écran → point du dessin où l'on peut peindre : là où le regard qui passe par ce point de l'écran traverse la
+    /// carte vue de face, **dans ses bords** (`carte_montre`). C'est par ici que passent le début d'un trait, chacun de
+    /// ses points et le curseur du pinceau.
+    pub fn sur_la_carte(&self, ecran: Pos2) -> Result<Pos2, Manque> {
+        self.vers_dessin(ecran).and_then(|p| if carte_montre(p, self.taille) { Ok(p) } else { Err(Manque::HorsCarte) })
+    }
+
+    /// Écran → point du plan de la carte (pixels de son dessin), là où le regard qui passe par ce point de l'écran le
+    /// traverse, carte vue de face. Le point peut tomber hors des bords de la carte : pour peindre, `sur_la_carte`.
     pub fn vers_dessin(&self, ecran: Pos2) -> Result<Pos2, Manque> {
         let ray = self.regard.rayon(ecran);
         // (La face de la carte regarde vers son axe Z : c'est de là que la caméra de référence la voit.)
@@ -150,15 +169,11 @@ impl CarteVue {
         }
         let [w, h] = self.taille;
         let p = pos2((o[0] + d[0] * t + 0.5) * w, (0.5 - (o[1] + d[1] * t)) * h);
-        if !(p.x.is_finite() && p.y.is_finite() && p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h) {
-            return Err(Manque::Loin);
+        // (Près de l'horizon d'une carte au sol, le point part à l'infini : ce n'est plus un point de la carte.)
+        if !(p.x.is_finite() && p.y.is_finite() && p.x.abs() < 1e7 && p.y.abs() < 1e7) {
+            return Err(Manque::HorsCarte);
         }
         Ok(p)
-    }
-
-    /// Le point `p` du dessin est dans la carte (la feuille).
-    pub fn dans_la_carte(&self, p: Pos2) -> bool {
-        p.x >= 0.0 && p.y >= 0.0 && p.x <= self.taille[0] && p.y <= self.taille[1]
     }
 
     /// Pixels d'écran par pixel du dessin au point `p` de la carte (la racine de l'aire qu'un pixel y occupe).
@@ -370,7 +385,7 @@ impl App {
         self.e3d.pointeur = hover.filter(|p| regard.rect.contains(*p));
         // Maj tenue (ou relâchée) sans que la souris bouge : le segment droit suit quand même (`tracedroit.rs`).
         let pen = self.stroke.as_ref().map(|s| s.pen).or(self.erase_pen()).unwrap_or(false);
-        let sur_la_carte = if primary_down { self.e3d.pointeur.and_then(|pos| self.e3_carte_du_calque(regard)?.vers_dessin(pos).ok()) } else { None };
+        let sur_la_carte = if primary_down { self.e3d.pointeur.and_then(|pos| self.e3_carte_du_calque(regard)?.sur_la_carte(pos).ok()) } else { None };
         self.droit_follow_calque(&mods, primary_down, sur_la_carte, if pen { self.pen_pressure } else { 1.0 });
     }
 
@@ -401,12 +416,9 @@ impl App {
             }
             return;
         };
-        let p = match carte.vers_dessin(pos) {
-            Ok(p) if carte.dans_la_carte(p) => p,
-            Ok(_) => {
-                self.status = HORS_CARTE.into();
-                return;
-            }
+        // (Seulement là où la carte montrera le trait : jamais d'encre qu'on ne voit pas.)
+        let p = match carte.sur_la_carte(pos) {
+            Ok(p) => p,
             Err(manque) => {
                 self.status = manque.message().into();
                 return;
@@ -423,7 +435,7 @@ impl App {
     }
 
     /// Le pointeur bouge pendant un trait : un point de plus, là où le regard touche la carte. Les points où il la
-    /// quitte (de dos, par la tranche, trop loin de ses bords) sont laissés.
+    /// quitte (hors de ses bords, de dos, par la tranche) sont laissés : le trait reprend quand il y revient.
     fn e3_suite_du_trait(&mut self, regard: Regard3d, pos: Pos2, mods: &egui::Modifiers) {
         let (pen, erase) = match (self.stroke.as_ref().map(|s| s.pen), self.erase_pen()) {
             (Some(pen), _) => (pen, false),
@@ -431,7 +443,7 @@ impl App {
             (None, None) => return,
         };
         let Some(carte) = self.e3_carte_du_calque(regard) else { return };
-        if let Ok(l) = carte.vers_dessin(pos) {
+        if let Ok(l) = carte.sur_la_carte(pos) {
             self.e3d.pointeur = Some(pos);
             let pressure = if pen { self.pen_pressure } else { 1.0 };
             self.stroke_point(l, pressure, mods, erase);
@@ -472,7 +484,7 @@ impl App {
             return;
         }
         let Some(brush) = self.current_brush() else { return };
-        let touche = self.e3_carte_du_calque(regard).filter(|_| self.espace3d.show_cards).and_then(|c| c.vers_dessin(pos).ok().filter(|p| en_trait || c.dans_la_carte(*p)).map(|p| (c, p)));
+        let touche = self.e3_carte_du_calque(regard).filter(|_| self.espace3d.show_cards).and_then(|c| c.sur_la_carte(pos).ok().map(|p| (c, p)));
         let Some((carte, p)) = touche else {
             ctx.set_cursor_icon(CursorIcon::NotAllowed);
             return;
