@@ -645,6 +645,13 @@ pub const ACTIONS: &[ActionInfo] = &[
     // commandes d'objets (`scene3d.ajouter_*`, `importer_modele`, `dupliquer`, `grouper`, `envoyer`…), du repère 3D
     // (`outil.repere3d`, `fichier.importer_modele3d`) n'existent plus.
     act("espace3d.basculer", "Espace 3D (afficher / quitter)", true, false),
+    // Une, deux ou quatre vues (`espace3dvues.rs`, `docs/INTERFACE.md` partie 144).
+    act("espace3d.vues", "Espace 3D : vues, disposition suivante (1, 2 côte à côte, 2 l'une sur l'autre, 4)", true, false),
+    act("espace3d.vues_une", "Espace 3D : 1 vue", true, false),
+    act("espace3d.vues_cote", "Espace 3D : 2 vues côte à côte", true, false),
+    act("espace3d.vues_superposees", "Espace 3D : 2 vues l'une sur l'autre", true, false),
+    act("espace3d.vues_quatre", "Espace 3D : 4 vues", true, false),
+    act("espace3d.vue_agrandir", "Espace 3D : agrandir la vue sous le pointeur en plein cadre (ou revenir)", true, false),
     act("espace3d.outil_choisir", "Espace 3D : outil choisir", true, false),
     act("espace3d.outil_deplacer", "Espace 3D : outil déplacer", true, false),
     act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),

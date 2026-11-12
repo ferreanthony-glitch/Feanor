@@ -1832,7 +1832,7 @@ fn the_tilt_of_a_card_is_free_only_in_a_plan_in_space() {
 fn vue_depuis(eye: m::V3, vers: m::V3) -> m::View {
     let forward = m::normalize(m::sub(vers, eye));
     let right = m::normalize(m::cross(forward, [0.0, 1.0, 0.0]));
-    m::View { eye, right, up: m::cross(right, forward), forward, focal: 35.0, ref_width: 1280.0 }
+    m::View { eye, right, up: m::cross(right, forward), forward, focal: 35.0, ref_width: 1280.0, ortho: None }
 }
 
 #[test]

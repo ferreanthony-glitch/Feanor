@@ -99,7 +99,7 @@ impl SceneCam {
         let (s, c) = self.roll.to_radians().sin_cos();
         let right = m::add(m::scale(right0, c), m::scale(up0, -s));
         let up = m::add(m::scale(up0, c), m::scale(right0, s));
-        m::View { eye: self.pos, right, up, forward, focal: self.focal, ref_width }
+        m::View { eye: self.pos, right, up, forward, focal: self.focal, ref_width, ortho: None }
     }
 
     pub fn sanitized(self) -> SceneCam {
@@ -587,7 +587,8 @@ impl Monde {
     pub fn pick_card(&self, xf: &Xf, ray: &Ray) -> Option<(f32, Pos2)> {
         let inv = m::inverse_affine(&xf.matrix());
         let (o, d) = ray.to_local(&inv);
-        if d[2].abs() < 1e-9 {
+        // (Un rayon abîmé, d'une vue de taille nulle : rien n'est touché.)
+        if d[2].abs() < 1e-9 || !(o.iter().chain(d.iter()).all(|v| v.is_finite())) {
             return None;
         }
         let t = -o[2] / d[2];

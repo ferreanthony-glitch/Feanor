@@ -1474,6 +1474,9 @@ pub struct Document {
     /// « Durée d'un nouveau plan » (Préférences > Montage), en secondes : celle que reçoit un plan neuf (`make_panel`). Comme `report_decor`,
     /// un réglage de l'application que `App` pose avant ses commandes (`dureeplans.rs`) : il n'est pas dans le projet.
     pub duree_plan_neuf: f32,
+    /// Les vues de l'Espace 3D retenues par le projet (`espace3dvues.rs`) : écrites dans le manifeste (champ facultatif
+    /// `vues_3d`). Hors de l'annulation : c'est une façon de regarder, pas une retouche du film. Rien : une vue.
+    pub vues_3d: Option<crate::espace3dvues::Retenue>,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1542,6 +1545,7 @@ impl Document {
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
+            vues_3d: None,
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1616,6 +1620,7 @@ impl Document {
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
+            vues_3d: None,
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1667,6 +1672,7 @@ impl Document {
             report_decor: self.report_decor,
             decor_bitmap: self.decor_bitmap,
             duree_plan_neuf: self.duree_plan_neuf,
+            vues_3d: self.vues_3d.clone(),
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),

@@ -72,6 +72,10 @@ pub struct Gizmo {
 impl Gizmo {
     /// Taille voulue : une fraction de la distance de l'œil à l'origine.
     pub fn size_for(view: &View, origin: V3) -> f32 {
+        // (Une vue orthographique, `espace3dvues.rs` : à l'écran, la taille qu'il a dans une vue de 35 mm.)
+        if let Some(w) = view.ortho {
+            return (w * 0.155).max(1e-3);
+        }
         (m::length(m::sub(origin, view.eye)) * 0.16).max(0.05)
     }
 
