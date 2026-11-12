@@ -523,7 +523,8 @@ impl App {
     }
 
     /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin d'origine.
-    fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
+    /// (Sert aussi à une trajectoire tracée dans l'espace, `trajectoire3d.rs`, partie 152.)
+    pub(crate) fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
         let l = &mut self.doc.panels[pi].layers[li];
         let (depart, source_notee, poses) = match l.trajectoire.as_mut() {
             Some(t) => (t.depart, t.source.take(), t.dessins.drain(..).map(|d| d.dessin).collect::<Vec<CelId>>()),

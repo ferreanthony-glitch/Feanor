@@ -1182,6 +1182,9 @@ mod espace3dvue_tests;
 // Retours d'Anthony sur la Trajectoire dans l'Espace 3D (partie 152) : la caméra choisie seule, et sa piste choisie dans la timeline.
 #[cfg(test)]
 mod trajectoire3d_camera_tests;
+// Partie 152 aussi : en « clés d'images », une carte qui suit un chemin dans l'espace a une clé de dessin à chaque jalon.
+#[cfg(test)]
+mod trajectoire3d_images_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

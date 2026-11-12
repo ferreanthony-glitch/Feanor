@@ -275,7 +275,9 @@ pub struct Trajectoire {
     pub tourne: bool,
     /// **Tracée dans l'Espace 3D** (format 55, partie 149) : le plan de l'espace où le chemin est posé. Ses points se lisent alors
     /// dans ce plan, et ce qui la suit (une carte, la caméra du plan) se déplace dans l'espace du déplacement du chemin depuis son
-    /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas.
+    /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas. En
+    /// « clés d'images », une carte a ses `dessins` comme sur la feuille (partie 152), sans déplacement ni angle : la carte se
+    /// déplace elle-même, par une clé de position tenue à chaque jalon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub support: Option<Support>,
 }
@@ -426,8 +428,13 @@ impl Trajectoire {
         // feuille, la garder la ferait prendre pour une autre.
         if let Some(s) = self.support {
             self.support = Some(s.assaini()?);
-            (self.ancre, self.tourne, self.decalage_depart, self.source) = (Ancre::Depart, false, [0.0, 0.0], None);
-            self.dessins.clear();
+            (self.ancre, self.tourne, self.decalage_depart) = (Ancre::Depart, false, [0.0, 0.0]);
+            // (Les dessins des clés d'images d'une carte sont gardés, avec leur dessin d'origine : sans eux, le calcul suivant
+            // referait des copies et laisserait de côté ce qu'on y a redessiné. Dans l'espace ils ne sont ni déplacés ni
+            // tournés : c'est la carte qui porte le mouvement. Partie 152.)
+            for d in &mut self.dessins {
+                (d.dx, d.dy, d.angle) = (0.0, 0.0, 0.0);
+            }
         }
         Some(self)
     }
