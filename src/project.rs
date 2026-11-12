@@ -342,6 +342,12 @@ pub(crate) struct Manifest {
     /// `plans/`. Absent : projet classique.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     partage: Option<partage_io::BlocPartage>,
+    /// Les vues de l'Espace 3D (`espace3dvues.rs`, `docs/INTERFACE.md` partie 144) : disposition, points de vue, bordures.
+    /// Facultatif, sans changer `VERSION` : une version qui ne le connaît pas l'ignore et ouvre le projet en une vue ; absent :
+    /// une vue. Jamais dans la structure d'un film partagé (ce n'est pas une retouche que l'équipe se transmet). Lu en souple
+    /// (une valeur quelconque, `Retenue::lire`) : un champ mal formé redonne une vue, il n'empêche jamais d'ouvrir le projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vues_3d: Option<serde_json::Value>,
 }
 
 /// Propriétés du projet (format 17). Dates en secondes depuis 1970.
@@ -2662,6 +2668,7 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         // Les instantanés ne gardent que la feuille de leurs dessins (pas leur hors-feuille, `monde.rs`).
         dessins_hors: Vec::new(),
         partage: None,
+        vues_3d: None,
     };
     let loaded = load_manifest(manifest, dir, quick, None);
     for (id, previous) in videos {
@@ -2809,6 +2816,7 @@ fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: 
         },
         dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
         partage: None,
+        vues_3d: if avec_plans { doc.vues_3d.as_ref().and_then(|r| serde_json::to_value(r).ok()) } else { None },
     }
 }
 
@@ -2984,6 +2992,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
+    // Les vues de l'Espace 3D (facultatives) : posées sur le document une fois fait.
+    let vues_3d = manifest.vues_3d.take().and_then(crate::espace3dvues::Retenue::lire);
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings, annexes.plans_seuls);
     crate::imagevec::charger_dossier(dir, &mut warnings, annexes.plans_seuls);
@@ -3524,6 +3534,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
+    doc.vues_3d = vues_3d;
     if !annexes.plans_seuls {
         // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
         if let Some(fx) = load_sound_fx(dir, &mut warnings) {

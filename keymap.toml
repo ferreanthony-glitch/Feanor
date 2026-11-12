@@ -1864,6 +1864,36 @@ touches = []
 source = "FEANOR (Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.vues"
+touches = []
+source = "FEANOR (Espace 3D, disposition suivante des vues ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_une"
+touches = []
+source = "FEANOR (Espace 3D, 1 vue ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_cote"
+touches = []
+source = "FEANOR (Espace 3D, 2 vues côte à côte ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_superposees"
+touches = []
+source = "FEANOR (Espace 3D, 2 vues l'une sur l'autre ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_quatre"
+touches = []
+source = "FEANOR (Espace 3D, 4 vues ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vue_agrandir"
+touches = []
+source = "FEANOR (Espace 3D, agrandir la vue sous le pointeur ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.outil_choisir"
 touches = []
 source = "FEANOR (Espace 3D, outil choisir ; aucune touche choisie)"

@@ -64,6 +64,34 @@ pub(crate) fn grid_lines(target: V3, distance: f32) -> Vec<GridLine> {
 }
 
 impl App {
+    /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
+    /// chaque vue (`espace3dvues.rs`).
+    pub(crate) fn e3_hauteur_sol(&self) -> f32 {
+        0.0
+    }
+
+    /// Le quadrillage d'une vue : le sol autour de `target`, à l'échelle de `distance` (perspective, caméra du plan) ; ou,
+    /// pour une vue orthographique (`ortho` : son point de vue, ce qu'elle regarde, sa largeur sur sa hauteur), le plan de
+    /// l'espace qui lui fait face. La même fonction pour la vue seule et pour chaque vue.
+    pub(crate) fn e3_quadrillage(&self, target: V3, distance: f32, ortho: Option<(crate::espace3dvues::PointDeVue, crate::espace3dvues::Ortho, f32)>) -> Vec<GridLine> {
+        let sol = self.e3_hauteur_sol();
+        match ortho {
+            Some((p, o, aspect)) => crate::espace3dvues::grille_ortho(p, &o, aspect, sol),
+            None => grid_lines(target, distance).into_iter().map(|l| GridLine { a: [l.a[0], l.a[1] + sol, l.a[2]], b: [l.b[0], l.b[1] + sol, l.b[2]], color: l.color }).collect(),
+        }
+    }
+
+    /// Peint ces traits de quadrillage (`proj` : du monde à l'écran).
+    pub(crate) fn e3_peindre_quadrillage(painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, lignes: Vec<GridLine>) {
+        for l in lignes {
+            if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
+                let [r, g, bl, alpha] = l.color;
+                let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
+                painter.line_segment([a, b], Stroke::new(1.0_f32, c));
+            }
+        }
+    }
+
     /// La vue d'édition, ou la vue de la caméra du plan.
     fn e3_view(&self, draw: Rect) -> View {
         if self.espace3d.through_camera {
@@ -138,21 +166,49 @@ impl App {
 
     /// Les coins de la pyramide de la caméra du plan, à une distance qui se lit dans la vue.
     fn e3_camera_corners(&self, cam: &SceneCam, view: &View) -> [V3; 4] {
-        let d = (m::length(m::sub(cam.pos, view.eye)) * 0.22).clamp(0.5, 6.0);
+        // (Une vue orthographique regarde de très loin : la pyramide prend une taille à l'échelle de ce qu'elle montre.)
+        let d = match crate::espace3dvues::largeur_ortho(view) {
+            Some(span) => (span * 0.08).clamp(0.3, 6.0),
+            None => (m::length(m::sub(cam.pos, view.eye)) * 0.22).clamp(0.5, 6.0),
+        };
         cam.corners_at(d, self.doc.frame)
     }
 
-    /// La souris dans la zone de dessin 3D.
+    /// La souris dans la zone de dessin 3D (une seule vue ; plusieurs : `espace3dvues.rs`).
     fn e3_input(&mut self, ctx: &egui::Context, draw: Rect, response: &egui::Response) {
-        let (scroll, mods, press, primary_down) = ctx.input(|i| (i.smooth_scroll_delta, i.modifiers, i.pointer.press_origin(), i.pointer.primary_down()));
+        let scroll = ctx.input(|i| i.smooth_scroll_delta);
         let Some(mut cam) = self.espace3d.cam else { return };
         let through = self.espace3d.through_camera;
         let delta = response.drag_delta();
-        let center = [draw.width() / 2.0, draw.height() / 2.0];
-        let rel = |p: Pos2| [p.x - draw.left(), p.y - draw.top()];
 
         // Navigation. Par la caméra du plan, elle déplace la caméra elle-même.
-        let moving_camera = through && response.hovered() && (scroll.y != 0.0 || response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary));
+        if through {
+            self.e3_nav_camera(draw, response, scroll.y, delta);
+        } else {
+            if response.hovered() && scroll.y != 0.0 {
+                cam.dolly((-scroll.y * 0.002).exp());
+            }
+            if response.dragged_by(PointerButton::Middle) {
+                cam.pan(delta.x, delta.y, draw.width());
+            }
+            if response.dragged_by(PointerButton::Secondary) {
+                cam.orbit(-delta.x * 0.35, delta.y * 0.35);
+            }
+        }
+
+        let view = if through { self.e3_view(draw) } else { cam.view(draw.width()) };
+        if self.e3_input_objets(ctx, &view, draw, response) && !through {
+            cam.orbit(-delta.x * 0.35, delta.y * 0.35);
+        }
+        if !through {
+            self.espace3d.cam = Some(cam);
+        }
+    }
+
+    /// Par la caméra du plan : la molette l'avance, le bouton du milieu la déplace, le clic droit la tourne (sa clé de
+    /// l'image courante si elle est animée), en une étape d'annulation par geste.
+    pub(crate) fn e3_nav_camera(&mut self, draw: Rect, response: &egui::Response, scroll_y: f32, delta: egui::Vec2) {
+        let moving_camera = response.hovered() && (scroll_y != 0.0 || response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary));
         if moving_camera {
             self.gesture_change(GESTURE_CAMERA, |s| {
                 let snap = s.snapshot();
@@ -166,8 +222,8 @@ impl App {
             let base = self.current_camera();
             let mut sc = world.scene_cam(&base);
             let view = sc.view(draw.width());
-            if scroll.y != 0.0 {
-                sc.pos = m::add(sc.pos, m::scale(view.forward, scroll.y * 0.01));
+            if scroll_y != 0.0 {
+                sc.pos = m::add(sc.pos, m::scale(view.forward, scroll_y * 0.01));
             }
             if response.dragged_by(PointerButton::Middle) {
                 let k = 0.004 * m::length(m::sub(sc.pos, [0.0, 1.0, 0.0])).clamp(1.0, 20.0);
@@ -180,29 +236,25 @@ impl App {
             let mut new = world.camera_from_scene(&sc.sanitized());
             new.zoom = base.zoom;
             self.set_current_camera(new);
-        } else if !through {
-            if response.hovered() && scroll.y != 0.0 {
-                cam.dolly((-scroll.y * 0.002).exp());
-            }
-            if response.dragged_by(PointerButton::Middle) {
-                cam.pan(delta.x, delta.y, draw.width());
-            }
-            if response.dragged_by(PointerButton::Secondary) {
-                cam.orbit(-delta.x * 0.35, delta.y * 0.35);
-            }
         }
+    }
 
-        let view = if through { self.e3_view(draw) } else { cam.view(draw.width()) };
+    /// Ce que la souris fait dans une vue `view` dont la zone est `draw` : un clic choisit, un glisser tire une poignée ou
+    /// une carte, le survol éclaire une poignée. Vrai si le glisser du bouton principal tourne la vue (à l'appelant de la
+    /// tourner : la vue seule, une des vues, `espace3dvues.rs`).
+    pub(crate) fn e3_input_objets(&mut self, ctx: &egui::Context, view: &View, draw: Rect, response: &egui::Response) -> bool {
+        let (mods, press, primary_down) = ctx.input(|i| (i.modifiers, i.pointer.press_origin(), i.pointer.primary_down()));
+        let view = *view;
+        let center = [draw.width() / 2.0, draw.height() / 2.0];
+        let rel = |p: Pos2| [p.x - draw.left(), p.y - draw.top()];
+        let mut orbiting = false;
         if response.drag_started_by(PointerButton::Primary) {
             let at = press.or(response.interact_pointer_pos()).unwrap_or(draw.center());
             self.e3_press(&view, center, rel(at), mods);
         }
         if response.dragged_by(PointerButton::Primary) {
-            let orbiting = matches!(self.espace3d.drag, Some(Drag::Orbit));
+            orbiting = matches!(self.espace3d.drag, Some(Drag::Orbit));
             let handling = matches!(self.espace3d.drag, Some(Drag::Handle { .. }));
-            if orbiting && !through {
-                cam.orbit(-delta.x * 0.35, delta.y * 0.35);
-            }
             if handling {
                 if let Some(p) = response.interact_pointer_pos() {
                     self.e3_drag(&view, center, rel(p));
@@ -219,9 +271,7 @@ impl App {
         }
         // Survol d'une poignée (pour la mettre en évidence).
         self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none()).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
-        if !through {
-            self.espace3d.cam = Some(cam);
-        }
+        orbiting
     }
 
     /// Un clic sans glisser : choisir la carte (ou la caméra) sous la souris, ou ne plus rien choisir.
@@ -231,7 +281,8 @@ impl App {
         if self.e3_gizmo(view).is_some_and(|g| g.hit(view, center, px, GRAB).is_some()) {
             return;
         }
-        let hit = self.e3_pick(&ray);
+        // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi.)
+        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
         let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
         match (hit, cam_hit) {
             (Some(id), _) => {
@@ -333,7 +384,7 @@ impl App {
         }
         // Une carte (ou la caméra) tirée directement : elle glisse dans son plan (Maj : en profondeur). La caméra glisse
         // à l'horizontale (Maj : en hauteur).
-        let hit = self.e3_pick(&ray);
+        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
         let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
         if hit.is_some() || cam_hit {
             let id = hit.unwrap_or(CAMERA_ID);
@@ -378,11 +429,60 @@ impl App {
         let (step_move, step_rot, step_scale) = (self.espace3d.step_move, self.espace3d.step_rot, self.espace3d.step_scale);
         let world_axes = gizmo.axes == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         let mut message = String::new();
+        // Vu de la vue, au départ du geste : un plan de profil (le regard le longe), un axe de bout (le regard le suit). Une
+        // vue orthographique les montre souvent ainsi (la vue Dessus et une carte dressée, la vue Face et le sol).
+        let visee = start.d;
+        let de_profil = |n: V3| m::dot(visee, n).abs() < 0.15;
+        let de_bout = |a: V3| m::dot(visee, a).abs() > 0.97;
+        if let (GizmoMode::Move | GizmoMode::Scale, Handle::Axis(k)) = (mode, handle) {
+            if de_bout(gizmo.axes[k]) {
+                self.status = format!("L'axe {} est vu de bout dans cette vue : ce geste ne le change pas. Prends une autre vue, ou glisse sans Maj.", ["X", "Y", "Z"][k]);
+                return;
+            }
+        }
+        // (Les axes qu'un glisser dans le plan de l'écran a bougés, pour l'aimantation.)
+        let mut moved_ecran: Option<[bool; 3]> = None;
         let mut new: Originals = match (mode, handle) {
             (GizmoMode::Move, Handle::Axis(k)) => gz::move_xfs(&originals, m::drag_along_axis(&start, &ray, gizmo.origin, gizmo.axes[k])),
-            (GizmoMode::Move, Handle::Plane(k)) => gz::move_xfs(&originals, m::drag_in_plane(&start, &ray, gizmo.origin, gizmo.axes[k])),
+            (GizmoMode::Move, Handle::Plane(k)) => {
+                let n = gizmo.axes[k];
+                let d = if de_profil(n) {
+                    // Le plan de glisse est vu de profil : on glisse dans le plan de l'écran, à la profondeur de l'objet.
+                    moved_ecran = Some([0, 1, 2].map(|a| view.forward[a].abs() < 0.5));
+                    match (view.screen_to_plane(start_px, center, gizmo.origin), view.screen_to_plane(px, center, gizmo.origin)) {
+                        (Some(a), Some(b)) => m::sub(b, a),
+                        _ => [0.0; 3],
+                    }
+                } else {
+                    // (Le déplacement reste dans son plan : rien ne dérive le long de sa normale.)
+                    let d = m::drag_in_plane(&start, &ray, gizmo.origin, n);
+                    m::sub(d, m::scale(n, m::dot(d, n)))
+                };
+                gz::move_xfs(&originals, if d.iter().all(|v| v.is_finite()) { d } else { [0.0; 3] })
+            }
             (GizmoMode::Rotate, Handle::Ring(k)) => {
-                let mut angle = m::drag_angle(&start, &ray, gizmo.origin, gizmo.axes[k]);
+                let axis = gizmo.axes[k];
+                let mut angle = if m::dot(visee, axis).abs() < 0.2 {
+                    // L'anneau est vu de profil (un trait) : l'angle que la souris fait à l'écran autour du centre projeté.
+                    match view.project(gizmo.origin, center) {
+                        Some(c) => {
+                            let (a, b) = ([start_px[0] - c[0], start_px[1] - c[1]], [px[0] - c[0], px[1] - c[1]]);
+                            if a[0].hypot(a[1]) < 2.0 || b[0].hypot(b[1]) < 2.0 {
+                                0.0
+                            } else {
+                                // (L'écran a son y vers le bas : un tour dans le sens des aiguilles d'une montre est positif.)
+                                let ecran = (a[0] * b[1] - a[1] * b[0]).atan2(a[0] * b[0] + a[1] * b[1]).to_degrees();
+                                if m::dot(axis, view.forward) > 0.0 { ecran } else { -ecran }
+                            }
+                        }
+                        None => 0.0,
+                    }
+                } else {
+                    m::drag_angle(&start, &ray, gizmo.origin, axis)
+                };
+                if !angle.is_finite() {
+                    angle = 0.0;
+                }
                 if snap_on {
                     angle = m::snap(angle, step_rot);
                 }
@@ -413,6 +513,7 @@ impl App {
             // le même décalage.
             if snap_on && world_axes {
                 let moved = match handle {
+                    _ if moved_ecran.is_some() => moved_ecran.unwrap_or_default(),
                     Handle::Axis(k) => [k == 0, k == 1, k == 2],
                     Handle::Plane(k) => [k != 0, k != 1, k != 2],
                     _ => [false; 3],
@@ -463,6 +564,11 @@ impl App {
                 self.espace3d.sel = vec![espace3d::card_selection(current)];
             }
         }
+        // Plusieurs vues (`espace3dvues.rs`) : chacune son point de vue, les mêmes cartes et la même sélection.
+        if self.e3_vues_multiples() {
+            self.e3_vues_panel(ui, rect);
+            return;
+        }
         let through = self.espace3d.through_camera;
         let draw = if through { letterbox(rect, self.doc.frame) } else { rect };
         self.e3_input(ui.ctx(), draw, response);
@@ -478,13 +584,9 @@ impl App {
         if self.espace3d.show_grid {
             let distance = self.espace3d.cam.map_or(8.0, |c| c.distance);
             let target = self.espace3d.cam.map_or([0.0; 3], |c| c.target);
-            for l in grid_lines(target, if through { 8.0 } else { distance }) {
-                if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
-                    let [r, g, bl, alpha] = l.color;
-                    let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
-                    painter.line_segment([a, b], Stroke::new(1.0_f32, c));
-                }
-            }
+            // (Le même quadrillage que chacune des vues multiples, `e3_quadrillage`.)
+            let lignes = self.e3_quadrillage(target, if through { 8.0 } else { distance }, None);
+            Self::e3_peindre_quadrillage(&painter, &proj, lignes);
         }
 
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
@@ -529,7 +631,7 @@ impl App {
 
     /// Les cartes : pour chaque calque visible du plan, du fond vers le dessus de la pile (l'ordre de l'image), le voile
     /// de sa feuille, son dessin, son contour (en couleur de sélection si elle est choisie) et son nom.
-    fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2) {
+    pub(crate) fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2) {
         if !self.espace3d.show_cards {
             return;
         }
@@ -587,7 +689,7 @@ impl App {
     }
 
     /// La caméra du plan : pyramide de vision, cadre, haut de l'image, et sa course pendant le plan si elle est animée.
-    fn e3_paint_camera(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, view: &View, cam: &SceneCam) {
+    pub(crate) fn e3_paint_camera(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, view: &View, cam: &SceneCam) {
         let selected = self.espace3d.sel.contains(&CAMERA_ID);
         let color = if selected { ACCENT } else { crate::theme::camera() };
         if self.doc.panels[self.cur_panel].camera.len() >= 2 {
@@ -620,7 +722,7 @@ impl App {
     }
 
     /// Les poignées du manipulateur.
-    fn e3_paint_gizmo(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, g: &Gizmo) {
+    pub(crate) fn e3_paint_gizmo(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, g: &Gizmo) {
         let hot = |h: Handle| self.espace3d.hover == Some(h) || matches!(&self.espace3d.drag, Some(Drag::Handle { handle, .. }) if *handle == h);
         let color = |h: Handle, k: usize| if hot(h) { HOT } else { AXIS_COLORS[k] };
         let Some(o) = proj(g.origin) else { return };

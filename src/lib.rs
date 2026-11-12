@@ -1158,6 +1158,12 @@ mod espace3dmath;
 mod espace3dmath_tests;
 mod espace3dui;
 mod espace3dview;
+// Une, deux ou quatre vues de l'Espace 3D (`docs/INTERFACE.md` partie 144).
+mod espace3dvues;
+#[cfg(test)]
+mod espace3dvues_tests;
+#[cfg(test)]
+mod espace3dvues_suite_tests;
 #[cfg(test)]
 mod espace3d_tests;
 // La tenue de la vue Espace 3D quand on s'y promène (partie 147) : jamais de morceau sans triangle vers la carte graphique.

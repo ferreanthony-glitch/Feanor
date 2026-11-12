@@ -61,6 +61,8 @@ pub(crate) struct Espace3dState {
     pub step_scale: f32,
     pub drag: Option<Drag>,
     pub hover: Option<Handle>,
+    /// Une, deux ou quatre vues, et leurs points de vue (`espace3dvues.rs`).
+    pub vues: crate::espace3dvues::Vues,
     /// Plan de la dernière image (la sélection ne passe pas d'un plan à l'autre).
     pub last_panel: u64,
 }
@@ -84,6 +86,7 @@ impl Default for Espace3dState {
             step_scale: 0.1,
             drag: None,
             hover: None,
+            vues: Default::default(),
             last_panel: 0,
         }
     }
@@ -117,6 +120,8 @@ impl App {
         s.last_panel = 0;
         s.last_layer = 0;
         s.card_textures.clear();
+        // (Les vues retenues par le projet ; un projet qui n'en dit rien s'ouvre en une vue.)
+        self.espace3d.vues = crate::espace3dvues::Vues::depuis(self.doc.vues_3d.as_ref());
     }
 
     /// Entre dans l'Espace 3D, ou en sort.
@@ -217,6 +222,10 @@ impl App {
         let mut cam = Orbite::fit_at(bounds, [rect.width().max(1.0), rect.height().max(1.0)], 30.0, 22.0);
         cam.distance = cam.distance.max(2.0);
         self.espace3d.cam = Some(cam);
+        // (Avec plusieurs vues, chacune se recadre aussi.)
+        if self.e3_vues_multiples() {
+            self.e3_vues_cadrer(false);
+        }
     }
 
     /// Met les cartes dans l'ordre de la profondeur : du plus loin (en bas de la pile) au plus près. Une étape
@@ -252,6 +261,10 @@ impl App {
         let action = crate::keymap::ALIASES.iter().find(|(alias, original)| *alias == action && original.starts_with("espace3d.")).map_or(action, |(_, original)| *original);
         if !action.starts_with("espace3d.") {
             return false;
+        }
+        // Les vues (une, deux, quatre) : `espace3dvues.rs`.
+        if self.e3_vues_action(action) {
+            return true;
         }
         match action {
             "espace3d.basculer" => self.set_espace3d(!(self.espace3d.on && !self.camera_view)),
@@ -318,9 +331,11 @@ impl App {
         if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : les cartes et la caméra.", "espace3d.cadrer").clicked() {
             self.espace3d_fit();
         }
-        if self.case_icone(ui, ph::BINOCULARS, Some(self.espace3d.through_camera), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre. Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
-            self.espace3d.through_camera = !self.espace3d.through_camera;
+        if self.case_icone(ui, ph::BINOCULARS, Some(self.e3_par_la_camera()), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : dans la vue active). Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
+            self.e3_basculer_par_la_camera();
         }
+        // Une, deux ou quatre vues (`espace3dvues.rs`).
+        self.e3_vues_bouton(ui);
     }
 
     // ------------------------------------------------------------------------ panneau Réglages
@@ -587,8 +602,8 @@ impl App {
             self.modified = true;
         }
         ui.horizontal(|ui| {
-            if self.bouton_etat(ui, self.espace3d.through_camera, ph::BINOCULARS, "Regarder par la caméra", "La vue montre ce que la caméra du plan filme, au format du cadre.", "espace3d.vue_camera").clicked() {
-                self.espace3d.through_camera = !self.espace3d.through_camera;
+            if self.bouton_etat(ui, self.e3_par_la_camera(), ph::BINOCULARS, "Regarder par la caméra", "La vue montre ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : la vue active).", "espace3d.vue_camera").clicked() {
+                self.e3_basculer_par_la_camera();
             }
             let some = self.espace3d.sel.iter().any(|i| *i != CAMERA_ID);
             if crate::bulles::icone_si(ui, some, ph::CROSSHAIR, "Viser la sélection", "Tourne la caméra vers les cartes choisies.", "").clicked() {

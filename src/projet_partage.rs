@@ -306,6 +306,7 @@ fn manifest_de_tete(tete: &Tete, sequences: Vec<SequenceEntry>, hors: Vec<u64>) 
         proprietes: PropertiesEntry::default(),
         dessins_hors: hors,
         partage: None,
+        vues_3d: None,
     }
 }
 

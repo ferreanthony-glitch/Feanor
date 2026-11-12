@@ -10364,6 +10364,72 @@ Essais : `camerasuite_tests.rs` passe à 11 (un plan sans mouvement prend son mo
 2. Lire le plan : arrêt pendant la première case, puis A vers B pendant la deuxième.
 3. Son plan 3 : sur la dernière case, le « + » puis un clic. Si la ligne d'état dit que la caméra est déjà en mouvement, ramener la clé B dans la première case au montage (ou ajouter un cadre sur la première case), puis recommencer.
 
+## 144. Plusieurs vues dans l'Espace 3D (2026-11-12, branche `vues-3d`)
+
+« J'aimerais que tu ajoutes à la vue 3D la possibilité d'afficher plusieurs vues », comme dans les logiciels 3D courants. L'idée est générale ; la façon de faire est la nôtre.
+
+Code : `espace3dvues.rs` (dispositions, points de vue, vues orthographiques, gestes routés, peinture de chaque vue, menus, bordures, mémoire), `espace3dview.rs` (la souris de la vue seule coupée en deux : `e3_nav_camera` et `e3_input_objets`, que les vues multiples reprennent ; une carte vue par la tranche s'attrape), `espace3dui.rs` (bouton « Vues », commandes), `espace3dgizmo.rs` (taille du manipulateur dans une vue orthographique), `document.rs` (`Document::vues_3d`), `project.rs` (champ facultatif `vues_3d`), `keymap.rs`, `keymap.toml`. Essais : `espace3dvues_tests.rs` (12).
+
+### 144.1 Ce qu'on voit
+
+- **Le bouton « Vues »**, dans la barre de la vue 3D, après « Regarder par la caméra » : son icône montre la disposition du moment ; un clic ouvre les quatre choix : **1 vue** (l'Espace 3D d'avant, tel quel), **2 vues côte à côte**, **2 vues l'une sur l'autre**, **4 vues**. Clic droit dessus : lui donner un raccourci (il passe à la disposition suivante). Chaque disposition a aussi sa commande, sans touche par défaut : `espace3d.vues_une`, `espace3d.vues_cote`, `espace3d.vues_superposees`, `espace3d.vues_quatre`.
+- **Chaque vue a son cadre et son menu**, en haut à gauche : Perspective (libre), Dessus, Dessous, Face, Arrière, Gauche, Droite (orthographiques), Caméra du plan (ce que filme le plan, au format du cadre).
+- **D'origine** : 4 vues = Dessus, Face, Droite, Perspective (dans l'ordre de lecture) ; 2 vues = Perspective et Caméra du plan. « Face » regarde l'espace du côté de la caméra du plan.
+- **Repères** : chaque vue a sa grille (en perspective et par la caméra : le sol ; en orthographique : le plan de l'espace qui lui fait face, le sol vu de dessus, la feuille vue de face, le plan de côté vu de gauche ou de droite) et, en bas à gauche, le repère des axes (X rouge, Y vert, Z bleu) tel que la vue le voit. La vue active (la dernière touchée) a un liseré discret.
+- **Les bordures** entre les vues se glissent (le curseur change) ; elles restent entre 15 % et 85 % de la zone.
+
+### 144.2 Les gestes
+
+- **Ils vont à la vue sous le pointeur** (à celle où le glisser a commencé, tant qu'il dure), avec la navigation de la vue seule : molette pour avancer (zoomer en orthographique), bouton du milieu pour glisser, clic droit ou Alt + glisser pour tourner. Par la caméra du plan, comme avant : ces gestes déplacent la caméra (sa clé de l'image courante si elle est animée).
+- **Une vue orthographique se glisse et se zoome, ne tourne pas.** Un geste de rotation la fait passer en perspective, depuis la même direction ; la ligne d'état le dit, son menu la remet. Glisser dans le vide (bouton principal) la fait glisser, au lieu de la tourner.
+- **Choisir, tirer une carte, les poignées** : le même code que la vue seule, dans chaque vue. **Ce qui est choisi ou bougé dans une vue se voit dans toutes** (une seule sélection, un seul plan). Dans une vue orthographique, une carte vue par la tranche (un trait) s'attrape aussi par son trait.
+- **Agrandir** : la commande `espace3d.vue_agrandir` (sans touche par défaut) ou un double-clic sur le menu d'une vue la met en plein cadre ; le même geste ramène la disposition.
+- « Regarder par la caméra », avec plusieurs vues, fait passer la vue active à la caméra du plan, ou la remet en perspective. « Recadrer » recadre toutes les vues.
+- Revenir à 1 vue montre la vue active si c'est une perspective ou la caméra du plan.
+
+### 144.3 La mémoire
+
+La disposition, le point de vue de chaque vue et les bordures sont **retenus avec le projet**, dans un champ facultatif du manifeste (`vues_3d`), **sans changer le numéro de format** : une version d'avant l'ignore et ouvre le projet en une vue (elle perd seulement cette disposition). Un projet d'avant s'ouvre en une vue. Des valeurs inconnues (écrites par une version plus récente) redeviennent celles d'origine, le projet s'ouvre quand même. La navigation de chaque vue (où elle regarde, son zoom) n'est pas retenue : à l'ouverture, les vues se cadrent sur l'espace. Changer de vues n'est pas une étape d'annulation. Un film partagé ne les écrit pas (ce n'est pas une retouche que l'équipe se transmet).
+
+### 144.4 Performance (règle « sans latence »)
+
+Toutes les vues partagent les textures des cartes (une par dessin). Mesuré sur la scène de test (10 cartes, écran 1 280 × 720, carte graphique) : **1 vue 1,44 ms par image (au plus 1,98), 4 vues 2,36 ms (au plus 3,08)**. Pas besoin de ne redessiner que les vues qui changent.
+
+### 144.5 Limites
+
+- (Remplacé par 144.8 : l'orthographique est maintenant une vraie projection parallèle.)
+- Une perspective qui naît d'une vue de dessus ou de dessous penche d'un degré (la vue d'orbite s'arrête à 89°).
+- Les réglages de la vue seule (le menu de coin n'y est pas) restent ceux d'avant : la vue seule n'a pas de point de vue orthographique.
+- Rien n'a été fait à la main dans le vrai logiciel : la règle tient par les essais ; l'écran reste à juger.
+
+### 144.6 À vérifier à l'écran (par Anthony)
+
+1. Ouvrir une copie d'un projet, l'Espace 3D, puis le bouton « Vues » > 4 vues : Dessus, Face, Droite, Perspective, chacune avec sa grille et son repère d'axes.
+2. Molette et bouton du milieu dans chaque vue : seule la vue sous le pointeur bouge.
+3. Clic droit et glisser dans la vue de face : elle passe en perspective, la ligne d'état le dit ; son menu la remet de face.
+4. Choisir une carte dans la vue de face et la tirer : elle bouge dans les quatre vues. Dans la vue de dessus, cliquer son trait : elle est choisie.
+5. Glisser la bordure du milieu ; double-cliquer le menu d'une vue (plein cadre), puis encore (retour).
+6. Menu d'une vue > Caméra du plan : la vue montre ce que filme le plan ; molette et clic droit y déplacent la caméra.
+7. Enregistrer, fermer, rouvrir : les 4 vues reviennent avec leurs points de vue. Un projet d'avant s'ouvre en une vue.
+
+### 144.7 Essais
+
+`espace3dvues_tests.rs` : les rectangles partagent la zone sans se chevaucher ; une vue orthographique ne montre pas la profondeur et regarde d'où elle doit ; ce que retient le projet se relit, même abîmé ; changer de disposition ; point de vue par vue ; le geste va à la vue sous le pointeur ; l'orthographique ne tourne pas (et passe en perspective sur un geste de rotation) ; agrandir puis revenir (raccourci, double-clic) ; la sélection se voit partout, une carte s'attrape par la tranche ; bordure glissée, vues enregistrées puis rouvertes ; un ancien projet s'ouvre en une vue ; 4 vues tiennent 60 images par seconde.
+
+### 144.8 Après la relecture (2026-11-12)
+
+- **Une vraie orthographique.** `View` (`espace3dmath.rs`) a un champ `ortho` : la largeur montrée, en mètres. Les rayons sont parallèles (origine sur le plan de l'image, direction la visée), la projection ne divise plus par la profondeur. Le téléobjectif à 20 km est retiré, et avec lui `FOCALE_ORTHO_MIN` : une vue reste orthographique à tout zoom (jusqu'à 10 km de large).
+- **Un plan de glisse vu de profil** (une carte dressée vue du dessus, la caméra vue de face) : on glisse dans le plan de l'écran, à la profondeur de l'objet (`View::screen_to_plane`). Avant : un saut de centaines de mètres, ou rien.
+- **Un plan vu de face** : le déplacement reste dans son plan, rien ne dérive le long de sa normale (20 allers-retours : la profondeur ne bouge pas).
+- **Un axe vu de bout** (Maj + glisser le long de la visée, ou une poignée d'échelle de bout) : rien ne bouge, et la ligne d'état le dit.
+- **Un anneau Tourner vu de profil** : l'angle est celui de la souris à l'écran autour du centre projeté (fini, et qui suit la main).
+- **Un champ `vues_3d` mal formé** (`partage` trop court ou `null`, `points` qui ne sont pas des noms, un nombre à la place de l'objet) : le projet s'ouvre, en une vue (le champ est lu en souple, `Retenue::lire`).
+- **« Regarder par la caméra » du panneau Réglages** passe par la même fonction que celui de la barre (`App::e3_basculer_par_la_camera`) : avec plusieurs vues, son état et son clic suivent la vue active.
+- **Une vue de moins de 16 pixels** au premier cadrage attend d'avoir sa taille ; un rayon abîmé (vue de taille nulle) ne touche aucune carte (`Monde::pick_card`).
+- **Un seul quadrillage** pour la vue seule et pour chaque vue (`App::e3_quadrillage`, à la hauteur de `App::e3_hauteur_sol`).
+
+Essais : 7 de plus dans `espace3dvues_tests.rs` (rouges sur 16f24d9, verts après) et 2 dans `espace3dvues_suite_tests.rs` (le bouton des Réglages, le quadrillage commun).
+
 ## 147. La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard (2026-11-12, branche `plantage-carte-vide`)
 
 Les parties 143 à 146 ne sont pas dans `main` : elles sont sur leurs branches (`espace-libre` : 143 ; `vues-3d` : 144 ;
