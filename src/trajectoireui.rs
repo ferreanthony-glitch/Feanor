@@ -312,6 +312,8 @@ impl App {
         let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
         let ancre = self.trajectoire_point_d_ancrage(pi, li, &t, base);
         let pivot = self.doc.stage_center();
+        // (Plan en Espace 3D : un calque redevenu fixe garde sa profondeur, même derrière la caméra d'origine du plan.)
+        let libre = self.doc.plan_en_espace(pi);
         let l = &mut self.doc.panels[pi].layers[li];
         match t.cles {
             Cles::Interpolation => {
@@ -319,7 +321,7 @@ impl App {
                 let premiere = l.pos_keys.first().map(|k| [k.t.x - base.x, k.t.y - base.y]).unwrap_or([0.0, 0.0]);
                 if l.pos_keys.is_empty() {
                     l.transform = base;
-                    l.fold_dz();
+                    l.fold_dz_selon(libre);
                 }
                 if let Some(tr) = l.trajectoire.as_mut() {
                     tr.decalage_depart = premiere;
@@ -332,7 +334,7 @@ impl App {
                 // Les clés de position s'en vont : le calque garde sa pose propre, les dessins font le mouvement.
                 l.pos_keys.clear();
                 l.transform = base;
-                l.fold_dz();
+                l.fold_dz_selon(libre);
                 if let Some(tr) = l.trajectoire.as_mut() {
                     tr.decalage_depart = [0.0, 0.0];
                 }
@@ -596,6 +598,7 @@ impl App {
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else { return false };
         let apres = self.layers()[li].pose(f);
         let delta = [apres.x - avant.x, apres.y - avant.y];
+        let libre = self.doc.plan_en_espace(self.cur_panel);
         let l = &mut self.layers_mut()[li];
         // La pose propre : celle du départ, moins ce que la trajectoire y ajoutait. Le geste s'y applique, sauf s'il a changé la pose du
         // départ lui-même (la clé du départ, ou la pose fixe) : elle le porte déjà.
@@ -606,7 +609,7 @@ impl App {
         }
         l.pos_keys.clear();
         l.transform = base;
-        l.fold_dz();
+        l.fold_dz_selon(libre);
         if let Some(tr) = l.trajectoire.as_mut() {
             tr.decalage_depart = [0.0, 0.0];
             tr.deplacer(delta[0], delta[1]);
@@ -884,10 +887,11 @@ impl App {
                 let snap = self.snapshot();
                 let pi = self.cur_panel;
                 self.trajectoire_defaire_les_dessins(pi, li);
+                let libre = self.doc.plan_en_espace(pi);
                 let l = &mut self.layers_mut()[li];
                 l.transform = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
                 l.pos_keys.clear();
-                l.fold_dz();
+                l.fold_dz_selon(libre);
                 l.trajectoire = None;
                 self.trajectoire_valider(snap, "Effacer la trajectoire");
                 self.status = "Trajectoire effacée : le calque reste où il était au départ.".into();

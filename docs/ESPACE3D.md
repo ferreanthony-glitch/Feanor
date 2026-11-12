@@ -57,7 +57,9 @@ la seule source. La pose 3D est *calculée* à partir d'eux (`Monde::card_xf`), 
 dessus, propagation) lit les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu
 passe par **le même code** qu'avant.
 
-Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels :
+Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels. (Dans un plan
+en Espace 3D, depuis le 2026-11-12, `d` descend sous −0,9 : `s` reste alors 0,1 et seule la position Z continue,
+`docs/INTERFACE.md`, partie 148.)
 
 | Carte (monde) | depuis le calque |
 |---|---|

@@ -566,10 +566,13 @@ impl App {
     }
 
     /// Le calque `li` prend la pose `t` à l'image courante : sa transformation fixe, ou, s'il est animé
-    /// (clés de position), la clé de cette image, posée au besoin (`Layer::set_pose`).
+    /// (clés de position), la clé de cette image, posée au besoin (`Layer::set_pose`). Dans un plan en Espace 3D, la
+    /// profondeur du calque reste libre : une carte passée derrière la caméra d'origine du plan n'en revient pas parce
+    /// qu'on la déplace ou qu'on annule sa transformation (`Layer::set_pose_selon`, partie 148).
     pub(crate) fn set_layer_pose(&mut self, li: usize, t: LayerTransform) {
         let f = self.cur_frame;
-        self.layers_mut()[li].set_pose(f, t);
+        let libre = self.doc.plan_en_espace(self.cur_panel);
+        self.layers_mut()[li].set_pose_selon(f, t, libre);
     }
 
     /// La pose du calque `li` à l'image courante telle que l'outil Transformer la travaille : la sienne ; pour un calque accroché à la

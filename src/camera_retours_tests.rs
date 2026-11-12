@@ -403,13 +403,13 @@ fn l_effet_vivant_s_enregistre_et_les_anciens_projets_gardent_leurs_cles() {
     doc.panels[1].camera = cles(&[0, 1, 2, 3, 4]);
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 54"), "format 54");
+    assert!(texte.contains("\"version\": 55"), "format 55");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effet_camera, doc.panels[0].effet_camera, "l'effet revient tel quel");
     assert_eq!(lu.panels[1].effet_camera, None);
     assert_eq!((0..30).map(|f| lu.panel_camera(0, f)).collect::<Vec<_>>(), (0..30).map(|f| doc.panel_camera(0, f)).collect::<Vec<_>>());
     // Un projet du format 51 (sans le champ) : ses clés d'effet restent des clés, aucun effet vivant n'apparaît.
-    let ancien = texte.replace("\"version\": 54", "\"version\": 51");
+    let ancien = texte.replace("\"version\": 55", "\"version\": 51");
     let sans_effet: serde_json::Value = {
         let mut v: serde_json::Value = serde_json::from_str(&ancien).unwrap();
         fn retirer(v: &mut serde_json::Value) {

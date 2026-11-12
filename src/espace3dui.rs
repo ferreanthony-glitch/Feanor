@@ -146,9 +146,10 @@ impl App {
         };
     }
 
-    /// Les dimensions du monde de ce projet.
+    /// Les dimensions du monde de ce projet, pour le plan courant : dans un plan en Espace 3D, la profondeur des cartes
+    /// est libre (`Monde::libre`, partie 148).
     pub(crate) fn e3_world(&self) -> Monde {
-        Monde::of(&self.doc)
+        Monde::du_plan(&self.doc, self.cur_panel)
     }
 
     /// Le rang dans le plan courant du calque dont la carte porte ce numéro de sélection.
@@ -186,7 +187,7 @@ impl App {
                     return Some((id, world.camera_xf(&self.current_camera())));
                 }
                 let layer = &self.layers()[self.e3_card_layer(id)?];
-                Some((id, world.card_xf(&layer.pose(frame), layer.depth_at(frame))))
+                Some((id, world.carte(layer, frame)))
             })
             .collect()
     }
@@ -220,7 +221,7 @@ impl App {
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
                 let layer = &self.layers()[li];
-                points.extend(world.card_corners(&world.card_xf(&layer.pose(self.cur_frame), layer.depth_at(self.cur_frame))));
+                points.extend(world.card_corners(&world.carte(layer, self.cur_frame)));
             }
         }
         points.push(world.eye(&self.current_camera()));
@@ -244,7 +245,8 @@ impl App {
         }
         let mut order: Vec<usize> = (0..layers.len()).collect();
         // (Stable : deux calques à la même profondeur gardent leur ordre.)
-        order.sort_by(|&a, &b| layers[b].depth_at(frame).total_cmp(&layers[a].depth_at(frame)));
+        let world = self.e3_world();
+        order.sort_by(|&a, &b| world.profondeur(&layers[b], frame).total_cmp(&world.profondeur(&layers[a], frame)));
         if order.iter().enumerate().all(|(i, &k)| i == k) {
             self.status = "Les cartes sont déjà dans l'ordre de la profondeur.".into();
             return;
@@ -261,6 +263,10 @@ impl App {
     /// Coche ou décoche « Plan en Espace 3D » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
     /// d'annulation. Étape A1 : la case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; l'image
     /// n'en dépend pas encore. Refusé si le cadre ne tient pas dans la feuille (`Document::accepte_plan_en_espace`).
+    ///
+    /// **Décocher** (partie 148) : un plan ordinaire ne sait pas tenir une carte au-delà de `Layer::MIN_DEPTH` (tout contre
+    /// la caméra d'origine du plan, ou derrière elle). Ces cartes reviennent à cette borne (`Layer::ramener_a_la_borne`),
+    /// dans la même étape d'annulation, et la barre d'état le dit : un seul Ctrl+Z rend la case et les cartes.
     pub(crate) fn espace3d_basculer_plan_en_espace(&mut self) {
         let on = !self.panel().espace;
         if on && !self.doc.accepte_plan_en_espace() {
@@ -268,10 +274,26 @@ impl App {
             return;
         }
         let pi = self.cur_panel;
-        self.espace3d_step("Plan en Espace 3D", |s| s.doc.panels[pi].espace = on);
+        let ramenees = self.espace3d_step("Plan en Espace 3D", |s| {
+            let p = &mut s.doc.panels[pi];
+            p.espace = on;
+            let mut cartes = 0;
+            if !on {
+                for l in &mut p.layers {
+                    if l.ramener_a_la_borne() && espace3d::is_card(l) {
+                        cartes += 1;
+                    }
+                }
+            }
+            cartes
+        });
         self.renderer.invalidate_all();
         self.status = if on {
             "Plan en Espace 3D : coché pour ce plan. (En construction : l'image ne change pas encore.)".into()
+        } else if ramenees == 1 {
+            "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. Une carte était tout contre la caméra d'origine du plan, ou derrière elle : elle est revenue devant elle, un plan ordinaire ne peut pas la garder là. Ctrl+Z remet tout comme avant.".into()
+        } else if ramenees > 1 {
+            format!("Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. {ramenees} cartes étaient tout contre la caméra d'origine du plan, ou derrière elle : elles sont revenues devant elle, un plan ordinaire ne peut pas les garder là. Ctrl+Z remet tout comme avant.")
         } else {
             "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire.".into()
         };
@@ -286,7 +308,9 @@ impl App {
     /// **Pose une surface à dessiner** dans le plan en Espace 3D courant (`docs/ESPACE-LIBRE.md`, étape A6) : un calque
     /// neuf, juste au-dessus du calque courant, du même genre que lui (vectoriel ou bitmap), posé face à la caméra, au sol
     /// ou en mur (`Monde::surface_xf`) ; il devient le calque courant et la carte choisie. Une étape d'annulation.
-    /// Refusé hors d'un plan en Espace 3D, storyboard verrouillé, ou si la surface tomberait derrière la caméra de référence.
+    /// Refusé hors d'un plan en Espace 3D, storyboard verrouillé, ou si la surface tomberait hors de l'espace où une carte
+    /// peut être. Elle se pose aussi derrière la caméra d'origine du plan (partie 148) ; si la carte ne peut pas être aussi
+    /// grande que demandé, la barre d'état le dit.
     pub(crate) fn espace3d_nouvelle_surface(&mut self, sorte: espace3d::Surface) {
         if !self.doc.plan_en_espace(self.cur_panel) {
             self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans Réglages.", sorte.nom());
@@ -298,7 +322,7 @@ impl App {
         let world = self.e3_world();
         let distance = self.espace3d_distance_surface();
         let Some(xf) = world.surface_xf(&self.current_camera(), sorte, distance) else {
-            self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait derrière la caméra d'origine du plan, où une carte ne peut pas être. Rapproche-la ou tourne la caméra.", sorte.nom());
+            self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait trop loin de la feuille pour être une carte. Rapproche la caméra de la feuille.", sorte.nom());
             return;
         };
         self.end_stroke();
@@ -313,6 +337,11 @@ impl App {
         let mut layer = crate::document::Layer::new(nom.clone(), kind);
         layer.parent = self.layers().get(self.cur_layer).and_then(|l| if l.folder { None } else { l.parent });
         world.apply_card_xf_libre(&mut layer, frame, &xf);
+        // (Près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la feuille : son échelle
+        // s'arrête à 100, et sous `Layer::MIN_DEPTH` sa taille ne grandit plus avec sa profondeur. Une surface demandée
+        // plus grande est posée plus petite : on le dit.)
+        let posee = world.carte(&layer, frame);
+        let plus_petite = posee.size[0].abs() < xf.size[0].abs() * 0.99;
         let id = layer.id;
         let at = (self.cur_layer + 1).min(self.layers().len());
         self.layers_mut().insert(at, layer);
@@ -323,7 +352,11 @@ impl App {
         self.history.context = before;
         self.espace3d.sel = vec![espace3d::card_selection(id)];
         self.espace3d.last_layer = id;
-        self.status = format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.");
+        self.status = if plus_petite {
+            format!("« {nom} » posée à {distance:.1} m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le cadre.")
+        } else {
+            format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.")
+        };
     }
 
     /// Les commandes de l'Espace 3D. Vrai si l'action est la sienne.
@@ -518,13 +551,14 @@ impl App {
             }
         });
         let frame = self.cur_frame;
+        let world = self.e3_world();
         let cards: Vec<(usize, u64, String, f32, bool)> = self
             .e3_visible_cards()
             .into_iter()
             .rev()
             .map(|li| {
                 let l = &self.layers()[li];
-                (li, l.id, l.name.clone(), l.depth_at(frame), l.locked || l.position_locked)
+                (li, l.id, l.name.clone(), world.profondeur(l, frame), l.locked || l.position_locked)
             })
             .collect();
         egui::ScrollArea::vertical().id_salt("espace3d_cartes").max_height(130.0).auto_shrink([true, true]).show(ui, |ui| {
@@ -573,7 +607,8 @@ impl App {
         let layer = &self.layers()[li];
         let (name, locked, animated) = (layer.name.clone(), layer.locked || layer.position_locked, layer.is_animated());
         let t0 = layer.pose(frame);
-        let d0 = layer.depth_at(frame);
+        // (Plan en Espace 3D : la profondeur est libre, la carte peut être derrière la caméra d'origine du plan.)
+        let d0 = world.profondeur(layer, frame);
         let mut xf = world.card_xf(&t0, d0);
         let mut t = t0;
         let mut depth = d0;
@@ -626,9 +661,17 @@ impl App {
                 ui.end_row();
                 ui.label("Profondeur");
                 ui.horizontal(|ui| {
-                    let r = ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(Layer::MIN_DEPTH..=1000.0).max_decimals(2));
+                    // (Plan en Espace 3D : le champ descend sous la borne des plans ordinaires. Il le faut aussi pour le
+                    // montrer : un champ borné ramènerait à sa borne, sans qu'on y touche, une carte qui l'a passée.)
+                    let plus_pres = if world.libre { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH };
+                    let r = ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(plus_pres..=1000.0).max_decimals(2));
                     deepened |= self.edited3d(&r, "Profondeur de la carte");
-                    crate::bulles::bulle(r, "Profondeur (multiplan)", "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace.", "");
+                    let phrase = if world.libre {
+                        "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace. Sous −0,9 la carte ne change plus de taille : elle avance jusqu'à cette caméra, la caméra d'origine du plan (−1), puis passe derrière elle."
+                    } else {
+                        "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace."
+                    };
+                    crate::bulles::bulle(r, "Profondeur (multiplan)", phrase, "");
                     if crate::bulles::icone_si(ui, t.is_tilted(), ph::ARROW_COUNTER_CLOCKWISE, "Remettre à plat", "Annule l'inclinaison : la carte redevient parallèle à la feuille.", "").clicked() {
                         flat = true;
                     }
@@ -655,10 +698,10 @@ impl App {
                 if flat {
                     (p.tilt_x, p.tilt_y) = (0.0, 0.0);
                 }
-                layer.set_pose(frame, p);
+                layer.set_pose_selon(frame, p, libre);
             }
             if deepened {
-                layer.set_depth_at(frame, depth);
+                layer.set_depth_selon(frame, depth, libre);
             }
         }
         ui.label(RichText::new("Rotation Z : le tour dans le plan de la carte (antihoraire) ; X et Y inclinent la carte.").small().weak());

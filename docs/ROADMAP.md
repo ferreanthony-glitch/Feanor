@@ -3433,7 +3433,8 @@ et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le mote
 - ✅ **A5** (2026-11-11) : dessiner par la caméra. Pas de trait là où le regard ne touche pas la carte (`App::to_layer_opt`), ni au-delà d'une feuille de ses bords près de
   l'horizon ; le curseur du pinceau a la taille du trait en perspective (`App::layer_zoom`). Pas regardé à l'écran.
 - ✅ **A6** (2026-11-12) : poser une surface à dessiner face à la caméra, au sol ou en mur (`espace3d.surface_*`, `Monde::surface_xf`), à une distance choisie ; inclinaison libre
-  jusqu'au demi-tour dans un plan en Espace 3D (85° ailleurs). Limite : pas de carte derrière la caméra d'origine du plan. Pas regardé à l'écran.
+  jusqu'au demi-tour dans un plan en Espace 3D (85° ailleurs). Limite : pas de carte derrière la caméra d'origine du plan (levée le 2026-11-12, `INTERFACE.md` partie 148,
+  format 55). Pas regardé à l'écran.
 - ✅ **A7** (2026-11-12) : la vue d'édition de l'Espace 3D trace les cartes d'un plan en Espace 3D du plus loin au plus près de son œil (`espace3d::ordre_vu`), dans l'ordre de l'image
   avec « Regarder par la caméra » ; message d'entrée et note sur la caméra. Pas regardé à l'écran.
 - ✅ **A8** (2026-11-12) : finitions. Bascule de la caméra jusqu'à 90° (plongée totale) ; vue de dessus et cadres de caméra des Vignettes mis de côté pour ces plans ; export de

@@ -1641,8 +1641,9 @@ impl App {
         if !t.is_tilted() && repere.is_none() {
             return None;
         }
-        let world = crate::espace3d::Monde::of(&self.doc);
-        let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
+        // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
+        let world = self.e3_world();
+        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
         match repere {
             Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
             None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),

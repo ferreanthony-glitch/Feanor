@@ -10741,3 +10741,170 @@ seconde version portable d'essai (`FEANOR-portable-2026-11-12b-ESSAI-espace-3d`,
 plantage ». Juste avant, sans préciser la version : « Pas de ralentissement ici avec une machine sous cette config ». Il
 n'a pas dit lesquels des points 1 à 3 il a faits. Les ralentissements du matin ne sont donc retrouvés ni sur le PC de
 l'atelier ni sur celui-là : leur cause reste inconnue, et rien n'a été changé pour eux.
+
+## 148. Une carte peut passer derrière la caméra d'origine du plan (2026-11-12, branche `trajectoire-espace`)
+
+Je lui avais écrit : « Une carte ne peut pas passer derrière la caméra d'origine du plan. Un personnage qui vient vers
+nous s'arrêtera donc avant de nous dépasser. » Anthony, 2026-11-12 : « Alors dépassons cette limite absurde. »
+
+**La limite.** Dans un plan en Espace 3D, la caméra va partout, mais les cartes restaient toutes devant la « caméra
+d'origine du plan » : la caméra telle qu'elle est avant qu'on la déplace, au centre de la feuille, de face. Une carte
+poussée vers elle s'arrêtait un peu avant de la toucher (à la profondeur −0,9 ; la caméra est à −1), et une surface
+demandée derrière elle était refusée.
+
+Elle venait de la façon dont un calque garde sa place : comme pour le multiplan, un décalage et une échelle sur la
+feuille, et une profondeur. La taille de la carte dans l'espace vaut « taille dessinée × (1 + profondeur) » : à −1 elle
+vaudrait zéro. D'où la borne à −0,9 (`Layer::MIN_DEPTH`), posée partout où une profondeur se lit ou s'écrit.
+
+**Ce qui change, dans un plan en Espace 3D seulement.**
+
+- Une carte se pousse vers la caméra d'origine, la traverse et continue derrière elle, aussi loin qu'on veut : avec les
+  poignées de la vue Espace 3D, avec les champs « Position » des Réglages, ou avec le champ « Profondeur », qui descend
+  maintenant sous −0,9 (−1 : sur la caméra d'origine ; −2 : aussi loin derrière elle que la feuille est devant ; jusqu'à
+  −1000).
+- Elle garde sa taille dans l'espace. Vue par la caméra d'origine, une carte qui avance grossit, puis disparaît quand
+  elle la dépasse. Une caméra tournée vers elle, ou reculée derrière elle, la filme.
+- « Nouvelle surface » pose aussi sa surface derrière la caméra d'origine (caméra retournée, par exemple) : plus de refus.
+- On dessine sur une carte passée derrière comme sur une autre, dès que la caméra du plan la voit.
+- Supprimer ses clés de position, la déplacer avec l'outil Transformer, annuler sa transformation : elle reste où elle
+  est.
+- **Décocher « Plan en Espace 3D »** : un plan ordinaire ne sait pas tenir une carte là. Les cartes passées derrière la
+  caméra d'origine, ou tout contre elle, reviennent devant elle, à la profondeur −0,9, à la même place en largeur et en
+  hauteur et à la même taille. La barre d'état le dit, et un seul Ctrl+Z rend la case et les cartes. Recocher ensuite ne
+  les renvoie pas derrière.
+
+**Comment.** Rien de neuf n'est gardé dans le projet : toujours un décalage, une échelle et une profondeur. Sous −0,9,
+la règle « taille × (1 + profondeur) » reste à sa valeur de la borne (un dixième), et seule la place le long de l'axe
+continue (`z = −d0 × profondeur`). La place d'une carte dans l'espace ne saute pas à −0,9, elle se retrouve toujours à
+partir de ce qui est gardé (et inversement), et toutes les valeurs d'avant gardent leur sens (`Monde::card_xf`,
+`card_from_xf_libre`).
+
+- `Layer` : les fonctions d'avant (`depth_at`, `set_depth_at`, `fold_dz`, `set_pose`) gardent la borne, pour les plans
+  ordinaires. À côté, pour un plan en Espace 3D : `depth_libre_at`, et `depth_selon`, `set_depth_selon`,
+  `fold_dz_selon`, `set_pose_selon`, à qui l'on dit si le plan est en Espace 3D. Bornes : ±1000 (`MAX_DEPTH_LIBRE`).
+- `Monde` sait de quel plan il est le monde (`Monde::du_plan`, champ `libre`) ; `Monde::carte` et `Monde::profondeur`
+  lisent une carte selon lui. La vue Espace 3D, ses Réglages, le dessin dans la vue et le pinceau passent par là.
+- **L'image.** Sous la caméra d'origine, un plan en Espace 3D se composait par le chemin du multiplan, qui aurait montré
+  ces cartes comme à −0,9. Dès qu'une carte du plan a passé la borne, le plan prend son changement de repère même sous
+  la caméra d'origine (`Document::repere_du_plan` ; c'est alors l'identité) : chaque carte passe par un maillage, qui
+  écarte ce qui est derrière la caméra. Sans carte au-delà de la borne, rien ne change : mêmes pixels qu'avant.
+- `Monde::surface_xf` ne refuse plus une surface derrière la caméra d'origine. Il ne refuse plus que l'absurde : plus
+  loin de la feuille que mille fois la distance de la caméra d'origine.
+- **Les champs de nombre.** Un champ borné écrit la valeur qu'il a dû borner, rien qu'en se montrant. Le champ
+  « Profondeur » des Réglages de l'Espace 3D et celui du menu d'un calque (panneau Calques) auraient ramené à −0,9 une
+  carte passée derrière la caméra dès qu'on les montrait : dans un plan en Espace 3D, tous deux descendent à −1000.
+
+**Ce qui ne change pas.** Un plan ordinaire garde sa borne à −0,9 partout (poignées, champs, vue de dessus, fichier). Un
+projet existant s'ouvre avec les mêmes valeurs et les mêmes images.
+
+**Format 55.** Aucun champ nouveau, mais des valeurs qu'une version d'avant ramènerait à −0,9 en ouvrant le projet : le
+film changerait sans prévenir. Elle doit donc le refuser. **Un projet enregistré par cette version n'est plus ouvert par
+les versions d'avant (« version plus récente »), même s'il n'a aucun plan en Espace 3D : travailler sur des copies.** Avec
+l'enregistrement continu, le premier changement fait dans un projet ouvert avec cette version le réécrit au format 55 (le
+jalon posé à l'ouverture garde l'état d'avant). Les projets des formats 54 et précédents s'ouvrent tels quels. L'outil
+Trajectoire dans l'Espace 3D, étape suivante de ce chantier, ajoutera ses champs sous ce même numéro.
+
+**Messages** (barre d'état). Décocher : « Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. 2 cartes
+étaient tout contre la caméra d'origine du plan, ou derrière elle : elles sont revenues devant elle, un plan ordinaire ne
+peut pas les garder là. Ctrl+Z remet tout comme avant. » Surface très loin derrière la caméra d'origine : « « Surface
+face à la caméra » posée à 400.0 m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle,
+une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le
+cadre. » Le refus d'une surface « elle tomberait derrière la caméra d'origine du plan » (partie 143) n'existe plus ; il
+reste « … elle tomberait trop loin de la feuille pour être une carte… ». La bulle du champ « Profondeur » dit, dans un plan
+en Espace 3D : « Sous −0,9 la carte ne change plus de taille : elle avance jusqu'à cette caméra, la caméra d'origine du
+plan (−1), puis passe derrière elle. »
+
+**Essais** (`espace3d_tests.rs`, 8 de plus ; `espace3dcles_tests.rs`, 1 de plus).
+
+- *Une carte garde sa place derrière la caméra d'origine*, calque fixe et calque animé : posée en z = 2 × la distance de
+  la caméra, relue à la même place, de la même taille, dans le même sens ; poussée plus loin, ramenée sur la caméra, à
+  la borne, devant la feuille : sa taille dans l'espace ne bouge pas. Le placement est continu à −0,9.
+- *Un plan ordinaire s'arrête toujours à −0,9* : par les poignées, par la profondeur, par une pose, à la lecture, à
+  l'image (un calque à −3 y est filmé comme à −0,9, mêmes pixels).
+- *L'image* : sous la caméra d'origine, une carte passée derrière n'est plus filmée (le chemin d'avant la montrait) ;
+  une caméra placée derrière elle la filme, son centre là où le calcul le dit, à sa taille ; caméra décalée, tournée et
+  zoomée de même. L'écran, les sorties et un plan rangé posent pareil ; le pinceau retrouve son point sur la carte, et
+  ne trace rien quand elle est derrière la caméra.
+- *Passé la borne, la carte continue* : à −0,95 elle paraît deux fois plus grande qu'à −0,9 (un plan ordinaire la
+  montre comme à −0,9) ; à −1 et au-delà elle a quitté l'image de la caméra d'origine. Devant la borne, un plan en
+  Espace 3D donne les mêmes pixels qu'un plan ordinaire.
+- *« Nouvelle surface » derrière la caméra d'origine* (caméra retournée) : posée, le cadre en son centre, on y dessine,
+  la vue d'édition la prend là où elle est ; à 400 m, posée plus petite, et la barre d'état le dit.
+- *Le fichier* : un calque fixe à −2,5 et une clé à −2,75 reviennent tels quels dans un plan en Espace 3D ; les mêmes
+  valeurs dans un plan ordinaire reviennent à la borne ; mêmes images avant et après ; le fichier dit son format (55 au
+  moins) ; le même projet écrit sans profondeur sous −0,9 et numéroté 54 s'ouvre avec les mêmes valeurs et les mêmes
+  pixels.
+- *Supprimer les clés de position* d'une carte passée derrière (toutes, ou la dernière) : elle ne bouge pas ; la
+  déplacer avec l'outil Transformer ou annuler sa transformation non plus ; dans un plan ordinaire, la borne.
+- *Décocher* : les deux cartes au-delà de la borne reviennent à −0,9 (place en largeur et en hauteur, taille et sens
+  gardés ; la clé de devant d'une carte animée garde sa profondeur), une seule étape d'annulation, le message ; Ctrl+Z
+  rend tout ; recocher ne les renvoie pas ; sans carte au-delà, rien ne bouge.
+- *Les champs* (`espace3dcles_tests.rs`) : montrer les Réglages de l'Espace 3D et le champ « Profondeur » du menu du
+  calque pour une carte à −2,5 ne la déplace pas et ne laisse aucune étape d'annulation ; dans un plan ordinaire, le
+  même champ ramène à −0,9.
+
+Essais d'avant **réécrits** (ils disaient l'ancienne limite) : `a_surface_facing_a_turned_camera_fills_its_frame_whatever_the_camera_does`
+affirmait « derrière la caméra d'origine du plan : pas de carte possible, pas de surface » ; il affirme maintenant que
+la surface s'y pose (deux caméras de plus, tournées vers l'arrière), et que seul un placement absurde est refusé. Son
+aide `carte_posee` relit la profondeur comme un plan en Espace 3D. Numéro de format épinglé (54 → 55, « plus récent »
+55 → 56) dans `camera_retours_tests`, `corbeille_tests`, `partage_tests`, `petits_livrables_tests`, `pipeline_tests`,
+`planannule_tests`, comme à chaque nouveau format.
+
+**Suite de référence** (PC de l'atelier, 2026-11-12, 20 h 34) : 4 562 essais réussis, 0 échec, les dix groupes de
+fiabilité passent (Espace 3D : 107 essais) ; le vérificateur ne signale que l'avertissement de compilation connu
+(`espace3d.rs`, des fonctions qui ne servent qu'aux essais). L'exe n'a pas été reconstruit.
+
+**Ce qui n'est pas fait.**
+
+- **Entre deux clés de position posées à des profondeurs différentes, la carte ne garde pas sa taille dans l'espace.**
+  Une clé retient une échelle et une profondeur, et chacune va de l'une à l'autre à vitesse constante. Avec une clé sur
+  la feuille et une clé derrière la caméra d'origine (aussi loin derrière elle que la feuille est devant), le calcul
+  donne une carte qui enfle jusqu'à 1,7 fois sa taille vers le cinquième du chemin, tombe à la moitié à la borne, puis
+  regrossit jusqu'à sa taille. Ce défaut date des clés de profondeur (il est aussi dans un plan ordinaire) ; il se verra
+  dès qu'un personnage avance vers la caméra avec deux clés seulement. En attendant l'outil Trajectoire de l'Espace 3D
+  (étape suivante), poser des clés rapprochées. Non mesuré par un essai.
+- **Dès qu'une carte du plan a passé la borne, toutes ses cartes sont posées par un maillage, même sous la caméra
+  d'origine.** Comme quand la caméra a bougé (partie 143) : une carte ne montre alors que sa feuille, le dessin hors de
+  la feuille n'est plus filmé, et le pinceau ne trace pas hors de la feuille de la carte.
+- Tout contre la caméra d'origine et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille (son
+  échelle s'arrête à 100). Une surface demandée plus grande est posée plus petite, et la barre d'état le dit.
+- Un calque **collé d'un plan en Espace 3D dans un plan ordinaire** avec une profondeur sous −0,9 y est montré à −0,9.
+  S'il est animé et que sa profondeur de base est elle-même sous −0,9, ses clés se décalent à la prochaine ouverture du
+  projet (la lecture ramène la base à −0,9 sans recompter les écarts). Un calque de toute la scène partagé entre un plan
+  en Espace 3D et un plan ordinaire est dans le même cas. Non corrigé.
+- Les silhouettes de l'outil Trajectoire (2D) ne suivent pas la caméra d'un plan en Espace 3D : c'est l'étape suivante.
+- Les quatre endroits de l'outil Trajectoire qui rendent un calque fixe gardent maintenant sa profondeur dans un plan en
+  Espace 3D, par la même fonction que la suppression des clés ; ils n'ont pas d'essai à eux.
+- **Rien n'a été regardé à l'écran.**
+
+**Vu en passant, pas corrigé.**
+
+- **La caméra d'un plan en Espace 3D est relue bornée à ±85°** (panoramique et bascule, `project.rs`, lecture des clés
+  de caméra) : une caméra retournée (panoramique de 180°) revient à 85° à la réouverture du projet. C'est le cas pour
+  filmer une carte passée derrière la caméra d'origine. À corriger avant de s'y fier après une réouverture.
+- Le message et la bulle de « Plan en Espace 3D » disent encore « En construction : l'image ne change pas encore », ce
+  qui n'est plus vrai depuis l'étape A3.
+
+**À vérifier à l'écran (par Anthony)**, sur une copie de projet :
+
+1. Un plan en Espace 3D, une carte avec un dessin. Dans la vue Espace 3D, la tirer vers la caméra d'origine par la flèche
+   de la profondeur : elle la traverse et continue derrière, sans s'arrêter et sans changer de taille.
+2. Quitter la vue Espace 3D, caméra du plan non déplacée : la carte passée derrière n'est plus dans l'image. La ramener
+   juste devant la caméra (« Profondeur » −0,95) : elle remplit l'image.
+3. Choisir la caméra, la reculer derrière la carte ou la tourner vers elle : l'image la montre. Dessiner dessus : le
+   trait tombe sous le stylet.
+4. Champ « Profondeur » des Réglages : taper −2, la carte passe derrière la caméra d'origine ; taper 0, elle revient au
+   niveau de la feuille. (Ce champ garde l'échelle du calque : entre 0 et −0,9 sa taille dans l'espace change, ce sont
+   les poignées qui la gardent.) Lire sa bulle.
+5. Caméra retournée (panoramique 180°), « Nouvelle surface face à la caméra » : elle se pose, le cadre tombe en son
+   centre, on dessine dessus.
+6. Animer : une clé de position loin devant, une autre derrière la caméra d'origine, puis lire. Le personnage vient vers
+   nous et nous dépasse. Dire si sa taille « respire » en chemin (premier point de « Ce qui n'est pas fait »).
+7. Supprimer les clés de position d'une carte passée derrière : elle ne bouge pas.
+8. Clic droit sur le calque d'une carte passée derrière (panneau Calques) : le champ « Profondeur » montre sa valeur
+   (−2,00 par exemple) et la carte ne bouge pas.
+9. Décocher « Plan en Espace 3D » : la barre d'état dit combien de cartes sont revenues devant la caméra ; Ctrl+Z les
+   renvoie derrière et recoche la case.
+10. Enregistrer, fermer, rouvrir : la carte est toujours derrière la caméra d'origine. (La caméra, elle, peut être
+    revenue à 85° : défaut noté ci-dessus.) Ouvrir la copie avec le FEANOR d'avant : refus propre.
+11. Un plan ordinaire du même projet : rien n'a changé, « Profondeur » s'arrête à −0,9.

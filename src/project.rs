@@ -252,7 +252,14 @@ pub const FORMAT: &str = "pelure-projet";
 /// dans l'Espace 3D et ses cartes se cachent selon leur distance (le rendu vient aux étapes A3 et A4 ; A1 pose la case). Une version
 /// précédente qui ouvrirait le projet ignorerait le champ sans rien dire, montrerait le plan à plat et perdrait le réglage à
 /// l'enregistrement : elle le refuse donc. Un projet de version 53 ou moins s'ouvre tel quel, aucun plan en Espace 3D.
-pub const VERSION: u32 = 54;
+/// 55 (2026-11-12, `docs/INTERFACE.md` partie 148) : **carte derrière la caméra d'origine d'un plan en Espace 3D** — aucun champ
+/// nouveau : la `profondeur` d'un calque d'un plan en Espace 3D (`espace`), ajoutée à l'`ecart_profondeur` de ses clés de position,
+/// peut descendre sous −0,9 (`Layer::MIN_DEPTH`), jusqu'à −1000 : la carte passe la caméra de référence (−1) et va derrière elle.
+/// Une version précédente ramènerait ces profondeurs à −0,9 en ouvrant le projet (la carte reviendrait devant la caméra, le film
+/// changerait sans prévenir) et les perdrait à l'enregistrement : elle le refuse donc. Un projet de version 54 ou moins s'ouvre
+/// tel quel, avec les mêmes valeurs et les mêmes images (il n'a aucune profondeur sous −0,9) ; un plan ordinaire garde sa borne.
+/// (L'outil Trajectoire dans l'Espace 3D, étape suivante du même chantier, ajoutera ses champs sous ce même numéro.)
+pub const VERSION: u32 = 55;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -3265,6 +3272,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
                 let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
                 let couleurs: Vec<Option<CouleurEntry>> = p.calques.iter().map(|l| l.calque_couleur.clone()).collect();
+                let en_espace = p.espace;
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -3305,8 +3313,10 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         trajectoire: l.trajectoire.and_then(crate::trajectoire::Trajectoire::assainie),
                         opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
                         unie: l.couleur_unie,
+                        // (Plan en Espace 3D, format 55 : la profondeur est libre, la carte peut être derrière la caméra de
+                        // référence. Plan ordinaire : la borne de toujours.)
                         depth: if l.profondeur.is_finite() {
-                            l.profondeur.clamp(Layer::MIN_DEPTH, 1000.0)
+                            l.profondeur.clamp(if en_espace { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH }, 1000.0)
                         } else {
                             0.0
                         },

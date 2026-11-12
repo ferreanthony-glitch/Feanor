@@ -221,17 +221,26 @@ pub struct Monde {
     pub d0: f32,
     /// La même, en pixels de la feuille (`camera::ref_distance`).
     pub d0_px: f32,
+    /// Le monde d'un **plan en Espace 3D** (`Monde::du_plan`) : la profondeur de ses cartes est libre, elles passent la
+    /// caméra de référence et vont derrière elle (`Layer::depth_libre_at`, `docs/INTERFACE.md`, partie 148). Faux : un plan
+    /// ordinaire, dont les cartes s'arrêtent à `Layer::MIN_DEPTH`. `carte` et `profondeur` lisent selon lui.
+    pub libre: bool,
 }
 
 impl Monde {
     pub fn new(stage: [usize; 2], frame: [usize; 2]) -> Monde {
         let k = SceneCam::meters_per_px(frame[0]);
         let d0_px = ref_distance(frame);
-        Monde { stage: [stage[0] as f32, stage[1] as f32], frame, k, d0: d0_px * k, d0_px }
+        Monde { stage: [stage[0] as f32, stage[1] as f32], frame, k, d0: d0_px * k, d0_px, libre: false }
     }
 
     pub fn of(doc: &crate::document::Document) -> Monde {
         Monde::new([doc.width, doc.height], doc.frame)
+    }
+
+    /// Le monde du plan `index` du projet : celui de `of`, qui sait en plus si le plan est en Espace 3D (`libre`).
+    pub fn du_plan(doc: &crate::document::Document, index: usize) -> Monde {
+        Monde { libre: doc.plan_en_espace(index), ..Monde::of(doc) }
     }
 
     // ------------------------------------------------------------------------------ caméra
@@ -349,12 +358,6 @@ impl Monde {
         -(self.frame[1] as f32 * self.k) / 2.0
     }
 
-    /// Le plus près de la caméra de référence qu'une carte peut être posée (mètres le long de Z) : la profondeur d'un
-    /// calque s'arrête à `Layer::MIN_DEPTH`, sa taille en dépend. Au-delà (derrière la caméra de référence), pas de carte.
-    pub fn z_max(&self) -> f32 {
-        -self.d0 * Layer::MIN_DEPTH
-    }
-
     /// Le placement d'une **surface à dessiner** neuve pour la caméra `cam` (prise telle quelle), à `distance` mètres
     /// (`docs/ESPACE-LIBRE.md`, étape A6). Elle a la taille de la feuille à l'échelle où un pixel de son dessin fait un
     /// pixel de l'image à cette distance : posée face à la caméra, le cadre tombe en son centre, avec la marge de la
@@ -364,7 +367,9 @@ impl Monde {
     /// - `Sol` : couchée au sol (`sol_y`), devant la caméra à `distance` à l'horizontale, son haut vers le fond.
     /// - `Mur` : debout sur le sol, face à la caméra à l'horizontale (sans sa bascule), à `distance`.
     ///
-    /// Rien si la surface tomberait derrière la caméra de référence (`z_max`) : une carte ne peut pas y être.
+    /// La surface se pose où que regarde la caméra, **derrière la caméra de référence comprise** (`docs/INTERFACE.md`,
+    /// partie 148 ; avant, elle y était refusée). Rien seulement si elle tomberait plus loin de la feuille que ce qu'une
+    /// carte sait tenir (`Layer::MAX_DEPTH_LIBRE` fois la distance de référence, devant ou derrière).
     pub fn surface_xf(&self, cam: &Camera, sorte: Surface, distance: f32) -> Option<Xf> {
         let distance = if distance.is_finite() { distance.clamp(self.d0 * 0.05, self.d0 * 200.0) } else { self.d0 };
         let eye = self.eye(cam);
@@ -391,7 +396,7 @@ impl Monde {
             Surface::Sol => (devant, right, fond, [0.0, 1.0, 0.0]),
             Surface::Mur => (m::add(devant, [0.0, h / 2.0, 0.0]), right, [0.0, 1.0, 0.0], m::scale(fond, -1.0)),
         };
-        if !(pos[2] < self.z_max() - 1e-3) {
+        if !(pos[2].abs() <= self.d0 * Layer::MAX_DEPTH_LIBRE) {
             return None;
         }
         #[rustfmt::skip]
@@ -406,15 +411,35 @@ impl Monde {
 
     // ------------------------------------------------------------------------------ cartes
 
-    /// Le placement 3D d'une carte : `t` sa pose, `depth` sa profondeur totale (`Layer::depth_at`).
+    /// Le placement 3D d'une carte : `t` sa pose, `depth` sa profondeur totale (`Layer::depth_at` dans un plan ordinaire,
+    /// `Layer::depth_libre_at` dans un plan en Espace 3D : `carte` choisit).
+    ///
+    /// La carte est à `−d0 · depth` le long de Z, et l'agrandissement du multiplan `1 + depth` règle sa place et sa
+    /// taille : vue de la caméra de référence, elle paraît telle qu'elle est dessinée. **Sous `Layer::MIN_DEPTH`** (un
+    /// plan en Espace 3D seulement : un plan ordinaire ne donne jamais une telle profondeur), cet agrandissement reste
+    /// celui de la borne : la carte garde sa place et sa taille dans l'espace et ne fait plus qu'avancer le long de Z,
+    /// jusqu'à la caméra de référence (profondeur −1) et derrière elle (`docs/INTERFACE.md`, partie 148). Le placement est
+    /// continu à la borne, et `card_from_xf_libre` en retrouve la pose et la profondeur partout.
     pub fn card_xf(&self, t: &LayerTransform, depth: f32) -> Xf {
         let s = 1.0 + depth.max(Layer::MIN_DEPTH);
         let [w, h] = self.stage;
         Xf {
-            pos: [t.x * s * self.k, -t.y * s * self.k, -self.d0 * depth.max(Layer::MIN_DEPTH)],
+            pos: [t.x * s * self.k, -t.y * s * self.k, -self.d0 * depth],
             rot: [t.tilt_x, t.tilt_y, -t.angle],
             size: [w * self.k * s * t.scale * t.stretch_x, h * self.k * s * t.scale * t.stretch_y, 1.0],
         }
+    }
+
+    /// La profondeur du calque `layer` à l'image `frame` dans ce monde : libre dans un plan en Espace 3D (`libre`), bornée
+    /// à `Layer::MIN_DEPTH` sinon.
+    pub fn profondeur(&self, layer: &Layer, frame: usize) -> f32 {
+        layer.depth_selon(frame, self.libre)
+    }
+
+    /// Le placement 3D de la carte du calque `layer` à l'image `frame` : `card_xf` de sa pose et de sa profondeur dans ce
+    /// monde (`profondeur`). C'est par ici que l'Espace 3D lit une carte, pour la montrer, la choisir ou y dessiner.
+    pub fn carte(&self, layer: &Layer, frame: usize) -> Xf {
+        self.card_xf(&layer.pose(frame), self.profondeur(layer, frame))
     }
 
     /// La pose du calque qui donne le placement `xf` à une carte dont la pose était `prev` à la profondeur
@@ -428,15 +453,18 @@ impl Monde {
     }
 
     /// Comme `card_from_xf`, pour une carte d'un plan en Espace 3D : l'inclinaison va jusqu'au demi-tour
-    /// (`MAX_TILT_LIBRE`), la carte se couche au sol ou se tourne face à la caméra où qu'elle regarde.
+    /// (`MAX_TILT_LIBRE`), la carte se couche au sol ou se tourne face à la caméra où qu'elle regarde ; et sa profondeur
+    /// est libre (`Layer::MAX_DEPTH_LIBRE`), la carte passe la caméra de référence et va derrière elle (`card_xf`).
     pub fn card_from_xf_libre(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf) -> (LayerTransform, f32) {
         self.card_from_xf_selon(prev, prev_depth, xf, true)
     }
 
     fn card_from_xf_selon(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf, libre: bool) -> (LayerTransform, f32) {
         let borne = if libre { LayerTransform::clamp_tilt_libre } else { LayerTransform::clamp_tilt };
-        let d = (-xf.pos[2] / self.d0).max(Layer::MIN_DEPTH);
-        let s = 1.0 + d;
+        // La profondeur : bornée à `MIN_DEPTH` dans un plan ordinaire, libre dans un plan en Espace 3D. L'agrandissement
+        // du multiplan, lui, s'arrête à la borne dans les deux cas (`card_xf`).
+        let d = if libre { Layer::clamp_depth_libre(-xf.pos[2] / self.d0) } else { (-xf.pos[2] / self.d0).max(Layer::MIN_DEPTH) };
+        let s = 1.0 + d.max(Layer::MIN_DEPTH);
         let s0 = 1.0 + prev_depth.max(Layer::MIN_DEPTH);
         let [w, h] = self.stage;
         // Ce que la taille demandée vaut sans l'agrandissement du multiplan, et ce que la pose d'avant aurait à ce
@@ -471,17 +499,18 @@ impl Monde {
         self.apply_card_xf_selon(layer, frame, xf, false)
     }
 
-    /// Comme `apply_card_xf`, pour une carte d'un plan en Espace 3D (inclinaison libre, `card_from_xf_libre`).
+    /// Comme `apply_card_xf`, pour une carte d'un plan en Espace 3D (inclinaison et profondeur libres,
+    /// `card_from_xf_libre`) : la carte se pose aussi derrière la caméra de référence.
     pub fn apply_card_xf_libre(&self, layer: &mut Layer, frame: usize, xf: &Xf) {
         self.apply_card_xf_selon(layer, frame, xf, true)
     }
 
     fn apply_card_xf_selon(&self, layer: &mut Layer, frame: usize, xf: &Xf, libre: bool) {
         let t0 = layer.pose(frame);
-        let d0 = layer.depth_at(frame);
+        let d0 = layer.depth_selon(frame, libre);
         let (mut t, d) = self.card_from_xf_selon(&t0, d0, xf, libre);
         t.dz = d - layer.depth;
-        layer.set_pose(frame, t);
+        layer.set_pose_selon(frame, t, libre);
     }
 
     /// Les quatre coins d'une carte dans le monde : haut-gauche, haut-droite, bas-droite, bas-gauche.
@@ -599,7 +628,9 @@ struct Bloc {
 }
 
 fn vu_du_calque(world: &Monde, layer: &Layer, frame: usize, regard: &Regard) -> Vu {
-    let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+    // (L'ordre par distance ne sert qu'aux plans en Espace 3D : la profondeur de la carte y est libre, elle peut être
+    // derrière la caméra de référence. Devant la borne des plans ordinaires, c'est `depth_at`.)
+    let xf = world.card_xf(&layer.pose(frame), layer.depth_libre_at(frame));
     let (mx, dist) = match regard {
         // (Un calque accroché à la caméra reste dans le cadre : il se lit sans le changement de repère, comme `place_dans`.)
         Regard::Camera(repere) => {
@@ -722,13 +753,16 @@ pub fn place(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen) ->
 /// Comme `place`, pour un plan qui peut être un **plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A3) : `repere` est
 /// alors le changement de repère de sa caméra (`Document::repere_du_plan`), et `camera` la caméra de référence.
 ///
-/// Sans repère (plan ordinaire, ou plan en Espace 3D dont la caméra est la caméra de référence) : exactement `place`.
+/// Sans repère (plan ordinaire, ou plan en Espace 3D dont la caméra est la caméra de référence et dont aucune carte n'a
+/// passé la borne des plans ordinaires) : exactement `place`.
 /// Avec : chaque carte, à plat ou inclinée, est passée dans le repère de la caméra et posée par un maillage, vue de l'œil
 /// de référence ; rien si elle est tout entière derrière la caméra. Un calque accroché à la caméra (`accroche.rs`) ne
 /// reçoit pas le changement de repère : sa pose se lit dans le cadre, il y reste.
 pub fn place_dans(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen, repere: Option<&m::M4>) -> Option<Placed> {
     if let Some(repere) = repere.filter(|_| !layer.accroche) {
-        let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+        // (Un repère veut dire « plan en Espace 3D » : la profondeur de la carte y est libre, elle peut être derrière la
+        // caméra de référence, `docs/INTERFACE.md`, partie 148.)
+        let xf = world.card_xf(&layer.pose(frame), layer.depth_libre_at(frame));
         let warp = world.card_warp_m(world.eye_reference(), &m::mul(repere, &xf.matrix()))?;
         return Some(Placed { transform: None, pre: Some(Pre { aff: Affine::IDENTITY, dims: None, warp: Some(Arc::new(warp)), card: true }) });
     }

@@ -313,7 +313,7 @@ impl App {
         let world = self.e3_world();
         let f = self.cur_frame;
         // (La pose que la vue trace, `e3_paint_cards` : le trait tombe où l'on voit la carte.)
-        Some(CarteVue::new(regard, world.card_xf(&l.pose(f), l.depth_at(f)).matrix(), world.stage))
+        Some(CarteVue::new(regard, world.carte(l, f).matrix(), world.stage))
     }
 
     /// La carte du calque courant vue par la vue où l'on dessine ; rien quand on n'y dessine pas.

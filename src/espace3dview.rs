@@ -118,7 +118,7 @@ impl App {
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
                 let layer = &self.layers()[li];
-                let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+                let xf = world.carte(layer, frame);
                 let Some((t, p)) = world.pick_card(&xf, ray) else { continue };
                 let key = espace3d::card_selection(layer.id);
                 if self.e3_card_drawn_at(li, p) && drawn_card.is_none_or(|(b, _)| t < b) {
@@ -578,7 +578,7 @@ impl App {
         let frame = self.cur_frame;
         for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
-            let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+            let xf = world.carte(layer, frame);
             let (id, name, cel) = (layer.id, layer.name.clone(), layer.shown_at(frame));
             let opacity = (layer.opacity_at(frame) * 255.0).round() as u8;
             let selected = self.espace3d.sel.contains(&espace3d::card_selection(id));
@@ -599,7 +599,7 @@ impl App {
                 }
             }
             if let Some(p) = view.project(corners[0], center).map(to_screen) {
-                let depth = self.layers()[li].depth_at(frame);
+                let depth = world.profondeur(&self.layers()[li], frame);
                 let label = if depth == 0.0 { name } else { format!("{name}  ({depth:+.2})") };
                 let galley = painter.layout_no_wrap(label, FontId::proportional(11.0), if selected { ACCENT } else { Color32::from_gray(225) });
                 let pos = p + vec2(4.0, -galley.size().y - 3.0);

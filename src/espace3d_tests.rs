@@ -1651,11 +1651,13 @@ fn the_brush_cursor_has_the_size_of_the_stroke_it_will_leave_on_a_far_card() {
 
 use crate::espace3d::Surface;
 
-/// Un calque neuf posé par `xf` (inclinaison libre), et son placement relu de ses champs : le chemin complet d'une surface.
+/// Un calque neuf posé par `xf` (inclinaison et profondeur libres), et son placement relu de ses champs : le chemin
+/// complet d'une surface. (La profondeur se relit comme dans un plan en Espace 3D : libre depuis la partie 148, une
+/// surface peut être derrière la caméra de référence ; devant la borne des plans ordinaires, c'est `depth_at`.)
 fn carte_posee(w: &Monde, xf: &Xf) -> (Layer, Xf) {
     let mut l = Layer::new("Surface", LayerKind::Bitmap);
     w.apply_card_xf_libre(&mut l, 0, xf);
-    let relu = w.card_xf(&l.pose(0), l.depth_at(0));
+    let relu = w.card_xf(&l.pose(0), l.depth_libre_at(0));
     (l, relu)
 }
 
@@ -1683,11 +1685,18 @@ fn a_surface_facing_a_turned_camera_fills_its_frame_whatever_the_camera_does() {
         Camera { zoom: 1.6, angle: 20.0, tilt: 25.0, pan: -50.0, ..base },
         // Avancée au-delà de la feuille et tournée de 120° : la surface lui fait face, inclinée de plus de 85° pour la feuille.
         Camera { dolly: w.d0_px * 1.5, pan: 120.0, ..base },
+        // Retournée sur place, dos à la feuille : la surface tombe derrière la caméra d'origine du plan (partie 148 ; avant,
+        // elle était refusée).
+        Camera { pan: 180.0, ..base },
+        // Reculée derrière la caméra d'origine, tournée de côté et basculée, avec du zoom : derrière elle aussi.
+        Camera { dolly: -w.d0_px * 0.8, x: 400.0, pan: 115.0, tilt: -20.0, zoom: 1.3, angle: -10.0, ..base },
     ];
     for cam in &cams {
         let distance = w.d0 * 0.6;
-        let xf = w.surface_xf(cam, Surface::Face, distance).expect("devant la caméra d'origine");
+        let xf = w.surface_xf(cam, Surface::Face, distance).expect("une surface, où que regarde la caméra");
         let (l, relu) = carte_posee(&w, &xf);
+        // (La carte tient ce placement, derrière la caméra d'origine compris : place et taille dans l'espace.)
+        assert!(near3(relu.pos, xf.pos, 2e-3) && near3(relu.size, xf.size, 2e-3), "caméra {cam:?} : {relu:?} contre {xf:?}");
         // Le centre de la surface est au centre de l'image, et le cadre (320 × 180 au centre de son dessin) aux coins de l'image.
         let mx = relu.matrix();
         let image = |px: f32, py: f32| w.to_frame(cam, m::point(&mx, [px / 640.0 - 0.5, -(py / 360.0 - 0.5), 0.0])).expect("devant la caméra");
@@ -1699,9 +1708,19 @@ fn a_surface_facing_a_turned_camera_fills_its_frame_whatever_the_camera_does() {
             assert!(l.pose(0).tilt_y.abs() > 85.0, "l'inclinaison passe la borne des plans ordinaires : {:?}", l.pose(0));
         }
     }
-    // Derrière la caméra d'origine du plan : pas de carte possible, pas de surface.
-    assert!(w.surface_xf(&Camera { pan: 180.0, ..base }, Surface::Face, w.d0).is_none());
-    assert!(w.surface_xf(&Camera { pan: 180.0, ..base }, Surface::Mur, w.d0).is_none());
+    // Derrière la caméra d'origine du plan : la surface se pose (partie 148 ; avant, « pas de carte possible, pas de
+    // surface »). Caméra retournée sur place : face à elle, à la distance de référence, la surface est en z = 2 · d0.
+    let dos = Camera { pan: 180.0, ..base };
+    let face = w.surface_xf(&dos, Surface::Face, w.d0).expect("derrière la caméra d'origine aussi");
+    assert!(near(face.pos[2], 2.0 * w.d0, 1e-3) && face.pos[2] > w.eye_reference()[2], "{face:?}");
+    let (l, relu) = carte_posee(&w, &face);
+    assert!(near(l.depth, -2.0, 1e-4) && near3(relu.pos, face.pos, 2e-3) && near3(relu.size, face.size, 2e-3), "{l:?}");
+    let mur = w.surface_xf(&dos, Surface::Mur, w.d0).expect("un mur derrière la caméra d'origine");
+    let (_, relu) = carte_posee(&w, &mur);
+    assert!(near(mur.pos[2], 2.0 * w.d0, 1e-3) && near3(relu.pos, mur.pos, 2e-3), "{mur:?}");
+    // Le seul refus qui reste : plus loin de la feuille que ce qu'une carte sait tenir (mille fois la distance de référence).
+    let tres_loin = Camera { dolly: -w.d0_px * 1500.0, ..base };
+    assert!(w.surface_xf(&tres_loin, Surface::Face, w.d0).is_none());
 }
 
 #[test]
@@ -2005,4 +2024,425 @@ fn the_plan_of_an_image_of_a_plan_in_space_with_twenty_cards_stays_within_the_fr
     let ms = t.elapsed().as_secs_f64() * 1000.0 / N as f64;
     println!("PERF plan en Espace 3D : plan d'une image, 20 cartes, ordre par distance compris (1920 × 1080) : {ms:.2} ms");
     assert!(ms < 8.0, "{ms:.2} ms pour le plan d'une image d'un plan en Espace 3D : la moitié d'une image à 60 images par seconde");
+}
+
+// ------------------------------------------------------------------------------ plan en Espace 3D : une carte derrière la caméra d'origine du plan (`docs/INTERFACE.md`, partie 148)
+
+/// Le monde d'essai de l'étape A2, pour un plan en Espace 3D : la profondeur de ses cartes est libre.
+fn monde_libre() -> Monde {
+    Monde { libre: true, ..monde_a2() }
+}
+
+/// Une carte de la taille de la feuille (640 × 360), de face, sur l'axe, en `z` fois la distance de référence : la caméra
+/// de référence est en z = 1, la carte est derrière elle dès que `z` passe 1.
+fn carte_en_z(w: &Monde, z: f32) -> Xf {
+    Xf { pos: [0.0, 0.0, z * w.d0], rot: [0.0; 3], size: [640.0 * w.k, 360.0 * w.k, 1.0] }
+}
+
+/// L'image finale du plan `pi` à son image `f`, par le chemin de toutes les sorties.
+fn filmee_du_plan(doc: &Document, pi: usize, f: usize) -> Vec<Color32> {
+    let plan = render::panel_plan_at(doc, pi, f, None);
+    render::camera_image(doc, &plan, &doc.panel_camera(pi, f))
+}
+
+/// La boîte `b` des pixels opaques est celle attendue, à `eps` pixels près.
+fn boite_proche(b: (usize, usize, usize, usize), attendue: (f32, f32, f32, f32), eps: f32) -> bool {
+    near(b.0 as f32, attendue.0, eps) && near(b.1 as f32, attendue.1, eps) && near(b.2 as f32, attendue.2, eps) && near(b.3 as f32, attendue.3, eps)
+}
+
+#[test]
+fn a_card_of_a_plan_in_space_keeps_a_placement_behind_the_reference_camera_fixed_or_animated() {
+    let w = monde_libre();
+    // La caméra de référence est en z = d0. La carte : en z = 2 · d0, décalée, inclinée, de la taille de la feuille.
+    let xf = Xf { pos: [0.7, -0.4, 2.0 * w.d0], rot: [10.0, -25.0, 5.0], ..carte_en_z(&w, 2.0) };
+    assert!(xf.pos[2] > w.eye_reference()[2]);
+    // Calque fixe : sa profondeur passe sous la borne des plans ordinaires, sans écart.
+    let mut fixe = Layer::new("F", LayerKind::Bitmap);
+    w.apply_card_xf_libre(&mut fixe, 3, &xf);
+    assert!(fixe.pos_keys.is_empty() && fixe.transform.dz == 0.0, "un calque fixe n'a pas d'écart de profondeur");
+    assert!(near(fixe.depth, -2.0, 1e-4) && near(fixe.depth_libre_at(3), -2.0, 1e-4) && fixe.passe_la_borne(3), "profondeur {}", fixe.depth);
+    let relu = w.carte(&fixe, 3);
+    assert!(near3(relu.pos, xf.pos, 1e-3) && near3(relu.size, xf.size, 1e-3) && near3(relu.rot, xf.rot, 1e-3), "{relu:?} contre {xf:?}");
+    // Calque animé : la clé de l'image porte l'écart ; la profondeur de base et l'autre clé ne bougent pas.
+    let mut anime = Layer::new("A", LayerKind::Bitmap);
+    anime.depth = 0.5;
+    anime.pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(10, LayerTransform::default())];
+    w.apply_card_xf_libre(&mut anime, 10, &xf);
+    assert_eq!((anime.pos_keys.len(), anime.depth), (2, 0.5));
+    assert!(near(anime.depth_libre_at(10), -2.0, 1e-4) && near(anime.depth_libre_at(0), 0.5, 1e-6));
+    let relu = w.carte(&anime, 10);
+    assert!(near3(relu.pos, xf.pos, 1e-3) && near3(relu.size, xf.size, 1e-3) && near3(relu.rot, xf.rot, 1e-3), "{relu:?} contre {xf:?}");
+    // Poussée plus loin derrière la caméra, ramenée sur elle, à la borne, devant elle, puis derrière la feuille : elle
+    // garde sa place et sa taille dans l'espace tout du long.
+    for z in [3.0f32, 1.0, 0.95, 0.9, 0.5, -1.0] {
+        let la = Xf { pos: [xf.pos[0], xf.pos[1], z * w.d0], ..xf };
+        w.apply_card_xf_libre(&mut fixe, 3, &la);
+        let relu = w.carte(&fixe, 3);
+        assert!(near3(relu.pos, la.pos, 1e-3) && near3(relu.size, la.size, 1e-3), "z = {z} · d0 : {relu:?} contre {la:?}");
+        assert!(near(fixe.depth, -z, 1e-4), "z = {z} · d0 : profondeur {}", fixe.depth);
+    }
+    // Le placement est continu à la borne, et la pose se retrouve bien au-delà d'elle.
+    let t = pose(30.0, -20.0);
+    let (a, b) = (w.card_xf(&t, Layer::MIN_DEPTH + 1e-5), w.card_xf(&t, Layer::MIN_DEPTH - 1e-5));
+    assert!(near3(a.pos, b.pos, 5e-4) && near3(a.size, b.size, 5e-4), "{a:?} contre {b:?}");
+    for d in [-0.95f32, -1.0, -2.5, -40.0] {
+        let xf = w.card_xf(&t, d);
+        let (back, d2) = w.card_from_xf_libre(&t, d, &xf);
+        assert!(near(d, d2, 1e-4 * d.abs()), "profondeur {d} → {d2}");
+        for (a, b) in [(t.x, back.x), (t.y, back.y), (t.scale, back.scale), (t.angle, back.angle), (t.stretch_x, back.stretch_x), (t.stretch_y, back.stretch_y)] {
+            assert!(near(a, b, 2e-3 * a.abs().max(1.0)), "profondeur {d} : {t:?} → {back:?}");
+        }
+    }
+}
+
+#[test]
+fn an_ordinary_plan_still_stops_its_cards_before_the_reference_camera() {
+    let w = monde_a2();
+    assert!(!w.libre);
+    let xf = carte_en_z(&w, 2.0);
+    // Poser par le placement : la profondeur s'arrête à la borne, la carte reste devant la caméra de référence.
+    let mut l = Layer::new("L", LayerKind::Bitmap);
+    w.apply_card_xf(&mut l, 0, &xf);
+    assert_eq!(l.depth, Layer::MIN_DEPTH);
+    assert!(near(w.carte(&l, 0).pos[2], 0.9 * w.d0, 1e-4));
+    assert_eq!(w.card_from_xf(&LayerTransform::default(), 0.0, &xf).1, Layer::MIN_DEPTH);
+    // Régler la profondeur, poser une pose, replier l'écart : la borne de toujours, par l'ancien nom comme par le nouveau.
+    let mut l = Layer::new("L", LayerKind::Bitmap);
+    l.set_depth_at(0, -3.0);
+    assert_eq!(l.depth, Layer::MIN_DEPTH);
+    l.depth = 0.0;
+    l.set_depth_selon(0, -3.0, false);
+    assert_eq!(l.depth, Layer::MIN_DEPTH);
+    l.depth = 0.0;
+    l.set_pose(0, LayerTransform { dz: -5.0, ..Default::default() });
+    assert_eq!((l.depth, l.transform.dz), (Layer::MIN_DEPTH, 0.0));
+    l.depth = 0.0;
+    l.set_pose_selon(0, LayerTransform { dz: -5.0, ..Default::default() }, false);
+    assert_eq!((l.depth, l.transform.dz), (Layer::MIN_DEPTH, 0.0));
+    // Un calque arrivé avec une profondeur au-delà (collé depuis un plan en Espace 3D) se lit à la borne.
+    l.depth = -3.0;
+    assert_eq!((l.depth_at(0), l.depth_selon(0, false)), (Layer::MIN_DEPTH, Layer::MIN_DEPTH));
+    assert!(near(w.carte(&l, 0).pos[2], 0.9 * w.d0, 1e-4));
+    // À l'image : pas de repère pour un plan ordinaire, et ce calque à −3 est filmé comme à −0,9, caméra décalée.
+    let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], -3.0)]);
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 324.0, y: 178.0, ..doc.default_camera() })];
+    assert!(doc.repere_du_plan(0, 0).is_none());
+    let au_dela = filmee(&doc, 0);
+    doc.panels[0].layers[0].depth = Layer::MIN_DEPTH;
+    assert!(au_dela.iter().any(|c| c.a() > 0), "le calque est dans l'image");
+    assert!(filmee(&doc, 0) == au_dela, "un plan ordinaire montre à la borne un calque qui la passe");
+    // Dans l'application : les poignées d'une carte d'un plan ordinaire s'arrêtent à la borne.
+    let mut b = banc_taille(doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]), false, 1280, 720);
+    b.chauffer(2);
+    let w = b.app.e3_world();
+    assert!(!w.libre);
+    let id = espace3d::card_selection(b.app.layer().id);
+    b.app.e3_set_xfs(&[(id, carte_en_z(&w, 2.0))]);
+    assert_eq!(b.app.layer().depth, Layer::MIN_DEPTH);
+}
+
+#[test]
+fn a_card_behind_the_reference_camera_is_filmed_by_a_camera_behind_it_and_not_by_the_reference_camera() {
+    // Un rectangle rouge de 80 × 60 au centre du dessin d'une carte.
+    let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], 0.0)]);
+    doc.panels[0].espace = true;
+    let w = Monde::du_plan(&doc, 0);
+    assert!(w.libre && !Monde::of(&doc).libre);
+    // La carte, de la taille de la feuille, en z = 2 · d0 : derrière la caméra de référence (z = d0).
+    let xf = carte_en_z(&w, 2.0);
+    w.apply_card_xf_libre(&mut doc.panels[0].layers[0], 0, &xf);
+    // Caméra de référence : une carte a passé la borne, le plan prend son repère (l'identité) et la carte passe par un
+    // maillage. Elle est derrière la caméra : rien dans l'image. (Sans repère, le chemin d'avant la montrait comme à la borne.)
+    let repere = doc.repere_du_plan(0, 0).expect("une carte a passé la borne : un repère, même sous la caméra de référence");
+    assert!(repere.iter().zip(m::IDENT.iter()).all(|(a, b)| (a - b).abs() < 1e-5), "{repere:?}");
+    let seen = doc.camera_seen(0, 0);
+    assert!(espace3d::place(&w, &doc.panels[0].layers[0], 0, &seen).is_some(), "le multiplan, lui, la poserait");
+    assert!(espace3d::place_dans(&w, &doc.panels[0].layers[0], 0, &seen, Some(&repere)).is_none(), "derrière la caméra : pas de maillage");
+    assert!(filmee(&doc, 0).iter().all(|c| c.a() == 0), "la caméra d'origine ne filme pas une carte passée derrière elle");
+    // Un plan rangé et l'écran posent pareil.
+    let range = doc.panels[0].clone();
+    assert_eq!(doc.repere_du_plan_range(&range, 0), Some(repere));
+    assert!(render::stored_panel_plan(&doc, &range, 0, None) == render::panel_plan_at(&doc, 0, 0, None));
+
+    // Une caméra derrière la carte (en z = 3 · d0), tournée vers la feuille : elle voit la carte à la distance de
+    // référence, comme la caméra de référence voit la feuille.
+    let cam = Camera { dolly: -2.0 * w.d0_px, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    assert!(near(w.eye(&cam)[2], 3.0 * w.d0, 1e-3));
+    let repere = doc.repere_du_plan(0, 0).expect("un repère");
+    let placed = espace3d::place_dans(&w, &doc.panels[0].layers[0], 0, &doc.camera_seen(0, 0), Some(&repere)).expect("devant cette caméra");
+    assert!(placed.pre.as_ref().is_some_and(|p| p.card && p.warp.is_some()), "la carte est posée par un maillage");
+    let image = filmee(&doc, 0);
+    let attendu = w.to_frame(&cam, xf.pos).expect("devant la caméra");
+    assert!((attendu - pos2(160.0, 90.0)).length() < 0.01, "{attendu:?}");
+    let c = centroid(&image, 320, RED).expect("le rectangle est dans l'image");
+    assert!(near(c.0, attendu.x, 1.0) && near(c.1, attendu.y, 1.0), "le centre de la carte tombe en {c:?}, attendu en {attendu:?}");
+    let boite = bbox(&image, 320).expect("encre");
+    assert!(boite_proche(boite, (120.0, 60.0, 200.0, 120.0), 1.5), "à la distance de référence, le dessin a sa taille : {boite:?}");
+
+    // Caméra décalée, tournée, zoomée : la carte tombe où `Monde::to_frame` le dit.
+    let cam = Camera { dolly: -2.2 * w.d0_px, x: 380.0, pan: -8.0, tilt: 3.0, angle: 12.0, zoom: 1.2, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, cam)];
+    let image = filmee(&doc, 0);
+    let mx = w.carte(&doc.panels[0].layers[0], 0).matrix();
+    let dans_l_image = |px: f32, py: f32| w.to_frame(&cam, m::point(&mx, [px / 640.0 - 0.5, -(py / 360.0 - 0.5), 0.0])).expect("devant la caméra");
+    let centre = dans_l_image(320.0, 180.0);
+    let c = centroid(&image, 320, RED).expect("le rectangle est dans l'image");
+    assert!(near(c.0, centre.x, 1.5) && near(c.1, centre.y, 1.5), "le centre de la carte tombe en {c:?}, attendu en {centre:?}");
+    let (dedans, dehors) = (dans_l_image(350.0, 200.0), dans_l_image(375.0, 180.0));
+    assert!(rouge(px(&image, dedans.x.round() as usize, dedans.y.round() as usize)), "un point du rectangle est rouge en {dedans:?}");
+    assert!(!rouge(px(&image, dehors.x.round() as usize, dehors.y.round() as usize)), "un point hors du rectangle ne l'est pas en {dehors:?}");
+
+    // L'écran pose comme les sorties, et le pinceau retrouve son point sur la carte.
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    assert!(b.app.build_plan_avec(0, false, false, false) == render::panel_plan_at(&b.app.doc, 0, 0, None));
+    let p = pos2(300.0, 200.0);
+    let feuille = w.card_to_sheet_m(w.eye_reference(), &m::mul(&w.repere_camera(&cam), &mx), p).expect("la caméra voit ce point");
+    let back = b.app.to_layer_opt(feuille).expect("le regard touche la carte");
+    assert!((back - p).length() < 0.05, "le pinceau peint en {back:?} au lieu de {p:?}");
+    // Caméra revenue à la référence : la carte est derrière elle, pas de trait.
+    b.app.doc.panels[0].camera.clear();
+    assert!(b.app.to_layer_opt(pos2(320.0, 180.0)).is_none(), "pas de trait sur une carte passée derrière la caméra");
+}
+
+#[test]
+fn past_the_bound_a_card_keeps_coming_grows_then_leaves_the_image_of_the_reference_camera() {
+    // Un rectangle de 80 × 60 au centre du dessin, filmé par la caméra de référence, à la profondeur donnée.
+    let image_a = |depth: f32, espace: bool| {
+        let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], depth)]);
+        doc.panels[0].espace = espace;
+        filmee(&doc, 0)
+    };
+    // Devant la borne et à la borne, plan en Espace 3D ou non : la carte paraît telle qu'elle est dessinée, mêmes pixels.
+    for depth in [0.0f32, -0.5, Layer::MIN_DEPTH] {
+        let ordinaire = image_a(depth, false);
+        assert!(boite_proche(bbox(&ordinaire, 320).expect("encre"), (120.0, 60.0, 200.0, 120.0), 0.5), "profondeur {depth}");
+        assert!(image_a(depth, true) == ordinaire, "profondeur {depth} : le plan en Espace 3D donne les mêmes pixels");
+    }
+    // Au-delà, à −0,95. Plan ordinaire : montrée comme à la borne. Plan en Espace 3D : elle est à 0,05 · d0 de la caméra,
+    // deux fois plus près qu'à la borne, de la même taille dans l'espace ; elle paraît donc deux fois plus grande.
+    assert!(image_a(-0.95, false) == image_a(Layer::MIN_DEPTH, false));
+    let libre = image_a(-0.95, true);
+    let boite = bbox(&libre, 320).expect("encre");
+    assert!(boite_proche(boite, (80.0, 30.0, 240.0, 150.0), 2.0), "deux fois plus grande : {boite:?}");
+    assert!(rouge(px(&libre, 225, 90)) && !rouge(px(&image_a(-0.95, false), 225, 90)));
+    // Sur la caméra (−1) et derrière elle : plus rien dans un plan en Espace 3D ; un plan ordinaire n'a pas bougé.
+    for depth in [-1.0f32, -1.5, -30.0] {
+        assert!(image_a(depth, true).iter().all(|c| c.a() == 0), "profondeur {depth} : la carte est passée derrière la caméra");
+        assert!(image_a(depth, false) == image_a(Layer::MIN_DEPTH, false), "profondeur {depth} : plan ordinaire inchangé");
+    }
+    // Le champ « Profondeur » (`set_depth_selon`) écrit ces valeurs : fixe, puis sur la clé d'un calque animé.
+    let mut l = Layer::new("L", LayerKind::Bitmap);
+    l.set_depth_selon(0, -1.5, true);
+    assert_eq!((l.depth, l.depth_libre_at(0), l.depth_at(0)), (-1.5, -1.5, Layer::MIN_DEPTH));
+    l.pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(8, LayerTransform::default())];
+    l.set_depth_selon(8, -4.0, true);
+    assert!(l.depth == -1.5 && near(l.depth_libre_at(8), -4.0, 1e-5) && near(l.depth_libre_at(0), -1.5, 1e-6), "{:?}", l.pos_keys);
+    // Une valeur absurde est ramenée dans ce qu'une carte sait tenir.
+    l.set_depth_selon(8, -5000.0, true);
+    assert!(near(l.depth_libre_at(8), -Layer::MAX_DEPTH_LIBRE, 1e-3));
+}
+
+#[test]
+fn a_new_surface_is_posed_behind_the_camera_of_origin_and_says_so_when_it_cannot_be_that_big() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    // La caméra s'est retournée sur place : elle regarde derrière la caméra d'origine du plan.
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { pan: 180.0, ..doc.default_camera() })];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.surface_face");
+    assert_eq!(b.app.layers().len(), 2, "la surface est posée (avant la partie 148 : refusée) : {}", b.app.status);
+    assert!(b.app.status.contains("posée") && !b.app.status.contains("plus petite"), "{}", b.app.status);
+    let w = b.app.e3_world();
+    let carte = w.carte(b.app.layer(), 0);
+    assert!(near(carte.pos[2], 2.0 * w.d0, 1e-3) && b.app.layer().depth < Layer::MIN_DEPTH, "{carte:?}");
+    // Le cadre de la caméra tombe au centre de la surface.
+    let cam = b.app.current_camera();
+    let mx = carte.matrix();
+    for (sur_la_carte, attendu) in [((320.0, 180.0), (160.0, 90.0)), ((160.0, 90.0), (0.0, 0.0)), ((480.0, 270.0), (320.0, 180.0))] {
+        let p = w.to_frame(&cam, m::point(&mx, [sur_la_carte.0 / 640.0 - 0.5, -(sur_la_carte.1 / 360.0 - 0.5), 0.0])).expect("devant la caméra");
+        assert!((p - pos2(attendu.0, attendu.1)).length() < 0.3, "le point {sur_la_carte:?} de la surface tombe en {p:?}, pas en {attendu:?}");
+    }
+    // On y dessine tout de suite : le pinceau y retrouve son point.
+    let p = pos2(300.0, 200.0);
+    let feuille = w.card_to_sheet_m(w.eye_reference(), &w.carte_dans_le_repere(&cam, &carte), p).expect("la caméra voit la surface");
+    let back = b.app.to_layer_opt(feuille).expect("le regard touche la surface");
+    assert!((back - p).length() < 0.05, "{back:?}");
+    // La vue d'édition la prend là où elle est : un regard parti d'entre la caméra d'origine et la surface la touche.
+    let id = espace3d::card_selection(b.app.layer().id);
+    assert_eq!(b.app.e3_pick(&m::Ray::new([0.0, 0.0, 1.5 * w.d0], [0.0, 0.0, 1.0])), Some(id));
+    // Très loin derrière la caméra d'origine, une carte ne peut pas être aussi grande que le cadre : posée, et on le dit.
+    b.app.espace3d.surface_distance = 400.0;
+    b.app.run_action("espace3d.surface_face");
+    assert_eq!(b.app.layers().len(), 3);
+    assert!(b.app.status.contains("plus petite que le cadre"), "{}", b.app.status);
+    // Une étape d'annulation par surface.
+    b.app.undo();
+    assert_eq!(b.app.layers().len(), 2);
+}
+
+#[test]
+fn a_depth_behind_the_reference_camera_survives_a_save_in_a_plan_in_space_only_and_an_older_project_opens_the_same() {
+    let dir = dir_for("derriere-la-camera");
+    let manifest = dir.join("P.pelure");
+    let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], 0.0), (GREEN, [100, 100, 200, 200], 0.25)]);
+    doc.panels[0].espace = true;
+    // Un calque fixe et une clé de position derrière la caméra de référence.
+    doc.panels[0].layers[0].depth = -2.5;
+    doc.panels[0].layers[1].pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(6, LayerTransform { dz: -3.0, ..pose(12.0, -4.0) })];
+    // Le même plan en double, ordinaire celui-là (comme des calques collés depuis un plan en Espace 3D).
+    let ordinaire = doc.duplicate_scene_after(0);
+    assert_eq!((ordinaire, doc.panels.len()), (1, 2));
+    doc.panels[ordinaire].espace = false;
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    assert!(project::VERSION >= 55, "la profondeur libre d'un plan en Espace 3D est du format 55");
+    assert!(text.contains(&format!("\"version\": {}", project::VERSION)), "le fichier dit son format");
+    assert!(text.contains("\"profondeur\": -2.5") && text.contains("\"ecart_profondeur\": -3.0"), "les profondeurs sont écrites telles quelles");
+    let back = project::load(&manifest).expect("relu").doc;
+    assert!(back.panels[0].espace && !back.panels[ordinaire].espace);
+    // Plan en Espace 3D : la profondeur du calque fixe et l'écart de la clé reviennent tels quels.
+    assert_eq!(back.panels[0].layers[0].depth, -2.5);
+    assert_eq!(back.panels[0].layers[1].pos_keys, doc.panels[0].layers[1].pos_keys);
+    assert!(near(back.panels[0].layers[1].depth_libre_at(6), -2.75, 1e-6));
+    // Plan ordinaire : la borne de toujours, à la lecture pour le calque fixe, à l'emploi pour la clé.
+    assert_eq!(back.panels[ordinaire].layers[0].depth, Layer::MIN_DEPTH);
+    assert_eq!(back.panels[ordinaire].layers[1].depth_at(6), Layer::MIN_DEPTH);
+    // Les mêmes images qu'avant l'enregistrement, dans les deux plans.
+    for pi in [0, ordinaire] {
+        for f in [0usize, 3, 6] {
+            assert!(filmee_du_plan(&back, pi, f) == filmee_du_plan(&doc, pi, f), "plan {pi}, image {f}");
+        }
+    }
+
+    // Un projet du format d'avant (54) n'a aucune profondeur sous −0,9. Même texte, ancien numéro : il s'ouvre avec les
+    // mêmes valeurs et les mêmes images, caméra tournée comprise.
+    for pi in [0, ordinaire] {
+        doc.panels[pi].layers[0].depth = Layer::MIN_DEPTH;
+        doc.panels[pi].layers[1].pos_keys[1].t.dz = -1.0;
+    }
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 300.0, pan: 20.0, ..doc.default_camera() })];
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    let ancien = text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 54");
+    assert_ne!(ancien, text, "le numéro de version a été trouvé dans le manifeste");
+    std::fs::write(&manifest, ancien).expect("écrit");
+    let old = project::load(&manifest).expect("un projet du format 54 s'ouvre").doc;
+    assert!(old.panels[0].espace && !old.panels[ordinaire].espace);
+    for pi in [0, ordinaire] {
+        for (a, b) in old.panels[pi].layers.iter().zip(&doc.panels[pi].layers) {
+            assert_eq!((a.depth, a.transform, &a.pos_keys), (b.depth, b.transform, &b.pos_keys), "plan {pi}, calque {}", b.name);
+        }
+        for f in [0usize, 3, 6] {
+            assert!(filmee_du_plan(&old, pi, f) == filmee_du_plan(&doc, pi, f), "plan {pi}, image {f} : la même, pixel pour pixel");
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn removing_the_position_keys_of_a_card_behind_the_reference_camera_leaves_it_there() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    let w = b.app.e3_world();
+    assert!(w.libre);
+    let id = espace3d::card_selection(b.app.layer().id);
+    let xf = Xf { pos: [0.5, 0.2, 2.0 * w.d0], ..carte_en_z(&w, 2.0) };
+    // Deux clés ; à l'image 6, la carte est derrière la caméra d'origine du plan.
+    b.app.layers_mut()[0].pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(6, LayerTransform::default())];
+    b.app.cur_frame = 6;
+    b.app.e3_set_xfs(&[(id, xf)]);
+    assert_eq!(b.app.layer().pos_keys.len(), 2);
+    let avant = w.carte(b.app.layer(), 6);
+    assert!(near3(avant.pos, xf.pos, 1e-3) && near3(avant.size, xf.size, 1e-3), "{avant:?}");
+    // « Supprimer les clés de position » : le calque garde la pose de cette image, donc sa place derrière la caméra.
+    b.app.run_action("calque.cles_position_supprimer");
+    assert!(b.app.layer().pos_keys.is_empty(), "{}", b.app.status);
+    let apres = w.carte(b.app.layer(), 6);
+    assert!(near3(apres.pos, avant.pos, 1e-3) && near3(apres.size, avant.size, 1e-3), "{apres:?} contre {avant:?}");
+    assert!(near(b.app.layer().depth, -2.0, 1e-4) && b.app.layer().transform.dz == 0.0);
+    // Annuler rend les clés.
+    b.app.undo();
+    assert_eq!(b.app.layer().pos_keys.len(), 2);
+    // La dernière clé retirée par « Supprimer la clé d'ici » : pareil.
+    b.app.layers_mut()[0].pos_keys.remove(0);
+    b.app.cur_frame = 6;
+    b.app.pos_keys_delete_here();
+    assert!(b.app.layer().pos_keys.is_empty(), "{}", b.app.status);
+    let apres = w.carte(b.app.layer(), 6);
+    assert!(near3(apres.pos, avant.pos, 1e-3) && near3(apres.size, avant.size, 1e-3), "{apres:?} contre {avant:?}");
+    // Fixe : la déplacer avec l'outil Transformer, ou annuler sa transformation, ne la ramène pas devant la caméra.
+    let ici = b.app.layer().pose(6);
+    b.app.set_layer_pose(0, LayerTransform { x: ici.x + 25.0, ..ici });
+    assert!(near(b.app.layer().depth, -2.0, 1e-4));
+    b.app.set_layer_pose(0, LayerTransform::default());
+    assert!(near(b.app.layer().depth, -2.0, 1e-4), "profondeur {}", b.app.layer().depth);
+    // Le même geste dans un plan ordinaire : la borne de toujours.
+    b.app.doc.panels[0].espace = false;
+    b.app.set_layer_pose(0, LayerTransform::default());
+    assert_eq!(b.app.layer().depth, Layer::MIN_DEPTH);
+}
+
+#[test]
+fn unchecking_plan_in_space_brings_the_cards_past_the_bound_back_to_it_in_one_undo_step() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0), (GREEN, [100, 100, 200, 200], -0.5), (BLUE, [400, 100, 500, 200], 0.4)]);
+    doc.panels[0].espace = true;
+    let w = Monde::du_plan(&doc, 0);
+    // Carte 0, fixe, derrière la caméra d'origine. Carte 1, animée : devant à l'image 0, derrière à l'image 6. Carte 2 : devant.
+    w.apply_card_xf_libre(&mut doc.panels[0].layers[0], 0, &Xf { pos: [0.6, -0.3, 2.0 * w.d0], ..carte_en_z(&w, 2.0) });
+    doc.panels[0].layers[1].pos_keys = vec![PosKey::new(0, pose(10.0, 5.0)), PosKey::new(6, LayerTransform { dz: -1.0, ..pose(40.0, -8.0) })];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    let avant = b.app.layers().to_vec();
+    assert!(avant[0].passe_la_borne(6) && avant[1].passe_la_borne(6) && !avant[1].passe_la_borne(0) && !avant[2].passe_la_borne(6));
+    let place = w.carte(&avant[0], 6);
+    let etapes = b.app.history.names().0.len();
+    // Décocher : un plan ordinaire ne tient pas ces cartes là. Elles reviennent à la borne, et la barre d'état le dit.
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(!b.app.doc.panels[0].espace);
+    assert_eq!(b.app.history.names().0.len(), etapes + 1, "une seule étape d'annulation");
+    assert!(b.app.status.contains("2 cartes") && b.app.status.contains("Ctrl+Z"), "{}", b.app.status);
+    let ordinaire = b.app.e3_world();
+    assert!(!ordinaire.libre);
+    {
+        let l = b.app.layers();
+        // La carte fixe : à la borne, à la même place en largeur et en hauteur, de la même taille, dans le même sens.
+        assert_eq!(l[0].depth, Layer::MIN_DEPTH);
+        let p = ordinaire.carte(&l[0], 6);
+        assert!(near(p.pos[0], place.pos[0], 1e-3) && near(p.pos[1], place.pos[1], 1e-3) && near(p.pos[2], 0.9 * w.d0, 1e-3), "{p:?} contre {place:?}");
+        assert!(near3(p.size, place.size, 1e-3) && near3(p.rot, place.rot, 1e-3));
+        // La carte animée : la clé passée derrière la caméra revient à la borne, la clé de devant garde sa profondeur ; le
+        // reste de leurs poses ne bouge pas.
+        assert!(near(l[1].depth_libre_at(6), Layer::MIN_DEPTH, 1e-6) && near(l[1].depth_libre_at(0), -0.5, 1e-6), "{:?}", l[1].pos_keys);
+        assert_eq!(l[1].depth, -0.5);
+        for (k, a) in l[1].pos_keys.iter().zip(&avant[1].pos_keys) {
+            assert_eq!(LayerTransform { dz: 0.0, ..k.t }, LayerTransform { dz: 0.0, ..a.t });
+        }
+        // La carte de devant : rien.
+        assert_eq!(l[2], avant[2]);
+    }
+    // Ctrl+Z : la case et les cartes, comme avant.
+    b.app.undo();
+    assert!(b.app.doc.panels[0].espace);
+    assert!(b.app.layers() == &avant[..], "un seul Ctrl+Z rend la case et les cartes");
+    // Recochée après coup : les cartes restent à la borne, elles y ont été ramenées pour de bon.
+    b.app.redo();
+    assert!(!b.app.doc.panels[0].espace);
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(b.app.doc.panels[0].espace);
+    assert_eq!(b.app.layers()[0].depth, Layer::MIN_DEPTH);
+    // Sans carte au-delà de la borne : décocher ne touche à rien d'autre que la case, avec son message d'avant.
+    let la = b.app.layers().to_vec();
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(!b.app.doc.panels[0].espace && b.app.layers() == &la[..]);
+    assert!(b.app.status.ends_with("un plan ordinaire."), "{}", b.app.status);
+    // Une seule carte : le message est au singulier.
+    b.app.run_action("espace3d.plan_en_espace");
+    b.app.layers_mut()[2].depth = -1.2;
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(b.app.status.contains("Une carte") && b.app.layers()[2].depth == Layer::MIN_DEPTH, "{}", b.app.status);
 }

@@ -179,6 +179,8 @@ impl App {
         self.named_step("Supprimer des clés de position", |app| app.record_step());
         let mut jalons = 0;
         let mut supprimees = 0;
+        // (Plan en Espace 3D : une carte passée derrière la caméra d'origine du plan y reste quand sa dernière clé s'en va.)
+        let libre = self.doc.plan_en_espace(self.cur_panel);
         for &(id, fr) in &list {
             let Some(li) = self.layers().iter().position(|l| l.id == id) else { continue };
             // Un jalon de trajectoire (`trajectoireui.rs`) : la marque s'en va (ou le message dit que le départ et la fin restent).
@@ -192,7 +194,7 @@ impl App {
             // La dernière clé partie, le calque garde la pose qu'il avait à cette image.
             if l.pos_keys.is_empty() {
                 l.transform = here;
-                l.fold_dz();
+                l.fold_dz_selon(libre);
             }
             supprimees += 1;
         }
@@ -248,11 +250,13 @@ impl App {
         self.end_stroke();
         let f = self.cur_frame;
         self.named_step("Supprimer les clés de position", |app| app.record_step());
+        // (Plan en Espace 3D : la carte garde sa profondeur, même derrière la caméra d'origine du plan.)
+        let libre = self.doc.plan_en_espace(self.cur_panel);
         for &li in &targets {
             let l = &mut self.layers_mut()[li];
             l.transform = l.pose(f);
             l.pos_keys.clear();
-            l.fold_dz();
+            l.fold_dz_selon(libre);
             l.trajectoire = None;
         }
         self.pos_ui.sel.clear();

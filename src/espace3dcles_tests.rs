@@ -302,3 +302,46 @@ fn in_a_plan_in_space_the_key_of_a_card_on_the_ground_keeps_its_tilt_and_its_dep
     assert!((milieu.tilt_x.abs().max(milieu.tilt_y.abs()) - 90.0).abs() < 0.01, "{milieu:?}");
     b.chauffer(3);
 }
+
+// ------------------------------------------------------------------------------------ une carte derrière la caméra d'origine du plan (partie 148)
+
+/// Quelques images du champ « Profondeur » du menu d'un calque (panneau Calques), pour le calque `li`.
+fn champ_profondeur_du_calque(ctx: &egui::Context, app: &mut App, t: &mut f64, li: usize) {
+    for _ in 0..4 {
+        let input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(420.0, 200.0))), time: Some(*t), ..RawInput::default() };
+        *t += 1.0 / 60.0;
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.depth_item(ui, li));
+        });
+    }
+}
+
+#[test]
+fn showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_back() {
+    // Un champ de nombre borné écrit la valeur qu'il a dû borner, rien qu'en se montrant. Dans un plan en Espace 3D, les
+    // champs de profondeur descendent donc sous la borne des plans ordinaires : montrer une carte passée derrière la caméra
+    // d'origine du plan ne la ramène pas devant, et ne laisse aucune étape d'annulation.
+    let mut doc = doc_cartes(2);
+    doc.panels[0].espace = true;
+    doc.panels[0].layers[1].depth = -2.5;
+    let mut b = ouvert(doc);
+    choisir(&mut b, &[1]);
+    let etapes = b.app.history.names().0.len();
+    let (ctx, mut t) = (egui::Context::default(), 0.0);
+    // Le panneau Réglages de l'Espace 3D : la liste des cartes dit la profondeur vraie, et le champ ne l'a pas changée.
+    let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
+    assert!(textes.iter().any(|(s, _)| s.contains("Carte 1") && s.contains("(-2.50)")), "{textes:?}");
+    assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » des Réglages n'a rien écrit");
+    // La vue tracée par le banc, la carte choisie : rien ne bouge non plus.
+    b.chauffer(4);
+    assert_eq!(b.app.layers()[1].depth, -2.5);
+    // Le champ « Profondeur » du menu du calque (panneau Calques) : pareil.
+    let (ctx, mut t) = (egui::Context::default(), 0.0);
+    champ_profondeur_du_calque(&ctx, &mut b.app, &mut t, 1);
+    assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » du menu du calque n'a rien écrit");
+    assert_eq!(b.app.history.names().0.len(), etapes, "aucune étape d'annulation");
+    // Un plan ordinaire garde sa borne : le même champ y ramène à −0,9 un calque qui l'aurait passée.
+    b.app.doc.panels[0].espace = false;
+    champ_profondeur_du_calque(&ctx, &mut b.app, &mut t, 1);
+    assert_eq!(b.app.layers()[1].depth, Layer::MIN_DEPTH);
+}

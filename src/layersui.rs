@@ -732,13 +732,17 @@ impl App {
     /// Profondeur du calque (multiplan).
     pub(crate) fn depth_item(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some((mut depth, fixed)) = self.layers().get(li).map(|l| (l.depth, l.position_locked)) else { return };
+        // Plan en Espace 3D (partie 148) : la profondeur est libre, une carte peut être derrière la caméra d'origine du plan.
+        // Le champ descend donc sous la borne des plans ordinaires : borné, il ramènerait la carte à sa borne rien qu'en
+        // se montrant (un champ écrit la valeur qu'il a dû borner), sans qu'on y touche.
+        let plus_pres = if self.doc.plan_en_espace(self.cur_panel) { -crate::document::Layer::MAX_DEPTH_LIBRE } else { crate::document::Layer::MIN_DEPTH };
         let resp = ui
             .horizontal(|ui| {
                 ui.label("Profondeur");
                 // Position verrouillée (13b) : la profondeur ne bouge plus non plus.
                 ui.add_enabled(
                     !fixed,
-                    egui::DragValue::new(&mut depth).speed(0.01).range(crate::document::Layer::MIN_DEPTH..=1000.0).max_decimals(2),
+                    egui::DragValue::new(&mut depth).speed(0.01).range(plus_pres..=1000.0).max_decimals(2),
                 )
             })
             .inner

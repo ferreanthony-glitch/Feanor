@@ -556,6 +556,16 @@ impl Layer {
     /// Plus proche que ça, le calque serait derrière la caméra.
     pub const MIN_DEPTH: f32 = -0.9;
 
+    /// La profondeur d'une carte d'un **plan en Espace 3D** va de −`MAX_DEPTH_LIBRE` à `MAX_DEPTH_LIBRE`
+    /// (`docs/INTERFACE.md`, partie 148) : elle passe `MIN_DEPTH`, atteint la caméra de référence (à −1) et va derrière
+    /// elle. C'est aussi la borne de ce qui se lit d'un fichier pour ces plans.
+    pub const MAX_DEPTH_LIBRE: f32 = 1000.0;
+
+    /// Une profondeur d'un plan en Espace 3D : entre −`MAX_DEPTH_LIBRE` et `MAX_DEPTH_LIBRE` (une valeur abîmée : 0).
+    pub fn clamp_depth_libre(v: f32) -> f32 {
+        if v.is_finite() { v.clamp(-Self::MAX_DEPTH_LIBRE, Self::MAX_DEPTH_LIBRE) } else { 0.0 }
+    }
+
     /// Facteur de perspective : 1 au plan de référence, ½ deux fois plus loin, 2 deux fois plus près.
     pub fn perspective(&self) -> f32 {
         1.0 / (1.0 + self.depth.max(Self::MIN_DEPTH))
@@ -603,6 +613,101 @@ impl Layer {
     pub fn fold_dz(&mut self) {
         self.depth = (self.depth + self.transform.dz).max(Self::MIN_DEPTH);
         self.transform.dz = 0.0;
+    }
+
+    // ---- Plan en Espace 3D : la profondeur libre (`docs/INTERFACE.md`, partie 148).
+    //
+    // Dans un plan ordinaire, la profondeur s'arrête à `MIN_DEPTH` (les quatre fonctions ci-dessus, inchangées). Dans un
+    // plan en Espace 3D, elle est libre : la carte passe la caméra de référence et va derrière elle. Tout ce qui lit ou
+    // écrit la profondeur d'une carte d'un tel plan passe par les fonctions ci-dessous ; `libre` est `Panel::espace`.
+
+    /// La profondeur du calque à l'image `frame` dans un **plan en Espace 3D** : comme `depth_at`, sans la borne
+    /// `MIN_DEPTH`. Sous cette borne, la carte ne change plus de taille avec sa profondeur (`Monde::card_xf`) : elle avance
+    /// seulement, jusqu'à la caméra de référence, puis derrière elle.
+    pub fn depth_libre_at(&self, frame: usize) -> f32 {
+        Self::clamp_depth_libre(self.depth + self.pose(frame).dz)
+    }
+
+    /// `depth_libre_at` dans un plan en Espace 3D (`libre`), `depth_at` dans un plan ordinaire.
+    pub fn depth_selon(&self, frame: usize, libre: bool) -> f32 {
+        if libre { self.depth_libre_at(frame) } else { self.depth_at(frame) }
+    }
+
+    /// Dans un plan en Espace 3D, à l'image `frame`, la carte est au-delà de ce qu'un plan ordinaire sait poser : plus près
+    /// de la caméra de référence que `MIN_DEPTH`, ou derrière elle. (À un cheveu près, `PRES_DE_LA_BORNE` : l'arrondi d'une
+    /// profondeur et de son écart ne fait pas passer la borne à une carte qui y est posée.)
+    pub fn passe_la_borne(&self, frame: usize) -> bool {
+        self.depth_libre_at(frame) < Self::MIN_DEPTH - Self::PRES_DE_LA_BORNE
+    }
+
+    /// En deçà de cet écart sous `MIN_DEPTH`, une carte compte pour posée à la borne (`passe_la_borne`).
+    const PRES_DE_LA_BORNE: f32 = 1e-4;
+
+    /// `set_depth_at` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH`.
+    pub fn set_depth_selon(&mut self, frame: usize, depth: f32, libre: bool) {
+        if !libre {
+            return self.set_depth_at(frame, depth);
+        }
+        let depth = Self::clamp_depth_libre(depth);
+        if self.pos_keys.is_empty() {
+            self.depth = depth;
+        } else {
+            let mut t = self.pose(frame);
+            t.dz = depth - self.depth;
+            self.set_pose_selon(frame, t, true);
+        }
+    }
+
+    /// `fold_dz` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH` :
+    /// une carte passée derrière la caméra de référence y reste quand elle perd ses clés de position.
+    pub fn fold_dz_selon(&mut self, libre: bool) {
+        if !libre {
+            return self.fold_dz();
+        }
+        self.depth = Self::clamp_depth_libre(self.depth + self.transform.dz);
+        self.transform.dz = 0.0;
+    }
+
+    /// `set_pose` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH` sur
+    /// la profondeur d'un calque fixe.
+    pub fn set_pose_selon(&mut self, frame: usize, t: LayerTransform, libre: bool) {
+        if !libre {
+            return self.set_pose(frame, t);
+        }
+        if self.pos_keys.is_empty() {
+            self.transform = t;
+            self.fold_dz_selon(true);
+        } else {
+            crate::poskeys::set_key(&mut self.pos_keys, frame, t);
+        }
+    }
+
+    /// Ramène la profondeur du calque dans ce qu'un plan ordinaire sait tenir (au plus près `MIN_DEPTH`) : sa profondeur de
+    /// base et celle de chacune de ses clés de position. Une carte passée derrière la caméra de référence revient devant
+    /// elle, à la borne ; sa place en largeur et en hauteur, sa taille et son orientation dans l'espace ne changent pas
+    /// (sous la borne, la taille ne dépend plus de la profondeur). Vrai si le calque, ou l'une de ses clés, était au-delà de
+    /// la borne. C'est ce que fait « Plan en Espace 3D » quand on le décoche (`App::espace3d_basculer_plan_en_espace`).
+    pub fn ramener_a_la_borne(&mut self) -> bool {
+        let avant = self.depth;
+        // (Comme `passe_la_borne` : une carte posée à la borne, à l'arrondi près, n'est pas « ramenée ».)
+        let au_dela = |dz: f32| avant + dz < Self::MIN_DEPTH - Self::PRES_DE_LA_BORNE;
+        let touche = if self.pos_keys.is_empty() { au_dela(self.transform.dz) } else { self.pos_keys.iter().any(|k| au_dela(k.t.dz)) };
+        if !touche && avant >= Self::MIN_DEPTH {
+            return false;
+        }
+        // (La profondeur de base revient dans la borne, et chaque écart est recompté depuis elle : une clé qui était
+        // devant la borne garde sa profondeur, une clé au-delà prend celle de la borne.)
+        let base = avant.max(Self::MIN_DEPTH);
+        let ecart = |dz: f32| (avant + dz).max(Self::MIN_DEPTH) - base;
+        self.transform.dz = ecart(self.transform.dz);
+        for k in &mut self.pos_keys {
+            k.t.dz = ecart(k.t.dz);
+        }
+        self.depth = base;
+        if self.pos_keys.is_empty() {
+            self.fold_dz();
+        }
+        touche
     }
 
     /// La pose du calque à l'image `frame` du plan : celle que donnent ses clés de position, sinon sa
@@ -1725,15 +1830,13 @@ impl Document {
         self.panels.get(index).is_some_and(|p| p.espace)
     }
 
-    /// Le changement de repère de la caméra du plan `index` à l'image `frame`, s'il en faut un : le plan est en Espace 3D
-    /// et sa caméra n'est pas la caméra de référence. Rien sinon : le plan se compose par le chemin de toujours (mêmes
-    /// pixels). Les deux constructeurs de plan le passent à `espace3d::place_dans`.
+    /// Le changement de repère de la caméra du plan `index` à son image `frame`, s'il en faut un : le plan est en Espace 3D
+    /// et sa caméra n'est pas la caméra de référence, ou l'une de ses cartes a passé la borne des plans ordinaires
+    /// (`repere_d_un_plan_en_espace`). Rien sinon : le plan se compose par le chemin de toujours (mêmes pixels). Les deux
+    /// constructeurs de plan le passent à `espace3d::place_dans`.
     pub fn repere_du_plan(&self, index: usize, frame: usize) -> Option<crate::espace3dmath::M4> {
-        if !self.plan_en_espace(index) {
-            return None;
-        }
-        let cam = self.panel_camera_reelle(index, frame);
-        (cam != self.default_camera()).then(|| crate::espace3d::Monde::of(self).repere_camera(&cam))
+        let p = self.panels.get(index).filter(|p| p.espace)?;
+        self.repere_d_un_plan_en_espace(p, &self.panel_camera_reelle(index, frame), frame)
     }
 
     /// Comme `repere_du_plan`, pour un plan rangé (une version qui n'est pas dans `panels`).
@@ -1741,8 +1844,19 @@ impl Document {
         if !p.espace {
             return None;
         }
-        let cam = self.camera_reelle_du_plan_range(p, frame);
-        (cam != self.default_camera()).then(|| crate::espace3d::Monde::of(self).repere_camera(&cam))
+        self.repere_d_un_plan_en_espace(p, &self.camera_reelle_du_plan_range(p, frame), frame)
+    }
+
+    /// Le changement de repère du plan en Espace 3D `p`, filmé par sa caméra `cam` à son image `frame`. Rien quand le
+    /// chemin de toujours donne la bonne image : la caméra est la caméra de référence **et** aucune carte n'a passé la borne
+    /// des plans ordinaires (`Layer::passe_la_borne`). Une carte au-delà de cette borne (tout contre la caméra de référence,
+    /// ou derrière elle : `docs/INTERFACE.md`, partie 148) ne se pose pas par le multiplan, qui la montrerait à la borne :
+    /// le plan prend alors son repère même sous la caméra de référence (c'est l'identité), et chaque carte passe par un
+    /// maillage, qui écarte ce qui est derrière la caméra. Un calque accroché à la caméra ne compte pas : il reste dans le
+    /// cadre, sa profondeur ne joue pas.
+    fn repere_d_un_plan_en_espace(&self, p: &Panel, cam: &Camera, frame: usize) -> Option<crate::espace3dmath::M4> {
+        let une_carte_passe = || p.layers.iter().any(|l| crate::espace3d::is_card(l) && !l.accroche && l.passe_la_borne(frame));
+        (*cam != self.default_camera() || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }
 
     /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la

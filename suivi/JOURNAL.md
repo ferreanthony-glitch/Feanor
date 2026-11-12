@@ -5,6 +5,23 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Une carte passe derrière la caméra d'origine du plan** (partie 148, branche `trajectoire-espace`, **format 55**). À ma phrase
+  « Une carte ne peut pas passer derrière la caméra d'origine du plan. Un personnage qui vient vers nous s'arrêtera donc avant de
+  nous dépasser », Anthony : « Alors dépassons cette limite absurde. » La profondeur d'un calque s'arrêtait à −0,9 parce que la
+  taille d'une carte dans l'espace vaut « taille dessinée × (1 + profondeur) ». Dans un plan en Espace 3D seulement, elle est
+  maintenant libre : sous −0,9 cette règle reste à sa valeur de la borne et la carte ne fait plus qu'avancer, jusqu'à la caméra
+  d'origine et derrière elle. Rien de neuf dans le fichier, mais un nouveau numéro de format : une version d'avant ramènerait ces
+  cartes devant la caméra. Suivent : les poignées de la vue Espace 3D, les champs « Position » et « Profondeur », « Nouvelle
+  surface » (plus de refus derrière la caméra d'origine), le pinceau, la suppression des clés de position, l'outil Transformer.
+  Sous la caméra d'origine, un plan dont une carte a passé la borne est composé par maillage : la carte passée derrière n'est plus
+  filmée. Décocher « Plan en Espace 3D » ramène ces cartes à −0,9, le dit, et un Ctrl+Z rend tout. Trouvé en chemin : un champ de
+  nombre borné écrit sa borne rien qu'en se montrant ; les deux champs « Profondeur » (Réglages de l'Espace 3D, menu du calque)
+  descendent donc à −1000 dans ces plans. 9 essais de plus, 1 réécrit (la surface refusée), le numéro de format dans six fichiers
+  d'essais. Vérificateur : 4 562 réussis, 0 échec, dix groupes OK, le seul avertissement connu. Pas fait : entre deux clés posées à
+  des profondeurs différentes, la carte ne garde pas sa taille dans l'espace (défaut d'avant, à régler avec la trajectoire de
+  l'Espace 3D). Vu en passant, pas corrigé : la caméra d'un plan en Espace 3D est relue bornée à ±85° (une caméra retournée revient
+  à 85° à la réouverture) ; le message « En construction » de la case est périmé. Rien regardé à l'écran, exe non reconstruit.
+  Rien fusionné, rien poussé.
 - **Fin de la liste de la partie 143, faite par Claude sur la fenêtre d'essai** (17 h à 17 h 16, souris simulée, sur son « continue »),
   copie du projet `afa`. Point 2 (plan 6, trois calques de couleur pleine : plan ordinaire, la pile décide ; coché, le plus proche
   passe devant ; à profondeur égale la pile départage) : bon. Point 3 (caméra passée derrière les cartes, non bridée ; la feuille et

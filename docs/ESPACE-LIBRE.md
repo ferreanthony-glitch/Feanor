@@ -96,7 +96,7 @@ feuille, quelle que soit la focale (voir A0, point 2).
 | Cartes qui se traversent | l'ordre se fait carte par carte (du plus loin au plus près), pas point par point |
 | Outil Transformer, boîte de sélection et multisélection sur une carte inclinée | limite déjà connue (`ESPACE3D.md`, 11.4), inchangée |
 | Vue de dessus (`topview.rs`), mouvements de caméra des Vignettes (`vignettecam.rs`) pour un plan en Espace 3D | désactivés pour ces plans, avec un mot d'explication (A8) ; l'export de la caméra, lui, est gardé |
-| Carte derrière la caméra d'origine du plan | la taille d'un calque est liée à sa profondeur, bornée à −0,9 (trouvé en A6) : à lever avec l'étape B |
+| Carte derrière la caméra d'origine du plan | **levé le 2026-11-12** (`docs/INTERFACE.md`, partie 148, format 55) : dans un plan en Espace 3D la profondeur d'une carte est libre ; sous −0,9, sa taille dans l'espace ne dépend plus de sa profondeur. (Trouvé en A6 : la taille d'un calque était liée à sa profondeur, bornée à −0,9.) |
 | Netteté d'une carte au sol vue de très près | une carte garde la définition de son dessin ; à mesurer, pas à résoudre ici |
 
 ## 6. Les étapes
@@ -409,6 +409,10 @@ défaut. Essais : la surface face à la caméra remplit le cadre ; le sol passe 
   s'arrête à −0,9 (`Layer::MIN_DEPTH`) et sa taille en dépend : la scène se construit dans le demi-espace devant la
   caméra de référence. La caméra, elle, va partout. Une surface qui tomberait derrière est refusée, avec un message.
   Lever cette limite demande de séparer la taille d'une carte de sa profondeur : à voir avec l'étape B.
+  **Levée le 2026-11-12** (`docs/INTERFACE.md`, partie 148, branche `trajectoire-espace`, format 55), sans attendre
+  l'étape B : dans un plan en Espace 3D, la profondeur d'une carte est libre. Sous −0,9, la carte garde sa place et sa
+  taille dans l'espace et ne fait plus qu'avancer, jusqu'à la caméra d'origine du plan (−1) et derrière elle ; une
+  surface s'y pose aussi. Un plan ordinaire garde sa borne.
 - **Essais** (`espace3d_tests.rs`, 5 de plus) : de face à la caméra de référence, la surface est la feuille ; **le cadre
   d'une caméra tournée (35°, −50° avec zoom et rotation, 120° passée derrière la feuille) tombe aux quatre coins prévus
   de la surface, à 0,3 px** ; au sol : quatre coins à la hauteur du sol, couchée à 90°, haut vers le fond ; en mur :
