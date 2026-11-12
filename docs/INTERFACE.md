@@ -10656,3 +10656,59 @@ trait hors de la feuille s'enregistre comme avant ; plan ordinaire, carte inclin
 À vérifier à l'écran (par Anthony) : refaire le point 9 de la partie 143 (caméra dos aux cartes, pinceau sur la
 surface au sol, sur la feuille) : rien ne se trace, la barre d'état dit pourquoi, et le dessin de la surface n'a pas
 gagné de trait (Ctrl+Z n'a rien à défaire).
+
+## 147. La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard (2026-11-12, branche `espace-libre-cles`)
+
+Anthony, 2026-11-12, après avoir essayé la version portable d'essai : « il y a beaucoup de crash du logiciel quand on se
+balade dans l'espace 3D. c'est devenu très instable. Est-ce que tu as une solution pour optimiser tout ça et éviter les
+crashs et les ralentissements ? »
+
+**Le plantage.** Rapport `plantage-1794439627.txt` (12 novembre, 0 h 27, dernières actions « Tourner dans l'espace 3D ») :
+« Buffer slices can not be empty », dans `egui_wgpu::Renderer::render`. `card_mesh` (`espace3dview.rs`) pose toujours les
+289 sommets d'une carte et n'ajoute un carreau que si ses quatre coins sont devant l'œil. Quand l'œil coupe la carte au
+point qu'il n'en reste pas un carreau entier devant lui, le maillage a des sommets et **aucun triangle**. egui ne retire
+que les maillages qui n'ont ni sommet ni triangle (`Mesh::is_empty`) ; celui-là part à la carte graphique, et wgpu 24
+refuse une tranche de tampon vide : FEANOR s'arrête. Le second rapport de la même seconde (« SurfaceSemaphores… ») n'est
+que la suite du premier.
+
+Le défaut date de la vue Espace 3D : il est aussi dans `main`. Il y était rare, les cartes faisant face à la caméra. Dans
+un plan en Espace 3D, une surface au sol passe sans cesse en partie derrière l'œil dès qu'on marche dessus, un mur dès
+qu'on le longe : il devient fréquent.
+
+**La correction.** `card_mesh` ne rend rien quand il n'a aucun triangle ; la vue ne pose alors ni le voile ni le dessin
+de la carte (son contour et son nom restent tracés, point par point). Même garde dans le canevas (`canvas.rs`,
+composition par le processeur quand la caméra est en perspective), qui construisait son maillage de la même façon. Les
+autres maillages de l'interface ont été relus (planche des Vignettes, dégradé, bandes de `viewbar.rs`) : ils ne posent
+des sommets qu'avec leurs triangles.
+
+**Rien ne change à l'écran** : ce qui n'était pas dessiné ne l'est toujours pas.
+
+**Essais** (`espace3dvue_tests.rs`). Ils regardent ce que la vue enverrait à la carte graphique : jamais un morceau qui a
+des sommets et aucun triangle.
+
+- *Une carte longée comme un mur, l'œil presque au bout* (seule la dernière rangée de sommets reste devant lui), des deux
+  côtés et vers chaque bout. Rouge avant la correction (« un morceau sans triangle part à la carte graphique »), vert
+  après.
+- *Une promenade de 360 images* dans un plan en Espace 3D (huit calques, une surface au sol, un mur, une surface de
+  face), à hauteur d'homme, en tournant la tête. Elle ne mordait pas avant la correction : elle garde la suite et donne
+  la mesure.
+
+**Vitesse.** Sur le PC de l'atelier, la promenade de 360 images coûte 1,14 ms par image en médiane et 2,43 ms au pire
+(toute l'interface et son découpage en triangles, écran 1280 × 720, sans le temps de la carte graphique). La vue n'est
+donc pas lente par elle-même sur cette machine.
+
+**Suite de référence** : 4 552 essais réussis, 0 échec, les dix groupes de fiabilité passent (Espace 3D : 97 essais) ; le
+vérificateur ne signale que l'avertissement de compilation venu de la branche du Mac (`espace3d.rs`).
+
+**Ce qui n'est pas fait.** Les ralentissements dont parle Anthony n'ont pas été retrouvés sur le PC de l'atelier : sans
+savoir sur quelle machine ni pendant quel geste, rien n'a été changé pour eux. Un garde-fou général (retirer tout
+maillage sans triangle juste avant l'envoi à la carte graphique, où qu'il vienne) n'est pas posé : egui ne donne pas de
+passage propre pour cela.
+
+**À vérifier à l'écran (par Anthony)**, sur une copie de projet :
+
+1. Un plan en Espace 3D avec une surface au sol et un mur. Dans la vue Espace 3D, avancer à la molette jusqu'à traverser
+   le sol et le mur, tourner au clic droit dans tous les sens, longtemps : FEANOR ne se ferme plus.
+2. La même promenade avec « Regarder par la caméra ».
+3. Tourner la caméra, puis une carte, par leurs poignées, jusqu'à ce que la carte passe derrière le regard.
+4. S'il se ferme encore : le rapport le plus récent du dossier `plantages` dit où.

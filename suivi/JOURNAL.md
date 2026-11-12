@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, même branche). Anthony, après la
+  version portable d'essai : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ». Rapport du 12 novembre,
+  0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage avec des sommets et aucun
+  triangle quand il ne restait pas un carreau entier de la carte devant l'œil ; egui le laisse passer, wgpu le refuse. Le défaut est
+  aussi dans `main`, rare tant que les cartes font face à la caméra ; fréquent avec un sol ou un mur. Corrigé dans la vue
+  (`espace3dview.rs`) et dans le canevas (`canvas.rs`, même maillage). Essai dirigé rouge puis vert (`espace3dvue_tests.rs`), une
+  promenade de 360 images en plus (1,14 ms par image en médiane sur ce PC). Vérificateur : 4 552 réussis, 0 échec, dix groupes OK,
+  le seul avertissement connu. Les ralentissements dont il parle ne sont pas retrouvés ici : rien changé pour eux, question posée
+  (quelle machine, quel geste).
 - **Deux versions portables**, demandées par Anthony (« sors moi une nouvelle version portable pour pc »), dans `Logiciel\Portable`,
   dossier et zip. `FEANOR-portable-2026-11-12` : le FEANOR habituel (`main` 00b5e44, format 53). `FEANOR-portable-2026-11-12-ESSAI-espace-3d` :
   cette branche (3f4e3e9, format 54), l'exe rangé dans `programme\` et lancé par « Lancer FEANOR essai Espace 3D.cmd », qui lui donne
