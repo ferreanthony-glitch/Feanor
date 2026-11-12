@@ -1179,6 +1179,9 @@ mod espace3d_tests;
 // La tenue de la vue Espace 3D quand on s'y promène (partie 147) : jamais de morceau sans triangle vers la carte graphique.
 #[cfg(test)]
 mod espace3dvue_tests;
+// Retours d'Anthony sur la Trajectoire dans l'Espace 3D (partie 152) : la caméra choisie seule, et sa piste choisie dans la timeline.
+#[cfg(test)]
+mod trajectoire3d_camera_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

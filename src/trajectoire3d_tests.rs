@@ -20,7 +20,7 @@ use crate::trajectoire3d::{self as t3, cles_dans_l_espace, Sujet};
 
 // ------------------------------------------------------------------------------------------------ le modèle
 
-fn proche(a: [f32; 3], b: [f32; 3], tol: f32) -> bool {
+pub(crate) fn proche(a: [f32; 3], b: [f32; 3], tol: f32) -> bool {
     m::length(m::sub(a, b)) <= tol
 }
 
@@ -160,7 +160,7 @@ fn the_keys_of_a_card_move_it_in_the_space_and_keep_its_size_and_its_orientation
 // ------------------------------------------------------------------------------------------------ le banc
 
 /// Un projet d'essai : cadre 320 × 180 sur une feuille 640 × 360, un plan de 24 images, `n` calques (« Carte 0 » en bas).
-fn doc_cartes(n: usize) -> Document {
+pub(crate) fn doc_cartes(n: usize) -> Document {
     let mut doc = Document::with_frame(320, 180, 24);
     doc.panels[0].layers = Vec::new();
     doc.panels[0].length = 24;
@@ -175,7 +175,7 @@ fn doc_cartes(n: usize) -> Document {
 
 /// Le banc, la vue Espace 3D ouverte et cadrée, le calque 0 courant, l'outil Trajectoire en main (clés d'interpolation).
 /// `espace` : le plan est un plan en Espace 3D.
-fn ouvert(doc: Document, espace: bool) -> Banc {
+pub(crate) fn ouvert(doc: Document, espace: bool) -> Banc {
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
@@ -193,31 +193,31 @@ fn ouvert(doc: Document, espace: bool) -> Banc {
     b
 }
 
-fn regard(b: &Banc) -> Regard3d {
+pub(crate) fn regard(b: &Banc) -> Regard3d {
     b.app.e3d.regard.expect("la vue a donné son regard")
 }
 
 /// Le point de l'écran où l'on voit ce point du monde ; il doit être dans la vue.
-fn a_l_ecran(b: &Banc, p: [f32; 3]) -> Pos2 {
+pub(crate) fn a_l_ecran(b: &Banc, p: [f32; 3]) -> Pos2 {
     let q = regard(b).ecran(p).unwrap_or_else(|| panic!("le point {p:?} se voit"));
     assert!(b.app.canvas_rect.shrink(4.0).contains(q), "le point {p:?} tombe en {q:?}, hors de la vue {:?}", b.app.canvas_rect);
     q
 }
 
 /// Le point de l'écran où l'on voit le point (x, z) du sol.
-fn sol(b: &Banc, x: f32, z: f32) -> Pos2 {
+pub(crate) fn sol(b: &Banc, x: f32, z: f32) -> Pos2 {
     let y = b.app.e3_world().sol_y();
     a_l_ecran(b, [x, y, z])
 }
 
 /// Un geste de souris qui passe par ces points de l'écran, touches `mods` tenues : appui au premier, relâché au dernier.
-fn geste(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
+pub(crate) fn geste(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
     appuyer(b, pts, mods);
     lacher(b, *pts.last().expect("un point au moins"), mods);
 }
 
 /// Le début d'un geste : appui au premier point, puis le pointeur passe par les suivants, bouton tenu.
-fn appuyer(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
+pub(crate) fn appuyer(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
     b.touches = mods;
     b.image(vec![Event::PointerMoved(pts[0])], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: pts[0], button: PointerButton::Primary, pressed: true, modifiers: mods }], 1.0 / 60.0);
@@ -229,32 +229,32 @@ fn appuyer(b: &mut Banc, pts: &[Pos2], mods: Modifiers) {
     }
 }
 
-fn lacher(b: &mut Banc, ou: Pos2, mods: Modifiers) {
+pub(crate) fn lacher(b: &mut Banc, ou: Pos2, mods: Modifiers) {
     b.image(vec![Event::PointerButton { pos: ou, button: PointerButton::Primary, pressed: false, modifiers: mods }], 1.0 / 60.0);
     b.touches = Modifiers::NONE;
     b.chauffer(2);
 }
 
 /// Le placement dans l'espace de la carte du calque `li` à l'image `f`.
-fn carte(b: &Banc, li: usize, f: usize) -> Xf {
+pub(crate) fn carte(b: &Banc, li: usize, f: usize) -> Xf {
     b.app.e3_world().carte(&b.app.layers()[li], f)
 }
 
-fn derniere_etape(b: &Banc) -> String {
+pub(crate) fn derniere_etape(b: &Banc) -> String {
     b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default()
 }
 
-fn trajectoire(b: &Banc, li: usize) -> Trajectoire {
+pub(crate) fn trajectoire(b: &Banc, li: usize) -> Trajectoire {
     b.app.layers()[li].trajectoire.clone().unwrap_or_else(|| panic!("le calque {li} suit un chemin ({})", b.app.status))
 }
 
 /// Le chemin d'essai sur le sol, devant les cartes : de (−2, 1) à (2, 3), soit 4 m vers la droite et 2 m vers l'avant.
-fn tracer_au_sol(b: &mut Banc) {
+pub(crate) fn tracer_au_sol(b: &mut Banc) {
     let (a, c) = (sol(b, -2.0, 1.0), sol(b, 2.0, 3.0));
     geste(b, &[a, c], Modifiers::NONE);
 }
 
-const AU_BOUT: [f32; 3] = [4.0, 0.0, 2.0];
+pub(crate) const AU_BOUT: [f32; 3] = [4.0, 0.0, 2.0];
 
 #[test]
 fn a_path_drawn_on_the_ground_moves_the_chosen_card_in_x_and_z_and_keeps_its_size_in_space() {
@@ -442,16 +442,17 @@ fn ctrl_click_on_the_camera_chooses_the_camera_and_not_the_card_behind_it() {
     let ctrl = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
     geste(&mut b, &[ici], ctrl);
     assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID], "{}", b.app.status);
-    assert_eq!(b.app.status, "Le chemin déplacera la caméra.");
+    assert!(b.app.status.starts_with("La caméra est choisie, seule"), "{}", b.app.status);
     assert_eq!(b.app.e3_traj_sujets(), vec![Sujet::Camera]);
-    // Hors du dessin de la caméra, Ctrl+clic prend toujours la carte sous le pointeur.
+    // Hors du dessin de la caméra, Maj+Ctrl+clic ajoute la carte sous le pointeur (partie 152 : Ctrl+clic seul choisit seul).
+    let maj_ctrl = Modifiers { shift: true, ..ctrl };
     let ailleurs = a_l_ecran(&b, m::point(&carte(&b, 0, 0).matrix(), [0.42, 0.1, 0.0]));
     assert!(!b.app.e3_pick_camera(&r.view, dans_la_vue(ailleurs), centre), "ce point de la carte est loin du dessin de la caméra");
-    geste(&mut b, &[ailleurs], ctrl);
+    geste(&mut b, &[ailleurs], maj_ctrl);
     assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID, carte_0], "{}", b.app.status);
     assert_eq!(b.app.status, "Le chemin déplacera 1 carte et la caméra.");
-    // Un second Ctrl+clic sur la caméra la lâche : elle seule, pas la carte qui passe derrière elle.
-    geste(&mut b, &[ici], ctrl);
+    // Un Maj+Ctrl+clic sur la caméra la lâche : elle seule, pas la carte qui passe derrière elle.
+    geste(&mut b, &[ici], maj_ctrl);
     assert_eq!(b.app.espace3d.sel, vec![carte_0], "{}", b.app.status);
     // « Regarder par la caméra » : son dessin n'est pas tracé, Ctrl+clic au même endroit prend la carte.
     b.app.espace3d.sel.clear();

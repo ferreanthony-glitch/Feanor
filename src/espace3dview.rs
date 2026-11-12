@@ -287,13 +287,8 @@ impl App {
                     self.e3_follow_card(id);
                 }
             }
-            (None, true) => {
-                if additive {
-                    self.espace3d.sel.push(CAMERA_ID);
-                } else {
-                    self.espace3d.sel = vec![CAMERA_ID];
-                }
-            }
+            // (La caméra : seule, les cartes sont lâchées ; Maj ou Ctrl : elle rejoint ce qui est choisi, ou le quitte.)
+            (None, true) => self.e3_choisir_la_camera(additive),
             (None, false) => {
                 if !additive {
                     self.espace3d.sel.clear();

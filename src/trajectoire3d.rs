@@ -38,8 +38,8 @@ use crate::trajectoire::{Cles, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
-pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Ctrl+clic : choisir ou lâcher une carte, la caméra. Alt+glisser ou clic droit : tourner la vue.";
-pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic, ou la liste des cartes dans le panneau Espace 3D).";
+pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Ctrl+clic : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
+pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou la liste des cartes et « choisir » dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
 pub(crate) const SUR_LA_FEUILLE: &str = "Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même outil.";
@@ -274,7 +274,8 @@ impl App {
     }
 
     /// Ce qui est choisi dans la vue et peut suivre une trajectoire : les cartes choisies, la caméra du plan ; rien de
-    /// choisi : la carte du calque courant.
+    /// choisi : la carte du calque courant. Ce repli ne vaut que quand **rien** n'est choisi : la caméra choisie seule
+    /// reste seule, aucun calque ne s'y ajoute (partie 152).
     pub(crate) fn e3_traj_sujets(&self) -> Vec<Sujet> {
         let mut out: Vec<Sujet> = Vec::new();
         for &s in &self.espace3d.sel {
@@ -441,7 +442,8 @@ impl App {
     // -------------------------------------------------------------------------------------------- le pointeur
 
     /// Le pointeur dans la vue Espace 3D quand il trace des trajectoires : appui, glisser, lâcher. Alt+appui tourne la vue
-    /// (`Drag::Orbit`, suivi par `e3_input`), Ctrl+clic choisit ou lâche la carte (ou la caméra) sous le pointeur.
+    /// (`Drag::Orbit`, suivi par `e3_input`), Ctrl+clic choisit, seule, la carte (ou la caméra) sous le pointeur, et
+    /// Maj+Ctrl+clic l'ajoute à ce qui est choisi ou l'en retire (`e3_traj_choisir`).
     pub(crate) fn e3_trajectoire_pointeur(&mut self, ctx: &egui::Context, response: &egui::Response, regard: Regard3d) {
         self.e3d.regard = Some(regard);
         let (events, primary_down, hover) = ctx.input(|i| (i.events.clone(), i.pointer.primary_down(), i.pointer.hover_pos()));
@@ -462,7 +464,8 @@ impl App {
                         self.e3_traj_lacher();
                         self.espace3d.drag = Some(Drag::Orbit);
                     } else if modifiers.command || modifiers.ctrl {
-                        self.e3_traj_choisir(regard, *pos);
+                        // (Maj n'ajoute qu'avec Ctrl : Maj seule, à l'appui, reste au chemin, qu'elle déplace en bloc.)
+                        self.e3_traj_choisir(regard, *pos, modifiers.shift);
                     } else {
                         self.e3_traj_presser(regard, *pos, modifiers.shift);
                     }
@@ -479,12 +482,17 @@ impl App {
         self.e3d.pointeur = hover.filter(|p| regard.rect.contains(*p));
     }
 
-    /// Ctrl+clic : la carte (ou la caméra) sous le pointeur rejoint ce qui est choisi, ou le quitte.
+    /// Ctrl+clic : la carte (ou la caméra) sous le pointeur est choisie, **seule** : ce qui était choisi est lâché, et les
+    /// gestes de l'outil n'agissent plus que sur son chemin (partie 152 ; Anthony, 2026-11-13 : « Éditer la trajectoire de la
+    /// caméra ne fonctionne pas puisqu'un calque est toujours sélectionné en même temps » : avant, Ctrl+clic ajoutait la
+    /// caméra à la carte du calque courant). Une carte choisie ainsi devient le calque courant, comme d'un clic avec les
+    /// outils de la vue. `ajouter` (Maj tenue avec Ctrl) : elle rejoint ce qui est choisi, ou le quitte : c'est ainsi qu'on
+    /// choisit exprès la caméra avec des cartes.
     ///
     /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide) : il est tracé par-dessus les
     /// cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de haut). Avant la partie 150,
     /// la carte l'emportait : Ctrl+clic sur la caméra choisissait le sol.
-    fn e3_traj_choisir(&mut self, regard: Regard3d, pos: Pos2) {
+    fn e3_traj_choisir(&mut self, regard: Regard3d, pos: Pos2, ajouter: bool) {
         let px = [pos.x - regard.rect.left(), pos.y - regard.rect.top()];
         let centre = [regard.rect.width() / 2.0, regard.rect.height() / 2.0];
         let camera = !self.espace3d.through_camera && self.e3_pick_camera(&regard.view, px, centre);
@@ -493,19 +501,27 @@ impl App {
             self.status = "Ctrl+clic : ni carte ni caméra sous le pointeur.".into();
             return;
         };
-        match self.espace3d.sel.iter().position(|s| *s == id) {
-            Some(k) => {
-                self.espace3d.sel.remove(k);
+        if id == CAMERA_ID {
+            self.e3_choisir_la_camera(ajouter);
+        } else if ajouter {
+            match self.espace3d.sel.iter().position(|s| *s == id) {
+                Some(k) => {
+                    self.espace3d.sel.remove(k);
+                }
+                None => self.espace3d.sel.push(id),
             }
-            None => self.espace3d.sel.push(id),
+        } else {
+            self.espace3d.sel = vec![id];
+            self.e3_follow_card(id);
         }
-        let sujets = self.e3_traj_sujets();
-        let cartes = sujets.iter().filter(|s| matches!(s, Sujet::Carte(_))).count();
-        let camera = sujets.contains(&Sujet::Camera);
+        // (Ce qui est choisi, sans le repli sur la carte du calque courant : la barre d'état dit ce qui l'est vraiment.)
+        let cartes = self.espace3d.sel.iter().filter(|&&s| self.e3_card_layer(s).is_some()).count();
+        let camera = self.espace3d.sel.contains(&CAMERA_ID);
         self.status = match (cartes, camera) {
-            (0, true) => "Le chemin déplacera la caméra.".into(),
+            (0, true) => "La caméra est choisie, seule : le chemin ne déplacera qu'elle. Maj+Ctrl+clic sur une carte : l'ajouter.".into(),
+            (0, false) => "Plus rien n'est choisi : le chemin déplacera la carte du calque courant.".into(),
             (n, true) => format!("Le chemin déplacera {n} carte{} et la caméra.", pluriel(n)),
-            (n, false) => format!("Le chemin déplacera {n} carte{}.", pluriel(n)),
+            (n, false) => format!("Le chemin déplacera {n} carte{}. Maj+Ctrl+clic : en ajouter une, ou la caméra.", pluriel(n)),
         };
     }
 
@@ -802,7 +818,7 @@ impl App {
     /// La légende du bas de la vue quand le pointeur trace des trajectoires.
     pub(crate) fn e3_trajectoire_legende(&self) -> &'static str {
         if self.doc.plan_en_espace(self.cur_panel) {
-            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
+            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
         } else {
             "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
         }
@@ -933,7 +949,7 @@ impl App {
                     "Trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi : chaque carte choisie, et la caméra si \
                      elle l'est, le suit depuis la tête de lecture jusqu'à la fin du plan, en partant de là où elle est. Puis de petits \
                      traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, ça va lentement ; \
-                     espacées, vite. Ctrl+clic choisit ou lâche une carte, la caméra.",
+                     espacées, vite. Ctrl+clic choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche.",
                 )
                 .small()
                 .weak(),
