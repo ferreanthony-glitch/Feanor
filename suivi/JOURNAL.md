@@ -5,6 +5,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Fin de la liste de la partie 143, faite par Claude sur la fenêtre d'essai** (17 h à 17 h 16, souris simulée, sur son « continue »),
+  copie du projet `afa`. Point 2 (plan 6, trois calques de couleur pleine : plan ordinaire, la pile décide ; coché, le plus proche
+  passe devant ; à profondeur égale la pile départage) : bon. Point 3 (caméra passée derrière les cartes, non bridée ; la feuille et
+  « Regarder par la caméra » montrent la carte la plus proche devant, en miroir) : bon. Point 4, lecture d'un mouvement de caméra à
+  trois clés : bon. Point 8 (sol dessiné, caméra au-dessus, −89° puis −90° : plongée totale, pas d'image qui tourne d'un coup) : bon.
+  Point 12, vidéo (MP4 du plan, image 24 comparée à l'export en image : ressemblance 0,98 à 0,99 ; couleurs un peu décalées, encodeur
+  H.264 de Windows faute de ffmpeg complet à côté de l'exe d'essai, cause non vérifiée) : bon pour l'image. Point 13, refus par le
+  FEANOR habituel (format 53) d'une copie au format 54 : la copie n'est pas touchée ; texte du refus pas lu à l'écran. Point 14 (plan
+  ordinaire : bascule bridée à −72,9° pour −90° tapé, vue de dessus présente) : bon pour ce qui a été regardé. Point 15 (rotations Y
+  et X tapées de 85 à 95°, anneau tiré de 80 à 125° par pas de 15°) : pas de saut. Restent à son œil : le stylet, la bulle et la
+  lisibilité des icônes, le « sans à-coup » du point 7. Rien changé au code.
 - **Retour d'Anthony sur la partie 147** (vers 15 h, autre PC : i7-9700K, 16 Go, RTX 2060, seconde version portable d'essai) :
   « Non, plus de plantage ». Juste avant : « Pas de ralentissement ici avec une machine sous cette config ». Rien changé pour les
   ralentissements du matin, dont la cause reste inconnue. Rien fusionné, rien poussé.
