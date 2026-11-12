@@ -332,11 +332,7 @@ impl App {
             self.espace3d_fit();
         }
         if self.case_icone(ui, ph::BINOCULARS, Some(self.e3_par_la_camera()), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : dans la vue active). Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
-            if self.e3_vues_multiples() {
-                self.e3_vues_par_la_camera();
-            } else {
-                self.espace3d.through_camera = !self.espace3d.through_camera;
-            }
+            self.e3_basculer_par_la_camera();
         }
         // Une, deux ou quatre vues (`espace3dvues.rs`).
         self.e3_vues_bouton(ui);
@@ -606,8 +602,8 @@ impl App {
             self.modified = true;
         }
         ui.horizontal(|ui| {
-            if self.bouton_etat(ui, self.espace3d.through_camera, ph::BINOCULARS, "Regarder par la caméra", "La vue montre ce que la caméra du plan filme, au format du cadre.", "espace3d.vue_camera").clicked() {
-                self.espace3d.through_camera = !self.espace3d.through_camera;
+            if self.bouton_etat(ui, self.e3_par_la_camera(), ph::BINOCULARS, "Regarder par la caméra", "La vue montre ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : la vue active).", "espace3d.vue_camera").clicked() {
+                self.e3_basculer_par_la_camera();
             }
             let some = self.espace3d.sel.iter().any(|i| *i != CAMERA_ID);
             if crate::bulles::icone_si(ui, some, ph::CROSSHAIR, "Viser la sélection", "Tourne la caméra vers les cartes choisies.", "").clicked() {

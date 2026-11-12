@@ -1163,6 +1163,8 @@ mod espace3dvues;
 #[cfg(test)]
 mod espace3dvues_tests;
 #[cfg(test)]
+mod espace3dvues_suite_tests;
+#[cfg(test)]
 mod espace3d_tests;
 #[cfg(test)]
 mod stage_tests;

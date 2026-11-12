@@ -72,10 +72,11 @@ pub struct Gizmo {
 impl Gizmo {
     /// Taille voulue : une fraction de la distance de l'œil à l'origine.
     pub fn size_for(view: &View, origin: V3) -> f32 {
-        // (Une vue orthographique, `espace3dvues.rs`, regarde de très loin au téléobjectif : le manipulateur garde à l'écran la
-        // taille qu'il a dans une vue de 35 mm.)
-        let k = if crate::espace3dvues::est_ortho(view) { 35.0 / view.focal } else { 1.0 };
-        (m::length(m::sub(origin, view.eye)) * 0.16 * k).max(0.05 * k)
+        // (Une vue orthographique, `espace3dvues.rs` : à l'écran, la taille qu'il a dans une vue de 35 mm.)
+        if let Some(w) = view.ortho {
+            return (w * 0.155).max(1e-3);
+        }
+        (m::length(m::sub(origin, view.eye)) * 0.16).max(0.05)
     }
 
     /// Les quatre coins du carré de la poignée « plan » `k` (perpendiculaire à l'axe `k`).

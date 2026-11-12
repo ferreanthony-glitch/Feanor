@@ -64,6 +64,34 @@ pub(crate) fn grid_lines(target: V3, distance: f32) -> Vec<GridLine> {
 }
 
 impl App {
+    /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
+    /// chaque vue (`espace3dvues.rs`).
+    pub(crate) fn e3_hauteur_sol(&self) -> f32 {
+        0.0
+    }
+
+    /// Le quadrillage d'une vue : le sol autour de `target`, à l'échelle de `distance` (perspective, caméra du plan) ; ou,
+    /// pour une vue orthographique (`ortho` : son point de vue, ce qu'elle regarde, sa largeur sur sa hauteur), le plan de
+    /// l'espace qui lui fait face. La même fonction pour la vue seule et pour chaque vue.
+    pub(crate) fn e3_quadrillage(&self, target: V3, distance: f32, ortho: Option<(crate::espace3dvues::PointDeVue, crate::espace3dvues::Ortho, f32)>) -> Vec<GridLine> {
+        let sol = self.e3_hauteur_sol();
+        match ortho {
+            Some((p, o, aspect)) => crate::espace3dvues::grille_ortho(p, &o, aspect, sol),
+            None => grid_lines(target, distance).into_iter().map(|l| GridLine { a: [l.a[0], l.a[1] + sol, l.a[2]], b: [l.b[0], l.b[1] + sol, l.b[2]], color: l.color }).collect(),
+        }
+    }
+
+    /// Peint ces traits de quadrillage (`proj` : du monde à l'écran).
+    pub(crate) fn e3_peindre_quadrillage(painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, lignes: Vec<GridLine>) {
+        for l in lignes {
+            if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
+                let [r, g, bl, alpha] = l.color;
+                let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
+                painter.line_segment([a, b], Stroke::new(1.0_f32, c));
+            }
+        }
+    }
+
     /// La vue d'édition, ou la vue de la caméra du plan.
     fn e3_view(&self, draw: Rect) -> View {
         if self.espace3d.through_camera {
@@ -401,11 +429,60 @@ impl App {
         let (step_move, step_rot, step_scale) = (self.espace3d.step_move, self.espace3d.step_rot, self.espace3d.step_scale);
         let world_axes = gizmo.axes == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         let mut message = String::new();
+        // Vu de la vue, au départ du geste : un plan de profil (le regard le longe), un axe de bout (le regard le suit). Une
+        // vue orthographique les montre souvent ainsi (la vue Dessus et une carte dressée, la vue Face et le sol).
+        let visee = start.d;
+        let de_profil = |n: V3| m::dot(visee, n).abs() < 0.15;
+        let de_bout = |a: V3| m::dot(visee, a).abs() > 0.97;
+        if let (GizmoMode::Move | GizmoMode::Scale, Handle::Axis(k)) = (mode, handle) {
+            if de_bout(gizmo.axes[k]) {
+                self.status = format!("L'axe {} est vu de bout dans cette vue : ce geste ne le change pas. Prends une autre vue, ou glisse sans Maj.", ["X", "Y", "Z"][k]);
+                return;
+            }
+        }
+        // (Les axes qu'un glisser dans le plan de l'écran a bougés, pour l'aimantation.)
+        let mut moved_ecran: Option<[bool; 3]> = None;
         let mut new: Originals = match (mode, handle) {
             (GizmoMode::Move, Handle::Axis(k)) => gz::move_xfs(&originals, m::drag_along_axis(&start, &ray, gizmo.origin, gizmo.axes[k])),
-            (GizmoMode::Move, Handle::Plane(k)) => gz::move_xfs(&originals, m::drag_in_plane(&start, &ray, gizmo.origin, gizmo.axes[k])),
+            (GizmoMode::Move, Handle::Plane(k)) => {
+                let n = gizmo.axes[k];
+                let d = if de_profil(n) {
+                    // Le plan de glisse est vu de profil : on glisse dans le plan de l'écran, à la profondeur de l'objet.
+                    moved_ecran = Some([0, 1, 2].map(|a| view.forward[a].abs() < 0.5));
+                    match (view.screen_to_plane(start_px, center, gizmo.origin), view.screen_to_plane(px, center, gizmo.origin)) {
+                        (Some(a), Some(b)) => m::sub(b, a),
+                        _ => [0.0; 3],
+                    }
+                } else {
+                    // (Le déplacement reste dans son plan : rien ne dérive le long de sa normale.)
+                    let d = m::drag_in_plane(&start, &ray, gizmo.origin, n);
+                    m::sub(d, m::scale(n, m::dot(d, n)))
+                };
+                gz::move_xfs(&originals, if d.iter().all(|v| v.is_finite()) { d } else { [0.0; 3] })
+            }
             (GizmoMode::Rotate, Handle::Ring(k)) => {
-                let mut angle = m::drag_angle(&start, &ray, gizmo.origin, gizmo.axes[k]);
+                let axis = gizmo.axes[k];
+                let mut angle = if m::dot(visee, axis).abs() < 0.2 {
+                    // L'anneau est vu de profil (un trait) : l'angle que la souris fait à l'écran autour du centre projeté.
+                    match view.project(gizmo.origin, center) {
+                        Some(c) => {
+                            let (a, b) = ([start_px[0] - c[0], start_px[1] - c[1]], [px[0] - c[0], px[1] - c[1]]);
+                            if a[0].hypot(a[1]) < 2.0 || b[0].hypot(b[1]) < 2.0 {
+                                0.0
+                            } else {
+                                // (L'écran a son y vers le bas : un tour dans le sens des aiguilles d'une montre est positif.)
+                                let ecran = (a[0] * b[1] - a[1] * b[0]).atan2(a[0] * b[0] + a[1] * b[1]).to_degrees();
+                                if m::dot(axis, view.forward) > 0.0 { ecran } else { -ecran }
+                            }
+                        }
+                        None => 0.0,
+                    }
+                } else {
+                    m::drag_angle(&start, &ray, gizmo.origin, axis)
+                };
+                if !angle.is_finite() {
+                    angle = 0.0;
+                }
                 if snap_on {
                     angle = m::snap(angle, step_rot);
                 }
@@ -436,6 +513,7 @@ impl App {
             // le même décalage.
             if snap_on && world_axes {
                 let moved = match handle {
+                    _ if moved_ecran.is_some() => moved_ecran.unwrap_or_default(),
                     Handle::Axis(k) => [k == 0, k == 1, k == 2],
                     Handle::Plane(k) => [k != 0, k != 1, k != 2],
                     _ => [false; 3],
@@ -506,13 +584,9 @@ impl App {
         if self.espace3d.show_grid {
             let distance = self.espace3d.cam.map_or(8.0, |c| c.distance);
             let target = self.espace3d.cam.map_or([0.0; 3], |c| c.target);
-            for l in grid_lines(target, if through { 8.0 } else { distance }) {
-                if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
-                    let [r, g, bl, alpha] = l.color;
-                    let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
-                    painter.line_segment([a, b], Stroke::new(1.0_f32, c));
-                }
-            }
+            // (Le même quadrillage que chacune des vues multiples, `e3_quadrillage`.)
+            let lignes = self.e3_quadrillage(target, if through { 8.0 } else { distance }, None);
+            Self::e3_peindre_quadrillage(&painter, &proj, lignes);
         }
 
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.

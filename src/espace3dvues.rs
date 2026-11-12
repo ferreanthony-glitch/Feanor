@@ -8,10 +8,10 @@
 //!   (celle où le glisser a commencé tant qu'il dure) et passent par le même code que la vue seule
 //!   (`App::e3_input_objets`) : choisir, tirer une carte, les poignées. Ce qui est choisi et ce qui bouge est celui du plan :
 //!   toutes les vues le montrent.
-//! - **Orthographique** : une vue de très loin au téléobjectif (`RECUL_ORTHO`), qui garde le même calcul de projection et de
-//!   rayons que les autres (`espace3dmath::View`) : l'écart avec une vraie projection parallèle est sous le millième pour une
-//!   scène de quelques dizaines de mètres. Elle se glisse et se zoome, ne tourne pas : un geste de rotation (clic droit,
-//!   Alt + glisser) la fait passer en perspective, et la barre d'état le dit.
+//! - **Orthographique** : une vraie projection parallèle (`espace3dmath::View::ortho`) : des rayons parallèles, partis du
+//!   plan de l'image. Un plan de glisse ou un anneau vu de profil se manipule dans le plan de l'écran (`espace3dview.rs`,
+//!   `e3_drag`). Elle se glisse et se zoome, ne tourne pas : un geste de rotation (clic droit, Alt + glisser) la fait passer
+//!   en perspective, et la barre d'état le dit.
 //! - **Mémoire** : la disposition, les points de vue et le partage des bordures vont dans le projet, dans un champ facultatif
 //!   du manifeste (`vues_3d`, `Retenue`), sans changer le numéro de format : une version d'avant l'ignore (elle ouvre le projet
 //!   en une vue et ne perd que cette disposition). Absent : une vue, comme avant.
@@ -23,17 +23,18 @@ use serde::{Deserialize, Serialize};
 use crate::app::App;
 use crate::espace3d;
 use crate::espace3dmath::{self as m, Orbite, View, V3, MAX_ELEVATION};
-use crate::espace3dview::{grid_lines, letterbox, nice_step, GridLine};
+use crate::espace3dview::{letterbox, nice_step, GridLine};
 
-/// Distance (mètres) d'où regarde une vue orthographique : assez loin pour que la perspective ne se voie plus.
-pub const RECUL_ORTHO: f32 = 20_000.0;
-/// Une prise de vue de focale au moins égale est une vue orthographique (les caméras du plan s'arrêtent à 300 mm).
-pub const FOCALE_ORTHO_MIN: f32 = 1_000.0;
+/// Où est le plan de l'image d'une vue orthographique, en arrière du point visé (mètres) : les rayons en partent, parallèles.
+/// Assez loin pour que tout l'espace soit devant ; la projection, elle, ne dépend pas de cette distance.
+pub const RECUL_ORTHO: f32 = 10_000.0;
 /// Le partage des bordures reste entre ces fractions de la zone.
 pub const PARTAGE_MIN: f32 = 0.15;
 pub const PARTAGE_MAX: f32 = 0.85;
 /// Nombre de cadres retenus : 0 à 3 pour les quatre vues, 4 et 5 pour les deux vues.
 pub const CADRES: usize = 6;
+/// Une vue plus petite que cela (pixels), au premier cadrage, attend d'avoir sa taille.
+pub const TAILLE_MIN: f32 = 16.0;
 
 const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
 const AXES: [Color32; 3] = [Color32::from_rgb(232, 80, 80), Color32::from_rgb(100, 205, 100), Color32::from_rgb(86, 138, 245)];
@@ -41,12 +42,12 @@ const ORBITE_D_ORIGINE: Orbite = Orbite { target: [0.0; 3], azimuth: 30.0, eleva
 
 /// Cette prise de vue est celle d'une vue orthographique.
 pub fn est_ortho(view: &View) -> bool {
-    view.focal >= FOCALE_ORTHO_MIN
+    view.is_ortho()
 }
 
 /// La largeur (mètres) que montre une vue orthographique sur toute sa largeur.
 pub fn largeur_ortho(view: &View) -> Option<f32> {
-    est_ortho(view).then(|| 36.0 * RECUL_ORTHO / view.focal)
+    view.ortho
 }
 
 /// Comment la zone du dessin se partage.
@@ -206,7 +207,7 @@ pub struct Ortho {
 pub fn vue_ortho(point: PointDeVue, o: &Ortho, width: f32) -> Option<View> {
     let (forward, right, up) = point.axes()?;
     let span = o.span.max(1e-3);
-    Some(View { eye: m::sub(o.target, m::scale(forward, RECUL_ORTHO)), right, up, forward, focal: 36.0 * RECUL_ORTHO / span, ref_width: width })
+    Some(View { eye: m::sub(o.target, m::scale(forward, RECUL_ORTHO)), right, up, forward, focal: 35.0, ref_width: width, ortho: Some(span) })
 }
 
 /// La vue en perspective qui part d'une vue orthographique : même direction (à la verticale près), même point visé, à la
@@ -313,6 +314,14 @@ pub struct Retenue {
     pub partage: [f32; 2],
 }
 
+impl Retenue {
+    /// Lu en souple depuis le manifeste : une valeur qui n'a pas la bonne forme (un nombre, une liste trop courte, `null`…)
+    /// ne donne rien, et le projet s'ouvre en une vue.
+    pub fn lire(v: serde_json::Value) -> Option<Retenue> {
+        serde_json::from_value::<Retenue>(v).ok()
+    }
+}
+
 fn milieux() -> [f32; 2] {
     [0.5, 0.5]
 }
@@ -384,7 +393,7 @@ impl Vues {
 /// Les traits de la grille d'une vue orthographique : dans le plan de l'espace face à la vue (le sol vu du dessus ou du
 /// dessous, le plan de la feuille vu de face ou de derrière, le plan de côté vu de gauche ou de droite), un trait plus marqué
 /// tous les cinq, les axes à leur couleur. `aspect` : largeur / hauteur de la vue.
-pub(crate) fn grille_ortho(point: PointDeVue, o: &Ortho, aspect: f32) -> Vec<GridLine> {
+pub(crate) fn grille_ortho(point: PointDeVue, o: &Ortho, aspect: f32, sol: f32) -> Vec<GridLine> {
     let Some((forward, r, u)) = point.axes() else { return Vec::new() };
     let axe = |v: V3| (0..3).max_by(|&a, &b| v[a].abs().total_cmp(&v[b].abs())).unwrap_or(0);
     let (kr, ku, kf) = (axe(r), axe(u), axe(forward));
@@ -407,7 +416,9 @@ pub(crate) fn grille_ortho(point: PointDeVue, o: &Ortho, aspect: f32) -> Vec<Gri
             let color = if a.abs() < step * 0.01 { couleur(long) } else { [0.7, 0.7, 0.72, if major { 0.32 } else { 0.14 }] };
             let mut p = [0.0f32; 3];
             p[k] = a;
-            p[kf] = 0.0;
+            // (Le sol vu de dessus ou de dessous est à sa hauteur, `App::e3_hauteur_sol` ; les autres plans passent par
+            // l'origine.)
+            p[kf] = if kf == 1 { sol } else { 0.0 };
             let (mut pa, mut pb) = (p, p);
             pa[long] = cl - half_long;
             pb[long] = cl + half_long;
@@ -467,7 +478,7 @@ impl App {
     fn e3_vues_taille(&self, i: usize) -> [f32; 2] {
         let v = &self.espace3d.vues;
         if let Some((_, r)) = v.rects.iter().find(|(k, _)| *k == i) {
-            return [r.width().max(1.0), r.height().max(1.0)];
+            return [r.width().max(0.0), r.height().max(0.0)];
         }
         let n = v.disposition.cadres().len().max(1) as f32;
         let r = self.canvas_rect;
@@ -477,7 +488,7 @@ impl App {
             Disposition::Quatre => (r.width() / 2.0, r.height() / 2.0),
             Disposition::Une => (r.width() / n, r.height()),
         };
-        [w.max(1.0), h.max(1.0)]
+        [w.max(0.0), h.max(0.0)]
     }
 
     /// Cadre chaque vue sur tout l'espace ; `ortho_seules` : seulement les vues orthographiques (les vues en perspective
@@ -485,8 +496,16 @@ impl App {
     pub(crate) fn e3_vues_cadrer(&mut self, ortho_seules: bool) {
         let (lo, hi) = self.e3_bornes();
         let center = m::scale(m::add(lo, hi), 0.5);
+        let montres = self.espace3d.vues.disposition.cadres();
+        // (Une vue de moins de `TAILLE_MIN` pixels, au tout début, ne se cadre pas : elle le sera à une image où elle a sa
+        // taille.)
+        let mut assez = true;
         for i in 0..CADRES {
             let [w, h] = self.e3_vues_taille(i);
+            if w < TAILLE_MIN || h < TAILLE_MIN {
+                assez &= !montres.contains(&i);
+                continue;
+            }
             let c = &mut self.espace3d.vues.cadres[i];
             if !ortho_seules {
                 let mut o = Orbite::fit_at((lo, hi), [w, h], c.orbite.azimuth, c.orbite.elevation);
@@ -503,7 +522,7 @@ impl App {
             }
             c.ortho = Ortho { target: center, span: span * 1.15 };
         }
-        self.espace3d.vues.prets = true;
+        self.espace3d.vues.prets = assez;
     }
 
     /// Change la disposition des vues.
@@ -592,6 +611,15 @@ impl App {
         let Some(i) = self.espace3d.vues.active_montree() else { return };
         let p = if self.espace3d.vues.cadres[i].point == PointDeVue::Camera { PointDeVue::Perspective } else { PointDeVue::Camera };
         self.e3_vues_point(i, p);
+    }
+
+    /// « Regarder par la caméra » (barre de la vue 3D et panneau Réglages) : la vue seule, ou la vue active.
+    pub(crate) fn e3_basculer_par_la_camera(&mut self) {
+        if self.e3_vues_multiples() {
+            self.e3_vues_par_la_camera();
+        } else {
+            self.espace3d.through_camera = !self.espace3d.through_camera;
+        }
     }
 
     /// La vue active montre la caméra du plan (le bouton « Regarder par la caméra » est enfoncé).
@@ -770,18 +798,13 @@ impl App {
         let proj = |p: V3| view.project(p, center).map(to_screen);
         painter.rect_filled(r, 0.0, Color32::from_gray(26));
         if self.espace3d.show_grid {
-            let lines = match c.point {
-                PointDeVue::Camera => grid_lines([0.0; 3], 8.0),
-                PointDeVue::Perspective => grid_lines(c.orbite.target, c.orbite.distance),
-                p => grille_ortho(p, &c.ortho, draw.width() / draw.height().max(1.0)),
+            // (Le même quadrillage que la vue seule, `App::e3_quadrillage`.)
+            let lignes = match c.point {
+                PointDeVue::Camera => self.e3_quadrillage([0.0; 3], 8.0, None),
+                PointDeVue::Perspective => self.e3_quadrillage(c.orbite.target, c.orbite.distance, None),
+                p => self.e3_quadrillage(c.ortho.target, c.ortho.span, Some((p, c.ortho, draw.width() / draw.height().max(1.0)))),
             };
-            for l in lines {
-                if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
-                    let [rr, g, bl, alpha] = l.color;
-                    let col = Color32::from_rgba_unmultiplied((rr * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
-                    painter.line_segment([a, b], Stroke::new(1.0_f32, col));
-                }
-            }
+            Self::e3_peindre_quadrillage(&painter, &proj, lignes);
         }
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
         if !camera {

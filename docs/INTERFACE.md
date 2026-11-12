@@ -10397,7 +10397,7 @@ Toutes les vues partagent les textures des cartes (une par dessin). Mesuré sur 
 
 ### 144.5 Limites
 
-- **L'orthographique est une vue de très loin au téléobjectif** (20 km) : le même calcul que les autres vues ; l'écart avec une vraie projection parallèle est sous le millième pour une scène de quelques dizaines de mètres (invisible à l'écran).
+- (Remplacé par 144.8 : l'orthographique est maintenant une vraie projection parallèle.)
 - Une perspective qui naît d'une vue de dessus ou de dessous penche d'un degré (la vue d'orbite s'arrête à 89°).
 - Les réglages de la vue seule (le menu de coin n'y est pas) restent ceux d'avant : la vue seule n'a pas de point de vue orthographique.
 - Rien n'a été fait à la main dans le vrai logiciel : la règle tient par les essais ; l'écran reste à juger.
@@ -10415,3 +10415,17 @@ Toutes les vues partagent les textures des cartes (une par dessin). Mesuré sur 
 ### 144.7 Essais
 
 `espace3dvues_tests.rs` : les rectangles partagent la zone sans se chevaucher ; une vue orthographique ne montre pas la profondeur et regarde d'où elle doit ; ce que retient le projet se relit, même abîmé ; changer de disposition ; point de vue par vue ; le geste va à la vue sous le pointeur ; l'orthographique ne tourne pas (et passe en perspective sur un geste de rotation) ; agrandir puis revenir (raccourci, double-clic) ; la sélection se voit partout, une carte s'attrape par la tranche ; bordure glissée, vues enregistrées puis rouvertes ; un ancien projet s'ouvre en une vue ; 4 vues tiennent 60 images par seconde.
+
+### 144.8 Après la relecture (2026-11-12)
+
+- **Une vraie orthographique.** `View` (`espace3dmath.rs`) a un champ `ortho` : la largeur montrée, en mètres. Les rayons sont parallèles (origine sur le plan de l'image, direction la visée), la projection ne divise plus par la profondeur. Le téléobjectif à 20 km est retiré, et avec lui `FOCALE_ORTHO_MIN` : une vue reste orthographique à tout zoom (jusqu'à 10 km de large).
+- **Un plan de glisse vu de profil** (une carte dressée vue du dessus, la caméra vue de face) : on glisse dans le plan de l'écran, à la profondeur de l'objet (`View::screen_to_plane`). Avant : un saut de centaines de mètres, ou rien.
+- **Un plan vu de face** : le déplacement reste dans son plan, rien ne dérive le long de sa normale (20 allers-retours : la profondeur ne bouge pas).
+- **Un axe vu de bout** (Maj + glisser le long de la visée, ou une poignée d'échelle de bout) : rien ne bouge, et la ligne d'état le dit.
+- **Un anneau Tourner vu de profil** : l'angle est celui de la souris à l'écran autour du centre projeté (fini, et qui suit la main).
+- **Un champ `vues_3d` mal formé** (`partage` trop court ou `null`, `points` qui ne sont pas des noms, un nombre à la place de l'objet) : le projet s'ouvre, en une vue (le champ est lu en souple, `Retenue::lire`).
+- **« Regarder par la caméra » du panneau Réglages** passe par la même fonction que celui de la barre (`App::e3_basculer_par_la_camera`) : avec plusieurs vues, son état et son clic suivent la vue active.
+- **Une vue de moins de 16 pixels** au premier cadrage attend d'avoir sa taille ; un rayon abîmé (vue de taille nulle) ne touche aucune carte (`Monde::pick_card`).
+- **Un seul quadrillage** pour la vue seule et pour chaque vue (`App::e3_quadrillage`, à la hauteur de `App::e3_hauteur_sol`).
+
+Essais : 7 de plus dans `espace3dvues_tests.rs` (rouges sur 16f24d9, verts après) et 2 dans `espace3dvues_suite_tests.rs` (le bouton des Réglages, le quadrillage commun).

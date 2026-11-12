@@ -422,3 +422,161 @@ fn quatre_vues_restent_sans_latence() {
     println!("PERF Espace 3D, 10 cartes, carte graphique {} : 1 vue {une:.2} ms par image (max {une_max:.2}), 4 vues {quatre:.2} ms (max {quatre_max:.2})", b.app.gpu.is_some());
     assert!(quatre < 16.0, "{quatre:.2} ms par image en 4 vues : l'Espace 3D doit tenir 60 images par seconde");
 }
+
+// ================================================================================ relecture de 16f24d9
+
+/// Un geste de manipulateur dans la vue `i` (coordonnées dans la vue), en une étape.
+fn geste_vue(b: &mut Banc, i: usize, handle: crate::espace3dgizmo::Handle, from: [f32; 2], to: &[[f32; 2]]) {
+    let r = rect_of(b, i);
+    let view = b.app.espace3d.vues.cadres[i].vue(r.width()).expect("vue");
+    let center = [r.width() / 2.0, r.height() / 2.0];
+    let gizmo = b.app.e3_gizmo(&view).expect("un manipulateur");
+    let mode = b.app.espace3d.mode;
+    b.app.e3_begin(handle, mode, gizmo, view.ray(from, center), from, "Geste d'essai");
+    for p in to {
+        b.app.e3_drag(&view, center, *p);
+    }
+    b.app.e3_finish_drag();
+}
+
+/// Le point `p` de l'espace dans la vue `i`, en coordonnées de la vue.
+fn dans_la_vue(b: &Banc, i: usize, p: [f32; 3]) -> [f32; 2] {
+    let r = rect_of(b, i);
+    let q = a_l_ecran(b, i, p);
+    [q.x - r.left(), q.y - r.top()]
+}
+
+fn px_par_metre(b: &Banc, i: usize) -> f32 {
+    rect_of(b, i).width() / b.app.espace3d.vues.cadres[i].ortho.span
+}
+
+#[test]
+fn vue_de_dessus_une_carte_dressee_glisse_dans_le_plan_de_l_ecran() {
+    let mut b = quatre();
+    b.app.espace3d.snap = false;
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    b.app.espace3d.sel = vec![card];
+    b.app.espace3d.mode = crate::espace3dgizmo::Mode::Move;
+    let avant = b.app.e3_xfs(&[card])[0].1.pos;
+    let p = dans_la_vue(&b, 0, avant);
+    // La carte est vue par la tranche : son plan (XY) est de profil. 50 px à droite et 30 px vers le haut de l'écran.
+    geste_vue(&mut b, 0, crate::espace3dgizmo::Handle::Plane(2), p, &[[p[0] + 50.0, p[1] - 30.0]]);
+    let apres = b.app.e3_xfs(&[card])[0].1.pos;
+    let k = px_par_metre(&b, 0);
+    let (dx, dz) = (apres[0] - avant[0], apres[2] - avant[2]);
+    assert!((dx - 50.0 / k).abs() < 0.02 && (dz + 30.0 / k).abs() < 0.02 && (apres[1] - avant[1]).abs() < 1e-3, "glissée de {dx} m en X et {dz} m en Z, attendu {} et {}", 50.0 / k, -30.0 / k);
+}
+
+#[test]
+fn vue_de_face_la_camera_glisse_dans_le_plan_de_l_ecran() {
+    let mut b = quatre();
+    b.app.espace3d.snap = false;
+    b.app.espace3d.sel = vec![crate::espace3dgizmo::CAMERA_ID];
+    b.app.espace3d.mode = crate::espace3dgizmo::Mode::Move;
+    let avant = b.app.e3_xfs(&[crate::espace3dgizmo::CAMERA_ID])[0].1.pos;
+    let p = dans_la_vue(&b, 1, avant);
+    // Le plan horizontal de la caméra est de profil dans la vue de face.
+    geste_vue(&mut b, 1, crate::espace3dgizmo::Handle::Plane(1), p, &[[p[0] + 40.0, p[1] - 20.0]]);
+    let apres = b.app.e3_xfs(&[crate::espace3dgizmo::CAMERA_ID])[0].1.pos;
+    let k = px_par_metre(&b, 1);
+    assert!((apres[0] - avant[0] - 40.0 / k).abs() < 0.02 && (apres[1] - avant[1] - 20.0 / k).abs() < 0.02 && (apres[2] - avant[2]).abs() < 1e-3, "{avant:?} → {apres:?} ({k} px/m)");
+}
+
+#[test]
+fn un_anneau_vu_de_profil_tourne_d_un_angle_fini_et_monotone() {
+    let mut b = quatre();
+    b.app.espace3d.snap = false;
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    b.app.espace3d.sel = vec![card];
+    b.app.espace3d.mode = crate::espace3dgizmo::Mode::Rotate;
+    let o = dans_la_vue(&b, 0, b.app.e3_xfs(&[card])[0].1.pos);
+    let r = rect_of(&b, 0);
+    let view = b.app.espace3d.vues.cadres[0].vue(r.width()).expect("vue");
+    let center = [r.width() / 2.0, r.height() / 2.0];
+    let gizmo = b.app.e3_gizmo(&view).expect("manipulateur");
+    let at = |deg: f32| [o[0] + 60.0 * deg.to_radians().cos(), o[1] + 60.0 * deg.to_radians().sin()];
+    // L'anneau autour de X : vu du dessus, un trait.
+    b.app.e3_begin(crate::espace3dgizmo::Handle::Ring(0), crate::espace3dgizmo::Mode::Rotate, gizmo, view.ray(at(0.0), center), at(0.0), "Tourner");
+    let mut angles = Vec::new();
+    for deg in [10.0, 20.0, 30.0, 40.0, 50.0, 60.0] {
+        b.app.e3_drag(&view, center, at(deg));
+        angles.push(b.app.layers()[0].pose(0).tilt_x);
+    }
+    b.app.e3_finish_drag();
+    assert!(angles.iter().all(|a| a.is_finite()), "{angles:?}");
+    let croissant = angles.windows(2).all(|w| w[1] > w[0]);
+    let decroissant = angles.windows(2).all(|w| w[1] < w[0]);
+    assert!(croissant || decroissant, "l'angle suit la souris sans à-coups : {angles:?}");
+    assert!((angles[5] - angles[0]).abs() > 30.0 && (angles[5] - angles[0]).abs() < 70.0, "50° de souris autour du centre : {angles:?}");
+}
+
+#[test]
+fn un_champ_vues_3d_mal_forme_n_empeche_pas_d_ouvrir_le_projet() {
+    let dir = std::env::temp_dir().join(format!("shot-test-vues3d-abime-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).expect("dossier");
+    let manifest = dir.join("P.shot");
+    project::save(&doc_with_cards(&[(RED, [10, 10, 80, 60], 0.0)]), &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    let mut b = quatre();
+    for champ in [r#"{ "disposition": "quatre", "partage": [0.5] }"#, r#"{ "disposition": "quatre", "partage": null }"#, r#"{ "disposition": "quatre", "points": [1] }"#, "3"] {
+        std::fs::write(&manifest, text.replacen("\"largeur\"", &format!("\"vues_3d\": {champ},\n  \"largeur\""), 1)).expect("écrit");
+        let relu = project::load(&manifest).unwrap_or_else(|e| panic!("vues_3d = {champ} : le projet doit s'ouvrir ({e})"));
+        b.app.load_doc(relu.doc);
+        b.chauffer(2);
+        assert_eq!(b.app.espace3d.vues.disposition, Disposition::Une, "vues_3d = {champ} : une vue");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn une_vue_orthographique_le_reste_au_plus_grand_zoom_arriere() {
+    for span in [0.02, 10.0, 2000.0, 1e4] {
+        let view = v::vue_ortho(PointDeVue::Face, &v::Ortho { target: [0.0; 3], span }, 800.0).expect("vue");
+        assert!(v::est_ortho(&view), "largeur {span} m : toujours orthographique");
+        assert!((v::largeur_ortho(&view).expect("largeur") - span).abs() <= span * 1e-4, "largeur {span}");
+    }
+}
+
+#[test]
+fn glisser_en_vue_de_face_ne_fait_pas_deriver_la_profondeur() {
+    let mut b = quatre();
+    b.app.espace3d.snap = false;
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    b.app.espace3d.sel = vec![card];
+    b.app.espace3d.mode = crate::espace3dgizmo::Mode::Move;
+    let z0 = b.app.e3_xfs(&[card])[0].1.pos[2];
+    let d0 = b.app.layers()[0].depth_at(0);
+    for _ in 0..20 {
+        let p = dans_la_vue(&b, 1, b.app.e3_xfs(&[card])[0].1.pos);
+        geste_vue(&mut b, 1, crate::espace3dgizmo::Handle::Plane(2), p, &[[p[0] + 80.0, p[1] + 35.0]]);
+        let p = dans_la_vue(&b, 1, b.app.e3_xfs(&[card])[0].1.pos);
+        geste_vue(&mut b, 1, crate::espace3dgizmo::Handle::Plane(2), p, &[[p[0] - 80.0, p[1] - 35.0]]);
+    }
+    let z = b.app.e3_xfs(&[card])[0].1.pos[2];
+    assert!((z - z0).abs() < 1e-4 && (b.app.layers()[0].depth_at(0) - d0).abs() < 1e-4, "20 allers-retours : Z {z0} → {z}");
+    // Maj + glisser le long de l'axe de visée (Z, vu de bout) : rien ne bouge, et la ligne d'état le dit.
+    let avant = b.app.e3_xfs(&[card])[0].1.pos;
+    let p = dans_la_vue(&b, 1, avant);
+    geste_vue(&mut b, 1, crate::espace3dgizmo::Handle::Axis(2), p, &[[p[0] + 30.0, p[1] + 30.0]]);
+    assert_eq!(b.app.e3_xfs(&[card])[0].1.pos, avant);
+    assert!(b.app.status.contains("vu de bout"), "{}", b.app.status);
+}
+
+#[test]
+fn une_vue_de_taille_nulle_attend_pour_se_cadrer_et_un_rayon_abime_ne_touche_rien() {
+    let mut b = space();
+    b.app.canvas_rect = Rect::from_min_size(pos2(10.0, 10.0), vec2(0.0, 0.0));
+    b.app.espace3d.vues.rects.clear();
+    b.app.e3_vues_poser(Disposition::Quatre);
+    assert!(!b.app.espace3d.vues.prets, "des vues de 0 × 0 ne sont pas cadrées");
+    b.chauffer(3);
+    assert!(b.app.espace3d.vues.prets, "cadrées dès qu'elles ont leur taille");
+    assert!(b.app.espace3d.vues.cadres.iter().all(|c| c.ortho.span.is_finite() && c.orbite.distance.is_finite()));
+    let w = b.app.e3_world();
+    let xf = w.card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0));
+    let abime = crate::espace3dmath::Ray { o: [f32::NAN; 3], d: [0.0, 0.0, -1.0] };
+    assert!(w.pick_card(&xf, &abime).is_none(), "un rayon abîmé ne touche rien");
+    let abime = crate::espace3dmath::Ray { o: [0.0, 0.0, 10.0], d: [f32::NAN, 0.0, -1.0] };
+    assert!(w.pick_card(&xf, &abime).is_none());
+}
