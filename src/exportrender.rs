@@ -88,6 +88,7 @@ pub(crate) fn plan_leger(p: &Panel) -> Panel {
         cues: p.cues.clone(),
         color: p.color,
         espace: p.espace,
+        trajectoire_camera: p.trajectoire_camera.clone(),
     }
 }
 

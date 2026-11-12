@@ -5,6 +5,25 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **La Trajectoire dans l'Espace 3D** (partie 149, branche `trajectoire-espace`, toujours le format 55). Anthony : « Je voudrais
+  qu'on essaye d'intégrer l'outil trajectoire dans l'environnement 3D, afin de générer des mouvements dans l'espace », puis « Un
+  calque ou la caméra, les deux. Ce qui est sélectionné est sujet à la trajectoire. » Dans la vue Espace 3D d'un plan en Espace 3D,
+  l'outil Trajectoire trace un chemin posé sur une surface (une carte non choisie, sinon le sol, sinon un plan face à la vue), et
+  tout ce qui est choisi le suit : chaque carte choisie, la caméra si elle l'est ; rien de choisi, la carte du calque courant.
+  Mêmes gestes que sur la feuille (trait long, marque en travers, glisser ou arracher une marque, tirer, Maj pour déplacer, second
+  trait, Échap), pour tout ce qui est choisi, en une étape d'annulation. Une carte reçoit des clés de position (une par image, ou
+  une tenue par marque) et garde sa taille et son orientation dans l'espace ; la caméra ne reçoit aucune clé, son chemin s'ajoute à
+  ses clés quand on l'évalue (image, exports, « Regarder par la caméra », vue de dessus), et on peut toujours la régler à toute
+  image. Réglages en tête du panneau de l'Espace 3D : départ, fin, temps égaux, sortes de clés, détacher, effacer, pour tout ce qui
+  est choisi. Montage : raccourcir le plan par la fin ne change pas le mouvement de la caméra ; couper, réunir, ou rogner le début
+  au-delà du départ écrit son chemin en clés sans changer l'image. Fichier : deux champs facultatifs, pas de nouveau numéro.
+  Décision prise en route : le sol l'emporte sur une carte quand il est devant elle (une carte descend sous le sol). Trois défauts
+  de la partie 148 corrigés : la caméra retournée d'un plan en Espace 3D est relue telle quelle (plus ramenée à 85°, y compris
+  dans le contenu rogné) ; le message « En construction » de la case est remplacé ; les silhouettes de la trajectoire de la feuille
+  suivent la caméra du plan. 17 essais de plus. Vérificateur : 4 579 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs` ; il n'en nomme plus que cinq, `Monde::to_frame` sert maintenant). Pas fait : la trajectoire de la caméra ne se voit pas sur la
+  timeline ; pas de silhouettes dans la vue ; un chemin tient sur une seule surface ; le miroir d'un calque ne retourne pas son
+  chemin dans l'espace ; un plan sans clé de caméra qui suit un plan à trajectoire de caméra ne reprend pas la caméra là où le
+  chemin l'a laissée. Rien regardé à l'écran, exe non reconstruit. Rien fusionné, rien poussé.
 - **Une carte passe derrière la caméra d'origine du plan** (partie 148, branche `trajectoire-espace`, **format 55**). À ma phrase
   « Une carte ne peut pas passer derrière la caméra d'origine du plan. Un personnage qui vient vers nous s'arrêtera donc avant de
   nous dépasser », Anthony : « Alors dépassons cette limite absurde. » La profondeur d'un calque s'arrêtait à −0,9 parce que la

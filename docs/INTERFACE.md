@@ -10908,3 +10908,183 @@ fiabilité passent (Espace 3D : 107 essais) ; le vérificateur ne signale que l'
 10. Enregistrer, fermer, rouvrir : la carte est toujours derrière la caméra d'origine. (La caméra, elle, peut être
     revenue à 85° : défaut noté ci-dessus.) Ouvrir la copie avec le FEANOR d'avant : refus propre.
 11. Un plan ordinaire du même projet : rien n'a changé, « Profondeur » s'arrête à −0,9.
+
+## 149. La Trajectoire dans l'Espace 3D : ce qui est choisi suit un chemin tracé dans l'espace (2026-11-12, branche `trajectoire-espace`)
+
+Anthony, 2026-11-12 : « Je voudrais qu'on essaye d'intégrer l'outil trajectoire dans l'environnement 3D, afin de générer
+des mouvements dans l'espace. » Je lui ai demandé : un calque, ou la caméra ? « Un calque ou la caméra, les deux. Ce qui
+est sélectionné est sujet à la trajectoire. »
+
+**Où.** Dans la **vue Espace 3D** d'un **plan en Espace 3D**, avec l'outil Trajectoire (sa case, sa touche). Prendre
+l'outil dans la vue donne le pointeur à la trajectoire, comme le pinceau le donne au dessin (partie 146) ; prendre un
+outil de la vue (choisir, déplacer, tourner, taille, caméra) le rend aux cartes. Tourner et glisser la vue restent sur
+Alt+glisser, le clic droit, le bouton du milieu et la molette. Sur la feuille, l'outil Trajectoire est celui de toujours
+(partie 119), inchangé.
+
+**Ce qui suit le chemin : ce qui est choisi.** Chaque carte choisie, et la caméra du plan si elle l'est. Rien de choisi :
+la carte du calque courant. Ctrl+clic, avec l'outil, choisit ou lâche la carte (ou la caméra) sous le pointeur ; la
+liste des cartes des Réglages (Maj+clic) et le bouton Caméra servent aussi. La barre d'état dit combien de cartes, et si
+la caméra en est.
+
+**Le chemin est posé sur une surface.** À l'appui, le regard qui passe sous le pointeur choisit la surface qui porte
+tout le trait :
+
+1. la carte la plus proche qu'il touche et qui n'est pas choisie (un mur, un décor au sol) ;
+2. sinon le sol (le quadrillage, au bas du cadre de la caméra d'origine du plan) ;
+3. sinon, si le regard ne descend pas vers le sol, un plan face à la vue, à la place de ce qui est choisi.
+
+Une carte est plus grande que le cadre et descend sous le sol : là où le sol est devant elle, c'est le sol qui prend le
+trait (on trace sur ce qu'on voit).
+
+**Les gestes**, les mêmes que sur la feuille :
+
+- un trait long : le chemin, depuis la tête de lecture jusqu'à la fin du plan ;
+- un petit trait en travers du chemin : une marque (le temps est le même entre deux marques : serrées, lent ; espacées,
+  vite) ;
+- glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire ;
+- tirer le chemin le tord là où on le prend ; Maj à l'appui, il se déplace en bloc (sur sa surface) ;
+- un second trait long retrace le chemin, sur la surface qu'il touche ; les marques et le temps restent ;
+- Échap abandonne le geste en cours.
+
+Chaque geste vaut pour **tout ce qui est choisi et qui suit un chemin**, en **une seule** étape d'annulation, aux noms de
+la feuille (« Trajectoire », « Marque de trajectoire », « Glisser une marque », « Retirer une marque », « Tirer la
+trajectoire », « Déplacer la trajectoire », « Retracer la trajectoire »). « Près du chemin » et « loin du chemin » se
+mesurent en pixels d'écran, sur le chemin tel que la vue le montre : la prise est la même de près et de loin.
+
+**Ce que ça donne.**
+
+- **Une carte** part de là où elle est à la tête de lecture et se déplace, dans l'espace, comme le chemin se déplace
+  depuis son départ : en largeur, en hauteur et en profondeur. Elle garde son orientation et sa taille dans l'espace :
+  elle rapetisse dans l'image en s'éloignant, grossit en venant vers nous, et passe devant ou derrière les autres selon
+  sa distance, toute seule. Plusieurs cartes choisies : chacune part de sa place et fait le même déplacement.
+  - « Clés d'interpolation » : une clé de position par image ; sur la timeline on ne voit que le départ, les marques et
+    la fin, et les glisser recale le chemin dans le temps, comme sur la feuille.
+  - « Clés d'images » : une clé tenue au départ, à chaque marque et à la fin ; la carte saute de l'une à l'autre. Aucune
+    copie de dessin n'est faite (sur la feuille, les clés d'images copient le dessin ; ici une copie n'a pas de sens, la
+    taille du dessin change avec la distance).
+  - Déplacer, tourner ou agrandir à la main une carte qui suit un chemin (poignées de la vue, champs des Réglages, outil
+    Transformer) change sa place de départ : elle bouge à toutes les images, et son chemin se déplace avec elle.
+- **La caméra** suit le chemin **sans aucune clé de caméra** : le déplacement du chemin s'ajoute, à chaque image, à la
+  caméra de ses clés, comme l'effet de caméra vivant. Panoramique, bascule, rotation et focale restent ceux des clés, et
+  la piste de la caméra n'est pas remplie. On peut toujours la déplacer ou la tourner dans la vue, à n'importe quelle
+  image : la clé écrite tient compte du chemin. « Regarder par la caméra », l'image du plan, les vignettes, les exports,
+  l'export de la caméra (valeurs image par image, et le plan marqué `trajectoire_dans_l_espace`), la fiche du plan, la
+  vue de dessus et la course de la caméra tracée dans la vue la montrent là où le chemin l'a portée. Avec la
+  postérisation temporelle du plan, le chemin avance par paliers, comme les clés.
+- Le montage ne casse rien : raccourcir ou rallonger le plan par la fin ne change pas le mouvement de la caméra (le plan
+  s'arrête en route, la suite revient en le rallongeant) ; rogner son début, insérer ou retirer des images décale le
+  chemin avec les images. Couper le plan, le réunir à un autre, ou rogner son début au-delà du départ du chemin : la
+  trajectoire de la caméra devient d'abord des clés (une par image là où elle la portait), sans changer aucune image.
+  Pour une carte, comme sur la feuille : couper ou réunir détache le chemin, les clés restent.
+
+**Ce que la vue montre**, avec l'outil : le chemin sur sa surface (une barre au départ, une flèche à l'arrivée), les
+marques, le numéro de l'image de chaque jalon, un point là où l'on en est à l'image courante, et la course de la caméra
+quand elle suit un chemin. Sur la **feuille** d'un plan en Espace 3D (ce que filme la caméra du plan), le chemin du
+calque courant est montré de même, sans se laisser prendre : il se retouche dans la vue Espace 3D, la barre d'état le
+dit. Le chemin de la caméra n'est pas montré sur la feuille.
+
+**Réglages** (panneau Réglages de la vue, en tête, quand l'outil a le pointeur) : qui est choisi, combien de marques, de
+quelle image à quelle image ; « Partir de la tête de lecture », « Finir à la tête de lecture », « Temps égaux entre les
+marques », les deux sortes de clés, « Retirer les marques », « Détacher » (le chemin s'en va, le mouvement reste : les
+clés des cartes, et pour la caméra une clé par image) et « Effacer » (le chemin et son mouvement s'en vont : les cartes
+gardent la place du départ, la caméra retrouve celle de ses clés). Tous agissent sur la trajectoire de tout ce qui est
+choisi, caméra comprise, en une étape. Le point d'ancrage et « le dessin tourne avec le chemin » ne sont pas proposés :
+ils ne servent pas dans l'espace.
+
+**Messages.**
+
+- Plan ordinaire : « Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D »
+  dans Réglages ; ou trace la trajectoire sur la feuille, hors de cette vue. »
+- Rien à déplacer, pas de surface sous le pointeur, trait trop court, calque verrouillé, accroché à la caméra, lié à son
+  calque de trait, ou qui a déjà une trajectoire tracée sur la feuille : la barre d'état dit pourquoi et rien n'est posé.
+- Sur la feuille : « Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même
+  outil. »
+- Décocher « Plan en Espace 3D » : les trajectoires dans l'espace des calques sont détachées (leurs clés restent) et celle
+  de la caméra devient ses clés, dans la même étape d'annulation que la case.
+
+**Comment.**
+
+- `trajectoire.rs` : la trajectoire de la feuille reçoit un **support** facultatif (`Support` : un point du plan et ses
+  deux axes, en mètres, une unité du chemin valant un pixel de la feuille au plan de référence). Avec lui, ses points se
+  lisent dans ce plan ; marques, temps, tirage, recalage : les mêmes calculs. `deplacement_a_l_image` donne le
+  déplacement dans l'espace à une image.
+- `trajectoire3d.rs` (nouveau) : l'outil dans la vue. `cles_dans_l_espace` pose les clés d'une carte par
+  `Monde::card_xf` et `card_from_xf_libre` (partie 148). La place de départ d'une carte est sa pose fixe
+  (`Layer::transform`, `Layer::depth`), que la trajectoire ne touche jamais.
+- `Panel::trajectoire_camera` : la trajectoire de la caméra. `Document::panel_camera_reelle` l'ajoute à la caméra des
+  clés ; `App::current_camera` aussi, et `App::set_current_camera` la retire avant d'écrire la clé.
+  `Document::cuire_trajectoires_camera` l'écrit en clés sans changer l'image.
+- Fichier : toujours le **format 55**, deux champs facultatifs (`support` dans la `trajectoire` d'un calque,
+  `trajectoire_camera` d'un plan). Un projet sans eux, et un projet du format 54, s'ouvrent comme avant.
+
+**Trois défauts corrigés en chemin** (notés à la partie 148).
+
+- **Caméra retournée relue à 85°.** La lecture d'un projet ramenait la bascule et le panoramique de toute clé de caméra à
+  ±85°. Dans un plan en Espace 3D, la caméra est libre : sa bascule va jusqu'à 90° et son panoramique n'a pas de borne.
+  Une caméra retournée revient maintenant comme elle était. La borne de 85° reste pour les plans ordinaires
+  (`project::bornes_de_camera`). La même borne existait à la lecture du contenu rogné d'un plan (`rognage.rs`, les clés
+  de caméra rangées quand on raccourcit un plan) : même correction, selon le plan.
+- **Message périmé.** La barre d'état et la bulle de « Plan en Espace 3D » disaient « En construction : l'image ne change
+  pas encore ». Elles disent ce que fait la case.
+- **Silhouettes de la trajectoire de la feuille.** Dans un plan en Espace 3D, les silhouettes pâles du calque aux jalons
+  étaient posées sans tenir compte de la caméra du plan. Elles sont posées comme le calque lui-même, par le repère de
+  cette caméra.
+
+**Ce qui n'est pas fait.**
+
+- La trajectoire de la caméra ne se voit pas sur la timeline (elle n'a pas de clé) : son départ et sa fin se recalent par
+  les boutons des Réglages, ses marques par la vue. Celle d'une carte se recale sur la timeline, comme sur la feuille.
+- Le chemin de la caméra reste où il a été tracé quand on déplace la caméra à la main (celui d'une carte la suit).
+- Pas de silhouettes aux jalons dans la vue Espace 3D.
+- Le chemin est à plat sur une seule surface : il ne monte pas un escalier, ne passe pas du sol à un mur.
+- Retourner un calque ou des calques choisis (miroir) ne retourne pas un chemin tracé dans l'espace : le calque est
+  retourné, son chemin reste. Retourner le plan entier retourne aussi les chemins.
+- Un calque qui a une trajectoire tracée sur la feuille ne reçoit pas de chemin dans l'espace tant qu'elle n'est pas
+  effacée.
+- Entre deux clés de position posées à la main à des profondeurs différentes, une carte ne garde toujours pas sa taille
+  dans l'espace (partie 148). Une trajectoire en clés d'interpolation n'a pas ce défaut (une clé par image).
+
+**Essais.** `src/trajectoire3d_tests.rs`, 17 essais : le support (du plan à l'espace et retour, ce qui n'est pas un
+plan), le déplacement dans l'espace et le temps des marques, l'écriture en JSON, les clés d'une carte (place, taille et
+orientation dans l'espace) ; puis de vrais gestes de souris dans la vue : un chemin sur le sol déplace la carte choisie
+en X et en Z (sa profondeur change, pas sa taille dans l'espace) ; deux cartes choisies, une annulation pour les deux ;
+un chemin sur une carte non choisie ; la caméra choisie (`panel_camera_reelle` suit, aucune clé, réglable à toute
+image) ; une carte et la caméra ensemble, « Effacer » et « Détacher » ; marques, recalage sur la timeline, glisser et
+arracher une marque, tirer, Échap, second trait ; déplacer à la main une carte qui suit un chemin ; le refus d'un plan
+ordinaire, la feuille, la case décochée ; enregistrer et relire les deux sortes, un projet du format 54 ; la caméra
+retournée relue ; couper, rogner, insérer des images ; le message de la case ; les silhouettes. Vérificateur : 4 579 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs` ; il n'en nomme plus que cinq, `Monde::to_frame` sert maintenant).
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.** Rien n'a été regardé à l'écran.
+
+1. Un plan en Espace 3D, deux cartes avec un dessin. Vue Espace 3D, outil Trajectoire. La carte du calque courant étant
+   entourée, tracer un trait sur le sol, devant elle : le chemin apparaît sur le quadrillage, avec sa barre, sa flèche et
+   les numéros d'images. Lire le plan : la carte suit le chemin, grossit en venant vers nous, sans se déformer.
+2. Dire si le trait tombe bien là où on le pose sur le sol, de près et de loin, et si le sol est facile à viser (le
+   quadrillage suffit-il à lire la profondeur ?).
+3. Un petit trait en travers du chemin : une marque. En poser deux serrées près du départ : départ lent. Glisser une
+   marque ; la tirer loin du chemin : elle part. Tirer le chemin : il se tord. Maj+glisser : il se déplace. Échap pendant
+   un geste : rien ne change. Ctrl+Z après chaque geste : un seul pas à chaque fois.
+4. Ctrl+clic sur la seconde carte : les deux sont choisies. Un nouveau trait : les deux cartes suivent. Ctrl+Z : les
+   deux chemins partent ensemble.
+5. Choisir la caméra (bouton Caméra, ou Ctrl+clic sur elle). Tracer un chemin au sol : la caméra le suit, sa course est
+   tracée dans la vue. « Regarder par la caméra » et lire : travelling. Vérifier sur la timeline qu'aucune clé de caméra
+   n'a été posée. Quitter la vue Espace 3D : l'image du plan fait le même travelling.
+6. La caméra sur son chemin, à une image du milieu : la tourner (panoramique) ou la déplacer avec ses poignées. Elle
+   reste où on la met, et le reste du mouvement suit.
+7. Une carte et la caméra choisies ensemble, un seul trait : les deux suivent le même chemin, à la même vitesse (la carte
+   reste à la même place dans l'image).
+8. Tracer sur un mur (une carte debout, non choisie) : le chemin est posé sur le mur, la carte choisie monte et descend
+   sans changer de distance.
+9. Réglages, avec l'outil : « Partir de la tête de lecture », « Finir à la tête de lecture », les deux sortes de clés
+   (en clés d'images, la carte et la caméra sautent de marque en marque), « Détacher », « Effacer ». Dire si ces
+   réglages sont à la bonne place (en tête du panneau de l'Espace 3D).
+10. Une carte qui suit un chemin : la déplacer avec ses poignées. Elle bouge à toutes les images, son chemin avec elle.
+11. Sur la timeline, glisser la clé d'une marque d'une carte : le mouvement est recalé.
+12. Quitter la vue Espace 3D, outil Trajectoire en main : le chemin de la carte se voit sur la feuille, tel que la caméra
+    le filme ; un appui dit qu'il se retouche dans la vue Espace 3D.
+13. Raccourcir le plan par la fin, puis le rallonger : le mouvement de la caméra ne change pas. Couper le plan au
+    milieu : les deux moitiés gardent leur image (la caméra a maintenant des clés).
+14. Un plan ordinaire, vue Espace 3D, outil Trajectoire : la barre d'état dit qu'il faut un plan en Espace 3D.
+15. Tourner la caméra d'un plan en Espace 3D d'un demi-tour (panoramique 180°), enregistrer, fermer, rouvrir : elle est
+    toujours retournée.
+16. Enregistrer, fermer, rouvrir : les chemins sont là, les mouvements sont les mêmes.

@@ -296,6 +296,7 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
         source: None,
         dessins: vec![DessinJalon { dessin: 1, dx: f32::NAN, dy: 0.0, angle: 0.0 }, DessinJalon { dessin: 2, dx: 0.0, dy: 0.0, angle: f32::NAN }],
         tourne: false,
+        support: None,
     };
     let propre = abimee.assainie().expect("tient debout");
     assert_eq!(propre.points.len(), 2);

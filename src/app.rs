@@ -1955,7 +1955,9 @@ impl App {
             if onion && !self.playing && li == cur && self.tool == Tool::Trajectoire {
                 if let Some(t) = layer.trajectoire.as_ref().filter(|t| t.cles == crate::trajectoire::Cles::Interpolation) {
                     for f in t.images_des_jalons(self.frame_count()).into_iter().filter(|&f| f != frame) {
-                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place(&world, layer, f, &camera)) else { continue };
+                        // (Plan en Espace 3D : la silhouette se pose comme le calque lui-même, par le repère de la caméra du plan à
+                        // l'image montrée ; sans lui elle ignorait cette caméra, partie 149.)
+                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place_dans(&world, layer, f, &camera, repere.as_ref())) else { continue };
                         onion_items.push(PlanItem {
                             cel,
                             opacity: crate::trajectoireui::FANTOME_OPACITE,
@@ -2697,8 +2699,10 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
-        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé.
+        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé. Dans la vue Espace 3D aussi
+        // (`trajectoire3d.rs`).
         self.trajectoire_lacher();
+        self.e3_traj_lacher();
         self.guides.stroke = None;
         self.shape_drag = None;
         // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un tracé abandonné ; une retouche en cours

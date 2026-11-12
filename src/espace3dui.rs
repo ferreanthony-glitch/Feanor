@@ -206,6 +206,9 @@ impl App {
                 // (Plan en Espace 3D : l'inclinaison est libre, la carte se couche au sol ou fait un demi-tour.)
                 if self.doc.plan_en_espace(self.cur_panel) {
                     world.apply_card_xf_libre(&mut self.layers_mut()[li], frame, xf);
+                    // (Une carte qui suit une trajectoire dans l'espace : sa pose propre prend le geste, son chemin la suit,
+                    // `trajectoire3d.rs`, partie 149.)
+                    self.trajectoire_espace_apres_pose(li);
                 } else {
                     world.apply_card_xf(&mut self.layers_mut()[li], frame, xf);
                 }
@@ -261,8 +264,9 @@ impl App {
     }
 
     /// Coche ou décoche « Plan en Espace 3D » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
-    /// d'annulation. Étape A1 : la case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; l'image
-    /// n'en dépend pas encore. Refusé si le cadre ne tient pas dans la feuille (`Document::accepte_plan_en_espace`).
+    /// d'annulation. La case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; cochée, la caméra du plan
+    /// est libre et l'image montre ce qu'elle filme. Refusé si le cadre ne tient pas dans la feuille
+    /// (`Document::accepte_plan_en_espace`).
     ///
     /// **Décocher** (partie 148) : un plan ordinaire ne sait pas tenir une carte au-delà de `Layer::MIN_DEPTH` (tout contre
     /// la caméra d'origine du plan, ou derrière elle). Ces cartes reviennent à cette borne (`Layer::ramener_a_la_borne`),
@@ -275,6 +279,11 @@ impl App {
         }
         let pi = self.cur_panel;
         let ramenees = self.espace3d_step("Plan en Espace 3D", |s| {
+            // (Décoché : une trajectoire dans l'espace n'a plus de sens. Celles des calques sont détachées, leurs clés restent ;
+            // celle de la caméra devient ses clés. Partie 149.)
+            if !on {
+                Self::trajectoires_espace_quitter(&mut s.doc, pi);
+            }
             let p = &mut s.doc.panels[pi];
             p.espace = on;
             let mut cartes = 0;
@@ -289,7 +298,7 @@ impl App {
         });
         self.renderer.invalidate_all();
         self.status = if on {
-            "Plan en Espace 3D : coché pour ce plan. (En construction : l'image ne change pas encore.)".into()
+            "Plan en Espace 3D : coché pour ce plan. Sa caméra est libre dans l'espace, et ce qui est devant cache ce qui est derrière.".into()
         } else if ramenees == 1 {
             "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. Une carte était tout contre la caméra d'origine du plan, ou derrière elle : elle est revenue devant elle, un plan ordinaire ne peut pas la garder là. Ctrl+Z remet tout comme avant.".into()
         } else if ramenees > 1 {
@@ -427,7 +436,8 @@ impl App {
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
         // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
         // vue sont éteints ; un outil de la vue lui rend les cartes.
-        let dessine = self.e3_dessine();
+        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.)
+        let dessine = self.e3_dessine() || self.e3_trace();
         self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
             if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
@@ -486,6 +496,12 @@ impl App {
             ui.heading(format!("{}  Espace 3D", ph::CUBE));
             ui.label(RichText::new("cartes et caméra").small().weak());
         });
+        // L'outil Trajectoire a le pointeur dans la vue : ses réglages d'abord, pour ce qui est choisi (`trajectoire3d.rs`,
+        // partie 149). Le reste du panneau suit : c'est là qu'on choisit les cartes et la caméra.
+        if self.e3_trace() {
+            self.trajectoire_espace_options_ui(ui);
+            ui.separator();
+        }
         // Repère des poignées, aimantation, grille.
         ui.horizontal(|ui| {
             interrupteur(ui, &mut self.espace3d.local, ph::CUBE_FOCUS, "Manipulateur dans le repère de la carte", "Les axes suivent la carte (une seule carte choisie) au lieu de ceux de l'espace.", "");
@@ -497,13 +513,13 @@ impl App {
             if r.clicked() {
                 self.espace3d.show_grid = !self.espace3d.show_grid;
             }
-            // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : une case du plan courant. Étape A1 : l'image n'en dépend pas encore.
+            // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : une case du plan courant.
             let r = self.bouton_etat(
                 ui,
                 self.panel().espace,
                 ph::CUBE_TRANSPARENT,
                 "Plan en Espace 3D",
-                "Ce plan devient un plan en Espace 3D : caméra libre, cartes qui se cachent selon leur distance. En construction : pour l'instant la case est retenue et enregistrée avec le plan, l'image ne change pas encore.",
+                "Ce plan devient un plan en Espace 3D : sa caméra est libre dans l'espace (elle tourne tout autour, passe derrière les cartes), ce qui est devant cache ce qui est derrière, et l'image montre ce que cette caméra filme. La case est enregistrée avec le plan.",
                 "espace3d.plan_en_espace",
             );
             if r.clicked() {
@@ -702,6 +718,10 @@ impl App {
             }
             if deepened {
                 layer.set_depth_selon(frame, depth, libre);
+            }
+            // (Une carte qui suit une trajectoire dans l'espace : ce réglage vaut pour sa pose propre, à toutes les images.)
+            if libre {
+                self.trajectoire_espace_apres_pose(li);
             }
         }
         ui.label(RichText::new("Rotation Z : le tour dans le plan de la carte (antihoraire) ; X et Y inclinent la carte.").small().weak());

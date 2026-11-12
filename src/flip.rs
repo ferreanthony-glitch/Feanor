@@ -69,8 +69,14 @@ impl App {
         for k in &mut l.pos_keys {
             k.t = flipped_in_place(k.t, pivot, center, horizontal);
         }
-        if let Some(t) = &mut l.trajectoire {
+        // (Un chemin tracé dans l'espace n'est pas sur la feuille : il reste où il est, et les clés de la carte retournée sont
+        // reposées d'après lui, partie 149.)
+        let dans_l_espace = l.trajectoire.as_ref().is_some_and(|t| !t.sur_la_feuille());
+        if let Some(t) = l.trajectoire.as_mut().filter(|t| t.sur_la_feuille()) {
             t.retourner(horizontal);
+        }
+        if dans_l_espace {
+            self.trajectoire_recalculer(li);
         }
         self.renderer.invalidate_all();
         self.status = format!("Calque retourné {} (ses dessins ne changent pas ; Ctrl+R annule la transformation).", if horizontal { "de gauche à droite" } else { "de haut en bas" });
@@ -92,10 +98,14 @@ impl App {
         self.drop_bitmap_selection();
         self.record_step();
         let (pivot, axis) = (self.doc.stage_center(), self.doc.frame_rect().center().x);
+        // (Les chemins tracés dans l'espace, partie 149 : leur plan est vu dans le même miroir, dressé au milieu du cadre.)
+        let world = crate::espace3d::Monde::of(&self.doc);
+        let miroir = (axis - world.stage[0] / 2.0) * world.k;
         let mut shared = 0;
+        let mut dans_l_espace: Vec<(usize, usize)> = Vec::new();
         for &pi in &targets {
             let p = &mut self.doc.panels[pi];
-            for l in &mut p.layers {
+            for (li, l) in p.layers.iter_mut().enumerate() {
                 if l.scene_wide.is_some() {
                     shared += 1;
                     continue;
@@ -105,12 +115,24 @@ impl App {
                     k.t = mirror_transform_x(k.t, pivot, axis);
                 }
                 if let Some(t) = &mut l.trajectoire {
-                    t.retourner(true);
+                    match t.support {
+                        Some(s) => {
+                            t.support = Some(s.miroir_x(miroir));
+                            dans_l_espace.push((pi, li));
+                        }
+                        None => t.retourner(true),
+                    }
                 }
             }
             for k in &mut p.camera {
                 k.cam = mirror_camera_x(k.cam, axis);
             }
+            if let Some(t) = p.trajectoire_camera.as_mut() {
+                t.support = t.support.map(|s| s.miroir_x(miroir));
+            }
+        }
+        for (pi, li) in dans_l_espace {
+            self.trajectoire_recalculer_dans(pi, li);
         }
         self.renderer.invalidate_all();
         let n = targets.len();

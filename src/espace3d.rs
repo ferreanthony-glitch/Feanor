@@ -746,6 +746,10 @@ pub struct Placed {
 /// une carte inclinée tout entière derrière l'œil), on ne le voit pas.
 ///
 /// Carte à plat : exactement `Layer::transform_seen_at` (les mêmes pixels qu'avant l'Espace 3D).
+///
+/// (Tout ce qui compose une image passe maintenant par `place_dans`, qui sait le plan en Espace 3D : les silhouettes de
+/// l'outil Trajectoire étaient le dernier appel sans repère, partie 149. Il ne reste ici que le plan ordinaire, pour les essais.)
+#[cfg(test)]
 pub fn place(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen) -> Option<Placed> {
     place_dans(world, layer, frame, camera, None)
 }

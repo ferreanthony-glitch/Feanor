@@ -116,7 +116,122 @@ pub struct DessinJalon {
     pub angle: f32,
 }
 
-/// La trajectoire d'un calque, telle qu'elle s'écrit dans le projet (`trajectoire` d'un calque).
+/// **Le support d'une trajectoire tracée dans l'Espace 3D** (`docs/INTERFACE.md`, partie 149) : le plan de l'espace sur lequel le
+/// chemin est posé (une carte, le sol, ou un plan face à la vue). Les points du chemin restent deux nombres, lus dans ce plan : le
+/// point (a, b) du chemin est, dans l'espace, `origine + a · u + b · v` (mètres). Les deux axes sont perpendiculaires et de même
+/// longueur : celle d'un pixel de la feuille au plan de référence (`espace3d::Monde::k` mètres), pour que les mesures du chemin (le
+/// pas, la longueur d'un clic, le rayon du tirage) gardent une taille sensée. Sans support, la trajectoire est sur la feuille.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Support {
+    /// Le point de l'espace (mètres) où le chemin a ses coordonnées (0, 0).
+    pub origine: [f32; 3],
+    /// Le premier axe du plan : une unité du chemin, en mètres.
+    pub u: [f32; 3],
+    /// Le second axe, perpendiculaire au premier, de la même longueur.
+    pub v: [f32; 3],
+}
+
+fn v3_moins(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn v3_scalaire(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn v3_norme(a: [f32; 3]) -> f32 {
+    v3_scalaire(a, a).sqrt()
+}
+
+impl Support {
+    /// Le plan qui passe par `origine`, d'axes dirigés par `u` et `v` (redressés : le second est rendu perpendiculaire au premier),
+    /// une unité du chemin valant `unite` mètres. Rien si les directions ne font pas un plan (nulles, alignées, abîmées).
+    pub fn nouveau(origine: [f32; 3], u: [f32; 3], v: [f32; 3], unite: f32) -> Option<Support> {
+        let nu = v3_norme(u);
+        if !(nu.is_finite() && nu > 1e-9 && unite.is_finite() && unite > 1e-9) || !origine.iter().all(|x| x.is_finite()) {
+            return None;
+        }
+        let u = u.map(|x| x / nu);
+        let k = v3_scalaire(v, u);
+        let v = [v[0] - u[0] * k, v[1] - u[1] * k, v[2] - u[2] * k];
+        let nv = v3_norme(v);
+        if !(nv.is_finite() && nv > 1e-6) {
+            return None;
+        }
+        Some(Support { origine, u: u.map(|x| x * unite), v: v.map(|x| x / nv * unite) })
+    }
+
+    /// Le point de l'espace (mètres) du point `p` du chemin.
+    pub fn monde(&self, p: [f32; 2]) -> [f32; 3] {
+        [0, 1, 2].map(|i| self.origine[i] + p[0] * self.u[i] + p[1] * self.v[i])
+    }
+
+    /// Le déplacement dans l'espace (mètres) du déplacement `d` dans le plan.
+    pub fn deplacement(&self, d: [f32; 2]) -> [f32; 3] {
+        [0, 1, 2].map(|i| d[0] * self.u[i] + d[1] * self.v[i])
+    }
+
+    /// Le point du plan le plus proche du point `q` de l'espace (sa projection à angle droit), en coordonnées du chemin.
+    pub fn dans_le_plan(&self, q: [f32; 3]) -> [f32; 2] {
+        let d = v3_moins(q, self.origine);
+        [v3_scalaire(d, self.u) / v3_scalaire(self.u, self.u), v3_scalaire(d, self.v) / v3_scalaire(self.v, self.v)]
+    }
+
+    /// La normale du plan (longueur 1).
+    pub fn normale(&self) -> [f32; 3] {
+        let (a, b) = (self.u, self.v);
+        let n = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        let l = v3_norme(n).max(1e-12);
+        n.map(|x| x / l)
+    }
+
+    /// Là où le rayon parti de `depart` dans la direction `direction` traverse le plan, en coordonnées du chemin. Rien s'il lui est
+    /// parallèle, s'il le traverse derrière son départ, ou trop loin pour que ce soit encore un point du chemin (près de l'horizon
+    /// d'un sol, le point part à l'infini).
+    pub fn couper(&self, depart: [f32; 3], direction: [f32; 3]) -> Option<[f32; 2]> {
+        let n = self.normale();
+        let den = v3_scalaire(direction, n);
+        if !den.is_finite() || den.abs() < 1e-6 * v3_norme(direction).max(1e-12) {
+            return None;
+        }
+        let t = v3_scalaire(v3_moins(self.origine, depart), n) / den;
+        if !(t.is_finite() && t > 0.0) {
+            return None;
+        }
+        let p = self.dans_le_plan([0, 1, 2].map(|i| depart[i] + direction[i] * t));
+        (p[0].is_finite() && p[1].is_finite() && p[0].abs() < COORDONNEE_MAX && p[1].abs() < COORDONNEE_MAX).then_some(p)
+    }
+
+    /// Le plan déplacé de `d` mètres : le chemin qu'il porte se déplace d'autant dans l'espace.
+    pub fn deplace(self, d: [f32; 3]) -> Support {
+        Support { origine: [0, 1, 2].map(|i| self.origine[i] + d[i]), ..self }
+    }
+
+    /// Le plan vu dans un miroir dressé en x = `x` (retourner un plan de gauche à droite).
+    pub fn miroir_x(self, x: f32) -> Support {
+        let m = |p: [f32; 3]| [-p[0], p[1], p[2]];
+        Support { origine: [2.0 * x - self.origine[0], self.origine[1], self.origine[2]], u: m(self.u), v: m(self.v) }
+    }
+
+    /// Un support relu d'un fichier : rien s'il ne fait pas un plan (valeurs abîmées, axes nuls ou alignés). Des axes
+    /// perpendiculaires et de même longueur reviennent tels quels, au chiffre près ; sinon ils sont redressés (`nouveau`).
+    pub fn assaini(self) -> Option<Support> {
+        let fini = |p: [f32; 3]| p.iter().all(|x| x.is_finite() && x.abs() < 1e6);
+        if !(fini(self.origine) && fini(self.u) && fini(self.v)) {
+            return None;
+        }
+        let (nu, nv) = (v3_norme(self.u), v3_norme(self.v));
+        if !(nu > 1e-9 && nv > 1e-9) {
+            return None;
+        }
+        let droit = (v3_scalaire(self.u, self.v) / (nu * nv)).abs() < 1e-3 && (nu - nv).abs() <= 1e-3 * nu;
+        if droit { Some(self) } else { Support::nouveau(self.origine, self.u, self.v, nu) }
+    }
+}
+
+/// Au-delà de cette distance de l'origine de son plan (unités du chemin), un point n'est plus un point du chemin.
+pub const COORDONNEE_MAX: f32 = 2.0e5;
+
+/// La trajectoire d'un calque, telle qu'elle s'écrit dans le projet (`trajectoire` d'un calque) ; ou, avec un support, celle de la
+/// caméra d'un plan en Espace 3D (`trajectoire_camera` d'un plan).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Trajectoire {
     /// Les points du chemin, en pixels de la feuille, du départ à l'arrivée ; au moins deux, à `PAS` l'un de l'autre.
@@ -158,6 +273,11 @@ pub struct Trajectoire {
     /// en gardant son orientation du départ. Faux d'origine : il garde son orientation sur tout le chemin.
     #[serde(default, skip_serializing_if = "est_faux")]
     pub tourne: bool,
+    /// **Tracée dans l'Espace 3D** (format 55, partie 149) : le plan de l'espace où le chemin est posé. Ses points se lisent alors
+    /// dans ce plan, et ce qui la suit (une carte, la caméra du plan) se déplace dans l'espace du déplacement du chemin depuis son
+    /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub support: Option<Support>,
 }
 
 fn est_zero_usize(v: &usize) -> bool {
@@ -195,7 +315,77 @@ impl Trajectoire {
             source: None,
             dessins: Vec::new(),
             tourne: false,
+            support: None,
         })
+    }
+
+    /// Un chemin tracé dans l'Espace 3D : les points `brut` du trait, lus dans le plan `support`. Rien si le trait est trop court.
+    pub fn nouvelle_dans_l_espace(brut: &[[f32; 2]], support: Support) -> Option<Trajectoire> {
+        Trajectoire::nouvelle(brut).map(|t| Trajectoire { support: Some(support), ..t })
+    }
+
+    /// La trajectoire est sur la feuille (sans support) : ses points sont des pixels de la feuille, et tout ce qui déplace, retourne
+    /// ou agrandit la feuille les déplace avec elle. Faux : elle est dans l'espace, ces gestes n'y touchent pas.
+    pub fn sur_la_feuille(&self) -> bool {
+        self.support.is_none()
+    }
+
+    /// Le déplacement dans l'espace (mètres) depuis le départ du chemin jusqu'à sa fraction `f` ; rien pour une trajectoire sur la
+    /// feuille.
+    pub fn deplacement_a(&self, f: f32) -> Option<[f32; 3]> {
+        let s = self.support?;
+        let (p, d) = (self.point_a(f), self.points[0]);
+        Some(s.deplacement([p[0] - d[0], p[1] - d[1]]))
+    }
+
+    /// La fraction du chemin où est, à l'image `image` d'un plan de `duree` images, ce qui suit la trajectoire : 0 avant le départ,
+    /// 1 après la fin. En clés d'interpolation, le long du chemin au rythme des marques (`fraction_a_l_image`) ; en clés d'images, le
+    /// dernier jalon atteint (le départ, une marque, l'arrivée), tenu jusqu'au suivant. Rien si le plan n'a pas au moins une image
+    /// après le départ : rien ne bouge encore.
+    pub fn fraction_suivie(&self, image: usize, duree: usize) -> Option<f32> {
+        let fin = self.derniere_image(duree)?;
+        if image < self.depart {
+            return Some(0.0);
+        }
+        if image >= fin {
+            return Some(1.0);
+        }
+        match self.cles {
+            Cles::Interpolation => self.fraction_a_l_image(image, duree),
+            Cles::Images => {
+                let (jalons, images) = (self.jalons(), self.images_des_jalons(duree));
+                let k = images.iter().rposition(|&i| i <= image)?;
+                jalons.get(k).copied()
+            }
+        }
+    }
+
+    /// Le déplacement dans l'espace (mètres), à l'image `image` d'un plan de `duree` images, de ce qui suit la trajectoire : rien
+    /// avant le départ, celui du bout du chemin après la fin (`fraction_suivie`). Rien pour une trajectoire sur la feuille, ou si le
+    /// plan s'arrête avant que le chemin ne commence.
+    pub fn deplacement_a_l_image(&self, image: usize, duree: usize) -> Option<[f32; 3]> {
+        self.deplacement_a(self.fraction_suivie(image, duree)?)
+    }
+
+    /// Les images où une trajectoire dans l'espace pose une clé de position, avec la fraction du chemin de chacune : une par image du
+    /// départ à la fin en clés d'interpolation, une par jalon (tenue jusqu'au suivant) en clés d'images. Vide si le plan s'arrête
+    /// avant que le chemin ne commence.
+    pub fn images_et_fractions(&self, duree: usize) -> Vec<(usize, f32)> {
+        let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
+        match self.cles {
+            Cles::Interpolation => (self.depart..=fin).filter_map(|f| Some((f, self.fraction_a_l_image(f, duree)?))).collect(),
+            Cles::Images => {
+                let mut out: Vec<(usize, f32)> = Vec::new();
+                for (image, fraction) in self.images_des_jalons(duree).into_iter().zip(self.jalons()) {
+                    // (Deux jalons arrondis à la même image : le dernier l'emporte, comme pour les dessins des clés d'images.)
+                    match out.last_mut() {
+                        Some(d) if d.0 == image => d.1 = fraction,
+                        _ => out.push((image, fraction)),
+                    }
+                }
+                out
+            }
+        }
     }
 
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
@@ -231,6 +421,13 @@ impl Trajectoire {
             if !x.is_finite() || !y.is_finite() {
                 self.ancre = Ancre::Depart;
             }
+        }
+        // Une trajectoire dans l'espace dont le support ne fait pas un plan ne se lit pas : ses points ne sont pas des pixels de la
+        // feuille, la garder la ferait prendre pour une autre.
+        if let Some(s) = self.support {
+            self.support = Some(s.assaini()?);
+            (self.ancre, self.tourne, self.decalage_depart, self.source) = (Ancre::Depart, false, [0.0, 0.0], None);
+            self.dessins.clear();
         }
         Some(self)
     }
@@ -457,6 +654,15 @@ impl Trajectoire {
         if bons {
             self.temps = Some(temps);
         }
+    }
+
+    /// Tout le chemin décalé de `delta` images dans le temps (négatif : plus tôt) : son départ et sa fin posée, les marques avec
+    /// eux. Le plan a gagné ou perdu des images à son début (`rognage.rs`). Un départ qui passerait avant la première image s'y
+    /// arrête.
+    pub fn decaler_de(&mut self, delta: isize) {
+        let bouge = |f: usize| (f as isize + delta).max(0) as usize;
+        self.depart = bouge(self.depart);
+        self.fin = self.fin.map(bouge).filter(|&f| f > self.depart);
     }
 
     /// Le déplacement du calque à chaque jalon, pour que le point d'ancrage `ancre` (pixels de la feuille) soit sur le chemin.

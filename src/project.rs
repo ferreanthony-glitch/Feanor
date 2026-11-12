@@ -258,8 +258,25 @@ pub const FORMAT: &str = "pelure-projet";
 /// Une version précédente ramènerait ces profondeurs à −0,9 en ouvrant le projet (la carte reviendrait devant la caméra, le film
 /// changerait sans prévenir) et les perdrait à l'enregistrement : elle le refuse donc. Un projet de version 54 ou moins s'ouvre
 /// tel quel, avec les mêmes valeurs et les mêmes images (il n'a aucune profondeur sous −0,9) ; un plan ordinaire garde sa borne.
-/// (L'outil Trajectoire dans l'Espace 3D, étape suivante du même chantier, ajoutera ses champs sous ce même numéro.)
+/// Sous ce même numéro (2026-11-12, `docs/INTERFACE.md` partie 149) : **la Trajectoire dans l'Espace 3D** — deux champs facultatifs :
+/// `support` dans la `trajectoire` d'un calque (`trajectoire::Support` : le plan de l'espace où le chemin est posé, son origine et
+/// ses deux axes en mètres ; absent : une trajectoire sur la feuille, celle de toujours) et `trajectoire_camera` d'un plan (la
+/// trajectoire que suit la caméra d'un plan en Espace 3D, toujours avec son `support` ; elle ne pose aucune clé de caméra). Un
+/// projet sans eux se lit comme avant. Et la bascule et le panoramique des clés de caméra d'un plan en Espace 3D ne sont plus
+/// ramenés à ±85° à la lecture (`bornes_de_camera`) : une caméra retournée revient comme elle était.
 pub const VERSION: u32 = 55;
+
+/// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
+/// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
+/// libre, la bascule va jusqu'à la verticale (`espace3d::MAX_TILT`) et le panoramique fait autant de tours qu'on veut (borné
+/// comme `SceneCam::sanitized`, pour écarter une valeur abîmée).
+pub(crate) fn bornes_de_camera(espace: bool, bascule: f32, panoramique: f32) -> (f32, f32) {
+    if espace {
+        (bascule.clamp(-crate::espace3d::MAX_TILT, crate::espace3d::MAX_TILT), panoramique.clamp(-3600.0, 3600.0))
+    } else {
+        (bascule.clamp(-85.0, 85.0), panoramique.clamp(-85.0, 85.0))
+    }
+}
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -578,6 +595,10 @@ pub(crate) struct PanelEntry {
     /// Plan en Espace 3D (format 54, `Panel::espace` ; absent : un plan ordinaire).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     espace: bool,
+    /// Trajectoire de la caméra d'un plan en Espace 3D (format 55, partie 149, `Panel::trajectoire_camera`) : un chemin tracé dans
+    /// l'espace, avec son `support` ; absente : la caméra des clés, telle quelle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    trajectoire_camera: Option<crate::trajectoire::Trajectoire>,
 }
 
 /// Postérisation temporelle de la caméra d'un plan (format 37) : allumée ou non, et « toutes les N images ».
@@ -2578,6 +2599,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
             .collect(),
         espace: panel.espace,
+        trajectoire_camera: panel.trajectoire_camera.clone(),
     };
     if digest {
         entry.signets.clear();
@@ -3310,7 +3332,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                             })
                             .unwrap_or_default(),
                         pos_keys: crate::poskeys::from_entries(l.cles_position),
-                        trajectoire: l.trajectoire.and_then(crate::trajectoire::Trajectoire::assainie),
+                        // (Une trajectoire tracée dans l'espace ne vaut que dans un plan en Espace 3D : ailleurs, ses clés restent,
+                        // à la main.)
+                        trajectoire: l.trajectoire.filter(|t| en_espace || t.support.is_none()).and_then(crate::trajectoire::Trajectoire::assainie),
                         opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
                         unie: l.couleur_unie,
                         // (Plan en Espace 3D, format 55 : la profondeur est libre, la carte peut être derrière la caméra de
@@ -3407,14 +3431,18 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     let finite =
                         [k.x, k.y, k.zoom, k.rotation, k.avance, k.adoucir_entree, k.adoucir_sortie, k.bascule, k.panoramique];
                     if finite.iter().all(|v| v.is_finite()) {
+                        // (Plan ordinaire : la caméra tournée doit encore voir la feuille, bascule et panoramique s'arrêtent à 85°.
+                        // Plan en Espace 3D : sa caméra est libre, elle bascule jusqu'à la verticale et tourne tout autour ; une
+                        // caméra retournée revient comme elle était, `bornes_de_camera`.)
+                        let (bascule, panoramique) = bornes_de_camera(p.espace, k.bascule, k.panoramique);
                         let cam = Camera {
                             x: k.x,
                             y: k.y,
                             zoom: k.zoom.clamp(0.05, 50.0),
                             angle: k.rotation,
                             dolly: k.avance,
-                            tilt: k.bascule.clamp(-85.0, 85.0),
-                            pan: k.panoramique.clamp(-85.0, 85.0),
+                            tilt: bascule,
+                            pan: panoramique,
                         };
                         crate::camera::set_key(&mut camera, k.image, cam);
                         if let Some(x) = camera.iter_mut().find(|x| x.frame == k.image) {
@@ -3471,6 +3499,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     },
                     color: p.couleur.filter(|k| (*k as usize) < crate::marks::COLORS.len()),
                     espace: p.espace,
+                    // (Une trajectoire de caméra n'a de sens que dans un plan en Espace 3D, et avec son support.)
+                    trajectoire_camera: p.trajectoire_camera.filter(|t| p.espace && t.support.is_some()).and_then(crate::trajectoire::Trajectoire::assainie),
                 });
             }
         }

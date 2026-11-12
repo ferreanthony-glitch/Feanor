@@ -930,6 +930,10 @@ mod espace3dcles_tests;
 mod espace3ddessin;
 #[cfg(test)]
 mod espace3ddessin_tests;
+// La Trajectoire dans l'Espace 3D (partie 149) : ce qui est choisi (cartes, caméra) suit un chemin tracé sur une surface.
+mod trajectoire3d;
+#[cfg(test)]
+mod trajectoire3d_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

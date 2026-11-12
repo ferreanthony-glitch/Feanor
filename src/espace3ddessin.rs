@@ -248,6 +248,9 @@ impl App {
         }
         if outil_de_dessin(tool) {
             self.e3_dessiner();
+        } else if tool == Tool::Trajectoire {
+            // L'outil Trajectoire : le pointeur trace, dans l'espace, le chemin de ce qui est choisi (`trajectoire3d.rs`, partie 149).
+            self.e3_tracer();
         } else if self.e3d.dessin {
             self.e3_manipuler();
             self.status = MANIPULE.into();
@@ -276,6 +279,7 @@ impl App {
     /// Un outil de la vue est repris : le pointeur manipule les cartes.
     pub(crate) fn e3_manipuler(&mut self) {
         if self.e3d.dessin {
+            // (Le trait en cours est fini ; un geste de trajectoire en cours dans la vue aussi, `end_stroke`.)
             self.end_stroke();
             self.e3d.dessin = false;
             self.e3d.vive = None;

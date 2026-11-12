@@ -959,8 +959,14 @@ pub struct Panel {
     /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
     pub color: Option<u8>,
     /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
-    /// se cachent selon leur distance. Étape A1 : la case seulement, l'image n'en dépend pas encore. Faux : un plan ordinaire.
+    /// se cachent selon leur distance ; l'image montre ce que cette caméra filme (`repere_du_plan`). Faux : un plan ordinaire.
     pub espace: bool,
+    /// **La trajectoire de la caméra** d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149, format 55) : un chemin tracé dans
+    /// l'espace (toujours avec son `support`), que la caméra du plan suit. Elle **ne pose aucune clé de caméra** : à chaque image,
+    /// la caméra des clés est déplacée dans l'espace du déplacement du chemin depuis son départ (`deplacement_de_la_camera`),
+    /// comme l'effet de caméra vivant s'ajoute aux clés ; panoramique, bascule, rotation et focale restent ceux des clés. Rien :
+    /// la caméra des clés, telle quelle.
+    pub trajectoire_camera: Option<crate::trajectoire::Trajectoire>,
 }
 
 /// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
@@ -1821,8 +1827,114 @@ impl Document {
     /// La caméra du plan `index` à l'image `frame` telle qu'elle est dans l'espace (paliers et effet vivant compris), même
     /// pour un plan en Espace 3D : pour ce qui la décrit (fiche, export de caméra, vue de dessus, tracé de son chemin).
     /// Pour un plan ordinaire, c'est `panel_camera`.
+    ///
+    /// **Avec une trajectoire de caméra** (`Panel::trajectoire_camera`, partie 149) : la caméra des clés, déplacée dans l'espace
+    /// du déplacement du chemin à cette image. C'est par ici que l'image (`repere_du_plan`), l'export de la caméra, la fiche, la
+    /// vue de dessus et le tracé de sa course la voient là où son chemin l'a portée. Avec la postérisation temporelle, le
+    /// déplacement avance par paliers comme le reste (`image_du_palier`).
     pub fn panel_camera_reelle(&self, index: usize, frame: usize) -> Camera {
-        self.panel_camera_selon(index, frame, true, true)
+        let cam = self.panel_camera_selon(index, frame, true, true);
+        match self.panels.get(index) {
+            Some(p) if p.espace && p.trajectoire_camera.is_some() => {
+                let image = Self::image_du_palier(p, &self.cles_montrees(index), frame);
+                self.camera_sur_la_trajectoire_de(p, cam, image)
+            }
+            _ => cam,
+        }
+    }
+
+    // ---- La trajectoire de la caméra d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149).
+
+    /// Le déplacement dans l'espace (mètres) que la trajectoire de caméra du plan `p` donne à sa caméra à l'image `frame` : rien
+    /// sans trajectoire, hors d'un plan en Espace 3D, ou si le plan s'arrête avant que le chemin ne commence.
+    pub fn deplacement_de_la_camera(&self, p: &Panel, frame: usize) -> Option<[f32; 3]> {
+        if !p.espace {
+            return None;
+        }
+        p.trajectoire_camera.as_ref()?.deplacement_a_l_image(frame, Self::duree_de_la_trajectoire_camera(p))
+    }
+
+    /// La durée sur laquelle se lit la trajectoire de caméra du plan `p` : celle du plan, ou davantage si la fin posée du chemin
+    /// est après sa dernière image. Un plan raccourci par la fin ne resserre donc pas le chemin : la caméra garde son mouvement
+    /// image pour image, le plan s'arrête en route, et le rallonger rend la suite (le montage change la durée, pas le mouvement).
+    pub fn duree_de_la_trajectoire_camera(p: &Panel) -> usize {
+        let n = p.frame_count();
+        p.trajectoire_camera.as_ref().and_then(|t| t.fin).map_or(n, |f| n.max(f + 1))
+    }
+
+    /// La caméra `cam` déplacée dans l'espace de `d` mètres (`sens` : 1 pour l'y porter, −1 pour l'en ramener). Seule sa place
+    /// change (centre du cadre et avancée, `espace3d::Monde::eye`) : panoramique, bascule, rotation et focale restent.
+    pub fn camera_deplacee(&self, cam: Camera, d: [f32; 3], sens: f32) -> Camera {
+        let k = crate::espace3d::Monde::of(self).k;
+        Camera { x: cam.x + sens * d[0] / k, y: cam.y - sens * d[1] / k, dolly: cam.dolly - sens * d[2] / k, ..cam }
+    }
+
+    fn camera_sur_la_trajectoire_de(&self, p: &Panel, cam: Camera, frame: usize) -> Camera {
+        match self.deplacement_de_la_camera(p, frame) {
+            Some(d) => self.camera_deplacee(cam, d, 1.0),
+            None => cam,
+        }
+    }
+
+    /// La caméra `cam` du plan `index` (celle de ses clés à l'image `frame`), portée là où sa trajectoire la met à cette image.
+    /// Sans trajectoire : `cam`. C'est ce que la vue Espace 3D montre et règle (`App::current_camera`).
+    pub fn camera_sur_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
+        self.panels.get(index).map_or(cam, |p| self.camera_sur_la_trajectoire_de(p, cam, frame))
+    }
+
+    /// Le chemin inverse de `camera_sur_sa_trajectoire` : la caméra `cam`, vue à l'image `frame` là où la trajectoire l'a portée,
+    /// ramenée à ce que ses clés doivent dire. Régler la caméra à n'importe quelle image (`App::set_current_camera`) écrit donc
+    /// la clé qui, une fois portée par le chemin, donne la caméra voulue.
+    pub fn camera_hors_de_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
+        match self.panels.get(index).and_then(|p| self.deplacement_de_la_camera(p, frame)) {
+            Some(d) => self.camera_deplacee(cam, d, -1.0),
+            None => cam,
+        }
+    }
+
+    /// L'image dont le déplacement de la trajectoire de caméra est montré à l'image `frame` du plan `p` (`keys` : ses clés
+    /// montrées) : avec la postérisation temporelle du plan, le début du palier, tant que la caméra bouge encore (avant sa
+    /// dernière clé et la fin de son chemin) ; sinon l'image elle-même.
+    fn image_du_palier(p: &Panel, keys: &[camera::CameraKey], frame: usize) -> usize {
+        if !p.saccade.actif {
+            return frame;
+        }
+        let fin_du_chemin = p.trajectoire_camera.as_ref().and_then(|t| t.images_des_jalons(Self::duree_de_la_trajectoire_camera(p)).last().copied()).unwrap_or(0);
+        let fin = keys.last().map_or(0, |k| k.frame).max(fin_du_chemin);
+        if frame >= fin { frame } else { frame - frame % camera::Saccade::cadence_valide(p.saccade.cadence) }
+    }
+
+    /// Écrit la trajectoire de caméra des plans `indices` dans leurs clés et la retire, **sans changer aucune image** : une clé
+    /// par image là où le chemin porte la caméra (de la dernière clé d'avant son départ à la première d'après sa fin), et les
+    /// clés d'après prennent le déplacement du bout du chemin. Les gestes qui coupent, réunissent ou rognent un plan le font
+    /// d'abord, après `cuire_effets_vivants` : ils savent garder l'image avec des clés, pas avec un chemin qui couvre le plan
+    /// entier. Décocher « Plan en Espace 3D » aussi. Vrai s'il y avait une trajectoire.
+    pub fn cuire_trajectoires_camera(&mut self, indices: &[usize]) -> bool {
+        let mut cuit = false;
+        for &i in indices {
+            let Some(p) = self.panels.get(i).filter(|p| p.trajectoire_camera.is_some()) else { continue };
+            cuit = true;
+            let dernier = p.frame_count().saturating_sub(1);
+            let jalons = p.trajectoire_camera.as_ref().map(|t| t.images_des_jalons(Self::duree_de_la_trajectoire_camera(p))).unwrap_or_default();
+            let (Some(&depart), Some(&fin), true) = (jalons.first(), jalons.last(), p.espace && jalons.first().is_some_and(|&d| d <= dernier)) else {
+                self.panels[i].trajectoire_camera = None;
+                continue;
+            };
+            // (Un chemin dont la fin est après la dernière image du plan : les clés s'arrêtent avec le plan.)
+            let au_bout = fin.min(dernier);
+            let a = p.camera.iter().map(|k| k.frame).filter(|&f| f <= depart).max().unwrap_or(0);
+            let b = p.camera.iter().map(|k| k.frame).filter(|&f| f >= au_bout).min().unwrap_or(dernier).max(au_bout);
+            let mut poses: Vec<(usize, Camera)> = (a..=b).map(|f| (f, self.camera_sur_la_trajectoire_de(p, self.panel_camera_douce(i, f), f))).collect();
+            if let Some(d) = self.deplacement_de_la_camera(p, fin) {
+                poses.extend(p.camera.iter().filter(|k| k.frame > b).map(|k| (k.frame, self.camera_deplacee(k.cam, d, 1.0))));
+            }
+            let p = &mut self.panels[i];
+            for (f, cam) in poses {
+                camera::set_key(&mut p.camera, f, cam);
+            }
+            p.trajectoire_camera = None;
+        }
+        cuit
     }
 
     /// Le plan `index` est un plan en Espace 3D (`Panel::espace`).
@@ -1962,11 +2074,9 @@ impl Document {
         let base = |f: usize| camera::camera_at(&p.camera, f, default);
         let vivantes = p.effet_camera.and_then(|v| crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base));
         let keys = vivantes.as_deref().unwrap_or(&p.camera);
-        if keys.is_empty() {
-            default
-        } else {
-            camera::camera_at(keys, p.saccade.image_montree(keys, frame), default)
-        }
+        let cam = if keys.is_empty() { default } else { camera::camera_at(keys, p.saccade.image_montree(keys, frame), default) };
+        // (Sa trajectoire de caméra, s'il en a une : comme `panel_camera_reelle`.)
+        self.camera_sur_la_trajectoire_de(p, cam, Self::image_du_palier(p, keys, frame))
     }
 
     /// Comme `camera_seen`, pour un plan rangé.
@@ -2583,8 +2693,9 @@ impl Document {
             return None;
         }
         // Un effet de caméra vivant devient d'abord ses clés, sans changer l'image : la coupe des clés (`split_keys`) garde
-        // alors chaque image des deux plans (partie 129).
+        // alors chaque image des deux plans (partie 129). Une trajectoire de caméra aussi (partie 149).
         self.cuire_effet_vivant(index);
+        self.cuire_trajectoires_camera(&[index]);
         let source = self.panels[index].clone();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layers = Vec::with_capacity(source.layers.len());
@@ -2644,6 +2755,8 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
             espace: source.espace,
+            // (La trajectoire de la caméra est devenue des clés avant la coupe, comme l'effet vivant.)
+            trajectoire_camera: None,
         };
         // Le contenu rogné à la fin du plan est celui de la fin du second (qui finit où le plan finissait) : il lui passe, avec
         // les numéros de ses calques. Rien n'est oublié.
@@ -2686,6 +2799,7 @@ impl Document {
         // (partie 129). Puis les caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) sont gardées ; les
         // caméras douces, celles des clés (comme `append_next_with`).
         self.cuire_effets_vivants(&[index, index + 1]);
+        self.cuire_trajectoires_camera(&[index, index + 1]);
         let (cam_a, cam_b) = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
@@ -2857,6 +2971,7 @@ impl Document {
             cues: Cues::default(),
             color: None,
             espace: false,
+            trajectoire_camera: None,
         }
     }
 
@@ -3087,6 +3202,7 @@ impl Document {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
         // Les effets de caméra vivants des deux plans deviennent d'abord leurs clés, sans changer l'image (partie 129).
         self.cuire_effets_vivants(&[index, index + 1]);
+        self.cuire_trajectoires_camera(&[index, index + 1]);
         // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
         let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));

@@ -146,7 +146,7 @@ impl App {
     }
 
     /// La caméra du plan est touchée par le pixel (près de son corps ou de sa pyramide).
-    fn e3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
+    pub(crate) fn e3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
         let cam = self.e3_world().scene_cam(&self.current_camera());
         let corners = self.e3_camera_corners(&cam, view);
         let near = |a: V3, b: V3| match (view.project(a, center), view.project(b, center)) {
@@ -217,9 +217,17 @@ impl App {
         // Un outil de dessin a été pris dans la vue : le pointeur dessine sur la carte du calque courant
         // (`espace3ddessin.rs`, partie 146). Alt+glisser tourne encore la vue ; les gestes de manipulation attendent
         // qu'un outil de la vue soit repris.
-        let dessine = self.e3_dessine();
+        // L'outil Trajectoire a été pris dans la vue : le pointeur trace, dans l'espace, le chemin de ce qui est choisi
+        // (`trajectoire3d.rs`, partie 149). La navigation reste la même.
+        let trace = self.e3_trace();
+        let dessine = self.e3_dessine() || trace;
         if dessine {
-            self.e3_dessin_pointeur(ctx, response, crate::espace3ddessin::Regard3d { rect: draw, view });
+            let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
+            if trace {
+                self.e3_trajectoire_pointeur(ctx, response, regard);
+            } else {
+                self.e3_dessin_pointeur(ctx, response, regard);
+            }
             if matches!(self.espace3d.drag, Some(Drag::Orbit)) && response.dragged_by(PointerButton::Primary) && !through {
                 cam.orbit(-delta.x * 0.35, delta.y * 0.35);
             }
@@ -526,8 +534,9 @@ impl App {
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
-        // (On dessine : pas de poignées sur la carte, elles ne répondraient pas.)
-        let dessine = self.e3_dessine();
+        // (On dessine, ou on trace une trajectoire : pas de poignées sur la carte, elles ne répondraient pas.)
+        let trace = self.e3_trace();
+        let dessine = self.e3_dessine() || trace;
         if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
@@ -554,7 +563,10 @@ impl App {
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
         // On dessine dans la vue : la pointe du trait, le cercle du pinceau posé sur la carte, la légende
         // (`espace3ddessin.rs`).
-        if dessine {
+        if trace {
+            // L'outil Trajectoire : le chemin de ce qui est choisi, ses marques, sa légende (`trajectoire3d.rs`).
+            self.e3_trajectoire_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        } else if dessine {
             self.e3_dessin_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
         }
         // Curseur.
@@ -635,7 +647,8 @@ impl App {
     fn e3_paint_camera(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, view: &View, cam: &SceneCam) {
         let selected = self.espace3d.sel.contains(&CAMERA_ID);
         let color = if selected { ACCENT } else { crate::theme::camera() };
-        if self.doc.panels[self.cur_panel].camera.len() >= 2 {
+        // (Sa course : ses clés, et sa trajectoire dans l'espace si elle en suit une, partie 149.)
+        if self.doc.panels[self.cur_panel].camera.len() >= 2 || self.doc.panels[self.cur_panel].trajectoire_camera.is_some() {
             let world = self.e3_world();
             let n = self.frame_count().max(1);
             let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera_reelle(self.cur_panel, f)))).collect();

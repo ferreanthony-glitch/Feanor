@@ -72,6 +72,8 @@ pub(crate) struct Etat {
     pub(crate) tourne_propose: bool,
     /// Le prochain appui sur le dessin choisit le point d'ancrage (bouton « Un point du dessin : cliquer »).
     pub(crate) choisir_ancre: bool,
+    /// Le geste en cours dans la vue Espace 3D (`trajectoire3d.rs`, partie 149).
+    pub(crate) espace: Option<crate::trajectoire3d::GesteEspace>,
 }
 
 /// Le texte du réglage « le dessin tourne avec le chemin ».
@@ -91,7 +93,8 @@ impl App {
 
     /// La marque sous le point `p` de la feuille (à `TOL_ECRAN` près), s'il y en a une ; sinon vrai si le chemin est sous `p`.
     fn trajectoire_sous(&self, p: Pos2) -> (Option<usize>, bool) {
-        let Some(t) = self.layers().get(self.cur_layer).and_then(|l| l.trajectoire.as_ref()) else { return (None, false) };
+        // (Une trajectoire tracée dans l'espace ne se prend pas sur la feuille : ses points ne sont pas des pixels de la feuille.)
+        let Some(t) = self.layers().get(self.cur_layer).and_then(|l| l.trajectoire.as_ref()).filter(|t| t.sur_la_feuille()) else { return (None, false) };
         let tol = TOL_ECRAN / self.trajectoire_echelle(p);
         let q = [p.x, p.y];
         match t.marque_pres_de(q, tol) {
@@ -118,6 +121,11 @@ impl App {
         // (Le chemin se trace sur la feuille ; la pose d'un calque accroché se lit dans le cadre de la caméra, `accroche.rs`.)
         if self.layer().accroche {
             self.status = "Ce calque est accroché à la caméra : décroche-le pour lui tracer une trajectoire (elle se trace sur la feuille).".into();
+            return;
+        }
+        // Une trajectoire tracée dans l'espace (partie 149) se retouche dans la vue Espace 3D : ici elle est seulement montrée.
+        if self.layer().trajectoire.as_ref().is_some_and(|t| !t.sur_la_feuille()) {
+            self.status = crate::trajectoire3d::SUR_LA_FEUILLE.into();
             return;
         }
         let p = [stage.x, stage.y];
@@ -307,6 +315,10 @@ impl App {
         let Some(p) = self.doc.panels.get(pi) else { return };
         let duree = p.frame_count();
         let Some(t) = p.layers.get(li).and_then(|l| l.trajectoire.clone()) else { return };
+        // Une trajectoire tracée dans l'espace (partie 149) : la carte se déplace dans l'espace, `trajectoire3d.rs` pose ses clés.
+        if !t.sur_la_feuille() {
+            return self.trajectoire_recalculer_dans_l_espace(pi, li);
+        }
         let l = &self.doc.panels[pi].layers[li];
         let posee = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
         let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
@@ -596,6 +608,11 @@ impl App {
     pub(crate) fn trajectoire_apres_transformer(&mut self, li: usize, avant: LayerTransform) -> bool {
         let f = self.cur_frame;
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else { return false };
+        // Une trajectoire tracée dans l'espace (partie 149) : la pose propre de la carte prend le geste, son chemin la suit.
+        if !t.sur_la_feuille() {
+            self.status = "Le calque et sa trajectoire ont bougé ensemble.".into();
+            return self.trajectoire_espace_apres_pose(li);
+        }
         let apres = self.layers()[li].pose(f);
         let delta = [apres.x - avant.x, apres.y - avant.y];
         let libre = self.doc.plan_en_espace(self.cur_panel);
@@ -623,6 +640,10 @@ impl App {
     pub(crate) fn trajectoire_touche(&mut self, key: Key) -> bool {
         if key != Key::Escape || self.tool != Tool::Trajectoire {
             return false;
+        }
+        // (Un geste en cours dans la vue Espace 3D : `trajectoire3d.rs`.)
+        if self.e3_traj_abandonner() {
+            return true;
         }
         let Some(g) = self.traj.geste.take() else { return false };
         let li = self.cur_layer;
@@ -687,6 +708,11 @@ impl App {
     /// et le trait en cours.
     pub(crate) fn paint_trajectoire(&self, painter: &egui::Painter) {
         if self.tool != Tool::Trajectoire || self.in_card {
+            return;
+        }
+        // Une trajectoire tracée dans l'espace (partie 149) : sur la feuille d'un plan en Espace 3D, son chemin est montré comme
+        // la caméra du plan le voit, sans se laisser prendre (`trajectoire3d.rs`).
+        if self.paint_trajectoire_dans_l_espace(painter) {
             return;
         }
         let ecran = |p: [f32; 2]| self.stage_to_screen(pos2(p[0], p[1]));
@@ -767,6 +793,11 @@ impl App {
     /// Réglages de l'outil (panneau Réglages, fenêtre du clic droit) : la sorte des clés, le départ et la fin, les commandes de la
     /// trajectoire du calque courant.
     pub(crate) fn trajectoire_options_ui(&mut self, ui: &mut egui::Ui) {
+        // Le calque courant suit une trajectoire tracée dans l'espace (partie 149) : ses réglages sont ceux de l'espace (ni point
+        // d'ancrage ni « le dessin tourne » : ils n'y servent pas).
+        if self.trajectoire_espace_options_ui(ui) {
+            return;
+        }
         let li = self.cur_layer;
         let duree = self.frame_count();
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else {

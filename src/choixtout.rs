@@ -215,8 +215,9 @@ impl App {
                 k.t = miroir(k.t);
             }
             // Un calque à trajectoire : son chemin est retourné autour du même milieu, et le déplacement noté au départ change de
-            // sens, pour qu'un nouveau calcul des clés retrouve la même pose (partie 136).
-            if let Some(t) = &mut l.trajectoire {
+            // sens, pour qu'un nouveau calcul des clés retrouve la même pose (partie 136). (Un chemin tracé dans l'espace n'est pas sur
+            // la feuille : il reste où il est, les clés de la carte retournée sont reposées plus bas, partie 149.)
+            if let Some(t) = l.trajectoire.as_mut().filter(|t| t.sur_la_feuille()) {
                 let a = if horizontal { centre.x } else { centre.y };
                 let c = if horizontal { 0 } else { 1 };
                 t.transformer(|p| {
@@ -235,6 +236,11 @@ impl App {
                     }
                     j.angle = -j.angle;
                 }
+            }
+        }
+        for &li in &lis {
+            if self.layers()[li].trajectoire.as_ref().is_some_and(|t| !t.sur_la_feuille()) {
+                self.trajectoire_recalculer(li);
             }
         }
         self.renderer.invalidate_all();
