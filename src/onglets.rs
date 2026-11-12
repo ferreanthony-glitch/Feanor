@@ -229,6 +229,7 @@ etat_projet! {
     flip_manual: Option<(usize, usize)> = None,
     // --- Espace 3D, références, envois, versions
     espace3d: crate::espace3dui::Espace3dState = Default::default(),
+    e3d: crate::espace3ddessin::Dessin3d = Default::default(),
     refs: crate::referencesui::RefUi = Default::default(),
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),
     comparaison: Option<crate::comparerui::Comparaison> = None,

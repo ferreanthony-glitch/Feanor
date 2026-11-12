@@ -5,6 +5,24 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Dessiner dans la vue Espace 3D** (partie 146, branche locale `espace-libre-cles`, à la suite des boutons de clés ; EN COURS, voir la
+  fin de cette puce). Sa demande, pendant le même essai : « il est impossible de dessiner dans l'espace 3D pour l'instant. C'est quelque
+  chose qui doit être faisable en permanence, le trait s'appliquant sur la carte », et « Oui, ici » à « je le code ici ? ». La règle :
+  **l'outil décide**. Dans la vue (orbite ou « Regarder par la caméra », plan ordinaire ou plan en Espace 3D), le pinceau, le crayon, la
+  gomme ou le mélangeur (case, touche, ou le bouton neuf « Dessiner sur la carte », commande `espace3d.dessiner`, sans touche) font
+  dessiner le pointeur sur la carte du calque courant ; un outil de la vue (choisir, déplacer, tourner, taille, caméra) lui rend les
+  cartes ; Alt+glisser, clic droit, milieu et molette restent à la vue ; Ctrl+clic prend une autre carte. Le trait passe par le moteur
+  de toujours (`begin_paint`, `stroke_point`, `end_stroke`) : seule change la conversion écran → dessin, par le regard d'UNE vue
+  (`espace3ddessin::Regard3d`, `CarteVue`, prévu pour les vues côte à côte de `vues-3d`) ; `layer_to_screen` et `layer_zoom` y passent
+  tant qu'on dessine dans la vue. Le trait se voit pendant le geste sans rejeu du moteur : la texture de la carte dessinée est refaite
+  par morceaux, les tuiles changées seulement (`render::cel_image_zone`). Le cercle du pinceau est posé sur la carte (ellipse sur une
+  carte penchée). Refus avec un mot : hors de la carte, de dos, par la tranche, derrière l'œil, cartes cachées, calque verrouillé ou caché.
+  Fichiers : `src/espace3ddessin.rs` et `src/espace3ddessin_tests.rs` (neufs), quelques lignes dans `espace3dview.rs`, `espace3dui.rs`,
+  `app.rs` (`set_tool`, `layer_to_screen`, `layer_zoom`), `canvas.rs`, `tracedroit.rs`, `render.rs`, `onglets.rs`, `keymap.rs`,
+  `keymap.toml`, `lib.rs`. Hors de cette étape : pot de peinture, dégradé, formes, sélection, Transformer, coller une image dans la vue.
+  **État au premier commit « en cours » : 7 essais neufs sur 8 passent ; celui du trait « par la caméra » échoue (le point de la carte
+  tombe hors de la vue dans l'essai, en cours de diagnostic). Restent : cet essai, les familles voisines, `cargo check`, la relecture de
+  la partie 146.** Rien n'a été regardé à l'écran ni essayé au stylet ; l'exe n'est pas construit ; pas poussé, pas fusionné.
 - Pendant son essai à l'écran de la branche `espace-libre` (plan en Espace 3D), sa remarque : « les clés de caméras et de transformation
   des objets ont disparu avec la vue 3D », puis « j'aimerais qu'un bouton y apparaisse » (vue Espace 3D ouverte, le panneau Réglages
   n'avait aucun bouton de clés, sur `main` non plus). Chantier `espace-libre-cles` (partie 145), branche locale du même nom depuis

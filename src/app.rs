@@ -578,6 +578,8 @@ pub struct App {
     pub(crate) format_custom: bool,
     /// Espace 3D (`espace3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes choisies, vue.
     pub(crate) espace3d: crate::espace3dui::Espace3dState,
+    /// Dessiner dans la vue Espace 3D (`espace3ddessin.rs`, partie 146) : le pointeur dessine ou manipule, le regard de la vue.
+    pub(crate) e3d: crate::espace3ddessin::Dessin3d,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -1279,6 +1281,7 @@ impl App {
             stage_view: None,
             format_custom: false,
             espace3d: Default::default(),
+            e3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -1683,6 +1686,10 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : le point de la carte, vu par cette vue.
+        if let Some(carte) = self.e3_carte_vue() {
+            return carte.vers_ecran(p).unwrap_or(egui::pos2(-1e6, -1e6));
+        }
         if let Some((world, mx, eye)) = self.tilted_card() {
             let stage = world.card_to_sheet_m(eye, &mx, p).unwrap_or(p);
             return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
@@ -1697,6 +1704,11 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : la taille d'un pixel de la carte sous le pointeur, vu
+        // par cette vue.
+        if let Some(z) = self.e3_zoom_du_dessin() {
+            return z;
+        }
         // Plan en Espace 3D : la carte est vue en perspective, un pixel de son dessin n'a pas partout la même taille à
         // l'écran. On prend celle qu'il a sous le pointeur (au centre de la carte s'il n'y est pas) : le curseur du
         // pinceau a la taille du trait qu'il va laisser à cet endroit.
@@ -5258,6 +5270,9 @@ impl App {
             self.tool_recent.retain(|t| *t != tool);
             self.tool_recent.insert(0, tool);
         }
+        // Vue Espace 3D : l'outil décide. Un outil de dessin y fait dessiner le pointeur, un autre lui rend les cartes
+        // (`espace3ddessin.rs`, partie 146). Même si l'outil était déjà celui-là.
+        self.e3_outil_pris(tool);
     }
 
     /// Zoom de la bande du bas par le facteur `f` : le montage en storyboard, la timeline en

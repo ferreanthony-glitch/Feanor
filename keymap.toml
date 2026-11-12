@@ -1934,6 +1934,11 @@ touches = []
 source = "FEANOR (Espace 3D, grille du sol ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.dessiner"
+touches = []
+source = "FEANOR (Espace 3D, dessiner sur la carte du calque courant ; aucune touche choisie : les touches du pinceau, du crayon et de la gomme l'allument)"
+
+[[raccourci]]
 action = "vue.3d"
 touches = []
 source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"

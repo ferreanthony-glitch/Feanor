@@ -28,6 +28,9 @@ impl App {
             if self.espace3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;
+                // (Le pointeur n'est pas sur la feuille : le lasso de Ctrl tenu ne s'arme pas dans cette vue, où Ctrl+clic
+                // prend une carte, `springtools.rs`, `espace3ddessin.rs`.)
+                self.hover_canvas = None;
                 self.espace3d_panel(ui, rect, &response);
                 return;
             }
@@ -314,7 +317,8 @@ impl App {
     /// Pendant un trait : relie le dernier point posé à la pointe du stylet, pour que le trait
     /// reste attaché à la croix (le lissage le fait sinon traîner un peu derrière). Rien n'est
     /// écrit dans le dessin : le trait définitif arrive dans les images suivantes.
-    fn paint_stroke_tip(&self, painter: &egui::Painter) {
+    /// (La vue Espace 3D s'en sert aussi, `espace3ddessin.rs`.)
+    pub(crate) fn paint_stroke_tip(&self, painter: &egui::Painter) {
         let Some(s) = &self.stroke else { return };
         let (Some((last, raw, r)), Some((rgb, alpha))) = (s.tip(), s.tip_paint()) else { return };
         let (a, b) = (self.layer_to_screen(last), self.layer_to_screen(raw));

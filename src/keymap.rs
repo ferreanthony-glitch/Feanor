@@ -659,6 +659,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.surface_mur", "Espace 3D : nouvelle surface en mur (plan en Espace 3D)", true, false),
     act("espace3d.aimanter", "Espace 3D : aimantation à la grille (oui / non)", true, false),
     act("espace3d.grille", "Espace 3D : grille du sol (oui / non)", true, false),
+    act("espace3d.dessiner", "Espace 3D : dessiner sur la carte du calque courant (oui / non)", true, false),
     act("vue.3d", "Espace 3D (ancien plateau en 3D)", true, false),
     act("scene3d.basculer", "Espace 3D (ancien nom : scène 3D de blocage)", true, false),
     act("vue3d.recadrer", "Espace 3D : recadrer (ancien plateau en 3D)", true, false),

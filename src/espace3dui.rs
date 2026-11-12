@@ -135,6 +135,8 @@ impl App {
         }
         self.espace3d.on = on;
         self.espace3d.drag = None;
+        // (Le regard de la vue et la texture de la carte qu'on y dessine ne valent que pour la vue montrée, `espace3ddessin.rs`.)
+        self.e3d.oublier_la_vue();
         self.status = if on && self.doc.plan_en_espace(self.cur_panel) {
             "Espace 3D : ce plan est en Espace 3D. La caméra est libre (choisis-la pour la déplacer ou la tourner), ce qui est devant cache ce qui est derrière, et « Nouvelle surface » dans Réglages pose un calque face à la caméra, au sol ou en mur.".into()
         } else if on {
@@ -356,6 +358,8 @@ impl App {
                 self.status = if self.espace3d.snap { "Aimantation à la grille : allumée.".into() } else { "Aimantation : éteinte.".into() };
             }
             "espace3d.grille" => self.espace3d.show_grid = !self.espace3d.show_grid,
+            // Dessiner sur la carte, ou rendre la main aux cartes (`espace3ddessin.rs`, partie 146).
+            crate::espace3ddessin::ACTION => self.espace3d_basculer_dessin(),
             _ => return false,
         }
         true
@@ -366,6 +370,8 @@ impl App {
             self.set_espace3d(true);
         }
         self.espace3d.mode = mode;
+        // (Un outil de la vue : le pointeur manipule, il ne dessine plus.)
+        self.e3_manipuler();
     }
 
     /// Choisit la caméra du plan (pour la déplacer ou la tourner), avec l'outil Déplacer si aucun outil de manipulation
@@ -379,18 +385,24 @@ impl App {
             self.espace3d.mode = GizmoMode::Move;
         }
         self.espace3d.through_camera = false;
+        self.e3_manipuler();
     }
 
     // ------------------------------------------------------------------------- barre d'outils
 
     /// Outils de l'Espace 3D, dans la barre au-dessus du dessin : une seule rangée.
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
+        // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
+        // vue sont éteints ; un outil de la vue lui rend les cartes.
+        let dessine = self.e3_dessine();
+        self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
-            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode), mode.label(), mode_description(mode), mode.action()).clicked() {
+            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
+                self.e3_manipuler();
             }
         }
-        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID);
+        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID) && !dessine;
         if self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée).", "espace3d.outil_camera").clicked() {
             self.espace3d_pick_camera();
         }

@@ -926,6 +926,10 @@ mod poskeysmontage_tests;
 mod espace3dcles;
 #[cfg(test)]
 mod espace3dcles_tests;
+// Dessiner dans la vue Espace 3D (partie 146) : l'outil décide, le trait tombe sur la carte du calque courant.
+mod espace3ddessin;
+#[cfg(test)]
+mod espace3ddessin_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

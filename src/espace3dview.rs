@@ -214,11 +214,21 @@ impl App {
         }
 
         let view = if through { self.e3_view(draw) } else { cam.view(draw.width()) };
-        if response.drag_started_by(PointerButton::Primary) {
+        // Un outil de dessin a été pris dans la vue : le pointeur dessine sur la carte du calque courant
+        // (`espace3ddessin.rs`, partie 146). Alt+glisser tourne encore la vue ; les gestes de manipulation attendent
+        // qu'un outil de la vue soit repris.
+        let dessine = self.e3_dessine();
+        if dessine {
+            self.e3_dessin_pointeur(ctx, response, crate::espace3ddessin::Regard3d { rect: draw, view });
+            if matches!(self.espace3d.drag, Some(Drag::Orbit)) && response.dragged_by(PointerButton::Primary) && !through {
+                cam.orbit(-delta.x * 0.35, delta.y * 0.35);
+            }
+        }
+        if !dessine && response.drag_started_by(PointerButton::Primary) {
             let at = press.or(response.interact_pointer_pos()).unwrap_or(draw.center());
             self.e3_press(&view, center, rel(at), mods);
         }
-        if response.dragged_by(PointerButton::Primary) {
+        if !dessine && response.dragged_by(PointerButton::Primary) {
             let orbiting = matches!(self.espace3d.drag, Some(Drag::Orbit));
             let handling = matches!(self.espace3d.drag, Some(Drag::Handle { .. }));
             if orbiting && !through {
@@ -230,7 +240,7 @@ impl App {
                 }
             }
         }
-        if response.clicked() {
+        if !dessine && response.clicked() {
             if let Some(p) = response.interact_pointer_pos() {
                 self.e3_click(&view, center, rel(p), mods);
             }
@@ -239,7 +249,7 @@ impl App {
             self.e3_finish_drag();
         }
         // Survol d'une poignée (pour la mettre en évidence).
-        self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none()).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
+        self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none() && !dessine).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
         if !through {
             self.espace3d.cam = Some(cam);
         }
@@ -516,7 +526,9 @@ impl App {
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
-        if let Some(g) = self.e3_gizmo(&view) {
+        // (On dessine : pas de poignées sur la carte, elles ne répondraient pas.)
+        let dessine = self.e3_dessine();
+        if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
         // Légendes.
@@ -529,7 +541,7 @@ impl App {
                 FontId::proportional(11.0),
                 crate::theme::camera(),
             );
-        } else {
+        } else if !dessine {
             painter.text(
                 rect.left_bottom() + vec2(8.0, -6.0),
                 Align2::LEFT_BOTTOM,
@@ -540,8 +552,13 @@ impl App {
         }
         let label = format!("{} carte(s)", self.e3_visible_cards().len());
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
+        // On dessine dans la vue : la pointe du trait, le cercle du pinceau posé sur la carte, la légende
+        // (`espace3ddessin.rs`).
+        if dessine {
+            self.e3_dessin_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        }
         // Curseur.
-        if response.hover_pos().is_some() {
+        if response.hover_pos().is_some() && !dessine {
             let icon = match (&self.espace3d.drag, self.espace3d.hover) {
                 (Some(_), _) => CursorIcon::Grabbing,
                 (None, Some(_)) => CursorIcon::Grab,
@@ -591,6 +608,10 @@ impl App {
 
     /// Texture du dessin `cel` (refaite quand il change).
     fn e3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
+        // La carte sur laquelle on dessine : sa texture suit le trait, tuile par tuile (`espace3ddessin.rs`).
+        if let Some(id) = self.e3_texture_vive(ctx, cel) {
+            return Some(id);
+        }
         let c = self.doc.cels.get(&cel)?;
         if let Some((v, t)) = self.espace3d.card_textures.get(&cel) {
             if *v == c.version {

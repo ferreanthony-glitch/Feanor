@@ -10497,3 +10497,111 @@ verrouillée ; surface au sol qui garde son inclinaison et sa profondeur.
    chacune, un seul Ctrl+Z retire les deux.
 6. Une carte verrouillée : rien ne se pose, la barre d'état dit pourquoi.
 7. Plan en Espace 3D : les mêmes gestes avec une surface au sol, et la caméra passée derrière les cartes.
+
+## 146. Dessiner dans la vue Espace 3D (2026-11-12, branche `espace-libre-cles`)
+
+Demandé par Anthony le 2026-11-12, pendant son essai à l'écran du plan en Espace 3D : « il est impossible de dessiner
+dans l'espace 3D pour l'instant. C'est quelque chose qui doit être faisable en permanence, le trait s'appliquant sur la
+carte ». (L'étape A, partie 143, laissait le dessin « depuis la vue d'orbite » de côté et lui posait la question : sa
+réponse est oui, en permanence. Jusque-là on dessinait en quittant la vue.)
+
+**La règle : l'outil décide.** Dans la vue Espace 3D, vue d'orbite ou « Regarder par la caméra », plan ordinaire ou
+plan en Espace 3D :
+
+- prendre le **pinceau, le crayon, la gomme ou le mélangeur** (sa case dans la barre d'outils, sa touche, ou le bouton
+  « Dessiner sur la carte » de la barre de la vue) : le pointeur **dessine** sur la carte du calque courant ;
+- prendre un **outil de la vue** (choisir, déplacer, tourner, taille, caméra) : le pointeur **manipule** les cartes,
+  comme avant ;
+- **tourner et glisser la vue ne changent pas**, y compris pendant qu'on dessine : Alt+glisser ou clic droit (tourner),
+  bouton du milieu (glisser), molette (avancer) ;
+- **Ctrl+clic** sur une carte, pendant qu'on dessine : elle devient le calque courant, le trait suivant y va.
+
+En entrant dans la vue, le pointeur manipule, comme avant (même si le pinceau est l'outil courant) : rien ne change
+pour qui ne dessine pas. Le choix est gardé quand on sort de la vue et qu'on y revient.
+
+**Ce qu'on voit.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Dessiner sur la carte » (plume) | barre au-dessus de la vue, en tête des outils de la vue | `espace3d.dessiner` | allumé : le pointeur dessine, et les outils de la vue (choisir, déplacer…) sont éteints. Un clic allume le dessin avec le dernier outil de dessin pris (le pinceau à défaut) ; allumé, un clic rend la main aux cartes |
+| La carte sur laquelle on dessine | dans la vue | | c'est la carte choisie : contour et nom en couleur de sélection. Les poignées de déplacement ne sont pas tracées pendant qu'on dessine |
+| Le cercle du pinceau | sous le pointeur | | il est **posé sur la carte** : il a la forme et la largeur du trait qu'il va y laisser (un cercle de face, une ellipse sur une carte penchée, plus petit sur une carte loin). Là où l'on ne peut pas peindre, le curseur « interdit » |
+| Légende | en bas à gauche de la vue | | « Pinceau sur la carte « … » · Ctrl+clic : prendre une autre carte · Alt+glisser ou clic droit : tourner la vue · … » |
+
+La commande `espace3d.dessiner` n'a pas de touche par défaut (palette Ctrl+K, `keymap.toml`) : les touches du pinceau,
+du crayon et de la gomme font le même travail.
+
+**Le trait.** Il passe par le moteur de toujours : appui du stylet, lissage, segment droit avec Maj, « peindre
+derrière », « peint sur l'aplat », annulation (une étape par trait), enregistrement. Il tombe là où le regard de la vue
+qui passe par la pointe traverse la carte, quelle que soit son inclinaison : de face, penchée, au sol, en mur. Le trait
+se voit pendant qu'on le trace : la texture de la carte sur laquelle on dessine est tenue à jour par morceaux (les
+tuiles que le trait vient de changer), sans rejouer le moteur de brosses ; elle est aussi plus fine que celle des autres
+cartes (2 048 pixels de large au lieu de 1 024).
+
+**Là où le trait ne commence pas**, la barre d'état dit pourquoi :
+
+- le pointeur n'est pas sur la carte du calque courant (hors de ses bords) ;
+- la carte est vue de dos, par la tranche (à moins de deux degrés), ou elle est derrière l'œil de la vue ;
+- les cartes sont cachées dans la vue (« Montrer les cartes ») ;
+- le calque est un dossier, verrouillé, caché, de position verrouillée… : les refus habituels du dessin.
+
+Pendant un trait, les points où le pointeur quitte la carte de plus d'une feuille (ou la voit de dos, par la tranche)
+sont laissés ; le trait reprend quand il y revient.
+
+**Messages** (barre d'état) : « Espace 3D : Pinceau sur la carte « … » (elle est entourée). Ctrl+clic : prendre une
+autre carte… », « Espace 3D : le pointeur manipule de nouveau les cartes… », « Rien à peindre ici : le pointeur n'est
+pas sur la carte du calque courant (celle qui est entourée)… », « … la carte du calque courant est vue de dos… »,
+« … vue par la tranche… », « … derrière l'œil de la vue… », « Les cartes sont cachées dans cette vue… », « Ce calque
+n'est pas une carte de l'Espace 3D… », « Carte « … » : c'est le calque courant, le trait y va. », « Ctrl+clic : aucune
+carte sous le pointeur. ».
+
+**Limites.**
+
+- Seuls le pinceau, le crayon, la gomme et le mélangeur dessinent dans la vue. Le pot de peinture, le dégradé, les
+  formes, la sélection, Transformer, le texte et coller une image n'y sont pas : avec eux le pointeur manipule les
+  cartes, et il faut quitter la vue pour s'en servir.
+- La gomme sur plusieurs calques choisis ne gomme, dans la vue, que le calque courant. Les guides de perspective n'y
+  sont pas.
+- On peint sur la carte du calque courant même si une autre carte la cache : rien ne le dit à l'écran (comme à
+  l'étape A5).
+- Dessiner sur une carte vue de dos est refusé dans la vue, alors que la feuille d'un plan en Espace 3D le permet quand
+  la caméra du plan est passée derrière la carte.
+- La vue montre toujours le dessin brut des cartes, sans effets ni modes de fusion ; la carte montre la feuille, pas ce
+  qui est dessiné hors d'elle.
+- En entrant dans la vue le pointeur manipule ; la barre d'outils de gauche garde alors son outil allumé (seule la barre
+  de la vue dit si l'on dessine). Après une touche d'outil tenue puis relâchée (outil « à ressort »), le pointeur dessine.
+- Ctrl tenu n'arme plus le lasso dans la vue Espace 3D (il n'y servait à rien) : Ctrl+clic y prend une carte.
+- **Rien de cette partie n'a été regardé à l'écran, ni essayé au stylet** : les essais font de vrais gestes de souris.
+
+**Pour la suite** (`vues-3d`, partie 144, plusieurs vues côte à côte) : la conversion est écrite pour **une** vue
+(`espace3ddessin::Regard3d` : son rectangle et sa prise de vue ; `CarteVue` : la carte vue par elle). Chaque vue passe
+la sienne à `App::e3_dessin_pointeur` et `e3_dessin_peindre`.
+
+**Essais** : `src/espace3ddessin_tests.rs` : de vrais traits de souris dans la vue d'orbite sur une carte de face, une
+carte penchée et une surface au sol d'un plan en Espace 3D (aller-retour écran → carte → écran à 0,05 pixel, encre sur
+le chemin et nulle part ailleurs, une étape d'annulation) ; les mêmes par la caméra, plan ordinaire et plan en Espace
+3D ; les refus (hors de la carte, de dos, par la tranche, cartes cachées, calque verrouillé, calque caché) ; l'outil qui
+décide (outil de la vue : la carte bouge, aucune encre ; crayon, gomme ; le bouton ; sortir et revenir) ; Alt+glisser
+tourne la vue sans tracer, Ctrl+clic prend une autre carte ; la taille du pinceau ; la texture qui suit le trait par
+morceaux sur une feuille 3 840 × 2 160, et le retour au repos ; calque vectoriel et segment droit avec Maj.
+
+À vérifier à l'écran (par Anthony), **au stylet**, sur la copie d'un projet :
+
+1. Vue Espace 3D : la plume « Dessiner sur la carte » est en tête de la barre de la vue, lisible, sa bulle à une
+   seconde. Un clic : elle s'allume, les outils de la vue s'éteignent, la carte du calque courant est entourée.
+2. Dessiner sur une carte de face : le trait suit la pointe sans retard ni décalage, l'appui du stylet joue, le trait
+   se voit pendant le geste et ne change pas d'aspect au relâché.
+3. Tourner la vue (Alt+glisser, clic droit), dessiner sur la même carte vue de trois quarts : le trait tombe sous la
+   pointe ; le cercle du pinceau est une ellipse couchée sur la carte, de la largeur du trait.
+4. Plan en Espace 3D, « Nouvelle surface » au sol : dessiner dessus depuis la vue d'orbite, vers le fond ; le trait
+   s'arrête avant l'horizon, sans à-coup.
+5. « Regarder par la caméra », puis dessiner : même chose, dans le cadre.
+6. Ctrl+clic sur une autre carte : elle est entourée, le trait suivant y va. La touche du crayon, de la gomme : on
+   dessine toujours.
+7. Un outil de la vue (déplacer) : la plume s'éteint, le même geste déplace la carte. La touche du pinceau : on
+   redessine.
+8. Pointe hors de la carte, carte vue de dos, par la tranche : le curseur « interdit », rien ne se trace, la barre
+   d'état dit pourquoi.
+9. Ctrl+Z après un trait : il part. Quitter la vue : le trait est sur la feuille, au même endroit du dessin.
+10. Un calque vectoriel : le trait, puis son rendu exact quelques instants après, sans saut visible.
+11. Sur un gros projet (feuille 3 840 × 2 160, plusieurs cartes) : pas de saccade en dessinant dans la vue.

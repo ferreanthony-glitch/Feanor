@@ -492,7 +492,7 @@ plan en Espace 3D. La branche `espace-libre` n'est pas fusionnée dans `main`.
 | Le nom à l'écran | **Tranché par Anthony le 2026-11-11 : « Espace 3D ».** Le mode porte le nom de la vue ; pour ne pas confondre les deux, le bouton et les messages disent « Plan en Espace 3D » (le plan est en Espace 3D), la vue reste « Espace 3D ». Avant ce choix, les documents disaient « plan en espace ». |
 | L'ordre par distance est-il automatique dans un plan en Espace 3D ? | Oui. C'est ce qui rend le dessin dans un décor naturel ; l'ordre de la pile ne départage plus que les égalités. |
 | Les dossiers dans un plan en Espace 3D | Un dossier se déplace en bloc dans l'ordre (à la distance de sa carte la plus loin), ses calques ordonnés entre eux. Confirmé possible par A0, point 3. |
-| Dessiner depuis la vue d'orbite (pas seulement par la caméra) | Pas dans l'étape A. |
+| Dessiner depuis la vue d'orbite (pas seulement par la caméra) | **Tranché par Anthony le 2026-11-12 : oui, en permanence** (« C'est quelque chose qui doit être faisable en permanence, le trait s'appliquant sur la carte »). Fait hors de l'étape A, sur la branche `espace-libre-cles` : `docs/INTERFACE.md`, partie 146. |
 | Avant ou après la V1 | `suivi/V1.md` range le moteur 3D en V2. A0 et A1 ne coûtent presque rien et ne montrent rien ; A2 à A8 peuvent attendre la V1. |
 
 ## 8. Licence
