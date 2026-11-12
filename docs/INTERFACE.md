@@ -10363,3 +10363,56 @@ Essais : `camerasuite_tests.rs` passe à 11 (un plan sans mouvement prend son mo
 1. Son plan 5 (deux cases, pas de caméra) : Maj sur la deuxième case, le « + », un clic. Le cadre B est sur la deuxième case ; la première ne bouge pas.
 2. Lire le plan : arrêt pendant la première case, puis A vers B pendant la deuxième.
 3. Son plan 3 : sur la dernière case, le « + » puis un clic. Si la ligne d'état dit que la caméra est déjà en mouvement, ramener la clé B dans la première case au montage (ou ajouter un cadre sur la première case), puis recommencer.
+
+## 147. La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard (2026-11-12, branche `plantage-carte-vide`)
+
+Les parties 143 à 146 ne sont pas dans `main` : elles sont sur leurs branches (`espace-libre` : 143 ; `vues-3d` : 144 ;
+`espace-libre-cles` : 145 et 146). Celle-ci porte dans `main`, à la demande d'Anthony (« Oui, corrige-le »), la seule
+correction du plantage, écrite d'abord sur `espace-libre-cles`.
+
+Anthony, 2026-11-12, après avoir essayé la version portable de l'essai « Plan en Espace 3D » : « il y a beaucoup de crash du
+logiciel quand on se balade dans l'espace 3D. »
+
+**Le plantage.** Rapport `plantage-1794439627.txt` (12 novembre, 0 h 27, dernières actions « Tourner dans l'espace 3D ») :
+« Buffer slices can not be empty », dans `egui_wgpu::Renderer::render`. `card_mesh` (`espace3dview.rs`) pose toujours les
+289 sommets d'une carte et n'ajoute un carreau que si ses quatre coins sont devant l'œil. Quand l'œil coupe la carte au
+point qu'il n'en reste pas un carreau entier devant lui, le maillage a des sommets et **aucun triangle**. egui ne retire
+que les maillages qui n'ont ni sommet ni triangle ; celui-là part à la carte graphique, et wgpu 24 refuse une tranche de
+tampon vide : FEANOR s'arrête.
+
+Le défaut date de la vue Espace 3D. Dans `main` il est rare : il faut que le regard longe une carte presque jusqu'à son
+bord. Dans un plan en Espace 3D, avec un sol et des murs, il devient fréquent : c'est là qu'Anthony l'a rencontré.
+
+**La correction.** `card_mesh` ne rend rien quand il n'a aucun triangle ; la vue ne pose alors ni le voile ni le dessin
+de la carte (son contour et son nom restent tracés). Même garde dans le canevas (`canvas.rs`, composition par le
+processeur quand la caméra est en perspective), qui construisait son maillage de la même façon.
+
+**Rien ne change à l'écran** : ce qui n'était pas dessiné ne l'est toujours pas.
+
+**Essais** (`espace3dvue_tests.rs`). Ils regardent ce que la vue enverrait à la carte graphique : jamais un morceau qui a
+des sommets et aucun triangle.
+
+- *Une carte longée comme un mur, l'œil presque au bout*, des deux côtés et vers chaque bout. Rouge sur le code de `main`
+  d'avant (« un morceau sans triangle part à la carte graphique »), vert après.
+- *Une promenade de 360 images à travers les huit cartes d'un plan*, en passant sans cesse d'un côté à l'autre de leur
+  plan et en tournant la tête. Elle ne mordait pas avant la correction : elle garde la suite et donne la mesure, 0,94 ms
+  par image en médiane, 1,39 ms au pire, sans la carte graphique (PC de l'atelier, écran d'essai 1280 × 720, feuille
+  3840 × 2160).
+
+**Suite de référence** : 4 502 essais réussis, 0 échec, aucun avertissement de compilation, les dix groupes de fiabilité
+passent (Espace 3D : 47 essais).
+
+**Ce qui n'est pas fait.** Les autres endroits de l'interface qui peignent un maillage (une vingtaine) n'ont pas tous été
+relus : seuls la planche des Vignettes (`boardui.rs`), le dégradé (`degradeui.rs`), les bandes de `viewbar.rs` et le hors
+de la feuille (`canvas.rs`) l'ont été, et ils ne posent des sommets qu'avec leurs triangles. Un garde-fou général (retirer
+tout maillage sans triangle juste avant l'envoi à la carte graphique) n'est pas posé : egui ne donne pas de passage propre
+pour cela.
+
+**Ce qui n'est pas dans `main`** : le Plan en Espace 3D (format 54), les boutons de clés et le dessin dans la vue
+Espace 3D restent sur `espace-libre-cles`. Le format reste 53.
+
+**À vérifier à l'écran (par Anthony)**, sur une copie de projet :
+
+1. Vue Espace 3D d'un plan à plusieurs calques : avancer à la molette jusqu'à traverser les cartes, tourner au clic droit
+   dans tous les sens, longtemps : FEANOR ne se ferme plus.
+2. S'il se ferme encore : le rapport le plus récent du dossier `plantages` dit où.
