@@ -10428,3 +10428,72 @@ Espace 3D… », « Plan en Espace 3D : sa caméra ne se règle pas par des cadr
 13. Enregistrer, fermer, rouvrir : tout est là. Ouvrir la copie avec le FEANOR d'avant : refus propre (« version plus récente »).
 14. Un plan ordinaire du même projet : rien n'a changé (caméra bridée, pile, vue de dessus, cadres des Vignettes).
 15. Poignées de rotation d'une carte près de 90° : signaler si elles sautent.
+
+## 145. Des boutons de clés dans les Réglages de l'Espace 3D (2026-11-12, branche `espace-libre-cles`)
+
+Demandé par Anthony le 2026-11-12, pendant son essai à l'écran du plan en Espace 3D : « les clés de caméras et de
+transformation des objets ont disparu avec la vue 3D ». À la reformulation « quand la vue Espace 3D est ouverte, le
+panneau Réglages n'a aucun bouton de clés, ni pour la caméra ni pour les cartes », sa réponse : « C'est bien ça et
+j'aimerais qu'un bouton y apparaisse. » (La partie 144 est réservée au chantier `vues-3d`.)
+
+**Le constat.** Vue Espace 3D ouverte, le panneau Réglages est celui de l'Espace 3D : les boutons de clés des outils
+Caméra et Transformer n'y sont pas, sur `main` non plus. Dans un plan en Espace 3D (partie 143) c'est plus gênant : sa
+caméra ne se règle que dans cette vue, où rien ne montrait comment poser une clé.
+
+**Ce qui est ajouté** (`src/espace3dcles.rs`) : les boutons des panneaux 2D, avec leurs icônes, leurs bulles et leurs
+commandes. Aucune commande neuve, rien de plus dans `keymap.toml`.
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Losange « Clé de caméra ici » | ligne « Caméra du plan », après « choisir » | `camera.cle_ici` | pose une clé de caméra à l'image courante, avec la caméra telle qu'elle y est (l'image ne change pas) ; une caméra fixe sans clé devient d'abord la clé du début. **Allumé quand l'image courante porte une clé** ; déjà allumé, un clic ne change rien et la barre d'état le dit |
+| Corbeille « Supprimer la clé de caméra » | à côté du losange | `camera.cle_supprimer` | retire la clé de caméra de l'image courante ; grisée s'il n'y en a pas |
+| Losange « Clé de position » | ligne du nom de la carte choisie ; à plusieurs, ligne « N cartes choisies » | `calque.cle_position` | pose une clé de position à l'image courante sur chaque carte choisie, avec sa pose actuelle. **Allumé quand toutes les cartes choisies ont une clé à cette image** |
+| Corbeille « Supprimer la clé d'ici » | à côté du losange | `calque.cle_position_supprimer` | retire la clé de position de l'image courante des cartes choisies ; grisée si aucune carte libre n'en a |
+
+**La règle** (« la sélection agit sur tout ce qui est choisi ») : tant que la vue Espace 3D est ouverte et qu'au moins
+une carte y est choisie, les commandes de clés de position (poser, lisser, supprimer la clé d'ici, tout supprimer)
+visent **les cartes choisies**, et non le seul calque courant, par le bouton, la palette ou une touche
+(`App::pos_targets`). Une seule étape d'annulation pour toutes les cartes. La caméra seule choisie, ou la vue fermée :
+le calque courant, comme avant.
+
+- Une clé de position garde toute la pose de la carte : place, échelle, étirements, rotation, inclinaisons (une
+  surface au sol reste couchée) et écart de profondeur.
+- Une carte qui a des clés est animée : la déplacer, la tourner ou l'agrandir à une autre image pose la clé de cette
+  image, comme avec l'outil Transformer. La caméra de même, dès qu'elle a deux clés.
+- Une carte verrouillée (elle, son dossier ou sa position) ne reçoit pas de clé et n'en perd pas ; choisie avec des
+  cartes libres, elle est laissée de côté.
+
+**Messages** (barre d'état) : « Clé de position posée à l'image … sur … calque(s) : change d'image et déplace le calque
+pour l'animer. », « Clé de position : la carte choisie est verrouillée (elle, son dossier ou sa position). Rien n'est
+changé. », « … clé(s) de position supprimée(s). », « Clé de caméra à l'image … (… clés dans ce plan)… », « Il y a déjà
+une clé de caméra à cette image : déplace la caméra pour la régler, ou retire la clé avec la corbeille. », « Clé de
+caméra supprimée. ».
+
+**Limites.**
+
+- Ce panneau n'a ni « clé précédente / suivante », ni « lisser », ni les adoucis : ils restent dans les réglages des
+  outils Caméra et Transformer et sur les pistes de la timeline.
+- Le losange de position, recliqué allumé, repose la clé avec la même pose (rien ne change à l'image, une étape
+  d'annulation), comme le bouton de l'outil Transformer.
+- Un calque à trajectoire pose ses clés lui-même : le losange le dit et ne pose rien.
+- Par une touche, « Supprimer la clé de position » sur une carte verrouillée répond « Pas de clé de position ici ».
+- **Rien de cette partie n'a été regardé à l'écran.**
+
+**Essais** : `src/espace3dcles_tests.rs` (6) : les boutons sont sur les bonnes lignes et un vrai clic pose et retire
+les clés ; clé de caméra (caméra fixe, losange allumé, annulation, clé posée en déplaçant la caméra à une autre image) ;
+caméra libre d'un plan en Espace 3D ; cartes choisies ensemble en une étape, caméra seule choisie, vue fermée ; carte
+verrouillée ; surface au sol qui garde son inclinaison et sa profondeur.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Vue Espace 3D, ligne « Caméra du plan » : un losange et une corbeille après « choisir », lisibles, leur bulle à une
+   seconde.
+2. Caméra fixe, tête de lecture au milieu du plan : un clic sur le losange l'allume, la piste Caméra montre deux clés
+   (le début et ici). Changer d'image, déplacer la caméra : une clé de plus. Lire le plan : la caméra bouge.
+3. Sur une clé de caméra : la corbeille la retire, Ctrl+Z la rend.
+4. Choisir une carte : le losange et la corbeille sont à côté de son nom. Un clic : un losange vert sur la piste du
+   calque. Changer d'image, déplacer la carte : elle s'anime.
+5. Deux cartes choisies (Maj + clic) : les boutons sont sur la ligne « 2 cartes choisies » ; un clic pose une clé sur
+   chacune, un seul Ctrl+Z retire les deux.
+6. Une carte verrouillée : rien ne se pose, la barre d'état dit pourquoi.
+7. Plan en Espace 3D : les mêmes gestes avec une surface au sol, et la caméra passée derrière les cartes.

@@ -3,6 +3,23 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-12
+
+- Pendant son essai à l'écran de la branche `espace-libre` (plan en Espace 3D), sa remarque : « les clés de caméras et de transformation
+  des objets ont disparu avec la vue 3D », puis « j'aimerais qu'un bouton y apparaisse » (vue Espace 3D ouverte, le panneau Réglages
+  n'avait aucun bouton de clés, sur `main` non plus). Chantier `espace-libre-cles` (partie 145), branche locale du même nom depuis
+  `espace-libre` e5dc84e, dans `Chantiers\calques-place` ; `espace-libre` elle-même ne reçoit aucun commit. Ajouté dans les Réglages de
+  l'Espace 3D, avec les icônes, les bulles et les commandes des panneaux 2D (aucune commande neuve) : sur la ligne « Caméra du plan », le
+  losange « Clé de caméra ici » (allumé quand l'image courante porte une clé) et la corbeille qui la retire ; sur la ligne de la carte
+  choisie, ou « N cartes choisies », le losange « Clé de position » (allumé quand toutes les cartes choisies ont une clé ici) et sa
+  corbeille. Sa règle « la sélection agit sur tout ce qui est choisi » : vue Espace 3D ouverte, les commandes de clés de position visent
+  les cartes choisies et non le seul calque courant, en une étape d'annulation ; une carte verrouillée est laissée de côté, avec un mot.
+  Essais : 6 neufs (`espace3dcles_tests.rs`, dont un vrai clic dans le panneau et une surface au sol qui garde son inclinaison), et les
+  familles voisines (Espace 3D 86, caméra 248, clés 102, clés de position 18, trajectoire 29, Transformer 31, bulles, raccourcis, fumée) :
+  0 échec ; `cargo check --release` : le seul avertissement déjà connu de `espace3d.rs`. Pas fait : la suite de référence entière ; l'exe
+  n'a pas été construit (son FEANOR d'essai tournait) ; **rien n'a été regardé à l'écran** (liste en 7 points, partie 145). Pas poussé,
+  pas fusionné.
+
 ## 2026-11-11
 
 - Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on

@@ -922,6 +922,10 @@ pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
 mod poskeysmontage_tests;
+// Les boutons de clés du panneau Réglages de l'Espace 3D (partie 145) : caméra du plan et position des cartes.
+mod espace3dcles;
+#[cfg(test)]
+mod espace3dcles_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

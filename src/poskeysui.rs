@@ -86,6 +86,11 @@ impl App {
     /// Les calques que les commandes de clés visent : les calques choisis qui bougent ensemble avec
     /// l'outil Transformer (au moins deux), sinon le calque courant s'il peut être transformé.
     fn pos_targets(&self) -> Vec<usize> {
+        // Vue Espace 3D ouverte, des cartes choisies : ce sont elles que les commandes de clés visent, pas le seul calque
+        // courant (`espace3dcles.rs`, partie 145).
+        if let Some(cartes) = self.e3_cartes_des_cles() {
+            return cartes;
+        }
         let peers = self.transform_peers();
         if !peers.is_empty() {
             return peers;
@@ -106,8 +111,13 @@ impl App {
         }
         let mut targets = self.pos_targets();
         if targets.is_empty() {
-            // (Le message dit pourquoi : verrouillé, position verrouillée, dossier…)
-            self.layer_editable();
+            if self.e3_cartes_des_cles().is_some() {
+                // (Les cartes choisies dans l'Espace 3D sont toutes verrouillées : le calque courant n'y est pour rien.)
+                self.status = crate::espace3dcles::CARTES_VERROUILLEES.into();
+            } else {
+                // (Le message dit pourquoi : verrouillé, position verrouillée, dossier…)
+                self.layer_editable();
+            }
             return;
         }
         // Un calque à trajectoire (`trajectoireui.rs`) : c'est elle qui pose les clés ; rien à la main.

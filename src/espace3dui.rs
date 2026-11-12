@@ -542,7 +542,11 @@ impl App {
             self.espace3d_card_fields(ui, *li);
         } else if chosen_cards.len() > 1 {
             ui.separator();
-            ui.label(RichText::new(format!("{} cartes choisies", chosen_cards.len())).strong());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{} cartes choisies", chosen_cards.len())).strong());
+                // (Les clés de position des cartes choisies, toutes ensemble : `espace3dcles.rs`.)
+                self.espace3d_boutons_cle_position(ui);
+            });
             note(ui, "Elles se déplacent, tournent et grandissent ensemble ; choisis-en une seule pour ses réglages.");
         }
         ui.separator();
@@ -564,6 +568,8 @@ impl App {
         let (mut moved, mut scaled, mut deepened, mut flat) = (false, false, false, false);
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{} {}", ph::SQUARE, name)).strong());
+            // (La clé de position de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_position(ui);
             if locked {
                 ui.label(RichText::new("verrouillée").small().weak());
             }
@@ -660,6 +666,8 @@ impl App {
             if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra pour la déplacer ou la tourner dans la vue").clicked() {
                 self.espace3d.sel = vec![CAMERA_ID];
             }
+            // (La clé de caméra de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_camera(ui);
         });
         egui::Grid::new("espace3d_camera").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
             ui.label("Position (m)");
