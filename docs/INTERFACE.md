@@ -10735,3 +10735,9 @@ passage propre pour cela.
 2. La même promenade avec « Regarder par la caméra ».
 3. Tourner la caméra, puis une carte, par leurs poignées, jusqu'à ce que la carte passe derrière le regard.
 4. S'il se ferme encore : le rapport le plus récent du dossier `plantages` dit où.
+
+**Retour d'Anthony (12 novembre, vers 15 h)**, sur un autre PC (Core i7-9700K, 16 Go, carte RTX 2060 6 Go), avec la
+seconde version portable d'essai (`FEANOR-portable-2026-11-12b-ESSAI-espace-3d`, exe de f223022) : « Non, plus de
+plantage ». Juste avant, sans préciser la version : « Pas de ralentissement ici avec une machine sous cette config ». Il
+n'a pas dit lesquels des points 1 à 3 il a faits. Les ralentissements du matin ne sont donc retrouvés ni sur le PC de
+l'atelier ni sur celui-là : leur cause reste inconnue, et rien n'a été changé pour eux.

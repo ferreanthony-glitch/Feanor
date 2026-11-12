@@ -5,6 +5,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Retour d'Anthony sur la partie 147** (vers 15 h, autre PC : i7-9700K, 16 Go, RTX 2060, seconde version portable d'essai) :
+  « Non, plus de plantage ». Juste avant : « Pas de ralentissement ici avec une machine sous cette config ». Rien changé pour les
+  ralentissements du matin, dont la cause reste inconnue. Rien fusionné, rien poussé.
 - **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, même branche). Anthony, après la
   version portable d'essai : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ». Rapport du 12 novembre,
   0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage avec des sommets et aucun
