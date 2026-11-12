@@ -10363,3 +10363,68 @@ Essais : `camerasuite_tests.rs` passe à 11 (un plan sans mouvement prend son mo
 1. Son plan 5 (deux cases, pas de caméra) : Maj sur la deuxième case, le « + », un clic. Le cadre B est sur la deuxième case ; la première ne bouge pas.
 2. Lire le plan : arrêt pendant la première case, puis A vers B pendant la deuxième.
 3. Son plan 3 : sur la dernière case, le « + » puis un clic. Si la ligne d'état dit que la caméra est déjà en mouvement, ramener la clé B dans la première case au montage (ou ajouter un cadre sur la première case), puis recommencer.
+
+## 143. Plan en Espace 3D : dessiner dans un décor que la caméra traverse (2026-11-12, branche `espace-libre`)
+
+Demandé par Anthony le 2026-11-11 ; le nom à l'écran (« Espace 3D ») est le sien. Conception, étapes A0 à A8, essais et
+limites : `docs/ESPACE-LIBRE.md`. **Rien de cette partie n'a été regardé à l'écran.**
+
+**Ce que c'est.** Un plan reste un plan ordinaire tant qu'on ne coche rien. Coché « Plan en Espace 3D », sa caméra est libre
+dans l'Espace 3D (elle tourne tout autour, passe derrière les cartes, plonge à la verticale), ce qui est devant cache ce
+qui est derrière sans ranger la pile, et les cartes se couchent au sol ou se dressent en mur. Format 54.
+
+**Où ça se trouve.** Tout est dans la vue Espace 3D (bouton cube sous le dessin), panneau Réglages :
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton à bascule « Plan en Espace 3D » (cube transparent) | rangée du haut, après la grille | `espace3d.plan_en_espace` | coche ou décoche pour le plan courant ; une étape « Plan en Espace 3D » |
+| « Nouvelle surface » : trois boutons (cadre, alignement bas, mur) et un champ en mètres | sous la rangée du haut, **seulement** dans un plan en Espace 3D | `espace3d.surface_face`, `_sol`, `_mur` | un calque neuf au-dessus du calque courant, posé face à la caméra, au sol ou en mur, à la distance du champ ; il devient courant |
+| Note sous les champs de la caméra | « Caméra du plan » | | dit que la caméra est libre, bascule jusqu'à 90° |
+
+Aucune de ces commandes n'a de touche par défaut ; toutes sont dans la palette (Ctrl+K) et `keymap.toml`.
+
+**Les gestes.**
+
+- *Régler la caméra* : dans la vue Espace 3D, outil Caméra, puis ses poignées ; ou ses champs dans Réglages. L'outil
+  Caméra **du canevas** ne tire plus le cadre dans ces plans : un message renvoie à la vue Espace 3D.
+- *Dessiner* : quitter la vue Espace 3D. La feuille montre ce que la caméra filme, le cadre au centre ; on dessine sur le
+  calque courant comme d'habitude. Le trait tombe sur sa carte, où qu'elle soit ; le curseur du pinceau a la taille du
+  trait à cet endroit. Là où le regard ne touche pas la carte (elle est derrière la caméra, vue par la tranche, ou trop
+  loin de ses bords près de l'horizon), le trait ne commence pas et la barre d'état le dit.
+- *Poser une surface* : régler la distance, cliquer un des trois boutons, dessiner.
+
+**Ce qui se met de côté pour ces plans**, avec un mot d'explication : la vue de dessus (Affichage > Vue de dessus) ; les
+cadres de caméra tirés sur une case des Vignettes. L'export de caméra reste, avec la vraie caméra du plan et le champ
+`espace_3d`.
+
+**Messages** (barre d'état) : « Plan en Espace 3D : coché pour ce plan… », « … décoché, le plan est de nouveau un plan
+ordinaire. », « Plan en Espace 3D refusé : le cadre du projet est plus grand que la feuille… », « Espace 3D : ce plan est
+en Espace 3D. La caméra est libre… », « « Surface au sol » posée à 5.8 m : c'est le calque courant, dessine dessus. »,
+« Surface … refusée : à … m devant cette caméra, elle tomberait derrière la caméra d'origine du plan… », « Rien à peindre
+ici : la carte du calque courant n'est pas sous le pointeur… », « Plan en Espace 3D : la caméra se règle dans la vue
+Espace 3D… », « Plan en Espace 3D : sa caméra ne se règle pas par des cadres sur la vignette… ».
+
+À vérifier à l'écran (par Anthony), **sur la copie d'un projet** (le format 54 n'est pas relu par une version d'avant) :
+
+1. Réglages de l'Espace 3D : le bouton « Plan en Espace 3D » (cube transparent) est lisible, sa bulle vient à une seconde,
+   il passe en couleur d'accent une fois coché. Ctrl+Z le décoche.
+2. Un plan avec trois calques à des profondeurs différentes, rangés à l'envers dans la pile : plan ordinaire, la pile
+   décide ; coché, le calque le plus proche est devant. La couleur d'un trait reste sous son trait.
+3. Choisir la caméra dans la vue, la faire tourner d'un demi-tour autour des cartes, la faire passer derrière : dans la
+   vue, les cartes se cachent comme on les voit ; « Regarder par la caméra » montre l'image.
+4. Quitter la vue Espace 3D : la feuille montre ce que la caméra filme, le cadre gris est au centre. Lire le plan : le
+   mouvement de caméra est celui réglé.
+5. Dessiner sur une carte, caméra tournée : le trait tombe sous le stylet, sans décalage, et le cercle du pinceau a la
+   largeur du trait. Sur une carte loin, il est plus petit.
+6. « Nouvelle surface » : les trois icônes sont lisibles. Face à la caméra : le cadre tombe au centre de la surface. Au
+   sol : elle est à plat, sur le quadrillage. En mur : debout sur le sol. Changer la distance et recommencer.
+7. Dessiner sur le sol, vers l'horizon : le trait s'arrête avant de partir à l'infini, sans à-coup.
+8. Bascule de la caméra à −90° (champ de Réglages) au-dessus d'un sol : la plongée totale se voit, sans image qui tourne
+   d'un coup.
+9. Retourner la caméra dos aux cartes, essayer de peindre : rien ne se peint, la barre d'état dit pourquoi.
+10. Outil Caméra du canevas dans ce plan : un clic donne le message, le cadre ne bouge pas.
+11. Vignettes : la case de ce plan montre l'image de la caméra ; Maj n'y propose pas de cadre de caméra.
+12. Exporter le plan en vidéo et en images : même image qu'à l'écran.
+13. Enregistrer, fermer, rouvrir : tout est là. Ouvrir la copie avec le FEANOR d'avant : refus propre (« version plus récente »).
+14. Un plan ordinaire du même projet : rien n'a changé (caméra bridée, pile, vue de dessus, cadres des Vignettes).
+15. Poignées de rotation d'une carte près de 90° : signaler si elles sautent.

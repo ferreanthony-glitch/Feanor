@@ -128,6 +128,11 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
             ));
         }
         plan.insert("cles".into(), Value::Array(keys.iter().map(key_json).collect()));
+        // Plan en Espace 3D : la caméra est libre dans l'espace (ses valeurs ne sont pas bridées à ce qui voit la feuille).
+        // Le champ n'est écrit que pour ces plans : rien ne change pour les autres.
+        if panel.espace {
+            plan.insert("espace_3d".into(), Value::Bool(true));
+        }
         if s.per_frame || panel.effet_camera.is_some() {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {

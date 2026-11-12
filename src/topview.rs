@@ -186,6 +186,17 @@ impl App {
     }
 
     fn top_view_ui(&mut self, ui: &mut egui::Ui) {
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, étape A8) : ce schéma montre des calques parallèles devant une caméra
+        // qui regarde la feuille de face. Avec une caméra libre, des cartes au sol ou en mur, il serait faux.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            ui.label(
+                egui::RichText::new(
+                    "Ce plan est en Espace 3D : sa caméra est libre et ses cartes peuvent être au sol ou en mur. La vue de dessus, qui montre des calques parallèles devant une caméra de face, ne le décrit pas. Regarde-le dans la vue Espace 3D (bouton cube), en tournant la vue au-dessus du décor.",
+                )
+                .weak(),
+            );
+            return;
+        }
         ui.label(
             egui::RichText::new(
                 "Glisser un calque vers le haut l'éloigne (il défile moins vite quand la caméra \

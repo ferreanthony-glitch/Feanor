@@ -95,7 +95,8 @@ feuille, quelle que soit la focale (voir A0, point 2).
 | Objets 3D, mannequin, import glTF | étape C (code retiré le 2026-10-21, `git` `5f3fda7`) |
 | Cartes qui se traversent | l'ordre se fait carte par carte (du plus loin au plus près), pas point par point |
 | Outil Transformer, boîte de sélection et multisélection sur une carte inclinée | limite déjà connue (`ESPACE3D.md`, 11.4), inchangée |
-| Vue de dessus (`topview.rs`), export de la caméra (`exportcamera.rs`), mouvements de caméra des Vignettes (`vignettecam.rs`) pour un plan en Espace 3D | désactivés pour ces plans, avec un mot d'explication ; à reprendre après |
+| Vue de dessus (`topview.rs`), mouvements de caméra des Vignettes (`vignettecam.rs`) pour un plan en Espace 3D | désactivés pour ces plans, avec un mot d'explication (A8) ; l'export de la caméra, lui, est gardé |
+| Carte derrière la caméra d'origine du plan | la taille d'un calque est liée à sa profondeur, bornée à −0,9 (trouvé en A6) : à lever avec l'étape B |
 | Netteté d'une carte au sol vue de très près | une carte garde la définition de son dessin ; à mesurer, pas à résoudre ici |
 
 ## 6. Les étapes
@@ -453,6 +454,36 @@ tournée de 180° par la poignée, repos de l'application.
 
 Ce qui est désactivé pour un plan en Espace 3D (partie 5) dit pourquoi. Essai de budget (20 cartes, écran et lecture).
 `docs/ESPACE3D.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `INTERFACE.md` (liste de contrôle à l'écran), README.
+
+#### Fait (2026-11-12)
+
+- **La bascule de la caméra va jusqu'à 90°** (question d'Anthony : « pourquoi 89° ? »). C'était une précaution de la vue
+  d'édition : `SceneCam::view` tirait la droite de la caméra de la verticale du monde, ce qui ne donne rien quand elle
+  regarde à la verticale. Le rendu des plans en Espace 3D (`repere_camera`) ne passait pas par là. `SceneCam::view` tire
+  maintenant la droite du panoramique (mêmes valeurs sous 90°, essai), `espace3d::MAX_TILT` = 90. Une plongée totale
+  filme le sol (essai). La caméra d'un plan ordinaire reste bridée par `Camera::limited`.
+- **Vue de dessus** : dans un plan en Espace 3D, sa fenêtre montre un mot d'explication au lieu du schéma (elle décrit
+  des calques parallèles devant une caméra de face).
+- **Vignettes** : pas de cadre de caméra à tirer sur une case d'un plan en Espace 3D (`cam_possible_ici`), les cadres
+  d'anciennes clés n'y sont plus tracés, et la commande d'ajout dit pourquoi.
+- **Export de caméra** : gardé, contrairement à ce que prévoyait la partie 5. Il écrit la vraie caméra du plan depuis A3
+  (`panel_camera_reelle`) et, pour ces plans seulement, le champ `"espace_3d": true`.
+- **Pas de trait hors de la carte** étendu au trait droit (`tracedroit.rs`) et au point d'ancrage d'une trajectoire
+  (`trajectoireui.rs`). Coller une image garde son repli (le centre de la carte), les formes aussi.
+- **Mesure** : le plan d'une image d'un plan en Espace 3D de 20 cartes (à plat, inclinées, au sol, profondeurs en
+  désordre, caméra tournée et animée), ordre par distance compris, en 1920 × 1080 : **1,36 ms** sur le Mac (seuil de
+  l'essai : 8 ms). À confirmer sur le poste Windows, la référence.
+- **Documents** : `docs/INTERFACE.md` partie 143 (gestes, messages, **liste de contrôle à l'écran en 15 points**),
+  `docs/ESPACE3D.md` partie 12, `docs/ARCHITECTURE.md` (« Plan en Espace 3D », décisions), README.
+- **Essais** (`espace3d_tests.rs`, 4 de plus) : droite de la caméra identique sous 90°, vue « par la caméra » = image à
+  0,05 px bascule à ±90° ; plongée totale sur un sol peint ; export de caméra, Vignettes, vue de dessus ; budget.
+- **Suite complète sur le Mac**, dernière passe, documents compris : **4 442 passent, 86 échouent**, les 86 du Mac,
+  les mêmes qu'avant A1. (La passe d'avant comptait en plus l'essai de minutage
+  `colorscript::tests_sortie::cancelling_leaves_no_file…` déjà vu à A4, qui passe seul.)
+
+**L'étape A est finie.** 35 essais lui sont propres (`espace3d_tests.rs`). Ce qui n'a jamais été fait : regarder le
+résultat à l'écran, lancer la suite de référence sous Windows (`scripts/verifier.ps1`), essayer la carte graphique sur un
+plan en Espace 3D. La branche `espace-libre` n'est pas fusionnée dans `main`.
 
 ## 7. À trancher par Anthony
 

@@ -696,7 +696,7 @@ impl App {
         });
         ui.label(RichText::new(format!("Champ horizontal {:.0}° (pellicule de 36 mm).{}", cam.angle_of_view(), if keys >= 2 { format!(" {keys} clés de caméra : on règle la clé de l'image courante.") } else { String::new() })).small().weak());
         if self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre. Elle tourne tout autour (panoramique sans borne), passe derrière les cartes, et l'image la suit. La bascule s'arrête à 89° : elle ne regarde pas à la verticale.").small().weak());
+            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre. Elle tourne tout autour (panoramique sans borne), passe derrière les cartes, bascule jusqu'à la verticale (90° : plongée ou contre-plongée totale), et l'image la suit.").small().weak());
         }
         if changed {
             let sc = cam.sanitized();

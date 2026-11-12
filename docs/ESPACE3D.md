@@ -204,3 +204,15 @@ Aucun changement de format (`project::VERSION` reste 35) : les objets et le rep�
    sauter près de ±90°.
 6. Dossiers : un dossier n'est pas une carte ; sa pose ne place pas ses calques dans l'espace.
 
+## 12. Plan en Espace 3D (2026-11-12, branche `espace-libre`)
+
+Tout ce qui précède décrit un plan ordinaire, et reste vrai pour lui. Un plan coché « Plan en Espace 3D » (`Panel::espace`,
+format 54) lève plusieurs de ces limites : sa caméra est libre (plus de `Camera::limited`, bascule jusqu'à 90°), ses cartes
+sont posées dans le repère de la caméra (`Monde::repere_camera`, `espace3d::place_dans`) et ordonnées par distance
+(`espace3d::ordre_par_distance`), leur inclinaison va jusqu'au demi-tour, et on y pose des surfaces face à la caméra, au
+sol ou en mur. Les points 11.1 (tri par profondeur) et 11.5 (inclinaison limitée à ±85°) ne valent plus pour ces plans ;
+11.2 (carte coupée aux bords de la feuille), 11.3, 11.4 et 11.6 valent toujours. Conception, essais et limites :
+`docs/ESPACE-LIBRE.md` ; interface et liste de contrôle : `docs/INTERFACE.md`, partie 143.
+
+`SceneCam::view` tire maintenant la droite de la caméra de son panoramique (mêmes axes qu'avant sous 90° de bascule) et
+`espace3d::MAX_TILT` vaut 90° : la caméra d'un plan ordinaire reste bridée par `Camera::limited`.

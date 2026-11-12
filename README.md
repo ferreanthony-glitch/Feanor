@@ -2225,6 +2225,12 @@ repère 3D. Les réglages sont dans le panneau Réglages ; conception : `docs/ES
   `scenes3d.json`, le champ `repere3d` et les fichiers de `modeles/` ne sont plus lus ni écrits, et jamais effacés.
 - Enregistré : poses et clés dans le projet (**format 35** : un FEANOR d'avant refuse ce projet). Détails et limites :
   `docs/ESPACE3D.md`, `docs/INTERFACE.md` (partie « Espace 3D »).
+- **Plan en Espace 3D** (bouton cube transparent dans Réglages de l'Espace 3D, plan par plan) : la caméra du plan devient
+  libre (elle tourne tout autour des cartes, passe derrière, plonge à la verticale), ce qui est devant cache ce qui est
+  derrière sans ranger la pile, et « Nouvelle surface » pose un calque face à la caméra, au sol ou en mur, à la distance
+  choisie. On règle la caméra dans la vue Espace 3D ; on dessine en la quittant : la feuille montre ce que la caméra filme.
+  Un plan non coché reste un plan ordinaire. **Format 54** (un FEANOR d'avant refuse ce projet). Détails et limites :
+  `docs/ESPACE-LIBRE.md`, `docs/INTERFACE.md` (partie 143).
 **Propager une peinture sur une vidéo** (façon EbSynth) : on peint quelques images clés sur un
 calque **bitmap** posé au-dessus d'un calque vidéo (ou d'une animation), puis clic droit sur ce
 calque (montage, timeline ou panneau Calques) ou menu Calques > « Propager la peinture… ». Sur un

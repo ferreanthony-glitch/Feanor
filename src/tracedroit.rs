@@ -93,8 +93,8 @@ impl App {
             return;
         }
         if self.droit_wanted(mods) {
-            if let Some(stage) = hover {
-                let p = self.to_layer(stage);
+            // (Plan en Espace 3D : rien là où le regard ne touche pas la carte du calque courant, `App::to_layer_opt`.)
+            if let Some(p) = hover.and_then(|stage| self.to_layer_opt(stage)) {
                 self.droit_aim(p, pressure, mods);
             }
         } else if self.droit.pending() {

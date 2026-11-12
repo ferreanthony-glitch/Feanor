@@ -70,8 +70,12 @@ impl Default for SceneCam {
 
 pub const MIN_FOCAL: f32 = 8.0;
 pub const MAX_FOCAL: f32 = 300.0;
-/// La bascule et le panoramique restent loin de la verticale (la caméra se retournerait).
-pub const MAX_TILT: f32 = 89.0;
+/// La bascule va jusqu'à la verticale : une plongée ou une contre-plongée totale (`docs/ESPACE-LIBRE.md`, étape A8).
+/// Elle s'arrêtait à 89° tant que `SceneCam::view` tirait la droite de la caméra de la verticale du monde, ce qui n'a pas
+/// de sens quand elle regarde à la verticale ; sa droite vient maintenant de son panoramique. Au-delà de 90°, la caméra
+/// serait à l'envers : c'est un panoramique d'un demi-tour et une rotation. La caméra d'un plan ordinaire reste bridée
+/// bien avant, par `Camera::limited` (elle doit voir la feuille).
+pub const MAX_TILT: f32 = 90.0;
 
 impl SceneCam {
     /// Vers où la caméra regarde. À panoramique et bascule nuls : vers −Z, comme la caméra 2D qui regarde la feuille de
@@ -85,7 +89,10 @@ impl SceneCam {
     /// Le point de vue pour une image dont `ref_width` pixels représentent les 36 mm de pellicule.
     pub fn view(&self, ref_width: f32) -> m::View {
         let forward = self.forward();
-        let right0 = m::normalize(m::cross(forward, [0.0, 1.0, 0.0]));
+        // La droite de la caméra ne dépend que de son panoramique (c'est `cross(forward, verticale)` normalisé tant que
+        // la bascule est sous 90°, et elle reste définie à 90°) : les mêmes axes que `Monde::repere_camera`.
+        let (sp, cp) = self.pan.to_radians().sin_cos();
+        let right0 = [cp, 0.0, sp];
         let up0 = m::cross(right0, forward);
         // Rotation du cadre dans le sens horaire (vu de derrière la caméra) : la droite du cadre descend, le haut penche
         // vers la droite.

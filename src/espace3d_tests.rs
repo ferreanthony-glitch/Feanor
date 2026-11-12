@@ -1881,3 +1881,127 @@ fn the_edit_view_opens_on_a_plan_in_space_with_its_surfaces_and_says_what_it_is(
     b.app.run_action("espace3d.basculer");
     assert!(b.app.status.starts_with("Espace 3D : clic sur une carte"), "{}", b.app.status);
 }
+
+// ------------------------------------------------------------------------------ plan en Espace 3D, étape A8 : finitions
+
+#[test]
+fn the_camera_tilts_to_the_vertical_and_the_view_through_it_agrees_with_the_image() {
+    let w = monde_a2();
+    let base = w.camera_reference();
+    // Sous 90°, la droite de la caméra tirée de son panoramique est celle d'avant (tirée de la verticale du monde).
+    for (pan, tilt, roll) in [(0.0f32, 0.0f32, 0.0f32), (35.0, 20.0, 0.0), (-120.0, -60.0, 15.0), (200.0, 88.0, -40.0), (10.0, -89.0, 0.0)] {
+        let sc = espace3d::SceneCam { pos: [1.0, 2.0, 3.0], pan, tilt, roll, focal: 35.0 };
+        let v = sc.view(320.0);
+        let avant = m::normalize(m::cross(sc.forward(), [0.0, 1.0, 0.0]));
+        let (s, c) = roll.to_radians().sin_cos();
+        let up0 = m::cross(avant, sc.forward());
+        let droite = m::add(m::scale(avant, c), m::scale(up0, -s));
+        assert!(m::length(m::sub(v.right, droite)) < 1e-4, "caméra {sc:?} : droite {:?} contre {droite:?}", v.right);
+    }
+    // À 90° exactement, elle est encore définie, et la vue « par la caméra » met chaque point où l'image le met.
+    assert_eq!(espace3d::MAX_TILT, 90.0);
+    let mut seen = 0;
+    for cam in [Camera { tilt: -90.0, y: -200.0, ..base }, Camera { tilt: 90.0, pan: 40.0, angle: 25.0, ..base }, Camera { tilt: -90.0, pan: -130.0, zoom: 1.5, dolly: 100.0, ..base }, Camera { tilt: 30.0, pan: 70.0, ..base }] {
+        let sc = w.scene_cam(&cam);
+        assert_eq!(sc.tilt, cam.tilt, "la bascule n'est plus bornée à 89°");
+        let v = sc.view(w.frame[0] as f32);
+        assert!(v.right.iter().chain(&v.up).chain(&v.forward).all(|x| x.is_finite()) && (m::length(v.right) - 1.0).abs() < 1e-4);
+        let eye = w.eye(&cam);
+        for d in [[0.3f32, 0.2, 0.0], [-0.5, 0.1, 0.4], [0.0, -0.6, -0.3]] {
+            // Un point devant la caméra, décalé de `d` (dans ses axes) à 4 m.
+            let p = m::add(eye, m::add(m::scale(v.forward, 4.0), m::add(m::scale(v.right, d[0]), m::add(m::scale(v.up, d[1]), m::scale(v.forward, d[2])))));
+            let (Some(vue), Some(image)) = (v.project(p, [160.0, 90.0]), w.to_frame(&cam, p)) else { continue };
+            assert!((pos2(vue[0], vue[1]) - image).length() < 0.05, "caméra {cam:?} : la vue met le point en {vue:?}, l'image en {image:?}");
+            seen += 1;
+        }
+    }
+    assert!(seen >= 10);
+}
+
+#[test]
+fn a_camera_straight_above_films_the_ground() {
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    doc.panels[0].espace = true;
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.surface_sol");
+    // On peint le centre du sol en rouge, puis la caméra monte au-dessus et regarde à la verticale.
+    let cel = b.app.doc.new_cel(LayerKind::Bitmap);
+    fill_rect(&mut b.app.doc, cel, 280, 150, 360, 210, RED);
+    b.app.doc.panels[0].layers[1].frames = vec![Some(cel); 12];
+    b.app.doc.panels[0].layers[0].visible = false;
+    let w = b.app.e3_world();
+    let sol = w.card_xf(&b.app.layers()[1].pose(0), b.app.layers()[1].depth_at(0));
+    let au_dessus = espace3d::SceneCam { pos: [sol.pos[0], w.sol_y() + 4.0, sol.pos[2]], pan: 0.0, tilt: -90.0, roll: 0.0, focal: 35.0 };
+    b.app.set_current_camera(w.camera_from_scene(&au_dessus));
+    assert_eq!(b.app.current_camera().tilt, -90.0, "plongée totale");
+    let image = filmee(&b.app.doc, 0);
+    assert!(rouge(px(&image, 160, 90)), "le centre du sol est au centre de l'image : {:?}", px(&image, 160, 90));
+    assert!(!rouge(px(&image, 20, 20)));
+    // Un plan ordinaire : la caméra reste bridée, comme avant.
+    b.app.doc.panels[0].espace = false;
+    b.app.set_current_camera(w.camera_from_scene(&au_dessus));
+    assert!(b.app.current_camera().tilt.abs() < 89.0);
+}
+
+#[test]
+fn what_does_not_describe_a_plan_in_space_steps_aside_and_the_camera_export_says_it_is_free() {
+    use crate::exportcamera::{self, CameraSettings};
+    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
+    let cam = Camera { pan: 140.0, tilt: 60.0, dolly: 300.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, doc.default_camera()), CameraKey::new(6, cam)];
+    // L'export de caméra : la vraie caméra du plan, et le champ `espace_3d` seulement pour un plan en Espace 3D.
+    let ordinaire = exportcamera::build(&doc, &[0], "Film", &CameraSettings { per_frame: true, ..Default::default() });
+    assert!(!ordinaire.json.contains("espace_3d"));
+    doc.panels[0].espace = true;
+    let e = exportcamera::build(&doc, &[0], "Film", &CameraSettings { per_frame: true, ..Default::default() });
+    let v: serde_json::Value = serde_json::from_str(&e.json).expect("JSON");
+    let plan = &v["plans"][0];
+    assert_eq!(plan["espace_3d"], serde_json::json!(true));
+    let derniere = plan["par_image"].as_array().expect("par image").iter().find(|f| f["image"] == serde_json::json!(6)).expect("image 6");
+    assert_eq!((derniere["panoramique"].as_f64(), derniere["bascule"].as_f64()), (Some(140.0), Some(60.0)), "la caméra réelle, pas la caméra qui cadre");
+    // Les Vignettes : pas de cadre de caméra à tirer sur une case d'un plan en Espace 3D, et la commande le dit.
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    assert!(!b.app.cam_possible_ici(0, 0));
+    let cles = b.app.doc.panels[0].camera.clone();
+    b.app.cam_ajouter_cadre_case(0, 0);
+    assert_eq!(b.app.doc.panels[0].camera, cles, "aucune clé de plus");
+    assert!(b.app.status.contains("Plan en Espace 3D"), "{}", b.app.status);
+    // La vue de dessus s'ouvre sans tomber, sur son mot d'explication.
+    b.app.run_action("vue.dessus");
+    b.chauffer(4);
+    assert!(b.app.top_view);
+}
+
+#[test]
+fn the_plan_of_an_image_of_a_plan_in_space_with_twenty_cards_stays_within_the_frame_budget() {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    doc.panels[0].layers = Vec::new();
+    for k in 0..20usize {
+        let mut layer = Layer::new(format!("Carte {k}"), LayerKind::Bitmap);
+        let cel = doc.new_cel(LayerKind::Bitmap);
+        fill_rect(&mut doc, cel, 200 + k * 150, 300, 600 + k * 150, 1500, if k % 2 == 0 { RED } else { GREEN });
+        layer.frames = vec![Some(cel); 12];
+        // (Des profondeurs en désordre dans la pile, des cartes à plat, inclinées, au sol.)
+        layer.depth = ((k * 7) % 20) as f32 * 0.2 - 0.8;
+        layer.transform = match k % 3 {
+            0 => LayerTransform::default(),
+            1 => LayerTransform { tilt_y: -60.0 + k as f32 * 5.0, ..Default::default() },
+            _ => LayerTransform { tilt_x: -90.0, ..pose(0.0, 300.0) },
+        };
+        doc.panels[0].layers.push(layer);
+    }
+    doc.panels[0].espace = true;
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 1500.0, pan: 25.0, tilt: -12.0, dolly: 200.0, ..doc.default_camera() }), CameraKey::new(11, Camera { x: 2600.0, pan: -40.0, tilt: -20.0, ..doc.default_camera() })];
+    let plan = render::panel_plan_at(&doc, 0, 3, None);
+    assert!(plan.items.iter().filter(|i| i.pre.as_ref().is_some_and(|p| p.card)).count() >= 15, "les cartes devant la caméra sont posées par un maillage");
+    let t = std::time::Instant::now();
+    const N: usize = 50;
+    for f in 0..N {
+        std::hint::black_box(render::panel_plan_at(&doc, 0, f % 12, None));
+    }
+    let ms = t.elapsed().as_secs_f64() * 1000.0 / N as f64;
+    println!("PERF plan en Espace 3D : plan d'une image, 20 cartes, ordre par distance compris (1920 × 1080) : {ms:.2} ms");
+    assert!(ms < 8.0, "{ms:.2} ms pour le plan d'une image d'un plan en Espace 3D : la moitié d'une image à 60 images par seconde");
+}

@@ -124,8 +124,7 @@ impl App {
         // Le point d'ancrage se choisit d'un clic sur le dessin (bouton des réglages).
         if std::mem::take(&mut self.traj.choisir_ancre) {
             let li = self.cur_layer;
-            if self.layer().trajectoire.is_some() {
-                let q = self.to_layer(stage);
+            if let (true, Some(q)) = (self.layer().trajectoire.is_some(), self.to_layer_opt(stage)) {
                 let snap = self.snapshot();
                 if let Some(t) = self.layers_mut()[li].trajectoire.as_mut() {
                     t.ancre = Ancre::Point { x: q.x, y: q.y };

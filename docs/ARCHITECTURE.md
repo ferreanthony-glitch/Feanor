@@ -2116,3 +2116,54 @@ les mêmes pas, dans la même étape.
 **Un geste** : à l'appui, la cible est choisie (sélection, zone du pot de peinture — `fill::flood` / `dilate`, ou `fond::zone` pour l'aplat, `zone_couleur` pour un calque de couleur —, ou toute la feuille) et sa **couverture** devient une petite image d'egui (une fois) ; pendant le glisser, seul l'axe
 change et l'aperçu est un maillage de 56 × 56 sommets colorés (`degrade::sommets`) posé sur cette image (sommet × texture = couleur × couverture) : aucun appel au moteur de pinceaux. Le lâcher écrit : bitmap, aplat et calque de couleur par `peindre` (`push_pixels` ou `Edit::FondTiles`, une étape « Dégradé ») ; vectoriel, un
 `Element::Fill` avec `gradient` (`push_vector`, rendu de la zone touchée seule : `refresh_cel_region`). Le rendu vectoriel (`Mask::composite_gradient`) lit le dégradé au centre de chaque pixel ; la transformation d'un élément (`transformed_with`, `warp_element_with`, `tween.rs`) fait passer les deux points de l'axe par la même fonction que les contours.
+
+## Plan en Espace 3D (2026-11-12, branche `espace-libre`)
+
+Un plan dont la caméra est libre et dont les cartes se cachent selon leur distance (`Panel::espace`, format 54). Conception,
+étapes, essais et limites : `docs/ESPACE-LIBRE.md` ; interface : `docs/INTERFACE.md`, partie 143. Ici, le placement dans le code.
+
+**Le principe : la caméra ne bouge pas, le monde tourne devant elle.** Le rendu de toujours a deux temps (les calques se posent
+sur la feuille vus de l'œil, puis la caméra cadre la feuille), ce qui oblige la caméra à voir la feuille. Pour un plan en
+Espace 3D, `Monde::repere_camera(cam)` donne la matrice qui amène le monde devant la **caméra de référence** (au centre de la
+feuille, de face) comme la caméra du plan le voit ; chaque carte est passée par cette matrice et posée par le maillage des
+cartes inclinées (`warp.rs`) vue de l'œil de référence ; la caméra de référence cadre. Il n'y a pas de second moteur d'image :
+processeur, carte graphique, effets, modes de fusion, calques d'ajustement servent tels quels.
+
+**Poser** : `espace3d::place_dans(world, layer, frame, camera, repere)` ; `place` l'appelle sans repère (inchangé). Les deux
+constructeurs de plan, `render::plan_with_camera_layers` (toutes les sorties) et `App::build_plan_avec` (l'écran), lui passent
+`Document::repere_du_plan` (rien pour un plan ordinaire, ou quand la caméra du plan est la caméra de référence : chemin de
+toujours, mêmes pixels). Un calque accroché à la caméra (`accroche.rs`) ne reçoit pas le repère.
+
+**Ordonner** : `espace3d::ordre_vu(…, Regard)` avant la boucle des deux constructeurs (`ordre_par_distance` pour l'image),
+et dans la vue d'édition (`App::e3_cartes_a_tracer`). Les cartes d'un même plan géométrique forment un groupe et gardent
+l'ordre de la pile ; un dossier passe en bloc ; les annotations en dernier. `calqueffet::Portees` donne la portée d'un calque
+d'ajustement dans cet ordre (« depuis le premier calque posé de son dossier »).
+
+**Cadrer** : `Document::panel_camera` (« la caméra montrée ») et `camera_du_plan_range` rendent la caméra de référence pour
+un plan en Espace 3D : tout ce qui filme est juste sans y toucher. `panel_camera_reelle` et `camera_reelle_du_plan_range`
+pour ce qui **décrit** la caméra (fiche, export de caméra, vue de dessus, chemin de la caméra dans la vue) ; `panel_camera_douce`
+et `App::current_camera` pour ce qui la **règle** (inchangés). `App::camera_montree` : la caméra de référence.
+`App::set_current_camera` ne passe plus par `Camera::limited` pour ces plans.
+
+**Dessiner** : `App::tilted_card` rend la matrice de la carte dans le repère et l'œil de référence ; `to_layer`,
+`layer_to_screen` s'en servent ; `to_layer_opt` ne rend rien quand le regard manque la carte (ou la touche à plus d'une
+feuille de ses bords) : ce qui peint ne commence pas (`canvas.rs`, `tracedroit.rs`, `trajectoireui.rs`). `layer_zoom` rend
+la taille d'un pixel de la carte à l'écran sous le pointeur.
+
+**Surfaces** : `Monde::surface_xf(cam, Surface, distance)`, `Monde::sol_y`, `App::espace3d_nouvelle_surface`. Inclinaison
+libre : `LayerTransform::clamp_tilt_libre`, `Monde::card_from_xf_libre`, `apply_card_xf_libre`.
+
+**Format** : `"espace": true` dans l'entrée du plan (`project::PanelEntry`, la même pour le projet classique, la copie de
+secours et les projets partagés), absent si faux ; `project::VERSION` = 54. La pose d'un calque lue d'un fichier est bornée
+au demi-tour (`clamp_tilt_libre`) au lieu de 85°.
+
+### Décisions (coût / risque / réversibilité)
+
+| Décision | Pourquoi | Coût | Risque | Réversible |
+|---|---|---|---|---|
+| Changer de repère plutôt qu'écrire un second moteur d'image | tout le rendu existant sert ; un plan ordinaire ne passe par aucune ligne nouvelle | toute carte d'un plan en Espace 3D passe par un maillage (1,4 ms pour 20 cartes en 1920 × 1080, mesuré sur Mac) | une carte ne montre que ce qui est dans la feuille (pas le hors-feuille) | oui : `repere_du_plan` seul décide |
+| `panel_camera` rend la caméra de référence pour ces plans | vingt endroits filment, huit décrivent : on change le plus petit nombre, et le code à venir qui filme est juste d'office | un nom de plus à connaître (`panel_camera_reelle`) | lire `panel_camera` pour décrire la caméra d'un plan en Espace 3D donnerait la caméra de référence | oui |
+| Une case par plan, pas un nouveau type de plan | couper, dupliquer, versions, projets partagés suivent sans rien de plus | un champ dans `Panel` (tous ses constructeurs) | — | oui : décocher |
+| Ordre par distance du centre, groupes par plan géométrique | la couleur reste sous son trait quand la caméra tourne | cartes qui se traversent non départagées ; dossier en bloc | un personnage debout sur un sol passe entier devant ou derrière | oui : `ordre_vu` seul décide |
+| Garder « un calque = une carte » (taille liée à la profondeur) | aucun nouveau type de données, anciens projets identiques | **pas de carte derrière la caméra d'origine du plan** (`Layer::MIN_DEPTH`) | une surface demandée là est refusée | à lever avec l'étape B (séparer taille et profondeur : format) |
+| Bascule de la caméra jusqu'à 90° pour tous (`MAX_TILT`), droite de la caméra tirée du panoramique | plongée totale ; mêmes axes que le rendu | aucun sous 90° (mêmes valeurs) | un plan ordinaire reste bridé par `Camera::limited` | oui |
