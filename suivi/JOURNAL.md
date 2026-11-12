@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Partie 150 regardée à l'écran par Claude** (23 h 33, souris simulée, exe de la branche construit à 23 h 32, copie du projet `afa`,
+  réglages à part). Vue Espace 3D ouverte sur le plan 6 : « Réglages » montre le Pinceau (taille, opacité) ; dessous, le groupe de
+  Couleur a trois onglets et « Espace 3D » est devant. Outil Trajectoire pris : « Réglages » montre « Trajectoire dans l'espace » et
+  ses boutons. Ctrl+clic sur le symbole de la caméra, posé devant la surface au sol : c'est la caméra qui est choisie. Vue fermée :
+  Couleur revient devant ; rouverte : « Espace 3D » repasse devant. Remarque : dans l'espace Storyboard, le panneau « Espace 3D » n'a
+  que la hauteur du groupe de Couleur, une centaine de pixels ; la liste des cartes et les champs demandent de faire défiler ou de
+  tirer la bordure. Pas essayé à l'écran : l'espace Animation, une disposition enregistrée avant ce changement, le pinceau qui
+  dessine sur une carte avec ses réglages sous les yeux, le stylet.
 - **Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi** (partie 150, branche `trajectoire-espace`, toujours le
   format 55). Anthony : « même dans l'espace 3D, le panneau réglages affiche les réglages de l'outil sélectionné. Les réglages de
   l'espace 3D basculent dans un panneau spécifique », puis, pour sa place : « Sa place par défaut : en dessous de réglages, à la
