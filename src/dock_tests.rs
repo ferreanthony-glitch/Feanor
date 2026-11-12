@@ -172,8 +172,9 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
 fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs() {
     // Plus de panneau Pinceaux (2026-10-24) : la couleur et les personnages restent en onglets, et le panneau
     // n'est dans aucune disposition d'origine.
+    // (Le panneau Espace 3D est un onglet de plus à côté d'eux depuis le 2026-11-12, partie 150.)
     let d = DockLayout::from_legacy(&Layout::default());
-    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages]"), "{:?}", d.principal);
+    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d]"), "{:?}", d.principal);
     for l in [d, DockLayout::pour_les_vignettes(), DockLayout::pour_le_montage(290.0)] {
         assert_eq!(count(&l, Pane::Brushes), 0, "{:?}", l.principal);
     }
@@ -190,7 +191,7 @@ fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs(
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Personnages);
     l.open(Pane::Personnages);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages]"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d]"), "{:?}", l.principal);
 }
 
 #[test]
@@ -222,7 +223,7 @@ fn a_saved_layout_that_still_has_the_brushes_tab_loads_without_it() {
     // l'onglet actif est un onglet qui existe.
     let l = Layout { panneaux: Some(back), ..Layout::default() }.dock_layout();
     assert_eq!(count(&l, Pane::Brushes), 0);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d], actif: 0 }"), "{:?}", l.principal);
     // Dans l'état d'egui_dock non plus.
     let state = dock::to_state(&l);
     assert!(state.find_tab(&Pane::Brushes).is_none());

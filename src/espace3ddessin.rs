@@ -48,7 +48,7 @@ pub(crate) const CARTE_DE_DOS: &str = "Rien à peindre ici : la carte du calque 
 pub(crate) const CARTE_PAR_LA_TRANCHE: &str = "Rien à peindre ici : la carte du calque courant est vue par la tranche. Tourne la vue (Alt+glisser ou clic droit).";
 pub(crate) const CARTE_DERRIERE: &str = "Rien à peindre ici : la carte du calque courant est derrière l'œil de la vue. Recule ou tourne la vue.";
 pub(crate) const PAS_UNE_CARTE: &str = "Ce calque n'est pas une carte de l'Espace 3D (un dossier ou un calque d'effet) : choisis un calque de dessin.";
-pub(crate) const CARTES_CACHEES: &str = "Les cartes sont cachées dans cette vue (« Montrer les cartes », dans Réglages) : montre-les pour dessiner.";
+pub(crate) const CARTES_CACHEES: &str = "Les cartes sont cachées dans cette vue (« Montrer les cartes », dans le panneau Espace 3D) : montre-les pour dessiner.";
 pub(crate) const AUCUNE_CARTE_ICI: &str = "Ctrl+clic : aucune carte sous le pointeur.";
 /// Sur la feuille (hors de la vue Espace 3D), plan en Espace 3D : les deux raisons de `App::to_layer_opt` de ne rien
 /// rendre (`App::rien_a_peindre`).

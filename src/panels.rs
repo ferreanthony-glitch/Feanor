@@ -469,11 +469,8 @@ impl App {
         if self.panneau_film_vide(ui) {
             return;
         }
-        // L'Espace 3D a ses propres réglages (`espace3dui.rs`).
-        if self.espace3d.on && !self.camera_view {
-            self.espace3d_options_panel(ui);
-            return;
-        }
+        // (Vue Espace 3D ouverte ou non, ce panneau montre l'outil en main : les réglages de la vue sont dans le panneau
+        // « Espace 3D », `espace3dpanneau.rs`, partie 150.)
         // Le stylo ou la gomme d'annotation de la planche a ses propres réglages (`annotationsui.rs`).
         if self.annot_actif() {
             self.annot_reglages_ui(ui);

@@ -1,5 +1,7 @@
-//! Essais des boutons de clés du panneau Réglages de l'Espace 3D (`espace3dcles.rs`, `docs/INTERFACE.md` partie 145) :
+//! Essais des boutons de clés des réglages de l'Espace 3D (`espace3dcles.rs`, `docs/INTERFACE.md` partie 145) :
 //! la clé de caméra et la clé de position des cartes choisies, dans un plan ordinaire et dans un plan en Espace 3D.
+//! (Ces réglages sont dans le panneau « Espace 3D » depuis la partie 150 : c'est lui que ces essais regardent, et non
+//! plus le panneau Réglages, qui montre l'outil en main.)
 
 use eframe::egui::{self, pos2, vec2, Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Shape};
 use egui_phosphor::regular as ph;
@@ -51,7 +53,7 @@ fn cles_camera(b: &Banc) -> Vec<usize> {
     b.app.doc.panels[0].camera.iter().map(|k| k.frame).collect()
 }
 
-// ------------------------------------------------------------------------------------ le panneau Réglages, à la souris
+// ------------------------------------------------------------------------------------ le panneau Espace 3D, à la souris
 
 fn collecter(shape: &Shape, out: &mut Vec<(String, Rect)>) {
     match shape {
@@ -61,12 +63,13 @@ fn collecter(shape: &Shape, out: &mut Vec<(String, Rect)>) {
     }
 }
 
-/// Une image du panneau Réglages, dans un contexte à part, avec ces événements : les textes peints et leur place.
+/// Une image du panneau Espace 3D (ce que le dock y montre, `App::pane_ui`), dans un contexte à part, avec ces
+/// événements : les textes peints et leur place.
 fn image_du_panneau(ctx: &egui::Context, app: &mut App, t: &mut f64, events: Vec<Event>) -> Vec<(String, Rect)> {
     let input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(420.0, 900.0))), time: Some(*t), events, ..RawInput::default() };
     *t += 1.0 / 60.0;
     let out = ctx.run(input, |ctx| {
-        egui::CentralPanel::default().show(ctx, |ui| app.tool_options_panel(ui));
+        egui::CentralPanel::default().show(ctx, |ui| app.pane_ui(ui, crate::dock::Pane::Espace3d));
     });
     let mut textes = Vec::new();
     for s in &out.shapes {
@@ -102,6 +105,7 @@ fn cliquer(ctx: &egui::Context, app: &mut App, t: &mut f64, p: Pos2) {
     }
 }
 
+// (Essai déplacé du panneau Réglages au panneau Espace 3D, partie 150.)
 #[test]
 fn the_settings_of_the_3d_view_carry_the_key_buttons_and_a_click_poses_and_removes_the_key() {
     let mut b = ouvert(doc_cartes(3));
@@ -328,10 +332,10 @@ fn showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_
     choisir(&mut b, &[1]);
     let etapes = b.app.history.names().0.len();
     let (ctx, mut t) = (egui::Context::default(), 0.0);
-    // Le panneau Réglages de l'Espace 3D : la liste des cartes dit la profondeur vraie, et le champ ne l'a pas changée.
+    // Le panneau Espace 3D : la liste des cartes dit la profondeur vraie, et le champ ne l'a pas changée.
     let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
     assert!(textes.iter().any(|(s, _)| s.contains("Carte 1") && s.contains("(-2.50)")), "{textes:?}");
-    assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » des Réglages n'a rien écrit");
+    assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » du panneau Espace 3D n'a rien écrit");
     // La vue tracée par le banc, la carte choisie : rien ne bouge non plus.
     b.chauffer(4);
     assert_eq!(b.app.layers()[1].depth, -2.5);

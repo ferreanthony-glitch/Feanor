@@ -1,6 +1,7 @@
 //! L'Espace 3D dans l'application (`docs/ESPACE3D.md`) : le mode « Espace 3D » (une vue d'édition à la place du dessin,
 //! où les calques du plan sont des cartes qu'on déplace, tourne et met à l'échelle, avec la caméra du plan), ses
-//! commandes, la barre d'outils, le panneau Réglages et l'annulation.
+//! commandes, la barre d'outils, les réglages de la vue (montrés par le panneau « Espace 3D », `espace3dpanneau.rs`) et
+//! l'annulation.
 //!
 //! Depuis la simplification voulue par Anthony (2026-10-21), il n'y a plus d'objets 3D : l'espace ne montre que les
 //! cartes et la caméra. La vue elle-même (souris, manipulateurs, tracé) est dans `espace3dview.rs`.
@@ -138,9 +139,9 @@ impl App {
         // (Le regard de la vue et la texture de la carte qu'on y dessine ne valent que pour la vue montrée, `espace3ddessin.rs`.)
         self.e3d.oublier_la_vue();
         self.status = if on && self.doc.plan_en_espace(self.cur_panel) {
-            "Espace 3D : ce plan est en Espace 3D. La caméra est libre (choisis-la pour la déplacer ou la tourner), ce qui est devant cache ce qui est derrière, et « Nouvelle surface » dans Réglages pose un calque face à la caméra, au sol ou en mur.".into()
+            "Espace 3D : ce plan est en Espace 3D. La caméra est libre (choisis-la pour la déplacer ou la tourner), ce qui est devant cache ce qui est derrière, et « Nouvelle surface » dans le panneau Espace 3D pose un calque face à la caméra, au sol ou en mur.".into()
         } else if on {
-            "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. Réglages : panneau Réglages.".into()
+            "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. Réglages de la vue : le panneau Espace 3D.".into()
         } else {
             "Espace 3D quitté.".into()
         };
@@ -308,7 +309,7 @@ impl App {
         };
     }
 
-    /// La distance où une surface neuve se pose (mètres) : celle des Réglages, sinon la distance de référence.
+    /// La distance où une surface neuve se pose (mètres) : celle du panneau Espace 3D, sinon la distance de référence.
     pub(crate) fn espace3d_distance_surface(&self) -> f32 {
         let d = self.espace3d.surface_distance;
         if d.is_finite() && d > 0.0 { d } else { self.e3_world().d0 }
@@ -322,7 +323,7 @@ impl App {
     /// grande que demandé, la barre d'état le dit.
     pub(crate) fn espace3d_nouvelle_surface(&mut self, sorte: espace3d::Surface) {
         if !self.doc.plan_en_espace(self.cur_panel) {
-            self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans Réglages.", sorte.nom());
+            self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.", sorte.nom());
             return;
         }
         if self.content_refuses() {
@@ -460,7 +461,7 @@ impl App {
         }
     }
 
-    // ------------------------------------------------------------------------ panneau Réglages
+    // ------------------------------------------------------------------------ panneau Espace 3D
 
     /// Une étape d'annulation de l'état d'avant, au nom `name` (à appeler AVANT le changement).
     fn record_named(&mut self, name: &str) {
@@ -486,7 +487,10 @@ impl App {
         changed
     }
 
-    /// Réglages de l'Espace 3D (panneau Réglages quand la vue 3D est ouverte).
+    /// Les réglages de la vue Espace 3D : ce que montre le panneau « Espace 3D » quand la vue est ouverte
+    /// (`espace3dpanneau.rs`, partie 150 ; avant elle, ils prenaient la place des réglages de l'outil dans le panneau
+    /// Réglages). Les réglages de l'outil en main n'y sont pas : ceux de la Trajectoire dans l'espace, comme ceux du pinceau,
+    /// sont dans le panneau Réglages (`trajectoire_espace_options_ui`).
     pub(crate) fn espace3d_options_panel(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur;
         let note = |ui: &mut egui::Ui, text: &str| {
@@ -496,12 +500,6 @@ impl App {
             ui.heading(format!("{}  Espace 3D", ph::CUBE));
             ui.label(RichText::new("cartes et caméra").small().weak());
         });
-        // L'outil Trajectoire a le pointeur dans la vue : ses réglages d'abord, pour ce qui est choisi (`trajectoire3d.rs`,
-        // partie 149). Le reste du panneau suit : c'est là qu'on choisit les cartes et la caméra.
-        if self.e3_trace() {
-            self.trajectoire_espace_options_ui(ui);
-            ui.separator();
-        }
         // Repère des poignées, aimantation, grille.
         ui.horizontal(|ui| {
             interrupteur(ui, &mut self.espace3d.local, ph::CUBE_FOCUS, "Manipulateur dans le repère de la carte", "Les axes suivent la carte (une seule carte choisie) au lieu de ceux de l'espace.", "");

@@ -18,6 +18,7 @@ fn the_bar_has_the_twelve_side_panels_in_order() {
             Pane::ToolOptions,
             Pane::Color,
             Pane::Personnages,
+            Pane::Espace3d,
             Pane::Layers,
             Pane::Effects,
             Pane::Sheet,
@@ -30,9 +31,10 @@ fn the_bar_has_the_twelve_side_panels_in_order() {
             Pane::Bibliotheque,
         ]
     );
-    // Trois groupes : le dessin, le plan, puis le scénario, les commentaires, l'historique, les bruitages, les
-    // références et la bibliothèque de fichiers. (Les suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
-    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![3, 4, 6]);
+    // Trois groupes : le dessin (avec le panneau Espace 3D, à côté de la couleur, depuis la partie 150), le plan, puis le
+    // scénario, les commentaires, l'historique, les bruitages, les références et la bibliothèque de fichiers. (Les
+    // suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
+    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 4, 6]);
     assert_eq!(pane_de_action("vue.suggestions_sonores"), Some(Pane::SuggestionsSonores));
 }
 
@@ -86,9 +88,9 @@ fn the_guides_panel_is_gone_from_the_bar_and_from_every_default_set() {
 fn the_exposure_sheet_icon_is_only_there_in_animation() {
     use crate::barrepanneaux::icones;
     let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
-    assert_eq!(panes(true), self::panes(), "en animation : les douze icônes");
+    assert_eq!(panes(true), self::panes(), "en animation : toutes les icônes");
     let storyboard = panes(false);
-    assert_eq!(storyboard.len(), 12);
+    assert_eq!(storyboard.len(), 13);
     assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
     assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History) && storyboard.contains(&Pane::Comments));
     // Les trois groupes restent là (aucun ne s'est vidé).
@@ -111,8 +113,12 @@ fn each_workspace_shows_only_the_panels_useful_for_its_work() {
     // Montage : la fiche du plan et ce qui sert à la relecture et au son.
     assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages, Pane::Bibliotheque]);
     // Storyboard : le dessin, les calques, la fiche ; pas de feuille d'exposition, de commentaires ni d'historique.
+    // (Et le panneau Espace 3D, dans le Storyboard et l'Animation : il est dans leur disposition d'origine.)
     let storyboard = icones_de(Espace::Storyboard, false, &[]);
-    assert_eq!(storyboard.len(), 9, "{storyboard:?}");
+    assert_eq!(storyboard.len(), 10, "{storyboard:?}");
+    for e in Espace::TOUS {
+        assert_eq!(icones_de(e, true, &[]).contains(&Pane::Espace3d), matches!(e, Espace::Storyboard | Espace::Animation), "{e:?}");
+    }
     for absent in [Pane::XSheet, Pane::Comments, Pane::History, Pane::Bruitages] {
         assert!(!storyboard.contains(&absent), "{absent:?} n'est pas dans la barre du storyboard");
     }

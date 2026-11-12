@@ -51,6 +51,8 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::ToolOptions, "vue.reglages", "Réglages de l'outil", "Taille, opacité et options de l'outil courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Personnages, "vue.personnages", "Brosses dédiées", "Les brosses dédiées : personnages du projet, classiques et décors, chacune avec sa couleur de trait et son aplat. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        // Le panneau « Espace 3D » (`espace3dpanneau.rs`, partie 150) : en onglet avec la couleur, sous les réglages de l'outil.
+        entree(Pane::Espace3d, "vue.espace3d_panneau", "Panneau Espace 3D","Les réglages de la vue Espace 3D : les cartes (les calques du plan) et la caméra du plan. Il passe devant la couleur quand la vue s'ouvre. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
         entree(Pane::Layers, "vue.calques", "Calques", "Les calques du plan, leur mode et leur opacité. Un clic l'ouvre ou le met devant, un autre le ferme."),
@@ -80,13 +82,15 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
 /// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
 /// - Storyboard, Animation et Montage : la bibliothèque de fichiers (explorer, aperçu des images, vidéos et sons).
+/// - Storyboard et Animation : le panneau Espace 3D (les réglages de la vue Espace 3D), qui est dans leur disposition
+///   d'origine, à côté de la couleur.
 ///
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
         Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
-        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Espace3d, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History, Pane::Bibliotheque],
     }
 }

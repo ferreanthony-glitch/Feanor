@@ -24,7 +24,7 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
-            // Espace 3D : à la place du dessin à plat, avec ses commandes dans les Réglages.
+            // Espace 3D : à la place du dessin à plat, avec ses réglages dans le panneau « Espace 3D » (`espace3dpanneau.rs`).
             if self.espace3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;

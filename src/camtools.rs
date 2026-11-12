@@ -272,9 +272,9 @@ impl App {
         self.end_stroke();
         self.playing = false;
         // Plan en Espace 3D : la feuille montre ce que la caméra filme, le cadre y reste au centre. Sa caméra se règle
-        // dans la vue Espace 3D (outil Caméra de la vue) et par les champs de Réglages, pas en tirant le cadre ici.
+        // dans la vue Espace 3D (outil Caméra de la vue) et par les champs du panneau Espace 3D, pas en tirant le cadre ici.
         if self.doc.plan_en_espace(self.cur_panel) {
-            self.status = "Plan en Espace 3D : la caméra se règle dans la vue Espace 3D (bouton cube) ou par ses champs dans Réglages.".into();
+            self.status = "Plan en Espace 3D : la caméra se règle dans la vue Espace 3D (bouton cube) ou par ses champs dans le panneau Espace 3D.".into();
             return;
         }
         let Some(handle) = self.camera_handle_at(screen) else {

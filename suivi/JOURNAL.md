@@ -5,6 +5,24 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-12
 
+- **Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi** (partie 150, branche `trajectoire-espace`, toujours le
+  format 55). Anthony : « même dans l'espace 3D, le panneau réglages affiche les réglages de l'outil sélectionné. Les réglages de
+  l'espace 3D basculent dans un panneau spécifique », puis, pour sa place : « Sa place par défaut : en dessous de réglages, à la
+  place de la couleur. » Réglages montre l'outil en main, vue Espace 3D ouverte ou non : le pinceau, le crayon, la gomme quand ils
+  dessinent sur une carte, et les réglages de la Trajectoire dans l'espace (ils ne sont plus en tête de ceux de la vue). Les
+  réglages de la vue (options, « Plan en Espace 3D », « Nouvelle surface », cartes, clés, caméra du plan) sont dans un panneau
+  « Espace 3D » (cube), un onglet de plus à côté de la couleur, sous Réglages, dans le Storyboard, l'Animation et les dispositions
+  standard. Il passe devant la couleur quand la vue s'ouvre et lui rend sa place quand elle se ferme ; fermé, la vue le remet à sa
+  place ; la disposition retenue garde la couleur devant. Vue fermée : une phrase et le bouton « Ouvrir la vue Espace 3D ». Les
+  dispositions enregistrées avant lui le reçoivent une fois, sans que rien d'autre y bouge (Storyboard, Animation, espaces
+  enregistrés ; pas les Vignettes ni le Montage). Commande `vue.espace3d_panneau` (sans touche), icône dans la barre des panneaux,
+  case dans Affichage > Panneaux. Les messages qui disaient « dans Réglages » disent « dans le panneau Espace 3D ». Défaut corrigé :
+  avec l'outil Trajectoire, Ctrl+clic sur la caméra choisit la caméra, plus la carte qui passe dessous. 14 essais de plus ; deux
+  essais des boutons de clés et une étape de l'essai de fumée lisent maintenant le panneau Espace 3D. Vérificateur : 4 593
+  réussis, 0 échec, dix groupes OK, le seul avertissement connu. Pas fait : le clic simple de l'outil « choisir » prend encore la carte avant la caméra ; le panneau ne repasse pas devant tout seul
+  après un clic sur l'onglet Couleur. À savoir : un fichier de réglages écrit par cette branche nomme le panneau, une version
+  d'avant ne le lit pas (réglages à part pour l'exe de la branche). Rien regardé à l'écran, exe non reconstruit. Rien fusionné,
+  rien poussé.
 - **Parties 148 et 149 regardées à l'écran par Claude** (22 h 15 à 22 h 20, souris simulée, exe de la branche construit à 22 h 14,
   copie du projet `afa`, réglages à part). Partie 148 : la carte rouge du plan 6 mise à Z 8 m par son champ (profondeur −1,37,
   derrière la caméra d'origine) : acceptée, elle sort de l'image du plan ; annulé. Remarque : son champ « Échelle » affiche alors

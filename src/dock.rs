@@ -109,6 +109,12 @@ pub enum Pane {
     /// images, vidéos et sons dans un aperçu intégré. Lecture seule ; fermé d'office, il s'ouvre dans la colonne de droite.
     #[serde(rename = "bibliotheque")]
     Bibliotheque,
+    /// Le panneau « Espace 3D » (`espace3dpanneau.rs`, 2026-11-12, `docs/INTERFACE.md` partie 150) : les réglages de la vue
+    /// Espace 3D (options de la vue, cartes, caméra du plan), sortis du panneau Réglages, qui montre toujours l'outil choisi.
+    /// Sa place d'origine (Anthony : « en dessous de réglages, à la place de la couleur ») : en onglet avec la couleur, dans
+    /// le Storyboard et l'Animation. Il passe devant quand la vue s'ouvre, et rend sa place à sa fermeture.
+    #[serde(rename = "espace3d")]
+    Espace3d,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -126,11 +132,12 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 19] = [
+    pub const ALL: [Pane; 20] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::ToolOptions,
+        Pane::Espace3d,
         Pane::Sheet,
         Pane::Layers,
         Pane::Montage,
@@ -188,6 +195,7 @@ impl Pane {
             Pane::MonPanneau => "Mon panneau",
             Pane::Scenario => "Scénario",
             Pane::Bibliotheque => "Bibliothèque",
+            Pane::Espace3d => "Espace 3D",
         }
     }
 
@@ -228,13 +236,15 @@ impl Pane {
             Pane::MonPanneau => ph::STAR,
             Pane::Scenario => ph::FILM_SCRIPT,
             Pane::Bibliotheque => ph::BOOKS,
+            // (Le cube du bouton de la vue, dans la barre au-dessus du dessin.)
+            Pane::Espace3d => ph::CUBE,
         }
     }
 
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Espace3d => Group::Left,
             Pane::Layers
             | Pane::XSheet
             | Pane::Effects
@@ -353,12 +363,13 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
 /// le 2026-10-17, et les guides dans le menu de la règle depuis le 2026-10-21.
 const SETTINGS_TABS: [Pane; 2] = [Pane::ToolOptions, Pane::Sheet];
 
-/// Les onglets du bas de la colonne : la couleur, et les personnages (brosse par personnage). Les pinceaux n'y sont
-/// plus : leur liste est dans les réglages de l'outil.
-const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Personnages];
+/// Les onglets du bas de la colonne : la couleur, les personnages (brosse par personnage), et le panneau Espace 3D
+/// (Anthony, 2026-11-12 : « en dessous de réglages, à la place de la couleur »). Les pinceaux n'y sont plus : leur liste
+/// est dans les réglages de l'outil.
+const COLOR_TABS: [Pane; 3] = [Pane::Color, Pane::Personnages, Pane::Espace3d];
 
-/// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur et les
-/// personnages, à leur rang (couleur, personnages), quels que soient ceux qui sont restés.
+/// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur, les
+/// personnages et l'Espace 3D, à leur rang (couleur, personnages, Espace 3D), quels que soient ceux qui sont restés.
 fn place_in_family(tabs: &mut Vec<Pane>, pane: Pane, family: &[Pane]) {
     if family != COLOR_TABS {
         tabs.push(pane);
@@ -538,6 +549,17 @@ impl DockNode {
         }
     }
 
+    /// Le groupe d'onglets qui contient `pane` : ses onglets et le rang de celui qui est devant.
+    fn groupe_de(&mut self, pane: Pane) -> Option<(&Vec<Pane>, &mut usize)> {
+        match self {
+            DockNode::Tabs { panneaux, actif } => panneaux.contains(&pane).then_some((&*panneaux, actif)),
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => match a.groupe_de(pane) {
+                Some(g) => Some(g),
+                None => b.groupe_de(pane),
+            },
+        }
+    }
+
     /// Remplace le groupe d'onglets qui contient `pane` par `f(ce groupe)`. Faux s'il n'y est pas.
     fn wrap_tabs_of(&mut self, pane: Pane, f: &mut dyn FnMut(DockNode) -> DockNode) -> bool {
         match self {
@@ -562,7 +584,8 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages]);
+            // (Le panneau Espace 3D : un onglet de plus à côté de la couleur, sous les réglages.)
+            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -761,6 +784,27 @@ impl DockLayout {
         out.contains(&pane)
     }
 
+    /// `avant` repasse devant `pane`, dans le groupe d'onglets qu'ils partagent (fenêtre principale ou panneau flottant) :
+    /// seulement si `pane` y est devant et si `avant` y est encore. Sinon rien ne change (les onglets ont été rangés
+    /// autrement entre-temps). Vrai si c'est fait.
+    ///
+    /// Sert au panneau Espace 3D, que la vue ouverte met devant la couleur (`espace3dpanneau.rs`) : la disposition
+    /// retenue garde l'onglet que l'utilisateur avait devant, pas celui que la vue y a mis pour un moment.
+    pub fn remettre_devant(&mut self, pane: Pane, avant: Pane) -> bool {
+        let groupe = match self.principal.groupe_de(pane) {
+            Some(g) => Some(g),
+            None => self.fenetres.iter_mut().find_map(|w| w.panneaux.groupe_de(pane)),
+        };
+        let Some((onglets, actif)) = groupe else { return false };
+        match (onglets.get(*actif) == Some(&pane), onglets.iter().position(|p| *p == avant)) {
+            (true, Some(rang)) => {
+                *actif = rang;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
@@ -833,6 +877,18 @@ impl DockLayout {
             return;
         }
         let group = pane.group();
+        // Le panneau Espace 3D : avec la couleur, où qu'elle soit (Anthony, 2026-11-12 : « à la place de la couleur ») ;
+        // sans elle, la règle de sa famille, juste dessous, le range avec les brosses dédiées.
+        if pane == Pane::Espace3d {
+            if let Some(t) = self.principal.tabs_with(&[Pane::Color]) {
+                place_in_family(t, pane, &COLOR_TABS);
+                return;
+            }
+            if let Some(t) = self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(&[Pane::Color])) {
+                place_in_family(t, pane, &COLOR_TABS);
+                return;
+            }
+        }
         // Un onglet des réglages revient avec les autres onglets des réglages ; les pinceaux et la
         // couleur, ensemble.
         for family in [&SETTINGS_TABS[..], &COLOR_TABS[..]] {
@@ -873,6 +929,13 @@ impl DockLayout {
         if pane == Pane::Layers && self.principal_has(Pane::Effects) {
             let mut above = |n: DockNode| column(0.6, tabs(vec![Pane::Layers]), n);
             self.principal.wrap_tabs_of(Pane::Effects, &mut above);
+            return;
+        }
+        // Le panneau Espace 3D, quand ni la couleur ni les personnages ne sont là pour l'accueillir en onglet : juste sous
+        // les réglages de l'outil, là où la couleur est d'ordinaire (on voit ainsi les réglages de l'outil et les siens).
+        if pane == Pane::Espace3d && self.principal_has(Pane::ToolOptions) {
+            let mut under = |n: DockNode| column(0.55, n, tabs(vec![Pane::Espace3d]));
+            self.principal.wrap_tabs_of(Pane::ToolOptions, &mut under);
             return;
         }
         // Le scénario, sans colonne de droite (l'espace Vignettes) : en onglet avec la couleur, dans la colonne des réglages.

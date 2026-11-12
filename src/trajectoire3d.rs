@@ -37,9 +37,9 @@ use crate::poskeys::PosKey;
 use crate::trajectoire::{Cles, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
-pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans Réglages ; ou trace la trajectoire sur la feuille, hors de cette vue.";
+pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
 pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Ctrl+clic : choisir ou lâcher une carte, la caméra. Alt+glisser ou clic droit : tourner la vue.";
-pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic, ou la liste des cartes dans Réglages).";
+pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic, ou la liste des cartes dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
 pub(crate) const SUR_LA_FEUILLE: &str = "Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même outil.";
@@ -480,10 +480,15 @@ impl App {
     }
 
     /// Ctrl+clic : la carte (ou la caméra) sous le pointeur rejoint ce qui est choisi, ou le quitte.
+    ///
+    /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide) : il est tracé par-dessus les
+    /// cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de haut). Avant la partie 150,
+    /// la carte l'emportait : Ctrl+clic sur la caméra choisissait le sol.
     fn e3_traj_choisir(&mut self, regard: Regard3d, pos: Pos2) {
         let px = [pos.x - regard.rect.left(), pos.y - regard.rect.top()];
         let centre = [regard.rect.width() / 2.0, regard.rect.height() / 2.0];
-        let touche = self.e3_pick(&regard.rayon(pos)).or_else(|| (!self.espace3d.through_camera && self.e3_pick_camera(&regard.view, px, centre)).then_some(CAMERA_ID));
+        let camera = !self.espace3d.through_camera && self.e3_pick_camera(&regard.view, px, centre);
+        let touche = if camera { Some(CAMERA_ID) } else { self.e3_pick(&regard.rayon(pos)) };
         let Some(id) = touche else {
             self.status = "Ctrl+clic : ni carte ni caméra sous le pointeur.".into();
             return;
@@ -799,7 +804,7 @@ impl App {
         if self.doc.plan_en_espace(self.cur_panel) {
             "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
         } else {
-            "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (Réglages) · Alt+glisser ou clic droit : tourner la vue"
+            "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
         }
     }
 
@@ -897,9 +902,11 @@ impl App {
         n
     }
 
-    /// Les réglages de l'outil pour les trajectoires dans l'espace (panneau Réglages de la vue Espace 3D ; sur la feuille,
-    /// pour un calque qui en suit une) : ils agissent sur la trajectoire de **tout ce qui est choisi**, caméra comprise.
-    /// Vrai s'ils ont été montrés (faux : rien à régler ici, les réglages de la feuille s'appliquent).
+    /// Les réglages de l'outil pour les trajectoires dans l'espace, dans le panneau Réglages comme ceux de tout outil
+    /// (`trajectoire_options_ui` ; partie 150 : ils ne sont plus en tête des réglages de la vue). Montrés quand la vue
+    /// Espace 3D est ouverte, et sur la feuille pour un calque qui suit une trajectoire dans l'espace : ils agissent sur la
+    /// trajectoire de **tout ce qui est choisi**, caméra comprise. Vrai s'ils ont été montrés (faux : rien à régler ici,
+    /// les réglages de la feuille s'appliquent).
     pub(crate) fn trajectoire_espace_options_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let dans_la_vue = self.e3_vue_montree();
         let sujets = self.traj_sujets_des_reglages();
@@ -908,7 +915,7 @@ impl App {
         }
         ui.label(RichText::new("Trajectoire dans l'espace").strong());
         if !self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(RichText::new("Ce plan n'est pas un « Plan en Espace 3D » : coche la case plus bas pour tracer dans l'espace le chemin d'une carte ou de la caméra. Sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat.").small().weak());
+            ui.label(RichText::new("Ce plan n'est pas un « Plan en Espace 3D » : coche la case « Plan en Espace 3D », dans le panneau Espace 3D, pour tracer dans l'espace le chemin d'une carte ou de la caméra. Sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat.").small().weak());
             return true;
         }
         let avec: Vec<Sujet> = sujets.iter().copied().filter(|&s| self.e3_traj_de(s).is_some()).collect();

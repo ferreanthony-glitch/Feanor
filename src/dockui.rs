@@ -185,6 +185,8 @@ impl App {
             Pane::MonPanneau => self.mon_panneau(ui),
             Pane::Scenario => self.scenario_panneau(ui),
             Pane::Bibliotheque => self.bibliotheque_panel(ui),
+            // Les réglages de la vue Espace 3D (`espace3dpanneau.rs`) : le panneau Réglages, lui, montre toujours l'outil choisi.
+            Pane::Espace3d => self.espace3d_panneau(ui),
         }
     }
 
@@ -210,6 +212,8 @@ impl App {
         self.mon_panneau_suivre(ctx);
         // L'anneau sous le stylet : ses huit commandes dites aux menus du clic droit, et celle qu'un menu y envoie (`anneauui.rs`).
         self.anneau_suivre(ctx);
+        // Le panneau Espace 3D passe devant quand la vue s'ouvre, et rend sa place quand elle se ferme (`espace3dpanneau.rs`).
+        self.espace3d_panneau_suivre();
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.

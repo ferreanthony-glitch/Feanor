@@ -1,6 +1,7 @@
 //! Les boutons de clés du panneau Réglages de l'Espace 3D (`docs/INTERFACE.md`, partie 145). Anthony, 2026-11-12 :
 //! « quand la vue Espace 3D est ouverte, le panneau Réglages n'a aucun bouton de clés, ni pour la caméra ni pour les
-//! cartes […] j'aimerais qu'un bouton y apparaisse ».
+//! cartes […] j'aimerais qu'un bouton y apparaisse ». (Depuis la partie 150, ces réglages de la vue, et donc ces boutons,
+//! sont dans le panneau « Espace 3D », `espace3dpanneau.rs` : le panneau Réglages montre toujours l'outil en main.)
 //!
 //! Ce sont les boutons des panneaux 2D, avec leurs commandes, leurs icônes et leurs bulles :
 //! - sur la ligne « Caméra du plan » : « Clé de caméra ici » (`camera.cle_ici`) et « Supprimer la clé de caméra »
@@ -59,7 +60,7 @@ impl App {
         }
     }
 
-    /// Les deux boutons de clés de la caméra, sur la ligne « Caméra du plan » des Réglages de l'Espace 3D.
+    /// Les deux boutons de clés de la caméra, sur la ligne « Caméra du plan » du panneau Espace 3D.
     pub(crate) fn espace3d_boutons_cle_camera(&mut self, ui: &mut egui::Ui) {
         let ici = self.camera_key_here().is_some();
         let poser = self
@@ -74,8 +75,8 @@ impl App {
         }
     }
 
-    /// Les deux boutons de clés de position, sur la ligne de la carte choisie (ou des cartes choisies) des Réglages de
-    /// l'Espace 3D. Le losange est allumé quand toutes les cartes choisies ont une clé à l'image courante ; la corbeille
+    /// Les deux boutons de clés de position, sur la ligne de la carte choisie (ou des cartes choisies) du panneau
+    /// Espace 3D. Le losange est allumé quand toutes les cartes choisies ont une clé à l'image courante ; la corbeille
     /// s'offre dès qu'une carte libre en a une.
     pub(crate) fn espace3d_boutons_cle_position(&mut self, ui: &mut egui::Ui) {
         let f = self.cur_frame;

@@ -42,14 +42,16 @@ pub fn fits(pane: Pane) -> bool {
 
 /// Les panneaux dont on mesure le contenu : ceux qui s'ajustent, et la couleur (souple, mais dont
 /// la hauteur ne dépend pas de celle du panneau ; les calques, eux, remplissent toujours le leur).
+/// Le panneau Espace 3D aussi, qui prend la place de la couleur sous les réglages de l'outil quand la vue est
+/// ouverte : comme elle, il prend le reste, et partage la colonne selon son contenu quand les deux ne tiennent pas.
 pub fn measured(pane: Pane) -> bool {
-    fits(pane) || pane == Pane::Color
+    fits(pane) || matches!(pane, Pane::Color | Pane::Espace3d)
 }
 
 /// Hauteur minimale d'un panneau qui prend le reste.
 pub fn flex_min(pane: Pane) -> f32 {
     match pane {
-        Pane::Color => 200.0,
+        Pane::Color | Pane::Espace3d => 200.0,
         Pane::Layers | Pane::XSheet => 140.0,
         Pane::Canvas => 240.0,
         Pane::Montage | Pane::Timeline => 160.0,

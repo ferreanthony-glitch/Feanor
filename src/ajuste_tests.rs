@@ -89,4 +89,8 @@ fn which_panes_fit() {
     }
     // La couleur est mesurée ; les calques remplissent toujours leur panneau, on ne les mesure pas.
     assert!(measured(Pane::Color) && !measured(Pane::Layers));
+    // Le panneau Espace 3D prend la place de la couleur sous les réglages de l'outil quand la vue est ouverte : comme elle, il
+    // prend le reste (au moins autant qu'elle), et son contenu est mesuré pour partager la colonne quand tout ne tient pas.
+    assert!(!fits(Pane::Espace3d) && measured(Pane::Espace3d));
+    assert_eq!(flex_min(Pane::Espace3d), flex_min(Pane::Color));
 }

@@ -580,6 +580,9 @@ pub struct App {
     pub(crate) espace3d: crate::espace3dui::Espace3dState,
     /// Dessiner dans la vue Espace 3D (`espace3ddessin.rs`, partie 146) : le pointeur dessine ou manipule, le regard de la vue.
     pub(crate) e3d: crate::espace3ddessin::Dessin3d,
+    /// Le panneau « Espace 3D » suit la vue (`espace3dpanneau.rs`, partie 150) : la vue était-elle montrée à la dernière
+    /// image, et l'onglet que le panneau a remplacé devant son groupe quand elle s'est ouverte.
+    pub(crate) e3_panneau: crate::espace3dpanneau::Suivi,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -1282,6 +1285,7 @@ impl App {
             format_custom: false,
             espace3d: Default::default(),
             e3d: Default::default(),
+            e3_panneau: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,

@@ -922,7 +922,7 @@ pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
 mod poskeysmontage_tests;
-// Les boutons de clés du panneau Réglages de l'Espace 3D (partie 145) : caméra du plan et position des cartes.
+// Les boutons de clés des réglages de l'Espace 3D (partie 145 ; dans le panneau Espace 3D depuis la partie 150) : caméra du plan et position des cartes.
 mod espace3dcles;
 #[cfg(test)]
 mod espace3dcles_tests;
@@ -934,6 +934,10 @@ mod espace3ddessin_tests;
 mod trajectoire3d;
 #[cfg(test)]
 mod trajectoire3d_tests;
+// Le panneau « Espace 3D » (partie 150) : les réglages de la vue, sortis du panneau Réglages ; il passe devant la couleur quand la vue s'ouvre.
+mod espace3dpanneau;
+#[cfg(test)]
+mod espace3dpanneau_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

@@ -73,6 +73,12 @@ pub struct Settings {
     /// il reste fermé.
     #[serde(default, rename = "panneau_vignettes_pose", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_vignettes_pose: bool,
+    /// Le panneau « Espace 3D » (2026-11-12, `docs/INTERFACE.md` partie 150) a été posé, une fois, dans les dispositions
+    /// retenues du Storyboard et de l'Animation et dans les espaces de travail enregistrés (`poser_le_panneau_espace3d`) :
+    /// une disposition d'avant lui ne l'avait pas. Fermé ensuite à la main, il reste fermé, jusqu'à ce que la vue
+    /// Espace 3D s'ouvre (elle le remet à sa place).
+    #[serde(default, rename = "panneau_espace3d_pose", skip_serializing_if = "std::ops::Not::not")]
+    pub panneau_espace3d_pose: bool,
     /// « Avec les annotations » des fenêtres d'export (la planche des Vignettes, les images, la vidéo, le GIF, le storyboard PDF) : coché,
     /// les calques d'annotation (de la planche et des plans) sont dans l'export. Décoché d'origine ; retenu par poste de travail, d'une séance à
     /// l'autre (`calqueannot.rs`).
@@ -387,6 +393,7 @@ impl Default for Settings {
             montage_layout: None,
             vignettes_layout: None,
             panneau_vignettes_pose: false,
+            panneau_espace3d_pose: false,
             export_annotations: false,
             exports: Default::default(),
             storyboard_space: Espace::Storyboard,
@@ -521,6 +528,7 @@ impl Settings {
         // L'anneau sous le stylet : huit commandes qui existent, toutes différentes, un délai dans ses bornes.
         s.anneau = std::mem::take(&mut s.anneau).nettoyes(crate::monpanneau::commande_connue);
         s.poser_le_panneau_vignettes();
+        s.poser_le_panneau_espace3d();
         s
     }
 
@@ -555,6 +563,38 @@ impl Settings {
                 d.open(crate::dock::Pane::Vignettes);
                 l.panneaux = Some(d);
             }
+        }
+    }
+
+    /// Une fois : le panneau « Espace 3D » rejoint les dispositions retenues qui datent d'avant lui, sans rien y changer
+    /// d'autre (ni les parts, ni l'onglet qui est devant). Celles du Storyboard et de l'Animation (les espaces où l'on
+    /// dessine avec les réglages de l'outil et la couleur), et les espaces de travail enregistrés qui montrent le dessin
+    /// avec ses réglages ou sa couleur. Sa place (`DockLayout::open`) : un onglet du groupe de la couleur ; sans la couleur
+    /// ni les brosses dédiées, juste sous les réglages de l'outil. Les dispositions des Vignettes (la planche ne montre pas
+    /// la vue Espace 3D) et du Montage (ni réglages de l'outil ni couleur) ne le reçoivent pas ; sans disposition retenue,
+    /// l'origine du jour l'a déjà. Une fois posé, c'est à l'utilisateur de le garder ou de le fermer.
+    pub fn poser_le_panneau_espace3d(&mut self) {
+        if std::mem::replace(&mut self.panneau_espace3d_pose, true) {
+            return;
+        }
+        use crate::dock::Pane;
+        let poser = |l: &mut Layout| {
+            // (Une disposition d'avant 6a devient la disposition d'origine du jour, qui a le panneau : `Layout::modernisee`.)
+            if l.is_before_6a() {
+                return;
+            }
+            let mut d = l.dock_layout();
+            if !d.contains(Pane::Espace3d) && (d.contains(Pane::ToolOptions) || d.contains(Pane::Color)) {
+                d.open(Pane::Espace3d);
+                l.panneaux = Some(d);
+            }
+        };
+        for l in [self.layout.as_mut(), self.animation_layout.as_mut()].into_iter().flatten() {
+            poser(l);
+        }
+        // (Un espace enregistré depuis la planche des Vignettes ne le reçoit pas.)
+        for w in self.workspaces.iter_mut().filter(|w| !w.layout.vignettes) {
+            poser(&mut w.layout);
         }
     }
 

@@ -11088,3 +11088,172 @@ retournée relue ; couper, rogner, insérer des images ; le message de la case ;
 15. Tourner la caméra d'un plan en Espace 3D d'un demi-tour (panoramique 180°), enregistrer, fermer, rouvrir : elle est
     toujours retournée.
 16. Enregistrer, fermer, rouvrir : les chemins sont là, les mouvements sont les mêmes.
+
+## 150. Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi (2026-11-12, branche `trajectoire-espace`)
+
+Anthony, 2026-11-12, après avoir vu l'outil Trajectoire dans la vue Espace 3D : « même dans l'espace 3D, le panneau
+réglages affiche les réglages de l'outil sélectionné. Les réglages de l'espace 3D basculent dans un panneau
+spécifique ». Puis, pour la place de ce panneau : « Sa place par défaut : en dessous de réglages, à la place de la
+couleur. »
+
+**Avant.** Tant que la vue Espace 3D était ouverte, le panneau Réglages ne montrait plus l'outil en main : il montrait
+les réglages de la vue (les cartes, la caméra). On dessinait sur une carte sans voir la taille ni l'opacité du pinceau
+(partie 146), et les réglages de la Trajectoire dans l'espace avaient été glissés en tête de ceux de la vue (partie 149).
+
+**Maintenant : deux panneaux.**
+
+| Panneau | Ce qu'il montre |
+|---|---|
+| **Réglages** | **toujours l'outil en main**, que la vue Espace 3D soit ouverte ou non. Le pinceau, le crayon, la gomme, le mélangeur : leur taille, leur opacité, leur brosse, « Plus de réglages », aussi quand ils dessinent sur une carte dans la vue. L'outil Trajectoire dans la vue : les réglages de la trajectoire dans l'espace (qui est choisi, les marques, « Partir de la tête de lecture », « Finir à la tête de lecture », « Temps égaux entre les marques », les deux sortes de clés, « Retirer les marques », « Détacher », « Effacer », le mode d'emploi). Sur la feuille : les réglages de la trajectoire à plat, comme avant |
+| **Espace 3D** (nouveau, icône cube) | **les réglages de la vue** : le repère des poignées, l'aimantation à la grille et ses pas, la grille du sol, la case « Plan en Espace 3D », « Nouvelle surface » et sa distance, la liste des cartes (montrer les cartes, ordonner selon la profondeur), les champs et les boutons de clés de la carte choisie, la caméra du plan (choisir, clés, position, panoramique, bascule, rotation, focale, « Regarder par la caméra », « Viser la sélection »). Les outils de la vue (choisir, déplacer, tourner, taille, caméra) n'ont pas d'autres réglages que ceux-là |
+
+Rien n'a changé dans ce que font ces réglages : seule leur place a changé. Le panneau « Réglages » garde son nom.
+
+**Sa place d'origine : sous Réglages, à la place de la couleur.** Le panneau Espace 3D est un onglet de plus dans le
+groupe de la couleur (Couleur, Brosses dédiées, Espace 3D), sous les réglages de l'outil, dans les dispositions
+d'origine du Storyboard et de l'Animation, et dans « Standard », « Dessin » et « Timeline ». La couleur y reste devant
+tant que la vue est fermée. Les dispositions d'origine des Vignettes et du Montage n'ont pas le panneau : la planche des
+Vignettes ne montre pas la vue Espace 3D, et le Montage n'a ni réglages de l'outil ni couleur. On peut l'y ouvrir à la
+main ; et si la vue est ouverte dans le lecteur du Montage, le panneau y arrive en onglet avec la fiche du plan.
+
+**Il suit la vue.**
+
+- **La vue s'ouvre** (le bouton cube, la commande, « Ouvrir la vue » du panneau) : le panneau passe devant, à la place
+  de la couleur. Réglages, au-dessus, et Calques, à côté, se voient en même temps que lui. La couleur reste à un clic,
+  sur son onglet.
+- **La vue se ferme** (ou la vue caméra la cache) : l'onglet qui était devant revient (la couleur d'ordinaire ; les
+  brosses dédiées si c'étaient elles).
+- Si un autre onglet a été mis devant à la main pendant que la vue était ouverte, ou si le panneau a été glissé
+  ailleurs, rien n'est défait à la fermeture.
+- Le panneau a été fermé : la vue, en s'ouvrant, le remet à sa place d'origine. Fermé pendant que la vue est ouverte,
+  il reste fermé jusqu'à la prochaine ouverture de la vue.
+- Changer d'espace de travail la vue ouverte (entrer en animation, « Rétablir la disposition ») : le panneau passe devant
+  dans la disposition où l'on arrive.
+- La disposition retenue dans les réglages garde l'onglet que tu avais devant (la couleur), pas celui que la vue a mis
+  devant pour un moment : au lancement suivant, la couleur est devant.
+
+**Sa place quand la disposition n'a pas la couleur.** Le panneau rejoint la couleur là où elle est (une autre colonne,
+un panneau flottant) ; sans la couleur, les brosses dédiées ; sans elles non plus, il se pose juste sous les réglages de
+l'outil, dans un groupe à lui (pour qu'on voie les deux) ; sans réglages de l'outil non plus (le Montage), en onglet
+avec la fiche du plan.
+
+**Vue fermée**, le panneau montre une phrase (« La vue Espace 3D est fermée : ouvre-la pour régler ici ses cartes (les
+calques du plan) et la caméra du plan. ») et le bouton « Ouvrir la vue Espace 3D ». Sur la planche des Vignettes, une
+phrase dit que la vue ne s'y montre pas.
+
+**Où le trouver.**
+
+| Élément | Où | Commande |
+|---|---|---|
+| Case « Espace 3D » | menu Affichage > Panneaux | |
+| « Panneau Espace 3D (ouvrir / fermer) » | palette (Ctrl+K), `keymap.toml` | `vue.espace3d_panneau`, sans touche d'origine |
+| Icône cube « Panneau Espace 3D » | barre des panneaux (bord droit), avec Réglages, Couleur et Brosses dédiées ; d'office dans le Storyboard et l'Animation | `vue.espace3d_panneau` : un clic l'ouvre ou le met devant, un autre le ferme |
+
+Le bouton cube de la barre au-dessus du dessin ouvre toujours la **vue** (`espace3d.basculer`) ; le cube de la barre des
+panneaux ouvre le **panneau**.
+
+**Les dispositions enregistrées avant ce panneau le reçoivent, sans être refaites.** Au premier lancement, une fois
+(`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_pose` dans les réglages) : le panneau est ajouté en
+onglet dans le groupe de la couleur des dispositions retenues du Storyboard et de l'Animation et des espaces de travail
+enregistrés qui montrent le dessin (ceux qui ont les réglages de l'outil ou la couleur, hors planche des Vignettes). Les
+parts, les panneaux flottants et l'onglet de devant ne bougent pas. Les dispositions retenues des Vignettes et du Montage
+ne le reçoivent pas. Fermé ensuite à la main, il n'est pas reposé (seule la vue, en s'ouvrant, le remet).
+
+**Les messages qui disaient « dans Réglages »** disent « dans le panneau Espace 3D » : l'ouverture de la vue
+(« Réglages de la vue : le panneau Espace 3D. », « « Nouvelle surface » dans le panneau Espace 3D… »), « Nouvelle
+surface » hors d'un plan en Espace 3D, les cartes cachées quand on veut dessiner, la Trajectoire dans un plan ordinaire
+(barre d'état, légende de la vue, et le texte de ses réglages, qui disait « coche la case plus bas »), « rien n'est
+choisi qui puisse suivre un chemin », et l'outil Caméra sur la feuille d'un plan en Espace 3D (« … ou par ses champs
+dans le panneau Espace 3D »).
+
+**Vocabulaire des parties 143 à 149.** Elles appellent « Réglages de l'Espace 3D », « panneau Réglages de la vue » ou
+« dans Réglages » ce qui est maintenant le **panneau Espace 3D**. Les boutons de clés de la partie 145, la case « Plan en
+Espace 3D » et « Nouvelle surface » de la partie 143, « Montrer les cartes » de la partie 146 y sont. Seuls les réglages
+de la Trajectoire dans l'espace (partie 149, « en tête du panneau de l'Espace 3D ») sont restés dans Réglages : ce sont
+ceux d'un outil.
+
+**Un défaut corrigé en chemin : Ctrl+clic sur la caméra.** Vu à l'écran le 2026-11-12 : avec l'outil Trajectoire dans la
+vue, Ctrl+clic sur la caméra du plan choisissait la surface au sol qui passait dessous. Le dessin de la caméra (son
+corps, sa pyramide) est tracé par-dessus les cartes : quand le pointeur est dessus, c'est la caméra qui est choisie ou
+lâchée. Ailleurs, la carte sous le pointeur, comme avant. « Regarder par la caméra » : son dessin n'est pas tracé, rien
+ne change.
+
+**Ce qui ne change pas.** Ce que fait chaque réglage, chaque commande et chaque touche ; la barre d'outils de la vue
+au-dessus du dessin ; le clic droit dans la vue (il tourne la vue : pas de fenêtre de réglages sous le curseur dans la
+vue Espace 3D) ; le format du projet (55).
+
+**Comment.**
+
+- `dock.rs` : `Pane::Espace3d` (nom enregistré `espace3d`), dans la famille de la couleur (`COLOR_TABS`), donc dans la
+  colonne des réglages des dispositions standard (`from_legacy`). `DockLayout::open` le range avec la couleur, sinon sous
+  les réglages de l'outil. `DockLayout::remettre_devant` rend sa place à l'onglet d'avant.
+- `espace3dpanneau.rs` (nouveau) : le contenu du panneau (`espace3d_panneau`), et le suivi de la vue
+  (`espace3d_panneau_suivre`, une comparaison par image d'écran, avant les panneaux ; il n'agit que quand la vue
+  s'ouvre ou se ferme).
+- `panels.rs` : `tool_options_panel` ne passe plus la main aux réglages de la vue. `espace3dui.rs` :
+  `espace3d_options_panel` n'a plus le bloc de la Trajectoire.
+- `ajuste.rs` : le panneau prend le reste de la colonne sous les réglages de l'outil, comme la couleur (au moins
+  200 points, et sa part selon son contenu quand les deux ne tiennent pas).
+- `workspaceui.rs` : `current_layout` retient l'onglet d'avant. `settings.rs` : la pose dans les dispositions d'avant.
+- `barrepanneaux.rs`, `keymap.rs`, `keymap.toml` : l'icône et la commande.
+- `trajectoire3d.rs` : `e3_traj_choisir`, la caméra d'abord.
+
+**Ce qui n'est pas fait.**
+
+- Un clic simple avec l'outil « choisir » de la vue prend encore la carte avant la caméra quand les deux sont sous le
+  pointeur (`e3_click`) : seul le Ctrl+clic de l'outil Trajectoire a été corrigé.
+- Le panneau ne repasse pas devant tout seul si un autre onglet a été mis devant pendant que la vue est ouverte.
+- Dans les Vignettes et le Montage, le panneau n'est pas dans la disposition d'origine.
+- **Réglages d'une version d'avant.** Un fichier de réglages écrit par cette version nomme le panneau (`espace3d`) dans
+  ses dispositions. Une version de FEANOR d'avant ce chantier ne connaît pas ce nom : elle ne lit pas le fichier et
+  repart des réglages d'origine. Tant que la branche n'est pas fusionnée, son exe se lance donc avec des réglages à part.
+
+**Essais.** `src/espace3dpanneau_tests.rs`, 13 essais : vue ouverte et pinceau en main, Réglages montre le pinceau
+(puis le crayon, la gomme) et pas les cartes, le panneau Espace 3D montre les cartes et la caméra ; avec l'outil
+Trajectoire dans un plan en Espace 3D, Réglages montre toutes les commandes du chemin et le panneau Espace 3D aucune ;
+dans un plan ordinaire, le texte renvoie au panneau Espace 3D ; vue fermée, une phrase et un bouton qui ouvre la vue ;
+ouvrir la vue met le panneau devant la couleur, la fermer rend l'onglet d'avant (la couleur, les brosses dédiées, la
+vue caméra, un onglet mis devant à la main) ; le panneau fermé revient à sa place quand la vue s'ouvre, et sous les
+réglages de l'outil sans la couleur ; la disposition retenue garde la couleur devant, l'Animation et « Rétablir la
+disposition » ont le panneau devant ; les dispositions d'origine l'ont, sous Réglages, avec la couleur (pas les
+Vignettes ni le Montage) ; `open` et `remettre_devant` ; une disposition enregistrée avant le panneau le reçoit une
+fois, sans que ses parts, son panneau flottant ni son onglet de devant bougent ; le nom, le cube, la commande, l'icône ;
+les messages. `src/trajectoire3d_tests.rs`, 1 essai de plus : Ctrl+clic sur la caméra, une carte derrière elle.
+Essais déplacés du panneau Réglages au panneau Espace 3D, pas supprimés : dans `src/espace3dcles_tests.rs`,
+`the_settings_of_the_3d_view_carry_the_key_buttons_and_a_click_poses_and_removes_the_key` et
+`showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_back` (ils lisent maintenant le panneau
+Espace 3D) ; dans `src/fiabilite_fumee_tests.rs`, l'étape « Espace 3D, réglages d'une carte » (elle ouvre le panneau
+Espace 3D en plus de Réglages). Essais mis à jour pour l'onglet de plus : `dock_tests.rs` (les onglets de la couleur),
+`barrepanneaux_tests.rs` (une icône de plus), `suggestions_tests.rs` (vingt panneaux), `ajuste_tests.rs`,
+`onglets_tests.rs` (le suivi du panneau est rangé avec l'état de l'application, pas avec celui d'un projet).
+Vérificateur : 4 593 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées
+de `espace3d.rs`), aucun nouveau.
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.** Rien n'a été regardé à l'écran.
+
+1. Storyboard, vue Espace 3D fermée : sous Réglages, trois onglets, Couleur, Brosses dédiées, Espace 3D ; la couleur
+   devant. Dire si les trois onglets tiennent dans la largeur de la colonne.
+2. Ouvrir la vue Espace 3D (bouton cube au-dessus du dessin) : le panneau Espace 3D passe devant la couleur, avec la
+   liste des cartes et la caméra du plan. Réglages, au-dessus, montre l'outil en main. Dire si la hauteur donnée à
+   chacun des deux panneaux convient.
+3. Prendre le pinceau dans la vue et dessiner sur une carte : Réglages montre la taille, l'opacité, la brosse ; les
+   changer, le trait suit. Pareil avec le crayon et la gomme.
+4. Cliquer l'onglet Couleur pour changer de couleur, la vue ouverte : la couleur passe devant, le panneau Espace 3D
+   reste à un clic. Dire s'il faudrait qu'il repasse devant tout seul, ou si la couleur devrait rester visible
+   autrement pendant qu'on dessine dans la vue.
+5. Fermer la vue, la rouvrir (le panneau repasse devant), puis la refermer sans toucher aux onglets : la couleur
+   revient devant, toute seule.
+6. Plan en Espace 3D, outil Trajectoire dans la vue : Réglages montre « Trajectoire dans l'espace », qui est choisi et
+   ses boutons ; le panneau Espace 3D ne les a plus. Tracer un chemin, puis « Partir de la tête de lecture »,
+   « Détacher », « Effacer » depuis Réglages.
+7. Avec l'outil Trajectoire, Ctrl+clic sur la caméra du plan, une surface au sol passant dessous : c'est la caméra qui
+   est choisie (la barre d'état dit « Le chemin déplacera la caméra. »).
+8. Panneau Espace 3D : cocher « Plan en Espace 3D », poser une « Nouvelle surface », choisir une carte dans la liste,
+   poser une clé (losange), régler la focale de la caméra : tout marche comme avant, depuis ce panneau.
+9. Vue fermée, cliquer l'onglet Espace 3D : une phrase et le bouton « Ouvrir la vue Espace 3D » ; le bouton ouvre la vue.
+10. Fermer le panneau Espace 3D (clic droit sur son onglet, ou son icône cube dans la barre des panneaux), puis ouvrir
+    la vue : il revient à sa place, devant la couleur.
+11. Entrer en animation (double-clic sur un plan), la vue ouverte : le panneau est devant là aussi.
+12. Ta disposition habituelle, celle d'avant ce chantier : le panneau y est arrivé en onglet à côté de la couleur, et
+    rien d'autre n'a bougé (largeurs, hauteurs, panneaux flottants).
+13. Menu Affichage > Panneaux : la case « Espace 3D ». Palette (Ctrl+K) : « Panneau Espace 3D (ouvrir / fermer) ».

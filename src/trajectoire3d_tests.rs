@@ -423,6 +423,46 @@ fn a_card_and_the_camera_chosen_together_share_one_path_and_one_undo_step() {
 }
 
 #[test]
+fn ctrl_click_on_the_camera_chooses_the_camera_and_not_the_card_behind_it() {
+    // Vu à l'écran le 2026-11-12 : Ctrl+clic sur la caméra du plan choisissait la carte du sol qui passait sous elle. Le
+    // dessin de la caméra est tracé par-dessus les cartes : c'est lui qui l'emporte quand le pointeur est dessus (partie 150).
+    let mut b = ouvert(doc_cartes(1), true);
+    // La vue regarde la carte de face, par-dessus la caméra du plan : le dessin de la caméra tombe au milieu de la carte.
+    let vue = b.app.espace3d.cam.as_mut().expect("la vue");
+    (vue.azimuth, vue.elevation, vue.distance) = (0.0, 0.0, vue.distance * 1.5);
+    b.chauffer(2);
+    let ici = a_l_ecran(&b, b.app.e3_world().scene_cam(&b.app.current_camera()).pos);
+    let r = regard(&b);
+    let dans_la_vue = |p: Pos2| [p.x - r.rect.left(), p.y - r.rect.top()];
+    let centre = [r.rect.width() / 2.0, r.rect.height() / 2.0];
+    let carte_0 = espace3d::card_selection(b.app.layers()[0].id);
+    assert!(b.app.e3_pick_camera(&r.view, dans_la_vue(ici), centre), "le pointeur est sur le dessin de la caméra");
+    assert_eq!(b.app.e3_pick(&r.rayon(ici)), Some(carte_0), "et une carte passe derrière elle, sous le pointeur");
+    assert!(b.app.espace3d.sel.is_empty(), "rien n'est choisi au départ");
+    let ctrl = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
+    geste(&mut b, &[ici], ctrl);
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID], "{}", b.app.status);
+    assert_eq!(b.app.status, "Le chemin déplacera la caméra.");
+    assert_eq!(b.app.e3_traj_sujets(), vec![Sujet::Camera]);
+    // Hors du dessin de la caméra, Ctrl+clic prend toujours la carte sous le pointeur.
+    let ailleurs = a_l_ecran(&b, m::point(&carte(&b, 0, 0).matrix(), [0.42, 0.1, 0.0]));
+    assert!(!b.app.e3_pick_camera(&r.view, dans_la_vue(ailleurs), centre), "ce point de la carte est loin du dessin de la caméra");
+    geste(&mut b, &[ailleurs], ctrl);
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID, carte_0], "{}", b.app.status);
+    assert_eq!(b.app.status, "Le chemin déplacera 1 carte et la caméra.");
+    // Un second Ctrl+clic sur la caméra la lâche : elle seule, pas la carte qui passe derrière elle.
+    geste(&mut b, &[ici], ctrl);
+    assert_eq!(b.app.espace3d.sel, vec![carte_0], "{}", b.app.status);
+    // « Regarder par la caméra » : son dessin n'est pas tracé, Ctrl+clic au même endroit prend la carte.
+    b.app.espace3d.sel.clear();
+    b.app.espace3d.through_camera = true;
+    b.chauffer(2);
+    let milieu = b.app.canvas_rect.center();
+    geste(&mut b, &[milieu], ctrl);
+    assert_eq!(b.app.espace3d.sel, vec![carte_0], "{}", b.app.status);
+}
+
+#[test]
 fn marks_change_the_timing_a_second_stroke_redraws_and_escape_cancels_a_gesture() {
     let mut b = ouvert(doc_cartes(1), true);
     let y = b.app.e3_world().sol_y();
