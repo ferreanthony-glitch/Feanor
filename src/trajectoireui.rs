@@ -74,6 +74,94 @@ pub(crate) struct Etat {
     pub(crate) choisir_ancre: bool,
     /// Le geste en cours dans la vue Espace 3D (`trajectoire3d.rs`, partie 149).
     pub(crate) espace: Option<crate::trajectoire3d::GesteEspace>,
+    /// Ce que la pose des dessins des jalons a laissé aux dessins posés à la main, et ce qu'il en reste à dire.
+    pub(crate) a_la_main: DessinsALaMain,
+}
+
+/// **Les dessins posés à la main dans une trajectoire en clés d'images**, pour la barre d'état. Anthony, 2026-11-13 : « Une
+/// clé de dessin posée à la main entre deux marques est écrasée au recalcul suivant du chemin : une boîte de dialogue demande
+/// si on écrase le dessin ou non. » ; puis, le même jour : « Je préfère qu'on évite au maximum la boîte de dialogue. Tout ce
+/// qui peut s'en passer s'en passera. » Ce cas s'en passe : la trajectoire ne recouvre jamais une clé de dessin qu'elle n'a
+/// pas posée (`App::trajectoire_exposer_les_dessins`), et **elle le dit une fois, dans la barre d'état**.
+///
+/// Rien de ceci n'est enregistré avec le projet : c'est ce que le dernier calcul a laissé, pour ne pas le redire à chaque
+/// calcul (à chaque image d'écran d'un geste), et ce qui attend d'être dit à la prochaine image d'écran
+/// (`App::trajectoire_dire_les_dessins_a_la_main`).
+#[derive(Default)]
+pub(crate) struct DessinsALaMain {
+    /// Calque par calque (le numéro du plan et celui du calque) : les clés posées à la main que le dernier calcul a laissées,
+    /// l'image et le dessin de chacune.
+    vus: Vec<((u64, u64), Vec<(usize, CelId)>)>,
+    /// À dire : les calques (leurs numéros, leur nom) où un calcul vient de laisser des clés qu'il n'avait pas encore dites,
+    /// avec les images de toutes leurs clés posées à la main.
+    gardes: Vec<((u64, u64), String, Vec<usize>)>,
+    /// À dire : les jalons qu'un calcul vient de poser à côté d'une clé posée à la main (la phrase de chacun).
+    ecartes: Vec<String>,
+}
+
+impl DessinsALaMain {
+    /// Le calcul vient de laisser les clés `cles` (image, dessin) sur le calque `calque` (« `nom` ») du plan `plan`. S'il y en
+    /// a qu'il n'avait pas laissées au calcul d'avant, c'est à dire ; les mêmes, retrouvées, ne se redisent pas.
+    fn noter(&mut self, plan: u64, calque: u64, nom: &str, cles: &[(usize, CelId)]) {
+        let qui = (plan, calque);
+        let rang = self.vus.iter().position(|v| v.0 == qui);
+        let nouvelles = cles.iter().any(|c| rang.is_none_or(|r| !self.vus[r].1.contains(c)));
+        match (rang, cles.is_empty()) {
+            (Some(r), true) => {
+                self.vus.remove(r);
+            }
+            (Some(r), false) => self.vus[r].1 = cles.to_vec(),
+            (None, false) => self.vus.push((qui, cles.to_vec())),
+            (None, true) => {}
+        }
+        // (Ce qui attend d'être dit pour ce calque parle de ses clés telles qu'elles sont maintenant.)
+        let deja = self.gardes.iter().position(|g| g.0 == qui);
+        let images: Vec<usize> = cles.iter().map(|c| c.0).collect();
+        match deja {
+            Some(g) if images.is_empty() => {
+                self.gardes.remove(g);
+            }
+            Some(g) => self.gardes[g].2 = images,
+            None if nouvelles => self.gardes.push((qui, nom.to_string(), images)),
+            None => {}
+        }
+    }
+}
+
+/// Les clés de dessin **posées à la main** parmi les images `debut..fin` de `frames` : chaque image où commence l'exposition
+/// d'un dessin qui n'est pas à la trajectoire (`a_elle` : son dessin d'origine, ceux de ses jalons), avec ce dessin. Un dessin
+/// dont l'exposition a commencé avant `debut` n'y a pas de clé : la sienne est avant.
+pub(crate) fn cles_a_la_main(frames: &[Option<CelId>], debut: usize, fin: usize, a_elle: &dyn Fn(CelId) -> bool) -> Vec<(usize, CelId)> {
+    (debut..fin.min(frames.len()))
+        .filter_map(|f| {
+            let c = frames[f]?;
+            (!a_elle(c) && (f == 0 || frames[f - 1] != Some(c))).then_some((f, c))
+        })
+        .collect()
+}
+
+/// « Trajectoire : 2 dessins posés à la main gardés entre les marques (images 7 et 18). » Avec plusieurs calques (plusieurs
+/// cartes choisies dans l'espace) : le compte de tous, et les images calque par calque.
+fn texte_des_dessins_gardes(gardes: &[((u64, u64), String, Vec<usize>)]) -> String {
+    let n: usize = gardes.iter().map(|g| g.2.len()).sum();
+    let s = pluriel(n);
+    let images = |v: &[usize]| format!("image{} {}", pluriel(v.len()), liste_d_images(v, 8));
+    let ou = match gardes {
+        [seul] => images(&seul.2),
+        _ => gardes.iter().map(|g| format!("« {} » : {}", g.1, images(&g.2))).collect::<Vec<_>>().join(" ; "),
+    };
+    format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} entre les marques ({ou}).")
+}
+
+/// « 7 », « 7 et 9 », « 7, 9 et 15 » ; au-delà de `max`, la liste s'arrête par « … ».
+fn liste_d_images(images: &[usize], max: usize) -> String {
+    let noms: Vec<String> = images.iter().take(max).map(|f| (f + 1).to_string()).collect();
+    match (noms.len(), images.len() > max) {
+        (0, _) => String::new(),
+        (_, true) => format!("{}…", noms.join(", ")),
+        (1, _) => noms[0].clone(),
+        (n, _) => format!("{} et {}", noms[..n - 1].join(", "), noms[n - 1]),
+    }
 }
 
 /// Le texte du réglage « le dessin tourne avec le chemin ».
@@ -471,9 +559,13 @@ impl App {
     /// calcul dans les coordonnées du dessin). Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce qu'on y a
     /// dessiné suit) ; s'il doit tourner autrement, il est refait depuis le dessin d'origine (tourner une copie déjà tournée
     /// l'abîmerait). **Chaque dessin reste à son jalon** (`Trajectoire::dessins`) : une marque qu'on vient de poser reçoit une
-    /// copie du dessin du jalon d'avant, tel qu'on l'a laissé ; les autres gardent le leur. Faux, avec la raison dans la ligne
-    /// d'état, s'il n'y a pas de dessin au départ.
+    /// copie du dessin du jalon d'avant, tel qu'on l'a laissé ; les autres gardent le leur. **Une clé de dessin posée à la main
+    /// n'est jamais remplacée** : un jalon qui tomberait sur elle est posé à côté (`trajectoire_ecarter_des_dessins_a_la_main`),
+    /// et l'exposition la laisse à son image (`trajectoire_exposer_les_dessins`). Faux, avec la raison dans la ligne d'état,
+    /// s'il n'y a pas de dessin au départ.
     fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize, ancre: [f32; 2], base: LayerTransform) -> bool {
+        // (Sur la feuille, les dessins font le mouvement : aucune clé de position n'est à reposer si un jalon change d'image.)
+        self.trajectoire_ecarter_des_dessins_a_la_main(pi, li);
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
         let images = t.images_des_jalons(duree);
@@ -512,29 +604,70 @@ impl App {
             };
             dessins.push(DessinJalon { dessin, dx: d[0], dy: d[1], angle });
         }
+        // (Les clés de dessin posées à la main entre les jalons ne sont pas recouvertes : `trajectoire_exposer_les_dessins`.)
+        self.trajectoire_exposer_les_dessins(pi, li, &t, &images, source, dessins);
+        true
+    }
+
+    /// **Expose les dessins des jalons** sur le calque `li` du plan `pi`. C'est par ici, et seulement par ici, que la pose des
+    /// dessins d'une trajectoire en clés d'images change la timeline : sur la feuille (`trajectoire_poser_les_dessins`) comme
+    /// dans l'espace (`trajectoire3d.rs`, `trajectoire_poser_les_dessins_dans_l_espace`), quel que soit le geste ou la
+    /// commande qui a demandé le calcul (`trajectoire_recalculer`, `trajectoire_recalculer_dans`). `images` : l'image de
+    /// chaque jalon ; `dessins` : son dessin ; `source` : le dessin d'origine ; `avant` : la trajectoire telle qu'elle était en
+    /// arrivant au calcul (ses dessins d'avant, ceux des marques retirées).
+    ///
+    /// **La trajectoire ne remplace jamais une clé de dessin qu'elle n'a pas posée** (Anthony, 2026-11-13 : « Une clé de dessin
+    /// posée à la main entre deux marques est écrasée au recalcul suivant du chemin », puis « Je préfère qu'on évite au maximum
+    /// la boîte de dialogue. Tout ce qui peut s'en passer s'en passera. » : rien n'est demandé). Elle a son dessin d'origine et
+    /// ceux de ses jalons ; entre son départ et la fin du plan, toute image où commence un autre dessin est **une clé posée à
+    /// la main** (`cles_a_la_main`). La timeline y est une suite de clés, dans l'ordre des images : les jalons et les clés
+    /// posées à la main, chacune montrant son dessin jusqu'à la suivante (le dernier jalon, jusqu'à la fin du plan). Une clé
+    /// posée à la main n'est jamais retirée, déplacée ni remplacée ; un jalon peut seulement écourter le temps où son dessin
+    /// est tenu, comme toute clé qu'on pose après une autre. (À la même image qu'un jalon, c'est elle qui se voit :
+    /// `trajectoire_ecarter_des_dessins_a_la_main` a posé le jalon à côté avant d'arriver ici, s'il y avait une image libre.)
+    /// Comme une clé posée à la main est lue là où son exposition commence, le calcul redonne la même timeline autant de fois
+    /// qu'on le refait, pendant un geste aussi. Rien n'est noté dans le projet pour cela.
+    ///
+    /// Les clés laissées sont notées pour la barre d'état (`DessinsALaMain`), qui le dit une fois.
+    pub(crate) fn trajectoire_exposer_les_dessins(&mut self, pi: usize, li: usize, avant: &Trajectoire, images: &[usize], source: CelId, dessins: Vec<DessinJalon>) {
+        let Some(&debut) = images.first() else { return };
+        let (duree, plan) = (self.doc.panels[pi].frame_count(), self.doc.panels[pi].id);
         let l = &mut self.doc.panels[pi].layers[li];
         if l.frames.len() < duree {
             l.frames.resize(duree, None);
         }
-        for k in 0..images.len() {
-            let fin = if k + 1 < images.len() { images[k + 1] } else { duree };
-            for f in images[k]..fin.min(duree) {
-                l.frames[f] = Some(dessins[k].dessin);
+        // Les dessins de la trajectoire : celui d'origine, ceux de ses jalons (d'avant ce calcul et de maintenant), ceux des
+        // marques retirées depuis.
+        let a_elle = |c: CelId| c == source || avant.source == Some(c) || avant.retires.contains(&c) || avant.dessins.iter().chain(dessins.iter()).any(|d| d.dessin == c);
+        let a_la_main = cles_a_la_main(&l.frames, debut, duree, &a_elle);
+        let (mut courant, mut k) = (None, 0);
+        for f in debut..duree {
+            // (Deux jalons arrondis à la même image : le dernier l'emporte.)
+            while k < images.len() && images[k] <= f {
+                courant = dessins.get(k).map(|d| d.dessin).or(courant);
+                k += 1;
             }
+            if let Some(&(_, c)) = a_la_main.iter().find(|(image, _)| *image == f) {
+                courant = Some(c);
+            }
+            l.frames[f] = courant;
         }
         if let Some(t) = l.trajectoire.as_mut() {
             t.source = Some(source);
             t.dessins = dessins;
+            t.retires.clear();
         }
-        true
+        let (calque, nom) = (l.id, l.name.clone());
+        self.traj.a_la_main.noter(plan, calque, &nom, &a_la_main);
     }
 
     /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin d'origine.
-    /// (Sert aussi à une trajectoire tracée dans l'espace, `trajectoire3d.rs`, partie 152.)
+    /// (Sert aussi à une trajectoire tracée dans l'espace, `trajectoire3d.rs`, partie 152.) Les dessins posés à la main
+    /// restent où ils sont.
     pub(crate) fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
         let l = &mut self.doc.panels[pi].layers[li];
         let (depart, source_notee, poses) = match l.trajectoire.as_mut() {
-            Some(t) => (t.depart, t.source.take(), t.dessins.drain(..).map(|d| d.dessin).collect::<Vec<CelId>>()),
+            Some(t) => (t.depart, t.source.take(), t.dessins.drain(..).map(|d| d.dessin).chain(std::mem::take(&mut t.retires)).collect::<Vec<CelId>>()),
             None => return,
         };
         let source = source_notee.filter(|c| self.doc.cels.contains_key(c)).or_else(|| l.cel_at(depart));
@@ -545,6 +678,103 @@ impl App {
             }
         }
         l.trim();
+    }
+
+    // ------------------------------------------------------------------ les dessins posés à la main
+
+    /// **Avant de poser les dessins des jalons** du calque `li` du plan `pi` (clés d'images, feuille et espace) : sa trajectoire
+    /// est mise d'accord avec les clés de dessin posées à la main. Vrai si elle a changé (l'image d'un jalon, ou le dessin
+    /// noté d'un jalon) : qui a déjà posé des clés de position d'après elle les repose.
+    ///
+    /// * **Un jalon qui tomberait exactement sur l'image d'une clé posée à la main** (une marque glissée ou posée là, un
+    ///   recalage, « Temps égaux ») est posé sur l'image libre la plus proche : sans clé posée à la main, entre ses deux jalons
+    ///   voisins ; celle d'après de préférence, sinon celle d'avant (`Trajectoire::recaler` : le temps des marques devient
+    ///   explicite). Aucun dessin n'est perdu, rien n'est demandé ; la barre d'état le dit. Sans image libre entre ses
+    ///   voisins, le jalon reste où il est : c'est la clé posée à la main qui se voit à cette image.
+    /// * **Un calque ou un plan dupliqué** : ses dessins sont des copies, et sa trajectoire notait encore ceux de l'original.
+    ///   Quand **aucun** des dessins notés de ses jalons n'est sur le calque, chaque jalon à l'image duquel commence un
+    ///   dessin (au départ : que l'image du départ montre) prend ce dessin pour le sien, sans rien toucher à la timeline.
+    ///   Sans cela, chaque jalon serait posé à côté de son propre dessin, et les dessins de l'original exposés dans la copie.
+    ///   (Il faut qu'il n'en reste aucun : un seul jalon dont le dessin ne se voit plus, parce qu'une clé posée à la main est
+    ///   à son image sans image libre à côté, ne prend jamais cette clé pour la sienne.)
+    pub(crate) fn trajectoire_ecarter_des_dessins_a_la_main(&mut self, pi: usize, li: usize) -> bool {
+        let duree = self.doc.panels[pi].frame_count();
+        let l = &self.doc.panels[pi].layers[li];
+        let Some(mut t) = l.trajectoire.clone().filter(|t| t.cles == Cles::Images) else { return false };
+        let frames = &l.frames;
+        let montre = |f: usize| frames.get(f).copied().flatten();
+        let mut change = false;
+        // Aucun des dessins notés n'est sur ce calque (une copie) : le dessin qui est à l'image de chaque jalon est le sien.
+        let images = t.images_des_jalons(duree);
+        let copie = t.dessins.iter().all(|d| !frames.contains(&Some(d.dessin)));
+        for k in 0..images.len().min(t.dessins.len()) {
+            if !copie {
+                break;
+            }
+            let note = t.dessins[k].dessin;
+            let f = images[k];
+            let la = montre(f).filter(|c| k == 0 || f == 0 || montre(f - 1) != Some(*c));
+            let Some(c) = la.filter(|c| !t.retires.contains(c) && !t.dessins.iter().any(|d| d.dessin == *c)) else { continue };
+            if t.source == Some(note) {
+                t.source = Some(c);
+            }
+            t.dessins[k].dessin = c;
+            change = true;
+        }
+        // Les jalons qui tombent sur une clé posée à la main : à côté.
+        let mut phrases: Vec<String> = Vec::new();
+        if let Some(source) = t.source.filter(|c| self.doc.cels.contains_key(c)).or_else(|| montre(t.depart)) {
+            for _ in 0..2 * (t.marques.len() + 2) {
+                let images = t.images_des_jalons(duree);
+                if images.len() < 2 {
+                    break;
+                }
+                let a_elle = |c: CelId| c == source || t.retires.contains(&c) || t.dessins.iter().any(|d| d.dessin == c);
+                let cles = cles_a_la_main(frames, images[0], duree, &a_elle);
+                let dernier = images.len() - 1;
+                // Le premier jalon sur une clé posée à la main qui a une image libre près de lui : (son rang, son image, l'image libre).
+                let ecart = (0..images.len()).filter(|&k| cles.iter().any(|c| c.0 == images[k])).find_map(|k| {
+                    let (bas, haut) = (if k == 0 { 0 } else { images[k - 1] + 1 }, if k == dernier { duree - 1 } else { images[k + 1].saturating_sub(1) });
+                    let libre = |c: usize| (bas..=haut).contains(&c) && !cles.iter().any(|x| x.0 == c);
+                    let f = images[k];
+                    (1..duree).flat_map(|d| [f.checked_add(d), f.checked_sub(d)]).flatten().find(|&c| libre(c)).map(|c| (k, f, c))
+                });
+                let Some((k, f, c)) = ecart else { break };
+                if t.recaler(k, c, duree) != Some(c) {
+                    break;
+                }
+                let (qui, pose) = if k == 0 { ("le départ", "il est posé") } else if k == dernier { ("l'arrivée", "elle est posée") } else { ("une marque", "elle est posée") };
+                phrases.push(format!("Trajectoire : {qui} tombait sur un dessin posé à la main, à l'image {} : {pose} à l'image {}.", f + 1, c + 1));
+                change = true;
+            }
+        }
+        if change {
+            self.doc.panels[pi].layers[li].trajectoire = Some(t);
+        }
+        for p in phrases {
+            if !self.traj.a_la_main.ecartes.contains(&p) {
+                self.traj.a_la_main.ecartes.push(p);
+            }
+        }
+        change
+    }
+
+    /// Une fois par image d'écran (`panels.rs`) : ce que les calculs viennent de laisser aux dessins posés à la main est dit
+    /// dans la barre d'état, à la suite de ce que le geste y a écrit (« Marque posée : … Trajectoire : 1 dessin posé à la main
+    /// gardé entre les marques (image 18). »). Une fois : un calcul qui retrouve les mêmes clés ne redit rien
+    /// (`DessinsALaMain::noter`). Jamais dans une fenêtre.
+    pub(crate) fn trajectoire_dire_les_dessins_a_la_main(&mut self) {
+        let d = &mut self.traj.a_la_main;
+        if d.gardes.is_empty() && d.ecartes.is_empty() {
+            return;
+        }
+        let mut phrases = std::mem::take(&mut d.ecartes);
+        let gardes = std::mem::take(&mut d.gardes);
+        if !gardes.is_empty() {
+            phrases.push(texte_des_dessins_gardes(&gardes));
+        }
+        let dit = phrases.join(" ");
+        self.status = if self.status.is_empty() { dit } else { format!("{} {dit}", self.status) };
     }
 
     /// La clé de l'image `de` du calque `li` du plan `pi`, un jalon de sa trajectoire (le départ, une marque, la fin), glissée à
