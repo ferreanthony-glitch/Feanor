@@ -848,10 +848,11 @@ impl App {
     /// quelle** : ni déplacée, ni agrandie, ni tournée. C'est la différence avec la feuille : ici c'est la carte qui porte
     /// le mouvement, par sa clé de position tenue du jalon (`cles_dans_l_espace`).
     ///
-    /// Les dessins posés sont suivis (`Trajectoire::dessins`, un par jalon, dans l'ordre) : un dessin déjà posé est gardé
-    /// tel qu'il est, avec ce qu'on y a redessiné ; seul un jalon de plus reçoit une copie neuve. Glisser une marque,
-    /// tirer le chemin ou recaler un jalon dans le temps ne refait donc aucun dessin : sa clé change seulement d'image.
-    /// Faux, avec la raison dans la barre d'état, s'il n'y a pas de dessin au départ.
+    /// Les dessins posés sont suivis (`Trajectoire::dessins`, un par jalon, **chacun à son jalon**) : un dessin déjà posé est
+    /// gardé tel qu'il est, avec ce qu'on y a redessiné ; seul un jalon de plus reçoit une copie neuve, celle du dessin du
+    /// jalon d'avant tel qu'on l'a laissé (ce que l'image montrait là) ; une marque retirée emporte le sien. Glisser une
+    /// marque, tirer le chemin ou recaler un jalon dans le temps ne refait donc aucun dessin : sa clé change seulement
+    /// d'image. Faux, avec la raison dans la barre d'état, s'il n'y a pas de dessin au départ.
     fn trajectoire_poser_les_dessins_dans_l_espace(&mut self, pi: usize, li: usize) -> bool {
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
@@ -865,7 +866,12 @@ impl App {
         };
         let mut dessins = Vec::with_capacity(images.len());
         for k in 0..images.len() {
-            let dessin = match t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)) {
+            let ancien = t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
+            // (Le même dessin que le jalon d'avant : une marque vient d'être posée entre les deux, `Trajectoire::ajouter_marque` ;
+            // elle reçoit sa copie à elle de ce dessin, tel qu'on l'a laissé.)
+            let neuf = k > 0 && ancien.is_some_and(|a| t.dessins.get(k - 1).is_some_and(|p| p.dessin == a.dessin));
+            let dessin = match ancien {
+                Some(a) if neuf => self.doc.duplicate_cel(a.dessin),
                 Some(a) => a.dessin,
                 None if k == 0 => source,
                 None => self.doc.duplicate_cel(source),
@@ -1117,11 +1123,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             let marques = avec.iter().any(|&s| self.e3_traj_de(s).is_some_and(|t| !t.marques.is_empty()));
             if marques && ui.button("Retirer les marques").on_hover_text("Le chemin reste, à vitesse constante.").clicked() {
-                self.e3_traj_pour_tous(&avec, "Retirer les marques", |t, _| {
-                    t.marques.clear();
-                    t.temps = None;
-                    true
-                });
+                self.e3_traj_retirer_les_marques(&avec);
             }
             if ui.button("Détacher").on_hover_text("Le chemin s'en va, le mouvement reste : les clés de position des cartes telles quelles, et pour la caméra une clé par image, à retoucher à la main.").clicked() {
                 self.e3_traj_retirer(&avec, false);
@@ -1150,6 +1152,16 @@ impl App {
         self.traj.cles_propose = cles;
         self.e3_traj_pour_tous(sujets, "Sorte des clés de la trajectoire", |t, _| {
             t.cles = cles;
+            true
+        });
+    }
+
+    /// « Retirer les marques » de la trajectoire dans l'espace de chaque sujet, en une étape d'annulation : le chemin reste, à
+    /// vitesse constante ; en clés d'images, le départ et l'arrivée d'une carte gardent leurs dessins
+    /// (`Trajectoire::retirer_les_marques`).
+    pub(crate) fn e3_traj_retirer_les_marques(&mut self, sujets: &[Sujet]) {
+        self.e3_traj_pour_tous(sujets, "Retirer les marques", |t, _| {
+            t.retirer_les_marques();
             true
         });
     }

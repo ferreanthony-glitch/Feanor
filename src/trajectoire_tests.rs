@@ -442,3 +442,72 @@ fn image_keys_pose_no_position_key_the_drawings_do_the_work() {
     t.cles = Cles::Interpolation;
     assert_eq!(cles_de(&t, 31, LayerTransform::default()).len(), 31);
 }
+
+/// Les numéros des dessins des jalons.
+fn numeros(t: &Trajectoire) -> Vec<u64> {
+    t.dessins.iter().map(|d| d.dessin).collect()
+}
+
+fn dessin(n: u64, dx: f32) -> DessinJalon {
+    DessinJalon { dessin: n, dx, dy: 0.0, angle: 0.0 }
+}
+
+/// Anthony, 2026-11-13 (« règle ce qui reste imparfait ») : les dessins des clés d'images étaient rangés par rang de jalon ; une
+/// marque posée ou retirée au milieu décalait les poses déjà redessinées. Chaque dessin suit maintenant son jalon : une marque
+/// posée prend place avec le dessin du jalon d'avant (le calcul suivant lui en fait sa copie), une marque retirée emporte le
+/// sien, « Retirer les marques » garde ceux du départ et de l'arrivée, une trajectoire relue remise en ordre garde chacun au
+/// sien. Sans un dessin par jalon (clés d'interpolation, pas de dessin au départ), rien n'est touché.
+#[test]
+fn each_drawing_of_image_keys_follows_its_milestone_when_marks_are_added_removed_or_put_back_in_order() {
+    let mut t = droite();
+    t.cles = Cles::Images;
+    t.ajouter_marque(0.5);
+    t.dessins = vec![dessin(10, 0.0), dessin(11, 50.0), dessin(12, 100.0)];
+    // Une marque avant celle de 50 % : son jalon prend le dessin du départ (le jalon d'avant), les autres gardent les leurs.
+    assert_eq!(t.ajouter_marque(0.2), Some(0));
+    assert_eq!(numeros(&t), [10, 10, 11, 12]);
+    assert_eq!(t.dessins[1], dessin(10, 0.0), "le dessin du jalon d'avant, tel quel : le calcul en fera une copie");
+    // Une marque après : elle prend celui de la marque de 50 %.
+    t.dessins[1] = dessin(13, 20.0);
+    assert_eq!(t.ajouter_marque(0.8), Some(2));
+    assert_eq!(numeros(&t), [10, 13, 11, 11, 12]);
+    // Une marque refusée (sur une autre, ou sur un bout) ne touche à rien.
+    t.dessins[3] = dessin(14, 80.0);
+    assert_eq!(t.ajouter_marque(0.505), None);
+    assert_eq!(t.ajouter_marque(0.995), None);
+    assert_eq!(numeros(&t), [10, 13, 11, 14, 12]);
+    // Glisser une marque, recaler le temps, retracer : l'ordre des jalons ne change pas, les dessins non plus.
+    t.deplacer_marque(1, 0.6);
+    assert!(t.recaler(2, 20, 31).is_some());
+    t.temps_egaux();
+    assert!(t.retracer(&[[0.0, 0.0], [0.0, 120.0]]));
+    assert_eq!(numeros(&t), [10, 13, 11, 14, 12]);
+    // Retirer la marque de 50 % (devenue 60 %) : son dessin s'en va, seul.
+    t.retirer_marque(1);
+    assert_eq!(numeros(&t), [10, 13, 14, 12]);
+    assert_eq!(t.marques.len(), 2);
+    // Une trajectoire relue d'un fichier, ses marques en désordre et une en double : chacune garde le sien.
+    let relue = Trajectoire { marques: vec![0.8, 0.2, 0.8], dessins: vec![dessin(10, 0.0), dessin(14, 80.0), dessin(13, 20.0), dessin(15, 80.0), dessin(12, 100.0)], ..t.clone() };
+    let propre = relue.assainie().expect("tient debout");
+    assert_eq!(propre.marques, [0.2, 0.8]);
+    assert_eq!(numeros(&propre), [10, 13, 14, 12], "remises en ordre, chaque marque avec son dessin ; le doublon laissé avec le sien");
+    // Sans un dessin par jalon : relue telle quelle, et poser ou retirer une marque n'y touche pas (le calcul les range).
+    let mal = Trajectoire { dessins: vec![dessin(10, 0.0), dessin(12, 100.0)], ..t.clone() };
+    assert_eq!(numeros(&mal.clone().assainie().unwrap()), [10, 12]);
+    let mut mal = mal;
+    mal.ajouter_marque(0.5);
+    mal.retirer_marque(0);
+    assert_eq!(numeros(&mal), [10, 12]);
+    // « Retirer les marques » : le départ et l'arrivée gardent les leurs, et le temps repart en parts égales.
+    t.temps = Some(vec![0.3, 0.6]);
+    t.retirer_les_marques();
+    assert!(t.marques.is_empty() && t.temps.is_none());
+    assert_eq!(numeros(&t), [10, 12]);
+    // Sans dessin du tout (clés d'interpolation), rien n'en est fait.
+    let mut sans = droite();
+    sans.ajouter_marque(0.5);
+    sans.retirer_les_marques();
+    sans.ajouter_marque(0.3);
+    sans.retirer_marque(0);
+    assert!(sans.dessins.is_empty() && sans.marques.is_empty());
+}

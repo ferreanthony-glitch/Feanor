@@ -470,7 +470,9 @@ impl App {
     /// le chemin — et tournée autour de lui si le dessin tourne avec le chemin (`base` : la pose propre du calque, qui encadre le
     /// calcul dans les coordonnées du dessin). Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce qu'on y a
     /// dessiné suit) ; s'il doit tourner autrement, il est refait depuis le dessin d'origine (tourner une copie déjà tournée
-    /// l'abîmerait). Faux, avec la raison dans la ligne d'état, s'il n'y a pas de dessin au départ.
+    /// l'abîmerait). **Chaque dessin reste à son jalon** (`Trajectoire::dessins`) : une marque qu'on vient de poser reçoit une
+    /// copie du dessin du jalon d'avant, tel qu'on l'a laissé ; les autres gardent le leur. Faux, avec la raison dans la ligne
+    /// d'état, s'il n'y a pas de dessin au départ.
     fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize, ancre: [f32; 2], base: LayerTransform) -> bool {
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
@@ -496,10 +498,15 @@ impl App {
         let mut dessins = Vec::with_capacity(images.len());
         for (k, &(d, angle)) in poses.iter().enumerate().take(images.len()) {
             let ancien = t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
+            // (Le même dessin que le jalon d'avant : une marque vient d'être posée entre les deux, `Trajectoire::ajouter_marque`.
+            // Elle reçoit sa copie à elle de ce dessin, tel qu'on l'a laissé, mise à sa place ; le jalon d'avant garde le sien.
+            // Chaque dessin reste ainsi à son jalon, quoi qu'il arrive aux autres : partie 152, réglé le 13 novembre.)
+            let neuf = k > 0 && ancien.is_some_and(|a| t.dessins.get(k - 1).is_some_and(|p| p.dessin == a.dessin));
             let dessin = match ancien {
-                Some(a) if proche(a.dx, d[0]) && proche(a.dy, d[1]) && meme_angle(a.angle, angle) => a.dessin,
+                Some(a) if !neuf && proche(a.dx, d[0]) && proche(a.dy, d[1]) && meme_angle(a.angle, angle) => a.dessin,
                 Some(a) if a.dessin != source && meme_angle(a.angle, angle) => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
-                _ if angle.abs() < 0.01 && d[0].abs() < 0.5 && d[1].abs() < 0.5 => source,
+                // (Seul le départ montre le dessin d'origine lui-même ; un autre jalon a toujours sa copie, qu'on redessine seule.)
+                _ if k == 0 && angle.abs() < 0.01 && d[0].abs() < 0.5 && d[1].abs() < 0.5 => source,
                 _ if angle.abs() < 0.01 => self.trajectoire_copie_decalee(source, d),
                 _ => self.trajectoire_copie_posee(source, &dans_le_dessin(d, angle)),
             };
@@ -903,8 +910,8 @@ impl App {
             if n > 0 && ui.button("Retirer les marques").on_hover_text("Le chemin reste, à vitesse constante.").clicked() {
                 let snap = self.snapshot();
                 if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
-                    tr.marques.clear();
-                    tr.temps = None;
+                    // (Le départ et l'arrivée gardent leurs dessins, en clés d'images.)
+                    tr.retirer_les_marques();
                 }
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, "Retirer les marques");
