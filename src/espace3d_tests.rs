@@ -576,7 +576,13 @@ fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
     b.chauffer(2);
     assert_eq!(b.app.espace3d.sel, vec![espace3d::card_selection(blue)], "le choix suit le panneau Calques");
     let rect = b.app.canvas_rect;
-    let p = view.project([0.0, 0.0, 0.0], center).expect("visible");
+    // (Un point du rouge loin du dessin de la caméra du plan : vue de face, la caméra est juste devant le centre des cartes,
+    // et sur son dessin c'est elle qu'un clic prend, partie 152, réglé le 13 novembre.)
+    let p = [[0.6, 0.0], [0.8, 0.0], [-0.6, 0.0], [-0.8, 0.0], [0.0, 0.5], [0.0, -0.5]]
+        .into_iter()
+        .filter_map(|[x, y]| view.project([x, y, 0.0], center))
+        .find(|p| !b.app.e3_pick_camera(&view, *p, center) && b.app.e3_pick(&view.ray(*p, center)) == Some(espace3d::card_selection(red)))
+        .expect("un point du rouge loin du dessin de la caméra");
     let at = pos2(rect.left() + p[0], rect.top() + p[1]);
     let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     b.image(vec![Event::PointerMoved(at)], 0.02);

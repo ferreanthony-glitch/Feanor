@@ -323,3 +323,50 @@ fn the_camera_joins_the_cards_only_on_purpose_with_shift() {
     geste(&mut b, &[ici], Modifiers::SHIFT);
     assert_eq!(b.app.espace3d.sel, vec![c[0]], "un second Maj+clic la lâche, sans doublon");
 }
+
+/// Les outils de la vue (« choisir ») : un clic simple sur le dessin de la caméra la prend, même avec une carte derrière
+/// (Anthony, 2026-11-13 : « règle ce qui reste imparfait » ; avant, la carte de derrière l'emportait) ; Maj ou Ctrl
+/// l'ajoute ou la lâche ; tirer son dessin déplace la caméra, pas la carte de derrière.
+#[test]
+fn with_the_view_tools_a_click_on_the_camera_takes_it_even_with_a_card_behind_and_dragging_it_moves_the_camera() {
+    let mut b = ouvert(doc_deux_cartes(), true);
+    let c = cartes(&b);
+    b.app.run_action("espace3d.outil_choisir");
+    b.chauffer(2);
+    assert!(!b.app.e3_trace() && !b.app.e3_dessine(), "les outils de la vue ont le pointeur");
+    let ici = vue_de_face_sur_la_camera(&mut b);
+    // Une carte passe bien derrière le dessin de la caméra : c'est elle qu'un clic simple prenait.
+    let derriere = b.app.e3_pick(&regard_de_la_vue(&b).rayon(ici));
+    assert!(derriere.is_some_and(|id| c.contains(&id)), "une carte est sous le pointeur, derrière la caméra : {derriere:?}");
+    b.app.espace3d.sel = vec![c[0]];
+    geste(&mut b, &[ici], Modifiers::NONE);
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID], "un clic simple : la caméra, seule ({})", b.app.status);
+    assert!(b.app.e3_camera_seule() && (0..2).all(|li| !b.app.calque_montre_courant(li)), "la piste « Caméra » est la rangée choisie");
+    assert_eq!(b.app.cur_layer, 0, "le calque courant ne change pas");
+    // Maj+clic, Ctrl+clic : elle rejoint les cartes choisies, ou les quitte, sans doublon.
+    b.app.espace3d.sel = vec![c[0]];
+    geste(&mut b, &[ici], Modifiers::SHIFT);
+    assert_eq!(b.app.espace3d.sel, vec![c[0], CAMERA_ID]);
+    geste(&mut b, &[ici], Modifiers::SHIFT);
+    assert_eq!(b.app.espace3d.sel, vec![c[0]]);
+    geste(&mut b, &[ici], CTRL);
+    assert_eq!(b.app.espace3d.sel, vec![c[0], CAMERA_ID]);
+    geste(&mut b, &[ici], CTRL);
+    assert_eq!(b.app.espace3d.sel, vec![c[0]]);
+    // Loin du dessin de la caméra, un clic sur une carte la prend toujours, et son calque devient courant.
+    let sur = sur_la_carte(&mut b, 1);
+    geste(&mut b, &[sur], Modifiers::NONE);
+    assert_eq!((b.app.espace3d.sel.clone(), b.app.cur_layer), (vec![c[1]], 1), "{}", b.app.status);
+    // Tirer le dessin de la caméra : la caméra se déplace (seule choisie), la carte de derrière ne bouge pas.
+    let (avant, camera_avant, etapes) = (calques(&b), b.app.e3_world().scene_cam(&b.app.current_camera()).pos, b.app.history.undo_len());
+    let loin = ici + eframe::egui::vec2(80.0, 0.0);
+    appuyer(&mut b, &[ici, loin], Modifiers::NONE);
+    lacher(&mut b, loin, Modifiers::NONE);
+    let camera_apres = b.app.e3_world().scene_cam(&b.app.current_camera()).pos;
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID], "{}", b.app.status);
+    assert!(m::length(m::sub(camera_apres, camera_avant)) > 0.05, "la caméra a glissé : {camera_avant:?} → {camera_apres:?}");
+    assert_eq!(calques(&b), avant, "aucune carte n'a bougé");
+    assert_eq!((derniere_etape(&b), b.app.history.undo_len()), ("Déplacer la caméra".to_string(), etapes + 1));
+    b.app.undo();
+    assert!(proche(b.app.e3_world().scene_cam(&b.app.current_camera()).pos, camera_avant, 1e-4), "une annulation la remet");
+}

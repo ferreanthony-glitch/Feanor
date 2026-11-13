@@ -269,14 +269,19 @@ impl App {
     }
 
     /// Un clic sans glisser : choisir la carte (ou la caméra) sous la souris, ou ne plus rien choisir.
+    ///
+    /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide), même avec une carte derrière :
+    /// il est tracé par-dessus les cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de
+    /// haut). C'est la règle du Ctrl+clic de l'outil Trajectoire (`e3_traj_choisir`, partie 152) ; avant, un clic simple
+    /// prenait la carte de derrière.
     fn e3_click(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
         let ray = view.ray(px, center);
         let additive = mods.shift || mods.command;
         if self.e3_gizmo(view).is_some_and(|g| g.hit(view, center, px, GRAB).is_some()) {
             return;
         }
-        let hit = self.e3_pick(&ray);
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        let cam_hit = !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        let hit = if cam_hit { None } else { self.e3_pick(&ray) };
         match (hit, cam_hit) {
             (Some(id), _) => {
                 if additive {
@@ -371,14 +376,20 @@ impl App {
             }
         }
         // Une carte (ou la caméra) tirée directement : elle glisse dans son plan (Maj : en profondeur). La caméra glisse
-        // à l'horizontale (Maj : en hauteur).
-        let hit = self.e3_pick(&ray);
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        // à l'horizontale (Maj : en hauteur). (La caméra d'abord, comme au clic : tirer son dessin la déplace, elle, même
+        // avec une carte derrière.)
+        let cam_hit = !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        let hit = if cam_hit { None } else { self.e3_pick(&ray) };
         if hit.is_some() || cam_hit {
             let id = hit.unwrap_or(CAMERA_ID);
             if !self.espace3d.sel.contains(&id) {
-                self.espace3d.sel = vec![id];
-                self.e3_follow_card(id);
+                if cam_hit {
+                    // (Seule, comme au clic : `e3_choisir_la_camera`.)
+                    self.e3_choisir_la_camera(false);
+                } else {
+                    self.espace3d.sel = vec![id];
+                    self.e3_follow_card(id);
+                }
             }
             if self.e3_frozen() {
                 return;
