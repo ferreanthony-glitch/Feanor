@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
+- **Ce qui restait imparfait, regardé à l'écran par Claude** (4 h 20 à 4 h 40, souris simulée, exe de la branche construit à 4 h 38,
+  copie du projet `afa`, réglages neufs, fenêtre rétrécie hors de la fenêtre invisible de Claude). Un clic simple sur la caméra avec
+  l'outil de la vue la choisit seule, alors que des cartes sont derrière ; la rangée « Caméra » du montage est la rangée choisie et
+  le panneau Calques ne montre plus aucun calque choisi ; un clic sur « Vectoriel 3 » dans Calques reprend le calque et lâche la
+  caméra ; un clic sur le nom de la piste « Caméra » du montage reprend la caméra. Le panneau Espace 3D arrive en onglet de Réglages
+  et passe devant ; vu trop bas (il gardait la hauteur de Réglages et coupait la liste des cartes) : réglé par Claude (238e6e1,
+  `ajuste.rs`), il prend maintenant la hauteur de ses cartes et de la caméra, et Réglages reprend la sienne à la fermeture. Suite
+  complète sur 238e6e1 : 4 614 réussis, 0 échec, le seul avertissement connu. Pas regardé à l'écran : une marque ajoutée au milieu
+  d'un chemin en clés d'images (couvert par trois essais), le stylet.
 - **Ce qui restait imparfait après la partie 152, réglé** (à sa demande : « règle ce qui reste imparfait » ; branche
   `trajectoire-espace`, quatre commits, rien fusionné, rien poussé, rien regardé à l'écran). (1) Avec les outils de la vue,
   un clic simple sur le dessin de la caméra la prend, même avec une carte derrière, et la tirer la déplace, elle. (2) Un clic
