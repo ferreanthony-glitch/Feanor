@@ -69,6 +69,8 @@ impl App {
         }
         ui.label(RichText::new(VUE_FERMEE).small().weak());
         let resp = ui.button(format!("{}  {OUVRIR}", ph::CUBE));
+        // (La fenêtre de l'aide de l'Espace 3D se pose à côté de ce bouton : `aideflottante.rs`.)
+        crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ESPACE3D, resp.rect);
         let description = "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe. Ce panneau passe alors devant Réglages, dans le même groupe d'onglets ; Réglages revient devant quand la vue se ferme.";
         if self.aide(resp, "Espace 3D", description, "espace3d.basculer").clicked() {
             self.run_action("espace3d.basculer");

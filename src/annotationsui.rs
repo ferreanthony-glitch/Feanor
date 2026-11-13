@@ -928,6 +928,10 @@ impl App {
                 texte = texte.color(couleur32(self.vignettes.annot.couleur));
             }
             let resp = ui.add_sized(taille, egui::SelectableLabel::new(on, texte));
+            if on {
+                // (La fenêtre de l'aide des annotations se pose à côté de l'outil pris : `aideflottante.rs`.)
+                crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ANNOTATION, resp.rect);
+            }
             if self.aide(resp, outil.nom(), outil.description(), outil.action()).clicked() {
                 self.annot_choisir(outil);
             }

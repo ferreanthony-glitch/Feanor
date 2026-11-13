@@ -74,7 +74,7 @@ impl App {
         ui.horizontal(|ui| {
             let mut on = afficher;
             let resp = ui.checkbox(&mut on, "Afficher les explications à chaque prise d'un outil");
-            if crate::bulles::bulle(resp, "Afficher les explications", "Cochée : l'animation d'un outil rejoue chaque fois qu'on le prend. Décochée : une seule fois, la première ; le bouton ▶ des Réglages la rejoue.", &self.raccourci("aide.explications")).changed() {
+            if crate::bulles::bulle(resp, "Afficher les explications", "Cochée : l'animation d'un outil rejoue chaque fois qu'on le prend. Décochée : une seule fois, la première ; le clic droit sur l'icône de l'outil (Revoir l'explication) la rejoue.", &self.raccourci("aide.explications")).changed() {
                 self.aide_basculer_explications();
             }
         });

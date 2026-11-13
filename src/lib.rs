@@ -23,6 +23,10 @@ mod aideanim_relecture_tests;
 mod aideanim_tests;
 mod aidecatalogue;
 mod aidefenetres;
+// La fenêtre flottante de l'aide animée, à côté de l'outil (partie 155).
+mod aideflottante;
+#[cfg(test)]
+mod aideflottante_tests;
 mod aidegestes;
 mod aideregistre;
 mod aidetextes;

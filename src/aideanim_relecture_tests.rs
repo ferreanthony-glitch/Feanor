@@ -53,8 +53,10 @@ fn contient(textes: &[(String, Rect)], morceau: &str) -> bool {
     textes.iter().any(|(t, _)| t.contains(morceau))
 }
 
+/// Le panneau Réglages, puis la fenêtre flottante de l'aide (partie 155 : c'est elle qui joue, plus le panneau).
 fn reglages(app: &mut App, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| app.tool_options_panel(ui));
+    app.aide_flottante_ui(ctx);
 }
 
 /// Une application sans fenêtre, `n` calques de la sorte `kind` ; l'aide joue d'elle-même, rien n'est encore vu.

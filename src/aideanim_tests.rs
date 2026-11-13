@@ -1,4 +1,5 @@
-//! L'aide animée (partie 153) : la première prise d'un outil joue son animation en haut de « Réglages », la seconde non (sauf avec
+//! L'aide animée (partie 153) : la première prise d'un outil joue son animation (dans la fenêtre flottante depuis la partie 155,
+//! `aideflottante_tests.rs`), la seconde non (sauf avec
 //! Aide > « Afficher les explications ») ; ▶ la rejoue ; à l'arrêt, plus de repaint ; le registre liste tout ; plus aucun texte gris
 //! explicatif dans les réglages des outils ; les vieux réglages se relisent ; chaque animation se peint sans paniquer.
 
@@ -55,8 +56,10 @@ fn collecter(shape: &Shape, out: &mut Vec<(String, Rect, f32, egui::Color32)>) {
     }
 }
 
+/// Le panneau Réglages, puis la fenêtre flottante de l'aide (partie 155 : c'est elle qui joue, plus le panneau).
 fn reglages(app: &mut App, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| app.tool_options_panel(ui));
+    app.aide_flottante_ui(ctx);
 }
 
 /// Une application sans fenêtre, un seul calque de la sorte `kind` ; l'aide joue d'elle-même (comme l'application lancée par
@@ -109,7 +112,7 @@ fn the_first_take_of_a_tool_plays_its_animation_and_the_second_does_not() {
     assert!(app.settings.explications_vues.iter().any(|v| v == "trajectoire.tracer"), "elle est retenue comme vue");
     assert!(app.settings_a_ecrire, "les réglages sont à écrire");
     jusqu_au_bout(&mut e, &mut app);
-    assert!(!app.confort.aide.joue(), "puis elle se replie");
+    assert!(!app.confort.aide.joue(), "puis elle s'efface");
     assert_eq!(e.reveil, std::time::Duration::MAX, "à l'arrêt, plus aucun repaint");
     // Un autre outil, puis de nouveau la Trajectoire : rien.
     app.set_tool(Tool::Brush);
