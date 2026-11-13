@@ -143,14 +143,23 @@ impl App {
     /// Caméra du panneau courant à l'image courante.
     pub(crate) fn current_camera(&self) -> Camera {
         // (La caméra douce, celle des clés : l'outil règle les clés, pas les paliers de la postérisation temporelle.)
-        self.doc.panel_camera_douce(self.cur_panel, self.cur_frame)
+        let cam = self.doc.panel_camera_douce(self.cur_panel, self.cur_frame);
+        // (Plan en Espace 3D dont la caméra suit une trajectoire, partie 149 : elle est montrée, et réglée, là où son chemin l'a
+        // portée à cette image ; `set_current_camera` fait le chemin inverse avant d'écrire la clé.)
+        self.doc.camera_sur_sa_trajectoire(self.cur_panel, cam, self.cur_frame)
     }
 
     /// La caméra que **l'écran montre** (vue caméra, cadre, aides au cadrage) à l'image courante : celle des paliers de la
     /// postérisation temporelle du plan (`Panel::saccade`), comme les exports et la lecture. Seul l'outil Caméra arrêté lit
     /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire. L'effet de caméra vivant du
     /// plan (partie 129), lui, se voit aussi avec l'outil Caméra : c'est là qu'on le règle.
+    ///
+    /// Plan en Espace 3D : la caméra de référence (`Document::panel_camera`), le cadre au centre de la feuille, puisque
+    /// la feuille montre déjà ce que la caméra du plan filme.
     pub(crate) fn camera_montree(&self) -> Camera {
+        if self.doc.plan_en_espace(self.cur_panel) {
+            return self.doc.default_camera();
+        }
         if self.tool == crate::app::Tool::Camera && !self.playing {
             self.doc.panel_camera_vivante(self.cur_panel, self.cur_frame)
         } else {
@@ -162,8 +171,12 @@ impl App {
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
     pub(crate) fn set_current_camera(&mut self, cam: Camera) {
-        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre.
-        let cam = cam.limited(self.doc.frame);
+        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre. Sauf dans un plan en
+        // Espace 3D (`docs/ESPACE-LIBRE.md`) : sa caméra est libre, elle n'a plus à voir la feuille.
+        let cam = if self.doc.plan_en_espace(self.cur_panel) { cam } else { cam.limited(self.doc.frame) };
+        // (Une trajectoire de caméra, partie 149 : `cam` est la caméra telle qu'on la voit, portée par son chemin ; la clé reçoit
+        // ce qu'il faut pour que, portée de même, elle la donne. Régler la caméra à n'importe quelle image marche donc toujours.)
+        let cam = self.doc.camera_hors_de_sa_trajectoire(self.cur_panel, cam, self.cur_frame);
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let keys = &mut self.doc.panels[self.cur_panel].camera;
         if keys.len() >= 2 {
@@ -258,6 +271,12 @@ impl App {
     pub(crate) fn camera_press(&mut self, p: Pos2, screen: Pos2) {
         self.end_stroke();
         self.playing = false;
+        // Plan en Espace 3D : la feuille montre ce que la caméra filme, le cadre y reste au centre. Sa caméra se règle
+        // dans la vue Espace 3D (outil Caméra de la vue) et par les champs du panneau Espace 3D, pas en tirant le cadre ici.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            self.status = "Plan en Espace 3D : la caméra se règle dans la vue Espace 3D (bouton cube) ou par ses champs dans le panneau Espace 3D.".into();
+            return;
+        }
         let Some(handle) = self.camera_handle_at(screen) else {
             self.status = "Outil Caméra : glisser dans le cadre pour le déplacer, un coin pour zoomer, \
                            la poignée ronde pour tourner."
@@ -665,17 +684,7 @@ impl App {
         });
         // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin. La section « Durées »,
         // séquence et plan, est partie le 8 novembre 2026 : Anthony l'a barrée, les durées se lisent dans la timeline.)
-        ui.label(
-            RichText::new(
-                "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
-                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier. \
-                 Losanges jaunes de la piste Caméra : clic pour choisir (Ctrl : ajouter, Maj : la suite), glisser pour \
-                 déplacer, glisser dans le vide de la piste pour en choisir plusieurs au rectangle (Maj : ajouter, Ctrl : \
-                 basculer), Ctrl+C / Ctrl+V à l'image courante, Suppr. Aides au cadrage : menu « Cadrage » au-dessus du dessin.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
     }
 
     /// Règle la postérisation temporelle de la caméra du plan `pi` (une étape d'annulation, appelée par le geste `key`) : les

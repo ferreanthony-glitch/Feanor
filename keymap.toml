@@ -324,6 +324,16 @@ touches = []
 source = "FEANOR (sans touche ; menu Aide)"
 
 [[raccourci]]
+action = "aide.explications"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
+action = "aide.registre"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]
 source = "proposition"
@@ -1934,6 +1944,26 @@ touches = []
 source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.plan_en_espace"
+touches = []
+source = "FEANOR (mettre le plan courant en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.surface_face"
+touches = []
+source = "FEANOR (nouvelle surface face à la caméra, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.surface_sol"
+touches = []
+source = "FEANOR (nouvelle surface au sol, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.surface_mur"
+touches = []
+source = "FEANOR (nouvelle surface en mur, plan en Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.aimanter"
 touches = []
 source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"
@@ -1942,6 +1972,17 @@ source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"
 action = "espace3d.grille"
 touches = []
 source = "FEANOR (Espace 3D, grille du sol ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.dessiner"
+touches = []
+source = "FEANOR (Espace 3D, dessiner sur la carte du calque courant ; aucune touche choisie : les touches du pinceau, du crayon et de la gomme l'allument)"
+
+# Panneau Espace 3D : les réglages de la vue (cartes, caméra du plan), en onglet avec les réglages de l'outil ; il passe devant quand la vue s'ouvre, et Réglages revient devant quand elle se ferme (sans touche : à choisir).
+[[raccourci]]
+action = "vue.espace3d_panneau"
+touches = []
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.3d"

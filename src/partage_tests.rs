@@ -180,14 +180,14 @@ fn the_link_is_saved_comes_back_and_a_newer_project_is_refused() {
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
     assert!(texte.contains("\"partage\""), "la clé est écrite");
-    assert_eq!(crate::project::VERSION, 53);
-    assert!(texte.contains("\"version\": 53"));
+    assert_eq!(crate::project::VERSION, 55);
+    assert!(texte.contains("\"version\": 55"));
     let back = crate::project::load(&manifest).unwrap().doc;
     let k = back.panels[0].layers[0].partage.expect("la clé revient");
     assert_eq!(back.panels[1].layers[0].partage, Some(k), "la même pour les deux exemplaires");
     assert_eq!(back.panels[1].layers[0].cel_at(0), back.panels[0].layers[0].cel_at(0), "le même dessin");
     // Un projet plus récent est refusé.
-    std::fs::write(&manifest, texte.replace("\"version\": 53", "\"version\": 54")).unwrap();
+    std::fs::write(&manifest, texte.replace("\"version\": 55", "\"version\": 56")).unwrap();
     assert!(crate::project::load(&manifest).is_err());
     std::fs::remove_dir_all(&dir).ok();
 }

@@ -139,7 +139,7 @@ impl App {
         if voisines.windows(2).any(|w| w[0].cam != w[1].cam) {
             return None;
         }
-        let depart = voisines.first().map_or_else(|| self.doc.panel_camera(pi, debut), |k| k.cam);
+        let depart = voisines.first().map_or_else(|| self.doc.panel_camera_reelle(pi, debut), |k| k.cam);
         let limite = keys.get(i1).map_or(plan, |k| k.frame);
         let (span, total) = (fin_case.saturating_sub(debut), limite.saturating_sub(debut));
         // (La lettre du cadre qu'elle tient : celle de la clé d'avant, A s'il n'y en a pas.)
@@ -168,6 +168,10 @@ impl App {
     /// pour le second cas.
     pub(crate) fn cadres_sur_la_planche(&self, layout: &BoardLayout, k: usize) -> (Vec<[Pos2; 4]>, bool) {
         let place = &layout.cards[k];
+        // (Plan en Espace 3D : la vignette montre ce que la caméra filme, il n'y a pas de cadre à tracer sur la feuille.)
+        if self.doc.plan_en_espace(place.panel) {
+            return (vec![vignettecam::coins_de(place.thumb)], true);
+        }
         match layout.move_of(k) {
             Some(m) if !m.cadres.is_empty() => (m.quads(), false),
             _ => (vec![vignettecam::coins_de(place.thumb)], true),
@@ -199,8 +203,12 @@ impl App {
     }
 
     /// Comme `cam_possible`, pour la case qui commence à l'image `frame` du plan `pi`.
+    ///
+    /// Jamais pour un plan en Espace 3D (`docs/ESPACE-LIBRE.md`, étape A8) : un cadre tiré sur une case dit où la caméra
+    /// regarde **sur la feuille**, or la caméra de ces plans est libre dans l'espace et la feuille montre déjà ce qu'elle
+    /// filme. Elle se règle dans la vue Espace 3D.
     pub(crate) fn cam_possible_ici(&self, pi: usize, frame: usize) -> bool {
-        self.mouvement_de_case(pi, frame).is_some()
+        !self.doc.plan_en_espace(pi) && self.mouvement_de_case(pi, frame).is_some()
     }
 
     /// Maj seule tenue (partie 113, proposition A) : l'appui en `p` (planche) sur la case `k` prend-il la caméra plutôt que le plan ? Oui à
@@ -497,6 +505,10 @@ impl App {
     /// continuité à l'arrêt après un mouvement, c'est un mouvement de plus, qui part du cadre qu'elle montre (B vers C, puis C vers D…).
     pub(crate) fn cam_ajouter_cadre_case(&mut self, pi: usize, debut: usize) {
         let Some(id) = self.doc.panels.get(pi).map(|p| p.id) else { return };
+        if self.doc.plan_en_espace(pi) {
+            self.status = "Plan en Espace 3D : sa caméra ne se règle pas par des cadres sur la vignette. Ouvre la vue Espace 3D (bouton cube) et choisis la caméra.".into();
+            return;
+        }
         if self.content_refuses() || !self.partage_peut_toucher(&[id]) {
             return;
         }
@@ -540,6 +552,10 @@ impl App {
     /// reste que lui, le mouvement de la case n'existe plus, et la case montre de nouveau le cadre d'avant, à l'arrêt.
     pub(crate) fn cam_retirer_cadre_case(&mut self, pi: usize, debut: usize, local: usize) {
         let Some(id) = self.doc.panels.get(pi).map(|p| p.id) else { return };
+        if self.doc.plan_en_espace(pi) {
+            self.status = "Plan en Espace 3D : sa caméra ne se règle pas par des cadres sur la vignette. Ouvre la vue Espace 3D (bouton cube) et choisis la caméra.".into();
+            return;
+        }
         if self.content_refuses() || !self.partage_peut_toucher(&[id]) {
             return;
         }

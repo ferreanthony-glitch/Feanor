@@ -89,4 +89,21 @@ fn which_panes_fit() {
     }
     // La couleur est mesurée ; les calques remplissent toujours leur panneau, on ne les mesure pas.
     assert!(measured(Pane::Color) && !measured(Pane::Layers));
+    // Le panneau Espace 3D est un onglet du groupe de Réglages (partie 152.3) : devant, il prend la hauteur de son contenu,
+    // comme Réglages, et la couleur dessous prend le reste.
+    assert!(fits(Pane::Espace3d) && measured(Pane::Espace3d));
+}
+
+#[test]
+fn the_espace3d_tab_in_front_takes_the_height_of_its_content_and_the_colour_the_rest() {
+    // Une colonne de 600 points : Réglages (ou le panneau Espace 3D devant lui) en haut, la couleur en bas (souple, au moins
+    // 200, contenu 180).
+    let couleur = Want::Flex { min: flex_min(Pane::Color), content: Some(180.0) };
+    // Réglages du pinceau : 150 points de contenu.
+    let reglages = top_height(600.0, 6.0, Want::Fit(150.0), couleur).expect("une hauteur");
+    assert!((reglages - 150.0).abs() < 1e-3, "{reglages}");
+    // Le panneau Espace 3D devant, 380 points de cartes et de caméra : il grandit, la couleur garde au moins son minimum.
+    let espace = top_height(600.0, 6.0, Want::Fit(380.0), couleur).expect("une hauteur");
+    assert!(espace > reglages + 100.0, "{espace} contre {reglages}");
+    assert!(600.0 - 6.0 - espace >= flex_min(Pane::Color) - 1e-3, "la couleur garde son minimum : {espace}");
 }

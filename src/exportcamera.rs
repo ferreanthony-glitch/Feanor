@@ -128,10 +128,20 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
             ));
         }
         plan.insert("cles".into(), Value::Array(keys.iter().map(key_json).collect()));
-        if s.per_frame || panel.effet_camera.is_some() {
+        // Plan en Espace 3D : la caméra est libre dans l'espace (ses valeurs ne sont pas bridées à ce qui voit la feuille).
+        // Le champ n'est écrit que pour ces plans : rien ne change pour les autres.
+        if panel.espace {
+            plan.insert("espace_3d".into(), Value::Bool(true));
+        }
+        // Une trajectoire de caméra (partie 149) ne pose aucune clé : comme l'effet vivant, elle s'exporte comme elle se voit, image
+        // par image, même si ces valeurs ne sont pas demandées ; et le plan le dit.
+        if panel.espace && panel.trajectoire_camera.is_some() {
+            plan.insert("trajectoire_dans_l_espace".into(), Value::Bool(true));
+        }
+        if s.per_frame || panel.effet_camera.is_some() || (panel.espace && panel.trajectoire_camera.is_some()) {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {
-                let c = doc.panel_camera(p, f);
+                let c = doc.panel_camera_reelle(p, f);
                 frames_csv.push_str(&format!("{},{f},{},{},{},{},{},{},{},{}\n", csv_text(&name), start + f, c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan));
                 frames.push(frame_json(f, &c));
             }

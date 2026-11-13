@@ -152,9 +152,20 @@ impl App {
             );
         };
         let cam = lane(rows.camera_top(), CAM_H);
-        label(cam, "Caméra", visuals.text_color());
-        // Clic droit sur « Caméra » : le menu de la caméra (passe interface).
-        ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click()).context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
+        // La caméra du plan choisie seule dans la vue Espace 3D : sa piste est montrée comme celle du calque actif (texte
+        // fort, cadre), et plus aucune piste de calque ne l'est (`espace3dui.rs`, partie 152).
+        let camera_seule = self.e3_camera_seule();
+        label(cam, "Caméra", if camera_seule { visuals.strong_text_color() } else { visuals.text_color() });
+        if camera_seule {
+            painter.rect_stroke(cam, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
+        }
+        // Clic sur « Caméra » : la caméra choisie seule dans la vue Espace 3D, sa piste la piste choisie
+        // (`e3_piste_camera_cliquee`) ; clic droit : le menu de la caméra (passe interface).
+        let resp = ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click());
+        if resp.clicked() {
+            self.e3_piste_camera_cliquee();
+        }
+        resp.context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
         painter.rect_filled(header, 3.0, theme::etiquette());
         self.project_header(ui, header);
@@ -219,7 +230,7 @@ impl App {
             }
             grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
             // (Le calque de couleur courant est « actif » par la rangée de son trait.)
-            let current = Some(row) == cur_row;
+            let current = Some(row) == cur_row && !camera_seule;
             // Un calque de toute la scène : son nom teinté « fond ».
             let wide = self.doc.panels[self.cur_panel].layers[k].scene_wide.is_some();
             let color = match (wide, current) {
@@ -235,7 +246,7 @@ impl App {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
             }
             // Choisi avec d'autres (Ctrl ou Maj + clic) : surligné plus légèrement.
-            if !current && self.is_chosen_layer(k) {
+            if !current && !camera_seule && self.is_chosen_layer(k) {
                 painter.rect_filled(r, 3.0, crate::theme::surface_active(crate::theme::accent(), 0.3));
                 painter.rect_stroke(r, 3.0, Stroke::new(1.0_f32, crate::theme::accent()), StrokeKind::Inside);
             }
@@ -428,6 +439,13 @@ impl App {
                 self.paint_cam_diamond(painter, c, self.cam_key_chosen(i, key.frame), cam_color(), 4.0, Stroke::NONE);
             }
         }
+        // La caméra du plan choisie seule dans la vue Espace 3D : sa piste a, sous le plan courant, le cadre que la case du
+        // calque actif a d'ordinaire (partie 152).
+        let camera_seule = self.e3_camera_seule();
+        if let Some(b) = blocks.get(self.cur_panel).filter(|_| camera_seule) {
+            let case = Rect::from_min_max(pos2(b.left(), cam.top()), pos2(b.right(), cam.bottom()));
+            painter.rect_stroke(case, 2.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
+        }
 
         // Les calques de chaque plan, dans son ordre.
         let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
@@ -454,7 +472,7 @@ impl App {
                     paint_dossier_cell(painter, cell, &p.layers, k, ppf, ferme);
                     continue;
                 }
-                let current = i == self.cur_panel && k == self.cur_layer;
+                let current = i == self.cur_panel && self.calque_montre_courant(k);
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
                 let show_name = row_name != Some(p.layers[k].name.as_str());

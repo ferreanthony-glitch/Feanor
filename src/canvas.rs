@@ -24,10 +24,14 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
-            // Espace 3D : à la place du dessin à plat, avec ses commandes dans les Réglages.
+            // Espace 3D : à la place du dessin à plat, avec ses réglages dans le panneau « Espace 3D » (`espace3dpanneau.rs`).
             if self.espace3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;
+                // (Le pointeur n'est pas sur la feuille : le lasso de Ctrl tenu ne s'arme pas au survol dans cette vue, où
+                // Ctrl+clic prend une carte, `springtools.rs`, `espace3ddessin.rs`. Il s'y prend en glissant, Ctrl tenu :
+                // `espace3dlasso.rs`.)
+                self.hover_canvas = None;
                 self.espace3d_panel(ui, rect, &response);
                 return;
             }
@@ -318,7 +322,8 @@ impl App {
     /// Pendant un trait : relie le dernier point posé à la pointe du stylet, pour que le trait
     /// reste attaché à la croix (le lissage le fait sinon traîner un peu derrière). Rien n'est
     /// écrit dans le dessin : le trait définitif arrive dans les images suivantes.
-    fn paint_stroke_tip(&self, painter: &egui::Painter) {
+    /// (La vue Espace 3D s'en sert aussi, `espace3ddessin.rs`.)
+    pub(crate) fn paint_stroke_tip(&self, painter: &egui::Painter) {
         let Some(s) = &self.stroke else { return };
         let (Some((last, raw, r)), Some((rgb, alpha))) = (s.tip(), s.tip_paint()) else { return };
         let (a, b) = (self.layer_to_screen(last), self.layer_to_screen(raw));
@@ -475,6 +480,13 @@ impl App {
                     } else {
                         p
                     };
+                    // Plan en Espace 3D, carte inclinée : le regard ne touche pas la carte du calque courant ici (elle est
+                    // derrière la caméra, vue par la tranche, ou le pointeur est hors de ses bords) : ce qui peint ne
+                    // commence pas, et la barre d'état dit lequel (`App::rien_a_peindre`).
+                    if matches!(self.tool, Tool::Fill | Tool::Gradient | Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser) && self.to_layer_opt(stage).is_none() {
+                        self.status = self.rien_a_peindre(stage).into();
+                        continue;
+                    }
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
                         Tool::Gradient => self.degrade_press(p, modifiers.alt),
@@ -514,7 +526,8 @@ impl App {
                         // Grab et Pull (`sculptapp.rs`).
                         Tool::Grab | Tool::Pull => self.sculpt_press(p, pen),
                         // Trajectoire (`trajectoireui.rs`) : sur la feuille.
-                        Tool::Trajectoire => self.trajectoire_presser(stage, modifiers.shift),
+                        // (Ctrl+clic sur le chemin : une poignée, partie 154.)
+                        Tool::Trajectoire => self.trajectoire_presser(stage, modifiers.shift, modifiers.command || modifiers.ctrl),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {
                             // Une zone bitmap choisie : sa boîte la transforme ; ailleurs, c'est le calque.
@@ -537,18 +550,25 @@ impl App {
                         // Trait aligné sur le guide (sur la feuille) : rien tant que la direction
                         // n'est pas choisie.
                         if let Some(q) = self.guided_point(stage) {
-                            self.stroke_point(self.to_layer(q), pressure, &mods, false);
+                            // (Le trait ne suit pas le pointeur là où il quitte la carte : ces points sont laissés.)
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.stroke_point(l, pressure, &mods, false);
+                            }
                         }
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
-                            self.stroke_point(self.to_layer(q), pressure, &mods, true);
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.stroke_point(l, pressure, &mods, true);
+                            }
                         }
                     } else if self.gomme_multi.actif() {
                         // (La gomme sur les autres calques choisis, quand le calque courant n'a rien à gommer.)
                         let pressure = if self.gomme_multi.pen() { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
-                            self.gomme_multi_point(self.to_layer(q), pressure);
+                            if let Some(l) = self.to_layer_opt(q) {
+                                self.gomme_multi_point(l, pressure);
+                            }
                         }
                     } else if self.cutter_drag(p) {
                     } else if self.sculpt_drag(p) {
@@ -629,7 +649,8 @@ impl App {
     }
 
     /// Sélection vectorielle, lasso et aperçu des formes, par-dessus le dessin.
-    fn paint_vector_overlay(&self, painter: &egui::Painter, _rect: Rect, shift: bool) {
+    /// (La vue Espace 3D s'en sert aussi pour l'outil Sélection, posée sur la carte : `espace3dlasso.rs`.)
+    pub(crate) fn paint_vector_overlay(&self, painter: &egui::Painter, _rect: Rect, shift: bool) {
         // Tout ce qui suit est en coordonnées du dessin du calque courant (transformé ou non).
         let to_s = |p: Pos2| self.layer_to_screen(p);
 

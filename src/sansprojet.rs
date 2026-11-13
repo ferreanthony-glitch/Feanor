@@ -54,6 +54,8 @@ pub(crate) fn action_sans_projet(action: &str) -> bool {
             | "aide.regler_stylet"
             | "aide.stylet_transmet"
             | "aide.habitudes"
+            | "aide.explications"
+            | "aide.registre"
             | "aide.noter_friction"
             | "aide.ouvrir_frictions"
             | "vue.plein_ecran"

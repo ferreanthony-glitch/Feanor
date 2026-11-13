@@ -1500,6 +1500,8 @@ mod mesures {
             let args = export::video_args(Format::Mp4, &enc, frame, 24, false, None, &out).unwrap();
             let mut c = std::process::Command::new(&ffmpeg);
             c.args(&args).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+            // (Priorité basse : une fonction de Windows. Ailleurs, les deux passes tournent à la priorité ordinaire.)
+            #[cfg(windows)]
             if basse {
                 use std::os::windows::process::CommandExt;
                 c.creation_flags(0x0800_0000 | 0x4000);

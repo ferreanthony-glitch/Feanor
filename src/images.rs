@@ -114,6 +114,10 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
             m.frame += n;
         }
     }
+    // La trajectoire de la caméra (partie 149) : son départ, sa fin et ses marques restent sur leurs images, comme celle d'un calque.
+    if let Some(t) = panel.trajectoire_camera.as_mut() {
+        t.decaler_images(at, n, removed);
+    }
     // Une marque ne peut pas être sur la première image (c'est le début du plan).
     panel.marks.retain(|m| m.frame > 0);
     // Signets, points d'entrée et de sortie (13d) : ils suivent leurs images.

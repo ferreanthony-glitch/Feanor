@@ -229,6 +229,8 @@ fn passer(avec_gpu: bool) {
     f.b.app.run_action("espace3d.basculer");
     assert!(f.b.app.espace3d.on, "l'Espace 3D s'ouvre");
     f.images("Espace 3D", 3);
+    // (Les réglages d'une carte sont dans le panneau Espace 3D, partie 150 ; le panneau Réglages montre l'outil en main.)
+    f.b.app.show_pane(Pane::Espace3d);
     f.b.app.show_pane(Pane::ToolOptions);
     let carte = crate::espace3d::card_selection(f.b.app.layer().id);
     f.b.app.espace3d.sel = vec![carte];

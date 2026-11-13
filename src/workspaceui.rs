@@ -15,6 +15,11 @@ impl App {
         if let (Mode::Storyboard, Some(saved)) = (self.mode, &self.exposition_masquee) {
             panes = panes.retour_animation(saved);
         }
+        // Le panneau Espace 3D, mis devant par la vue ouverte : la disposition retenue garde l'onglet que l'utilisateur
+        // avait devant (Réglages, d'ordinaire), pas celui que la vue y a mis pour un moment (`espace3dpanneau.rs`).
+        if let Some(avant) = self.e3_panneau.avant {
+            panes.remettre_devant(Pane::Espace3d, avant);
+        }
         Layout {
             tools: panes.contains(Pane::Tools),
             sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
@@ -41,6 +46,8 @@ impl App {
         self.exposition_masquee = None;
         self.set_dock_layout(layout.dock_layout());
         self.layout = layout;
+        // (Une disposition neuve : si la vue Espace 3D est ouverte, son panneau y arrive, ou y passe devant, à l'image suivante.)
+        self.e3_panneau = Default::default();
     }
 
     /// Retient la disposition quand elle change (pas pendant qu'on tire un panneau), dans celle de

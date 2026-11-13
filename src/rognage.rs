@@ -359,6 +359,11 @@ fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camer
     }
     let (out, kept, edge) = cam_cut_head(&p.camera, c, default);
     (piece.camera, p.camera, piece.cam_edge) = (out, kept, edge);
+    // La trajectoire de la caméra (partie 149) suit les images sans devenir des clés : son départ et sa fin reculent de `c`.
+    // (Un début rogné au-delà de son départ l'a d'abord écrite dans les clés, `Document::trim_head`.)
+    if let Some(t) = p.trajectoire_camera.as_mut() {
+        t.decaler_de(-(c as isize));
+    }
     // Une marque posée sur la première image gardée serait l'image de départ du plan : elle sort.
     let (hidden, shown): (Vec<ImageMark>, Vec<ImageMark>) = std::mem::take(&mut p.marks).into_iter().partition(|m| m.frame <= c);
     piece.marks = hidden;
@@ -455,6 +460,10 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     }
     let keys_v2 = piece.keys_v2;
     let n = p.frame_count();
+    // (La trajectoire de la caméra suit les images qui reviennent au début : partie 149.)
+    if let Some(t) = p.trajectoire_camera.as_mut() {
+        t.decaler_de(len as isize);
+    }
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
             v.start += len as i64;
@@ -575,6 +584,9 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
     for key in &mut p.camera {
         key.frame += k;
     }
+    if let Some(t) = p.trajectoire_camera.as_mut() {
+        t.decaler_de(k as isize);
+    }
     for m in &mut p.marks {
         m.frame += k;
     }
@@ -647,6 +659,12 @@ impl Document {
     pub fn trim_head(&mut self, pi: usize, delta: isize) -> isize {
         if pi >= self.panels.len() || delta == 0 {
             return 0;
+        }
+        // Une trajectoire de caméra (partie 149) suit les images du début (`cut_head`, `absorb_head`, `pad_head`). Un début rogné
+        // au-delà de son départ couperait le chemin en route : elle devient alors d'abord ses clés, sans changer l'image.
+        if delta > 0 && self.panels[pi].trajectoire_camera.as_ref().is_some_and(|t| t.depart < delta as usize) {
+            self.cuire_effet_vivant(pi);
+            self.cuire_trajectoires_camera(&[pi]);
         }
         self.with_reserve(pi, |p, comments, r, default| {
             let n = p.frame_count();
@@ -1141,17 +1159,12 @@ fn cam_file(frame: usize, c: &Camera, key: Option<&CameraKey>) -> file::CamFile 
     }
 }
 
-fn cam_of(c: &file::CamFile) -> Option<Camera> {
+/// Une caméra du contenu rogné d'un plan, relue du fichier. `espace` : le plan est en Espace 3D, sa caméra est libre et sa
+/// bascule et son panoramique ne sont pas ramenés à ±85° (`project::bornes_de_camera`, comme les clés du plan lui-même).
+fn cam_of(c: &file::CamFile, espace: bool) -> Option<Camera> {
     let v = [c.x, c.y, c.zoom, c.rotation, c.avance, c.bascule, c.panoramique, c.adoucir_entree, c.adoucir_sortie];
-    v.iter().all(|x| x.is_finite()).then(|| Camera {
-        x: c.x,
-        y: c.y,
-        zoom: c.zoom.clamp(0.05, 50.0),
-        angle: c.rotation,
-        dolly: c.avance,
-        tilt: c.bascule.clamp(-85.0, 85.0),
-        pan: c.panoramique.clamp(-85.0, 85.0),
-    })
+    let (tilt, pan) = crate::project::bornes_de_camera(espace, c.bascule, c.panoramique);
+    v.iter().all(|x| x.is_finite()).then(|| Camera { x: c.x, y: c.y, zoom: c.zoom.clamp(0.05, 50.0), angle: c.rotation, dolly: c.avance, tilt, pan })
 }
 
 fn exposures(frames: &[Option<CelId>]) -> Vec<(Option<u64>, usize)> {
@@ -1307,13 +1320,13 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
     let camera = f
         .camera
         .iter()
-        .filter_map(|k| cam_of(k).map(|cam| CameraKey { frame: k.frame, cam, smooth: k.doux, ease_in: k.adoucir_entree.max(0.0), ease_out: k.adoucir_sortie.max(0.0) }))
+        .filter_map(|k| cam_of(k, panel.espace).map(|cam| CameraKey { frame: k.frame, cam, smooth: k.doux, ease_in: k.adoucir_entree.max(0.0), ease_out: k.adoucir_sortie.max(0.0) }))
         .collect();
     Piece {
         len,
         layers,
         camera,
-        cam_edge: f.camera_bord.as_ref().and_then(cam_of),
+        cam_edge: f.camera_bord.as_ref().and_then(|c| cam_of(c, panel.espace)),
         marks: f
             .marques
             .into_iter()

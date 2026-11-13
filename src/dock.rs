@@ -109,6 +109,13 @@ pub enum Pane {
     /// images, vidéos et sons dans un aperçu intégré. Lecture seule ; fermé d'office, il s'ouvre dans la colonne de droite.
     #[serde(rename = "bibliotheque")]
     Bibliotheque,
+    /// Le panneau « Espace 3D » (`espace3dpanneau.rs`, 2026-11-12, `docs/INTERFACE.md` partie 150) : les réglages de la vue
+    /// Espace 3D (options de la vue, cartes, caméra du plan), sortis du panneau Réglages, qui montre toujours l'outil choisi.
+    /// Sa place (Anthony, 2026-11-13, partie 152 : « Onglet de Réglages ») : un onglet du groupe des réglages de l'outil,
+    /// après les onglets qui y sont (Réglages, la fiche du plan). Il y arrive, et passe devant, quand la vue s'ouvre ;
+    /// Réglages repasse devant quand elle se ferme, et l'onglet reste. Rangé ailleurs à la main, il reste où on l'a mis.
+    #[serde(rename = "espace3d")]
+    Espace3d,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -126,11 +133,12 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 19] = [
+    pub const ALL: [Pane; 20] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::ToolOptions,
+        Pane::Espace3d,
         Pane::Sheet,
         Pane::Layers,
         Pane::Montage,
@@ -148,11 +156,13 @@ impl Pane {
         Pane::Bibliotheque,
     ];
 
-    /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
+    /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande. (Le panneau Espace 3D en est
+    /// depuis la partie 152 : il arrive en onglet des réglages de l'outil quand la vue Espace 3D s'ouvre, ou quand on
+    /// l'ouvre à la main, et y reste.)
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
         )
     }
 
@@ -188,6 +198,7 @@ impl Pane {
             Pane::MonPanneau => "Mon panneau",
             Pane::Scenario => "Scénario",
             Pane::Bibliotheque => "Bibliothèque",
+            Pane::Espace3d => "Espace 3D",
         }
     }
 
@@ -228,13 +239,15 @@ impl Pane {
             Pane::MonPanneau => ph::STAR,
             Pane::Scenario => ph::FILM_SCRIPT,
             Pane::Bibliotheque => ph::BOOKS,
+            // (Le cube du bouton de la vue, dans la barre au-dessus du dessin.)
+            Pane::Espace3d => ph::CUBE,
         }
     }
 
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Espace3d => Group::Left,
             Pane::Layers
             | Pane::XSheet
             | Pane::Effects
@@ -345,7 +358,9 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [(0.3, keep(vec![Pane::Tools])), (0.55, keep(SETTINGS_TABS.to_vec())), (1.0, keep(COLOR_TABS.to_vec()))];
+    // (Le panneau Espace 3D, onglet des réglages, n'est dans aucune disposition d'origine : il n'est ici que quand on
+    // l'ouvre sans plus aucun panneau de sa colonne, qu'il refait alors à lui seul.)
+    let parts = [(0.3, keep(vec![Pane::Tools])), (0.55, keep([&SETTINGS_TABS[..], &[Pane::Espace3d][..]].concat())), (1.0, keep(COLOR_TABS.to_vec()))];
     stack(&parts)
 }
 
@@ -353,8 +368,10 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
 /// le 2026-10-17, et les guides dans le menu de la règle depuis le 2026-10-21.
 const SETTINGS_TABS: [Pane; 2] = [Pane::ToolOptions, Pane::Sheet];
 
-/// Les onglets du bas de la colonne : la couleur, et les personnages (brosse par personnage). Les pinceaux n'y sont
-/// plus : leur liste est dans les réglages de l'outil.
+/// Les onglets du bas de la colonne : la couleur et les personnages (brosse par personnage). Les pinceaux n'y sont plus :
+/// leur liste est dans les réglages de l'outil. Le panneau Espace 3D n'y est plus non plus (il y a été un jour, le
+/// 2026-11-12, partie 150 : « en dessous de réglages, à la place de la couleur ») : il est un onglet du groupe des
+/// réglages de l'outil (`DockLayout::open`, partie 152).
 const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Personnages];
 
 /// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur et les
@@ -538,6 +555,37 @@ impl DockNode {
         }
     }
 
+    /// Le groupe d'onglets qui contient `pane` : ses onglets et le rang de celui qui est devant.
+    fn groupe_de(&mut self, pane: Pane) -> Option<(&Vec<Pane>, &mut usize)> {
+        match self {
+            DockNode::Tabs { panneaux, actif } => panneaux.contains(&pane).then_some((&*panneaux, actif)),
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => match a.groupe_de(pane) {
+                Some(g) => Some(g),
+                None => b.groupe_de(pane),
+            },
+        }
+    }
+
+    /// `pane` est un onglet d'un groupe qui a aussi l'un des panneaux `autres`.
+    fn en_onglet_avec(&self, pane: Pane, autres: &[Pane]) -> bool {
+        match self {
+            DockNode::Tabs { panneaux, .. } => panneaux.contains(&pane) && panneaux.iter().any(|p| autres.contains(p)),
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => a.en_onglet_avec(pane, autres) || b.en_onglet_avec(pane, autres),
+        }
+    }
+
+    /// `pane` est seul dans son groupe d'onglets, juste sous le groupe d'onglets qui contient `cible`.
+    fn seul_sous(&self, pane: Pane, cible: Pane) -> bool {
+        match self {
+            DockNode::Tabs { .. } => false,
+            DockNode::Column { haut, bas, .. } => {
+                let ici = matches!(&**bas, DockNode::Tabs { panneaux, .. } if panneaux.as_slice() == [pane]) && matches!(&**haut, DockNode::Tabs { panneaux, .. } if panneaux.contains(&cible));
+                ici || haut.seul_sous(pane, cible) || bas.seul_sous(pane, cible)
+            }
+            DockNode::Row { gauche, droite, .. } => gauche.seul_sous(pane, cible) || droite.seul_sous(pane, cible),
+        }
+    }
+
     /// Remplace le groupe d'onglets qui contient `pane` par `f(ce groupe)`. Faux s'il n'y est pas.
     fn wrap_tabs_of(&mut self, pane: Pane, f: &mut dyn FnMut(DockNode) -> DockNode) -> bool {
         match self {
@@ -562,6 +610,8 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
+            // (Le panneau Espace 3D n'est pas dans la disposition d'origine : il arrive en onglet des réglages de l'outil
+            // quand la vue Espace 3D s'ouvre, et y reste. `espace3dpanneau.rs`, partie 152.)
             settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages]);
             if l.sheet {
                 settings.push(Pane::Sheet);
@@ -761,6 +811,41 @@ impl DockLayout {
         out.contains(&pane)
     }
 
+    /// `avant` repasse devant `pane`, dans le groupe d'onglets qu'ils partagent (fenêtre principale ou panneau flottant) :
+    /// seulement si `pane` y est devant et si `avant` y est encore. Sinon rien ne change (les onglets ont été rangés
+    /// autrement entre-temps). Vrai si c'est fait.
+    ///
+    /// Sert au panneau Espace 3D, que la vue ouverte met devant Réglages, son voisin d'onglets (`espace3dpanneau.rs`) : la
+    /// disposition retenue garde l'onglet que l'utilisateur avait devant, pas celui que la vue y a mis pour un moment.
+    pub fn remettre_devant(&mut self, pane: Pane, avant: Pane) -> bool {
+        let groupe = match self.principal.groupe_de(pane) {
+            Some(g) => Some(g),
+            None => self.fenetres.iter_mut().find_map(|w| w.panneaux.groupe_de(pane)),
+        };
+        let Some((onglets, actif)) = groupe else { return false };
+        match (onglets.get(*actif) == Some(&pane), onglets.iter().position(|p| *p == avant)) {
+            (true, Some(rang)) => {
+                *actif = rang;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Retire `pane` de **la place que la partie 150 donnait au panneau Espace 3D** : un onglet du groupe de la couleur
+    /// ou des brosses dédiées (fenêtre principale ou panneau flottant), ou, sans elles, seul juste sous les réglages de
+    /// l'outil. Ailleurs (un autre groupe, un panneau flottant à lui, sa propre fenêtre), il a été rangé à la main : il y
+    /// reste. Un onglet du groupe des réglages de l'outil reste aussi, même si la couleur y est avec lui : c'est sa place
+    /// depuis la partie 152. Vrai s'il a été retiré.
+    pub fn retirer_de_la_place_150(&mut self, pane: Pane) -> bool {
+        let avec_la_couleur = |n: &DockNode| n.en_onglet_avec(pane, &COLOR_TABS) && !n.en_onglet_avec(pane, &[Pane::ToolOptions]);
+        let la = avec_la_couleur(&self.principal) || self.fenetres.iter().any(|w| avec_la_couleur(&w.panneaux)) || self.principal.seul_sous(pane, Pane::ToolOptions);
+        if la {
+            self.close(pane);
+        }
+        la
+    }
+
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
@@ -833,6 +918,17 @@ impl DockLayout {
             return;
         }
         let group = pane.group();
+        // Le panneau Espace 3D : un onglet du groupe des réglages de l'outil, après ceux qui y sont (Réglages, la fiche du
+        // plan) : Réglages ou lui devant (Anthony, 2026-11-13, partie 152 : « Onglet de Réglages » ; à la partie 150 il
+        // était un onglet du groupe de la couleur, où il ne restait qu'une centaine de points de haut). Sans réglages de
+        // l'outil dans la fenêtre principale (le Montage ; Réglages fermé, ou flottant) : la règle de son groupe, plus bas
+        // (un onglet avec la fiche du plan, la couleur ou les brosses dédiées ; sans aucun d'eux, sa colonne à lui).
+        if pane == Pane::Espace3d {
+            if let Some(t) = self.principal.tabs_with(&[Pane::ToolOptions]) {
+                t.push(pane);
+                return;
+            }
+        }
         // Un onglet des réglages revient avec les autres onglets des réglages ; les pinceaux et la
         // couleur, ensemble.
         for family in [&SETTINGS_TABS[..], &COLOR_TABS[..]] {

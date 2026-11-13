@@ -434,17 +434,17 @@ impl App {
             if self.case_icone(ui, ph::VIDEO_CAMERA, Some(cam), "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
                 self.set_camera_view(true);
             }
-            if self
-                .case_icone(
-                    ui,
-                    ph::CUBE,
-                    Some(in3d),
-                    "Espace 3D",
-                    "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
-                    "espace3d.basculer",
-                )
-                .clicked()
-            {
+            let cube = self.case_icone(
+                ui,
+                ph::CUBE,
+                Some(in3d),
+                "Espace 3D",
+                "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
+                "espace3d.basculer",
+            );
+            // (La fenêtre de l'aide de l'Espace 3D se pose à côté de cette icône : `aideflottante.rs`.)
+            crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ESPACE3D, cube.rect);
+            if cube.clicked() {
                 self.run_action("espace3d.basculer");
             }
             ui.add_space(crate::barres::MARGE_TRAIT);

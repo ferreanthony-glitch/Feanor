@@ -253,7 +253,9 @@ impl App {
             let resp = crate::bulles::bulle(resp, "Opacité du calque", "Glisser ou taper une valeur.", "");
             if self.edited(&resp) {
                 // Sans clé : l'opacité fixe ; avec des clés : la clé de l'image courante (posée au besoin). Plusieurs calques
-                // choisis : tous prennent cette valeur (`choixtout.rs`).
+                // choisis : tous prennent cette valeur (`choixtout.rs`). (La caméra choisie seule est lâchée : c'est le calque
+                // courant qui change, il redevient le calque choisi, `e3_calque_choisi`.)
+                self.e3_calque_choisi(li);
                 self.regler_opacite(li, opacity / 100.0);
             }
             // « Créer une clé » : le losange des clés d'opacité, comme celui des effets.
@@ -262,6 +264,7 @@ impl App {
         // Calque Couleur unie : sa couleur, avec les réglages du calque.
         self.couleur_unie_ui(ui);
         if mode != self.layers()[li].blend {
+            self.e3_calque_choisi(li);
             self.regler_mode_calques(li, mode);
         }
         ui.add_space(2.0);
@@ -354,6 +357,9 @@ impl App {
         // visaient les rangs d'avant) sont lâchés ; l'image suivante refait la liste (passe de débogage, 2026-10-22).
         let avant = self.empreinte_calques();
         let mut tient = true;
+        // La caméra du plan choisie seule dans la vue Espace 3D : aucun rang n'est montré choisi, ni le calque courant (comme
+        // dans la timeline et le montage, `espace3dui.rs`, partie 152).
+        let camera_seule = self.e3_camera_seule();
         for li in (0..self.layers().len()).rev() {
             if !self.calques_tiennent(&avant, li) {
                 tient = false;
@@ -387,8 +393,8 @@ impl App {
             } else {
                 crate::theme::couleur_calque(kind, couleur)
             };
-            let current = li == self.cur_layer;
-            let chosen = !current && self.is_chosen_layer(li);
+            let current = self.calque_montre_courant(li);
+            let chosen = !current && !camera_seule && self.is_chosen_layer(li);
             let aplat_vise = current && self.aplat_en_cible();
             // Atelier, Papier et Gris sombre : le calque courant prend le fond plein de sa sorte (jade sombre pour le vectoriel), avec un texte qui s'y lit.
             let marque = crate::theme::palette();
@@ -732,13 +738,17 @@ impl App {
     /// Profondeur du calque (multiplan).
     pub(crate) fn depth_item(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some((mut depth, fixed)) = self.layers().get(li).map(|l| (l.depth, l.position_locked)) else { return };
+        // Plan en Espace 3D (partie 148) : la profondeur est libre, une carte peut être derrière la caméra d'origine du plan.
+        // Le champ descend donc sous la borne des plans ordinaires : borné, il ramènerait la carte à sa borne rien qu'en
+        // se montrant (un champ écrit la valeur qu'il a dû borner), sans qu'on y touche.
+        let plus_pres = if self.doc.plan_en_espace(self.cur_panel) { -crate::document::Layer::MAX_DEPTH_LIBRE } else { crate::document::Layer::MIN_DEPTH };
         let resp = ui
             .horizontal(|ui| {
                 ui.label("Profondeur");
                 // Position verrouillée (13b) : la profondeur ne bouge plus non plus.
                 ui.add_enabled(
                     !fixed,
-                    egui::DragValue::new(&mut depth).speed(0.01).range(crate::document::Layer::MIN_DEPTH..=1000.0).max_decimals(2),
+                    egui::DragValue::new(&mut depth).speed(0.01).range(plus_pres..=1000.0).max_decimals(2),
                 )
             })
             .inner

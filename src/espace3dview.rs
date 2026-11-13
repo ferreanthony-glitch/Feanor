@@ -12,8 +12,9 @@ use crate::espace3dmath::{self as m, Orbite, Ray, V3, View};
 use crate::espace3dui::Drag;
 
 const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
-const AXIS_COLORS: [Color32; 3] = [Color32::from_rgb(232, 80, 80), Color32::from_rgb(100, 205, 100), Color32::from_rgb(86, 138, 245)];
-const HOT: Color32 = Color32::from_rgb(255, 214, 70);
+/// (Aussi les flèches x, y, z d'une poignée de trajectoire, `trajectoirepoignees.rs`, partie 154.)
+pub(crate) const AXIS_COLORS: [Color32; 3] = [Color32::from_rgb(232, 80, 80), Color32::from_rgb(100, 205, 100), Color32::from_rgb(86, 138, 245)];
+pub(crate) const HOT: Color32 = Color32::from_rgb(255, 214, 70);
 /// Distance (pixels d'écran) à laquelle on attrape une poignée.
 const GRAB: f32 = 9.0;
 /// Un point plus près de l'œil que cela n'est pas dessiné.
@@ -67,7 +68,12 @@ impl App {
     /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
     /// chaque vue (`espace3dvues.rs`).
     pub(crate) fn e3_hauteur_sol(&self) -> f32 {
-        0.0
+        // (Plan en Espace 3D : le sol des surfaces, `Monde::sol_y`.)
+        if self.doc.plan_en_espace(self.cur_panel) {
+            self.e3_world().sol_y()
+        } else {
+            0.0
+        }
     }
 
     /// Le quadrillage d'une vue : le sol autour de `target`, à l'échelle de `distance` (perspective, caméra du plan) ; ou,
@@ -115,6 +121,27 @@ impl App {
         Some(Gizmo { origin, axes: gz::axes_for(local, &first.1), len: Gizmo::size_for(view, origin), mode })
     }
 
+    /// Les cartes visibles du plan courant dans l'ordre où la vue les trace.
+    ///
+    /// Plan ordinaire : du fond vers le dessus de la pile, l'ordre où l'image les compose (`e3_visible_cards`).
+    ///
+    /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A7) : du plus loin au plus près de l'œil de la vue, comme
+    /// l'image les compose vues de la caméra (`espace3d::ordre_vu` : même plan = ordre de la pile, dossier en bloc,
+    /// annotations en dernier). « Regarder par la caméra » : l'œil est la caméra du plan, l'ordre est exactement celui de
+    /// l'image.
+    pub(crate) fn e3_cartes_a_tracer(&self, view: &View) -> Vec<usize> {
+        let visibles = self.e3_visible_cards();
+        if !self.doc.plan_en_espace(self.cur_panel) {
+            return visibles;
+        }
+        let layers = self.layers();
+        let pile = crate::calqueannot::ordre(layers, true);
+        let world = self.e3_world();
+        let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame);
+        let regard = if self.espace3d.through_camera { espace3d::Regard::Camera(repere.as_ref()) } else { espace3d::Regard::Vue { eye: view.eye, forward: view.forward } };
+        espace3d::ordre_vu(&world, layers, &pile, self.cur_frame, &regard).into_iter().filter(|li| visibles.contains(li)).collect()
+    }
+
     /// La carte touchée par le rayon : la plus proche dont le dessin est touché, sinon la plus proche dont la feuille
     /// l'est (en dernier recours, pour attraper un calque vide).
     pub(crate) fn e3_pick(&mut self, ray: &Ray) -> Option<u64> {
@@ -125,7 +152,7 @@ impl App {
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
                 let layer = &self.layers()[li];
-                let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+                let xf = world.carte(layer, frame);
                 let Some((t, p)) = world.pick_card(&xf, ray) else { continue };
                 let key = espace3d::card_selection(layer.id);
                 if self.e3_card_drawn_at(li, p) && drawn_card.is_none_or(|(b, _)| t < b) {
@@ -152,8 +179,17 @@ impl App {
         })
     }
 
+    /// La caméra du plan est touchée par le pixel **sur son corps** (son œil, le sommet de la pyramide), ce qui passe avant une
+    /// carte au clic (partie 152 : la caméra devant une carte se prend). Les traits fins de la pyramide et de son cadre, eux,
+    /// ne passent qu'après les cartes : vue de face, ils traversent la carte que la caméra regarde, et la rendaient impossible
+    /// à choisir.
+    pub(crate) fn e3_pick_camera_devant(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
+        let cam = self.e3_world().scene_cam(&self.current_camera());
+        view.project(cam.pos, center).is_some_and(|p| ((p[0] - px[0]).powi(2) + (p[1] - px[1]).powi(2)).sqrt() < 12.0)
+    }
+
     /// La caméra du plan est touchée par le pixel (près de son corps ou de sa pyramide).
-    fn e3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
+    pub(crate) fn e3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
         let cam = self.e3_world().scene_cam(&self.current_camera());
         let corners = self.e3_camera_corners(&cam, view);
         let near = |a: V3, b: V3| match (view.project(a, center), view.project(b, center)) {
@@ -248,11 +284,32 @@ impl App {
         let center = [draw.width() / 2.0, draw.height() / 2.0];
         let rel = |p: Pos2| [p.x - draw.left(), p.y - draw.top()];
         let mut orbiting = false;
-        if response.drag_started_by(PointerButton::Primary) {
+        // Un outil de dessin a été pris dans la vue : le pointeur dessine sur la carte du calque courant
+        // (`espace3ddessin.rs`, partie 146). Alt+glisser tourne encore la vue ; les gestes de manipulation attendent
+        // qu'un outil de la vue soit repris.
+        // L'outil Trajectoire a été pris dans la vue : le pointeur trace, dans l'espace, le chemin de ce qui est choisi
+        // (`trajectoire3d.rs`, partie 149). La navigation reste la même.
+        // L'outil Sélection a été pris dans la vue : son lasso prend sur la carte du calque courant (`espace3dlasso.rs`,
+        // partie 152). La navigation reste la même. (Dans la vue seule comme dans chacune des vues, partie 151.)
+        let trace = self.e3_trace();
+        let selectionne = self.e3_selectionne();
+        let dessine = self.e3_dessine() || trace || selectionne;
+        if dessine {
+            let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
+            if trace {
+                self.e3_trajectoire_pointeur(ctx, response, regard);
+            } else if selectionne {
+                self.e3_selection_pointeur(ctx, response, regard);
+            } else {
+                self.e3_dessin_pointeur(ctx, response, regard);
+            }
+            orbiting = matches!(self.espace3d.drag, Some(Drag::Orbit)) && response.dragged_by(PointerButton::Primary);
+        }
+        if !dessine && response.drag_started_by(PointerButton::Primary) {
             let at = press.or(response.interact_pointer_pos()).unwrap_or(draw.center());
             self.e3_press(&view, center, rel(at), mods);
         }
-        if response.dragged_by(PointerButton::Primary) {
+        if !dessine && response.dragged_by(PointerButton::Primary) {
             orbiting = matches!(self.espace3d.drag, Some(Drag::Orbit));
             let handling = matches!(self.espace3d.drag, Some(Drag::Handle { .. }));
             if handling {
@@ -261,7 +318,7 @@ impl App {
                 }
             }
         }
-        if response.clicked() {
+        if !dessine && response.clicked() {
             if let Some(p) = response.interact_pointer_pos() {
                 self.e3_click(&view, center, rel(p), mods);
             }
@@ -270,20 +327,26 @@ impl App {
             self.e3_finish_drag();
         }
         // Survol d'une poignée (pour la mettre en évidence).
-        self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none()).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
+        self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none() && !dessine).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
         orbiting
     }
 
     /// Un clic sans glisser : choisir la carte (ou la caméra) sous la souris, ou ne plus rien choisir.
+    ///
+    /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide), même avec une carte derrière :
+    /// il est tracé par-dessus les cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de
+    /// haut). C'est la règle du Ctrl+clic de l'outil Trajectoire (`e3_traj_choisir`, partie 152) ; avant, un clic simple
+    /// prenait la carte de derrière.
     fn e3_click(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
         let ray = view.ray(px, center);
         let additive = mods.shift || mods.command;
         if self.e3_gizmo(view).is_some_and(|g| g.hit(view, center, px, GRAB).is_some()) {
             return;
         }
-        // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi.)
-        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi ; la caméra d'abord.)
+        let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
+        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
         match (hit, cam_hit) {
             (Some(id), _) => {
                 if additive {
@@ -299,13 +362,8 @@ impl App {
                     self.e3_follow_card(id);
                 }
             }
-            (None, true) => {
-                if additive {
-                    self.espace3d.sel.push(CAMERA_ID);
-                } else {
-                    self.espace3d.sel = vec![CAMERA_ID];
-                }
-            }
+            // (La caméra : seule, les cartes sont lâchées ; Maj ou Ctrl : elle rejoint ce qui est choisi, ou le quitte.)
+            (None, true) => self.e3_choisir_la_camera(additive),
             (None, false) => {
                 if !additive {
                     self.espace3d.sel.clear();
@@ -383,14 +441,21 @@ impl App {
             }
         }
         // Une carte (ou la caméra) tirée directement : elle glisse dans son plan (Maj : en profondeur). La caméra glisse
-        // à l'horizontale (Maj : en hauteur).
-        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        // à l'horizontale (Maj : en hauteur). (La caméra d'abord, comme au clic : tirer son dessin la déplace, elle, même
+        // avec une carte derrière. Une vue orthographique attrape aussi une carte par sa tranche.)
+        let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
+        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
         if hit.is_some() || cam_hit {
             let id = hit.unwrap_or(CAMERA_ID);
             if !self.espace3d.sel.contains(&id) {
-                self.espace3d.sel = vec![id];
-                self.e3_follow_card(id);
+                if cam_hit {
+                    // (Seule, comme au clic : `e3_choisir_la_camera`.)
+                    self.e3_choisir_la_camera(false);
+                } else {
+                    self.espace3d.sel = vec![id];
+                    self.e3_follow_card(id);
+                }
             }
             if self.e3_frozen() {
                 return;
@@ -584,7 +649,8 @@ impl App {
         if self.espace3d.show_grid {
             let distance = self.espace3d.cam.map_or(8.0, |c| c.distance);
             let target = self.espace3d.cam.map_or([0.0; 3], |c| c.target);
-            // (Le même quadrillage que chacune des vues multiples, `e3_quadrillage`.)
+            // (Le même quadrillage que chacune des vues multiples, `e3_quadrillage`, à la hauteur du sol,
+            // `e3_hauteur_sol`.)
             let lignes = self.e3_quadrillage(target, if through { 8.0 } else { distance }, None);
             Self::e3_peindre_quadrillage(&painter, &proj, lignes);
         }
@@ -594,7 +660,11 @@ impl App {
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
-        if let Some(g) = self.e3_gizmo(&view) {
+        // (On dessine, on sélectionne ou on trace une trajectoire : pas de poignées sur la carte, elles ne répondraient pas.)
+        let trace = self.e3_trace();
+        let selectionne = self.e3_selectionne();
+        let dessine = self.e3_dessine() || trace || selectionne;
+        if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
         // Légendes.
@@ -607,7 +677,7 @@ impl App {
                 FontId::proportional(11.0),
                 crate::theme::camera(),
             );
-        } else {
+        } else if !dessine {
             painter.text(
                 rect.left_bottom() + vec2(8.0, -6.0),
                 Align2::LEFT_BOTTOM,
@@ -618,8 +688,19 @@ impl App {
         }
         let label = format!("{} carte(s)", self.e3_visible_cards().len());
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
+        // On dessine dans la vue : la pointe du trait, le cercle du pinceau posé sur la carte, la légende
+        // (`espace3ddessin.rs`).
+        if trace {
+            // L'outil Trajectoire : le chemin de ce qui est choisi, ses marques, sa légende (`trajectoire3d.rs`).
+            self.e3_trajectoire_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        } else if selectionne {
+            // L'outil Sélection : le lasso, le contour et la boîte de ce qui est choisi, posés sur la carte (`espace3dlasso.rs`).
+            self.e3_selection_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        } else if dessine {
+            self.e3_dessin_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        }
         // Curseur.
-        if response.hover_pos().is_some() {
+        if response.hover_pos().is_some() && !dessine {
             let icon = match (&self.espace3d.drag, self.espace3d.hover) {
                 (Some(_), _) => CursorIcon::Grabbing,
                 (None, Some(_)) => CursorIcon::Grab,
@@ -637,9 +718,9 @@ impl App {
         }
         let world = self.e3_world();
         let frame = self.cur_frame;
-        for li in self.e3_visible_cards() {
+        for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
-            let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+            let xf = world.carte(layer, frame);
             let (id, name, cel) = (layer.id, layer.name.clone(), layer.shown_at(frame));
             let opacity = (layer.opacity_at(frame) * 255.0).round() as u8;
             let selected = self.espace3d.sel.contains(&espace3d::card_selection(id));
@@ -648,8 +729,26 @@ impl App {
             // (Rien de la carte devant l'œil : pas de maillage du tout, `card_mesh`.)
             if let Some(voile) = card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 })) {
                 painter.add(Shape::mesh(voile));
-                if let Some(dessin) = cel.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                // Une sélection qu'on déplace sur cette carte (`espace3dlasso.rs`) : comme sur la feuille, le dessin sans
+                // elle, puis elle seule, posée où le geste la met (`flottante.rs`). Sinon le dessin, tel quel.
+                let flottante = cel.and_then(|c| self.e3_feuille_flottante(c));
+                let image = match flottante {
+                    Some(f) => Some(f.base),
+                    None => cel,
+                };
+                if let Some(dessin) = image.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
                     painter.add(Shape::mesh(dessin));
+                }
+                if let Some(f) = flottante {
+                    // (Le pixel (u, v) de la feuille, mené au point du dessin où le geste le met, puis sur la carte.)
+                    let [w, h] = world.stage;
+                    let sur_la_carte = |u: f32, v: f32| {
+                        let p = f.aff.apply(egui::pos2(u * f.taille[0], v * f.taille[1]));
+                        m::point(&mx, [p.x / w - 0.5, 0.5 - p.y / h, 0.0])
+                    };
+                    if let Some(feuille) = self.e3_card_texture(ctx, f.feuille).and_then(|tex| card_mesh(view, center, to_screen, &sur_la_carte, Some(tex), crate::viewbar::veil(opacity))) {
+                        painter.add(Shape::mesh(feuille));
+                    }
                 }
             }
             let corners = world.card_corners(&xf);
@@ -660,7 +759,7 @@ impl App {
                 }
             }
             if let Some(p) = view.project(corners[0], center).map(to_screen) {
-                let depth = self.layers()[li].depth_at(frame);
+                let depth = world.profondeur(&self.layers()[li], frame);
                 let label = if depth == 0.0 { name } else { format!("{name}  ({depth:+.2})") };
                 let galley = painter.layout_no_wrap(label, FontId::proportional(11.0), if selected { ACCENT } else { Color32::from_gray(225) });
                 let pos = p + vec2(4.0, -galley.size().y - 3.0);
@@ -672,6 +771,10 @@ impl App {
 
     /// Texture du dessin `cel` (refaite quand il change).
     fn e3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
+        // La carte sur laquelle on dessine : sa texture suit le trait, tuile par tuile (`espace3ddessin.rs`).
+        if let Some(id) = self.e3_texture_vive(ctx, cel) {
+            return Some(id);
+        }
         let c = self.doc.cels.get(&cel)?;
         if let Some((v, t)) = self.espace3d.card_textures.get(&cel) {
             if *v == c.version {
@@ -692,10 +795,11 @@ impl App {
     pub(crate) fn e3_paint_camera(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, view: &View, cam: &SceneCam) {
         let selected = self.espace3d.sel.contains(&CAMERA_ID);
         let color = if selected { ACCENT } else { crate::theme::camera() };
-        if self.doc.panels[self.cur_panel].camera.len() >= 2 {
+        // (Sa course : ses clés, et sa trajectoire dans l'espace si elle en suit une, partie 149.)
+        if self.doc.panels[self.cur_panel].camera.len() >= 2 || self.doc.panels[self.cur_panel].trajectoire_camera.is_some() {
             let world = self.e3_world();
             let n = self.frame_count().max(1);
-            let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera(self.cur_panel, f)))).collect();
+            let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera_reelle(self.cur_panel, f)))).collect();
             painter.add(Shape::line(pts, Stroke::new(1.0_f32, color.gamma_multiply(0.7))));
         }
         let corners = self.e3_camera_corners(cam, view);

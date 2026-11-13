@@ -15,6 +15,22 @@ mod accueil_tests;
 mod aidetouches;
 #[cfg(test)]
 mod aidetouches_tests;
+// L'aide animée (partie 153) : les animations des outils à la place des textes gris, et le registre des explications.
+mod aideanim;
+#[cfg(test)]
+mod aideanim_relecture_tests;
+#[cfg(test)]
+mod aideanim_tests;
+mod aidecatalogue;
+mod aidefenetres;
+// La fenêtre flottante de l'aide animée, à côté de l'outil (partie 155).
+mod aideflottante;
+#[cfg(test)]
+mod aideflottante_tests;
+mod aidegestes;
+mod aideregistre;
+mod aidetextes;
+mod aidevignettes;
 mod concentration;
 #[cfg(test)]
 mod concentration_tests;
@@ -922,6 +938,34 @@ pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
 mod poskeysmontage_tests;
+// Les boutons de clés des réglages de l'Espace 3D (partie 145 ; dans le panneau Espace 3D depuis la partie 150) : caméra du plan et position des cartes.
+mod espace3dcles;
+#[cfg(test)]
+mod espace3dcles_tests;
+// Dessiner dans la vue Espace 3D (partie 146) : l'outil décide, le trait tombe sur la carte du calque courant.
+mod espace3ddessin;
+#[cfg(test)]
+mod espace3ddessin_tests;
+// La Trajectoire dans l'Espace 3D (partie 149) : ce qui est choisi (cartes, caméra) suit un chemin tracé sur une surface.
+mod trajectoire3d;
+#[cfg(test)]
+mod trajectoire3d_tests;
+// Le curseur « Lissage » de l'outil Trajectoire, sur la feuille et dans l'Espace 3D (partie 151).
+mod trajectoirelisse;
+#[cfg(test)]
+mod trajectoirelisse_tests;
+// Maj + un trait depuis un bout du chemin : il le prolonge (partie 151).
+mod trajectoireprolonge;
+#[cfg(test)]
+mod trajectoireprolonge_tests;
+// Ctrl+clic sur le chemin : une poignée ; la tirer tord le chemin en douceur ; dans l'espace, ses flèches x, y, z (partie 154).
+mod trajectoirepoignees;
+#[cfg(test)]
+mod trajectoirepoignees_tests;
+// Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; un onglet à côté de Réglages, qui passe devant quand la vue s'ouvre.
+mod espace3dpanneau;
+#[cfg(test)]
+mod espace3dpanneau_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]
@@ -1164,11 +1208,27 @@ mod espace3dvues;
 mod espace3dvues_tests;
 #[cfg(test)]
 mod espace3dvues_suite_tests;
+// La fusion des vues multiples dans la branche de la Trajectoire dans l'espace (partie 151).
+#[cfg(test)]
+mod espace3dvues_fusion_tests;
 #[cfg(test)]
 mod espace3d_tests;
 // La tenue de la vue Espace 3D quand on s'y promène (partie 147) : jamais de morceau sans triangle vers la carte graphique.
 #[cfg(test)]
 mod espace3dvue_tests;
+// Retours d'Anthony sur la Trajectoire dans l'Espace 3D (partie 152) : la caméra choisie seule, et sa piste choisie dans la timeline.
+#[cfg(test)]
+mod trajectoire3d_camera_tests;
+// Partie 152 aussi : en « clés d'images », une carte qui suit un chemin dans l'espace a une clé de dessin à chaque jalon.
+#[cfg(test)]
+mod trajectoire3d_images_tests;
+// Partie 152 toujours : une clé de dessin posée à la main entre deux jalons n'est jamais remplacée par la trajectoire.
+#[cfg(test)]
+mod trajectoire_main_tests;
+// Partie 152 encore : l'outil Sélection (son lasso) dans la vue Espace 3D, sur la carte du calque courant.
+mod espace3dlasso;
+#[cfg(test)]
+mod espace3dlasso_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

@@ -827,13 +827,13 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
 /// Comme `panel_plan_at`, avec ou sans les calques d'annotation du plan : `annotations` vrai, ils sont posés par-dessus tout le reste.
 pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>, annotations: bool) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps, annotations)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations)
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
 /// vignette d'une carte de la pile des versions.
 pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps, false)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.repere_du_plan_range(panel, frame).as_ref(), doc.fps, false)
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
@@ -864,8 +864,8 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     Some(Plan { paper: None, items: griffon_item(&panel.layers, li, frame, &line).into_iter().chain(fond_item(l, &line)).chain([line]).collect() })
 }
 
-fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> Plan {
-    plan_with_camera_layers(world, panel, frame, paper, camera, fps, annotations).0
+fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> Plan {
+    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations).0
 }
 
 /// Les calques d'un plan que l'export des calques séparés (`exportlayers.rs`) écrit chacun à part, du plus bas au plus haut : ni dossier, ni
@@ -887,32 +887,37 @@ pub fn separable_layers(panel: &Panel, annotations: bool) -> Vec<usize> {
 pub fn panel_layer_plans(doc: &Document, index: usize, frame: usize, annotations: bool) -> Vec<(usize, Plan)> {
     let camera = doc.camera_seen(index, frame);
     let panel = &doc.panels[index];
-    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.fps, annotations);
+    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations);
     let keep = separable_layers(panel, annotations);
     ranges.into_iter().filter(|(li, r)| keep.contains(li) && !r.is_empty()).map(|(li, r)| (li, Plan { paper: None, items: plan.items[r].to_vec() })).collect()
 }
 
 /// Comme `plan_with_camera`, avec pour chaque calque traité (dans l'ordre de pose) la plage de ses éléments dans `Plan::items`.
-fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
+fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
     let mut items: Vec<PlanItem> = Vec::new();
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
+    // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près ; sinon l'ordre de la pile.
+    let order = if panel.espace { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
+    let mut portees = crate::calqueffet::Portees::new(panel.espace);
     // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
     for &li in &order {
         let l = &panel.layers[li];
         starts[li] = items.len();
+        portees.visiter(&panel.layers, li, items.len());
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect_at(&panel.layers, li, frame) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
         // finale, `incrustation.rs`).
         if l.effet.is_some() {
-            items.extend(crate::calqueffet::marker(&panel.layers, li, frame, opacity, &starts));
+            items.extend(portees.marker(&panel.layers, li, frame, opacity, &starts));
             continue;
         }
         // Derrière la caméra : rien. Sinon l'affinité d'avant (carte à plat) ou le maillage d'une carte inclinée
         // de l'Espace 3D (`espace3d::place`).
-        let Some(placed) = crate::espace3d::place(world, l, frame, camera) else { continue };
+        // (Plan en Espace 3D : `repere`, le changement de repère de sa caméra ; sinon rien, le chemin de toujours.)
+        let Some(placed) = crate::espace3d::place_dans(world, l, frame, camera, repere) else { continue };
         // Couleur unie du calque (`couleurunie.rs`) : sous ses dessins, même s'il n'en a pas à cette image.
         items.extend(unie_item(l, (opacity * 255.0).round() as u8));
         // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
@@ -1202,15 +1207,33 @@ pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, t
 /// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par
 /// pixel) : texture des plans de la vue du plateau en 3D (9e).
 pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
+    let [tw, th] = cel_image_size(raster, max_w);
+    cel_image_zone(raster, max_w, [0, 0, tw, th])
+}
+
+/// La taille de l'image que `cel_image` fait de ce dessin, au plus large de `max_w` pixels.
+pub fn cel_image_size(raster: &Raster, max_w: usize) -> [usize; 2] {
     let (w, h) = (raster.width.max(1), raster.height.max(1));
     let tw = w.min(max_w.max(1));
-    let th = ((h as f32 * tw as f32 / w as f32).round() as usize).max(1);
+    [tw, ((h as f32 * tw as f32 / w as f32).round() as usize).max(1)]
+}
+
+/// Un morceau de l'image de `cel_image` : la zone `[x0, y0, x1, y1]` de ses pixels (bornes hautes exclues), mêmes
+/// pixels que l'image entière. Sert à rafraîchir seulement ce qu'un trait vient de changer (`espace3ddessin.rs`).
+pub fn cel_image_zone(raster: &Raster, max_w: usize, zone: [usize; 4]) -> ColorImage {
+    let (w, h) = (raster.width.max(1), raster.height.max(1));
+    let [tw, th] = cel_image_size(raster, max_w);
     let (sx, sy) = (w as f32 / tw as f32, h as f32 / th as f32);
-    let mut pixels = vec![Color32::TRANSPARENT; tw * th];
+    let (x0, y0) = (zone[0].min(tw), zone[1].min(th));
+    let (zw, zh) = (zone[2].min(tw).saturating_sub(x0), zone[3].min(th).saturating_sub(y0));
+    let mut pixels = vec![Color32::TRANSPARENT; zw * zh];
+    if pixels.is_empty() {
+        return ColorImage { size: [zw, zh], pixels };
+    }
     const ROWS: usize = 16;
-    par_chunks(&mut pixels, tw * ROWS, |chunk, rows| {
+    par_chunks(&mut pixels, zw * ROWS, |chunk, rows| {
         for (k, px) in rows.iter_mut().enumerate() {
-            let (x, y) = (k % tw, chunk * ROWS + k / tw);
+            let (x, y) = (x0 + k % zw, y0 + chunk * ROWS + k / zw);
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 let c = sample(raster, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
@@ -1221,7 +1244,7 @@ pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
             *px = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
         }
     });
-    ColorImage { size: [tw, th], pixels }
+    ColorImage { size: [zw, zh], pixels }
 }
 
 fn texture_options() -> TextureOptions {

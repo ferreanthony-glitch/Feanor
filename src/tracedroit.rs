@@ -89,12 +89,19 @@ impl App {
     /// Une fois par image, pendant un trait : Maj tenue sans que la souris bouge, le segment suit
     /// quand même la pointe (`hover` : sa place sur la feuille) ; Maj relâchée, le segment est posé.
     pub(crate) fn droit_follow(&mut self, mods: &Modifiers, primary_down: bool, hover: Option<Pos2>, pressure: f32) {
+        // (Plan en Espace 3D : rien là où le regard ne touche pas la carte du calque courant, `App::to_layer_opt`.)
+        let p = if primary_down && self.droit_wanted(mods) { hover.and_then(|stage| self.to_layer_opt(stage)) } else { None };
+        self.droit_follow_calque(mods, primary_down, p, pressure);
+    }
+
+    /// `droit_follow`, la pointe étant déjà ramenée au dessin du calque (`p` ; rien : elle n'est pas sur le dessin). La
+    /// vue Espace 3D passe par ici : elle a son propre regard (`espace3ddessin.rs`).
+    pub(crate) fn droit_follow_calque(&mut self, mods: &Modifiers, primary_down: bool, p: Option<Pos2>, pressure: f32) {
         if !primary_down {
             return;
         }
         if self.droit_wanted(mods) {
-            if let Some(stage) = hover {
-                let p = self.to_layer(stage);
+            if let Some(p) = p {
                 self.droit_aim(p, pressure, mods);
             }
         } else if self.droit.pending() {

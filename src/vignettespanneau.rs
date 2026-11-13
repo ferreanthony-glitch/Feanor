@@ -111,8 +111,10 @@ impl App {
         let vise = self.vignettes.annot.outil.is_some().then(|| self.annot_calque_actif()).flatten();
         let haut = calques.first().map(|c| c.0);
         let bas = calques.last().map(|c| c.0);
+        // Sans calque encore : une ligne d'état ; « le premier trait d'annotation crée son calque » est dans l'animation « Annotations » du
+        // registre des explications (partie 153).
         if calques.is_empty() {
-            ui.label(RichText::new("Aucune annotation pour l'instant : le premier trait d'annotation crée son calque.").small().weak());
+            ui.label(RichText::new("Aucune annotation pour l'instant.").small().weak());
         }
         // Le glissé d'un calque (Anthony, 2026-10-24) : on tient un calque par son nom et on le dépose entre deux autres ; le dépôt est une
         // seule étape d'annulation. Les rectangles des lignes, du haut vers le bas, disent où il tombe (`annotationsui::depot_du_calque`).

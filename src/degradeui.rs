@@ -955,7 +955,7 @@ impl App {
         });
 
         self.degrade_enregistres_ui(ui);
-        ui.label(egui::RichText::new("Glisser : tracer l'axe (Maj : par 15°). Ensuite l'axe reste : tire ses poignées ou change les réglages, jusqu'à Entrée, Échap ou un autre outil. Dans la sélection, sinon dans la zone fermée où l'on appuie ; Alt : tout le calque.").small().weak());
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
     }
 
     /// Les deux bandes : l'opacité (pastilles au-dessus) et les couleurs (pastilles dessous), autour d'une seule bande qui montre le
@@ -994,11 +994,7 @@ impl App {
         if ui.ctx().input(|i| i.pointer.button_double_clicked(egui::PointerButton::Primary)) && self.degrade_ui.sel_couleur.is_some() && ui.rect_contains_pointer(Rect::from_min_size(pos2(zone.left(), y_c), vec2(zone.width(), RANGEE))) {
             self.degrade_ui.selecteur = true;
         }
-        if self.degrade.couleurs.is_none() {
-            ui.label(egui::RichText::new("Les deux pastilles de couleur suivent les carrés avant-plan et arrière-plan du panneau Couleur ; touche à une pastille pour les détacher.").small().weak());
-        } else {
-            ui.label(egui::RichText::new("Clic sous la bande : ajouter une couleur. Clic au-dessus : ajouter une opacité. Glisser : déplacer ; tirer vers le bas ou le haut : supprimer. Losange : milieu (double-clic : au centre).").small().weak());
-        }
+        // (Le mode d'emploi des pastilles est dans l'animation « Les pastilles sur la bande » et le registre des explications.)
         // La pastille choisie : sa couleur (ou son opacité), sa position, la corbeille.
         let cible = match (self.degrade_ui.sel_couleur, self.degrade_ui.sel_opacite) {
             (Some(i), _) if i < cs.len() => Some((true, i)),

@@ -467,7 +467,7 @@ impl App {
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
                 let layer = &self.layers()[li];
-                points.extend(world.card_corners(&world.card_xf(&layer.pose(self.cur_frame), layer.depth_at(self.cur_frame))));
+                points.extend(world.card_corners(&world.carte(layer, self.cur_frame)));
             }
         }
         points.push(world.eye(&self.current_camera()));
@@ -665,7 +665,8 @@ impl App {
         let mut best: Option<(f32, f32, u64)> = None;
         for li in self.e3_visible_cards() {
             let layer = &self.layers()[li];
-            let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+            // (Par `Monde::carte` : la profondeur libre d'un plan en Espace 3D, partie 148.)
+            let xf = world.carte(layer, frame);
             let c = world.card_corners(&xf);
             let q: Vec<Pos2> = c.iter().filter_map(|&w| view.project(w, center).map(|s| pos2(s[0], s[1]))).collect();
             if q.len() < 4 {
@@ -724,15 +725,21 @@ impl App {
                 }
             }
         }
-        for &(i, r) in &panes {
-            self.e3_vues_peindre(ui, i, r, panes.len() > 1);
+        // (Le dessin et la Trajectoire retiennent le regard de la vue où va le geste : chaque vue se peint avec le sien,
+        // puis celui du geste revient.)
+        let regard_du_geste = self.e3d.regard;
+        for (i, r, resp) in &resps {
+            self.e3_vues_peindre(ui, *i, *r, resp, panes.len() > 1);
         }
+        self.e3d.regard = regard_du_geste;
         self.espace3d.through_camera = through_avant;
         for &(i, r) in &panes {
             self.e3_vues_menu(ui, i, r);
         }
         self.e3_vues_bordures(ui, rect);
-        if resps.iter().any(|x| x.2.hovered() || x.2.dragged()) {
+        // (On dessine, ou on trace : le curseur est celui de l'outil, `e3_dessin_peindre`, `e3_trajectoire_peindre`.)
+        let dessine = self.e3_dessine() || self.e3_trace();
+        if !dessine && resps.iter().any(|x| x.2.hovered() || x.2.dragged()) {
             let icon = match (&self.espace3d.drag, self.espace3d.hover) {
                 (Some(_), _) => CursorIcon::Grabbing,
                 (None, Some(_)) => CursorIcon::Grab,
@@ -786,7 +793,7 @@ impl App {
 
     /// Peint la vue `i` dans son rectangle `r` : fond, grille, cartes, caméra du plan, manipulateur, repère des axes, liseré
     /// de la vue active.
-    fn e3_vues_peindre(&mut self, ui: &mut egui::Ui, i: usize, r: Rect, plusieurs: bool) {
+    fn e3_vues_peindre(&mut self, ui: &mut egui::Ui, i: usize, r: Rect, resp: &egui::Response, plusieurs: bool) {
         let c = self.espace3d.vues.cadres[i];
         let camera = c.point == PointDeVue::Camera;
         self.espace3d.through_camera = camera;
@@ -811,11 +818,20 @@ impl App {
             let cam_now = self.e3_world().scene_cam(&self.current_camera());
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
-        if let Some(g) = self.e3_gizmo(&view) {
+        // (On dessine, ou on trace une trajectoire : pas de poignées, elles ne répondraient pas ; comme la vue seule.)
+        let trace = self.e3_trace();
+        let dessine = self.e3_dessine() || trace;
+        if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
         if camera {
             painter.rect_stroke(draw, 0.0, Stroke::new(1.0_f32, crate::theme::camera()), egui::StrokeKind::Outside);
+        }
+        let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
+        if trace {
+            self.e3_trajectoire_peindre(ui.ctx(), &painter, resp, r, regard);
+        } else if dessine {
+            self.e3_dessin_peindre(ui.ctx(), &painter, resp, r, regard);
         }
         peindre_axes(&painter, r, &view);
         if plusieurs && self.espace3d.vues.active == i {

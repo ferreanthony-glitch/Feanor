@@ -32,6 +32,12 @@ pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
 const FINI_AFFICHE: f64 = 8.0;
 
+/// Images à la clé : combien de calques des plans `plans` ne font pas de clé (cachés, calques d'effet, calques vidéo). Les annotations,
+/// qui suivent leur case à cocher, ne comptent pas (partie 153 : l'avertissement n'est dit que s'il y en a).
+pub(crate) fn calques_sans_cle(doc: &crate::document::Document, plans: &[usize]) -> usize {
+    plans.iter().filter_map(|&pi| doc.panels.get(pi)).flat_map(|p| p.layers.iter()).filter(|l| !l.annotation && (!l.visible || l.effet.is_some() || l.video.is_some())).count()
+}
+
 fn good() -> Color32 {
     crate::theme::succes()
 }
@@ -387,7 +393,7 @@ impl App {
                         if effects > 0 {
                             crate::theme::avertir_petit(ui, format!("{effects} calque{} d'effet pas écrit{} : il agit sur ce qui est dessous, il n'a pas d'image à lui.", if effects > 1 { "s" } else { "" }, if effects > 1 { "s" } else { "" }));
                         }
-                        ui.label(RichText::new("Un dossier par plan (SQ01_PL012A), une suite PNG par calque : 01_Fond_0001.png…").small().weak());
+                        // (Comment les fichiers sont rangés : dans le registre des explications, `aidetextes.rs`, partie 153.)
                     });
                     ui.end_row();
                 }
@@ -397,7 +403,6 @@ impl App {
                     ui.vertical(|ui| {
                         ui.checkbox(&mut s.camera.per_frame, "Avec la caméra de chaque image (déjà interpolée)");
                         ui.checkbox(&mut s.camera.csv, "Aussi en CSV (un tableur, un script)");
-                        ui.label(RichText::new("Le JSON et son format sont décrits dans docs/EXPORT_MONTAGE.md.").small().weak());
                     });
                     ui.end_row();
                 }
@@ -457,7 +462,6 @@ impl App {
                                 crate::theme::avertir_petit(ui, "Un plan où rien ne s'entend n'a pas de fichier.");
                             }
                         }
-                        ui.label(RichText::new("Le mixage du montage (volumes, fondus, égaliseur, écho ; muets et solo respectés), de la première à la dernière image du plan, à l'échantillon près. Un son qui passe une coupe est coupé au bord du plan.").small().weak());
                         if has_transitions {
                             ui.label(RichText::new("Les transitions ne changent rien au son : aucun fondu sonore, aucune poignée.").small().weak());
                         }
@@ -499,7 +503,11 @@ impl App {
                             if sans > 0 && cles > 0 {
                                 crate::theme::avertir_petit(ui, format!("{sans} plan{} sans clé (rien de dessiné sur un calque visible) : pas d'image.", if sans > 1 { "s" } else { "" }));
                             }
-                            ui.label(RichText::new("Les calques cachés, les calques d'effet et les calques vidéo ne font pas de clé ; les annotations seulement avec « Avec les annotations ».").small().weak());
+                            let sans_cle = calques_sans_cle(&self.doc, &plans);
+                            if sans_cle > 0 {
+                                let pl = if sans_cle > 1 { "s" } else { "" };
+                                crate::theme::avertir_petit(ui, format!("{sans_cle} calque{pl} caché{pl}, d'effet ou vidéo : pas de clé."));
+                            }
                         });
                         ui.end_row();
                     }
@@ -933,7 +941,7 @@ fn nomenclature_ui(ui: &mut egui::Ui, n: &mut crate::nomenclature::Nomenclature,
     }
     if n.forme == Forme::Perso {
         ui.add(egui::TextEdit::singleline(&mut n.modele).desired_width(380.0).font(egui::TextStyle::Monospace));
-        ui.label(RichText::new("Champs : {projet} {episode} {sequence} {plan} {cle} {calque} {version} {case} {date} ; une largeur complète de zéros : {plan:03}. Le reste (tirets, soulignés, lettres) est écrit tel quel.").small().weak());
+        // (Les champs du modèle : dans le registre des explications, `aidetextes.rs`, partie 153.)
         for a in n.avertissements() {
             crate::theme::avertir_petit(ui, a);
         }

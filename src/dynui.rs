@@ -95,7 +95,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, mix
         }
         MixKind::Smudge => smudge_slider(ui, s),
     }
-    ui.label(egui::RichText::new("Modèle propre à FEANOR : à comparer avec tes outils de peinture.").small().weak());
+    // (« Modèle propre à FEANOR » : dans le registre des explications, `aidetextes.rs`, partie 153.)
 }
 
 /// Le curseur d'entraînement du doigt (type « Lisser » et outil Mélangeur).
@@ -108,19 +108,13 @@ fn smudge_slider(ui: &mut egui::Ui, s: &mut BrushSettings) {
 /// « Taille et appui ») ; vrai : la couleur A→B (catégorie « Couleur et mélange »). `vector` :
 /// calque vectoriel, où le trait gardé ne retient que la taille.
 pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, color: bool) {
-    ui.label(
-        egui::RichText::new("Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (par exemple un réglage qui varie avec la pression ou la vitesse).")
-            .small()
-            .weak(),
-    );
+    // (Ce que sont les connexions : dans le registre des explications, `aidetextes.rs`, partie 153.)
     let (legacy_size, legacy_opacity, min_size, min_opacity) = (s.pressure_size, s.pressure_opacity, s.min_size, s.min_opacity);
     let d = &mut s.dynamics;
     let (uses_speed, uses_fade);
     if color {
+        // (Ce qu'est la couleur A→B : dans le registre des explications.)
         connection_row(ui, "Couleur A→B", "couleur", &mut d.color, None);
-        if d.color.active() {
-            note(ui, "Couleur A→B : la couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source.");
-        }
         (uses_speed, uses_fade) = (d.color.source == Source::Speed, d.color.source == Source::Fade);
     } else {
         connection_row(ui, "Taille", "taille", &mut d.size, legacy_size.then_some(min_size));

@@ -157,7 +157,7 @@ impl App {
     fn top_fit(&self, rect: Rect, items: &[Item]) -> Fit {
         let unit = self.doc.frame[0] as f32;
         let d_max = items.iter().map(|it| it.shown).fold(1.5_f32, f32::max) * 1.12;
-        let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
+        let cam = self.doc.panel_camera_reelle(self.cur_panel, self.cur_frame);
         let cam_x = cam.x - self.doc.stage_center().x;
         let [(a, _), (b, _)] = field_edges(cam_x, self.camera_advance(&cam), d_max, cam.zoom, cam.pan, unit);
         let (mut lo, mut hi) = (a.min(b).min(cam_x), a.max(b).max(cam_x));
@@ -186,6 +186,17 @@ impl App {
     }
 
     fn top_view_ui(&mut self, ui: &mut egui::Ui) {
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, étape A8) : ce schéma montre des calques parallèles devant une caméra
+        // qui regarde la feuille de face. Avec une caméra libre, des cartes au sol ou en mur, il serait faux.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            ui.label(
+                egui::RichText::new(
+                    "Ce plan est en Espace 3D : sa caméra est libre et ses cartes peuvent être au sol ou en mur. La vue de dessus, qui montre des calques parallèles devant une caméra de face, ne le décrit pas. Regarde-le dans la vue Espace 3D (bouton cube), en tournant la vue au-dessus du décor.",
+                )
+                .weak(),
+            );
+            return;
+        }
         ui.label(
             egui::RichText::new(
                 "Glisser un calque vers le haut l'éloigne (il défile moins vite quand la caméra \
@@ -296,7 +307,7 @@ impl App {
         let unit = fit.unit;
         let cx = self.doc.stage_center().x;
         let cone = |frame: usize| {
-            let cam = self.doc.panel_camera(self.cur_panel, frame);
+            let cam = self.doc.panel_camera_reelle(self.cur_panel, frame);
             let x = cam.x - cx;
             // La caméra avancée (travelling) est plus haut, plus près des calques ; le
             // panoramique tourne son champ.

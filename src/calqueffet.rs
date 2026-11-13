@@ -220,11 +220,55 @@ pub fn scope_low(layers: &[Layer], li: usize) -> usize {
     }
 }
 
+/// La portée des calques d'ajustement pendant qu'un constructeur de plan pose les calques (`render.rs`, `App::build_plan_avec`).
+///
+/// Plan ordinaire : les calques se posent dans l'ordre de la pile, un calque d'ajustement vise « depuis le premier calque de
+/// son dossier » par son rang (`marker`, `scope_low`) : rien ne change.
+///
+/// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A4) : les calques se posent du plus loin au plus près
+/// (`espace3d::ordre_par_distance`), le premier calque d'un dossier dans la pile n'est plus forcément le premier posé. La
+/// portée d'un calque d'ajustement est alors « depuis le premier calque **posé** de son dossier » (hors dossier : depuis le
+/// début) : il agit sur ce qui est plus loin que lui.
+pub struct Portees {
+    par_distance: bool,
+    /// Pour chaque dossier (son rang), le nombre d'éléments déjà posés quand son premier calque a été visité.
+    debuts: std::collections::HashMap<usize, usize>,
+}
+
+impl Portees {
+    pub fn new(par_distance: bool) -> Portees {
+        Portees { par_distance, debuts: Default::default() }
+    }
+
+    /// À appeler pour chaque calque visité, avant de poser ses éléments : `deja`, le nombre d'éléments déjà posés.
+    pub fn visiter(&mut self, layers: &[Layer], li: usize, deja: usize) {
+        if self.par_distance {
+            if let Some(fi) = crate::folders::parent_index(layers, li) {
+                self.debuts.entry(fi).or_insert(deja);
+            }
+        }
+    }
+
+    /// L'élément repère du calque d'ajustement `li` (voir `marker`), avec la portée qui convient à l'ordre de pose.
+    pub fn marker(&self, layers: &[Layer], li: usize, frame: usize, opacity: f32, starts: &[usize]) -> Option<PlanItem> {
+        if !self.par_distance {
+            return marker(layers, li, frame, opacity, starts);
+        }
+        let from = crate::folders::parent_index(layers, li).and_then(|fi| self.debuts.get(&fi).copied()).unwrap_or(0);
+        marker_depuis(layers, li, frame, opacity, from)
+    }
+}
+
 /// L'élément repère à poser dans le plan pour le calque `li` à l'image `frame` s'il agit (calque
 /// d'ajustement, une exposition à cette image, au moins un effet qui change quelque chose). `starts`
 /// : pour chaque calque d'en dessous, le nombre d'éléments déjà posés quand il a commencé.
 /// `opacity` : celle du calque, multipliée par celle de son dossier (`folders::effect`).
 pub fn marker(layers: &[Layer], li: usize, frame: usize, opacity: f32, starts: &[usize]) -> Option<PlanItem> {
+    marker_depuis(layers, li, frame, opacity, starts.get(scope_low(layers, li)).copied().unwrap_or(0))
+}
+
+/// Comme `marker`, la portée étant donnée : le calque d'ajustement agit sur les éléments du plan à partir du rang `from`.
+pub fn marker_depuis(layers: &[Layer], li: usize, frame: usize, opacity: f32, from: usize) -> Option<PlanItem> {
     let l = layers.get(li)?;
     if !l.is_adjustment() || !l.effect_active(frame) {
         return None;
@@ -233,10 +277,9 @@ pub fn marker(layers: &[Layer], li: usize, frame: usize, opacity: f32, starts: &
     if steps.is_empty() {
         return None;
     }
-    let low = scope_low(layers, li);
     let reglage = Reglage {
         layer: l.id,
-        from: starts.get(low).copied().unwrap_or(0),
+        from,
         root: crate::folders::parent_index(layers, li).is_none(),
         steps,
         opacity: (opacity.clamp(0.0, 1.0) * 255.0).round() as u8,

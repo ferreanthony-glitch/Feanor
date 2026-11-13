@@ -1,6 +1,7 @@
 //! L'Espace 3D dans l'application (`docs/ESPACE3D.md`) : le mode « Espace 3D » (une vue d'édition à la place du dessin,
 //! où les calques du plan sont des cartes qu'on déplace, tourne et met à l'échelle, avec la caméra du plan), ses
-//! commandes, la barre d'outils, le panneau Réglages et l'annulation.
+//! commandes, la barre d'outils, les réglages de la vue (montrés par le panneau « Espace 3D », `espace3dpanneau.rs`) et
+//! l'annulation.
 //!
 //! Depuis la simplification voulue par Anthony (2026-10-21), il n'y a plus d'objets 3D : l'espace ne montre que les
 //! cartes et la caméra. La vue elle-même (souris, manipulateurs, tracé) est dans `espace3dview.rs`.
@@ -59,6 +60,8 @@ pub(crate) struct Espace3dState {
     pub step_move: f32,
     pub step_rot: f32,
     pub step_scale: f32,
+    /// Distance (mètres) où poser une surface neuve dans un plan en Espace 3D ; 0 : la distance de référence de la caméra.
+    pub surface_distance: f32,
     pub drag: Option<Drag>,
     pub hover: Option<Handle>,
     /// Une, deux ou quatre vues, et leurs points de vue (`espace3dvues.rs`).
@@ -84,6 +87,7 @@ impl Default for Espace3dState {
             step_move: 0.25,
             step_rot: 15.0,
             step_scale: 0.1,
+            surface_distance: 0.0,
             drag: None,
             hover: None,
             vues: Default::default(),
@@ -137,16 +141,21 @@ impl App {
         }
         self.espace3d.on = on;
         self.espace3d.drag = None;
-        self.status = if on {
-            "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. Réglages : panneau Réglages.".into()
+        // (Le regard de la vue et la texture de la carte qu'on y dessine ne valent que pour la vue montrée, `espace3ddessin.rs`.)
+        self.e3d.oublier_la_vue();
+        self.status = if on && self.doc.plan_en_espace(self.cur_panel) {
+            "Espace 3D : ce plan est en Espace 3D. La caméra est libre (choisis-la pour la déplacer ou la tourner), ce qui est devant cache ce qui est derrière, et « Nouvelle surface » dans le panneau Espace 3D pose un calque face à la caméra, au sol ou en mur.".into()
+        } else if on {
+            "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. Réglages de la vue : le panneau Espace 3D.".into()
         } else {
             "Espace 3D quitté.".into()
         };
     }
 
-    /// Les dimensions du monde de ce projet.
+    /// Les dimensions du monde de ce projet, pour le plan courant : dans un plan en Espace 3D, la profondeur des cartes
+    /// est libre (`Monde::libre`, partie 148).
     pub(crate) fn e3_world(&self) -> Monde {
-        Monde::of(&self.doc)
+        Monde::du_plan(&self.doc, self.cur_panel)
     }
 
     /// Le rang dans le plan courant du calque dont la carte porte ce numéro de sélection.
@@ -184,7 +193,7 @@ impl App {
                     return Some((id, world.camera_xf(&self.current_camera())));
                 }
                 let layer = &self.layers()[self.e3_card_layer(id)?];
-                Some((id, world.card_xf(&layer.pose(frame), layer.depth_at(frame))))
+                Some((id, world.carte(layer, frame)))
             })
             .collect()
     }
@@ -200,7 +209,15 @@ impl App {
                 self.set_current_camera(cam);
             } else if let Some(li) = self.e3_card_layer(*id).filter(|&li| !self.layers()[li].locked && !self.layers()[li].position_locked) {
                 // (Un calque verrouillé, ou de position verrouillée, ne bouge pas, même avec les poignées d'un groupe.)
-                world.apply_card_xf(&mut self.layers_mut()[li], frame, xf);
+                // (Plan en Espace 3D : l'inclinaison est libre, la carte se couche au sol ou fait un demi-tour.)
+                if self.doc.plan_en_espace(self.cur_panel) {
+                    world.apply_card_xf_libre(&mut self.layers_mut()[li], frame, xf);
+                    // (Une carte qui suit une trajectoire dans l'espace : sa pose propre prend le geste, son chemin la suit,
+                    // `trajectoire3d.rs`, partie 149.)
+                    self.trajectoire_espace_apres_pose(li);
+                } else {
+                    world.apply_card_xf(&mut self.layers_mut()[li], frame, xf);
+                }
             }
         }
         self.modified = true;
@@ -213,7 +230,7 @@ impl App {
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
                 let layer = &self.layers()[li];
-                points.extend(world.card_corners(&world.card_xf(&layer.pose(self.cur_frame), layer.depth_at(self.cur_frame))));
+                points.extend(world.card_corners(&world.carte(layer, self.cur_frame)));
             }
         }
         points.push(world.eye(&self.current_camera()));
@@ -241,7 +258,8 @@ impl App {
         }
         let mut order: Vec<usize> = (0..layers.len()).collect();
         // (Stable : deux calques à la même profondeur gardent leur ordre.)
-        order.sort_by(|&a, &b| layers[b].depth_at(frame).total_cmp(&layers[a].depth_at(frame)));
+        let world = self.e3_world();
+        order.sort_by(|&a, &b| world.profondeur(&layers[b], frame).total_cmp(&world.profondeur(&layers[a], frame)));
         if order.iter().enumerate().all(|(i, &k)| i == k) {
             self.status = "Les cartes sont déjà dans l'ordre de la profondeur.".into();
             return;
@@ -253,6 +271,111 @@ impl App {
             s.cur_layer = s.layers().iter().position(|l| l.id == current).unwrap_or(0);
         });
         self.status = "Les cartes sont dans l'ordre de la profondeur : le plus loin en bas de la pile.".into();
+    }
+
+    /// Coche ou décoche « Plan en Espace 3D » pour le plan courant (`Panel::espace`, `docs/ESPACE-LIBRE.md`), en une étape
+    /// d'annulation. La case est retenue, enregistrée et suit le plan (couper, dupliquer, versions) ; cochée, la caméra du plan
+    /// est libre et l'image montre ce qu'elle filme. Refusé si le cadre ne tient pas dans la feuille
+    /// (`Document::accepte_plan_en_espace`).
+    ///
+    /// **Décocher** (partie 148) : un plan ordinaire ne sait pas tenir une carte au-delà de `Layer::MIN_DEPTH` (tout contre
+    /// la caméra d'origine du plan, ou derrière elle). Ces cartes reviennent à cette borne (`Layer::ramener_a_la_borne`),
+    /// dans la même étape d'annulation, et la barre d'état le dit : un seul Ctrl+Z rend la case et les cartes.
+    pub(crate) fn espace3d_basculer_plan_en_espace(&mut self) {
+        let on = !self.panel().espace;
+        if on && !self.doc.accepte_plan_en_espace() {
+            self.status = "Plan en Espace 3D refusé : le cadre du projet est plus grand que la feuille. Agrandis la feuille (Fichier > Réglages du projet).".into();
+            return;
+        }
+        let pi = self.cur_panel;
+        let ramenees = self.espace3d_step("Plan en Espace 3D", |s| {
+            // (Décoché : une trajectoire dans l'espace n'a plus de sens. Celles des calques sont détachées, leurs clés restent ;
+            // celle de la caméra devient ses clés. Partie 149.)
+            if !on {
+                Self::trajectoires_espace_quitter(&mut s.doc, pi);
+            }
+            let p = &mut s.doc.panels[pi];
+            p.espace = on;
+            let mut cartes = 0;
+            if !on {
+                for l in &mut p.layers {
+                    if l.ramener_a_la_borne() && espace3d::is_card(l) {
+                        cartes += 1;
+                    }
+                }
+            }
+            cartes
+        });
+        self.renderer.invalidate_all();
+        self.status = if on {
+            "Plan en Espace 3D : coché pour ce plan. Sa caméra est libre dans l'espace, et ce qui est devant cache ce qui est derrière.".into()
+        } else if ramenees == 1 {
+            "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. Une carte était tout contre la caméra d'origine du plan, ou derrière elle : elle est revenue devant elle, un plan ordinaire ne peut pas la garder là. Ctrl+Z remet tout comme avant.".into()
+        } else if ramenees > 1 {
+            format!("Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. {ramenees} cartes étaient tout contre la caméra d'origine du plan, ou derrière elle : elles sont revenues devant elle, un plan ordinaire ne peut pas les garder là. Ctrl+Z remet tout comme avant.")
+        } else {
+            "Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire.".into()
+        };
+    }
+
+    /// La distance où une surface neuve se pose (mètres) : celle du panneau Espace 3D, sinon la distance de référence.
+    pub(crate) fn espace3d_distance_surface(&self) -> f32 {
+        let d = self.espace3d.surface_distance;
+        if d.is_finite() && d > 0.0 { d } else { self.e3_world().d0 }
+    }
+
+    /// **Pose une surface à dessiner** dans le plan en Espace 3D courant (`docs/ESPACE-LIBRE.md`, étape A6) : un calque
+    /// neuf, juste au-dessus du calque courant, du même genre que lui (vectoriel ou bitmap), posé face à la caméra, au sol
+    /// ou en mur (`Monde::surface_xf`) ; il devient le calque courant et la carte choisie. Une étape d'annulation.
+    /// Refusé hors d'un plan en Espace 3D, storyboard verrouillé, ou si la surface tomberait hors de l'espace où une carte
+    /// peut être. Elle se pose aussi derrière la caméra d'origine du plan (partie 148) ; si la carte ne peut pas être aussi
+    /// grande que demandé, la barre d'état le dit.
+    pub(crate) fn espace3d_nouvelle_surface(&mut self, sorte: espace3d::Surface) {
+        if !self.doc.plan_en_espace(self.cur_panel) {
+            self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.", sorte.nom());
+            return;
+        }
+        if self.content_refuses() {
+            return;
+        }
+        let world = self.e3_world();
+        let distance = self.espace3d_distance_surface();
+        let Some(xf) = world.surface_xf(&self.current_camera(), sorte, distance) else {
+            self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait trop loin de la feuille pour être une carte. Rapproche la caméra de la feuille.", sorte.nom());
+            return;
+        };
+        self.end_stroke();
+        let snap = self.snapshot();
+        let frame = self.cur_frame;
+        let kind = match self.layers().get(self.cur_layer) {
+            Some(l) if !l.folder && l.effet.is_none() => l.kind,
+            _ => crate::document::LayerKind::Vector,
+        };
+        let deja = self.layers().iter().filter(|l| l.name.starts_with(sorte.nom())).count();
+        let nom = if deja == 0 { sorte.nom().to_string() } else { format!("{} {}", sorte.nom(), deja + 1) };
+        let mut layer = crate::document::Layer::new(nom.clone(), kind);
+        layer.parent = self.layers().get(self.cur_layer).and_then(|l| if l.folder { None } else { l.parent });
+        world.apply_card_xf_libre(&mut layer, frame, &xf);
+        // (Près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la feuille : son échelle
+        // s'arrête à 100, et sous `Layer::MIN_DEPTH` sa taille ne grandit plus avec sa profondeur. Une surface demandée
+        // plus grande est posée plus petite : on le dit.)
+        let posee = world.carte(&layer, frame);
+        let plus_petite = posee.size[0].abs() < xf.size[0].abs() * 0.99;
+        let id = layer.id;
+        let at = (self.cur_layer + 1).min(self.layers().len());
+        self.layers_mut().insert(at, layer);
+        self.cur_layer = at;
+        self.vsel = None;
+        let before = self.history.context.replace(sorte.nom().to_string());
+        self.commit_structure(snap);
+        self.history.context = before;
+        self.espace3d.sel = vec![espace3d::card_selection(id)];
+        self.espace3d.last_layer = id;
+        self.status = if plus_petite {
+            format!("« {nom} » posée à {distance:.1} m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le cadre.")
+        } else {
+            format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.")
+        };
     }
 
     /// Les commandes de l'Espace 3D. Vrai si l'action est la sienne.
@@ -272,7 +395,7 @@ impl App {
             "espace3d.outil_deplacer" => self.espace3d_mode(GizmoMode::Move),
             "espace3d.outil_tourner" => self.espace3d_mode(GizmoMode::Rotate),
             "espace3d.outil_echelle" => self.espace3d_mode(GizmoMode::Scale),
-            "espace3d.outil_camera" => self.espace3d_pick_camera(),
+            "espace3d.outil_camera" => self.espace3d_pick_camera(false),
             "espace3d.vue_camera" => {
                 self.set_espace3d(true);
                 self.espace3d.through_camera = !self.espace3d.through_camera;
@@ -282,11 +405,17 @@ impl App {
                 self.espace3d_fit();
             }
             "espace3d.ordonner_profondeur" => self.espace3d_order_by_depth(),
+            "espace3d.plan_en_espace" => self.espace3d_basculer_plan_en_espace(),
+            "espace3d.surface_face" => self.espace3d_nouvelle_surface(espace3d::Surface::Face),
+            "espace3d.surface_sol" => self.espace3d_nouvelle_surface(espace3d::Surface::Sol),
+            "espace3d.surface_mur" => self.espace3d_nouvelle_surface(espace3d::Surface::Mur),
             "espace3d.aimanter" => {
                 self.espace3d.snap = !self.espace3d.snap;
                 self.status = if self.espace3d.snap { "Aimantation à la grille : allumée.".into() } else { "Aimantation : éteinte.".into() };
             }
             "espace3d.grille" => self.espace3d.show_grid = !self.espace3d.show_grid,
+            // Dessiner sur la carte, ou rendre la main aux cartes (`espace3ddessin.rs`, partie 146).
+            crate::espace3ddessin::ACTION => self.espace3d_basculer_dessin(),
             _ => return false,
         }
         true
@@ -297,11 +426,86 @@ impl App {
             self.set_espace3d(true);
         }
         self.espace3d.mode = mode;
+        // (Un outil de la vue : le pointeur manipule, il ne dessine plus.)
+        self.e3_manipuler();
+    }
+
+    // ------------------------------------------------------------------------- la caméra choisie seule (partie 152)
+
+    /// **La caméra du plan est choisie seule** dans la vue Espace 3D : elle est choisie, et aucune carte ne l'est avec
+    /// elle. Anthony, 2026-11-13 : « La partie dédiée à la caméra dans la timeline doit être sélectionnée quand la caméra
+    /// l'est, et plus un calque. » Tant que c'est le cas, la timeline et le montage montrent la piste « Caméra » comme la
+    /// rangée choisie, et aucune rangée de calque (`calque_montre_courant`).
+    pub(crate) fn e3_camera_seule(&self) -> bool {
+        self.e3_vue_montree() && self.espace3d.sel.contains(&CAMERA_ID) && !self.espace3d.sel.iter().any(|&s| self.e3_card_layer(s).is_some())
+    }
+
+    /// Le calque `li` est celui que les rangées de la timeline et du montage montrent comme le calque courant : le calque
+    /// courant, sauf quand la caméra du plan est choisie seule (c'est alors la piste « Caméra » qui est montrée choisie).
+    /// Le calque courant reste le calque courant pour tout le reste (le panneau Calques, le dessin).
+    pub(crate) fn calque_montre_courant(&self, li: usize) -> bool {
+        li == self.cur_layer && !self.e3_camera_seule()
+    }
+
+    /// Choisit la caméra du plan. **Seule** : les cartes sont lâchées, et les gestes de la Trajectoire n'agissent plus que
+    /// sur son chemin (Anthony, 2026-11-13 : « Éditer la trajectoire de la caméra ne fonctionne pas puisqu'un calque est
+    /// toujours sélectionné en même temps »). `ajouter` (Maj tenue) : elle rejoint ce qui est choisi, ou le quitte si elle
+    /// y était.
+    pub(crate) fn e3_choisir_la_camera(&mut self, ajouter: bool) {
+        // (Ce choix est le dernier mot : un changement de calque que la vue n'a pas encore vu, `espace3d_panel`, ne le
+        // remplace pas par la carte de ce calque à l'image d'écran suivante.)
+        self.espace3d.last_layer = self.layer().id;
+        if !ajouter {
+            self.espace3d.sel = vec![CAMERA_ID];
+        } else if let Some(k) = self.espace3d.sel.iter().position(|s| *s == CAMERA_ID) {
+            self.espace3d.sel.remove(k);
+        } else {
+            self.espace3d.sel.push(CAMERA_ID);
+        }
+    }
+
+    /// **Un clic sur la piste « Caméra »** de la timeline ou du montage (son nom, le vide de sa rangée, une de ses clés, une
+    /// poignée de lissage) : la caméra du plan est choisie seule, comme « choisir » du panneau Espace 3D
+    /// (`e3_choisir_la_camera`), et sa piste devient la rangée choisie (Anthony, 2026-11-13 : « La partie dédiée à la caméra
+    /// dans la timeline doit être sélectionnée quand la caméra l'est, et plus un calque »). Seulement quand la vue Espace 3D
+    /// est montrée, dans tout plan (en Espace 3D ou non) : c'est pour elle que la caméra se choisit. Vue fermée (ou cachée par
+    /// la vue caméra), rien de plus ne change : le clic fait ce qu'il faisait (la tête de lecture, les clés, les menus).
+    pub(crate) fn e3_piste_camera_cliquee(&mut self) {
+        if self.e3_vue_montree() {
+            self.e3_choisir_la_camera(false);
+        }
+    }
+
+    /// Le calque `li` vient d'être choisi à la main (`App::select_layer` : le panneau Calques, la timeline, le montage…),
+    /// même s'il était déjà le calque courant : **la caméra du plan est lâchée**, et la carte de ce calque est choisie à sa
+    /// place (vue ouverte, cartes montrées). La timeline et le montage rendent alors leur rangée à ce calque. Sans caméra
+    /// choisie, rien ne change (le choix des cartes suit le calque courant comme avant, `espace3d_panel`).
+    pub(crate) fn e3_calque_choisi(&mut self, li: usize) {
+        if !self.espace3d.sel.contains(&CAMERA_ID) {
+            return;
+        }
+        let carte = self.layers().get(li).filter(|l| espace3d::is_card(l)).map(|l| espace3d::card_selection(l.id));
+        match carte.filter(|_| self.espace3d.on && self.espace3d.show_cards) {
+            Some(c) => self.espace3d.sel = vec![c],
+            None => self.espace3d.sel.retain(|s| *s != CAMERA_ID),
+        }
     }
 
     /// Choisit la caméra du plan (pour la déplacer ou la tourner), avec l'outil Déplacer si aucun outil de manipulation
-    /// n'est actif.
-    fn espace3d_pick_camera(&mut self) {
+    /// n'est actif : le bouton « Caméra » de la barre de la vue, et sa commande.
+    ///
+    /// **Tant que l'outil Trajectoire a le pointeur dans la vue** (`e3_trace`), il le garde (Anthony, 2026-11-13 : « Le
+    /// bouton « Caméra » de la barre de la vue fait quitter l'outil Trajectoire. On garde l'outil » ; avant, le bouton
+    /// rendait le pointeur aux cartes, comme un outil de la vue). La caméra est alors choisie seule, exactement comme par
+    /// « choisir » du panneau Espace 3D (`e3_choisir_la_camera`), et le prochain trait trace son chemin. `ajouter` (Maj
+    /// tenue au clic) : elle rejoint ce qui est choisi, ou le quitte. Avec tout autre outil, rien ne change : `ajouter` ne
+    /// sert pas, et les autres outils de la vue (choisir, déplacer, tourner, taille) rendent toujours le pointeur aux cartes.
+    fn espace3d_pick_camera(&mut self, ajouter: bool) {
+        if self.e3_trace() {
+            self.e3_choisir_la_camera(ajouter);
+            self.e3_traj_dire_ce_qui_suivra();
+            return;
+        }
         if !self.espace3d.on {
             self.set_espace3d(true);
         }
@@ -310,20 +514,33 @@ impl App {
             self.espace3d.mode = GizmoMode::Move;
         }
         self.espace3d.through_camera = false;
+        self.e3_manipuler();
     }
 
     // ------------------------------------------------------------------------- barre d'outils
 
     /// Outils de l'Espace 3D, dans la barre au-dessus du dessin : une seule rangée.
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
+        // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
+        // vue sont éteints ; un outil de la vue lui rend les cartes.
+        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.
+        // L'outil Sélection de même, partie 152.)
+        let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
+        self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
-            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode), mode.label(), mode_description(mode), mode.action()).clicked() {
+            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
+                self.e3_manipuler();
             }
         }
-        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID);
-        if self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée).", "espace3d.outil_camera").clicked() {
-            self.espace3d_pick_camera();
+        // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et
+        // reste allumée tant qu'elle l'est. Anthony, 2026-11-13 : « On garde l'outil ».)
+        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID) && (!dessine || self.e3_trace());
+        let description = "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée). Avec l'outil Trajectoire : la caméra est choisie seule et l'outil reste en main, le prochain trait trace son chemin (Maj+clic : avec les cartes choisies, ou la lâcher).";
+        let r = self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", description, "espace3d.outil_camera");
+        if r.clicked() {
+            let ajouter = ui.input(|i| i.modifiers.shift);
+            self.espace3d_pick_camera(ajouter);
         }
         ui.add_space(crate::barres::MARGE_TRAIT);
         ui.separator();
@@ -338,7 +555,7 @@ impl App {
         self.e3_vues_bouton(ui);
     }
 
-    // ------------------------------------------------------------------------ panneau Réglages
+    // ------------------------------------------------------------------------ panneau Espace 3D
 
     /// Une étape d'annulation de l'état d'avant, au nom `name` (à appeler AVANT le changement).
     fn record_named(&mut self, name: &str) {
@@ -364,12 +581,12 @@ impl App {
         changed
     }
 
-    /// Réglages de l'Espace 3D (panneau Réglages quand la vue 3D est ouverte).
+    /// Les réglages de la vue Espace 3D : ce que montre le panneau « Espace 3D » quand la vue est ouverte
+    /// (`espace3dpanneau.rs`, partie 150 ; avant elle, ils prenaient la place des réglages de l'outil dans le panneau
+    /// Réglages). Les réglages de l'outil en main n'y sont pas : ceux de la Trajectoire dans l'espace, comme ceux du pinceau,
+    /// sont dans le panneau Réglages (`trajectoire_espace_options_ui`).
     pub(crate) fn espace3d_options_panel(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur;
-        let note = |ui: &mut egui::Ui, text: &str| {
-            ui.label(RichText::new(text).small().weak());
-        };
         ui.horizontal(|ui| {
             ui.heading(format!("{}  Espace 3D", ph::CUBE));
             ui.label(RichText::new("cartes et caméra").small().weak());
@@ -385,6 +602,21 @@ impl App {
             if r.clicked() {
                 self.espace3d.show_grid = !self.espace3d.show_grid;
             }
+            // Une, deux ou quatre vues (`espace3dvues.rs`, partie 144) : un réglage de la vue, donc ici et dans la barre
+            // de la vue, pas dans le panneau Réglages (partie 150).
+            self.e3_vues_bouton(ui);
+            // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : une case du plan courant.
+            let r = self.bouton_etat(
+                ui,
+                self.panel().espace,
+                ph::CUBE_TRANSPARENT,
+                "Plan en Espace 3D",
+                "Ce plan devient un plan en Espace 3D : sa caméra est libre dans l'espace (elle tourne tout autour, passe derrière les cartes), ce qui est devant cache ce qui est derrière, et l'image montre ce que cette caméra filme. La case est enregistrée avec le plan.",
+                "espace3d.plan_en_espace",
+            );
+            if r.clicked() {
+                self.espace3d_basculer_plan_en_espace();
+            }
         });
         if self.espace3d.snap {
             ui.horizontal(|ui| {
@@ -394,6 +626,26 @@ impl App {
                 crate::bulles::bulle(r, "Pas de rotation", "Rotations aimantées à ce pas.", "");
                 let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_scale).speed(0.01).range(0.01..=2.0));
                 crate::bulles::bulle(r, "Pas de taille", "Tailles aimantées à ce pas.", "");
+            });
+        }
+        // Poser une surface à dessiner (plan en Espace 3D seulement) : face à la caméra, au sol, en mur, à la distance dite.
+        if self.doc.plan_en_espace(self.cur_panel) {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{}  Nouvelle surface", ph::PLUS)).strong());
+                for (sorte, icone, action, description) in [
+                    (espace3d::Surface::Face, ph::FRAME_CORNERS, "espace3d.surface_face", "Un calque neuf posé face à la caméra, à la distance choisie : le cadre tombe en son centre."),
+                    (espace3d::Surface::Sol, ph::ALIGN_BOTTOM, "espace3d.surface_sol", "Un calque neuf couché au sol, devant la caméra, à la distance choisie."),
+                    (espace3d::Surface::Mur, ph::WALL, "espace3d.surface_mur", "Un calque neuf debout sur le sol, face à la caméra, à la distance choisie."),
+                ] {
+                    if self.bouton(ui, icone, sorte.nom(), description, action).clicked() {
+                        self.espace3d_nouvelle_surface(sorte);
+                    }
+                }
+                let mut d = self.espace3d_distance_surface();
+                let r = ui.add(egui::DragValue::new(&mut d).speed(0.05).range(0.3..=500.0).suffix(" m"));
+                if crate::bulles::bulle(r, "Distance de la surface", "À combien de mètres devant la caméra la surface neuve se pose. La distance d'origine de la caméra : celle de la feuille.", "").changed() {
+                    self.espace3d.surface_distance = d;
+                }
             });
         }
         ui.separator();
@@ -407,13 +659,14 @@ impl App {
             }
         });
         let frame = self.cur_frame;
+        let world = self.e3_world();
         let cards: Vec<(usize, u64, String, f32, bool)> = self
             .e3_visible_cards()
             .into_iter()
             .rev()
             .map(|li| {
                 let l = &self.layers()[li];
-                (li, l.id, l.name.clone(), l.depth_at(frame), l.locked || l.position_locked)
+                (li, l.id, l.name.clone(), world.profondeur(l, frame), l.locked || l.position_locked)
             })
             .collect();
         egui::ScrollArea::vertical().id_salt("espace3d_cartes").max_height(130.0).auto_shrink([true, true]).show(ui, |ui| {
@@ -443,8 +696,12 @@ impl App {
             self.espace3d_card_fields(ui, *li);
         } else if chosen_cards.len() > 1 {
             ui.separator();
-            ui.label(RichText::new(format!("{} cartes choisies", chosen_cards.len())).strong());
-            note(ui, "Elles se déplacent, tournent et grandissent ensemble ; choisis-en une seule pour ses réglages.");
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{} cartes choisies", chosen_cards.len())).strong());
+                // (Les clés de position des cartes choisies, toutes ensemble : `espace3dcles.rs`.)
+                self.espace3d_boutons_cle_position(ui);
+            });
+            // (Ce qu'elles font ensemble est dans le registre des explications, rubrique Espace 3D, partie 153.)
         }
         ui.separator();
         self.espace3d_camera_fields(ui);
@@ -458,13 +715,16 @@ impl App {
         let layer = &self.layers()[li];
         let (name, locked, animated) = (layer.name.clone(), layer.locked || layer.position_locked, layer.is_animated());
         let t0 = layer.pose(frame);
-        let d0 = layer.depth_at(frame);
+        // (Plan en Espace 3D : la profondeur est libre, la carte peut être derrière la caméra d'origine du plan.)
+        let d0 = world.profondeur(layer, frame);
         let mut xf = world.card_xf(&t0, d0);
         let mut t = t0;
         let mut depth = d0;
         let (mut moved, mut scaled, mut deepened, mut flat) = (false, false, false, false);
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{} {}", ph::SQUARE, name)).strong());
+            // (La clé de position de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_position(ui);
             if locked {
                 ui.label(RichText::new("verrouillée").small().weak());
             }
@@ -509,9 +769,17 @@ impl App {
                 ui.end_row();
                 ui.label("Profondeur");
                 ui.horizontal(|ui| {
-                    let r = ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(Layer::MIN_DEPTH..=1000.0).max_decimals(2));
+                    // (Plan en Espace 3D : le champ descend sous la borne des plans ordinaires. Il le faut aussi pour le
+                    // montrer : un champ borné ramènerait à sa borne, sans qu'on y touche, une carte qui l'a passée.)
+                    let plus_pres = if world.libre { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH };
+                    let r = ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(plus_pres..=1000.0).max_decimals(2));
                     deepened |= self.edited3d(&r, "Profondeur de la carte");
-                    crate::bulles::bulle(r, "Profondeur (multiplan)", "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace.", "");
+                    let phrase = if world.libre {
+                        "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace. Sous −0,9 la carte ne change plus de taille : elle avance jusqu'à cette caméra, la caméra d'origine du plan (−1), puis passe derrière elle."
+                    } else {
+                        "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace."
+                    };
+                    crate::bulles::bulle(r, "Profondeur (multiplan)", phrase, "");
                     if crate::bulles::icone_si(ui, t.is_tilted(), ph::ARROW_COUNTER_CLOCKWISE, "Remettre à plat", "Annule l'inclinaison : la carte redevient parallèle à la feuille.", "").clicked() {
                         flat = true;
                     }
@@ -521,9 +789,14 @@ impl App {
         });
         if moved || scaled || deepened || flat {
             self.modified = true;
+            let libre = self.doc.plan_en_espace(self.cur_panel);
             let layer = &mut self.layers_mut()[li];
             if moved {
-                world.apply_card_xf(layer, frame, &xf);
+                if libre {
+                    world.apply_card_xf_libre(layer, frame, &xf);
+                } else {
+                    world.apply_card_xf(layer, frame, &xf);
+                }
             }
             if scaled || flat {
                 let mut p = layer.pose(frame);
@@ -533,13 +806,17 @@ impl App {
                 if flat {
                     (p.tilt_x, p.tilt_y) = (0.0, 0.0);
                 }
-                layer.set_pose(frame, p);
+                layer.set_pose_selon(frame, p, libre);
             }
             if deepened {
-                layer.set_depth_at(frame, depth);
+                layer.set_depth_selon(frame, depth, libre);
+            }
+            // (Une carte qui suit une trajectoire dans l'espace : ce réglage vaut pour sa pose propre, à toutes les images.)
+            if libre {
+                self.trajectoire_espace_apres_pose(li);
             }
         }
-        ui.label(RichText::new("Rotation Z : le tour dans le plan de la carte (antihoraire) ; X et Y inclinent la carte.").small().weak());
+        // (Les axes de rotation d'une carte : l'animation « Une carte et ses axes de rotation », registre des explications.)
     }
 
     /// La caméra du plan, seule caméra de l'espace : placement, focale (objectifs du plan), vue par la caméra.
@@ -553,9 +830,13 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{}  Caméra du plan", ph::VIDEO_CAMERA)).strong());
             let selected = self.espace3d.sel.contains(&CAMERA_ID);
-            if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra pour la déplacer ou la tourner dans la vue").clicked() {
-                self.espace3d.sel = vec![CAMERA_ID];
+            // (Seule : les cartes sont lâchées, la timeline montre la piste « Caméra » choisie. Maj+clic : avec les cartes.)
+            if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra, seule, pour la déplacer, la tourner, ou tracer son chemin dans la vue : les cartes sont lâchées. Maj+clic : l'ajouter aux cartes choisies, ou la lâcher.").clicked() {
+                let ajouter = ui.input(|i| i.modifiers.shift);
+                self.e3_choisir_la_camera(ajouter);
             }
+            // (La clé de caméra de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_camera(ui);
         });
         egui::Grid::new("espace3d_camera").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
             ui.label("Position (m)");
@@ -591,6 +872,10 @@ impl App {
             ui.end_row();
         });
         ui.label(RichText::new(format!("Champ horizontal {:.0}° (pellicule de 36 mm).{}", cam.angle_of_view(), if keys >= 2 { format!(" {keys} clés de caméra : on règle la clé de l'image courante.") } else { String::new() })).small().weak());
+        if self.doc.plan_en_espace(self.cur_panel) {
+            // (Ce que peut la caméra libre : l'animation « La caméra libre », registre des explications.)
+            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre.").small().weak());
+        }
         if changed {
             let sc = cam.sanitized();
             let mut new = world.camera_from_scene(&sc);

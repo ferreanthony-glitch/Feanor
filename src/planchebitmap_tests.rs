@@ -229,6 +229,8 @@ fn the_first_pass_keeps_citing_a_piece_that_left_for_a_drawing() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+// (Le verrou d'un fichier tenu par un autre programme est celui de Windows : l'essai n'existe que là.)
+#[cfg(windows)]
 #[test]
 fn emptying_the_layer_removes_images_first_and_a_locked_image_never_makes_it_unreadable() {
     use std::os::windows::fs::OpenOptionsExt;
