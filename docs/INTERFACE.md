@@ -11115,11 +11115,12 @@ les réglages de la vue (les cartes, la caméra). On dessinait sur une carte san
 
 Rien n'a changé dans ce que font ces réglages : seule leur place a changé. Le panneau « Réglages » garde son nom.
 
-**Sa place : à côté de Réglages (modifié par la partie 152).** À cette partie, le panneau était un onglet de plus dans le
-groupe de la couleur, sous les réglages de l'outil, et passait devant la couleur quand la vue s'ouvrait. Vu à l'écran le
-2026-11-13, il n'y avait qu'une centaine de points de haut : Anthony l'a voulu « à côté de réglages plutôt ». Depuis la
-partie 152 (point 152.3), il a une colonne à lui, à droite de celle des réglages de l'outil, sur toute la hauteur ; elle
-arrive quand la vue s'ouvre et repart quand elle se ferme, et le panneau n'est plus dans les dispositions d'origine.
+**Sa place : un onglet de Réglages (modifié par la partie 152).** À cette partie, le panneau était un onglet de plus dans
+le groupe de la couleur, sous les réglages de l'outil, et passait devant la couleur quand la vue s'ouvrait. Vu à l'écran
+le 2026-11-13, il n'y avait qu'une centaine de points de haut : Anthony l'a voulu « à côté de réglages plutôt ». Une
+colonne à lui a d'abord été essayée ; après sa réponse du 13 novembre (« Onglet de Réglages », point 152.3), il est un
+onglet du groupe de Réglages, après Réglages et la fiche du plan : il y arrive et passe devant quand la vue s'ouvre,
+Réglages revient devant quand elle se ferme, et l'onglet reste. Il n'est plus dans les dispositions d'origine.
 Ce qui suit dans cette partie sur sa place (les trois onglets du groupe de la couleur, « il passe devant la couleur »,
 sa place quand la disposition n'a pas la couleur, les dispositions enregistrées qui le reçoivent) ne vaut donc plus :
 voir 152.3.
@@ -11140,16 +11141,16 @@ phrase dit que la vue ne s'y montre pas.
 |---|---|---|
 | Case « Espace 3D » | menu Affichage > Panneaux | |
 | « Panneau Espace 3D (ouvrir / fermer) » | palette (Ctrl+K), `keymap.toml` | `vue.espace3d_panneau`, sans touche d'origine |
-| Icône cube « Panneau Espace 3D » | barre des panneaux (bord droit), avec Réglages, Couleur et Brosses dédiées ; d'office dans le Storyboard et l'Animation | `vue.espace3d_panneau` : un clic l'ouvre (dans sa colonne à côté de Réglages : modifié par la partie 152) ou le met devant, un autre le ferme |
+| Icône cube « Panneau Espace 3D » | barre des panneaux (bord droit), avec Réglages, Couleur et Brosses dédiées ; d'office dans le Storyboard et l'Animation | `vue.espace3d_panneau` : un clic l'ouvre (en onglet de Réglages : modifié par la partie 152) ou le met devant, un autre le ferme |
 
 Le bouton cube de la barre au-dessus du dessin ouvre toujours la **vue** (`espace3d.basculer`) ; le cube de la barre des
 panneaux ouvre le **panneau**.
 
 **Les dispositions enregistrées avant ce panneau (modifié par la partie 152).** À cette partie, au premier lancement,
 le panneau était ajouté une fois en onglet dans le groupe de la couleur des dispositions retenues
-(`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_pose`). Ce n'est plus fait : sa colonne arrive avec
-la vue, une disposition n'a pas besoin de l'avoir. Et les dispositions qui l'avaient reçu ainsi le perdent, une fois
-(152.3).
+(`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_pose`). Ce n'est plus fait : il arrive avec la vue,
+en onglet de Réglages ; une disposition n'a pas besoin de l'avoir d'avance. Et les dispositions qui l'avaient reçu ainsi
+le perdent, une fois (152.3).
 
 **Les messages qui disaient « dans Réglages »** disent « dans le panneau Espace 3D » : l'ouverture de la vue
 (« Réglages de la vue : le panneau Espace 3D. », « « Nouvelle surface » dans le panneau Espace 3D… »), « Nouvelle
@@ -11178,8 +11179,8 @@ vue Espace 3D) ; le format du projet (55).
 
 - `dock.rs` : `Pane::Espace3d` (nom enregistré `espace3d`). À cette partie il était dans la famille de la couleur
   (`COLOR_TABS`) et dans les dispositions standard (`from_legacy`), et `DockLayout::open` le rangeait avec la couleur ;
-  depuis la partie 152 il n'y est plus, et `open` le pose dans sa colonne (`poser_en_colonne`, modifié par la partie
-  152). `DockLayout::remettre_devant` rend sa place à l'onglet d'avant.
+  depuis la partie 152 il n'y est plus, et `open` le range en dernier onglet du groupe des réglages de l'outil (modifié
+  par la partie 152). `DockLayout::remettre_devant` rend sa place à l'onglet d'avant.
 - `espace3dpanneau.rs` (nouveau) : le contenu du panneau (`espace3d_panneau`), et le suivi de la vue
   (`espace3d_panneau_suivre`, une comparaison par image d'écran, avant les panneaux ; il n'agit que quand la vue
   s'ouvre ou se ferme).
@@ -11357,60 +11358,82 @@ premier geste sur lui (une marque, un recalage), ou en passant par « Clés d'in
 **Qui pose les clés d'une carte à la main doit passer par `App::trajectoire_recalculer` (ou
 `trajectoire_recalculer_dans`)** : `cles_dans_l_espace` seule ne pose que les clés de position.
 
-### 152.3 Le panneau Espace 3D à côté de Réglages
+### 152.3 Le panneau Espace 3D, un onglet de Réglages (modifié après sa réponse du 13 novembre)
 
 **Avant** (partie 150). Le panneau était un onglet du groupe de la couleur, sous Réglages. Vu à l'écran, il n'y avait
 qu'une centaine de points de haut.
 
-**Maintenant : une colonne à lui, à droite de celle des réglages de l'outil, sur toute la hauteur.** Réglages (l'outil
-en main), la couleur dessous, et le panneau Espace 3D à leur droite se voient en même temps. La couleur ne bouge pas.
+**Premier essai (retiré).** Une colonne à lui, à droite de celle des réglages de l'outil, sur toute la hauteur, 340
+points pris au dessin, qui arrivait quand la vue s'ouvrait et repartait quand elle se fermait (commit 6ad1f1f). Dans son
+propre essai, Anthony avait de lui-même glissé le panneau en onglet à côté de « Réglages » et « Fiche ». À la question
+« Colonne à part » (les deux visibles) ou « Onglet de Réglages » (comme il l'avait rangé, l'un ou l'autre devant), il a
+répondu, le 13 novembre : **« Onglet de Réglages »**. La colonne est retirée.
+
+**Maintenant : un onglet du groupe de Réglages**, après Réglages et la fiche du plan (après tous les onglets que ce groupe
+a). Réglages ou le panneau Espace 3D devant, l'un ou l'autre ; la couleur dessous et les calques ne bougent pas, le
+dessin garde sa largeur.
 
 ```
- dessin │ Calques │ Réglages │ Espace 3D          dessin        │ Calques │ Réglages
-        │         │──────────│                                  │         │──────────
-        │ Effets  │ Couleur  │                                  │ Effets  │ Couleur
- ───────────────────────────────────          ──────────────────────────────────────
- montage / timeline                            montage / timeline
-        vue Espace 3D ouverte                          vue Espace 3D fermée
+ dessin │ Calques │ Réglages Fiche [Espace 3D]      dessin │ Calques │ [Réglages] Fiche Espace 3D
+        │         │──────────────────────────              │         │──────────────────────────
+        │ Effets  │ Couleur                                │ Effets  │ Couleur
+ ─────────────────────────────────────────────      ──────────────────────────────────────────
+ montage / timeline                                  montage / timeline
+        vue Espace 3D ouverte                               vue Espace 3D fermée
+                                      [ ] : l'onglet de devant
 ```
 
-- **La colonne arrive quand la vue Espace 3D s'ouvre et repart quand elle se ferme** (ou quand la vue caméra la
-  cache) : le reste du temps, elle ne prend aucune place, et le panneau n'est plus dans les dispositions d'origine.
-- **Largeurs.** La colonne fait **340 points** de large (entre 12 % et 40 % de la largeur des panneaux si la fenêtre
-  est immense ou minuscule). Cette largeur est **prise au dessin** ; Réglages, la couleur et les calques gardent la
-  leur. Dans la fenêtre de référence (1 454 points de panneaux), le Storyboard d'origine donne : dessin 874, Calques
-  230, Réglages et couleur 350 ; vue ouverte : dessin 534, Calques 230, Réglages et couleur 350, Espace 3D 340. Le
-  dessin garde au moins un cinquième de la largeur : s'il est déjà plus étroit, les colonnes de droite se serrent.
-- **Rangé ailleurs à la main, il y reste.** Si le panneau est déjà dans la disposition (glissé en onglet d'un autre
-  groupe, flottant, dans sa propre fenêtre), la vue ne le déplace pas : elle le met devant les onglets de son groupe
-  en s'ouvrant, et rend l'onglet d'avant en se fermant (comme à la partie 150).
-- **Ouvert à la main, il reste ouvert.** Son icône cube de la barre des panneaux, sa case du menu Affichage > Panneaux
-  et sa commande l'ouvrent dans cette même colonne, la vue ouverte ou fermée, et il y reste quand la vue se ferme. Vue
-  fermée, il montre sa phrase et le bouton « Ouvrir la vue Espace 3D ».
-- **Fermé à la main pendant que la vue est ouverte**, il reste fermé jusqu'à la prochaine ouverture de la vue.
-- **Glissé ailleurs pendant que la vue est ouverte**, il reste où on l'a glissé à la fermeture.
-- **La disposition retenue** (celle des réglages, celle que l'espace de travail retrouve) est celle sans la colonne
-  que la vue a posée : FEANOR se relance sans elle.
-- **Changer d'espace de travail la vue ouverte** (entrer en animation, « Rétablir la disposition ») : la colonne arrive
-  dans la disposition où l'on arrive.
-- **Sans les réglages de l'outil dans la fenêtre principale** (le Montage ; Réglages fermé, ou flottant) : pas de
-  colonne à côté d'eux. Le panneau arrive en onglet du groupe de sa colonne (avec la fiche du plan, ou la couleur),
-  passe devant, et l'onglet d'avant revient à la fermeture.
+- **Quand la vue s'ouvre** : si le panneau n'est pas dans la disposition, il y arrive en onglet de Réglages ; dans tous
+  les cas il passe devant les onglets de son groupe, et l'onglet qui était devant (Réglages, d'ordinaire) est retenu.
+- **Quand elle se ferme** (ou quand la vue caméra la cache) : cet onglet repasse devant, si le panneau y est encore
+  devant, dans le même groupe. L'onglet Espace 3D **reste** dans la disposition : vue fermée, il montre sa phrase et le
+  bouton « Ouvrir la vue Espace 3D ».
+- **Un onglet comme les autres.** On peut le fermer, ou le glisser ailleurs (un autre groupe, flottant, sa propre
+  fenêtre) : la vue ne le déplace jamais ; elle le met seulement devant là où il est, et rend l'onglet d'avant en se
+  fermant. Fermé, il revient en onglet de Réglages à la prochaine ouverture de la vue.
+- **Rangé autrement pendant que la vue est ouverte** (Réglages ou la fiche mis devant à la main, le panneau glissé
+  ailleurs ou fermé) : rien n'est défait à la fermeture.
+- **Ouvert à la main** (son icône cube, sa case du menu Affichage > Panneaux, sa commande) : en onglet de Réglages, devant.
+- **La disposition retenue** (celle des réglages, celle que l'espace de travail retrouve) a l'onglet, avec devant celui
+  que l'utilisateur y avait (Réglages, d'ordinaire), pas celui que la vue y a mis pour un moment.
+- **Les dispositions d'origine** ne l'ont pas : il arrive à la première ouverture de la vue. « Rétablir la disposition » :
+  la disposition d'origine, sans lui ; la vue ouverte, il y arrive aussitôt, devant.
+- **Changer d'espace de travail la vue ouverte** (entrer en animation) : l'onglet arrive dans la disposition où l'on
+  arrive, devant.
+- **Sans les réglages de l'outil dans la fenêtre principale** (le Montage ; Réglages fermé, ou flottant) : le panneau
+  arrive en onglet du groupe de sa colonne (avec la fiche du plan, ou la couleur), passe devant, et l'onglet d'avant
+  revient à la fermeture. Sans plus aucun panneau de cette colonne, il en refait une à lui seul (à l'essai de la
+  colonne, rien ne s'ouvrait dans ce cas).
 
 **Les dispositions retenues qui avaient le panneau avec la couleur le perdent, une fois.** Au premier lancement
 (`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_a_cote`) : dans chaque disposition retenue
 (Storyboard, Animation, Montage, Vignettes, espaces de travail enregistrés), le panneau quitte la place que la partie
 150 lui avait donnée : un onglet du groupe de la couleur ou des brosses dédiées, ou seul juste sous Réglages. Rien
-d'autre ne bouge (parts, onglet de devant, panneaux flottants). Rangé ailleurs, il y reste. **Un panneau qu'on aurait
-remis soi-même dans le groupe de la couleur ne se distingue pas de celui que la partie 150 y avait posé : il le quitte
-aussi, cette fois-là.** Remis ensuite, il y reste. Les dispositions d'avant la partie 150 ne reçoivent plus le panneau
-(la partie 150 l'y ajoutait).
+d'autre ne bouge (parts, onglet de devant, panneaux flottants) ; il revient en onglet de Réglages à la prochaine
+ouverture de la vue. **En onglet de Réglages** (comme Anthony l'avait rangé dans son essai), il reste, même si la couleur
+a été glissée dans ce groupe ; rangé ailleurs, il reste aussi. **Un panneau qu'on aurait remis soi-même dans le groupe
+de la couleur ne se distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là.** Remis
+ensuite, il y reste. Les dispositions d'avant la partie 150 ne reçoivent plus le panneau (la partie 150 l'y ajoutait).
 
-**Comment.** `dock.rs` : `DockLayout::poser_en_colonne`, `en_colonne`, `retirer_la_colonne`,
-`retirer_de_la_place_150`, `part_de_la_colonne_espace3d`, `ESPACE3D_WIDTH` ; `DockLayout::open` pose le panneau dans
-cette colonne ; il n'est plus dans `COLOR_TABS` ni dans `from_legacy`. `espace3dpanneau.rs` : `Suivi::colonne`,
-`espace3d_panneau_suivre`. `workspaceui.rs` : `current_layout` retient la disposition sans la colonne.
-`settings.rs` : la marque `panneau_espace3d_a_cote`.
+**Comment.** `dock.rs` : `DockLayout::open` range le panneau en dernier onglet du groupe des réglages de l'outil (sinon
+la règle de son groupe ; `left_column` le prend quand il refait la colonne à lui seul) ; `retirer_de_la_place_150`
+laisse un onglet du groupe de Réglages ; il n'est ni dans `COLOR_TABS` ni dans `from_legacy`. Retirés avec la colonne :
+`poser_en_colonne`, `en_colonne`, `retirer_la_colonne`, `part_de_la_colonne_espace3d`, `ESPACE3D_WIDTH` et leurs aides.
+`espace3dpanneau.rs` : `espace3d_panneau_suivre`, `espace3d_panneau_montrer`, `espace3d_panneau_rendre` (le suivi de la
+partie 150, `Suivi::avant`) ; `Suivi::colonne` est retiré. `workspaceui.rs` : `current_layout` remet devant l'onglet
+d'avant (`DockLayout::remettre_devant`). `settings.rs` : la marque `panneau_espace3d_a_cote`.
+
+**Essais de l'onglet.** `src/espace3dpanneau_tests.rs`, 15 essais : 4 récrits (le panneau en dernier onglet du groupe
+de Réglages, rien d'autre ne bouge, aussi dans les Vignettes ; ouvrir la vue le met devant, la fermer rend Réglages,
+l'onglet reste, la vue caméra, Réglages ou la fiche mis devant à la main ; rangé, fermé, glissé ou ouvert à la main,
+respecté ; l'Animation et « Rétablir la disposition », la vue ouverte ou fermée, et sans Réglages), 4 adaptés (sans
+Réglages dans la fenêtre principale, dont le cas où plus rien de sa colonne n'est là ; l'onglet d'avant dans le groupe
+de Réglages ; les dispositions retenues, dont une en onglet de Réglages et une où la couleur est dans ce groupe ; la
+commande, qui le met aussi devant quand il est derrière Réglages), 1 nouveau (sa disposition à lui, enregistrée par la
+partie 150, le panneau à côté de Réglages et Fiche : gardée telle quelle, puis la vue l'y met devant et rend Réglages).
+Filtres `espace3dpanneau`, `dock`, `settings`, `workspace`, `barrepanneaux`, `ajuste` : 15, 24, 120, 24, 12 et 8
+réussis, aucun échec. Vérificateur : 4 607 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des
+fonctions jamais appelées de `espace3d.rs`), aucun nouveau.
 
 ### 152.4 Le lasso dans la vue Espace 3D
 
@@ -11467,10 +11490,8 @@ calque du dessus) lâche la caméra et rend la rangée ; Maj+Ctrl+clic et Maj+cl
 `src/trajectoire3d_images_tests.rs`, 4 essais (nouveau) : une clé de dessin à chaque jalon, copie intacte du dessin du
 départ, et les clés de position tenues gardées ; glisser une marque ou la recaler sur la timeline garde ce qui a été
 redessiné ; « Clés d'interpolation », « Détacher » et « Effacer » ; sans dessin au départ, la caméra, et
-l'enregistrement puis la relecture. `src/espace3dpanneau_tests.rs`, 14 essais (8 récrits pour la colonne) : la colonne à
-droite de Réglages, largeurs prises au dessin ; sans Réglages dans la fenêtre principale, un onglet ; ouvrir et fermer
-la vue ; rangé ou ouvert à la main, respecté ; chaque espace de travail ; les dispositions d'origine sans le panneau ;
-l'onglet d'avant ; les dispositions retenues de la partie 150 qui le perdent une fois. `src/espace3dlasso_tests.rs`,
+l'enregistrement puis la relecture. `src/espace3dpanneau_tests.rs` : récrits une première fois pour la colonne, puis
+pour l'onglet de Réglages après sa réponse du 13 novembre (voir « Essais de l'onglet », en 152.3). `src/espace3dlasso_tests.rs`,
 4 essais (nouveau), de vrais gestes de souris dans la vue : lasso sur une carte bitmap et déplacement (la feuille
 flottante posée sur la carte) ; Suppr, copier, couper, coller, Échap, Maj pour ajouter, un outil de la vue qui pose ce
 qui est choisi ; sur une carte vectorielle, lasso, déplacer, agrandir, tourner, trois annulations, Suppr ; Ctrl+glisser
@@ -11500,9 +11521,11 @@ fois ; le seul avertissement connu (celui des fonctions jamais appelées de `esp
   marque ajoutée ou retirée au milieu du chemin, les poses redessinées gardent leur rang (la deuxième pose reste la
   deuxième), pas leur marque. Et un recalcul de la trajectoire repose une clé de dessin à chaque jalon : une clé de
   dessin ajoutée à la main entre deux jalons est recouverte, comme sur la feuille.
-- **Le panneau Espace 3D** n'a plus de place dans les dispositions d'origine : fermé, il n'a pas d'onglet où le
-  retrouver ; il revient avec la vue, par son icône cube de la barre des panneaux, ou par le menu Affichage > Panneaux.
-  Dans les Vignettes et le Montage, rien de neuf.
+- **Le panneau Espace 3D** n'est pas dans les dispositions d'origine : avant la première ouverture de la vue (ou après
+  « Rétablir la disposition »), il n'a pas d'onglet ; il arrive avec la vue, par son icône cube de la barre des panneaux
+  ou par le menu Affichage > Panneaux, puis reste. Quand son onglet est devant, le bord entre le groupe de Réglages et la
+  couleur ne s'ajuste pas tout seul à son contenu (`ajuste.rs` : les deux prennent « le reste ») : il garde la hauteur
+  que Réglages avait. Dans les Vignettes et le Montage, rien de neuf.
 - **Le lasso dans la vue** : la sélection sur plusieurs calques à la fois (Ctrl+Maj sur la feuille, ou plusieurs
   calques choisis) et la sélection par couleur ne s'y font pas : le lasso prend sur la carte du calque courant
   seulement. Coller une zone pendant qu'un outil de la vue a le pointeur la colle bien, mais il faut prendre l'outil
@@ -11540,19 +11563,23 @@ Les clés d'images (152.2) :
    dessin du départ partout.
 9. Un calque vide, « Clés d'images », un chemin : la barre d'état dit de dessiner d'abord à l'image du départ.
 
-Le panneau Espace 3D (152.3) :
+Le panneau Espace 3D (152.3, modifié après sa réponse du 13 novembre) :
 
-10. Storyboard, vue Espace 3D fermée : pas de panneau Espace 3D ; sous Réglages, la couleur, comme avant la partie 150.
-11. Ouvrir la vue : une colonne « Espace 3D » arrive à droite de Réglages et de la couleur, sur toute la hauteur ; le
-    dessin rétrécit d'autant. Dire si 340 points de large conviennent, si le dessin garde assez de place, et s'il
-    vaudrait mieux que la colonne soit prise ailleurs qu'au dessin.
-12. Fermer la vue : la colonne repart, le dessin retrouve sa largeur. Dire si ce va-et-vient gêne (sinon : la garder
-    toujours là).
-13. Glisser le panneau ailleurs (en onglet avec les calques, par exemple), fermer et rouvrir la vue : il reste où tu
-    l'as mis, et passe devant quand la vue s'ouvre.
-14. Vue fermée, cliquer l'icône cube de la barre des panneaux : le panneau s'ouvre dans cette colonne et y reste.
-15. Ta disposition d'essai d'hier (le panneau en onglet avec la couleur) : au lancement, l'onglet a quitté le groupe de
-    la couleur, rien d'autre n'a bougé.
+10. Storyboard, réglages neufs, vue Espace 3D fermée : pas d'onglet Espace 3D ; Réglages et Fiche au-dessus de la
+    couleur, comme avant la partie 150.
+11. Ouvrir la vue : un onglet « Espace 3D » arrive après Réglages et Fiche, et passe devant ; la couleur et les calques
+    restent visibles, le dessin garde sa largeur. Dire si la hauteur de ce groupe suffit pour la liste des cartes et la
+    caméra du plan (quand l'onglet Espace 3D est devant, le bord avec la couleur ne s'ajuste pas tout seul : il garde la
+    hauteur que Réglages avait).
+12. Fermer la vue : Réglages revient devant, l'onglet Espace 3D reste derrière lui. Rouvrir : il repasse devant.
+13. La vue ouverte, cliquer l'onglet Réglages (changer de brosse), puis fermer la vue : Réglages reste devant. Dire s'il
+    faudrait que le panneau Espace 3D repasse devant tout seul.
+14. Glisser l'onglet ailleurs (avec les calques, par exemple), fermer et rouvrir la vue : il reste où tu l'as mis, et
+    passe devant quand la vue s'ouvre. Le fermer (clic droit sur l'onglet) : à la prochaine ouverture de la vue, il
+    revient en onglet de Réglages.
+15. Ta disposition d'essai (le panneau glissé à côté de Réglages et Fiche) : il y est toujours, rien n'a bougé. Une
+    disposition de la partie 150 (le panneau avec la couleur) : au lancement l'onglet a quitté le groupe de la couleur,
+    et il arrive en onglet de Réglages à l'ouverture de la vue.
 
 Le lasso dans la vue (152.4) :
 
