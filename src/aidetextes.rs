@@ -21,7 +21,16 @@ const fn t(fenetre: &'static str, sujet: &'static str, texte: &'static str) -> T
     Texte { fenetre, sujet, texte }
 }
 
-/// Tous les textes, dans l'ordre du registre.
+/// Tous les textes du registre : ceux des panneaux (ici), puis ceux des Préférences et des fenêtres (`aidefenetres.rs`).
+pub(crate) fn tous() -> impl Iterator<Item = &'static Texte> {
+    TEXTES.iter().chain(crate::aidefenetres::FENETRES.iter())
+}
+
+/// La rubrique des exports : le registre y montre ce que fait chaque export de la fenêtre « Exporter » (`prefsui::FAMILLES`, qui
+/// reste l'info-bulle de son bouton).
+pub(crate) const EXPORTS: &str = "Exporter";
+
+/// Les textes des panneaux, dans l'ordre du registre.
 pub(crate) static TEXTES: &[Texte] = &[
     // ------------------------------------------------------------------ Réglages (les textes sans animation)
     t(BROSSES, "Connexions", "Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (par exemple un réglage qui varie avec la pression ou la vitesse)."),

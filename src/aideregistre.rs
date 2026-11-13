@@ -26,7 +26,7 @@ pub(crate) fn rubriques() -> Vec<&'static str> {
 /// Les fenêtres des textes sans animation, dans l'ordre du catalogue (chacune une fois).
 pub(crate) fn fenetres() -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
-    for t in crate::aidetextes::TEXTES {
+    for t in crate::aidetextes::tous() {
         if !out.contains(&t.fenetre) {
             out.push(t.fenetre);
         }
@@ -97,12 +97,22 @@ impl App {
                             ui.add_space(4.0);
                         }
                     }
-                    for t in crate::aidetextes::TEXTES.iter().filter(|t| t.fenetre == fenetre) {
+                    for t in crate::aidetextes::tous().filter(|t| t.fenetre == fenetre) {
                         if !t.sujet.is_empty() {
                             ui.label(RichText::new(t.sujet).strong());
                         }
                         ui.label(aideanim::avec_touches(t.texte, |a| self.raccourci(a)));
                         ui.add_space(4.0);
+                    }
+                    // Les exports de la fenêtre « Exporter » : leur texte est aussi l'info-bulle de leur bouton.
+                    if fenetre == crate::aidetextes::EXPORTS {
+                        for (titre, exports) in crate::prefsui::FAMILLES.iter() {
+                            ui.label(RichText::new(*titre).strong());
+                            for (icone, nom, aide, _) in exports.iter() {
+                                ui.label(format!("{icone}  {nom} : {aide}"));
+                            }
+                            ui.add_space(4.0);
+                        }
                     }
                 });
             }

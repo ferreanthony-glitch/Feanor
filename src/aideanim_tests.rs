@@ -234,11 +234,41 @@ fn the_shortcuts_are_read_in_the_texts() {
     assert_eq!(avec_touches("l'outil Sélection{outil.selection}, même texturé", r), "l'outil Sélection (S), même texturé");
     assert_eq!(avec_touches("rien{outil.inconnu}.", r), "rien.");
     assert_eq!(avec_touches("{ pas une commande }", r), "{ pas une commande }");
+    // Les champs d'un modèle de nom (sans point) restent tels quels.
+    assert_eq!(avec_touches("{projet} {plan:03}", r), "{projet} {plan:03}");
+}
+
+// ------------------------------------------------------------------------------------------------------ les fenêtres
+
+/// Les textes des Préférences et des fenêtres : ils ont quitté leur fichier et sont dans le registre (`aidefenetres.rs`).
+#[test]
+fn the_window_texts_left_their_window_for_the_register() {
+    let sources = [
+        include_str!("prefsui.rs"),
+        include_str!("genprefsui.rs"),
+        include_str!("vignettesprefs.rs"),
+        include_str!("exportui.rs"),
+        include_str!("scenarioui.rs"),
+        include_str!("cooperationui.rs"),
+    ];
+    let mut restent = Vec::new();
+    for t in crate::aidefenetres::FENETRES.iter().filter(|t| t.fenetre != crate::aidetextes::EXPORTS) {
+        // (Le libellé tel qu'il s'écrivait dans le code, les barres obliques inverses doublées ; une info-bulle qui dit la même chose
+        // reste.)
+        let ecrit = format!("RichText::new(\"{}\")", t.texte.replace('\\', "\\\\"));
+        if sources.iter().any(|s| s.contains(&ecrit)) {
+            restent.push(t.texte);
+        }
+        assert!(crate::aideregistre::fenetres().contains(&t.fenetre));
+    }
+    assert!(restent.is_empty(), "encore dans leur fenêtre : {restent:#?}");
+    // La fenêtre « Exporter » ne répète plus sous chaque bouton ce que dit son info-bulle.
+    assert!(!include_str!("prefsui.rs").contains("ui.label(RichText::new(*hint).small().weak())"));
 }
 
 #[test]
 fn the_texts_name_no_commercial_software() {
-    let tous = aideanim::toutes().map(|a| format!("{} {}", a.titre, a.texte)).chain(crate::aidetextes::TEXTES.iter().map(|t| format!("{} {} {}", t.fenetre, t.sujet, t.texte)));
+    let tous = aideanim::toutes().map(|a| format!("{} {}", a.titre, a.texte)).chain(crate::aidetextes::tous().map(|t| format!("{} {} {}", t.fenetre, t.sujet, t.texte)));
     for texte in tous {
         for interdit in ["Storyboard Pro", "TVPaint", "Photoshop", "Procreate", "EbSynth", "Toon Boom", "Blender", "Krita"] {
             assert!(!texte.contains(interdit), "{interdit} : {texte}");
@@ -258,7 +288,7 @@ fn the_register_lists_every_animation_and_every_text() {
         assert!(rubriques.contains(&a.rubrique), "{}", a.id);
     }
     let fenetres = crate::aideregistre::fenetres();
-    for t in crate::aidetextes::TEXTES {
+    for t in crate::aidetextes::tous() {
         assert!(fenetres.contains(&t.fenetre) && !t.texte.is_empty());
     }
     // À l'écran : la fenêtre, chaque rubrique, et les titres et les textes qui y tiennent (la suite est sous le défilement).

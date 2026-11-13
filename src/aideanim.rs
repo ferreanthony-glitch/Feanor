@@ -107,7 +107,8 @@ pub(crate) fn avec_touches(texte: &str, raccourci: impl Fn(&str) -> String) -> S
         out.push_str(&reste[..i]);
         let suite = &reste[i + 1..];
         match suite.find('}') {
-            Some(j) if j > 0 && suite[..j].chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '_' || c.is_ascii_digit()) => {
+            // (Un identifiant de commande a toujours un point : `{plan}`, un champ d'un modèle de nom, reste tel quel.)
+            Some(j) if j > 0 && suite[..j].contains('.') && suite[..j].chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '_' || c.is_ascii_digit()) => {
                 out.push_str(&crate::panels::between_parens(&raccourci(&suite[..j])));
                 reste = &suite[j + 1..];
             }

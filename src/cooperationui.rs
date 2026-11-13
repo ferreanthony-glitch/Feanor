@@ -649,7 +649,7 @@ impl App {
             if !vue.copies.is_empty() {
                 ui.separator();
                 ui.label(RichText::new(format!("{} Copies en conflit ({})", ph::WARNING, vue.copies.len())).strong());
-                ui.label(RichText::new("Un client de synchronisation de fichiers a gardé deux versions d'un fichier.").small().weak());
+                // (Ce que sont les copies en conflit et les brouillons : dans le registre des explications, `aidetextes.rs`.)
                 for c in &vue.copies {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(c.nom()).small());
@@ -667,7 +667,6 @@ impl App {
             if !vue.brouillons.is_empty() {
                 ui.separator();
                 ui.label(RichText::new(format!("{} Brouillons ({})", ph::NOTE_PENCIL, vue.brouillons.len())).strong());
-                ui.label(RichText::new("Du travail mis de côté (un plan perdu dans une course, repris pendant une coupure…).").small().weak());
                 for nom in &vue.brouillons {
                     let Some(plan) = nom_de_brouillon(nom) else { continue };
                     ui.horizontal(|ui| {
@@ -911,7 +910,6 @@ impl App {
                 ui.label(format!("Création du film partagé « {nom} »…"));
                 let fraction = if total == 0 { 0.0 } else { fait as f32 / total as f32 };
                 ui.add(crate::barre::Barre::new(fraction).desired_width(280.0).text(if total == 0 { "préparation".to_string() } else { format!("{fait} / {total} dessins") }));
-                ui.label(RichText::new("Le projet ouvert n'est pas touché. Le film partagé s'ouvrira dans un nouvel onglet.").small().weak());
             });
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
             return;
@@ -942,7 +940,6 @@ impl App {
                 change = true;
             }
         });
-        ui.label(RichText::new("Le nom et la couleur que les autres voient sur les plans que tu tiens.").small().weak());
         ui.horizontal(|ui| {
             ui.label("Une prise périme après");
             let mut m = self.settings.equipe.bail_minutes;
