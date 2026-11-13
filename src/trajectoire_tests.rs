@@ -299,6 +299,7 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
         support: None,
         lissage: 0.0,
         brut: None,
+        reference: None,
     };
     let propre = abimee.assainie().expect("tient debout");
     assert_eq!(propre.points.len(), 2);

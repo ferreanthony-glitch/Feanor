@@ -289,6 +289,11 @@ pub struct Trajectoire {
     /// chemin n'est pas lissé, `points` est le chemin brut.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brut: Option<Vec<[f32; 2]>>,
+    /// Le point du chemin d'où se mesure le déplacement de ce qui le suit (`point_de_reference`) ; rien : son départ, comme
+    /// toujours. Posé quand le chemin est **prolongé par son début** (Maj + un trait depuis le début, partie 151) : c'est
+    /// l'ancien départ, et ce qui suivait le chemin passe toujours au même endroit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<[f32; 2]>,
 }
 
 /// À lissage 1, la demi-fenêtre de la moyenne glissante (`lissage_de`), en fraction de la longueur du chemin.
@@ -334,7 +339,50 @@ impl Trajectoire {
             support: None,
             lissage: 0.0,
             brut: None,
+            reference: None,
         })
+    }
+
+    /// Le point du chemin d'où se mesure le déplacement de ce qui le suit : son départ, ou l'ancien départ d'un chemin
+    /// prolongé par son début (`reference`).
+    pub fn point_de_reference(&self) -> [f32; 2] {
+        self.reference.unwrap_or(self.points[0])
+    }
+
+    /// **Prolonge le chemin** du trait `trait_` (points de la feuille, ou du plan du chemin dans l'Espace 3D), tracé depuis un
+    /// de ses bouts : `devant`, depuis le début (le trait est ajouté devant, le chemin commence au bout du trait) ; sinon
+    /// depuis la fin (ajouté derrière). Ce qui suivait le chemin continue de le suivre : les marques gardent leur place
+    /// (leurs fractions sont recalculées sur la nouvelle longueur), le déplacement se mesure toujours depuis le même point
+    /// (`reference`). Le temps se répartit de nouveau en parts égales entre les jalons, comme pour un chemin neuf. Le lissage
+    /// du chemin s'applique au morceau ajouté. Faux (rien ne change) si le trait est trop court.
+    pub fn prolonger(&mut self, trait_: &[[f32; 2]], devant: bool) -> bool {        let base = self.chemin_brut().to_vec();
+        let Some((&debut, &fin)) = base.first().zip(base.last()) else { return false };
+        let bout = if devant { debut } else { fin };
+        let mut brut = vec![bout];
+        brut.extend(trait_.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()));
+        let morceau = echantillonner(&lisser(&brut));
+        if morceau.len() < 2 || longueur_de(&morceau) < LONGUEUR_MIN {
+            return false;
+        }
+        // Les marques, en longueur depuis le bout qui ne bouge pas.
+        let ancienne = self.longueur();
+        let depuis_le_bout_fixe: Vec<f32> = self.marques.iter().map(|&f| if devant { (1.0 - f) * ancienne } else { f * ancienne }).collect();
+        if devant && self.reference.is_none() {
+            self.reference = Some(self.points[0]);
+        }
+        let neuf: Vec<[f32; 2]> = if devant { morceau.iter().rev().copied().chain(base.iter().skip(1).copied()).collect() } else { base.iter().copied().chain(morceau.iter().skip(1).copied()).collect() };
+        let neuf = echantillonner(&neuf);
+        self.points = neuf;
+        self.brut = None;
+        self.relisser();
+        let longueur = self.longueur().max(1e-6);
+        self.marques.clear();
+        self.temps = None;
+        for s in depuis_le_bout_fixe {
+            let f = if devant { 1.0 - s / longueur } else { s / longueur };
+            self.ajouter_marque(f.clamp(0.0, 1.0));
+        }
+        true
     }
 
     /// Le chemin brut : le trait tel qu'il a été tracé, avant le lissage (`points` quand le chemin n'est pas lissé).
@@ -378,7 +426,7 @@ impl Trajectoire {
     /// feuille.
     pub fn deplacement_a(&self, f: f32) -> Option<[f32; 3]> {
         let s = self.support?;
-        let (p, d) = (self.point_a(f), self.points[0]);
+        let (p, d) = (self.point_a(f), self.point_de_reference());
         Some(s.deplacement([p[0] - d[0], p[1] - d[1]]))
     }
 
@@ -486,6 +534,7 @@ impl Trajectoire {
         if self.brut.is_none() {
             self.lissage = 0.0;
         }
+        self.reference = self.reference.filter(|r| r[0].is_finite() && r[1].is_finite());
         Some(self)
     }
 
@@ -495,7 +544,7 @@ impl Trajectoire {
         match Trajectoire::nouvelle(brut) {
             Some(t) => {
                 self.points = t.points;
-                self.brut = None;
+                (self.brut, self.reference) = (None, None);
                 self.relisser();
                 true
             }
@@ -758,7 +807,7 @@ impl Trajectoire {
     /// Le chemin retourné de gauche à droite (`horizontal`) ou de haut en bas, autour de son départ : le calque, retourné de même,
     /// suit le chemin retourné.
     pub fn retourner(&mut self, horizontal: bool) {
-        let d = self.points[0];
+        let d = self.point_de_reference();
         self.transformer(|p| if horizontal { [2.0 * d[0] - p[0], p[1]] } else { [p[0], 2.0 * d[1] - p[1]] });
     }
 
@@ -893,6 +942,14 @@ impl Trajectoire {
         let part = rayon.max(1e-3) / self.longueur().max(1e-6);
         let repris = tirer_points(self.chemin_brut(), fraction, dx, dy, part);
         if repris.len() >= 2 && longueur_de(&repris) >= LONGUEUR_MIN {
+            // (Le point de référence d'un chemin prolongé par son début suit le chemin là où il est, du même poids.)
+            if let Some(r) = self.reference {
+                let d = (self.plus_proche(r).0 - fraction.clamp(0.0, 1.0)).abs();
+                if d < part {
+                    let w = 0.5 * (1.0 + (std::f32::consts::PI * d / part).cos());
+                    self.reference = Some([r[0] + dx * w, r[1] + dy * w]);
+                }
+            }
             if self.brut.is_some() {
                 self.brut = Some(repris);
                 self.relisser();
@@ -910,6 +967,9 @@ impl Trajectoire {
         }
         for p in self.brut.iter_mut().flatten() {
             *p = f(*p);
+        }
+        if let Some(r) = self.reference.as_mut() {
+            *r = f(*r);
         }
     }
 

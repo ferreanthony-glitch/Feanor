@@ -938,6 +938,10 @@ mod trajectoire3d_tests;
 mod trajectoirelisse;
 #[cfg(test)]
 mod trajectoirelisse_tests;
+// Maj + un trait depuis un bout du chemin : il le prolonge (partie 151).
+mod trajectoireprolonge;
+#[cfg(test)]
+mod trajectoireprolonge_tests;
 // Le panneau « Espace 3D » (partie 150) : les réglages de la vue, sortis du panneau Réglages ; il passe devant la couleur quand la vue s'ouvre.
 mod espace3dpanneau;
 #[cfg(test)]

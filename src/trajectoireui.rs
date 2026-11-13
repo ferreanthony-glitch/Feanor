@@ -6,7 +6,10 @@
 //! * un petit trait **en travers du chemin pose une marque** ;
 //! * un appui sur une marque la **glisse** le long du chemin ; tirée loin du chemin, elle est **arrachée** (retirée au lâcher) ;
 //! * un appui sur le chemin le **tire** : il se tord là où on le prend, comme une corde (Anthony : « que la trajectoire soit éditable
-//!   facilement ») ; Maj tenue, il se **déplace** en bloc ; Échap abandonne le geste en cours.
+//!   facilement ») ; Maj tenue, il se **déplace** en bloc ; Échap abandonne le geste en cours ;
+//! * Maj + un appui sur **un bout** du chemin (son début ou sa fin), puis un trait : il **prolonge** le chemin, devant ou
+//!   derrière (partie 151, `trajectoireprolonge.rs`) ;
+//! * le curseur « Lissage » des réglages adoucit le chemin, sans perdre le trait tracé (partie 151, `trajectoirelisse.rs`).
 //!
 //! Deux sortes de clés (réglages) :
 //! * **clés d'interpolation** : une clé de position par image (`Layer::pos_keys`), le calque glisse le long de la courbe ; pendant
@@ -60,6 +63,9 @@ pub(crate) enum Geste {
     Marque { i: usize, avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool, arrachee: bool },
     /// Le chemin pris en `fraction` : tiré là (tordu, comme une corde), ou, Maj tenue, déplacé en bloc.
     Chemin { depart: [f32; 2], fraction: f32, bloc: bool, avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool },
+    /// Maj + appui sur un bout du chemin, puis un trait : il prolonge le chemin (`devant` : depuis son début), au lâcher
+    /// (`trajectoireprolonge.rs`, partie 151).
+    Prolonger { points: Vec<[f32; 2]>, devant: bool },
 }
 
 /// L'état de l'outil pour un projet.
@@ -145,6 +151,12 @@ impl App {
             }
             return;
         }
+        // Maj + appui sur un bout du chemin : le trait qui suit le prolonge (partie 151).
+        if let Some(devant) = self.trajectoire_bout_sous(stage).filter(|_| maj) {
+            self.traj.geste = Some(Geste::Prolonger { points: vec![p], devant });
+            self.status = crate::trajectoireprolonge::PROLONGER.into();
+            return;
+        }
         let (marque, chemin) = self.trajectoire_sous(stage);
         let l = self.layer();
         if let (Some(avant), true) = (l.trajectoire.clone(), chemin) {
@@ -167,7 +179,7 @@ impl App {
         let p = [stage.x, stage.y];
         let li = self.cur_layer;
         match &mut g {
-            Geste::Trait { points } => {
+            Geste::Trait { points } | Geste::Prolonger { points, .. } => {
                 if points.last().is_none_or(|l| distance(*l, p) > 0.5) {
                     points.push(p);
                 }
@@ -197,7 +209,7 @@ impl App {
                 }
                 *bouge = true;
                 self.trajectoire_poser_en_direct(li, t);
-                self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : relâche Maj pour le tordre, Maj pour le déplacer en bloc.".into() };
+                self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : il se tord là où on le prend. Maj à l'appui : le déplacer en bloc ; Maj sur un bout : le prolonger.".into() };
             }
         }
         self.traj.geste = Some(g);
@@ -225,6 +237,7 @@ impl App {
         }
         match g {
             Geste::Trait { points } => self.trajectoire_poser_le_trait(li, &points),
+            Geste::Prolonger { points, devant } => self.trajectoire_prolonger(li, &points, devant),
             Geste::Marque { snap, bouge, arrachee, .. } => {
                 if arrachee {
                     self.trajectoire_recalculer(li);
@@ -393,7 +406,8 @@ impl App {
     /// Le point de la feuille qui suit le chemin, pour la trajectoire `t` du calque `li` du plan `pi` sous la pose propre `base` : le
     /// départ du trait, ou un point du dessin du départ (son bas, son centre…, ou le point cliqué) mis sur la feuille par la pose.
     fn trajectoire_point_d_ancrage(&self, pi: usize, li: usize, t: &Trajectoire, base: LayerTransform) -> [f32; 2] {
-        let depart = t.points[0];
+        // (Le départ du trait, ou l'ancien départ d'un chemin prolongé par son début : `Trajectoire::point_de_reference`.)
+        let depart = t.point_de_reference();
         let affine = base.affine(self.doc.stage_center());
         let sur_la_feuille = |p: [f32; 2]| {
             let q = affine.apply(pos2(p[0], p[1]));
@@ -566,13 +580,13 @@ impl App {
     }
 
     /// Une étape d'annulation au nom `nom`, depuis l'état `snap` d'avant le geste.
-    fn trajectoire_valider(&mut self, snap: Edit, nom: &str) {
+    pub(crate) fn trajectoire_valider(&mut self, snap: Edit, nom: &str) {
         self.modified = true;
         self.commit_named(snap, nom);
     }
 
     /// « Marque posée : 3 marques, le chemin dure de l'image 1 à 36. » En clés d'images sans dessin au départ, le dit.
-    fn trajectoire_resume(&self, li: usize, debut: &str) -> String {
+    pub(crate) fn trajectoire_resume(&self, li: usize, debut: &str) -> String {
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.as_ref()) else { return debut.to_string() };
         let images = t.images_des_jalons(self.frame_count());
         let n = t.marques.len();
@@ -695,7 +709,7 @@ impl App {
     pub(crate) fn trajectoire_curseur(&self, p: Pos2) -> CursorIcon {
         match &self.traj.geste {
             Some(Geste::Marque { .. } | Geste::Chemin { .. }) => return CursorIcon::Grabbing,
-            Some(Geste::Trait { .. }) => return CursorIcon::Crosshair,
+            Some(Geste::Trait { .. } | Geste::Prolonger { .. }) => return CursorIcon::Crosshair,
             None => {}
         }
         let stage = self.view.to_canvas(self.canvas_rect, self.canvas_size(), p);
@@ -720,7 +734,7 @@ impl App {
             return;
         }
         let ecran = |p: [f32; 2]| self.stage_to_screen(pos2(p[0], p[1]));
-        if let Some(Geste::Trait { points }) = &self.traj.geste {
+        if let Some(Geste::Trait { points } | Geste::Prolonger { points, .. }) = &self.traj.geste {
             if points.len() >= 2 {
                 let pts: Vec<Pos2> = points.iter().map(|p| ecran(*p)).collect();
                 painter.add(Shape::line(pts, Stroke::new(1.5_f32, COULEUR.gamma_multiply(0.7))));
@@ -937,7 +951,8 @@ impl App {
         });
         ui.label(
             RichText::new(
-                "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). Glisser une marque le long du \
+                "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). Maj + un trait depuis un \
+                 bout du chemin le prolonge, devant ou derrière. Glisser une marque le long du \
                  chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, les marques restent. Sur la \
                  timeline, glisser la première clé, la dernière ou une marque les recale dans le temps ; Suppr sur une marque la retire. \
                  Transformer déplace le calque et son chemin ensemble.",

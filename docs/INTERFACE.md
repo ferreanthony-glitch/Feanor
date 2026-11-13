@@ -11323,3 +11323,94 @@ de `espace3d.rs`), aucun nouveau.
 12. Ta disposition habituelle, celle d'avant ce chantier : le panneau y est arrivé en onglet à côté de la couleur, et
     rien d'autre n'a bougé (largeurs, hauteurs, panneaux flottants).
 13. Menu Affichage > Panneaux : la case « Espace 3D ». Palette (Ctrl+K) : « Panneau Espace 3D (ouvrir / fermer) ».
+
+## 151. Fusion des vues multiples ; lisser une trajectoire ; continuer un chemin avec Maj (2026-11-12, branche `trajectoire-3d`)
+
+Trois chantiers sur la branche `trajectoire-3d` (partie de `trajectoire-espace`, parties 148 à 150, format 55).
+
+### 151.1 Fusion de `main` (partie 144, les vues multiples de l'Espace 3D)
+
+- **Plantage de la promenade (partie 147).** Une seule `card_mesh`, qui ne rend rien quand le maillage n'a aucun
+  triangle ; la garde `!mesh.indices.is_empty()` du canevas reste. `espace3dvue_tests.rs` et la partie 147 sont ceux de
+  la branche. Les vues multiples peignent leurs cartes par la même `e3_paint_cards` : un essai fait longer une carte aux
+  quatre vues, l'œil presque au bout (la situation du plantage) : aucun morceau sans triangle.
+- **Les gestes.** `main` sépare `e3_input` en `e3_nav_camera` (la caméra du plan) et `e3_input_objets` (choisir, tirer,
+  poignées). Le dessin dans la vue (partie 146) et la Trajectoire dans l'espace (partie 149) passent maintenant par
+  `e3_input_objets` : ils marchent dans la vue seule **et dans chacune des vues**. Chaque vue peint le chemin, le trait en
+  cours et le curseur de l'outil avec son propre regard ; le regard du geste est rendu après la peinture (le trait tombe
+  dans la vue où il a été fait). Pendant qu'on dessine ou trace, les vues ne montrent pas les poignées.
+- **Profondeur libre (partie 148).** Les vues lisaient les cartes par `card_xf(pose, depth_at)` (les bornes de cadrage, la
+  carte vue par la tranche) : elles passent par `Monde::carte`. Une carte derrière la caméra d'origine compte donc à sa
+  vraie place (essai rouge sur l'ancienne lecture, vert après).
+- **Le sol.** `e3_hauteur_sol()` rend `Monde::sol_y` dans un plan en Espace 3D (0 sinon) ; le quadrillage de la vue seule
+  passe par `e3_quadrillage`, comme chaque vue.
+- **Les réglages de la vue.** Le bouton « Vues » est dans la barre de la vue et dans le panneau « Espace 3D » (à côté de la
+  grille), jamais dans « Réglages ». « Regarder par la caméra » du panneau suit la vue active.
+- **Format.** 55, les deux jeux de champs ; `vues_3d` reste facultatif et lu avec indulgence.
+- Essais : `espace3dvues_fusion_tests.rs` (3).
+
+### 151.2 Le lissage d'une trajectoire
+
+Anthony : « de façon générale la courbe tracée pour une trajectoire doit pouvoir être lissée dans les réglages d'outils ».
+
+- Un curseur **« Lissage »** (0 à 100 %) dans les réglages de l'outil Trajectoire, sur la feuille comme dans l'Espace 3D
+  (`trajectoirelisse.rs`).
+- Il agit **en direct sur les trajectoires de ce qui est choisi** : sur la feuille, les calques choisis qui ont une
+  trajectoire sur la feuille ; dans l'Espace 3D, les cartes choisies et la caméra. Un geste sur le curseur = une étape
+  d'annulation. Sa valeur vaut aussi pour les prochains tracés. Sans trajectoire choisie, il ne règle que les prochains
+  tracés (hors de l'annulation, comme la sorte des clés).
+- **Non destructif** : le trait brut est gardé (`Trajectoire::brut`, avec `lissage` ; champs facultatifs, le format reste
+  55). Le chemin est recalculé depuis lui (`Trajectoire::lisser_a`, `lissage_de` : trois passes d'une moyenne glissante,
+  demi-fenêtre jusqu'à 8 % de la longueur, la fenêtre se resserre près des bouts : **les deux bouts restent fixes**). On
+  peut remonter ou redescendre le curseur à tout moment ; 0 rend le trait tel qu'il a été tracé. Tirer, déplacer,
+  retourner le chemin agissent sur le trait brut, puis le chemin est lissé de nouveau.
+- Les marques gardent leur place relative le long du chemin. Les clés suivent comme quand on tire le chemin : à chaque
+  image d'écran en clés d'interpolation et pour les cartes ; en clés d'images, les dessins sont reposés au lâcher du
+  curseur seulement (rien de lourd pendant le geste).
+- Une version de FEANOR qui ne connaît pas ces champs ouvre le projet et lit le chemin lissé ; elle perd le trait brut à
+  l'enregistrement (le lissage ne se défait plus), rien d'autre.
+- Essais : `trajectoirelisse_tests.rs` (5 ; le vrai curseur est tiré à la souris ; 4 rouges quand le lissage ne fait rien).
+
+### 151.3 Continuer un chemin avec Maj
+
+Anthony : « maintenir Maj + tracer une nouvelle trajectoire depuis la fin ou le début d'une trajectoire existante continue
+la trajectoire déjà tracée ».
+
+- **Maj + appui près d'un bout** (début ou fin, à 10 pixels d'écran comme le reste de l'outil), puis un trait : au lâcher,
+  le trait prolonge la même trajectoire (`Trajectoire::prolonger`, `trajectoireprolonge.rs`). Depuis le début il est
+  ajouté devant, depuis la fin derrière. **Maj + appui ailleurs** sur le chemin le déplace toujours en bloc.
+- **Ce qui la suivait continue de la suivre.** Les marques gardent leur place dans l'espace (fractions recalculées sur la
+  nouvelle longueur). Le temps se répartit de nouveau en parts égales entre les jalons, selon la sorte de clés, comme pour
+  un chemin neuf ; le départ et la fin restent sur leurs images. Prolongé par devant, le déplacement se mesure toujours
+  depuis l'ancien départ (`Trajectoire::reference`, champ facultatif) : ce qui suit le chemin passe aux mêmes endroits
+  qu'avant, et commence au bout du nouveau trait.
+- Dans l'Espace 3D, le trait reste sur le plan porteur du chemin, et le prolongement vaut pour tout ce qui est choisi.
+- Le lissage s'applique au morceau ajouté. Un geste = une étape d'annulation (« Prolonger la trajectoire ») ; Échap
+  abandonne. Textes d'aide mis à jour (prise de l'outil, légende de la vue, aides des réglages, barre d'état).
+- Essais : `trajectoireprolonge_tests.rs` (6 : modèle, feuille par la fin et par le début, Échap, Maj au milieu, Espace 3D).
+
+### Ce qui reste, ce qui est douteux
+
+- Rien n'a été regardé à l'écran.
+- Prolonger ne change pas la durée du chemin (départ et fin restent) : un chemin deux fois plus long va deux fois plus
+  vite. À juger par Anthony.
+- Le point de référence d'un chemin prolongé par devant n'est pas connu d'une version d'avant ce chantier : elle
+  décalerait ce qui suit le chemin de la longueur ajoutée devant.
+- Le curseur « Lissage » n'a pas de raccourci.
+- Sur la feuille, le prolongement ne vaut que pour le calque courant (seul son chemin y est montré).
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.**
+
+1. Espace 3D, « Vues » (barre de la vue ou panneau Espace 3D) : 4 vues. Outil Trajectoire, plan en Espace 3D : tracer un
+   chemin au sol dans la vue de dessus, puis dans la perspective ; le chemin se voit dans toutes les vues.
+2. Pinceau dans la vue, en 4 vues : dessiner sur une carte dans une des vues ; le trait tombe sous le pointeur.
+3. Se promener longtemps en 4 vues, une carte traversée : FEANOR ne se ferme pas.
+4. Une carte passée derrière la caméra d'origine : « Recadrer » en 4 vues la montre dans les vues orthographiques.
+5. Feuille : tracer une trajectoire en zigzag, puis tirer « Lissage » dans Réglages : la courbe s'adoucit en direct, ses
+   bouts restent ; redescendre à 0 % : le zigzag revient. Ctrl+Z annule le geste entier.
+6. Deux calques choisis avec chacun un chemin : le curseur lisse les deux.
+7. Clés d'images : pendant qu'on tire le curseur, seul le chemin bouge ; les dessins se reposent au lâcher.
+8. Espace 3D : une carte et la caméra choisies, chacune sur un chemin : le curseur lisse les deux.
+9. Maj + trait depuis la fin d'un chemin : il continue ; depuis le début : il s'allonge devant et le dessin part du bout
+   du nouveau trait. Maj au milieu du chemin : il se déplace en bloc. Échap pendant le trait : rien ne change.
+10. Pareil dans l'Espace 3D, sur un chemin posé au sol ou sur une carte.

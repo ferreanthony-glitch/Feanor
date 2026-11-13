@@ -38,7 +38,7 @@ use crate::trajectoire::{Cles, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
-pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Ctrl+clic : choisir ou lâcher une carte, la caméra. Alt+glisser ou clic droit : tourner la vue.";
+pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic : choisir ou lâcher une carte, la caméra. Alt+glisser ou clic droit : tourner la vue.";
 pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic, ou la liste des cartes dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
@@ -74,6 +74,9 @@ pub(crate) enum GesteEspace {
     Marque { i: usize, avant: Vec<Avant>, snap: Edit, bouge: bool, arrachee: bool },
     /// Le chemin pris en `fraction` (le pointeur étant alors en `depart`, dans le plan du chemin) : tiré là, ou déplacé en bloc.
     Chemin { depart: [f32; 2], fraction: f32, bloc: bool, avant: Vec<Avant>, snap: Edit, bouge: bool },
+    /// Maj + appui sur un bout du chemin, puis un trait sur le plan qui porte le chemin : il le prolonge (`devant` : depuis
+    /// son début), au lâcher, pour tout ce qui est choisi (`trajectoireprolonge.rs`, partie 151).
+    Prolonger { support: Support, devant: bool, ecran: Vec<Pos2>, plan: Vec<[f32; 2]> },
 }
 
 fn pluriel(n: usize) -> &'static str {
@@ -337,7 +340,7 @@ impl App {
 
     /// Parmi ce qui est choisi, ce qui peut recevoir un chemin maintenant. Une carte verrouillée, accrochée à la caméra, liée
     /// à son calque de trait, ou qui a déjà une trajectoire tracée sur la feuille est laissée, et la barre d'état dit pourquoi.
-    fn e3_traj_sujets_libres(&mut self) -> Vec<Sujet> {
+    pub(crate) fn e3_traj_sujets_libres(&mut self) -> Vec<Sujet> {
         let mut refus: Option<String> = None;
         let sujets: Vec<Sujet> = self
             .e3_traj_sujets()
@@ -528,6 +531,12 @@ impl App {
         if let Some((_, t)) = self.e3_traj_reference(&sujets) {
             let Some(support) = t.support else { return };
             let ecran = |p: [f32; 2]| regard.ecran(support.monde(p));
+            // Maj + appui sur un bout du chemin : le trait qui suit le prolonge, sur le plan du chemin (partie 151).
+            if let Some(g) = Self::e3_traj_prolonger_depuis(&t, support, &regard, pos).filter(|_| maj) {
+                self.traj.espace = Some(g);
+                self.status = crate::trajectoireprolonge::PROLONGER.into();
+                return;
+            }
             let marque = marque_sous(&t, &ecran, pos);
             let pres = CheminVu::de(&t, &ecran).plus_proche(pos).filter(|(_, d)| *d <= TOL_ECRAN);
             if marque.is_some() || pres.is_some() {
@@ -557,7 +566,7 @@ impl App {
         let Some(mut g) = self.traj.espace.take() else { return };
         let ray = regard.rayon(pos);
         match &mut g {
-            GesteEspace::Trait { support, ecran, plan } => {
+            GesteEspace::Trait { support, ecran, plan } | GesteEspace::Prolonger { support, ecran, plan, .. } => {
                 if ecran.last().is_none_or(|l| l.distance(pos) > 0.5) {
                     if let Some(p) = support.couper(ray.o, ray.d) {
                         ecran.push(pos);
@@ -616,6 +625,7 @@ impl App {
         let Some(g) = self.traj.espace.take() else { return };
         match g {
             GesteEspace::Trait { support, ecran, plan } => self.e3_traj_poser_le_trait(support, &ecran, &plan),
+            GesteEspace::Prolonger { devant, ecran, plan, .. } => self.e3_traj_prolonger(&ecran, &plan, devant),
             GesteEspace::Marque { snap, bouge, arrachee, .. } => {
                 if arrachee || bouge {
                     self.modified = true;
@@ -707,7 +717,7 @@ impl App {
     }
 
     /// « Trajectoire tracée : 2 cartes et la caméra, 1 marque, de l'image 1 à l'image 24. »
-    fn e3_traj_resume(&self, debut: &str) -> String {
+    pub(crate) fn e3_traj_resume(&self, debut: &str) -> String {
         let avec: Vec<Sujet> = self.e3_traj_sujets().into_iter().filter(|&s| self.e3_traj_de(s).is_some()).collect();
         let Some((s, t)) = self.e3_traj_reference(&avec) else { return debut.to_string() };
         let cartes = avec.iter().filter(|s| matches!(s, Sujet::Carte(_))).count();
@@ -804,7 +814,7 @@ impl App {
     /// La légende du bas de la vue quand le pointeur trace des trajectoires.
     pub(crate) fn e3_trajectoire_legende(&self) -> &'static str {
         if self.doc.plan_en_espace(self.cur_panel) {
-            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
+            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
         } else {
             "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
         }
@@ -815,7 +825,7 @@ impl App {
     pub(crate) fn e3_trajectoire_peindre(&mut self, ctx: &egui::Context, painter: &egui::Painter, response: &egui::Response, rect: Rect, regard: Regard3d) {
         self.e3d.regard = Some(regard);
         painter.text(rect.left_bottom() + vec2(8.0, -6.0), Align2::LEFT_BOTTOM, self.e3_trajectoire_legende(), FontId::proportional(11.0), Color32::from_gray(190));
-        if let Some(GesteEspace::Trait { ecran, .. }) = &self.traj.espace {
+        if let Some(GesteEspace::Trait { ecran, .. } | GesteEspace::Prolonger { ecran, .. }) = &self.traj.espace {
             if ecran.len() >= 2 {
                 painter.add(Shape::line(ecran.clone(), Stroke::new(1.5_f32, COULEUR.gamma_multiply(0.7))));
             }
@@ -852,7 +862,7 @@ impl App {
         let icone = match (&self.espace3d.drag, &self.traj.espace) {
             (Some(Drag::Orbit), _) => CursorIcon::Grabbing,
             (_, Some(GesteEspace::Marque { .. } | GesteEspace::Chemin { .. })) => CursorIcon::Grabbing,
-            (_, Some(GesteEspace::Trait { .. })) => CursorIcon::Crosshair,
+            (_, Some(GesteEspace::Trait { .. } | GesteEspace::Prolonger { .. })) => CursorIcon::Crosshair,
             _ if alt => CursorIcon::Grab,
             _ if ctrl => CursorIcon::PointingHand,
             _ if !self.doc.plan_en_espace(self.cur_panel) => CursorIcon::NotAllowed,
@@ -1009,7 +1019,8 @@ impl App {
         });
         ui.label(
             RichText::new(
-                "Tirer sur le chemin le tord là où on le prend (Maj : le déplacer en bloc). Glisser une marque le long du chemin la \
+                "Tirer sur le chemin le tord là où on le prend (Maj : le déplacer en bloc). Maj + un trait depuis un bout du chemin le \
+                 prolonge, devant ou derrière, sur le même plan. Glisser une marque le long du chemin la \
                  déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, sur la surface qu'il touche ; les marques \
                  restent. Sur la timeline, glisser la première clé, la dernière ou une marque d'une carte les recale dans le temps. La \
                  caméra ne reçoit aucune clé : son chemin s'ajoute à celles qu'elle a.",
