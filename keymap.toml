@@ -324,6 +324,16 @@ touches = []
 source = "FEANOR (sans touche ; menu Aide)"
 
 [[raccourci]]
+action = "aide.explications"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
+action = "aide.registre"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]
 source = "proposition"

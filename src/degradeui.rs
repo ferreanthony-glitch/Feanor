@@ -955,7 +955,7 @@ impl App {
         });
 
         self.degrade_enregistres_ui(ui);
-        ui.label(egui::RichText::new("Glisser : tracer l'axe (Maj : par 15°). Ensuite l'axe reste : tire ses poignées ou change les réglages, jusqu'à Entrée, Échap ou un autre outil. Dans la sélection, sinon dans la zone fermée où l'on appuie ; Alt : tout le calque.").small().weak());
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
     }
 
     /// Les deux bandes : l'opacité (pastilles au-dessus) et les couleurs (pastilles dessous), autour d'une seule bande qui montre le

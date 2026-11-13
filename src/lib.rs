@@ -15,6 +15,14 @@ mod accueil_tests;
 mod aidetouches;
 #[cfg(test)]
 mod aidetouches_tests;
+// L'aide animée (partie 153) : les animations des outils à la place des textes gris, et le registre des explications.
+mod aideanim;
+#[cfg(test)]
+mod aideanim_tests;
+mod aidecatalogue;
+mod aideregistre;
+mod aidetextes;
+mod aidevignettes;
 mod concentration;
 #[cfg(test)]
 mod concentration_tests;

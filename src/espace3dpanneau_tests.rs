@@ -200,9 +200,10 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);
     assert!(b.app.e3_trace(), "l'outil Trajectoire a le pointeur dans la vue ({})", b.app.status);
-    // Sans chemin encore : qui est choisi, le mode d'emploi et les deux sortes de clés sont dans Réglages.
+    // Sans chemin encore : qui est choisi et les deux sortes de clés sont dans Réglages (le mode d'emploi est dans l'aide animée et le
+    // registre des explications, partie 153).
     let (images, interpolation) = (Cles::Images.label(), Cles::Interpolation.label());
-    verifier(&mut b.app, Pane::ToolOptions, &[Tool::Trajectoire.label(), "Trajectoire dans l'espace", "Choisi : 1 carte.", "Trace d'un trait", images, interpolation], &DE_LA_VUE);
+    verifier(&mut b.app, Pane::ToolOptions, &[Tool::Trajectoire.label(), "Trajectoire dans l'espace", "Choisi : 1 carte.", images, interpolation], &DE_LA_VUE);
     verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Choisi :", "Trace d'un trait"]);
     // La carte du calque courant suit un chemin au sol, avec une marque recalée à la main : toutes les commandes du chemin
     // sont dans Réglages.
@@ -217,14 +218,14 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
     assert!(b.app.trajectoire_recaler(0, jalons[1], 4), "{}", b.app.status);
     b.app.cur_frame = 9;
     b.chauffer(1);
-    let commandes = ["Choisi : 1 carte. 1 marque", "Partir de la tête de lecture", "Finir à la tête de lecture", "Temps égaux entre les marques", images, interpolation, "Retirer les marques", "Détacher", "Effacer", "Tirer sur le chemin"];
+    let commandes = ["Choisi : 1 carte. 1 marque", "Partir de la tête de lecture", "Finir à la tête de lecture", "Temps égaux entre les marques", images, interpolation, "Retirer les marques", "Détacher", "Effacer"];
     verifier(&mut b.app, Pane::ToolOptions, &commandes, &DE_LA_VUE);
     verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Choisi :", "Partir de la tête de lecture", "Détacher", "Retirer les marques", "Temps égaux"]);
     // Sur la feuille, pour un calque sans chemin dans l'espace : les réglages de la trajectoire à plat, comme avant.
     fermer_la_vue(&mut b);
     b.app.cur_layer = 1;
     b.chauffer(1);
-    verifier(&mut b.app, Pane::ToolOptions, &[Tool::Trajectoire.label(), "Trace le chemin du calque d'un trait"], &["Trajectoire dans l'espace", "Choisi :"]);
+    verifier(&mut b.app, Pane::ToolOptions, &[Tool::Trajectoire.label(), "Lissage"],&["Trajectoire dans l'espace", "Choisi :"]);
 }
 
 #[test]
@@ -235,7 +236,7 @@ fn in_an_ordinary_plan_the_trajectory_settings_point_to_the_space_pane_for_the_c
     b.chauffer(2);
     assert!(!b.app.doc.plan_en_espace(0));
     let textes = textes_du_panneau(&mut b.app, Pane::ToolOptions);
-    assert!(contient(&textes, "Trajectoire dans l'espace") && contient(&textes, "dans le panneau Espace 3D"), "{textes:?}");
+    assert!(contient(&textes, "Trajectoire dans l'espace") && contient(&textes, "du panneau Espace 3D"), "{textes:?}");
     assert!(!contient(&textes, "plus bas"), "la case n'est plus sous ces réglages : {textes:?}");
     // La case est bien dans le panneau Espace 3D (son bouton y est, avec les autres options de la vue).
     verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace"]);

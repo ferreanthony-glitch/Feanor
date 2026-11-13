@@ -152,6 +152,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("aide.noter_friction", "Noter une friction : ce qui vient de me freiner, avec une capture de la fenêtre et mes dernières commandes", true, false),
     act("aide.ouvrir_frictions", "Mes frictions notées : ouvrir leur dossier", true, false),
     act("aide.habitudes", "Mes habitudes : les commandes que j'utilise le plus et celles qui ne servent jamais (compteur du poste)", true, false),
+    // L'aide animée (partie 153, `aideanim.rs`).
+    act("aide.explications", "Afficher les explications : l'animation d'un outil rejoue à chaque prise (sinon une seule fois)", true, false),
+    act("aide.registre", "Registre des explications : toutes les animations des outils et les textes des fenêtres", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
     act("outil.gomme", "Outil gomme", true, false),

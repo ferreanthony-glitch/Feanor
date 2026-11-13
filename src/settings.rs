@@ -256,6 +256,12 @@ pub struct Settings {
     /// restent dans la palette (Ctrl+K). Décochée d'origine.
     #[serde(default, rename = "fonctions_experimentales", skip_serializing_if = "std::ops::Not::not")]
     pub experimental: bool,
+    /// L'aide animée (`aideanim.rs`, partie 153) : les animations déjà vues (leur identifiant), qui ne rejouent plus d'elles-mêmes.
+    #[serde(default, rename = "explications_vues", skip_serializing_if = "Vec::is_empty")]
+    pub explications_vues: Vec<String>,
+    /// Aide > « Afficher les explications » : cochée, une animation rejoue à chaque prise de son outil. Décochée d'origine.
+    #[serde(default, rename = "afficher_explications", skip_serializing_if = "std::ops::Not::not")]
+    pub afficher_explications: bool,
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
@@ -441,6 +447,8 @@ impl Default for Settings {
             conseils: Default::default(),
             premier_jour: Default::default(),
             experimental: false,
+            explications_vues: Vec::new(),
+            afficher_explications: false,
             echelle: crate::echelle::ECHELLE_DEFAUT,
             dossier_accueil: String::new(),
             vignettes: Default::default(),

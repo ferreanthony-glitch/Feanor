@@ -43,11 +43,7 @@ fn menu_actif(ui: &mut egui::Ui, sans_projet: bool, titre: &str) -> bool {
     !sans_projet
 }
 
-/// Mode d'emploi de la boîte de sélection (Réglages de l'outil Sélection).
-const BOX_NOTE: &str = "Boîte : glisser dedans pour déplacer (Maj : un seul axe) ; un coin ou le milieu d'un côté pour \
-mettre à l'échelle, la poignée opposée restant en place (Maj : proportions ; Ctrl : l'autre point fixe, réglé par « Point \
-fixe ») ; juste hors d'un coin pour tourner autour du pivot ou du coin opposé (réglé par « Rotation » ; Maj : par 15°) ; un bord entre les poignées pour incliner ; le point rond pour déplacer le pivot. \
-Flèches : déplacer d'un pixel (Maj : dix).";
+// (Le mode d'emploi de la boîte de sélection est dans le registre des explications, avec son animation : `aidecatalogue.rs`.)
 
 fn note(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).small().weak());
@@ -306,6 +302,8 @@ impl App {
                 // onglets Raccourcis et Dessin, depuis le 2026-11-08 ; F1 et la palette les ouvrent toujours.)
                 self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
+                // L'aide animée (`aideanim.rs`, partie 153).
+                self.aide_menu_ui(ui);
                 self.action_item(ui, "Régler FEANOR pour cette machine…", "aide.diagnostic");
                 ui.separator();
                 // Ce qui freine et ce qui sert (`frictionui.rs`, `usageui.rs`).
@@ -473,6 +471,8 @@ impl App {
         // « Espace 3D », `espace3dpanneau.rs`, partie 150.)
         // Le stylo ou la gomme d'annotation de la planche a ses propres réglages (`annotationsui.rs`).
         if self.annot_actif() {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
+            self.aide_joueur_ui(ui);
             self.annot_reglages_ui(ui);
             return;
         }
@@ -484,7 +484,11 @@ impl App {
                     .small()
                     .weak(),
             );
+            // Le bouton ▶ de l'aide animée (`aideanim.rs`, partie 153).
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
         });
+        // L'animation de l'outil, à sa première prise, puis repliée.
+        self.aide_joueur_ui(ui);
         // Sous-ligne d'aplat choisie : « Aplat de <calque> » et ses réglages (couleur, débord, trous) d'abord ; l'outil et
         // sa brosse suivent, ce sont eux qui travaillent l'aplat.
         self.aplat_section_ui(ui);
@@ -718,7 +722,6 @@ impl App {
                 app.box_fields_ui(ui);
             }
             if lasso {
-                note(ui, BOX_NOTE);
                 note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Un clic sur un dessin choisit sa forme (Ctrl+Maj + clic : en ajouter une autre, sur tous les calques). Échap ou autre outil : poser la zone.");
             }
         });
@@ -784,10 +787,6 @@ impl App {
                     }
                 });
                 app.box_fields_ui(ui);
-            }
-            if lasso {
-                note(ui, BOX_NOTE);
-                note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. Ctrl+Maj : prendre sur tous les calques du plan (pas seulement les calques choisis).");
             }
         });
     }

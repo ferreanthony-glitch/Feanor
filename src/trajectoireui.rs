@@ -818,17 +818,8 @@ impl App {
         }
         let li = self.cur_layer;
         let duree = self.frame_count();
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else {
-            ui.label(
-                RichText::new(
-                    "Trace le chemin du calque d'un trait : le calque le suit depuis la tête de lecture jusqu'à la fin du plan, en partant \
-                     de là où il est. Puis de petits traits en travers du chemin : les marques. Le temps est le même entre deux marques ; \
-                     serrées, le calque va lentement ; espacées, il va vite. Sur la timeline, glisser la première clé, la dernière ou une \
-                     marque les recale dans le temps.",
-                )
-                .small()
-                .weak(),
-            );
             let mut cles = self.traj.cles_propose;
             if cles_ui(ui, &mut cles) {
                 self.traj.cles_propose = cles;
@@ -949,17 +940,6 @@ impl App {
                 self.status = "Trajectoire effacée : le calque reste où il était au départ.".into();
             }
         });
-        ui.label(
-            RichText::new(
-                "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). Maj + un trait depuis un \
-                 bout du chemin le prolonge, devant ou derrière. Glisser une marque le long du \
-                 chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, les marques restent. Sur la \
-                 timeline, glisser la première clé, la dernière ou une marque les recale dans le temps ; Suppr sur une marque la retire. \
-                 Transformer déplace le calque et son chemin ensemble.",
-            )
-            .small()
-            .weak(),
-        );
     }
 }
 
