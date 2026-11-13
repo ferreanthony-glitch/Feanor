@@ -107,6 +107,11 @@ impl Ancre {
 /// Un dessin posé par la trajectoire en « clés d'images » : à un jalon (une marque, ou l'arrivée), le numéro du dessin et le
 /// déplacement (pixels de la feuille) qu'il porte par rapport au dessin du départ, et sa rotation (degrés, autour du point
 /// d'ancrage) quand le dessin tourne avec le chemin.
+///
+/// **Chaque dessin appartient à son jalon** (Anthony, 2026-11-13 : « règle ce qui reste imparfait » ; avant, une marque posée
+/// au milieu du chemin décalait d'une marque les poses déjà redessinées). Deux jalons qui se suivent avec **le même dessin** :
+/// le second vient d'être posé (`Trajectoire::ajouter_marque`), il montre encore le dessin du jalon d'avant, celui que l'image
+/// montrait là ; le calcul suivant lui en fait une copie à lui (`trajectoireui.rs`, `trajectoire3d.rs`).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DessinJalon {
     pub dessin: u64,
@@ -266,7 +271,9 @@ pub struct Trajectoire {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<u64>,
     /// En « clés d'images » : les dessins posés aux jalons, un par jalon (le départ compris : le dessin d'origine lui-même quand il ne
-    /// bouge pas).
+    /// bouge pas), dans l'ordre des jalons. **Chacun suit le sien** : poser, retirer une marque ou toutes les retirer garde à chaque
+    /// autre jalon son dessin (`ajouter_marque`, `retirer_marque`, `retirer_les_marques`, `assainie`) ; glisser une marque, recaler
+    /// le temps ou retracer le chemin ne change pas leur ordre.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dessins: Vec<DessinJalon>,
     /// Le dessin tourne avec le chemin (Anthony, 2026-11-08) : il pivote, autour du point d'ancrage, pour regarder où va le chemin,
@@ -501,11 +508,27 @@ impl Trajectoire {
         }
         let marques = std::mem::take(&mut self.marques);
         let temps = self.temps.take();
-        for m in marques {
+        // (Les dessins des jalons suivent leurs marques : remises en ordre, une marque abîmée ou en double laissée, chacune garde
+        // le sien. Sans un dessin par jalon, ils restent tels quels, dans l'ordre : le calcul suivant les range.)
+        let dessins = std::mem::take(&mut self.dessins);
+        let alignes = dessins.len() == marques.len() + 2;
+        let mut origines: Vec<usize> = Vec::with_capacity(marques.len());
+        for (j, m) in marques.into_iter().enumerate() {
             if m.is_finite() {
-                self.ajouter_marque(m);
+                if let Some(i) = self.ajouter_marque(m) {
+                    origines.insert(i, j);
+                }
             }
         }
+        self.dessins = if alignes {
+            let mut d = Vec::with_capacity(origines.len() + 2);
+            d.push(dessins[0]);
+            d.extend(origines.iter().map(|&j| dessins[j + 1]));
+            d.push(dessins[dessins.len() - 1]);
+            d
+        } else {
+            dessins
+        };
         // Les temps : un par marque, finis, strictement croissants entre 0 et 1 ; sinon, parts égales.
         if let Some(t) = temps {
             let bons = t.len() == self.marques.len() && t.iter().all(|v| v.is_finite()) && t.windows(2).all(|w| w[0] < w[1]) && t.first().is_none_or(|v| *v > 0.0) && t.last().is_none_or(|v| *v < 1.0);
@@ -903,12 +926,18 @@ impl Trajectoire {
     }
 
     /// Pose une marque à la fraction `f` : son rang, ou rien si elle tombe sur un bout ou sur une marque (à `ECART_MIN` près). Des
-    /// temps posés à la main : la marque prend le milieu du temps de son intervalle.
+    /// temps posés à la main : la marque prend le milieu du temps de son intervalle. En clés d'images, son jalon prend place parmi
+    /// les dessins avec, en attendant sa copie à lui, le dessin du jalon d'avant (`DessinJalon`) : les autres jalons gardent les
+    /// leurs.
     pub fn ajouter_marque(&mut self, f: f32) -> Option<usize> {
         if !(ECART_MIN..=1.0 - ECART_MIN).contains(&f) || self.marques.iter().any(|m| (m - f).abs() < ECART_MIN) {
             return None;
         }
         let i = self.marques.iter().position(|m| *m > f).unwrap_or(self.marques.len());
+        if self.dessins.len() == self.marques.len() + 2 {
+            let avant = self.dessins[i];
+            self.dessins.insert(i + 1, avant);
+        }
         if let Some(t) = self.temps.as_mut().filter(|t| t.len() == self.marques.len()) {
             let (avant, apres) = (if i == 0 { 0.0 } else { t[i - 1] }, if i < t.len() { t[i] } else { 1.0 });
             t.insert(i, (avant + apres) * 0.5);
@@ -930,8 +959,12 @@ impl Trajectoire {
             .map(|(i, _)| i)
     }
 
+    /// Retire la marque `i` ; en clés d'images, son dessin s'en va avec elle, les autres jalons gardent les leurs.
     pub fn retirer_marque(&mut self, i: usize) {
         if i < self.marques.len() {
+            if self.dessins.len() == self.marques.len() + 2 {
+                self.dessins.remove(i + 1);
+            }
             self.marques.remove(i);
             match self.temps.as_mut() {
                 Some(t) if i < t.len() => {
@@ -940,6 +973,18 @@ impl Trajectoire {
                 _ => self.temps = None,
             }
         }
+    }
+
+    /// Toutes les marques retirées (« Retirer les marques ») : le chemin reste, à vitesse constante, en parts égales. En clés
+    /// d'images, le départ et l'arrivée gardent leurs dessins ; ceux des marques s'en vont avec elles.
+    pub fn retirer_les_marques(&mut self) {
+        if self.dessins.len() == self.marques.len() + 2 && self.dessins.len() > 2 {
+            let arrivee = self.dessins[self.dessins.len() - 1];
+            self.dessins.truncate(1);
+            self.dessins.push(arrivee);
+        }
+        self.marques.clear();
+        self.temps = None;
     }
 
     /// Glisse la marque `i` à la fraction `f`, bornée entre ses voisines (et les bouts) : la fraction retenue.

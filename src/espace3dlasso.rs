@@ -80,6 +80,9 @@ impl App {
         self.e3d.vive = None;
         self.e3d.ctrl_appui = None;
         self.espace3d.drag = None;
+        // (On sélectionne sur le calque courant : la caméra choisie seule est lâchée, même quand ce calque n'est pas une carte
+        // ou que les cartes sont cachées, `e3_calque_choisi`.)
+        self.e3_calque_choisi(self.cur_layer);
         let (id, nom, carte) = (self.layer().id, self.layer().name.clone(), espace3d::is_card(self.layer()));
         if carte && self.espace3d.show_cards {
             self.espace3d.sel = vec![espace3d::card_selection(id)];
@@ -211,6 +214,8 @@ impl App {
         };
         // (La tolérance d'un clic sur un trait se lit sous le pointeur : `e3_zoom_du_dessin`.)
         self.e3d.pointeur = Some(pos);
+        // (La caméra choisie seule entre-temps est lâchée : le lasso prend sur le calque courant, `e3_calque_choisi`.)
+        self.e3_calque_choisi(self.cur_layer);
         self.select_press(p, pos, maj);
     }
 

@@ -35,23 +35,23 @@ fn share(fit: f32, min: f32, content: Option<f32>, room: f32) -> f32 {
 /// Hauteur d'une partie, au moins : la barre d'onglets et une ligne.
 pub const MIN_FIT: f32 = 56.0;
 
-/// Les panneaux qui prennent la hauteur de leur contenu.
+/// Les panneaux qui prennent la hauteur de leur contenu. Le panneau Espace 3D en est : c'est un onglet du groupe de
+/// Réglages (`docs/INTERFACE.md`, partie 152.3), et devant, il prend la hauteur de ses cartes et de sa caméra au lieu de
+/// garder celle que Réglages avait ; la couleur dessous prend le reste.
 pub fn fits(pane: Pane) -> bool {
-    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Sheet | Pane::Effects | Pane::Vignettes)
+    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Sheet | Pane::Effects | Pane::Vignettes | Pane::Espace3d)
 }
 
 /// Les panneaux dont on mesure le contenu : ceux qui s'ajustent, et la couleur (souple, mais dont
 /// la hauteur ne dépend pas de celle du panneau ; les calques, eux, remplissent toujours le leur).
-/// Le panneau Espace 3D aussi, qui prend la place de la couleur sous les réglages de l'outil quand la vue est
-/// ouverte : comme elle, il prend le reste, et partage la colonne selon son contenu quand les deux ne tiennent pas.
 pub fn measured(pane: Pane) -> bool {
-    fits(pane) || matches!(pane, Pane::Color | Pane::Espace3d)
+    fits(pane) || matches!(pane, Pane::Color)
 }
 
 /// Hauteur minimale d'un panneau qui prend le reste.
 pub fn flex_min(pane: Pane) -> f32 {
     match pane {
-        Pane::Color | Pane::Espace3d => 200.0,
+        Pane::Color => 200.0,
         Pane::Layers | Pane::XSheet => 140.0,
         Pane::Canvas => 240.0,
         Pane::Montage | Pane::Timeline => 160.0,

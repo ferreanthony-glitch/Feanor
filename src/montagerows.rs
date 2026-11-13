@@ -159,8 +159,13 @@ impl App {
         if camera_seule {
             painter.rect_stroke(cam, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
         }
-        // Clic droit sur « Caméra » : le menu de la caméra (passe interface).
-        ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click()).context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
+        // Clic sur « Caméra » : la caméra choisie seule dans la vue Espace 3D, sa piste la piste choisie
+        // (`e3_piste_camera_cliquee`) ; clic droit : le menu de la caméra (passe interface).
+        let resp = ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click());
+        if resp.clicked() {
+            self.e3_piste_camera_cliquee();
+        }
+        resp.context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
         painter.rect_filled(header, 3.0, theme::etiquette());
         self.project_header(ui, header);

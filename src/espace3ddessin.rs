@@ -269,6 +269,9 @@ impl App {
         let deja = self.e3d.dessin;
         self.e3d.dessin = true;
         self.espace3d.drag = None;
+        // (On dessine sur le calque courant : la caméra choisie seule est lâchée, même quand ce calque n'est pas une carte ou
+        // que les cartes sont cachées ; il redevient le calque choisi partout, `e3_calque_choisi`, partie 152.)
+        self.e3_calque_choisi(self.cur_layer);
         let (id, nom, carte) = (self.layer().id, self.layer().name.clone(), espace3d::is_card(self.layer()));
         if carte && self.espace3d.show_cards {
             self.espace3d.sel = vec![espace3d::card_selection(id)];
@@ -470,6 +473,9 @@ impl App {
         };
         // (La taille du pinceau se lit sous le pointeur : `e3_zoom_du_dessin`.)
         self.e3d.pointeur = Some(pos);
+        // (La caméra a été choisie seule pendant que l'outil de dessin était en main, « choisir » du panneau Espace 3D ou sa
+        // piste : le trait va sur le calque courant, qui redevient le calque choisi, `e3_calque_choisi`.)
+        self.e3_calque_choisi(self.cur_layer);
         let pressure = if pen { self.pen_pressure } else { 1.0 };
         self.begin_paint(p, pressure, pen);
         if self.stroke.is_some() || self.erase_pen().is_some() {

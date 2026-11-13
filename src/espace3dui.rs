@@ -464,6 +464,18 @@ impl App {
         }
     }
 
+    /// **Un clic sur la piste « Caméra »** de la timeline ou du montage (son nom, le vide de sa rangée, une de ses clés, une
+    /// poignée de lissage) : la caméra du plan est choisie seule, comme « choisir » du panneau Espace 3D
+    /// (`e3_choisir_la_camera`), et sa piste devient la rangée choisie (Anthony, 2026-11-13 : « La partie dédiée à la caméra
+    /// dans la timeline doit être sélectionnée quand la caméra l'est, et plus un calque »). Seulement quand la vue Espace 3D
+    /// est montrée, dans tout plan (en Espace 3D ou non) : c'est pour elle que la caméra se choisit. Vue fermée (ou cachée par
+    /// la vue caméra), rien de plus ne change : le clic fait ce qu'il faisait (la tête de lecture, les clés, les menus).
+    pub(crate) fn e3_piste_camera_cliquee(&mut self) {
+        if self.e3_vue_montree() {
+            self.e3_choisir_la_camera(false);
+        }
+    }
+
     /// Le calque `li` vient d'être choisi à la main (`App::select_layer` : le panneau Calques, la timeline, le montage…),
     /// même s'il était déjà le calque courant : **la caméra du plan est lâchée**, et la carte de ce calque est choisie à sa
     /// place (vue ouverte, cartes montrées). La timeline et le montage rendent alors leur rangée à ce calque. Sans caméra

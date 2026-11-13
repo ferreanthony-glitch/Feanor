@@ -1576,6 +1576,11 @@ impl App {
                         }
                     }
                 }
+                // Un clic dans la piste Caméra (une clé, une poignée de lissage, le vide) : la caméra du plan, devenu le plan
+                // courant, est choisie seule dans la vue Espace 3D, sa piste la piste choisie (`e3_piste_camera_cliquee`).
+                if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                    self.e3_piste_camera_cliquee();
+                }
             }
         }
         if resp.double_clicked() && !comment_ptr.busy && !label_click {

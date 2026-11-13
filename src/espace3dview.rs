@@ -178,6 +178,15 @@ impl App {
         })
     }
 
+    /// La caméra du plan est touchée par le pixel **sur son corps** (son œil, le sommet de la pyramide), ce qui passe avant une
+    /// carte au clic (partie 152 : la caméra devant une carte se prend). Les traits fins de la pyramide et de son cadre, eux,
+    /// ne passent qu'après les cartes : vue de face, ils traversent la carte que la caméra regarde, et la rendaient impossible
+    /// à choisir.
+    pub(crate) fn e3_pick_camera_devant(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
+        let cam = self.e3_world().scene_cam(&self.current_camera());
+        view.project(cam.pos, center).is_some_and(|p| ((p[0] - px[0]).powi(2) + (p[1] - px[1]).powi(2)).sqrt() < 12.0)
+    }
+
     /// La caméra du plan est touchée par le pixel (près de son corps ou de sa pyramide).
     pub(crate) fn e3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
         let cam = self.e3_world().scene_cam(&self.current_camera());
@@ -322,15 +331,21 @@ impl App {
     }
 
     /// Un clic sans glisser : choisir la carte (ou la caméra) sous la souris, ou ne plus rien choisir.
+    ///
+    /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide), même avec une carte derrière :
+    /// il est tracé par-dessus les cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de
+    /// haut). C'est la règle du Ctrl+clic de l'outil Trajectoire (`e3_traj_choisir`, partie 152) ; avant, un clic simple
+    /// prenait la carte de derrière.
     fn e3_click(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
         let ray = view.ray(px, center);
         let additive = mods.shift || mods.command;
         if self.e3_gizmo(view).is_some_and(|g| g.hit(view, center, px, GRAB).is_some()) {
             return;
         }
-        // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi.)
-        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi ; la caméra d'abord.)
+        let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
+        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
         match (hit, cam_hit) {
             (Some(id), _) => {
                 if additive {
@@ -425,14 +440,21 @@ impl App {
             }
         }
         // Une carte (ou la caméra) tirée directement : elle glisse dans son plan (Maj : en profondeur). La caméra glisse
-        // à l'horizontale (Maj : en hauteur).
-        let hit = self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px));
-        let cam_hit = hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center);
+        // à l'horizontale (Maj : en hauteur). (La caméra d'abord, comme au clic : tirer son dessin la déplace, elle, même
+        // avec une carte derrière. Une vue orthographique attrape aussi une carte par sa tranche.)
+        let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
+        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
         if hit.is_some() || cam_hit {
             let id = hit.unwrap_or(CAMERA_ID);
             if !self.espace3d.sel.contains(&id) {
-                self.espace3d.sel = vec![id];
-                self.e3_follow_card(id);
+                if cam_hit {
+                    // (Seule, comme au clic : `e3_choisir_la_camera`.)
+                    self.e3_choisir_la_camera(false);
+                } else {
+                    self.espace3d.sel = vec![id];
+                    self.e3_follow_card(id);
+                }
             }
             if self.e3_frozen() {
                 return;

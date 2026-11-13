@@ -189,7 +189,13 @@ impl App {
                 false => visuals.weak_text_color(),
             };
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(11.0), encre);
-            menu_on(self, ui, row, "camera", GridMenu::Camera);
+            // Un clic sur le nom : la caméra choisie seule dans la vue Espace 3D, sa rangée la rangée choisie
+            // (`e3_piste_camera_cliquee`) ; clic droit : son menu.
+            let resp = ui.interact(row, ui.id().with(("nom_ligne", "camera")), Sense::click());
+            if resp.clicked() {
+                self.e3_piste_camera_cliquee();
+            }
+            resp.context_menu(|ui| self.grid_menu_ui(ui, GridMenu::Camera));
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
@@ -1193,6 +1199,12 @@ impl App {
                     // (Un clic sur une poignée de lissage ne fait rien : seul son glisser règle.)
                     None if ease_under(self, p).is_some() => cam_clicked = true,
                     None => self.clear_cam_keys(),
+                }
+                // Un clic dans la rangée Caméra (une clé, une poignée de lissage, le vide) : la caméra est choisie seule dans
+                // la vue Espace 3D, sa rangée devient la rangée choisie (`e3_piste_camera_cliquee`). (La poignée de la fin du
+                // plan, qui passe dans cette rangée, n'en est pas.)
+                if cam_row.contains(p) && self.timeline_handle_at(p, r, cell, &rows, grid_top).is_none() {
+                    self.e3_piste_camera_cliquee();
                 }
             }
         }

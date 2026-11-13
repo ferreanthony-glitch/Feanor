@@ -322,7 +322,9 @@ fn selection_visible_partout() {
     b.chauffer(2);
     // Un clic sur la carte dans la vue de face la choisit.
     let centre = b.app.e3_world().card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0)).pos;
-    let at = a_l_ecran(&b, 1, centre);
+    // (Un peu à côté du centre : dans la vue de face, l'œil de la caméra, devant la carte, est sur son centre, et le corps de
+    // la caméra se choisit avant la carte qu'il couvre — partie 152 ; ses traits fins, eux, laissent la carte se prendre.)
+    let at = a_l_ecran(&b, 1, centre) + vec2(18.0, -14.0);
     clic(&mut b, at);
     assert_eq!(b.app.espace3d.sel, vec![card], "choisie dans la vue de face");
     // Toutes les vues la montrent choisie : chacune a son manipulateur.
