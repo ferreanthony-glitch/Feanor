@@ -942,7 +942,7 @@ mod trajectoirelisse_tests;
 mod trajectoireprolonge;
 #[cfg(test)]
 mod trajectoireprolonge_tests;
-// Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; sa colonne arrive à côté des réglages de l'outil quand la vue s'ouvre.
+// Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; un onglet à côté de Réglages, qui passe devant quand la vue s'ouvre.
 mod espace3dpanneau;
 #[cfg(test)]
 mod espace3dpanneau_tests;

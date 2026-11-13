@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
+- **Le panneau Espace 3D devient un onglet de Réglages** (partie 152, point 3, modifié après sa réponse ; branche
+  `trajectoire-espace`, rien fusionné, rien regardé à l'écran). Entre « Colonne à part » et « Onglet de Réglages » (comme il
+  l'avait rangé lui-même dans son essai), Anthony a choisi : « Onglet de Réglages ». La colonne est retirée ; le panneau
+  arrive en onglet après Réglages et la fiche quand la vue s'ouvre, passe devant, Réglages revient devant à la fermeture, et
+  l'onglet reste ; rangé, fermé ou glissé à la main, il est respecté. Une disposition retenue qui l'a en onglet de Réglages le
+  garde. À lui de dire : si la hauteur du groupe suffit quand l'onglet Espace 3D est devant (le bord avec la couleur ne
+  s'ajuste pas tout seul). Essais : 4 récrits, 4 adaptés, 1 nouveau. Vérificateur : 4 607 réussis, 0 échec, aucun nouvel
+  avertissement.
 - **Partie 152 regardée à l'écran par Claude** (1 h 46 à 1 h 57, souris simulée, exe de la branche construit à 1 h 45, copie du projet
   `afa`). Avec des réglages neufs : la vue Espace 3D ouverte, le panneau « Espace 3D » arrive dans une colonne à droite de Réglages,
   Réglages montre le Pinceau à côté ; un clic dans la liste des cartes de la colonne choisit la carte, ses champs apparaissent.

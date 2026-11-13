@@ -111,9 +111,9 @@ pub enum Pane {
     Bibliotheque,
     /// Le panneau « Espace 3D » (`espace3dpanneau.rs`, 2026-11-12, `docs/INTERFACE.md` partie 150) : les réglages de la vue
     /// Espace 3D (options de la vue, cartes, caméra du plan), sortis du panneau Réglages, qui montre toujours l'outil choisi.
-    /// Sa place (Anthony, 2026-11-13, partie 152 : « Place-le à côté de réglages plutôt ») : une colonne à lui, à droite de
-    /// celle des réglages de l'outil. Elle arrive quand la vue s'ouvre et repart quand elle se ferme ; ouvert à la main, ou
-    /// rangé ailleurs, il reste où on l'a mis.
+    /// Sa place (Anthony, 2026-11-13, partie 152 : « Onglet de Réglages ») : un onglet du groupe des réglages de l'outil,
+    /// après les onglets qui y sont (Réglages, la fiche du plan). Il y arrive, et passe devant, quand la vue s'ouvre ;
+    /// Réglages repasse devant quand elle se ferme, et l'onglet reste. Rangé ailleurs à la main, il reste où on l'a mis.
     #[serde(rename = "espace3d")]
     Espace3d,
 }
@@ -157,7 +157,8 @@ impl Pane {
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande. (Le panneau Espace 3D en est
-    /// depuis la partie 152 : sa colonne arrive avec la vue Espace 3D, ou quand on l'ouvre à la main.)
+    /// depuis la partie 152 : il arrive en onglet des réglages de l'outil quand la vue Espace 3D s'ouvre, ou quand on
+    /// l'ouvre à la main, et y reste.)
     pub fn on_demand(self) -> bool {
         matches!(
             self,
@@ -357,7 +358,9 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [(0.3, keep(vec![Pane::Tools])), (0.55, keep(SETTINGS_TABS.to_vec())), (1.0, keep(COLOR_TABS.to_vec()))];
+    // (Le panneau Espace 3D, onglet des réglages, n'est dans aucune disposition d'origine : il n'est ici que quand on
+    // l'ouvre sans plus aucun panneau de sa colonne, qu'il refait alors à lui seul.)
+    let parts = [(0.3, keep(vec![Pane::Tools])), (0.55, keep([&SETTINGS_TABS[..], &[Pane::Espace3d][..]].concat())), (1.0, keep(COLOR_TABS.to_vec()))];
     stack(&parts)
 }
 
@@ -367,8 +370,8 @@ const SETTINGS_TABS: [Pane; 2] = [Pane::ToolOptions, Pane::Sheet];
 
 /// Les onglets du bas de la colonne : la couleur et les personnages (brosse par personnage). Les pinceaux n'y sont plus :
 /// leur liste est dans les réglages de l'outil. Le panneau Espace 3D n'y est plus non plus (il y a été un jour, le
-/// 2026-11-12, partie 150 : « en dessous de réglages, à la place de la couleur ») : il a sa colonne à côté des réglages
-/// (`DockLayout::poser_en_colonne`, partie 152).
+/// 2026-11-12, partie 150 : « en dessous de réglages, à la place de la couleur ») : il est un onglet du groupe des
+/// réglages de l'outil (`DockLayout::open`, partie 152).
 const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Personnages];
 
 /// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur et les
@@ -443,32 +446,6 @@ const TOOLS_WIDTH: f32 = 350.0;
 /// Part du lecteur, dans l'espace Montage, de la largeur au-dessus de la bande (le reste : la fiche
 /// du plan et les panneaux du montage).
 const MONTAGE_LECTEUR_PART: f32 = 0.7;
-/// Largeur de la colonne du panneau Espace 3D, à côté des réglages de l'outil (`DockLayout::poser_en_colonne`,
-/// `docs/INTERFACE.md` partie 152), en points : de quoi lire ses champs de position (trois nombres sur une ligne).
-pub const ESPACE3D_WIDTH: f32 = 340.0;
-/// La part de la largeur de la disposition que prend cette colonne, au moins et au plus (fenêtre très large, ou très étroite).
-const COLONNE_MIN: f32 = 0.12;
-const COLONNE_MAX: f32 = 0.4;
-/// Ce qu'une colonne posée à côté des réglages laisse au moins au dessin, en part de la largeur de la disposition.
-const DESSIN_MIN: f32 = 0.2;
-
-/// La part de la largeur de la disposition qui donne `ESPACE3D_WIDTH` points à la colonne du panneau Espace 3D, dans une
-/// fenêtre dont les panneaux font `largeur` points de large (rien : la fenêtre de référence).
-pub fn part_de_la_colonne_espace3d(largeur: Option<f32>) -> f32 {
-    let l = largeur.filter(|l| l.is_finite() && *l > 0.0).unwrap_or(REF_WIDTH);
-    (ESPACE3D_WIDTH / l).clamp(COLONNE_MIN, COLONNE_MAX)
-}
-
-/// Ce que rend `DockNode::poser_a_droite_de`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Pose {
-    /// Le panneau visé n'est pas dans ce nœud.
-    Absent,
-    /// Il y est, et ce nœud est (encore) toute sa colonne de panneaux : au parent de poser la voisine.
-    Colonne,
-    /// La voisine est posée ; il reste cette largeur à prendre plus haut (0 : le dessin l'a déjà cédée).
-    Fait(f32),
-}
 
 impl DockNode {
     fn collect(&self, out: &mut Vec<Pane>) {
@@ -589,106 +566,6 @@ impl DockNode {
         }
     }
 
-    /// Ce nœud contient `pane`.
-    fn a(&self, pane: Pane) -> bool {
-        match self {
-            DockNode::Tabs { panneaux, .. } => panneaux.contains(&pane),
-            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => a.a(pane) || b.a(pane),
-        }
-    }
-
-    /// Ce nœud contient le dessin ou la bande du bas : ce n'est pas une simple colonne de panneaux.
-    fn a_le_dessin_ou_la_bande(&self) -> bool {
-        self.a(Pane::Canvas) || self.a(Pane::Montage) || self.a(Pane::Timeline)
-    }
-
-    /// Pose `nouveau` en colonne à droite de **la colonne de panneaux** qui contient `cible` (ses réglages et ce qui est
-    /// empilé avec eux, dessus ou dessous : la couleur d'ordinaire), sur toute sa hauteur. La colonne de `cible` garde sa
-    /// largeur ; les `e` de large de la nouvelle (part de la largeur de toute la disposition) sont pris au dessin, là où
-    /// il est le voisin d'une des parties traversées. `w` : la largeur de ce nœud, dans la même unité.
-    fn poser_a_droite_de(&mut self, cible: Pane, nouveau: &mut Option<DockNode>, e: f32, w: f32) -> Pose {
-        match self {
-            DockNode::Tabs { panneaux, .. } => {
-                if panneaux.contains(&cible) {
-                    Pose::Colonne
-                } else {
-                    Pose::Absent
-                }
-            }
-            DockNode::Column { haut, bas, .. } => {
-                let en_haut = haut.a(cible);
-                let (enfant, autre) = if en_haut { (haut, bas) } else { (bas, haut) };
-                match enfant.poser_a_droite_de(cible, nouveau, e, w) {
-                    // (Une colonne de panneaux : c'est elle tout entière qui reçoit sa voisine, au parent de la poser.)
-                    Pose::Colonne if !autre.a_le_dessin_ou_la_bande() => Pose::Colonne,
-                    // (La partie d'en face est le dessin ou la bande : la voisine se pose ici, dans la largeur de la colonne.)
-                    Pose::Colonne => {
-                        let Some(n) = nouveau.take() else { return Pose::Absent };
-                        let part = if w - e >= e * 0.5 { (w - e) / w } else { 0.5 };
-                        let vieux = std::mem::replace(&mut **enfant, tabs(Vec::new()));
-                        **enfant = row(part, vieux, n);
-                        Pose::Fait(0.0)
-                    }
-                    p => p,
-                }
-            }
-            DockNode::Row { part, gauche, droite } => {
-                let a_gauche = gauche.a(cible);
-                let (wg, wd) = (*part * w, (1.0 - *part) * w);
-                let (enfant, we, frere, wf) = if a_gauche { (gauche, wg, droite, wd) } else { (droite, wd, gauche, wg) };
-                let reste = match enfant.poser_a_droite_de(cible, nouveau, e, we) {
-                    Pose::Absent => return Pose::Absent,
-                    Pose::Colonne => {
-                        let Some(n) = nouveau.take() else { return Pose::Absent };
-                        let vieux = std::mem::replace(&mut **enfant, tabs(Vec::new()));
-                        **enfant = row(we / (we + e), vieux, n);
-                        e
-                    }
-                    Pose::Fait(reste) => reste,
-                };
-                if reste <= 0.0 {
-                    return Pose::Fait(0.0);
-                }
-                // La partie traversée a grandi de `reste`. Son voisin est le dessin : il le lui cède (en gardant de quoi
-                // dessiner), la largeur du tout ne change pas. Sinon le tout grandit, et c'est plus haut qu'on le prend.
-                let (nouvelle_part, suite) = if frere.a(Pane::Canvas) {
-                    let cede = reste.min((wf - DESSIN_MIN).max(0.0));
-                    let enfant_apres = we + cede;
-                    (if a_gauche { enfant_apres / w } else { (w - enfant_apres) / w }, 0.0)
-                } else {
-                    let (enfant_apres, tout) = (we + reste, w + reste);
-                    (if a_gauche { enfant_apres / tout } else { (tout - enfant_apres) / tout }, reste)
-                };
-                *part = nouvelle_part.clamp(0.05, 0.95);
-                Pose::Fait(suite)
-            }
-        }
-    }
-
-    /// Ce nœud est la paire que fait `poser_a_droite_de` : à gauche une colonne de panneaux qui contient `cible`, à
-    /// droite `pane`, seul dans son groupe d'onglets.
-    fn est_la_colonne_posee(&self, pane: Pane, cible: Pane) -> bool {
-        match self {
-            DockNode::Row { gauche, droite, .. } => {
-                let seul = matches!(&**droite, DockNode::Tabs { panneaux, .. } if panneaux.as_slice() == [pane]);
-                seul && gauche.a(cible) && !gauche.a_le_dessin_ou_la_bande()
-            }
-            _ => false,
-        }
-    }
-
-    /// `pane` est seul dans son groupe d'onglets, à droite d'une colonne de panneaux qui contient `cible` : là où
-    /// `poser_a_droite_de` l'a mis.
-    fn en_colonne_a_droite_de(&self, pane: Pane, cible: Pane) -> bool {
-        if self.est_la_colonne_posee(pane, cible) {
-            return true;
-        }
-        match self {
-            DockNode::Tabs { .. } => false,
-            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => a.en_colonne_a_droite_de(pane, cible) || b.en_colonne_a_droite_de(pane, cible),
-        }
-    }
-
     /// `pane` est un onglet d'un groupe qui a aussi l'un des panneaux `autres`.
     fn en_onglet_avec(&self, pane: Pane, autres: &[Pane]) -> bool {
         match self {
@@ -706,48 +583,6 @@ impl DockNode {
                 ici || haut.seul_sous(pane, cible) || bas.seul_sous(pane, cible)
             }
             DockNode::Row { gauche, droite, .. } => gauche.seul_sous(pane, cible) || droite.seul_sous(pane, cible),
-        }
-    }
-
-    /// L'inverse de `poser_a_droite_de` : retire la colonne où `pane` est seul, à droite de la colonne de panneaux de
-    /// `cible`, et rend sa largeur au dessin. Rend la largeur encore à rendre plus haut (rien : la colonne n'y est pas).
-    fn retirer_la_colonne_a_droite_de(&mut self, pane: Pane, cible: Pane, w: f32) -> Option<f32> {
-        match self {
-            DockNode::Tabs { .. } => None,
-            DockNode::Column { haut, bas, .. } => {
-                let en_haut = haut.en_colonne_a_droite_de(pane, cible);
-                let (enfant, autre) = if en_haut { (haut, bas) } else { (bas, haut) };
-                // (Posée dans la largeur d'une partie empilée avec le dessin ou la bande : rien n'avait été pris plus haut.)
-                let sur_place = enfant.est_la_colonne_posee(pane, cible) && autre.a_le_dessin_ou_la_bande();
-                let rendu = enfant.retirer_la_colonne_a_droite_de(pane, cible, w)?;
-                Some(if sur_place { 0.0 } else { rendu })
-            }
-            DockNode::Row { part, gauche, droite } => {
-                let seul = matches!(&**droite, DockNode::Tabs { panneaux, .. } if panneaux.as_slice() == [pane]);
-                if seul && gauche.a(cible) && !gauche.a_le_dessin_ou_la_bande() {
-                    let rendu = (1.0 - *part) * w;
-                    let reste = std::mem::replace(&mut **gauche, tabs(Vec::new()));
-                    *self = reste;
-                    return Some(rendu);
-                }
-                let (wg, wd) = (*part * w, (1.0 - *part) * w);
-                let a_gauche = gauche.en_colonne_a_droite_de(pane, cible);
-                let (enfant, we, frere) = if a_gauche { (gauche, wg, droite) } else { (droite, wd, gauche) };
-                let rendu = enfant.retirer_la_colonne_a_droite_de(pane, cible, we)?;
-                if rendu <= 0.0 {
-                    return Some(0.0);
-                }
-                // La partie traversée a rétréci de `rendu` : le dessin, son voisin, le reprend ; sinon le tout rétrécit.
-                let enfant_apres = (we - rendu).max(0.0);
-                let (nouvelle_part, suite) = if frere.a(Pane::Canvas) {
-                    (if a_gauche { enfant_apres / w } else { (w - enfant_apres) / w }, 0.0)
-                } else {
-                    let tout = (w - rendu).max(1e-6);
-                    (if a_gauche { enfant_apres / tout } else { (tout - enfant_apres) / tout }, rendu)
-                };
-                *part = nouvelle_part.clamp(0.05, 0.95);
-                Some(suite)
-            }
         }
     }
 
@@ -775,8 +610,8 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            // (Le panneau Espace 3D n'est pas dans la disposition d'origine : sa colonne arrive, à côté des réglages, quand
-            // la vue Espace 3D s'ouvre, et repart avec elle. `espace3dpanneau.rs`, partie 152.)
+            // (Le panneau Espace 3D n'est pas dans la disposition d'origine : il arrive en onglet des réglages de l'outil
+            // quand la vue Espace 3D s'ouvre, et y reste. `espace3dpanneau.rs`, partie 152.)
             settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages]);
             if l.sheet {
                 settings.push(Pane::Sheet);
@@ -980,8 +815,8 @@ impl DockLayout {
     /// seulement si `pane` y est devant et si `avant` y est encore. Sinon rien ne change (les onglets ont été rangés
     /// autrement entre-temps). Vrai si c'est fait.
     ///
-    /// Sert au panneau Espace 3D, que la vue ouverte met devant la couleur (`espace3dpanneau.rs`) : la disposition
-    /// retenue garde l'onglet que l'utilisateur avait devant, pas celui que la vue y a mis pour un moment.
+    /// Sert au panneau Espace 3D, que la vue ouverte met devant Réglages, son voisin d'onglets (`espace3dpanneau.rs`) : la
+    /// disposition retenue garde l'onglet que l'utilisateur avait devant, pas celui que la vue y a mis pour un moment.
     pub fn remettre_devant(&mut self, pane: Pane, avant: Pane) -> bool {
         let groupe = match self.principal.groupe_de(pane) {
             Some(g) => Some(g),
@@ -997,40 +832,13 @@ impl DockLayout {
         }
     }
 
-    /// **`pane` dans une colonne à lui, à droite de la colonne des réglages de l'outil**, sur toute sa hauteur
-    /// (`docs/INTERFACE.md`, partie 152 ; Anthony, 2026-11-13, pour le panneau Espace 3D : « Place-le à côté de réglages
-    /// plutôt »). Les réglages de l'outil, et la couleur dessous, gardent leur place et leur largeur ; la largeur de la
-    /// colonne neuve (`largeur` : sa part de la largeur de toute la disposition) est prise au dessin, qui en garde au
-    /// moins `DESSIN_MIN`. Faux, et rien ne change, si `pane` est déjà dans la disposition, ou si les réglages de l'outil
-    /// ne sont pas dans la fenêtre principale (ou y partagent leurs onglets avec le dessin).
-    pub fn poser_en_colonne(&mut self, pane: Pane, largeur: f32) -> bool {
-        if pane == Pane::Canvas || self.contains(pane) || !self.principal_has(Pane::ToolOptions) {
-            return false;
-        }
-        let e = if largeur.is_finite() { largeur.clamp(COLONNE_MIN, COLONNE_MAX) } else { part_de_la_colonne_espace3d(None) };
-        let mut nouveau = Some(tabs(vec![pane]));
-        matches!(self.principal.poser_a_droite_de(Pane::ToolOptions, &mut nouveau, e, 1.0), Pose::Fait(_))
-    }
-
-    /// `pane` est dans sa colonne à droite de celle des réglages de l'outil, seul dans son groupe d'onglets : là où
-    /// `poser_en_colonne` le met.
-    pub fn en_colonne(&self, pane: Pane) -> bool {
-        self.principal.en_colonne_a_droite_de(pane, Pane::ToolOptions)
-    }
-
-    /// L'inverse de `poser_en_colonne` : la colonne de `pane` s'en va et rend sa largeur au dessin ; les réglages de
-    /// l'outil gardent la leur. Faux, et rien ne change, si `pane` n'est pas (ou plus) dans cette colonne : rangé
-    /// ailleurs à la main, il y reste.
-    pub fn retirer_la_colonne(&mut self, pane: Pane) -> bool {
-        self.en_colonne(pane) && self.principal.retirer_la_colonne_a_droite_de(pane, Pane::ToolOptions, 1.0).is_some()
-    }
-
     /// Retire `pane` de **la place que la partie 150 donnait au panneau Espace 3D** : un onglet du groupe de la couleur
     /// ou des brosses dédiées (fenêtre principale ou panneau flottant), ou, sans elles, seul juste sous les réglages de
     /// l'outil. Ailleurs (un autre groupe, un panneau flottant à lui, sa propre fenêtre), il a été rangé à la main : il y
-    /// reste. Vrai s'il a été retiré.
+    /// reste. Un onglet du groupe des réglages de l'outil reste aussi, même si la couleur y est avec lui : c'est sa place
+    /// depuis la partie 152. Vrai s'il a été retiré.
     pub fn retirer_de_la_place_150(&mut self, pane: Pane) -> bool {
-        let avec_la_couleur = |n: &DockNode| n.en_onglet_avec(pane, &COLOR_TABS);
+        let avec_la_couleur = |n: &DockNode| n.en_onglet_avec(pane, &COLOR_TABS) && !n.en_onglet_avec(pane, &[Pane::ToolOptions]);
         let la = avec_la_couleur(&self.principal) || self.fenetres.iter().any(|w| avec_la_couleur(&w.panneaux)) || self.principal.seul_sous(pane, Pane::ToolOptions);
         if la {
             self.close(pane);
@@ -1110,12 +918,16 @@ impl DockLayout {
             return;
         }
         let group = pane.group();
-        // Le panneau Espace 3D : dans une colonne à lui, à côté des réglages de l'outil (Anthony, 2026-11-13 : « Place-le à
-        // côté de réglages plutôt » ; la veille, partie 150, il était un onglet du groupe de la couleur, où il ne restait
-        // qu'une centaine de points de haut). Sans réglages de l'outil dans la fenêtre principale : la règle de son groupe,
-        // plus bas (un onglet avec la couleur, les brosses dédiées ou la fiche du plan).
-        if pane == Pane::Espace3d && self.poser_en_colonne(pane, part_de_la_colonne_espace3d(None)) {
-            return;
+        // Le panneau Espace 3D : un onglet du groupe des réglages de l'outil, après ceux qui y sont (Réglages, la fiche du
+        // plan) : Réglages ou lui devant (Anthony, 2026-11-13, partie 152 : « Onglet de Réglages » ; à la partie 150 il
+        // était un onglet du groupe de la couleur, où il ne restait qu'une centaine de points de haut). Sans réglages de
+        // l'outil dans la fenêtre principale (le Montage ; Réglages fermé, ou flottant) : la règle de son groupe, plus bas
+        // (un onglet avec la fiche du plan, la couleur ou les brosses dédiées ; sans aucun d'eux, sa colonne à lui).
+        if pane == Pane::Espace3d {
+            if let Some(t) = self.principal.tabs_with(&[Pane::ToolOptions]) {
+                t.push(pane);
+                return;
+            }
         }
         // Un onglet des réglages revient avec les autres onglets des réglages ; les pinceaux et la
         // couleur, ensemble.

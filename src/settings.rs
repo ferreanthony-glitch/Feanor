@@ -80,8 +80,9 @@ pub struct Settings {
     #[serde(default, rename = "panneau_espace3d_pose", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_espace3d_pose: bool,
     /// Le panneau « Espace 3D » a quitté, une fois, la place que la partie 150 lui donnait dans les dispositions retenues
-    /// (un onglet du groupe de la couleur) : depuis la partie 152 (2026-11-13, « Place-le à côté de réglages plutôt »), sa
-    /// colonne arrive à côté des réglages de l'outil quand la vue Espace 3D s'ouvre (`poser_le_panneau_espace3d`).
+    /// (un onglet du groupe de la couleur) : depuis la partie 152 (2026-11-13, « Onglet de Réglages »), il arrive en onglet
+    /// du groupe de Réglages quand la vue Espace 3D s'ouvre (`poser_le_panneau_espace3d`). (Le nom de la marque vient du
+    /// premier essai de la partie 152 : une colonne à lui, « à côté » de Réglages.)
     #[serde(default, rename = "panneau_espace3d_a_cote", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_espace3d_a_cote: bool,
     /// « Avec les annotations » des fenêtres d'export (la planche des Vignettes, les images, la vidéo, le GIF, le storyboard PDF) : coché,
@@ -575,15 +576,16 @@ impl Settings {
     /// Le panneau « Espace 3D » dans les dispositions retenues (toutes : le Storyboard, l'Animation, le Montage, les
     /// Vignettes, et les espaces de travail enregistrés).
     ///
-    /// **Partie 152** (2026-11-13, Anthony : « Place-le à côté de réglages plutôt ») : le panneau n'est plus un onglet
-    /// du groupe de la couleur. Sa colonne arrive à côté des réglages de l'outil quand la vue Espace 3D s'ouvre, et repart
-    /// quand elle se ferme (`espace3dpanneau.rs`) : une disposition n'a donc plus besoin de l'avoir. Une fois
-    /// (`panneau_espace3d_a_cote`), il quitte la place que la partie 150 lui avait donnée dans les dispositions retenues
-    /// (`DockLayout::retirer_de_la_place_150` : un onglet du groupe de la couleur ou des brosses dédiées, ou seul juste
-    /// sous les réglages de l'outil), sans rien y changer d'autre. Rangé ailleurs à la main (un autre groupe, un panneau
-    /// flottant à lui, sa propre fenêtre), il y reste. Un panneau remis à la main dans le groupe de la couleur ne se
-    /// distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là ; remis ensuite, il y
-    /// reste.
+    /// **Partie 152** (2026-11-13, Anthony : « Place-le à côté de réglages plutôt », puis, entre une colonne à part et un
+    /// onglet : « Onglet de Réglages ») : le panneau n'est plus un onglet du groupe de la couleur. Il arrive en onglet du
+    /// groupe de Réglages quand la vue Espace 3D s'ouvre, et y reste (`espace3dpanneau.rs`) : une disposition n'a donc pas
+    /// besoin de l'avoir d'avance. Une fois (`panneau_espace3d_a_cote`), il quitte la place que la partie 150 lui avait
+    /// donnée dans les dispositions retenues (`DockLayout::retirer_de_la_place_150` : un onglet du groupe de la couleur ou
+    /// des brosses dédiées, ou seul juste sous les réglages de l'outil), sans rien y changer d'autre ; il revient en
+    /// onglet de Réglages à la prochaine ouverture de la vue. Rangé ailleurs à la main (en onglet de Réglages, dans un
+    /// autre groupe, un panneau flottant à lui, sa propre fenêtre), il y reste. Un panneau remis à la main dans le groupe
+    /// de la couleur ne se distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là ;
+    /// remis ensuite, il y reste.
     ///
     /// **Partie 150** (2026-11-12) : le panneau était ajouté, une fois, aux dispositions retenues d'avant lui
     /// (`panneau_espace3d_pose`). Ce n'est plus fait : la marque est seulement posée, pour qu'un fichier de réglages
