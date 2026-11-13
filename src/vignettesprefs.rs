@@ -2,7 +2,7 @@
 //! d'ouverture. Les réglages eux-mêmes sont dans `vignettesreglages.rs` ; les trois groupes de la fenêtre (`prefsonglets.rs`) sont
 //! dessinés ici, `prefsui.rs` les appelle.
 
-use eframe::egui::{self, RichText};
+use eframe::egui;
 
 use crate::app::App;
 use crate::board::{self, BoardLayout};
@@ -322,6 +322,6 @@ impl App {
                 self.settings_a_ecrire = true;
             }
         });
-        ui.label(RichText::new("À l'ouverture et à la création d'un projet seulement : le zoom ne change pas quand on revient sur l'onglet.").small().weak());
+        // (Quand ce réglage joue : dans le registre des explications, `aidetextes.rs`, partie 153.)
     }
 }

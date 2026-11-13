@@ -558,9 +558,6 @@ impl App {
     /// sont dans le panneau Réglages (`trajectoire_espace_options_ui`).
     pub(crate) fn espace3d_options_panel(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur;
-        let note = |ui: &mut egui::Ui, text: &str| {
-            ui.label(RichText::new(text).small().weak());
-        };
         ui.horizontal(|ui| {
             ui.heading(format!("{}  Espace 3D", ph::CUBE));
             ui.label(RichText::new("cartes et caméra").small().weak());
@@ -675,7 +672,7 @@ impl App {
                 // (Les clés de position des cartes choisies, toutes ensemble : `espace3dcles.rs`.)
                 self.espace3d_boutons_cle_position(ui);
             });
-            note(ui, "Elles se déplacent, tournent et grandissent ensemble ; choisis-en une seule pour ses réglages.");
+            // (Ce qu'elles font ensemble est dans le registre des explications, rubrique Espace 3D, partie 153.)
         }
         ui.separator();
         self.espace3d_camera_fields(ui);
@@ -790,7 +787,7 @@ impl App {
                 self.trajectoire_espace_apres_pose(li);
             }
         }
-        ui.label(RichText::new("Rotation Z : le tour dans le plan de la carte (antihoraire) ; X et Y inclinent la carte.").small().weak());
+        // (Les axes de rotation d'une carte : l'animation « Une carte et ses axes de rotation », registre des explications.)
     }
 
     /// La caméra du plan, seule caméra de l'espace : placement, focale (objectifs du plan), vue par la caméra.
@@ -847,7 +844,8 @@ impl App {
         });
         ui.label(RichText::new(format!("Champ horizontal {:.0}° (pellicule de 36 mm).{}", cam.angle_of_view(), if keys >= 2 { format!(" {keys} clés de caméra : on règle la clé de l'image courante.") } else { String::new() })).small().weak());
         if self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre. Elle tourne tout autour (panoramique sans borne), passe derrière les cartes, bascule jusqu'à la verticale (90° : plongée ou contre-plongée totale), et l'image la suit.").small().weak());
+            // (Ce que peut la caméra libre : l'animation « La caméra libre », registre des explications.)
+            ui.label(RichText::new("Plan en Espace 3D : la caméra est libre.").small().weak());
         }
         if changed {
             let sc = cam.sanitized();

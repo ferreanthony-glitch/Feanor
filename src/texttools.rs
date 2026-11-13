@@ -288,14 +288,6 @@ impl App {
                     .color(crate::theme::avertissement()),
             );
         }
-        ui.label(
-            egui::RichText::new(
-                "Clic : nouveau texte (sur un texte d'un calque vectoriel : le modifier). Ctrl+Entrée : \
-                 poser ; Échap : annuler. Sur un calque vectoriel, le texte reste modifiable (Sélection : \
-                 déplacer, agrandir, tourner). Une police absente du poste est remplacée par celle de FEANOR.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation « Le texte » et le registre des explications, partie 153.)
     }
 }

@@ -425,16 +425,10 @@ impl App {
             courbe_attenuation(ui, r.attenuation);
             ui.checkbox(&mut r.curseur, "Afficher le curseur");
         });
-        if tool == Tool::Grab {
-            ui.label(RichText::new("Appui : les points du cercle sont pris ; glisser les déplace, plus ou moins selon leur distance au centre.").small().weak());
-        } else {
-            ui.label(RichText::new("Glisser : les points sous le cercle suivent le mouvement, comme un doigt qui étire le trait.").small().weak());
-        }
+        // (Le geste de Grab et de Pull est dans l'animation « Grab et Pull » et le registre des explications, partie 153.)
         let cles = self.sculpt_cibles_choisies();
         if cles >= 2 {
             ui.label(RichText::new(format!("{cles} clés choisies : la même déformation s'applique à chacune.")).small().strong());
-        } else {
-            ui.label(RichText::new("Plusieurs clés choisies du calque : la même déformation s'applique à chacune (une seule étape d'annulation).").small().weak());
         }
         if r != avant {
             *self.sculpte.de_mut(tool) = r;

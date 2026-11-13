@@ -684,17 +684,7 @@ impl App {
         });
         // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin. La section « Durées »,
         // séquence et plan, est partie le 8 novembre 2026 : Anthony l'a barrée, les durées se lisent dans la timeline.)
-        ui.label(
-            RichText::new(
-                "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
-                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier. \
-                 Losanges jaunes de la piste Caméra : clic pour choisir (Ctrl : ajouter, Maj : la suite), glisser pour \
-                 déplacer, glisser dans le vide de la piste pour en choisir plusieurs au rectangle (Maj : ajouter, Ctrl : \
-                 basculer), Ctrl+C / Ctrl+V à l'image courante, Suppr. Aides au cadrage : menu « Cadrage » au-dessus du dessin.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
     }
 
     /// Règle la postérisation temporelle de la caméra du plan `pi` (une étape d'annulation, appelée par le geste `key`) : les

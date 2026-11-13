@@ -154,7 +154,7 @@ impl App {
 
     /// Le contenu de la section : les trois rôles, le serveur local, la note de licences.
     pub(crate) fn generation_prefs_corps(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("Le panneau Suggestions sonores lit le storyboard et propose des sons témoins. Chaque rôle a son fournisseur : le serveur local de cet ordinateur, ou un service en ligne.").small().weak());
+        // (Les explications de cette section sont dans le registre des explications : `aidetextes.rs`, partie 153.)
         let mut change = false;
         for role in Role::ALL {
             ui.add_space(4.0);
@@ -170,9 +170,7 @@ impl App {
                 }
             });
             match self.settings.generation_son.mode(role) {
-                Mode::Regles => {
-                    ui.label(RichText::new("Lit l'action, le dialogue et les notes des plans avec des mots-clés, sans modèle : rien à installer, rien n'est envoyé.").small().weak());
-                }
+                Mode::Regles => {}
                 Mode::Local => {
                     ui.label(RichText::new(format!("{} par le serveur local, sur 127.0.0.1.", role.modele_local())).small().weak());
                 }
@@ -195,8 +193,6 @@ impl App {
         }
         ui.add_space(6.0);
         change |= self.serveur_local_prefs_ui(ui);
-        ui.add_space(6.0);
-        ui.label(RichText::new("Licences : les conditions d'utilisation de chaque service et de chaque modèle (en particulier l'usage commercial des sons générés et le sort des données envoyées) sont à vérifier par toi. Ce sont ici des sons témoins, pour l'animatique.").small().weak());
         if change {
             self.settings.generation_son = std::mem::take(&mut self.settings.generation_son).sanitized();
             let _ = self.settings.save();
@@ -208,7 +204,6 @@ impl App {
     fn serveur_local_prefs_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut change = false;
         ui.label(RichText::new("Serveur local").strong());
-        ui.label(RichText::new("Un petit programme Python (sidecar/serveur.py) qui tourne sur cet ordinateur et fait tourner les modèles : rien ne sort de la machine. Les modèles et le Python sont dans le dossier SHOT-modeles (par défaut Documents\\SHOT\\Modèles\\SHOT-modeles).").small().weak());
         let (defaut_racine, defaut_python) = (crate::serveurlocal::racine_par_defaut(), crate::serveurlocal::python_de(&crate::serveurlocal::racine_des_reglages(&self.settings.generation_son)));
         ui.horizontal(|ui| {
             ui.label("Dossier des modèles");

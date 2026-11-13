@@ -11764,3 +11764,83 @@ Le lasso dans la vue (152.4) :
     choisie). Ctrl+clic sans glisser : la carte sous le pointeur devient le calque courant.
 20. Alt+glisser, clic droit, bouton du milieu, molette, avec l'outil Sélection : la vue tourne, glisse, avance.
 21. Prendre un outil de la vue (déplacer) : ce qui était choisi est posé, le pointeur manipule de nouveau les cartes.
+## 153. L'aide animée : des animations à la place des textes gris, et le registre des explications (2026-11-13, branche `aide-animee`)
+
+Demande d'Anthony, validée sur six essais montrés en boucle : les textes explicatifs gris (petits et pâles) quittent les
+panneaux. Ils sont remplacés par de petites animations schématiques, peintes par egui, qui jouent la première fois qu'on
+se sert d'un outil, en haut de « Réglages ». Les textes ne vivent plus que dans Aide > « Registre des explications ».
+Branche partie de `trajectoire-3d` (78ffda3).
+
+### 153.1 Le moteur et le joueur
+
+- `aideanim.rs` : une animation = un identifiant stable (retenu dans les réglages quand elle a été vue), un titre, sa
+  rubrique du registre, les contextes où elle joue, une durée (4 à 6 s), une fonction de dessin
+  `fn(&Painter, Rect, t, &Teintes)` et le texte du registre. Tout est peint en vecteurs : aucun fichier image, aucune
+  crate nouvelle. La toile 240 × 150 et ses aides : curseur (cercle de rayon 5 cerné de jade, point plein quand le
+  bouton est appuyé), touche de clavier (Plex Mono 11, allumée en jade quand elle est tenue), chemin tracé peu à peu,
+  adoucissement, carte, bonhomme, poignées, losange de clé.
+- Couleurs : celles de la charte, sombre ou clair (`canvas` dans un cadre `ground`, encre, encre douce, ligne forte,
+  jade pour le geste de la main). Aucun rouge, aucun dégradé décoratif, aucune ombre, aucun mot sauf les touches.
+- Le contexte (`App::aide_contexte`) : l'outil en main, précisé par ce qu'il vise (vue Espace 3D, calque bitmap,
+  plusieurs calques), ou l'espace Vignettes (planche, outil Caméra, outil d'annotation).
+- Le joueur, en haut de « Réglages » (sous le titre de l'outil) : à la première prise d'un outil, ses animations jouent
+  l'une après l'autre, puis la vignette se replie en douceur ; un clic sur la vignette la replie tout de suite. Le
+  bouton ▶ du titre les rejoue. Pendant qu'elles jouent, l'écran est repeint ; à l'arrêt, plus aucun repaint.
+- Ce qui a été vu est retenu dans `reglages.toml` : `explications_vues` (liste d'identifiants, écrite seulement si elle
+  n'est pas vide) ; `afficher_explications` (écrit seulement s'il est coché). Un vieux fichier se relit sans erreur.
+- L'état est dans `Confort` (partagé par les onglets). Les essais ne jouent rien d'eux-mêmes (`Joueur::auto` faux).
+
+### 153.2 Le menu Aide et le registre
+
+- Aide > « Afficher les explications » (case, `aide.explications`, sans touche) : cochée, l'animation rejoue à chaque
+  prise de l'outil. Décochée (d'origine) : une seule fois.
+- Aide > « Registre des explications… » (`aide.registre`, sans touche) : la fenêtre range les animations par rubrique
+  (Trajectoire, Sélection, Caméra, Dégradé, Dessin, Déformer, Formes, Sculpter, Autres outils, Espace 3D, Vignettes).
+  Chacune a sa vignette (un clic la rejoue) et son texte, avec les raccourcis lus dans le fichier de raccourcis. Puis
+  les textes des panneaux sans animation, des Préférences et des fenêtres, rangés par fenêtre (`aidetextes.rs`,
+  `aidefenetres.rs`), avec ce que règle chaque catégorie de brosse et ce que fait chaque export (leurs info-bulles).
+
+### 153.3 Les animations
+
+- Validées (`aidecatalogue.rs`) : Trajectoire sur la feuille (tracer, marquer, suivre), Maj depuis un bout, Trajectoire
+  dans l'espace, la boîte de sélection, la caméra (cadrer, poser une clé, jouer), le dégradé (tirer l'axe, valider).
+- Les autres gestes (`aidegestes.rs`) : tordre le chemin et ses marques, le lasso bitmap, la sélection par couleur,
+  plusieurs calques dans une boîte, la pression du stylet, le mélangeur, la gomme vectorielle, le Cutter, paliers et
+  adoucis, effets de caméra sur une plage, enveloppe, perspective, pastilles du dégradé, formes, Grab et Pull, pot de
+  peinture, texte, pipette, main, et l'Espace 3D (tourner la vue, une carte et ses axes, la caméra libre).
+- Les Vignettes (`aidevignettes.rs`, ajout d'Anthony) : coupe ou continuité, un trait à travers les cases, caméras dans
+  les vignettes, annotations, le pont avec le Storyboard. Aux proportions de la planche (`board.rs` : écart 18 dans un
+  plan, 53 à une coupe ; barre au tiers de la case, pâle ou à l'encre ; numéro du plan au-dessus de sa première case).
+  Les annotations sont à l'encre du dessin : c'est leur calque qui les distingue (l'œil le cache, le storyboard n'est
+  pas touché). Elles jouent à la première ouverture des Vignettes, à l'outil Caméra ou à un outil d'annotation.
+
+### 153.4 Ce qui reste dans les panneaux
+
+La barre d'état (et `aplat_indication`), les lignes d'état chiffrées, les conditions du moment (« Sans mouvement (moins
+de deux clés), rien ne change », « Caméra tournée… »), les avertissements (`theme::avertir_petit`), les libellés courts,
+les titres et toutes les info-bulles (`Categorie::help` et les aides des exports restent des info-bulles).
+
+### Essais
+
+`aideanim_tests.rs` : première prise → l'animation joue ; seconde → rien, sauf avec la case ; ▶ la rejoue ; repos sans
+repaint ; une animation d'un autre outil s'arrête ; le registre liste chaque animation et chaque texte ; aucun texte gris
+de plus de 60 caractères dans Réglages, pour chaque outil, sur un calque vectoriel et bitmap, « Plus de réglages »
+déplié ; chaque contexte a son animation ; la première ouverture des Vignettes ; vieux réglages ; chaque animation se
+peint à t = 0, au milieu et à la fin, dans les deux thèmes ; pas de rouge ; pas de nom de logiciel commercial ; les
+textes des fenêtres ont quitté leur fichier.
+
+### Ce qui reste, ce qui est douteux
+
+- Rien n'a été regardé à l'écran : les animations sont écrites d'après les choréographies, pas comparées à la maquette.
+- Des textes gris restent dans d'autres fenêtres (commentaires, fil de décision, suggestions sonores, bibliothèque,
+  cadrage, anneau, palette, nouveau projet…) : à traiter dans un chantier suivant.
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.**
+
+1. Prendre l'outil Trajectoire : l'animation joue en haut de Réglages, puis se replie. Le reprendre : rien.
+2. Le bouton ▶ à droite du titre de Réglages : elle rejoue.
+3. Aide > « Afficher les explications » cochée : chaque prise d'un outil rejoue son animation.
+4. Aide > « Registre des explications… » : les rubriques, un clic sur une vignette la rejoue, les textes sont là.
+5. Ouvrir l'espace Vignettes (première fois) : coupe ou continuité, le trait à travers les cases, le pont.
+6. Thème clair (Papier) : les animations restent lisibles.
+7. Le rythme et le style des six animations validées : conformes aux essais ?

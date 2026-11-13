@@ -298,7 +298,8 @@ impl App {
             ui.label(RichText::new(text).small().weak());
         };
         if keys == 0 {
-            note(ui, "Aucune clé : le calque garde sa pose fixe. Pose une clé, change d'image, déplace le calque.");
+            // (Comment animer le calque : dans le registre des explications, `aidetextes.rs`, partie 153.)
+            note(ui, "Aucune clé : le calque garde sa pose fixe.");
         } else {
             let at = match here {
                 Some(_) => "une clé est posée à cette image".to_string(),
@@ -321,7 +322,7 @@ impl App {
                 poskeys::set_eases(&mut self.layers_mut()[li].pos_keys, f, smooth, ease_in, ease_out);
                 self.renderer.invalidate_all();
             }
-            note(ui, "Arrivée, départ : combien d'images le calque met à ralentir en arrivant à cette clé, à accélérer en repartant (0 : vitesse constante).");
+            // (Ce que sont l'arrivée et le départ : dans le registre des explications.)
         }
     }
 

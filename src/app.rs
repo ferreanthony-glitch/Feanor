@@ -5778,6 +5778,8 @@ impl App {
             self.sequence_fenetre(ctx);
             // « Mes habitudes » et la note de friction en cours (`usageui.rs`, `frictionui.rs`).
             self.habitudes_fenetre(ctx);
+            // Le registre des explications (`aideregistre.rs`, partie 153).
+            self.aide_registre_fenetre(ctx);
             self.friction_fenetre(ctx);
             // Le banc du stylet : ce que Windows en dit, à côté de ce que FEANOR reçoit (`styletui.rs`).
             self.stylet_fenetre(ctx);

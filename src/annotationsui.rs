@@ -942,7 +942,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", outil.icone(), outil.nom()));
         });
-        ui.label(RichText::new("Par-dessus la planche, sans effet sur le storyboard.").small().weak());
+        // (Ce que sont les annotations, et le geste du lasso : l'animation « Annotations », `aidevignettes.rs`, partie 153.)
         ui.add_space(4.0);
         match outil {
             Outil::Stylo => {
@@ -969,7 +969,6 @@ impl App {
             Outil::Lasso => {
                 let n = self.vignettes.annot.selection.len();
                 ui.label(RichText::new(if n == 0 { "Rien de choisi.".to_string() } else { format!("{n} annotation{} choisie{}.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }) }).small());
-                ui.label(RichText::new("Glisser dans le vide : lasso (Maj : ajouter). Clic : un trait. Dans la boîte : déplacer ; un coin : agrandir ; hors d'un coin : tourner. Échap : abandonner.").small().weak());
             }
         }
         ui.add_space(4.0);

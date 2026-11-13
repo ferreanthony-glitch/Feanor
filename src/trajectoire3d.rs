@@ -1063,7 +1063,7 @@ impl App {
         }
         ui.label(RichText::new("Trajectoire dans l'espace").strong());
         if !self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(RichText::new("Ce plan n'est pas un « Plan en Espace 3D » : coche la case « Plan en Espace 3D », dans le panneau Espace 3D, pour tracer dans l'espace le chemin d'une carte ou de la caméra. Sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat.").small().weak());
+            ui.label("Ce plan n'est pas un « Plan en Espace 3D » (case du panneau Espace 3D).");
             return true;
         }
         let avec: Vec<Sujet> = sujets.iter().copied().filter(|&s| self.e3_traj_de(s).is_some()).collect();
@@ -1076,16 +1076,6 @@ impl App {
         };
         let Some((premier, t)) = self.e3_traj_reference(&avec) else {
             ui.label(format!("Choisi : {qui}."));
-            ui.label(
-                RichText::new(
-                    "Trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi : chaque carte choisie, et la caméra si \
-                     elle l'est, le suit depuis la tête de lecture jusqu'à la fin du plan, en partant de là où elle est. Puis de petits \
-                     traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, ça va lentement ; \
-                     espacées, vite. Ctrl+clic choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche.",
-                )
-                .small()
-                .weak(),
-            );
             let mut cles = self.traj.cles_propose;
             if cles_espace_ui(ui, &mut cles) {
                 self.traj.cles_propose = cles;
@@ -1149,17 +1139,7 @@ impl App {
                 self.e3_traj_retirer(&avec, true);
             }
         });
-        ui.label(
-            RichText::new(
-                "Tirer sur le chemin le tord là où on le prend (Maj : le déplacer en bloc). Maj + un trait depuis un bout du chemin le \
-                 prolonge, devant ou derrière, sur le même plan. Glisser une marque le long du chemin la \
-                 déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, sur la surface qu'il touche ; les marques \
-                 restent. Sur la timeline, glisser la première clé, la dernière ou une marque d'une carte les recale dans le temps. La \
-                 caméra ne reçoit aucune clé : son chemin s'ajoute à celles qu'elle a.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
         true
     }
 
