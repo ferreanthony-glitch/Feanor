@@ -3,8 +3,48 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-13
+
+- **Partie 152 regardée à l'écran par Claude** (1 h 46 à 1 h 57, souris simulée, exe de la branche construit à 1 h 45, copie du projet
+  `afa`). Avec des réglages neufs : la vue Espace 3D ouverte, le panneau « Espace 3D » arrive dans une colonne à droite de Réglages,
+  Réglages montre le Pinceau à côté ; un clic dans la liste des cartes de la colonne choisit la carte, ses champs apparaissent.
+  Outil Trajectoire, Ctrl+clic sur la caméra : elle est choisie seule, la rangée « Caméra » du montage est la rangée choisie, aucune
+  rangée de calque ne l'est ; Ctrl+clic sur une carte la reprend et lâche la caméra. « Clés d'images » : un chemin au sol et une
+  marque sur la carte « Vectoriel 4 » donnent, dans la timeline, une clé de dessin à la marque (image 38) ; chemin retiré ensuite
+  par « Effacer ». Outil Sélection dans la vue : un lasso autour du trait bleu de la carte sélectionne cinq éléments, la boîte et ses
+  poignées sont posées sur la carte ; Échap la lâche. Dans les réglages de son propre essai, Anthony avait rangé le panneau
+  « Espace 3D » en onglet à côté de « Réglages » et « Fiche » : il y est resté, et ses boutons répondent. Piège du banc d'essai : une
+  fenêtre de l'application Claude, invisible sur les captures, couvrait la droite de l'écran et y prenait les clics ; vu avec
+  `WindowFromPoint`, contourné en rétrécissant la fenêtre d'essai, puis remise en plein écran. Pas regardé à l'écran : le stylet,
+  le déplacement de la sélection, couper / coller sur une carte, Maj+Ctrl+clic, l'espace Animation.
+- **Retours d'Anthony sur la Trajectoire dans l'Espace 3D** (partie 152, branche `trajectoire-espace`, rien fusionné, rien regardé
+  à l'écran). Ses quatre phrases après son essai des parties 149 et 150, et ce qui a changé. 1. « Un calque est toujours sélectionné
+  en même temps » : choisir la caméra la choisit seule (Ctrl+clic avec l'outil Trajectoire, « choisir » du panneau Espace 3D ; Maj
+  pour l'ajouter exprès aux cartes), et la timeline et le montage montrent alors la piste « Caméra » comme la rangée choisie, plus
+  aucun calque ; choisir un calque la lâche. 2. « Clés d'images ne crée pas de clés d'images » : une carte en clés d'images a
+  maintenant une clé de dessin à chaque jalon, copie du dessin du départ qu'on peut redessiner (la copie n'est pas déplacée : la
+  carte porte le mouvement). 3. « Place-le à côté de réglages plutôt » : le panneau Espace 3D a une colonne à lui à droite de
+  Réglages, 340 points pris au dessin, qui arrive quand la vue s'ouvre et repart quand elle se ferme ; rangé ou ouvert à la main,
+  il reste où il est ; l'onglet que la partie 150 avait mis avec la couleur dans les dispositions retenues part une fois. 4. « Le
+  lasso ne fonctionne pas dans l'espace 3D » : l'outil Sélection prend le pointeur dans la vue, sur la carte du calque courant
+  (lasso, boîte, poignées, Suppr, couper, copier, coller, Échap, annulation) ; Ctrl+glisser trace un lasso depuis un outil de
+  dessin, Ctrl+clic prend toujours une carte. À lui de dire : si la rangée « Caméra » se lit bien comme choisie, si la colonne du
+  panneau (sa largeur, son va-et-vient avec la vue) convient, si le lasso et ses poignées tombent juste sur une carte en biais.
+  Non fait : la sélection sur plusieurs calques dans la vue, le clic simple qui prend la caméra avant une carte. Essais : 12
+  nouveaux (caméra seule 4, clés d'images 4, lasso 4) et 8 récrits pour la colonne du panneau. Vérificateur, deux passages : 4 605 réussis et 1 échec chacun, un essai de temps des
+  Vignettes différent à chaque fois, vert relancé seul ; dix groupes OK ; aucun nouvel avertissement. Commits 6e72a99, af3d064,
+  6ad1f1f, 9232a63, puis la documentation.
+
 ## 2026-11-12
 
+- **Partie 150 regardée à l'écran par Claude** (23 h 33, souris simulée, exe de la branche construit à 23 h 32, copie du projet `afa`,
+  réglages à part). Vue Espace 3D ouverte sur le plan 6 : « Réglages » montre le Pinceau (taille, opacité) ; dessous, le groupe de
+  Couleur a trois onglets et « Espace 3D » est devant. Outil Trajectoire pris : « Réglages » montre « Trajectoire dans l'espace » et
+  ses boutons. Ctrl+clic sur le symbole de la caméra, posé devant la surface au sol : c'est la caméra qui est choisie. Vue fermée :
+  Couleur revient devant ; rouverte : « Espace 3D » repasse devant. Remarque : dans l'espace Storyboard, le panneau « Espace 3D » n'a
+  que la hauteur du groupe de Couleur, une centaine de pixels ; la liste des cartes et les champs demandent de faire défiler ou de
+  tirer la bordure. Pas essayé à l'écran : l'espace Animation, une disposition enregistrée avant ce changement, le pinceau qui
+  dessine sur une carte avec ses réglages sous les yeux, le stylet.
 - **Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi** (partie 150, branche `trajectoire-espace`, toujours le
   format 55). Anthony : « même dans l'espace 3D, le panneau réglages affiche les réglages de l'outil sélectionné. Les réglages de
   l'espace 3D basculent dans un panneau spécifique », puis, pour sa place : « Sa place par défaut : en dessous de réglages, à la

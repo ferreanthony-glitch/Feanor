@@ -942,7 +942,7 @@ mod trajectoirelisse_tests;
 mod trajectoireprolonge;
 #[cfg(test)]
 mod trajectoireprolonge_tests;
-// Le panneau « Espace 3D » (partie 150) : les réglages de la vue, sortis du panneau Réglages ; il passe devant la couleur quand la vue s'ouvre.
+// Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; sa colonne arrive à côté des réglages de l'outil quand la vue s'ouvre.
 mod espace3dpanneau;
 #[cfg(test)]
 mod espace3dpanneau_tests;
@@ -1196,6 +1196,16 @@ mod espace3d_tests;
 // La tenue de la vue Espace 3D quand on s'y promène (partie 147) : jamais de morceau sans triangle vers la carte graphique.
 #[cfg(test)]
 mod espace3dvue_tests;
+// Retours d'Anthony sur la Trajectoire dans l'Espace 3D (partie 152) : la caméra choisie seule, et sa piste choisie dans la timeline.
+#[cfg(test)]
+mod trajectoire3d_camera_tests;
+// Partie 152 aussi : en « clés d'images », une carte qui suit un chemin dans l'espace a une clé de dessin à chaque jalon.
+#[cfg(test)]
+mod trajectoire3d_images_tests;
+// Partie 152 encore : l'outil Sélection (son lasso) dans la vue Espace 3D, sur la carte du calque courant.
+mod espace3dlasso;
+#[cfg(test)]
+mod espace3dlasso_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

@@ -370,7 +370,11 @@ impl App {
                 in_folder: l.parent.is_some(),
             }
         };
-        let current = li == self.cur_layer;
+        // (La caméra du plan choisie seule dans la vue Espace 3D : c'est sa rangée que la timeline montre choisie, et plus
+        // aucune rangée de calque, `espace3dui.rs`, partie 152.)
+        let camera_seule = self.e3_camera_seule();
+        let current = self.calque_montre_courant(li);
+        let choisi = self.is_chosen_layer(li) && !camera_seule;
         let visuals = ui.visuals().clone();
         // Calque rangé dans un dossier : la ligne est décalée, un trait la relie à son dossier.
         let rect = if h.in_folder || h.sous_trait {
@@ -383,7 +387,7 @@ impl App {
         let r = rect.shrink2(vec2(0.0, 1.0));
         let painter = ui.painter_at(r);
         // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
-        let bg = match (current, self.is_chosen_layer(li)) {
+        let bg = match (current, choisi) {
             (true, _) => theme::surface_active(crate::theme::accent(), 1.0),
             (false, true) => theme::surface_active(crate::theme::accent(), 0.45),
             (false, false) => theme::etiquette(),
@@ -394,7 +398,7 @@ impl App {
             painter.rect_stroke(r, 2.0, Stroke::new(1.5_f32, crate::theme::accent()), egui::StrokeKind::Inside);
         }
         // Plusieurs calques choisis : un cadre à chacun, plus épais au courant (qui garde le plein).
-        if !self.layer_sel.is_empty() && self.is_chosen_layer(li) {
+        if !self.layer_sel.is_empty() && choisi {
             let width = if current { 2.0_f32 } else { 1.25_f32 };
             painter.rect_stroke(r, 2.0, Stroke::new(width, crate::theme::accent()), egui::StrokeKind::Inside);
         }

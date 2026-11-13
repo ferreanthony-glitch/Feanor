@@ -221,3 +221,72 @@ fn dans_l_espace_maj_depuis_la_fin_prolonge_le_chemin_sur_son_plan() {
     b.app.undo();
     assert_eq!(b.app.layers()[0].trajectoire.as_ref(), Some(&t));
 }
+
+// ------------------------------------------------------------------------------------------------ avec les clés de dessin
+
+/// Après la partie 152 : une carte en « Clés d'images » dans l'espace a une clé de dessin à chaque jalon. Le lissage et le
+/// prolongement reposent ses clés par `trajectoire_recalculer` : les copies suivies restent les mêmes dessins, à leurs
+/// jalons, et la carte est au bout du chemin à la fin.
+#[test]
+fn en_cles_d_images_le_lissage_et_le_prolongement_gardent_une_cle_de_dessin_par_jalon() {
+    use crate::trajectoire3d_tests::{carte, doc_cartes, ouvert, tracer_au_sol, trajectoire};
+    let mut b = ouvert(doc_cartes(1), true);
+    b.app.traj.cles_propose = Cles::Images;
+    tracer_au_sol(&mut b);
+    let t = trajectoire(&b, 0);
+    assert_eq!((t.cles, t.dessins.len(), t.images_des_jalons(24)), (Cles::Images, 2, vec![0, 23]), "{}", b.app.status);
+    let (d0, d1) = (t.dessins[0].dessin, t.dessins[1].dessin);
+    let depart = carte(&b, 0, 0).pos;
+    let sujets = b.app.traj_sujets_des_reglages();
+    // Le lissage : pendant le geste, rien n'est copié ; à la fin, les mêmes dessins, à leurs jalons.
+    let dessins_avant = b.app.doc.cels.len();
+    b.app.trajectoire_lisser(&[], &sujets, 0.8);
+    b.app.trajectoire_lissage_fini(&[], &sujets);
+    let t = trajectoire(&b, 0);
+    assert_eq!(t.lissage, 0.8);
+    assert_eq!(t.dessins.iter().map(|d| d.dessin).collect::<Vec<_>>(), vec![d0, d1], "les copies suivies restent");
+    assert_eq!((b.app.layers()[0].cel_at(22), b.app.layers()[0].cel_at(23)), (Some(d0), Some(d1)));
+    assert_eq!(b.app.doc.cels.len(), dessins_avant, "aucune copie de plus");
+    // Le prolongement par la fin : toujours une clé de dessin par jalon, la carte au nouveau bout.
+    let bout = *t.points.last().unwrap();
+    let plan = [[bout[0] + 20.0, bout[1]], [bout[0] + 60.0, bout[1] + 10.0]];
+    b.app.e3_traj_prolonger(&[Pos2::new(0.0, 0.0), Pos2::new(60.0, 0.0)], &plan, false);
+    let n = trajectoire(&b, 0);
+    assert!(n.longueur() > t.longueur() + 40.0, "{}", b.app.status);
+    assert_eq!((n.dessins.len(), n.images_des_jalons(24)), (2, vec![0, 23]));
+    assert_eq!(b.app.layers()[0].cel_at(23), Some(n.dessins[1].dessin));
+    let attendu = m::add(depart, n.deplacement_a(1.0).unwrap());
+    assert!(m::length(m::sub(carte(&b, 0, 23).pos, attendu)) < 0.05, "{:?} contre {attendu:?}", carte(&b, 0, 23).pos);
+    assert_eq!(b.app.history.names().0.last().map(|s| s.to_string()).as_deref(), Some("Prolonger la trajectoire"));
+}
+
+// ------------------------------------------------------------------------------------------------ après la relecture
+
+#[test]
+fn une_marque_tout_pres_du_bout_fixe_n_est_pas_perdue_et_le_dessin_qui_tourne_garde_son_orientation() {
+    let mut t = Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).unwrap();
+    t.ajouter_marque(0.3);
+    t.ajouter_marque(0.98);
+    t.tourne = true;
+    // Prolongé par devant, trois fois plus long : la marque à 2 % de la fin passerait sous l'écart minimal.
+    assert!(t.prolonger(&[[0.0, -3.0], [0.0, -100.0], [0.0, -200.0]], true));
+    assert_eq!(t.marques.len(), 2, "aucune marque perdue : {:?}", t.marques);
+    assert!(t.marques[0] < t.marques[1] && t.marques[1] <= 1.0 - crate::trajectoire::ECART_MIN);
+    assert!(proche2(t.point_a(t.marques[0]), [30.0, 0.0], 1.5), "{:?}", t.point_a(t.marques[0]));
+    // Le nouveau morceau monte à la verticale : le dessin qui tourne avec le chemin n'est pas tourné sur l'ancienne partie.
+    let f = t.plus_proche([50.0, 0.0]).0;
+    assert!(t.angle_a(f).abs() < 2.0, "sur l'ancienne partie, l'orientation d'avant : {}", t.angle_a(f));
+    assert!((t.angle_a(0.1).abs() - 90.0).abs() < 5.0, "sur le morceau ajouté, le quart de tour : {}", t.angle_a(0.1));
+}
+
+#[test]
+fn retracer_le_chemin_garde_son_lissage() {
+    let mut b = banc();
+    tracer_le_chemin(&mut b);
+    b.app.trajectoire_lisser(&[0], &[], 0.6);
+    b.app.traj.lissage = 0.0;
+    geste(&mut b, &[(60.0, 200.0), (160.0, 220.0), (260.0, 200.0), (340.0, 230.0)], Modifiers::NONE, true);
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    assert_eq!(derniere_etape(&b), "Retracer la trajectoire");
+    assert!((t.lissage - 0.6).abs() < 1e-6 && t.brut.is_some(), "{}", t.lissage);
+}

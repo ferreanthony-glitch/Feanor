@@ -278,13 +278,18 @@ impl App {
         // (`espace3ddessin.rs`, partie 146). Alt+glisser tourne encore la vue ; les gestes de manipulation attendent
         // qu'un outil de la vue soit repris.
         // L'outil Trajectoire a été pris dans la vue : le pointeur trace, dans l'espace, le chemin de ce qui est choisi
-        // (`trajectoire3d.rs`, partie 149). La navigation reste la même. (Dans la vue seule comme dans chacune des vues.)
+        // (`trajectoire3d.rs`, partie 149). La navigation reste la même.
+        // L'outil Sélection a été pris dans la vue : son lasso prend sur la carte du calque courant (`espace3dlasso.rs`,
+        // partie 152). La navigation reste la même. (Dans la vue seule comme dans chacune des vues, partie 151.)
         let trace = self.e3_trace();
-        let dessine = self.e3_dessine() || trace;
+        let selectionne = self.e3_selectionne();
+        let dessine = self.e3_dessine() || trace || selectionne;
         if dessine {
             let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
             if trace {
                 self.e3_trajectoire_pointeur(ctx, response, regard);
+            } else if selectionne {
+                self.e3_selection_pointeur(ctx, response, regard);
             } else {
                 self.e3_dessin_pointeur(ctx, response, regard);
             }
@@ -341,13 +346,8 @@ impl App {
                     self.e3_follow_card(id);
                 }
             }
-            (None, true) => {
-                if additive {
-                    self.espace3d.sel.push(CAMERA_ID);
-                } else {
-                    self.espace3d.sel = vec![CAMERA_ID];
-                }
-            }
+            // (La caméra : seule, les cartes sont lâchées ; Maj ou Ctrl : elle rejoint ce qui est choisi, ou le quitte.)
+            (None, true) => self.e3_choisir_la_camera(additive),
             (None, false) => {
                 if !additive {
                     self.espace3d.sel.clear();
@@ -637,9 +637,10 @@ impl App {
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
-        // (On dessine, ou on trace une trajectoire : pas de poignées sur la carte, elles ne répondraient pas.)
+        // (On dessine, on sélectionne ou on trace une trajectoire : pas de poignées sur la carte, elles ne répondraient pas.)
         let trace = self.e3_trace();
-        let dessine = self.e3_dessine() || trace;
+        let selectionne = self.e3_selectionne();
+        let dessine = self.e3_dessine() || trace || selectionne;
         if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
@@ -669,6 +670,9 @@ impl App {
         if trace {
             // L'outil Trajectoire : le chemin de ce qui est choisi, ses marques, sa légende (`trajectoire3d.rs`).
             self.e3_trajectoire_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
+        } else if selectionne {
+            // L'outil Sélection : le lasso, le contour et la boîte de ce qui est choisi, posés sur la carte (`espace3dlasso.rs`).
+            self.e3_selection_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
         } else if dessine {
             self.e3_dessin_peindre(ui.ctx(), &painter, response, rect, crate::espace3ddessin::Regard3d { rect: draw, view });
         }
@@ -702,8 +706,26 @@ impl App {
             // (Rien de la carte devant l'œil : pas de maillage du tout, `card_mesh`.)
             if let Some(voile) = card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 })) {
                 painter.add(Shape::mesh(voile));
-                if let Some(dessin) = cel.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                // Une sélection qu'on déplace sur cette carte (`espace3dlasso.rs`) : comme sur la feuille, le dessin sans
+                // elle, puis elle seule, posée où le geste la met (`flottante.rs`). Sinon le dessin, tel quel.
+                let flottante = cel.and_then(|c| self.e3_feuille_flottante(c));
+                let image = match flottante {
+                    Some(f) => Some(f.base),
+                    None => cel,
+                };
+                if let Some(dessin) = image.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
                     painter.add(Shape::mesh(dessin));
+                }
+                if let Some(f) = flottante {
+                    // (Le pixel (u, v) de la feuille, mené au point du dessin où le geste le met, puis sur la carte.)
+                    let [w, h] = world.stage;
+                    let sur_la_carte = |u: f32, v: f32| {
+                        let p = f.aff.apply(egui::pos2(u * f.taille[0], v * f.taille[1]));
+                        m::point(&mx, [p.x / w - 0.5, 0.5 - p.y / h, 0.0])
+                    };
+                    if let Some(feuille) = self.e3_card_texture(ctx, f.feuille).and_then(|tex| card_mesh(view, center, to_screen, &sur_la_carte, Some(tex), crate::viewbar::veil(opacity))) {
+                        painter.add(Shape::mesh(feuille));
+                    }
                 }
             }
             let corners = world.card_corners(&xf);

@@ -319,9 +319,12 @@ fn the_tool_decides_a_view_tool_moves_the_card_a_drawing_tool_draws_on_it() {
     geste(&mut b, &[a, c], Modifiers::NONE);
     assert!(encre(&b, 0) < pleine, "la gomme enlève de l'encre : {} → {}", pleine, encre(&b, 0));
 
-    // Un outil qui ne trace pas (la sélection) : le pointeur manipule, la barre d'état le dit.
+    // L'outil Sélection, lui, garde le pointeur : son lasso prend sur la carte (partie 152, `espace3dlasso_tests.rs`).
     b.app.run_action("outil.selection");
-    assert!(!b.app.e3_dessine());
+    assert!(!b.app.e3_dessine() && b.app.e3_selectionne());
+    // Un outil qui n'a rien à faire sur une carte (la pipette) : le pointeur manipule, la barre d'état le dit.
+    b.app.run_action("outil.pipette");
+    assert!(!b.app.e3_dessine() && !b.app.e3_selectionne());
     assert_eq!(b.app.status, d3::MANIPULE);
 
     // Le bouton « Dessiner sur la carte » : il reprend le dernier outil de dessin, puis rend la main aux cartes.

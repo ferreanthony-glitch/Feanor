@@ -29,18 +29,23 @@ const AIDE: &str = "Adoucit la courbe du chemin, de 0 % (le trait tel que tracé
 impl App {
     /// Les calques choisis du plan courant qui suivent une trajectoire tracée sur la feuille, le calque courant d'abord.
     pub(crate) fn trajectoire_calques_lissables(&self) -> Vec<usize> {
-        let mut out: Vec<usize> = self.chosen_layers().into_iter().filter(|&li| self.layers()[li].trajectoire.as_ref().is_some_and(|t| t.sur_la_feuille())).collect();
+        let mut out: Vec<usize> = self.chosen_layers().into_iter().filter(|&li| !self.layers()[li].locked && self.layers()[li].trajectoire.as_ref().is_some_and(|t| t.sur_la_feuille())).collect();
         if let Some(k) = out.iter().position(|&li| li == self.cur_layer) {
             out.swap(0, k);
         }
         out
     }
 
+    /// Le sujet s est la carte d'un calque verrouillé : le curseur le laisse, comme les autres gestes de l'outil.
+    fn trajectoire_sujet_verrouille(&self, s: Sujet) -> bool {
+        matches!(s, Sujet::Carte(id) if self.layers().iter().any(|l| l.id == id && (l.locked || l.position_locked)))
+    }
+
     /// Le curseur « Lissage » des réglages de l'outil : `espace`, pour les trajectoires dans l'espace de ce qui est choisi
     /// (cartes, caméra) ; sinon pour celles des calques choisis sur la feuille. Rend la place du curseur à l'écran.
     pub(crate) fn trajectoire_lissage_ui(&mut self, ui: &mut egui::Ui, espace: bool) -> egui::Rect {
         let (calques, sujets): (Vec<usize>, Vec<Sujet>) = if espace {
-            (Vec::new(), self.traj_sujets_des_reglages().into_iter().filter(|&s| self.e3_traj_de(s).is_some()).collect())
+            (Vec::new(), self.traj_sujets_des_reglages().into_iter().filter(|&s| self.e3_traj_de(s).is_some() && !self.trajectoire_sujet_verrouille(s)).collect())
         } else {
             (self.trajectoire_calques_lissables(), Vec::new())
         };
@@ -69,7 +74,7 @@ impl App {
         }
         // Le geste est fini (curseur lâché, clic, flèche du clavier) : les dessins des clés d'images sont reposés.
         if resp.drag_stopped() || (change && !resp.dragged()) {
-            self.trajectoire_lissage_fini(&calques);
+            self.trajectoire_lissage_fini(&calques, &sujets);
         }
         resp.rect
     }
@@ -92,15 +97,24 @@ impl App {
         for &s in sujets {
             let Some(mut t) = self.e3_traj_de(s).cloned() else { continue };
             t.lisser_a(l);
-            self.e3_traj_poser(s, t);
+            // (Les clés de position suivent ; en clés d'images, les clés de dessin attendent la fin du geste.)
+            self.e3_traj_poser_en_direct(s, t);
         }
         self.modified = true;
         self.renderer.invalidate_params();
         self.status = format!("{LISSAGE} du chemin : {} %.", (l * 100.0).round());
     }
 
-    /// Le geste sur le curseur est fini : les calques en clés d'images reposent leurs dessins d'après le chemin lissé.
-    pub(crate) fn trajectoire_lissage_fini(&mut self, calques: &[usize]) {
+    /// Le geste sur le curseur est fini : les calques en clés d'images reposent leurs dessins d'après le chemin lissé, et les
+    /// cartes de l'Espace 3D leurs clés et leurs dessins des jalons (partie 152).
+    pub(crate) fn trajectoire_lissage_fini(&mut self, calques: &[usize], sujets: &[Sujet]) {
+        for &s in sujets {
+            if let Sujet::Carte(id) = s {
+                if let Some(li) = self.layers().iter().position(|l| l.id == id) {
+                    self.trajectoire_recalculer(li);
+                }
+            }
+        }
         for &li in calques {
             if self.layers().get(li).and_then(|l| l.trajectoire.as_ref()).is_some_and(|t: &Trajectoire| t.cles == Cles::Images) {
                 self.trajectoire_recalculer(li);

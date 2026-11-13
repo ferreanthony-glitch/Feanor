@@ -430,6 +430,55 @@ impl App {
         self.e3_manipuler();
     }
 
+    // ------------------------------------------------------------------------- la caméra choisie seule (partie 152)
+
+    /// **La caméra du plan est choisie seule** dans la vue Espace 3D : elle est choisie, et aucune carte ne l'est avec
+    /// elle. Anthony, 2026-11-13 : « La partie dédiée à la caméra dans la timeline doit être sélectionnée quand la caméra
+    /// l'est, et plus un calque. » Tant que c'est le cas, la timeline et le montage montrent la piste « Caméra » comme la
+    /// rangée choisie, et aucune rangée de calque (`calque_montre_courant`).
+    pub(crate) fn e3_camera_seule(&self) -> bool {
+        self.e3_vue_montree() && self.espace3d.sel.contains(&CAMERA_ID) && !self.espace3d.sel.iter().any(|&s| self.e3_card_layer(s).is_some())
+    }
+
+    /// Le calque `li` est celui que les rangées de la timeline et du montage montrent comme le calque courant : le calque
+    /// courant, sauf quand la caméra du plan est choisie seule (c'est alors la piste « Caméra » qui est montrée choisie).
+    /// Le calque courant reste le calque courant pour tout le reste (le panneau Calques, le dessin).
+    pub(crate) fn calque_montre_courant(&self, li: usize) -> bool {
+        li == self.cur_layer && !self.e3_camera_seule()
+    }
+
+    /// Choisit la caméra du plan. **Seule** : les cartes sont lâchées, et les gestes de la Trajectoire n'agissent plus que
+    /// sur son chemin (Anthony, 2026-11-13 : « Éditer la trajectoire de la caméra ne fonctionne pas puisqu'un calque est
+    /// toujours sélectionné en même temps »). `ajouter` (Maj tenue) : elle rejoint ce qui est choisi, ou le quitte si elle
+    /// y était.
+    pub(crate) fn e3_choisir_la_camera(&mut self, ajouter: bool) {
+        // (Ce choix est le dernier mot : un changement de calque que la vue n'a pas encore vu, `espace3d_panel`, ne le
+        // remplace pas par la carte de ce calque à l'image d'écran suivante.)
+        self.espace3d.last_layer = self.layer().id;
+        if !ajouter {
+            self.espace3d.sel = vec![CAMERA_ID];
+        } else if let Some(k) = self.espace3d.sel.iter().position(|s| *s == CAMERA_ID) {
+            self.espace3d.sel.remove(k);
+        } else {
+            self.espace3d.sel.push(CAMERA_ID);
+        }
+    }
+
+    /// Le calque `li` vient d'être choisi à la main (`App::select_layer` : le panneau Calques, la timeline, le montage…),
+    /// même s'il était déjà le calque courant : **la caméra du plan est lâchée**, et la carte de ce calque est choisie à sa
+    /// place (vue ouverte, cartes montrées). La timeline et le montage rendent alors leur rangée à ce calque. Sans caméra
+    /// choisie, rien ne change (le choix des cartes suit le calque courant comme avant, `espace3d_panel`).
+    pub(crate) fn e3_calque_choisi(&mut self, li: usize) {
+        if !self.espace3d.sel.contains(&CAMERA_ID) {
+            return;
+        }
+        let carte = self.layers().get(li).filter(|l| espace3d::is_card(l)).map(|l| espace3d::card_selection(l.id));
+        match carte.filter(|_| self.espace3d.on && self.espace3d.show_cards) {
+            Some(c) => self.espace3d.sel = vec![c],
+            None => self.espace3d.sel.retain(|s| *s != CAMERA_ID),
+        }
+    }
+
     /// Choisit la caméra du plan (pour la déplacer ou la tourner), avec l'outil Déplacer si aucun outil de manipulation
     /// n'est actif.
     fn espace3d_pick_camera(&mut self) {
@@ -450,8 +499,9 @@ impl App {
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
         // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
         // vue sont éteints ; un outil de la vue lui rend les cartes.
-        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.)
-        let dessine = self.e3_dessine() || self.e3_trace();
+        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.
+        // L'outil Sélection de même, partie 152.)
+        let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
         self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
             if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
@@ -754,8 +804,10 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{}  Caméra du plan", ph::VIDEO_CAMERA)).strong());
             let selected = self.espace3d.sel.contains(&CAMERA_ID);
-            if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra pour la déplacer ou la tourner dans la vue").clicked() {
-                self.espace3d.sel = vec![CAMERA_ID];
+            // (Seule : les cartes sont lâchées, la timeline montre la piste « Caméra » choisie. Maj+clic : avec les cartes.)
+            if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra, seule, pour la déplacer, la tourner, ou tracer son chemin dans la vue : les cartes sont lâchées. Maj+clic : l'ajouter aux cartes choisies, ou la lâcher.").clicked() {
+                let ajouter = ui.input(|i| i.modifiers.shift);
+                self.e3_choisir_la_camera(ajouter);
             }
             // (La clé de caméra de cette image : la poser, la retirer. `espace3dcles.rs`.)
             self.espace3d_boutons_cle_camera(ui);

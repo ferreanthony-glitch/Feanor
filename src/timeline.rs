@@ -170,20 +170,25 @@ impl App {
         {
             let y = r.top() + HEADER_H + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, theme::rangee_sombre());
+            // La caméra du plan choisie seule dans la vue Espace 3D : sa rangée est montrée comme celle d'un calque courant, et
+            // plus aucune rangée de calque ne l'est (`espace3dui.rs`, partie 152).
+            let choisie = self.e3_camera_seule();
+            painter.rect_filled(row, 2.0, if choisie { theme::surface_active(crate::theme::accent(), 1.0) } else { theme::rangee_sombre() });
+            if choisie && theme::palette().identite {
+                painter.rect_stroke(row, 2.0, Stroke::new(1.5_f32, crate::theme::accent()), StrokeKind::Inside);
+            }
             let n = self.panel().camera.len();
             let label = match n {
                 0 => "Caméra".to_string(),
                 1 => "Caméra (fixe)".to_string(),
                 _ => format!("Caméra ({n} clés)"),
             };
-            painter.text(
-                pos2(r.left() + 8.0, row.center().y),
-                Align2::LEFT_CENTER,
-                label,
-                FontId::proportional(11.0),
-                visuals.weak_text_color(),
-            );
+            let encre = match choisie {
+                true if theme::palette().identite => theme::texte_fort(),
+                true => crate::theme::sur_accent(),
+                false => visuals.weak_text_color(),
+            };
+            painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(11.0), encre);
             menu_on(self, ui, row, "camera", GridMenu::Camera);
         }
         if sound_h > 0.0 {
@@ -256,7 +261,8 @@ impl App {
         {
             let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, theme::rangee_sombre());
+            // (La caméra choisie seule dans la vue Espace 3D : sa rangée a la surbrillance du calque courant, partie 152.)
+            painter.rect_filled(row, 0.0, if self.e3_camera_seule() { theme::surface_active(crate::theme::accent(), 0.35) } else { theme::rangee_sombre() });
             // (Cachées par le filtre de la légende, `legendecles.rs` : la rangée reste, sans losanges.)
             let keys: &[crate::camera::CameraKey] = if self.cle_vue(crate::legendecles::Sorte::Camera) { &self.panel().camera } else { &[] };
             let cx = |f: usize| r.left() + (f as f32 + 0.5) * cell;
@@ -325,13 +331,15 @@ impl App {
             }
         }
 
-        // Fond des lignes, calque courant en surbrillance.
+        // Fond des lignes, calque courant en surbrillance (aucun quand la caméra du plan est choisie seule dans la vue
+        // Espace 3D : c'est sa rangée qui l'est, partie 152).
+        let camera_seule = self.e3_camera_seule();
         for row in &rows {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
-            let bg = if li == self.cur_layer {
+            let bg = if self.calque_montre_courant(li) {
                 theme::surface_active(crate::theme::accent(), 0.35)
-            } else if self.is_chosen_layer(li) {
+            } else if !camera_seule && self.is_chosen_layer(li) {
                 theme::surface_active(crate::theme::accent(), 0.18)
             } else if self.layers()[li].folder {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre.

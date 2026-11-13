@@ -2157,6 +2157,9 @@ impl App {
     }
 
     pub(crate) fn select_layer(&mut self, layer: usize) {
+        // Choisir un calque, même celui qui est déjà courant, lâche la caméra du plan choisie dans la vue Espace 3D : la
+        // timeline et le montage lui rendent sa rangée (`espace3dui.rs`, partie 152).
+        self.e3_calque_choisi(layer);
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;

@@ -54,7 +54,7 @@ pub(crate) const AUCUNE_CARTE_ICI: &str = "Ctrl+clic : aucune carte sous le poin
 /// rendre (`App::rien_a_peindre`).
 pub(crate) const HORS_CARTE_FEUILLE: &str = "Rien à peindre ici : le pointeur est hors des bords de la carte du calque courant. Dans un plan en Espace 3D, une carte ne montre que sa feuille : un trait au-delà ne se verrait pas.";
 pub(crate) const PAS_SOUS_LE_POINTEUR: &str = "Rien à peindre ici : la carte du calque courant n'est pas sous le pointeur (elle est derrière la caméra, ou vue par la tranche).";
-pub(crate) const MANIPULE: &str = "Espace 3D : le pointeur manipule de nouveau les cartes. Le pinceau, le crayon ou la gomme (leur case ou leur touche) le font dessiner sur la carte.";
+pub(crate) const MANIPULE: &str = "Espace 3D : le pointeur manipule de nouveau les cartes. Le pinceau, le crayon ou la gomme (leur case ou leur touche) le font dessiner sur la carte ; l'outil Sélection y trace son lasso.";
 
 /// L'outil dessine un trait : pinceau, mélangeur, crayon, gomme.
 pub(crate) fn outil_de_dessin(tool: Tool) -> bool {
@@ -217,6 +217,9 @@ pub(crate) struct Dessin3d {
     pub constructions: usize,
     pub morceaux: usize,
     pub dernier_morceau: Option<[usize; 4]>,
+    /// Un appui avec Ctrl dans la vue (son point de l'écran, et si Maj était tenue), dont on ne sait pas encore s'il est
+    /// un clic (prendre la carte sous le pointeur) ou le début d'un lasso (`espace3dlasso.rs`, partie 152).
+    pub ctrl_appui: Option<(Pos2, bool)>,
 }
 
 impl Dessin3d {
@@ -226,6 +229,7 @@ impl Dessin3d {
         self.regard = None;
         self.pointeur = None;
         self.vive = None;
+        self.ctrl_appui = None;
     }
 }
 
@@ -251,6 +255,9 @@ impl App {
         } else if tool == Tool::Trajectoire {
             // L'outil Trajectoire : le pointeur trace, dans l'espace, le chemin de ce qui est choisi (`trajectoire3d.rs`, partie 149).
             self.e3_tracer();
+        } else if tool == Tool::Select {
+            // L'outil Sélection : son lasso prend sur la carte du calque courant (`espace3dlasso.rs`, partie 152).
+            self.e3_selectionner();
         } else if self.e3d.dessin {
             self.e3_manipuler();
             self.status = MANIPULE.into();
@@ -279,10 +286,13 @@ impl App {
     /// Un outil de la vue est repris : le pointeur manipule les cartes.
     pub(crate) fn e3_manipuler(&mut self) {
         if self.e3d.dessin {
+            // (L'outil Sélection avait le pointeur : ce qu'il a choisi sur la carte est posé et lâché, `espace3dlasso.rs`.)
+            self.e3_selection_quitter();
             // (Le trait en cours est fini ; un geste de trajectoire en cours dans la vue aussi, `end_stroke`.)
             self.end_stroke();
             self.e3d.dessin = false;
             self.e3d.vive = None;
+            self.e3d.ctrl_appui = None;
         }
     }
 
@@ -320,9 +330,11 @@ impl App {
         Some(CarteVue::new(regard, world.carte(l, f).matrix(), world.stage))
     }
 
-    /// La carte du calque courant vue par la vue où l'on dessine ; rien quand on n'y dessine pas.
+    /// La carte du calque courant vue par la vue où l'on dessine, ou où l'on sélectionne (l'outil Sélection, partie 152) ;
+    /// rien quand le pointeur n'y fait ni l'un ni l'autre. C'est par elle que `App::layer_to_screen` et `App::layer_zoom`
+    /// passent alors : la pointe du trait, le lasso, le contour et la boîte de la sélection se posent sur la carte.
     pub(crate) fn e3_carte_vue(&self) -> Option<CarteVue> {
-        if !self.e3_dessine() {
+        if !(self.e3_dessine() || self.e3_selectionne()) {
             return None;
         }
         self.e3_carte_du_calque(self.e3d.regard?)
@@ -375,13 +387,34 @@ impl App {
                         self.end_stroke();
                         self.espace3d.drag = Some(Drag::Orbit);
                     } else if modifiers.command || modifiers.ctrl {
-                        self.e3_prendre_la_carte(regard, *pos);
+                        // Ctrl : un clic prend la carte sous le pointeur, un glisser trace un lasso sur la carte du calque
+                        // courant (« Ctrl tenu : lasso », comme sur la feuille). On le saura au premier mouvement, ou au
+                        // relâché (`espace3dlasso.rs`, partie 152).
+                        self.end_stroke();
+                        self.e3d.ctrl_appui = Some((*pos, modifiers.shift));
                     } else {
                         self.e3_debut_du_trait(regard, *pos, pen);
                     }
                 }
-                Event::PointerMoved(pos) => self.e3_suite_du_trait(regard, *pos, &mods),
-                Event::PointerButton { button: PointerButton::Primary, pressed: false, .. } | Event::PointerGone => self.e3_fin_du_trait(),
+                Event::PointerMoved(pos) => {
+                    // (L'appui avec Ctrl a glissé : le lasso est pris, la suite du geste est à l'outil Sélection.)
+                    if self.e3_ctrl_glisse(regard, *pos, &mods) {
+                    } else if self.e3_selectionne() {
+                        self.e3_sel_glisser(regard, *pos, &mods);
+                    } else {
+                        self.e3_suite_du_trait(regard, *pos, &mods);
+                    }
+                }
+                Event::PointerButton { button: PointerButton::Primary, pressed: false, .. } => {
+                    self.e3_ctrl_lache(regard);
+                    self.e3_fin_du_trait();
+                    self.e3_sel_lacher(mods.shift);
+                }
+                Event::PointerGone => {
+                    self.e3d.ctrl_appui = None;
+                    self.e3_fin_du_trait();
+                    self.e3_sel_lacher(mods.shift);
+                }
                 _ => {}
             }
         }
@@ -389,7 +422,9 @@ impl App {
         self.last_frame_time = now;
         // Relâchement manqué (perte de focus…) : on clôt le geste quand même.
         if !primary_down {
+            self.e3d.ctrl_appui = None;
             self.e3_fin_du_trait();
+            self.e3_sel_lacher(mods.shift);
         }
         self.e3d.pointeur = hover.filter(|p| regard.rect.contains(*p));
         // Maj tenue (ou relâchée) sans que la souris bouge : le segment droit suit quand même (`tracedroit.rs`).
@@ -399,7 +434,7 @@ impl App {
     }
 
     /// Ctrl+clic : la carte sous le pointeur devient le calque courant (on continue de dessiner, sur elle).
-    fn e3_prendre_la_carte(&mut self, regard: Regard3d, pos: Pos2) {
+    pub(crate) fn e3_prendre_la_carte(&mut self, regard: Regard3d, pos: Pos2) {
         self.end_stroke();
         match self.e3_pick(&regard.rayon(pos)) {
             Some(id) => {
@@ -528,14 +563,15 @@ impl App {
     pub(crate) fn e3_dessin_legende(&self) -> String {
         let outil = self.tool.label();
         let carte = if espace3d::is_card(self.layer()) { format!("la carte « {} »", self.layer().name) } else { "ce calque (pas une carte)".to_string() };
-        format!("{outil} sur {carte} · Ctrl+clic : prendre une autre carte · Alt+glisser ou clic droit : tourner la vue · milieu : glisser la vue · molette : avancer · outils de la vue : manipuler")
+        format!("{outil} sur {carte} · Ctrl+clic : prendre une autre carte · Ctrl+glisser : lasso · Alt+glisser ou clic droit : tourner la vue · milieu : glisser la vue · molette : avancer · outils de la vue : manipuler")
     }
 
     /// La texture de la carte sur laquelle on dessine (le dessin `cel` : celui du calque courant à l'image courante, ou
     /// celui du trait en cours), tenue à jour à chaque image sans rejeu du moteur : seules les tuiles que le trait
     /// vient de changer sont refaites. Rien pour un autre dessin, ou quand on ne dessine pas dans la vue.
     pub(crate) fn e3_texture_vive(&mut self, ctx: &egui::Context, cel: CelId) -> Option<egui::TextureId> {
-        if !self.e3_dessine() {
+        // (L'outil Sélection aussi : effacer, déplacer ou coller une zone change le dessin de la carte, qui doit le montrer.)
+        if !(self.e3_dessine() || self.e3_selectionne()) {
             return None;
         }
         let en_cours = self.stroke.as_ref().map(|s| s.cel).or(self.verase.as_ref().map(|v| v.cel));

@@ -14,8 +14,11 @@
 //! calque courant. Chacun reçoit sa copie de la trajectoire et se déplace, dans l'espace, du déplacement du chemin depuis son
 //! départ : il garde sa place au départ, son orientation et sa taille dans l'espace.
 //! * **Une carte** reçoit des clés de position (`cles_dans_l_espace`) : une par image en clés d'interpolation, une par jalon,
-//!   tenue, en clés d'images (aucune copie de dessin : une copie n'a pas de sens quand la taille change avec la distance). Sa
-//!   pose propre est sa pose fixe (`Layer::transform`, `Layer::depth`), que la trajectoire ne touche jamais.
+//!   tenue, en clés d'images. En clés d'images elle reçoit aussi, comme sur la feuille, **une clé de dessin à chaque jalon**
+//!   (`trajectoire_poser_les_dessins_dans_l_espace`, partie 152 ; Anthony, 2026-11-13 : « Clés d'images ne crée pas de clés
+//!   d'images dans la timeline ») : une copie du dessin du départ, ni déplacée ni agrandie ni tournée, puisque c'est la carte
+//!   qui porte le mouvement. Sa pose propre est sa pose fixe (`Layer::transform`, `Layer::depth`), que la trajectoire ne
+//!   touche jamais.
 //! * **La caméra** ne reçoit aucune clé : sa trajectoire (`Panel::trajectoire_camera`) s'ajoute à la caméra des clés quand on
 //!   l'évalue (`Document::panel_camera_reelle`, `App::current_camera`).
 //!
@@ -34,12 +37,12 @@ use crate::espace3dmath as m;
 use crate::espace3dui::Drag;
 use crate::history::Edit;
 use crate::poskeys::PosKey;
-use crate::trajectoire::{Cles, Support, Trajectoire, MARQUE_FRACTION_MAX};
+use crate::trajectoire::{Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
-pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic : choisir ou lâcher une carte, la caméra. Alt+glisser ou clic droit : tourner la vue.";
-pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic, ou la liste des cartes dans le panneau Espace 3D).";
+pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
+pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou la liste des cartes et « choisir » dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
 pub(crate) const SUR_LA_FEUILLE: &str = "Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même outil.";
@@ -277,7 +280,8 @@ impl App {
     }
 
     /// Ce qui est choisi dans la vue et peut suivre une trajectoire : les cartes choisies, la caméra du plan ; rien de
-    /// choisi : la carte du calque courant.
+    /// choisi : la carte du calque courant. Ce repli ne vaut que quand **rien** n'est choisi : la caméra choisie seule
+    /// reste seule, aucun calque ne s'y ajoute (partie 152).
     pub(crate) fn e3_traj_sujets(&self) -> Vec<Sujet> {
         let mut out: Vec<Sujet> = Vec::new();
         for &s in &self.espace3d.sel {
@@ -324,14 +328,43 @@ impl App {
         }
     }
 
-    /// Donne la trajectoire `t` au sujet `s` : une carte voit ses clés de position reposées, la caméra n'a rien d'autre à
-    /// faire (sa trajectoire s'ajoute à ses clés quand on l'évalue).
+    /// Donne la trajectoire `t` au sujet `s` : une carte voit ses clés de position reposées, et en clés d'images ses
+    /// dessins des jalons (`trajectoire_recalculer`) ; la caméra n'a rien d'autre à faire (sa trajectoire s'ajoute à ses
+    /// clés quand on l'évalue).
     pub(crate) fn e3_traj_poser(&mut self, s: Sujet, t: Trajectoire) {
         match s {
             Sujet::Camera => self.panel_mut().trajectoire_camera = Some(t),
             Sujet::Carte(id) => {
                 if let Some(li) = self.traj_rang(id) {
                     self.layers_mut()[li].trajectoire = Some(t);
+                    self.trajectoire_recalculer(li);
+                }
+            }
+        }
+    }
+
+    /// Comme `e3_traj_poser`, **pendant un geste** (une marque glissée, le chemin tiré) : la carte suit à chaque image
+    /// d'écran par ses clés de position, mais ses dessins des jalons attendent le lâcher (`e3_traj_lacher`), comme sur la
+    /// feuille : rien n'est copié ni rangé dans la timeline tant que le geste dure, et Échap n'a que le chemin et les clés
+    /// de position à rendre.
+    pub(crate) fn e3_traj_poser_en_direct(&mut self, s: Sujet, t: Trajectoire) {
+        match s {
+            Sujet::Camera => self.panel_mut().trajectoire_camera = Some(t),
+            Sujet::Carte(id) => {
+                if let Some(li) = self.traj_rang(id) {
+                    let pi = self.cur_panel;
+                    self.layers_mut()[li].trajectoire = Some(t);
+                    self.trajectoire_cles_dans_l_espace(pi, li);
+                }
+            }
+        }
+    }
+
+    /// Le geste est lâché : chaque carte du geste a ses clés et ses dessins des jalons posés pour de bon.
+    fn e3_traj_finir(&mut self, avant: &[Avant]) {
+        for a in avant {
+            if let Sujet::Carte(id) = a.sujet {
+                if let Some(li) = self.traj_rang(id) {
                     self.trajectoire_recalculer(li);
                 }
             }
@@ -380,7 +413,7 @@ impl App {
 
     /// La trajectoire de référence d'un geste : celle du premier sujet qui en suit une. C'est elle qu'on voit et qu'on prend ;
     /// le geste s'applique ensuite à la trajectoire de chacun.
-    fn e3_traj_reference(&self, sujets: &[Sujet]) -> Option<(Sujet, Trajectoire)> {
+    pub(crate) fn e3_traj_reference(&self, sujets: &[Sujet]) -> Option<(Sujet, Trajectoire)> {
         sujets.iter().find_map(|&s| self.e3_traj_de(s).map(|t| (s, t.clone())))
     }
 
@@ -444,7 +477,8 @@ impl App {
     // -------------------------------------------------------------------------------------------- le pointeur
 
     /// Le pointeur dans la vue Espace 3D quand il trace des trajectoires : appui, glisser, lâcher. Alt+appui tourne la vue
-    /// (`Drag::Orbit`, suivi par `e3_input`), Ctrl+clic choisit ou lâche la carte (ou la caméra) sous le pointeur.
+    /// (`Drag::Orbit`, suivi par `e3_input`), Ctrl+clic choisit, seule, la carte (ou la caméra) sous le pointeur, et
+    /// Maj+Ctrl+clic l'ajoute à ce qui est choisi ou l'en retire (`e3_traj_choisir`).
     pub(crate) fn e3_trajectoire_pointeur(&mut self, ctx: &egui::Context, response: &egui::Response, regard: Regard3d) {
         self.e3d.regard = Some(regard);
         let (events, primary_down, hover) = ctx.input(|i| (i.events.clone(), i.pointer.primary_down(), i.pointer.hover_pos()));
@@ -465,7 +499,8 @@ impl App {
                         self.e3_traj_lacher();
                         self.espace3d.drag = Some(Drag::Orbit);
                     } else if modifiers.command || modifiers.ctrl {
-                        self.e3_traj_choisir(regard, *pos);
+                        // (Maj n'ajoute qu'avec Ctrl : Maj seule, à l'appui, reste au chemin, qu'elle déplace en bloc.)
+                        self.e3_traj_choisir(regard, *pos, modifiers.shift);
                     } else {
                         self.e3_traj_presser(regard, *pos, modifiers.shift);
                     }
@@ -482,12 +517,17 @@ impl App {
         self.e3d.pointeur = hover.filter(|p| regard.rect.contains(*p));
     }
 
-    /// Ctrl+clic : la carte (ou la caméra) sous le pointeur rejoint ce qui est choisi, ou le quitte.
+    /// Ctrl+clic : la carte (ou la caméra) sous le pointeur est choisie, **seule** : ce qui était choisi est lâché, et les
+    /// gestes de l'outil n'agissent plus que sur son chemin (partie 152 ; Anthony, 2026-11-13 : « Éditer la trajectoire de la
+    /// caméra ne fonctionne pas puisqu'un calque est toujours sélectionné en même temps » : avant, Ctrl+clic ajoutait la
+    /// caméra à la carte du calque courant). Une carte choisie ainsi devient le calque courant, comme d'un clic avec les
+    /// outils de la vue. `ajouter` (Maj tenue avec Ctrl) : elle rejoint ce qui est choisi, ou le quitte : c'est ainsi qu'on
+    /// choisit exprès la caméra avec des cartes.
     ///
     /// **La caméra l'emporte quand le pointeur est sur son dessin** (son corps, sa pyramide) : il est tracé par-dessus les
     /// cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de haut). Avant la partie 150,
     /// la carte l'emportait : Ctrl+clic sur la caméra choisissait le sol.
-    fn e3_traj_choisir(&mut self, regard: Regard3d, pos: Pos2) {
+    fn e3_traj_choisir(&mut self, regard: Regard3d, pos: Pos2, ajouter: bool) {
         let px = [pos.x - regard.rect.left(), pos.y - regard.rect.top()];
         let centre = [regard.rect.width() / 2.0, regard.rect.height() / 2.0];
         let camera = !self.espace3d.through_camera && self.e3_pick_camera(&regard.view, px, centre);
@@ -496,19 +536,27 @@ impl App {
             self.status = "Ctrl+clic : ni carte ni caméra sous le pointeur.".into();
             return;
         };
-        match self.espace3d.sel.iter().position(|s| *s == id) {
-            Some(k) => {
-                self.espace3d.sel.remove(k);
+        if id == CAMERA_ID {
+            self.e3_choisir_la_camera(ajouter);
+        } else if ajouter {
+            match self.espace3d.sel.iter().position(|s| *s == id) {
+                Some(k) => {
+                    self.espace3d.sel.remove(k);
+                }
+                None => self.espace3d.sel.push(id),
             }
-            None => self.espace3d.sel.push(id),
+        } else {
+            self.espace3d.sel = vec![id];
+            self.e3_follow_card(id);
         }
-        let sujets = self.e3_traj_sujets();
-        let cartes = sujets.iter().filter(|s| matches!(s, Sujet::Carte(_))).count();
-        let camera = sujets.contains(&Sujet::Camera);
+        // (Ce qui est choisi, sans le repli sur la carte du calque courant : la barre d'état dit ce qui l'est vraiment.)
+        let cartes = self.espace3d.sel.iter().filter(|&&s| self.e3_card_layer(s).is_some()).count();
+        let camera = self.espace3d.sel.contains(&CAMERA_ID);
         self.status = match (cartes, camera) {
-            (0, true) => "Le chemin déplacera la caméra.".into(),
+            (0, true) => "La caméra est choisie, seule : le chemin ne déplacera qu'elle. Maj+Ctrl+clic sur une carte : l'ajouter.".into(),
+            (0, false) => "Plus rien n'est choisi : le chemin déplacera la carte du calque courant.".into(),
             (n, true) => format!("Le chemin déplacera {n} carte{} et la caméra.", pluriel(n)),
-            (n, false) => format!("Le chemin déplacera {n} carte{}.", pluriel(n)),
+            (n, false) => format!("Le chemin déplacera {n} carte{}. Maj+Ctrl+clic : en ajouter une, ou la caméra.", pluriel(n)),
         };
     }
 
@@ -590,7 +638,7 @@ impl App {
                                 t.deplacer_marque(*i, f);
                             }
                         }
-                        self.e3_traj_poser(a.sujet, t);
+                        self.e3_traj_poser_en_direct(a.sujet, t);
                     }
                     (*arrachee, *bouge) = (loin, true);
                     self.status = if loin { "Marque arrachée : lâcher la retire.".into() } else { format!("Marque à {} % du chemin.", (f * 100.0).round()) };
@@ -608,7 +656,7 @@ impl App {
                             let rayon = t.rayon_de_tirage();
                             t.tirer(*fraction, dx, dy, rayon);
                         }
-                        self.e3_traj_poser(a.sujet, t);
+                        self.e3_traj_poser_en_direct(a.sujet, t);
                     }
                     *bouge = true;
                     self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : il se tord là où on le prend. Maj à l'appui : le déplacer en bloc.".into() };
@@ -626,8 +674,10 @@ impl App {
         match g {
             GesteEspace::Trait { support, ecran, plan } => self.e3_traj_poser_le_trait(support, &ecran, &plan),
             GesteEspace::Prolonger { devant, ecran, plan, .. } => self.e3_traj_prolonger(&ecran, &plan, devant),
-            GesteEspace::Marque { snap, bouge, arrachee, .. } => {
+            GesteEspace::Marque { avant, snap, bouge, arrachee, .. } => {
                 if arrachee || bouge {
+                    // (Les dessins des jalons, en clés d'images, se posent maintenant : pas pendant le geste.)
+                    self.e3_traj_finir(&avant);
                     self.modified = true;
                     self.commit_named(snap, if arrachee { "Retirer une marque" } else { "Glisser une marque" });
                     if arrachee {
@@ -635,8 +685,9 @@ impl App {
                     }
                 }
             }
-            GesteEspace::Chemin { snap, bouge, bloc, .. } => {
+            GesteEspace::Chemin { avant, snap, bouge, bloc, .. } => {
                 if bouge {
+                    self.e3_traj_finir(&avant);
                     self.modified = true;
                     self.commit_named(snap, if bloc { "Déplacer la trajectoire" } else { "Tirer la trajectoire" });
                 }
@@ -679,25 +730,30 @@ impl App {
             }
             return;
         }
-        let Some(mut neuve) = Trajectoire::nouvelle_dans_l_espace(plan, support) else {
+        let Some(neuve) = Trajectoire::nouvelle_dans_l_espace(plan, support) else {
             self.status = TROP_COURT.into();
             return;
         };
-        // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
-        neuve.lisser_a(self.traj.lissage);
         let snap = self.snapshot();
         let retrace = sujets.iter().all(|&s| self.e3_traj_de(s).is_some());
         let (image, duree) = (self.cur_frame, self.frame_count());
         for &s in &sujets {
             let mut t = neuve.clone();
             match self.e3_traj_de(s).cloned() {
-                Some(e) => (t.marques, t.depart, t.fin, t.temps, t.cles) = (e.marques, e.depart, e.fin, e.temps, e.cles),
+                // (Retracé : les marques, le temps, la sorte des clés et les dessins des jalons restent, comme sur la feuille.)
+                // (Et le lissage du chemin, partie 151.)
+                Some(e) => {
+                    (t.marques, t.depart, t.fin, t.temps, t.cles, t.source, t.dessins) = (e.marques, e.depart, e.fin, e.temps, e.cles, e.source, e.dessins);
+                    t.lisser_a(e.lissage);
+                }
                 None => {
                     // Le départ est à la tête de lecture, la fin sur la dernière image du plan (posée : elle suit les images
                     // insérées ou retirées). Une carte garde la pose qu'elle a au départ : c'est sa pose propre désormais.
                     t.depart = image;
                     t.fin = (duree >= image + 2).then(|| duree - 1);
                     t.cles = self.traj.cles_propose;
+                    // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
+                    t.lisser_a(self.traj.lissage);
                     if let Sujet::Carte(id) = s {
                         if let Some(li) = self.traj_rang(id) {
                             let l = &mut self.layers_mut()[li];
@@ -728,10 +784,19 @@ impl App {
         };
         let images = t.images_des_jalons(self.e3_traj_duree(s));
         let n = t.marques.len();
-        match (images.first(), images.last()) {
+        let mut texte = match (images.first(), images.last()) {
             (Some(a), Some(b)) => format!("{debut} : {qui}, {n} marque{}, de l'image {} à l'image {}.", pluriel(n), a + 1, b + 1),
             _ => format!("{debut} : {qui}, {n} marque{} ; le plan s'arrête avant l'image {} du départ, rien ne bouge encore.", pluriel(n), t.depart + 1),
+        };
+        // En clés d'images, une carte sans dessin au départ n'a rien à copier aux jalons : on le dit, comme sur la feuille.
+        let sans_dessin = avec.iter().find_map(|s| match s {
+            Sujet::Carte(_) => self.e3_traj_de(*s).filter(|t| t.cles == Cles::Images && t.dessins.is_empty() && t.images_des_jalons(self.frame_count()).len() >= 2),
+            Sujet::Camera => None,
+        });
+        if let Some(t) = sans_dessin {
+            texte.push_str(&format!(" Il manque un dessin au départ : dessine d'abord à l'image {}, la trajectoire en fera une copie à chaque marque.", t.depart + 1));
         }
+        texte
     }
 
     /// Échap pendant un geste de l'outil dans la vue : tout revient comme avant le geste ; vrai si la touche a servi.
@@ -758,15 +823,86 @@ impl App {
 
     // -------------------------------------------------------------------------------------------- les clés des cartes
 
-    /// Les clés de position du calque `li` du plan `pi` reposées d'après sa trajectoire dans l'espace
-    /// (`cles_dans_l_espace`). Un chemin qui ne couvre aucune image (plan trop court) laisse la carte à sa pose propre.
+    /// Ce que la trajectoire dans l'espace du calque `li` du plan `pi` pose sur lui, reposé d'après elle : **ses clés de
+    /// position** (`cles_dans_l_espace`) ; et, en **clés d'images**, **un dessin à chaque jalon**
+    /// (`trajectoire_poser_les_dessins_dans_l_espace`). En clés d'interpolation, les dessins qu'elle avait posés s'en vont
+    /// (leurs images reprennent le dessin du départ), comme sur la feuille. Un chemin qui ne couvre aucune image (plan trop
+    /// court) laisse la carte à sa pose propre.
+    ///
+    /// C'est par ici (`App::trajectoire_recalculer`, `trajectoire_recalculer_dans`) que passent le tracé, les marques, le
+    /// recalage sur la timeline, le changement de sorte de clés et la pose à la main d'une carte : poser les clés de
+    /// position seules (`cles_dans_l_espace`) ne pose pas les dessins.
     pub(crate) fn trajectoire_recalculer_dans_l_espace(&mut self, pi: usize, li: usize) {
+        let Some((cles, des_dessins)) = self.doc.panels.get(pi).and_then(|p| p.layers.get(li)).and_then(|l| l.trajectoire.as_ref()).filter(|t| t.support.is_some()).map(|t| (t.cles, !t.dessins.is_empty())) else { return };
+        self.trajectoire_cles_dans_l_espace(pi, li);
+        match cles {
+            Cles::Images => {
+                self.trajectoire_poser_les_dessins_dans_l_espace(pi, li);
+            }
+            Cles::Interpolation if des_dessins => self.trajectoire_defaire_les_dessins(pi, li),
+            Cles::Interpolation => {}
+        }
+    }
+
+    /// Les clés de position du calque `li` du plan `pi` reposées d'après sa trajectoire dans l'espace
+    /// (`cles_dans_l_espace`), sans toucher à ses dessins : ce qu'un geste en cours refait à chaque image d'écran.
+    fn trajectoire_cles_dans_l_espace(&mut self, pi: usize, li: usize) {
         let Some(p) = self.doc.panels.get(pi) else { return };
         let duree = p.frame_count();
         let Some(l) = p.layers.get(li) else { return };
         let Some(t) = l.trajectoire.as_ref().filter(|t| t.support.is_some()) else { return };
         let cles = cles_dans_l_espace(&Monde::du_plan(&self.doc, pi), l, t, duree);
         self.doc.panels[pi].layers[li].pos_keys = cles;
+    }
+
+    /// **Clés d'images d'une trajectoire dans l'espace** (partie 152 ; Anthony, 2026-11-13 : « Clés d'images ne crée pas de
+    /// clés d'images dans la timeline ») : **un dessin à chaque jalon** (le départ, chaque marque, l'arrivée), exposé
+    /// jusqu'au jalon suivant (le dernier, jusqu'à la fin du plan), comme sur la feuille
+    /// (`trajectoire_poser_les_dessins`). La timeline se scinde aux jalons, et chaque pose se redessine.
+    ///
+    /// Le départ garde le dessin d'origine (noté dans `source`) ; chaque autre jalon reçoit **une copie de ce dessin, telle
+    /// quelle** : ni déplacée, ni agrandie, ni tournée. C'est la différence avec la feuille : ici c'est la carte qui porte
+    /// le mouvement, par sa clé de position tenue du jalon (`cles_dans_l_espace`).
+    ///
+    /// Les dessins posés sont suivis (`Trajectoire::dessins`, un par jalon, dans l'ordre) : un dessin déjà posé est gardé
+    /// tel qu'il est, avec ce qu'on y a redessiné ; seul un jalon de plus reçoit une copie neuve. Glisser une marque,
+    /// tirer le chemin ou recaler un jalon dans le temps ne refait donc aucun dessin : sa clé change seulement d'image.
+    /// Faux, avec la raison dans la barre d'état, s'il n'y a pas de dessin au départ.
+    fn trajectoire_poser_les_dessins_dans_l_espace(&mut self, pi: usize, li: usize) -> bool {
+        let duree = self.doc.panels[pi].frame_count();
+        let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
+        let images = t.images_des_jalons(duree);
+        if images.len() < 2 {
+            return false;
+        }
+        let Some(source) = t.source.filter(|c| self.doc.cels.contains_key(c)).or_else(|| self.doc.panels[pi].layers[li].cel_at(t.depart)) else {
+            self.status = format!("Clés d'images : dessine d'abord à l'image {} du départ, la trajectoire en fera une copie à chaque marque.", t.depart + 1);
+            return false;
+        };
+        let mut dessins = Vec::with_capacity(images.len());
+        for k in 0..images.len() {
+            let dessin = match t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)) {
+                Some(a) => a.dessin,
+                None if k == 0 => source,
+                None => self.doc.duplicate_cel(source),
+            };
+            dessins.push(DessinJalon { dessin, dx: 0.0, dy: 0.0, angle: 0.0 });
+        }
+        let l = &mut self.doc.panels[pi].layers[li];
+        if l.frames.len() < duree {
+            l.frames.resize(duree, None);
+        }
+        for k in 0..images.len() {
+            let fin = if k + 1 < images.len() { images[k + 1] } else { duree };
+            for f in images[k]..fin.min(duree) {
+                l.frames[f] = Some(dessins[k].dessin);
+            }
+        }
+        if let Some(t) = l.trajectoire.as_mut() {
+            t.source = Some(source);
+            t.dessins = dessins;
+        }
+        true
     }
 
     /// Le calque `li`, qui suit une trajectoire dans l'espace, vient d'être posé à la main à l'image courante (manipulateur
@@ -814,7 +950,7 @@ impl App {
     /// La légende du bas de la vue quand le pointeur trace des trajectoires.
     pub(crate) fn e3_trajectoire_legende(&self) -> &'static str {
         if self.doc.plan_en_espace(self.cur_panel) {
-            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
+            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
         } else {
             "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
         }
@@ -945,7 +1081,7 @@ impl App {
                     "Trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi : chaque carte choisie, et la caméra si \
                      elle l'est, le suit depuis la tête de lecture jusqu'à la fin du plan, en partant de là où elle est. Puis de petits \
                      traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, ça va lentement ; \
-                     espacées, vite. Ctrl+clic choisit ou lâche une carte, la caméra.",
+                     espacées, vite. Ctrl+clic choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche.",
                 )
                 .small()
                 .weak(),
@@ -993,11 +1129,7 @@ impl App {
         });
         let mut cles = t.cles;
         if cles_espace_ui(ui, &mut cles) {
-            self.traj.cles_propose = cles;
-            self.e3_traj_pour_tous(&avec, "Sorte des clés de la trajectoire", |t, _| {
-                t.cles = cles;
-                true
-            });
+            self.e3_traj_sorte(&avec, cles);
         }
         // Le lissage du chemin, pour tout ce qui est choisi (partie 151).
         self.trajectoire_lissage_ui(ui, true);
@@ -1031,6 +1163,17 @@ impl App {
         true
     }
 
+    /// La sorte des clés (réglages de l'outil) de la trajectoire dans l'espace de chaque sujet, en une étape d'annulation ;
+    /// elle est proposée au chemin suivant. « Clés d'images » : une clé de position tenue et, pour une carte, une clé de
+    /// dessin à chaque jalon. « Clés d'interpolation » : une clé de position par image, les dessins des jalons s'en vont.
+    pub(crate) fn e3_traj_sorte(&mut self, sujets: &[Sujet], cles: Cles) {
+        self.traj.cles_propose = cles;
+        self.e3_traj_pour_tous(sujets, "Sorte des clés de la trajectoire", |t, _| {
+            t.cles = cles;
+            true
+        });
+    }
+
     /// « Détacher » (`effacer` faux : le mouvement reste, en clés) ou « Effacer » (le mouvement s'en va) la trajectoire dans
     /// l'espace de chaque sujet, en une étape d'annulation.
     pub(crate) fn e3_traj_retirer(&mut self, sujets: &[Sujet], effacer: bool) {
@@ -1047,6 +1190,11 @@ impl App {
                 }
                 Sujet::Carte(id) => {
                     if let Some(li) = self.traj_rang(id) {
+                        // (« Effacer » : les dessins qu'elle a posés aux jalons, en clés d'images, s'en vont avec elle, leurs
+                        // images reprennent le dessin du départ. « Détacher » les laisse, comme les clés de position.)
+                        if effacer {
+                            self.trajectoire_defaire_les_dessins(pi, li);
+                        }
                         let l = &mut self.layers_mut()[li];
                         l.trajectoire = None;
                         if effacer {
@@ -1067,7 +1215,7 @@ impl App {
 fn cles_espace_ui(ui: &mut egui::Ui, cles: &mut Cles) -> bool {
     let avant = *cles;
     ui.horizontal(|ui| {
-        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Une pose tenue à chaque marque : ce qui est choisi saute de marque en marque, sans glisser entre deux. (Dans l'espace, aucune copie de dessin n'est faite.)");
+        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Une pose tenue à chaque marque : ce qui est choisi saute de marque en marque, sans glisser entre deux. Une carte reçoit aussi une clé de dessin à chaque marque, copie du dessin du départ, exposée jusqu'à la marque suivante : la timeline se scinde, chaque pose se redessine. D'origine.");
         ui.radio_value(cles, Cles::Interpolation, Cles::Interpolation.label()).on_hover_text("Ce qui est choisi glisse le long du chemin, à la vitesse que donnent les marques : une clé de position par image pour une carte.");
     });
     *cles != avant

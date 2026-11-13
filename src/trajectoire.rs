@@ -275,7 +275,9 @@ pub struct Trajectoire {
     pub tourne: bool,
     /// **Tracée dans l'Espace 3D** (format 55, partie 149) : le plan de l'espace où le chemin est posé. Ses points se lisent alors
     /// dans ce plan, et ce qui la suit (une carte, la caméra du plan) se déplace dans l'espace du déplacement du chemin depuis son
-    /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas.
+    /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas. En
+    /// « clés d'images », une carte a ses `dessins` comme sur la feuille (partie 152), sans déplacement ni angle : la carte se
+    /// déplace elle-même, par une clé de position tenue à chaque jalon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub support: Option<Support>,
     /// **Le lissage du chemin** (partie 151 ; Anthony, 2026-11-12 : « la courbe tracée pour une trajectoire doit pouvoir être
@@ -376,12 +378,21 @@ impl Trajectoire {
         self.brut = None;
         self.relisser();
         let longueur = self.longueur().max(1e-6);
-        self.marques.clear();
         self.temps = None;
-        for s in depuis_le_bout_fixe {
-            let f = if devant { 1.0 - s / longueur } else { s / longueur };
-            self.ajouter_marque(f.clamp(0.0, 1.0));
+        // (Toutes les marques restent, dans leur ordre : une marque tout près du bout fixe n'est pas jetée, elle est gardée
+        // à `ECART_MIN` des bouts et de ses voisines. En clés d'images, les dessins sont rangés par jalon : en perdre une
+        // décalerait ceux qui suivent.)
+        let mut marques: Vec<f32> = depuis_le_bout_fixe.iter().map(|&s| if devant { 1.0 - s / longueur } else { s / longueur }).collect();
+        marques.sort_by(|a, b| a.total_cmp(b));
+        let n = marques.len();
+        for (i, m) in marques.iter_mut().enumerate() {
+            let (bas, haut) = (ECART_MIN * (i + 1) as f32, 1.0 - ECART_MIN * (n - i) as f32);
+            *m = if bas <= haut { m.clamp(bas, haut) } else { (i + 1) as f32 / (n + 1) as f32 };
         }
+        for i in 1..n {
+            marques[i] = marques[i].max(marques[i - 1] + ECART_MIN);
+        }
+        self.marques = marques;
         true
     }
 
@@ -518,8 +529,13 @@ impl Trajectoire {
         // feuille, la garder la ferait prendre pour une autre.
         if let Some(s) = self.support {
             self.support = Some(s.assaini()?);
-            (self.ancre, self.tourne, self.decalage_depart, self.source) = (Ancre::Depart, false, [0.0, 0.0], None);
-            self.dessins.clear();
+            (self.ancre, self.tourne, self.decalage_depart) = (Ancre::Depart, false, [0.0, 0.0]);
+            // (Les dessins des clés d'images d'une carte sont gardés, avec leur dessin d'origine : sans eux, le calcul suivant
+            // referait des copies et laisserait de côté ce qu'on y a redessiné. Dans l'espace ils ne sont ni déplacés ni
+            // tournés : c'est la carte qui porte le mouvement. Partie 152.)
+            for d in &mut self.dessins {
+                (d.dx, d.dy, d.angle) = (0.0, 0.0, 0.0);
+            }
         }
         // Le lissage : entre 0 et 1 ; le chemin brut, filtré comme les points, n'est gardé que s'il tient debout (sinon le
         // chemin lissé devient le chemin brut).
@@ -587,7 +603,20 @@ impl Trajectoire {
     /// L'angle (degrés, entre −180 et 180) dont le chemin a tourné à la fraction `f` depuis sa direction au départ : ce que le dessin
     /// tourne quand il suit le chemin (`tourne`) ; 0 au départ.
     pub fn angle_a(&self, f: f32) -> f32 {
-        let (d, d0) = (self.direction_lissee_a(f), self.direction_lissee_a(0.0));
+        // (Un chemin prolongé par son début : l'orientation de départ reste celle de l'ancien départ, `reference`.)
+        // (Lue vers l'avant seulement, comme au départ d'un chemin : le coin du raccord n'y entre pas.)
+        let d0 = match self.reference {
+            None => self.direction_lissee_a(0.0),
+            Some(r) => {
+                let f0 = self.plus_proche(r).0;
+                let l = self.longueur().max(1e-6);
+                let (a, b) = (self.point_a(f0), self.point_a((f0 + FENETRE_DIRECTION.max(l * 0.02) / l).min(1.0)));
+                let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                let n = (dx * dx + dy * dy).sqrt();
+                if n > 1e-6 { [dx / n, dy / n] } else { self.direction_lissee_a(f0) }
+            }
+        };
+        let d = self.direction_lissee_a(f);
         let a = (d[1].atan2(d[0]) - d0[1].atan2(d0[0])).to_degrees();
         let a = a.rem_euclid(360.0);
         if a > 180.0 { a - 360.0 } else { a }

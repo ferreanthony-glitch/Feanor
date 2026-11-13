@@ -290,6 +290,8 @@ impl App {
                         t.source = e.source;
                         t.dessins = e.dessins;
                         t.tourne = e.tourne;
+                        // (Retracé : le chemin garde son lissage, partie 151.)
+                        t.lissage = e.lissage;
                     }
                     None => {
                         // La clé de départ démarre sur la tête de lecture ; la fin est posée sur la dernière image du plan (une fin
@@ -300,10 +302,12 @@ impl App {
                         t.fin = (duree >= t.depart + 2).then(|| duree - 1);
                         t.cles = self.traj.cles_propose;
                         t.tourne = self.traj.tourne_propose;
+                        // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
+                        t.lissage = self.traj.lissage;
                     }
                 }
-                // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
-                t.lisser_a(self.traj.lissage);
+                let lissage = t.lissage;
+                t.lisser_a(lissage);
                 self.layers_mut()[li].trajectoire = Some(t);
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, nom);
@@ -541,7 +545,8 @@ impl App {
     }
 
     /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin d'origine.
-    fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
+    /// (Sert aussi à une trajectoire tracée dans l'espace, `trajectoire3d.rs`, partie 152.)
+    pub(crate) fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
         let l = &mut self.doc.panels[pi].layers[li];
         let (depart, source_notee, poses) = match l.trajectoire.as_mut() {
             Some(t) => (t.depart, t.source.take(), t.dessins.drain(..).map(|d| d.dessin).collect::<Vec<CelId>>()),

@@ -87,11 +87,26 @@ impl App {
             // (La barre d'état dit déjà pourquoi : `e3_traj_sujets_libres`.)
             return;
         }
+        // (Le trait est lu sur le chemin de référence ; un autre sujet choisi le reçoit décalé de l'écart entre son bout et
+        // celui de la référence, s'il est sur un plan parallèle : il prolonge son propre chemin, sans saut.)
+        let Some((_, reference)) = self.e3_traj_reference(&sujets) else { return };
+        let bout_de = |t: &Trajectoire| if devant { t.chemin_brut()[0] } else { *t.chemin_brut().last().unwrap_or(&[0.0, 0.0]) };
+        let (bout_ref, normale_ref) = (bout_de(&reference), reference.support.map(|s| s.normale()));
         let snap = self.snapshot();
         let mut n = 0;
         for s in sujets {
             let Some(mut t) = self.e3_traj_de(s).cloned() else { continue };
-            if t.prolonger(plan, devant) {
+            let parallele = match (t.support.map(|s| s.normale()), normale_ref) {
+                (Some(a), Some(b)) => crate::espace3dmath::dot(a, b).abs() > 0.999,
+                _ => false,
+            };
+            if !parallele {
+                continue;
+            }
+            let b = bout_de(&t);
+            let d = [b[0] - bout_ref[0], b[1] - bout_ref[1]];
+            let decale: Vec<[f32; 2]> = plan.iter().map(|p| [p[0] + d[0], p[1] + d[1]]).collect();
+            if t.prolonger(&decale, devant) {
                 self.e3_traj_poser(s, t);
                 n += 1;
             }
