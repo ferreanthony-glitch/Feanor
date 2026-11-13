@@ -11416,8 +11416,14 @@ propre essai, Anthony avait de lui-même glissé le panneau en onglet à côté 
 répondu, le 13 novembre : **« Onglet de Réglages »**. La colonne est retirée.
 
 **Maintenant : un onglet du groupe de Réglages**, après Réglages et la fiche du plan (après tous les onglets que ce groupe
-a). Réglages ou le panneau Espace 3D devant, l'un ou l'autre ; la couleur dessous et les calques ne bougent pas, le
-dessin garde sa largeur.
+a). Réglages ou le panneau Espace 3D devant, l'un ou l'autre ; les calques ne bougent pas, le dessin garde sa largeur.
+
+**Sa hauteur** (ajouté par Claude le 13 novembre, après l'avoir vu à l'écran : l'onglet devant gardait la hauteur que
+Réglages avait, une centaine de points avec le pinceau, et coupait la liste des cartes). Comme Réglages, le panneau
+Espace 3D prend la hauteur de son contenu (`ajuste.rs`, `fits`) : devant, le groupe grandit jusqu'aux cartes et à la
+caméra du plan, la couleur dessous garde au moins ses 200 points ; Réglages revenu devant, le bord glisse à sa hauteur.
+Un bord tiré à la main entre ces deux groupes n'est pas touché (« Réajuster les panneaux » le rend). Essai :
+`ajuste_tests::the_espace3d_tab_in_front_takes_the_height_of_its_content_and_the_colour_the_rest`.
 
 ```
  dessin │ Calques │ Réglages Fiche [Espace 3D]      dessin │ Calques │ [Réglages] Fiche Espace 3D
@@ -11636,9 +11642,9 @@ Le panneau Espace 3D (152.3, modifié après sa réponse du 13 novembre) :
 10. Storyboard, réglages neufs, vue Espace 3D fermée : pas d'onglet Espace 3D ; Réglages et Fiche au-dessus de la
     couleur, comme avant la partie 150.
 11. Ouvrir la vue : un onglet « Espace 3D » arrive après Réglages et Fiche, et passe devant ; la couleur et les calques
-    restent visibles, le dessin garde sa largeur. Dire si la hauteur de ce groupe suffit pour la liste des cartes et la
-    caméra du plan (quand l'onglet Espace 3D est devant, le bord avec la couleur ne s'ajuste pas tout seul : il garde la
-    hauteur que Réglages avait).
+    restent visibles, le dessin garde sa largeur. Le groupe grandit jusqu'à la hauteur des cartes et de la caméra du
+    plan (la couleur garde au moins 200 points), puis reprend celle de Réglages à la fermeture. Dire si cette hauteur
+    suffit. (Un bord tiré à la main entre Réglages et la couleur reste où il est : « Réajuster les panneaux » le rend.)
 12. Fermer la vue : Réglages revient devant, l'onglet Espace 3D reste derrière lui. Rouvrir : il repasse devant.
 13. La vue ouverte, cliquer l'onglet Réglages (changer de brosse), puis fermer la vue : Réglages reste devant. Dire s'il
     faudrait que le panneau Espace 3D repasse devant tout seul.
