@@ -43,11 +43,8 @@ fn menu_actif(ui: &mut egui::Ui, sans_projet: bool, titre: &str) -> bool {
     !sans_projet
 }
 
-// (Le mode d'emploi de la boîte de sélection est dans le registre des explications, avec son animation : `aidecatalogue.rs`.)
-
-fn note(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).small().weak());
-}
+// (Les modes d'emploi des outils, qui s'écrivaient ici en petit et en gris, sont dans leurs animations et le registre des
+// explications : `aideanim.rs`, partie 153.)
 
 /// « (Alt+S) » d'un raccourci, pour une phrase ; rien s'il n'y en a pas. Les phrases d'aide lisent
 /// ainsi la touche dans le fichier de raccourcis au lieu de l'écrire en dur.
@@ -499,29 +496,18 @@ impl App {
             // « Peint sur l'aplat » et l'aplat du calque (pinceau et crayon), puis « Plus de réglages » (replié
             // d'office) : les catégories de la brosse et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur
             // reste à portée. (Le tremblement du trait se règle dans le panneau Effets : plus de ligne ici, 2026-10-23.)
+            // (Les modes d'emploi des outils sont dans leurs animations et le registre des explications : `aidegestes.rs`, partie 153.)
             Tool::Brush | Tool::Mixer => {
-                if self.tool == Tool::Mixer {
-                    // Le Mélangeur est le pinceau courant en « Lisser » : mêmes taille, dureté, espacement, grain.
-                    note(ui, "Mélangeur : la brosse du pinceau, en « Lisser » : elle étale ce qui est peint sans poser de couleur. « Couleur et mélange » règle l'entraînement.");
-                }
+                // (Le Mélangeur est le pinceau courant en « Lisser » : mêmes taille, dureté, espacement, grain.)
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
                 // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
                 self.griffonner_options_ui(ui);
-                if vector && self.pinceaux.reglages_ouverts {
-                    let key = between_parens(&self.raccourci("outil.selection"));
-                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
-                          image, grain du papier)."));
-                }
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
-                if vector && self.pinceaux.reglages_ouverts {
-                    let key = between_parens(&self.raccourci("outil.selection"));
-                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
-                }
             }
             Tool::Eraser => {
                 self.brush_summary_ui(ui);
@@ -534,13 +520,6 @@ impl App {
                         "La gomme retire chaque trait touché en entier au lieu de le couper.",
                         "",
                     );
-                    if self.pinceaux.reglages_ouverts {
-                        note(
-                            ui,
-                            "Sur un calque vectoriel, la gomme coupe les traits. Les zones remplies \
-                             s'effacent en mode « traits entiers » ou par la sélection.",
-                        );
-                    }
                 }
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
@@ -559,15 +538,6 @@ impl App {
                 });
                 self.plus_de_reglages(ui, |app, ui| {
                     ui.add(egui::Slider::new(&mut app.fill.expand, 0..=4).text("Débord (px)"));
-                    if vector {
-                        note(ui, "Sur un trait ou une zone déjà peinte : change sa couleur.");
-                    } else {
-                        note(
-                            ui,
-                            "Astuce : trait sur un calque, couleurs sur un calque en dessous, \
-                             contours pris sur tous les calques.",
-                        );
-                    }
                 });
             }
             Tool::Gradient => self.degrade_options_ui(ui),
@@ -577,27 +547,12 @@ impl App {
             Tool::Grab | Tool::Pull => self.sculpt_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
-            Tool::Cutter => {
-                ui.label("Glisse en travers des bouts de traits à enlever, ou clique sur l'un d'eux.");
-                note(
-                    ui,
-                    "Calque vectoriel : chaque trait touché est coupé là où il croise les autres traits (et lui-même) ; \
-                     seuls les morceaux touchés partent. Un trait qui ne croise rien part en entier. Ctrl+Z annule.",
-                );
-            }
-            Tool::Picker => {
-                ui.label("Clique sur le dessin pour prélever une couleur.");
-                note(ui, "Avec les autres outils : Alt + clic.");
-            }
-            Tool::Pan => {
-                ui.label("Glisse pour déplacer la vue.");
-                note(ui, "Sinon : Espace + glisser, ou bouton du milieu.");
-            }
+            // Le Cutter, la pipette et la main n'ont pas de réglages : leur animation les montre.
+            Tool::Cutter | Tool::Picker | Tool::Pan => {}
             Tool::Transform => {
                 let peers = self.transform_peers().len();
                 if peers >= 2 {
                     ui.label(RichText::new(format!("{peers} calques choisis : ils se déplacent, tournent et grandissent ensemble.")).strong());
-                    note(ui, "Un coin agrandit tous les calques en gardant les proportions ; l'étirement par un côté se fait sur un seul calque. Ctrl+R remet tous les calques choisis en place. Les calques cachés ou verrouillés restent où ils sont.");
                 }
                 // x, y, largeur, hauteur et angle sur une seule ligne, sous le titre ; puis le point fixe et la rotation (où
                 // ils étaient) ; puis les clés de position (animer le calque), toujours visibles : plus de « Plus de réglages »
@@ -608,16 +563,11 @@ impl App {
             }
             // Sur la planche des Vignettes, l'outil Caméra ne règle que les cadres A, B, C… : rien du panneau complet (clés, adoucis,
             // focale…), qui reste au Storyboard (partie 113, décision 9).
-            Tool::Camera if self.espace == crate::workspace::Espace::Vignettes => {
-                ui.label("Sur la planche : survole une case, ses cadres se montrent.");
-                note(ui, "Glisser un cadre le déplace ; un coin le redimensionne (le zoom). Clic droit sur la case : ajouter ou retirer un cadre. Les réglages fins de la caméra (clés, adoucis, focale) sont dans le Storyboard.");
-            }
+            // (Son mode d'emploi est l'animation « Caméras dans les vignettes », `aidevignettes.rs`.)
+            Tool::Camera if self.espace == crate::workspace::Espace::Vignettes => {}
             Tool::Camera => self.camera_panel(ui),
         }
-        // (Un mode d'emploi de plus : seulement quand « Plus de réglages » est déplié.)
-        if self.pinceaux.reglages_ouverts && self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
-            note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");
-        }
+        // (D'où vient la pression : l'animation « La pression du stylet change l'épaisseur », `aidegestes.rs`.)
     }
 
     /// Panneau Vue : cadrage, zoom, miroir, rotation, table lumineuse.
@@ -720,9 +670,6 @@ impl App {
                     }
                 });
                 app.box_fields_ui(ui);
-            }
-            if lasso {
-                note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Un clic sur un dessin choisit sa forme (Ctrl+Maj + clic : en ajouter une autre, sur tous les calques). Échap ou autre outil : poser la zone.");
             }
         });
     }

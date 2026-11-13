@@ -89,6 +89,14 @@ impl App {
             ui.label(RichText::new("Les panneaux et les fenêtres").strong());
             for fenetre in fenetres() {
                 egui::CollapsingHeader::new(RichText::new(fenetre).strong()).id_salt(("registre_fenetre", fenetre)).default_open(true).show(ui, |ui| {
+                    // Les catégories des brosses : leur texte est aussi leur info-bulle (`Categorie::help`).
+                    if fenetre == crate::aidetextes::BROSSES {
+                        for c in crate::pinceaux::Categorie::ALL {
+                            ui.label(RichText::new(c.label()).strong());
+                            ui.label(c.help());
+                            ui.add_space(4.0);
+                        }
+                    }
                     for t in crate::aidetextes::TEXTES.iter().filter(|t| t.fenetre == fenetre) {
                         if !t.sujet.is_empty() {
                             ui.label(RichText::new(t.sujet).strong());

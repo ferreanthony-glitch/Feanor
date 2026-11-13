@@ -295,9 +295,64 @@ fn the_help_menu_has_the_box_and_the_register_and_the_commands_exist() {
 // ------------------------------------------------------------------------------------------------------ plus de texte gris
 
 /// Les outils dont les réglages n'ont plus aucun texte gris explicatif (petit et pâle, de plus de `LONG` caractères).
-/// (Avec la sorte de calque visée ; `None` : les deux.)
-const SANS_TEXTE_GRIS: &[(Tool, Option<LayerKind>)] = &[(Tool::Trajectoire, None), (Tool::Select, Some(LayerKind::Vector))];
+/// (Avec la sorte de calque visée ; `None` : les deux.) Tous les outils.
+const SANS_TEXTE_GRIS: &[(Tool, Option<LayerKind>)] = &[
+    (Tool::Brush, None),
+    (Tool::Mixer, None),
+    (Tool::Pencil, None),
+    (Tool::Eraser, None),
+    (Tool::Cutter, None),
+    (Tool::Fill, None),
+    (Tool::Gradient, None),
+    (Tool::Line, None),
+    (Tool::Rect, None),
+    (Tool::Ellipse, None),
+    (Tool::Polyline, None),
+    (Tool::Text, None),
+    (Tool::Select, None),
+    (Tool::SelectColor, None),
+    (Tool::Picker, None),
+    (Tool::Pan, None),
+    (Tool::Camera, None),
+    (Tool::Transform, None),
+    (Tool::Perspective, None),
+    (Tool::Grab, None),
+    (Tool::Pull, None),
+    (Tool::Trajectoire, None),
+];
 const LONG: usize = 60;
+
+#[test]
+fn every_tool_is_in_the_list_of_tools_without_grey_text() {
+    for t in Tool::ALL {
+        assert!(SANS_TEXTE_GRIS.iter().any(|(o, _)| *o == t), "{t:?}");
+    }
+}
+
+#[test]
+fn every_tool_has_its_animation() {
+    for contexte in ["trajectoire", "trajectoire.espace", "selection", "selection.bitmap", "selection.couleur", "selection.multi", "pinceau", "crayon", "melangeur", "gomme", "cutter", "remplissage", "degrade", "formes", "texte", "deformer", "sculpter", "pipette", "main", "camera", "espace3d", "vignettes", "vignettes.camera", "vignettes.annotation"] {
+        assert!(!aideanim::du_contexte(contexte).is_empty(), "rien pour « {contexte} »");
+    }
+}
+
+#[test]
+fn the_first_opening_of_the_vignettes_plays_their_animations() {
+    let mut app = app_aide("vignettes", LayerKind::Vector);
+    app.espace = crate::workspace::Espace::Vignettes;
+    let mut e = Ecran::new(0.25);
+    e.chauffer(&mut app, 2, &mut reglages);
+    assert_eq!(app.aide_contexte(), "vignettes");
+    assert_eq!(app.confort.aide.en_cours(), Some("vignettes.coupe"), "l'espace Vignettes ouvert la première fois : la coupe et la continuité");
+    jusqu_au_bout(&mut e, &mut app);
+    for id in ["vignettes.coupe", "vignettes.trait", "vignettes.pont"] {
+        assert!(app.settings.explications_vues.iter().any(|v| v == id), "{id} a joué");
+    }
+    // L'outil Caméra sur la planche : les caméras dans les vignettes.
+    app.set_tool(Tool::Camera);
+    e.chauffer(&mut app, 2, &mut reglages);
+    assert_eq!(app.confort.aide.en_cours(), Some("vignettes.camera"));
+}
 
 #[test]
 fn no_grey_explanation_is_left_in_the_tool_settings() {

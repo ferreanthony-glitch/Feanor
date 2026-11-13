@@ -20,6 +20,7 @@ mod aideanim;
 #[cfg(test)]
 mod aideanim_tests;
 mod aidecatalogue;
+mod aidegestes;
 mod aideregistre;
 mod aidetextes;
 mod aidevignettes;

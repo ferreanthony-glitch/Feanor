@@ -428,8 +428,8 @@ impl App {
                 let right = ui
                     .vertical(|ui| {
                         fit_to_pane(ui);
+                        // (Ce que règle la catégorie : son info-bulle, et le registre des explications.)
                         ui.label(RichText::new(cat.label()).strong());
-                        note(ui, cat.help());
                         ui.add_space(2.0);
                         self.category_ui(ui, cat, vector);
                     })
@@ -739,7 +739,7 @@ impl App {
                 *t = Toucher::ancien();
             }
         });
-        note(ui, "Réponse à la pression commune à tous les pinceaux, appliquée avant leurs réglages. « Ancien » : le toucher d'avant l'étude, pour comparer.");
+        // (Ce qu'est le toucher : dans le registre des explications, `aidetextes.rs`.)
     }
 
     // ------------------------------------------------------------------ résumé du panneau Réglages de l'outil

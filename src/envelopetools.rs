@@ -281,15 +281,7 @@ impl App {
                         self.envelope = None;
                     }
                 });
-                ui.label(
-                    egui::RichText::new(
-                        "Clic sur le dessin : son enveloppe apparaît (sur un calque vectoriel, la sélection s'il y \
-                         en a une ; sur un calque bitmap, la zone choisie). Tire un coin ou une poignée ronde pour \
-                         courber les côtés, l'intérieur pour déplacer. Ctrl+Z annule chaque geste.",
-                    )
-                    .small()
-                    .weak(),
-                );
+                // (Le mode d'emploi est dans l'animation « L'enveloppe » et le registre des explications, partie 153.)
             }
         }
     }

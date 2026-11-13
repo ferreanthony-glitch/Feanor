@@ -87,7 +87,7 @@ pub(crate) struct Anim {
 
 /// Toutes les animations, dans l'ordre du registre.
 pub(crate) fn toutes() -> impl Iterator<Item = &'static Anim> {
-    crate::aidecatalogue::OUTILS.iter().chain(crate::aidevignettes::VIGNETTES.iter())
+    crate::aidecatalogue::OUTILS.iter().chain(crate::aidegestes::GESTES.iter()).chain(crate::aidevignettes::VIGNETTES.iter())
 }
 
 pub(crate) fn anim(id: &str) -> Option<&'static Anim> {
@@ -191,6 +191,10 @@ impl Chemin {
         Chemin::de(pts)
     }
 
+    pub(crate) fn droite(a: (f32, f32), b: (f32, f32)) -> Chemin {
+        Chemin::de(vec![pos2(a.0, a.1), pos2(b.0, b.1)])
+    }
+
     pub(crate) fn longueur(&self) -> f32 {
         self.cumul.last().copied().unwrap_or(0.0)
     }
@@ -219,6 +223,17 @@ impl Chemin {
         out
     }
 
+    /// Les points de la fraction `a` à la fraction `b`.
+    pub(crate) fn entre(&self, a: f32, b: f32) -> Vec<Pos2> {
+        if b <= a || self.pts.len() < 2 {
+            return Vec::new();
+        }
+        let (la, lb) = (a.clamp(0.0, 1.0) * self.longueur(), b.clamp(0.0, 1.0) * self.longueur());
+        let mut out = vec![self.point(a).0];
+        out.extend(self.pts.iter().zip(&self.cumul).filter(|(_, c)| **c > la && **c < lb).map(|(p, _)| *p));
+        out.push(self.point(b).0);
+        out
+    }
 }
 
 /// Le temps égal entre deux marques : à la fraction de temps `u` (0 à 1), la fraction de longueur où l'on est, quand les marques
@@ -273,6 +288,24 @@ impl<'a> Toile<'a> {
         if pts.len() >= 2 {
             self.p.add(Shape::line(pts.iter().map(|p| self.ecran(*p)).collect(), self.trait_(w, c)));
         }
+    }
+
+    pub(crate) fn ferme(&self, pts: &[Pos2], w: f32, c: Color32) {
+        if pts.len() >= 3 {
+            self.p.add(Shape::closed_line(pts.iter().map(|p| self.ecran(*p)).collect(), self.trait_(w, c)));
+        }
+    }
+
+    pub(crate) fn cadre_pointille(&self, r: Rect, w: f32, c: Color32) {
+        self.pointilles(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], w, c);
+    }
+
+    /// Une fine flèche de `a` à `b`.
+    pub(crate) fn fleche(&self, a: Pos2, b: Pos2, w: f32, col: Color32) {
+        self.ligne(a, b, w, col);
+        let d = (b - a).normalized();
+        let n = vec2(-d.y, d.x);
+        self.polyligne(&[b - d * 5.0 + n * 3.0, b, b - d * 5.0 - n * 3.0], w, col);
     }
 
     pub(crate) fn plein(&self, pts: &[Pos2], c: Color32) {
@@ -451,6 +484,10 @@ impl App {
             return "vignettes";
         }
         let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind != LayerKind::Vector);
+        // La vue Espace 3D ouverte : ses gestes (la vue, les cartes, la caméra libre), sauf pour la Trajectoire, qui y a les siens.
+        if self.e3_vue_montree() && self.tool != Tool::Trajectoire {
+            return "espace3d";
+        }
         match self.tool {
             Tool::Trajectoire if self.e3_vue_montree() => "trajectoire.espace",
             Tool::Trajectoire => "trajectoire",
@@ -473,7 +510,6 @@ impl App {
             Tool::Picker => "pipette",
             Tool::Pan => "main",
             Tool::Camera => "camera",
-            Tool::Transform if self.e3_vue_montree() => "espace3d",
             Tool::Transform => "transformer",
         }
     }

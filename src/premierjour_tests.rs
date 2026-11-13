@@ -343,7 +343,10 @@ fn the_board_panel_no_longer_contradicts_itself() {
     b.chauffer(8);
     assert!(est_la(&b, "Calques d'annotation"));
     assert!(est_la(&b, "Dessin de la case"));
-    assert!(est_la(&b, "Aucune annotation pour l'instant"));
+    // (« Aucune annotation pour l'instant : le premier trait d'annotation crée son calque » est dans le registre des explications,
+    // avec l'animation « Annotations », partie 153.)
+    assert!(!est_la(&b, "Aucune annotation pour l'instant"));
+    assert!(crate::aideanim::anim("vignettes.annotations").is_some_and(|a| a.texte.contains("Aucune annotation pour l'instant")));
     assert!(!est_la(&b, "Aucun calque d'annotation"));
 }
 

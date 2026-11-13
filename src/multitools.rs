@@ -966,8 +966,6 @@ impl App {
         if has {
             self.box_fields_ui(ui);
         }
-        if lasso {
-            ui.label(egui::RichText::new("Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. Un clic sur un trait le prend ; Maj : ajouter ou retirer ; Ctrl+Maj : prendre sur tous les calques du plan (leurs clés se choisissent aussi dans le montage). Les calques cachés ou verrouillés sont laissés de côté.").small().weak());
-        }
+        // (Le mode d'emploi est dans l'animation « Plusieurs calques dans une seule boîte » et le registre des explications.)
     }
 }

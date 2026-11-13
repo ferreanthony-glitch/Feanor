@@ -188,7 +188,7 @@ impl App {
         let nom = self.layers()[li].name.clone();
         ui.label(RichText::new(format!("Aplat de {nom}")).strong());
         self.aplat_reglages_ui(ui, li, true);
-        ui.label(RichText::new(self.aplat_indication()).small().weak());
+        // (Ce que fait l'outil sur l'aplat : dans la barre d'état, `aplat_indication`, et dans le registre des explications.)
         ui.separator();
     }
 
