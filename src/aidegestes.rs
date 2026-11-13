@@ -21,6 +21,18 @@ pub(crate) static GESTES: &[Anim] = &[
                 Transformer déplace le calque et son chemin ensemble.",
     },
     Anim {
+        id: "trajectoire.poignees",
+        titre: "Poignées de trajectoire",
+        rubrique: "Trajectoire",
+        contextes: &["trajectoire", "trajectoire.espace"],
+        duree: 6.4,
+        dessin: poignees,
+        texte: "Ctrl+clic sur le chemin pose une poignée ; Ctrl+clic sur elle la retire. \
+                Tirer une poignée tord le chemin en douceur autour d'elle : les bouts et les autres poignées restent fixes, les marques gardent leur place. \
+                Dans la vue Espace 3D, la poignée choisie montre trois flèches, x, y et z : tirer une flèche la déplace sur cet axe, y compris hors de la surface où le chemin est posé (y : en hauteur). \
+                Ce qui suit le chemin, carte ou caméra, monte ou descend avec lui. Avec plusieurs cartes choisies, chacune a sa poignée, en une étape d'annulation.",
+    },
+    Anim {
         id: "selection.lasso",
         titre: "Le lasso sur un calque bitmap",
         rubrique: "Sélection",
@@ -288,6 +300,77 @@ fn tordre(p: &Painter, r: Rect, t: f32, th: &Teintes) {
     if t < 4.9 {
         c.curseur(ici, (t > 0.5 && t < 1.5) || (t > 2.1 && t < 3.0) || (t > 3.6 && t < 4.5));
     }
+}
+
+/// Le poids, en cloche, d'un point à la fraction `s` d'un chemin tiré en `s0`, entre les points fixes `bas` et `haut`.
+fn cloche(s: f32, s0: f32, bas: f32, haut: f32) -> f32 {
+    let (e, r) = if s < s0 { (s0 - s, s0 - bas) } else { (s - s0, haut - s0) };
+    if r <= 0.0 || e >= r { 0.0 } else { 0.5 * (1.0 + (std::f32::consts::PI * e / r).cos()) }
+}
+
+/// Poignées de trajectoire (partie 154) : Ctrl s'allume, un clic sur le chemin pose une poignée (jade) ; tirée, le chemin se
+/// tord en douceur entre le départ et l'autre poignée, qui ne bouge pas ; puis ses trois flèches x, y, z, dans les teintes du
+/// manipulateur de l'Espace 3D : la flèche y la monte hors du sol (le chemin au sol reste en pointillé) ; la carte suit.
+fn poignees(p: &Painter, r: Rect, t: f32, th: &Teintes) {
+    let c = Toile::new(p, r, th);
+    c.fond();
+    let base = Chemin::bezier((25.0, 118.0), (80.0, 88.0), (150.0, 130.0), (215.0, 92.0));
+    let n = base.pts.len();
+    let (s0, s1) = (0.4, 0.75);
+    let tire = doux(t, 1.5, 2.6) * 24.0;
+    let monte = doux(t, 3.6, 4.6) * 26.0;
+    let forme = |haut: f32| -> Vec<Pos2> {
+        base.pts
+            .iter()
+            .enumerate()
+            .map(|(i, q)| {
+                let w = cloche(i as f32 / (n - 1) as f32, s0, 0.0, s1);
+                *q + vec2(tire * 0.4, -tire - haut) * w
+            })
+            .collect()
+    };
+    let rang = |s: f32| (s * (n - 1) as f32).round() as usize;
+    let pts = forme(monte);
+    // Hors du sol : le chemin tel qu'il est au sol reste en pointillé, et un pointillé relie la poignée à sa place au sol.
+    if monte > 0.5 {
+        let au_sol = forme(0.0);
+        c.pointilles(&au_sol, 1.0, th.forte);
+        c.pointilles(&[au_sol[rang(s0)], pts[rang(s0)]], 1.0, th.forte);
+    }
+    let chemin = Chemin::de(pts.clone());
+    c.polyligne(&chemin.pts, 1.6, th.encre);
+    // L'autre poignée, fixe ; la nouvelle, posée d'un Ctrl+clic, choisie.
+    let (q0, q1) = (pts[rang(s0)], pts[rang(s1)]);
+    c.disque(q1, 3.6, th.fond);
+    c.disque(q1, 2.8, th.encre);
+    let ctrl = t > 0.3 && t < 1.0;
+    c.touche(pos2(28.0, 18.0), "Ctrl", ctrl);
+    if t >= 0.85 {
+        c.disque(q0, 3.6, th.fond);
+        c.disque(q0, 2.8, th.jade);
+    }
+    // Les flèches x, y, z de la poignée choisie.
+    let vues = phase(t, 3.0, 3.3) * (1.0 - phase(t, 5.0, 5.3));
+    let axes = [vec2(20.0, 0.0), vec2(0.0, -20.0), vec2(-12.0, 10.0)];
+    if vues > 0.0 {
+        for (k, a) in axes.iter().enumerate() {
+            c.fleche(q0, q0 + *a, if k == 1 && t > 3.4 && t < 4.7 { 2.0 } else { 1.4 }, fondu(crate::espace3dview::AXIS_COLORS[k], vues));
+        }
+    }
+    // Le curseur : vers le chemin, Ctrl+clic, tirer la poignée, puis la flèche y.
+    if t < 4.8 {
+        let ici = if t < 0.8 {
+            mixp(pos2(120.0, 30.0), q0, doux(t, 0.0, 0.75))
+        } else if t < 3.4 {
+            q0 + if t > 2.6 { axes[1] * doux(t, 2.7, 3.3) } else { vec2(0.0, 0.0) }
+        } else {
+            q0 + axes[1]
+        };
+        c.curseur(ici, (t > 0.8 && t < 1.0) || (t > 1.5 && t < 2.6) || (t > 3.6 && t < 4.6));
+    }
+    // La carte parcourt le chemin, montée avec lui.
+    let u = doux(t, 4.9, 6.2);
+    c.carte(chemin.point(u).0, 18.0, 13.0, false);
 }
 
 // ------------------------------------------------------------------------------------------------------ Sélection

@@ -30,9 +30,10 @@ pub(crate) const TROP_COURT: &str = "Trajectoire : le trait est trop court pour 
 
 /// Le bout du chemin (vu à l'écran par `ecran`) sous le point `p` de l'écran, à `TOL_ECRAN` près : vrai pour le début, faux
 /// pour la fin ; le plus proche s'ils y sont tous les deux. Rien : `p` n'est près d'aucun bout.
-pub(crate) fn bout_sous(t: &Trajectoire, ecran: &dyn Fn([f32; 2]) -> Option<Pos2>, p: Pos2) -> Option<bool> {
-    let d = |q: [f32; 2]| ecran(q).map_or(f32::INFINITY, |e| e.distance(p));
-    let (debut, fin) = (d(t.points[0]), d(*t.points.last()?));
+/// (`ecran` reçoit aussi la hauteur du point hors du plan du chemin, partie 154 ; sur la feuille, elle est nulle.)
+pub(crate) fn bout_sous(t: &Trajectoire, ecran: &dyn Fn([f32; 3]) -> Option<Pos2>, p: Pos2) -> Option<bool> {
+    let d = |q: [f32; 3]| ecran(q).map_or(f32::INFINITY, |e| e.distance(p));
+    let (debut, fin) = (d(t.point3(0)), d(t.point3(t.points.len().checked_sub(1)?)));
     if debut.min(fin) > TOL_ECRAN {
         return None;
     }
@@ -45,7 +46,7 @@ impl App {
     pub(crate) fn trajectoire_bout_sous(&self, stage: Pos2) -> Option<bool> {
         let t = self.layers().get(self.cur_layer)?.trajectoire.as_ref().filter(|t| t.sur_la_feuille())?;
         let p = self.stage_to_screen(stage);
-        bout_sous(t, &|q| Some(self.stage_to_screen(Pos2::new(q[0], q[1]))), p)
+        bout_sous(t, &|q: [f32; 3]| Some(self.stage_to_screen(Pos2::new(q[0], q[1]))), p)
     }
 
     /// Sur la feuille, au lâcher : le trait `points` (pixels de la feuille) prolonge le chemin du calque `li` (`devant` :
@@ -68,7 +69,10 @@ impl App {
     /// Dans l'Espace 3D, à l'appui (Maj tenue) au point `pos` de l'écran : le geste qui prolonge le chemin `t` (posé sur
     /// `support`, vu par `regard`), si l'appui est près d'un de ses bouts et que le regard touche le plan du chemin.
     pub(crate) fn e3_traj_prolonger_depuis(t: &Trajectoire, support: Support, regard: &Regard3d, pos: Pos2) -> Option<GesteEspace> {
-        let devant = bout_sous(t, &|p| regard.ecran(support.monde(p)), pos)?;
+        let devant = bout_sous(t, &|p| regard.ecran(support.monde3(p)), pos)?;
+        // (Le trait se pose sur le plan parallèle qui passe par ce bout, à sa hauteur hors du plan : partie 154.)
+        let h = t.hauteur_du_point(if devant { 0 } else { t.points.len() - 1 });
+        let support = support.a_la_hauteur(h);
         let ray = regard.rayon(pos);
         let depart = support.couper(ray.o, ray.d)?;
         Some(GesteEspace::Prolonger { support, devant, ecran: vec![pos], plan: vec![depart] })
