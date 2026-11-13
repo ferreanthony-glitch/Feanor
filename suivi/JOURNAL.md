@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
+- **Ce qui restait imparfait après la partie 152, réglé** (à sa demande : « règle ce qui reste imparfait » ; branche
+  `trajectoire-espace`, quatre commits, rien fusionné, rien poussé, rien regardé à l'écran). (1) Avec les outils de la vue,
+  un clic simple sur le dessin de la caméra la prend, même avec une carte derrière, et la tirer la déplace, elle. (2) Un clic
+  sur la piste « Caméra » de la timeline ou du montage (son nom, le vide de sa rangée, une clé) choisit la caméra seule, la
+  vue Espace 3D montrée ; vue fermée, rien de plus qu'avant. (3) La caméra choisie seule, le panneau Calques ne montre plus
+  de calque choisi ; un clic sur un calque ou son aplat, un outil de dessin pris ou un trait dans la vue le rendent. (4) En
+  « Clés d'images », chaque copie reste à son jalon, sur la feuille comme dans l'espace : une marque posée au milieu reçoit
+  une copie du dessin du jalon d'avant, les poses redessinées ne se décalent plus ; rien de neuf dans le fichier. À lui de
+  dire (partie 152, points 22 à 25) : si le dessin de la caméra prend le clic d'assez près, et si la piste « Caméra » devrait
+  se montrer choisie vue fermée. Essais : 6 nouveaux, 1 adapté. Vérificateur, deux passages : 4 611 réussis et 2 échecs de
+  rendu et de temps au premier (une autre session lançait ses essais en même temps ; réussis relancés seuls), puis 4 613
+  réussis, 0 échec ; aucun nouvel avertissement.
 - **Le panneau Espace 3D devient un onglet de Réglages** (partie 152, point 3, modifié après sa réponse ; branche
   `trajectoire-espace`, rien fusionné, rien regardé à l'écran). Entre « Colonne à part » et « Onglet de Réglages » (comme il
   l'avait rangé lui-même dans son essai), Anthony a choisi : « Onglet de Réglages ». La colonne est retirée ; le panneau

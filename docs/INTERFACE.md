@@ -8360,7 +8360,11 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin d'origine (ou une copie déplacée, si le point
   d'ancrage n'est pas le départ du trait) : la timeline se scinde comme pour toute clé de dessin, aucune clé de position, et chaque pose
   se redessine. Sans dessin au départ, rien n'est posé et la ligne d'état dit de dessiner d'abord. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
-  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. Vectoriel : les traits sont translatés,
+  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. **Chaque dessin reste à son
+  jalon** (2026-11-13, partie 152, à sa demande : « règle ce qui reste imparfait » ; avant, ils étaient rangés par rang, et une
+  marque posée au milieu du chemin décalait d'une marque les poses redessinées) : une marque posée reçoit une copie du dessin du
+  jalon d'avant, tel qu'on l'a laissé, mise à sa place sur le chemin ; une marque retirée emporte le sien ; « Retirer les
+  marques » garde ceux du départ et de l'arrivée ; seul le départ montre le dessin d'origine lui-même. Vectoriel : les traits sont translatés,
   le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
   suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
   le modèle des clés de position, format 49, sans emploi ici.)
@@ -8426,7 +8430,10 @@ Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois p
 feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
 l'autre. `depart` et `fin` : les images du plan où le chemin commence et finit (`fin` absente : la dernière du plan) ; `temps` : le temps de
 chaque marque, en fraction du temps entre départ et fin (absent : parts égales) ; `cles` : interpolées ou par images ; `dessins` : en clés
-d'images, les dessins posés (numéro, déplacement). `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
+d'images, les dessins posés (numéro, déplacement), un par jalon dans l'ordre des jalons, **chacun gardé à son jalon** (2026-11-13) :
+`ajouter_marque` fait prendre place au jalon neuf avec le dessin du jalon d'avant (deux jalons de suite avec le même dessin : le calcul
+suivant fait au second sa copie), `retirer_marque` retire le sien, `retirer_les_marques` garde ceux des deux bouts, `assainie` les
+remet en ordre avec leurs marques. `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
 en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre deux jalons, selon leurs temps), le point du
 chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, aucune (`trajectoireui.rs` pose les dessins). Une
 trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre, temps faux, fin avant le
@@ -11279,7 +11286,8 @@ courant comme la rangée choisie.
 | Outil Trajectoire, **Ctrl+clic** sur la caméra ou sur une carte | elle, **seule** : ce qui était choisi est lâché. Une carte choisie ainsi devient le calque courant |
 | Outil Trajectoire, **Maj+Ctrl+clic** | elle rejoint ce qui est choisi, ou le quitte : c'est ainsi qu'on choisit exprès la caméra avec des cartes, ou plusieurs cartes |
 | Outil Trajectoire, Maj seule | rien de neuf : Maj à l'appui déplace le chemin en bloc, comme avant |
-| Outils de la vue, clic sur la caméra | elle, seule (comme avant) ; Maj+clic ou Ctrl+clic l'ajoute ou la lâche (avant, un second Maj+clic l'inscrivait deux fois) |
+| Outils de la vue, clic sur la caméra | elle, seule (comme avant) ; Maj+clic ou Ctrl+clic l'ajoute ou la lâche (avant, un second Maj+clic l'inscrivait deux fois). **Même avec une carte derrière son dessin** : la caméra passe d'abord, comme au Ctrl+clic de l'outil Trajectoire, et tirer son dessin la déplace, elle (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, la carte de derrière l'emportait) |
+| Timeline ou montage, clic sur la piste « Caméra » (son nom, le vide de sa rangée, une de ses clés) | elle, seule, la vue Espace 3D montrée (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») |
 | Panneau Espace 3D, « choisir » de la caméra | elle, seule ; **Maj+clic** : avec les cartes déjà choisies, ou lâchée |
 | Panneau Espace 3D, liste des cartes | inchangé : un clic choisit la carte seule, Maj+clic l'ajoute ou la lâche |
 
@@ -11295,18 +11303,40 @@ de calque ne l'a :
 - timeline : le nom « Caméra » sur le fond d'accent (avec le bord d'accent dans les thèmes de la marque), et sa rangée
   en surbrillance sur toute la longueur ; les rangées des calques sans surbrillance ni cadre ;
 - montage : le nom « Caméra » en texte fort dans un cadre, et un cadre autour de la case de la caméra sous le plan
-  courant ; les pistes des calques sans cadre.
+  courant ; les pistes des calques sans cadre ;
+- panneau Calques (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, il montrait toujours le
+  calque courant) : aucun rang n'est montré choisi, ni le calque courant (ni son fond, ni le cadre épais de sa vignette, ni
+  sa sous-ligne d'aplat visée), ni les calques choisis avec lui.
 
 Avec une carte choisie en plus de la caméra (Maj), la rangée reste à son calque. Le calque courant reste le calque
-courant pour tout le reste : le panneau Calques le montre toujours, et c'est sur lui qu'on dessinera.
+courant pour tout le reste : c'est sur lui qu'on dessinera.
+
+**Cliquer la piste « Caméra »** (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, rien ne
+se choisissait) : un clic sur son nom, dans le vide de sa rangée, sur une de ses clés ou une poignée de lissage, dans la
+timeline comme au montage, choisit la caméra seule, comme « choisir » du panneau Espace 3D ; la piste devient la rangée
+choisie, plus aucun calque. Ce que la piste faisait au clic reste : la tête de lecture va à l'image cliquée, une clé se
+choisit (Ctrl l'ajoute, Maj prend celles d'entre), les glisser, les poignées de lissage, les menus du clic droit. Au
+montage, un clic sous un autre plan y mène d'abord : c'est la caméra de ce plan qui est choisie. **Seulement la vue Espace
+3D montrée**, dans tout plan (en Espace 3D ou non) : la caméra choisie n'existe que pour la vue. Vue fermée (ou cachée par
+la vue caméra), le clic ne fait que ce qu'il faisait : la rangée reste au calque courant, et rien n'est choisi pour la
+prochaine ouverture de la vue.
 
 **Choisir un calque ou une carte lâche la caméra**, et rend la rangée à ce calque : un clic sur une carte dans la vue,
 la liste des cartes du panneau Espace 3D, un calque dans le panneau Calques, la timeline ou le montage (son nom, sa
-rangée, une de ses clés), « calque du dessus » et « du dessous », même si ce calque était déjà le calque courant.
+rangée, une de ses clés), « calque du dessus » et « du dessous », même si ce calque était déjà le calque courant. Et
+aussi (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») : la sous-ligne de l'aplat d'un calque ; le
+mode de fusion ou l'opacité changés en haut du panneau Calques ; prendre un outil de dessin dans la vue (pinceau, crayon,
+gomme, mélangeur, outil Sélection), même quand le calque courant n'est pas une carte ou que les cartes sont cachées ;
+commencer un trait ou un lasso dans la vue, la caméra ayant été choisie entre-temps (« choisir », sa piste). L'outil
+Trajectoire, lui, garde la caméra choisie : c'est elle qui suivra le chemin.
 
 **Comment.** `espace3dui.rs` : `App::e3_camera_seule`, `App::calque_montre_courant`, `App::e3_choisir_la_camera`,
-`App::e3_calque_choisi` (appelé par `App::select_layer`). `trajectoire3d.rs` : `e3_traj_choisir`. `espace3dview.rs` :
-`e3_click`. `timeline.rs`, `layerheads.rs`, `montagerows.rs` : les rangées.
+`App::e3_calque_choisi` (appelé par `App::select_layer`), `App::e3_piste_camera_cliquee` (13 novembre).
+`trajectoire3d.rs` : `e3_traj_choisir`. `espace3dview.rs` : `e3_click`, `e3_press` (la caméra d'abord, 13 novembre).
+`timeline.rs` (`timeline_names`, `timeline_grid`), `layerheads.rs`, `montagerows.rs` (`row_headers`), `storyboard.rs`
+(`montage_strip`) : les rangées et leurs clics. `layersui.rs` (`layer_list`, `layers_panel`), `fondui.rs`
+(`select_aplat`, `aplat_subrow`) : le panneau Calques. `espace3ddessin.rs` (`e3_dessiner`, `e3_debut_du_trait`),
+`espace3dlasso.rs` (`e3_selectionner`, `e3_sel_presser`) : le dessin et le lasso dans la vue.
 
 ### 152.2 « Clés d'images » pose des clés de dessin dans la timeline
 
@@ -11329,10 +11359,16 @@ Les copies sont suivies, comme sur la feuille (`Trajectoire::dessins`, `source`)
   tenue du jalon suit ;
 - glisser sur la timeline la clé d'un jalon (sa clé de dessin au montage, ou sa clé de position) recale le jalon : sa
   clé de dessin change d'image, avec le même dessin ; ce qu'on y a redessiné reste ;
-- une marque de plus : une copie de plus ; une marque retirée : une clé de dessin de moins ;
+- **chaque copie est à son jalon**, quoi qu'il arrive aux autres (réglé le 13 novembre, à sa demande : « règle ce qui
+  reste imparfait » ; avant, les copies étaient rangées par rang de jalon, et une marque posée au milieu du chemin
+  décalait d'une marque les poses déjà redessinées) : une marque de plus reçoit **une copie du dessin du jalon d'avant,
+  tel qu'on l'a laissé** (ce que l'image montrait là jusqu'ici), et tous les autres jalons gardent le leur ; une marque
+  retirée (arrachée, Suppr sur sa clé) emporte sa copie, seule ; « Retirer les marques » garde ceux du départ et de
+  l'arrivée. De même sur la feuille (partie 119), où la copie neuve est en plus mise à sa place sur le chemin ;
 - pendant un geste dans la vue, seules les clés de position suivent ; les dessins se posent au lâcher, et Échap ne
   laisse rien ;
-- un second trait long (retracer) garde les dessins des jalons.
+- un second trait long (retracer), « Temps égaux entre les marques », Ctrl+Z et Ctrl+Maj+Z, l'enregistrement puis la
+  relecture gardent chaque dessin à son jalon.
 
 | Commande | Ce qu'elle fait des clés de dessin |
 |---|---|
@@ -11350,11 +11386,21 @@ La caméra n'a pas de dessin : rien ne change pour elle. « Clés d'interpolatio
 (`Trajectoire::assainie`), sans quoi le calcul suivant aurait refait des copies et laissé de côté ce qu'on avait
 redessiné. Un chemin en clés d'images tracé avec la partie 149 n'a pas encore ses clés de dessin : il les reçoit au
 premier geste sur lui (une marque, un recalage), ou en passant par « Clés d'interpolation » puis « Clés d'images ».
+**Rien de neuf dans le fichier pour « chaque copie à son jalon »** (13 novembre) : `dessins` y est, comme avant, un dessin
+par jalon, dans l'ordre des jalons ; c'est le programme qui garde cet ordre quand une marque arrive ou part, et une
+trajectoire relue dont les marques étaient en désordre garde chaque dessin à sa marque. Un fichier d'avant se relit tel
+quel, dans le même ordre ; une liste qui n'a pas un dessin par jalon (fichier abîmé) se relit telle quelle et le calcul
+suivant la range par rang, comme avant.
 
 **Comment.** `trajectoire3d.rs` : `trajectoire_recalculer_dans_l_espace` pose les clés de position
 (`trajectoire_cles_dans_l_espace`, par `cles_dans_l_espace`, inchangée) puis les dessins
 (`trajectoire_poser_les_dessins_dans_l_espace`) ; `e3_traj_poser_en_direct` et `e3_traj_finir` pour les gestes ;
-`e3_traj_sorte` ; `e3_traj_retirer`. `trajectoireui.rs` : `trajectoire_defaire_les_dessins` sert aux deux.
+`e3_traj_sorte` ; `e3_traj_retirer` ; `e3_traj_retirer_les_marques` (13 novembre). `trajectoireui.rs` :
+`trajectoire_defaire_les_dessins` sert aux deux. Chaque copie à son jalon (13 novembre) : `trajectoire.rs`,
+`Trajectoire::ajouter_marque` (le jalon neuf prend place avec le dessin du jalon d'avant), `retirer_marque` (le sien s'en
+va), `retirer_les_marques` (nouvelle), `assainie` (les dessins suivent leurs marques remises en ordre) ; le calcul des
+dessins (`trajectoire_poser_les_dessins` sur la feuille, `trajectoire_poser_les_dessins_dans_l_espace`) fait sa copie au
+jalon qui montre le même dessin que celui d'avant.
 **Qui pose les clés d'une carte à la main doit passer par `App::trajectoire_recalculer` (ou
 `trajectoire_recalculer_dans`)** : `cles_dans_l_espace` seule ne pose que les clés de position.
 
@@ -11506,21 +11552,43 @@ intermittents notés dans `suivi/ETAT.md`) : au premier,
 `vignettes_selection_relecture_tests::the_cost_with_sixty_cases_and_two_thousand_strokes`. Dix groupes OK les deux
 fois ; le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs`), aucun nouveau.
 
+**Essais de ce qui restait imparfait (13 novembre).** De vrais gestes de souris : `src/trajectoire3d_camera_tests.rs`, 3
+essais nouveaux (un clic simple sur le dessin de la caméra, une carte derrière lui, avec les outils de la vue ; Maj, Ctrl ;
+le glisser déplace la caméra et pas la carte, une étape ; des clics sur le nom et le vide de la piste « Caméra » au
+montage et dans la timeline, sur une clé, Ctrl+clic sur une autre, la vue ouverte puis fermée ; le panneau Calques tel
+qu'il est peint, la caméra seule puis rendue par un clic sur le nom du calque courant, par chaque outil de dessin pris,
+cartes cachées comprises, l'outil Trajectoire qui la garde, un trait dans la vue). `src/trajectoireui_tests.rs` (la
+feuille) et `src/trajectoire3d_images_tests.rs` (l'espace), 1 essai nouveau chacun : la pose de la marque 2 sur 3
+redessinée, une marque posée entre les jalons 1 et 2, puis une autre après la pose redessinée ; Ctrl+Z, Ctrl+Maj+Z ;
+glisser une marque ; la recaler sur la timeline ; « Temps égaux » ; enregistrer et relire ; arracher une marque ; Suppr
+sur sa clé (feuille) ; retracer ; « Retirer les marques ». `src/trajectoire_tests.rs`, 1 essai nouveau (le modèle : poser,
+refuser, retirer une marque, toutes les retirer, une trajectoire relue en désordre, une liste qui n'a pas un dessin par
+jalon). Adapté : `espace3d_tests.rs` (`the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer` : le
+clic de l'essai se fait sur la carte loin du dessin de la caméra ; vue de face, la caméra est juste devant le centre des
+cartes, et c'est elle que le clic y prend maintenant). Filtres `trajectoire`, `espace3d`, `calques_timeline`,
+`lissage_camera`, `camkeys`, `aplat`, `pistes` : 61 (dont `trajectoire3d_camera` : 7), 126, 11, 26, 23, 125 et 20
+réussis ; un échec, une fois, à `aplat`
+(`retours_aplat_tests::a_fill_stays_on_screen_while_it_is_recomputed_even_after_many_other_fills_were_shown`, un essai
+de temps du fil de travail, qui ne passe par rien de ce qui a changé ici), réussi relancé seul. Vérificateur, deux
+passages : au premier, 4 611 réussis et 2 échecs, deux essais de rendu et de temps qui ne passent par rien de ce qui a
+changé ici (`camera_traits_tests::the_tremble_on_the_graphics_card_has_no_lighter_column_at_the_edge`,
+`exportrender::tests::application::the_interface_composes_no_export_frame_and_its_frames_stay_short_during_an_export`),
+pendant qu'une autre session construisait et lançait ses essais sur la même machine ; tous deux réussis relancés seuls.
+Au second, 4 613 réussis, 0 échec. Dix groupes OK les deux fois ; le seul avertissement connu (celui des fonctions jamais
+appelées de `espace3d.rs`), aucun nouveau.
+
 **Ce qui n'est pas fait.**
 
-- **La caméra d'abord, avec les outils de la vue.** Un clic simple avec l'outil « choisir » de la vue prend encore la
-  carte avant la caméra quand les deux sont sous le pointeur (noté à la partie 150) : seul le Ctrl+clic de l'outil
-  Trajectoire donne la priorité au dessin de la caméra. « choisir » du panneau Espace 3D la prend toujours.
 - **Le bouton « Caméra » de la barre de la vue** choisit la caméra seule, mais c'est un outil de la vue : il reprend le
-  pointeur à l'outil Trajectoire. Pour tracer le chemin de la caméra sans lâcher l'outil : Ctrl+clic sur elle, ou
-  « choisir » du panneau Espace 3D.
-- **Le panneau Calques** montre toujours le calque courant, même quand la caméra est choisie seule : seuls la timeline
-  et le montage changent de rangée.
-- **Cliquer la piste « Caméra »** de la timeline ou du montage ne choisit pas la caméra dans la vue.
-- **Les clés de dessin d'une trajectoire sont rangées par jalon, dans l'ordre**, comme sur la feuille : après une
-  marque ajoutée ou retirée au milieu du chemin, les poses redessinées gardent leur rang (la deuxième pose reste la
-  deuxième), pas leur marque. Et un recalcul de la trajectoire repose une clé de dessin à chaque jalon : une clé de
-  dessin ajoutée à la main entre deux jalons est recouverte, comme sur la feuille.
+  pointeur à l'outil Trajectoire. Pour tracer le chemin de la caméra sans lâcher l'outil : Ctrl+clic sur elle,
+  « choisir » du panneau Espace 3D, ou un clic sur sa piste dans la timeline ou le montage.
+- **Une clé de dessin ajoutée à la main entre deux jalons** d'une trajectoire en clés d'images est recouverte au
+  recalcul suivant (une marque, un recalage) : le calcul repose une clé de dessin à chaque jalon, comme sur la feuille.
+  (Les poses redessinées, elles, restent à leur jalon depuis le 13 novembre.)
+- **La caméra choisie seule, vue Espace 3D fermée** : rien ne se choisit, la piste « Caméra » ne se montre pas choisie
+  (la caméra choisie n'existe que pour la vue). Les commandes du haut du panneau Calques et de ses icônes (dupliquer,
+  supprimer, monter, descendre…) agissent toujours sur le calque courant, même quand aucun rang n'est montré choisi ;
+  seuls le mode de fusion et l'opacité, changés là, rendent le calque courant.
 - **Le panneau Espace 3D** n'est pas dans les dispositions d'origine : avant la première ouverture de la vue (ou après
   « Rétablir la disposition »), il n'a pas d'onglet ; il arrive avec la vue, par son icône cube de la barre des panneaux
   ou par le menu Affichage > Panneaux, puis reste. Quand son onglet est devant, le bord entre le groupe de Réglages et la
@@ -11594,3 +11662,22 @@ Le lasso dans la vue (152.4) :
     choisie). Ctrl+clic sans glisser : la carte sous le pointeur devient le calque courant.
 20. Alt+glisser, clic droit, bouton du milieu, molette, avec l'outil Sélection : la vue tourne, glisse, avance.
 21. Prendre un outil de la vue (déplacer) : ce qui était choisi est posé, le pointeur manipule de nouveau les cartes.
+
+Ce qui restait imparfait (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») :
+
+22. Vue Espace 3D, outil « choisir » de la vue, la vue tournée pour que la caméra passe devant une carte : un clic simple
+    sur le dessin de la caméra la choisit, seule (plus la carte de derrière). Maj+clic : avec la carte choisie, puis
+    lâchée. Tirer le dessin de la caméra : elle glisse, la carte de derrière reste. Un clic sur la carte, à côté du dessin
+    de la caméra : la carte. Dire si le dessin de la caméra prend le clic d'assez près, ou de trop loin.
+23. La vue ouverte, cliquer « Caméra » dans la timeline (son nom, puis le vide de sa rangée), puis au montage : la caméra
+    est choisie seule, la piste « Caméra » est la rangée choisie, la tête de lecture va où l'on a cliqué. Une clé de
+    caméra cliquée se choisit comme avant (Ctrl+clic en ajoute une), et la caméra aussi. La vue fermée : un clic sur la
+    piste ne change rien d'autre qu'avant. Dire s'il faudrait que la piste se montre choisie aussi vue fermée.
+24. La caméra choisie seule : le panneau Calques ne montre plus aucun calque choisi. Cliquer un calque (même le courant)
+    ou la sous-ligne de son aplat, prendre le pinceau, la gomme ou l'outil Sélection, ou tracer un trait sur une carte :
+    le calque courant revient en surbrillance, la caméra est lâchée. L'outil Trajectoire, lui, la garde choisie.
+25. Clés d'images, sur la feuille puis dans l'espace : un chemin, une marque, redessiner sa pose. Poser une marque entre
+    le départ et elle : la pose redessinée reste à sa marque, la nouvelle marque a une copie du départ (sur la feuille, à
+    sa place sur le chemin). Poser une marque entre elle et la fin : une copie de la pose redessinée. Arracher une marque,
+    ou Suppr sur sa clé : seule sa pose s'en va. Glisser une marque, recaler une clé sur la timeline, « Temps égaux »,
+    retracer le chemin, Ctrl+Z, enregistrer et rouvrir : chaque pose reste à sa marque.
