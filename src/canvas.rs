@@ -28,8 +28,9 @@ impl App {
             if self.espace3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;
-                // (Le pointeur n'est pas sur la feuille : le lasso de Ctrl tenu ne s'arme pas dans cette vue, où Ctrl+clic
-                // prend une carte, `springtools.rs`, `espace3ddessin.rs`.)
+                // (Le pointeur n'est pas sur la feuille : le lasso de Ctrl tenu ne s'arme pas au survol dans cette vue, où
+                // Ctrl+clic prend une carte, `springtools.rs`, `espace3ddessin.rs`. Il s'y prend en glissant, Ctrl tenu :
+                // `espace3dlasso.rs`.)
                 self.hover_canvas = None;
                 self.espace3d_panel(ui, rect, &response);
                 return;
@@ -647,7 +648,8 @@ impl App {
     }
 
     /// Sélection vectorielle, lasso et aperçu des formes, par-dessus le dessin.
-    fn paint_vector_overlay(&self, painter: &egui::Painter, _rect: Rect, shift: bool) {
+    /// (La vue Espace 3D s'en sert aussi pour l'outil Sélection, posée sur la carte : `espace3dlasso.rs`.)
+    pub(crate) fn paint_vector_overlay(&self, painter: &egui::Painter, _rect: Rect, shift: bool) {
         // Tout ce qui suit est en coordonnées du dessin du calque courant (transformé ou non).
         let to_s = |p: Pos2| self.layer_to_screen(p);
 

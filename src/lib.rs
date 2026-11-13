@@ -1185,6 +1185,10 @@ mod trajectoire3d_camera_tests;
 // Partie 152 aussi : en « clés d'images », une carte qui suit un chemin dans l'espace a une clé de dessin à chaque jalon.
 #[cfg(test)]
 mod trajectoire3d_images_tests;
+// Partie 152 encore : l'outil Sélection (son lasso) dans la vue Espace 3D, sur la carte du calque courant.
+mod espace3dlasso;
+#[cfg(test)]
+mod espace3dlasso_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

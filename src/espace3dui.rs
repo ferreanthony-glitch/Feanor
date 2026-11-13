@@ -486,8 +486,9 @@ impl App {
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
         // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
         // vue sont éteints ; un outil de la vue lui rend les cartes.
-        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.)
-        let dessine = self.e3_dessine() || self.e3_trace();
+        // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.
+        // L'outil Sélection de même, partie 152.)
+        let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
         self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
             if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
