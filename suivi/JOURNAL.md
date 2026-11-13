@@ -3,6 +3,26 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-13
+
+- **Retours d'Anthony sur la Trajectoire dans l'Espace 3D** (partie 152, branche `trajectoire-espace`, rien fusionné, rien regardé
+  à l'écran). Ses quatre phrases après son essai des parties 149 et 150, et ce qui a changé. 1. « Un calque est toujours sélectionné
+  en même temps » : choisir la caméra la choisit seule (Ctrl+clic avec l'outil Trajectoire, « choisir » du panneau Espace 3D ; Maj
+  pour l'ajouter exprès aux cartes), et la timeline et le montage montrent alors la piste « Caméra » comme la rangée choisie, plus
+  aucun calque ; choisir un calque la lâche. 2. « Clés d'images ne crée pas de clés d'images » : une carte en clés d'images a
+  maintenant une clé de dessin à chaque jalon, copie du dessin du départ qu'on peut redessiner (la copie n'est pas déplacée : la
+  carte porte le mouvement). 3. « Place-le à côté de réglages plutôt » : le panneau Espace 3D a une colonne à lui à droite de
+  Réglages, 340 points pris au dessin, qui arrive quand la vue s'ouvre et repart quand elle se ferme ; rangé ou ouvert à la main,
+  il reste où il est ; l'onglet que la partie 150 avait mis avec la couleur dans les dispositions retenues part une fois. 4. « Le
+  lasso ne fonctionne pas dans l'espace 3D » : l'outil Sélection prend le pointeur dans la vue, sur la carte du calque courant
+  (lasso, boîte, poignées, Suppr, couper, copier, coller, Échap, annulation) ; Ctrl+glisser trace un lasso depuis un outil de
+  dessin, Ctrl+clic prend toujours une carte. À lui de dire : si la rangée « Caméra » se lit bien comme choisie, si la colonne du
+  panneau (sa largeur, son va-et-vient avec la vue) convient, si le lasso et ses poignées tombent juste sur une carte en biais.
+  Non fait : la sélection sur plusieurs calques dans la vue, le clic simple qui prend la caméra avant une carte. Essais : 12
+  nouveaux (caméra seule 4, clés d'images 4, lasso 4) et 8 récrits pour la colonne du panneau. Vérificateur, deux passages : 4 605 réussis et 1 échec chacun, un essai de temps des
+  Vignettes différent à chaque fois, vert relancé seul ; dix groupes OK ; aucun nouvel avertissement. Commits 6e72a99, af3d064,
+  6ad1f1f, 9232a63, puis la documentation.
+
 ## 2026-11-12
 
 - **Partie 150 regardée à l'écran par Claude** (23 h 33, souris simulée, exe de la branche construit à 23 h 32, copie du projet `afa`,
