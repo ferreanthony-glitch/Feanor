@@ -5,6 +5,24 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
+- **Deux décisions d'Anthony sur ce qui restait imparfait** (branche `trajectoire-espace`, partie 152 ; rien n'a été regardé à
+  l'écran, l'exe n'a pas été reconstruit). **Le bouton « Caméra »** : « Le bouton « Caméra » de la barre de la vue fait quitter
+  l'outil Trajectoire. On garde l'outil ». Avec l'outil Trajectoire dans la vue Espace 3D, la case « Caméra » choisit la caméra
+  seule (Maj+clic : avec les cartes), reste allumée, et l'outil garde le pointeur : le trait suivant trace le chemin de la
+  caméra. Avec un autre outil, la case fait ce qu'elle faisait. **Les dessins posés à la main** : « Une clé de dessin posée à
+  la main entre deux marques est écrasée au recalcul suivant du chemin : une boîte de dialogue demande si on écrase le dessin ou
+  non », puis « Je préfère qu'on évite au maximum la boîte de dialogue. Tout ce qui peut s'en passer s'en passera ». Ce cas
+  s'en passe : en clés d'images, sur la feuille comme dans l'espace, la trajectoire ne remplace plus jamais une clé de dessin
+  qu'elle n'a pas posée. Ta clé reste à son image avec son dessin, le dessin de la marque d'avant est exposé jusqu'à elle ; une
+  marque qui tomberait sur son image est posée sur l'image libre d'à côté ; la barre d'état le dit une fois (« Trajectoire :
+  1 dessin posé à la main gardé entre les marques (image 18). »), aucune fenêtre ne s'ouvre. Rien de neuf dans le fichier
+  (format 55). Aucun cas n'a demandé de question. Arrangé en chemin : un calque dupliqué exposait, à son premier calcul, les
+  dessins de l'original (les deux calques partageaient leurs poses) ; il garde les siens. Vu en lisant le code, pas réglé :
+  Échap pendant qu'on glisse sur la timeline la clé de position d'un jalon (carte en clés d'images) ne rend pas les clés de
+  dessin. Vérificateur complet (10 h 07) : 4 619 réussis, 1 échec (un essai de repos des Vignettes sans rapport, réussi repassé
+  seul le soir sur le même code), dix groupes OK, le seul avertissement connu. Le travail s'est arrêté le matin sur la limite
+  d'usage, avant l'enregistrement ; relu, complété et enregistré le soir. À vérifier à l'écran par Anthony : points 26 à 31 de
+  la partie 152.
 - **Ce qui restait imparfait, regardé à l'écran par Claude** (4 h 20 à 4 h 40, souris simulée, exe de la branche construit à 4 h 38,
   copie du projet `afa`, réglages neufs, fenêtre rétrécie hors de la fenêtre invisible de Claude). Un clic simple sur la caméra avec
   l'outil de la vue la choisit seule, alors que des cartes sont derrière ; la rangée « Caméra » du montage est la rangée choisie et
