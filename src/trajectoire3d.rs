@@ -546,7 +546,13 @@ impl App {
             self.espace3d.sel = vec![id];
             self.e3_follow_card(id);
         }
-        // (Ce qui est choisi, sans le repli sur la carte du calque courant : la barre d'état dit ce qui l'est vraiment.)
+        self.e3_traj_dire_ce_qui_suivra();
+    }
+
+    /// La barre d'état dit ce que le chemin déplacera : ce qui est choisi dans la vue, sans le repli sur la carte du calque
+    /// courant (elle dit ce qui l'est vraiment). Après un Ctrl+clic de l'outil (`e3_traj_choisir`), et après le bouton
+    /// « Caméra » de la barre de la vue pris avec l'outil (`espace3dui.rs`, `espace3d_pick_camera`).
+    pub(crate) fn e3_traj_dire_ce_qui_suivra(&mut self) {
         let cartes = self.espace3d.sel.iter().filter(|&&s| self.e3_card_layer(s).is_some()).count();
         let camera = self.espace3d.sel.contains(&CAMERA_ID);
         self.status = match (cartes, camera) {

@@ -618,3 +618,99 @@ fn while_the_camera_is_chosen_alone_the_layers_panel_shows_no_layer_as_chosen_an
     assert!(!b.app.e3_camera_seule() && b.app.calque_montre_courant(0));
     assert_eq!(rang_peint(&b, "Carte 0"), courant);
 }
+
+// ------------------------------------------------------------------------------------------------ la case « Caméra » de la barre de la vue
+
+/// Une case de la barre de la vue (au-dessus du dessin), reconnue à son icône, telle que la dernière image l'a peinte : la
+/// zone de son icône, et si la case est allumée (un fond plein est peint derrière l'icône ; le pointeur doit être ailleurs,
+/// une case survolée en reçoit un aussi).
+fn case_de_la_barre(b: &Banc, icone: &str) -> (Rect, bool) {
+    let mut tous = Vec::new();
+    b.formes.iter().for_each(|f| zones_des_textes(&f.shape, &mut tous));
+    let dessin = b.app.canvas_rect;
+    let barre = Rect::from_min_max(pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), pos2(dessin.right(), dessin.top()));
+    let zones: Vec<Rect> = tous.into_iter().filter(|(t, z)| t == icone && barre.contains(z.center())).map(|(_, z)| z).collect();
+    assert_eq!(zones.len(), 1, "une case {icone:?} dans la barre de la vue {barre:?} : {zones:?}");
+    let mut fonds = Vec::new();
+    b.formes.iter().for_each(|f| rectangles(&f.shape, &mut fonds));
+    let allumee = fonds.iter().any(|(r, fond, _)| *fond != Color32::TRANSPARENT && r.contains(zones[0].center()) && r.width() < 60.0 && r.height() < 60.0);
+    (zones[0], allumee)
+}
+
+/// Anthony, 2026-11-13 : « Le bouton « Caméra » de la barre de la vue fait quitter l'outil Trajectoire. On garde l'outil ».
+/// Tant que l'outil Trajectoire a le pointeur dans la vue, la case choisit la caméra seule (Maj : avec les cartes) et
+/// l'outil garde le pointeur : le trait suivant trace le chemin de la caméra. Avec le pinceau, la case fait ce qu'elle
+/// faisait ; les autres outils de la vue rendent toujours le pointeur aux cartes.
+#[test]
+fn with_the_trajectory_tool_the_camera_button_of_the_view_bar_chooses_the_camera_alone_and_the_tool_keeps_the_pointer() {
+    use crate::espace3dgizmo::Mode as GizmoMode;
+    use egui_phosphor::regular as ph;
+    let mut b = ouvert(doc_deux_cartes(), true);
+    b.garder_formes = true;
+    let c = cartes(&b);
+    // Une carte est choisie (comme après avoir dessiné dessus) ; l'outil Trajectoire a le pointeur dans la vue.
+    b.app.espace3d.sel = vec![c[0]];
+    pointeur_ailleurs(&mut b);
+    assert!(b.app.e3_trace() && b.app.tool == Tool::Trajectoire);
+    let (case, allumee) = case_de_la_barre(&b, ph::CAMERA);
+    assert!(!allumee, "la caméra n'est pas choisie : sa case est éteinte");
+    assert!(case_de_la_barre(&b, ph::CUBE).1, "(la case de la vue Espace 3D, elle, est allumée : c'est bien ce fond qu'on lit)");
+    let etapes = b.app.history.undo_len();
+    // Un clic sur la case « Caméra » : la caméra, seule ; l'outil Trajectoire garde le pointeur.
+    cliquer(&mut b, case.center(), Modifiers::NONE);
+    pointeur_ailleurs(&mut b);
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID], "la caméra, seule : la carte est lâchée ({})", b.app.status);
+    assert!(b.app.e3_camera_seule() && b.app.e3_traj_sujets() == vec![Sujet::Camera]);
+    assert!(b.app.tool == Tool::Trajectoire && b.app.e3_trace(), "l'outil Trajectoire a gardé le pointeur de la vue");
+    assert!(b.app.status.starts_with("La caméra est choisie, seule"), "{}", b.app.status);
+    assert!(case_de_la_barre(&b, ph::CAMERA).1, "la case est allumée tant que la caméra est choisie");
+    assert_eq!(b.app.history.undo_len(), etapes, "choisir n'est pas une étape d'annulation");
+    // Le trait suivant, long, au sol : c'est le chemin de la caméra, et aucun calque ne change.
+    let y = b.app.e3_world().sol_y();
+    let vue = b.app.espace3d.cam.as_mut().expect("la vue");
+    (vue.target, vue.distance) = ([0.0, y, 2.5], vue.distance * 0.4);
+    b.chauffer(2);
+    let avant = calques(&b);
+    tracer_au_sol(&mut b);
+    let chemin = b.app.doc.panels[0].trajectoire_camera.clone().expect("la caméra suit un chemin");
+    assert!(proche(chemin.deplacement_a(1.0).unwrap(), AU_BOUT, 0.05), "{:?}", chemin.deplacement_a(1.0));
+    assert_eq!(calques(&b), avant, "aucun calque n'a reçu de chemin, de clé, ni changé de place");
+    assert_eq!((derniere_etape(&b), b.app.history.undo_len()), ("Trajectoire".to_string(), etapes + 1));
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID]);
+    assert!(b.app.e3_trace());
+    // Maj+clic sur la case : la caméra rejoint les cartes choisies, ou les quitte, comme « choisir » du panneau Espace 3D.
+    b.app.espace3d.sel = vec![c[0]];
+    cliquer(&mut b, case.center(), Modifiers::SHIFT);
+    pointeur_ailleurs(&mut b);
+    assert_eq!(b.app.espace3d.sel, vec![c[0], CAMERA_ID], "{}", b.app.status);
+    assert_eq!(b.app.status, "Le chemin déplacera 1 carte et la caméra.");
+    assert!(b.app.e3_trace() && case_de_la_barre(&b, ph::CAMERA).1, "allumée aussi quand elle est choisie avec des cartes");
+    cliquer(&mut b, case.center(), Modifiers::SHIFT);
+    pointeur_ailleurs(&mut b);
+    assert_eq!(b.app.espace3d.sel, vec![c[0]], "un second Maj+clic la lâche");
+    assert!(b.app.e3_trace() && !case_de_la_barre(&b, ph::CAMERA).1);
+    // La commande de la case (sa touche) : la caméra seule, l'outil gardé, de même.
+    b.app.run_action("espace3d.outil_camera");
+    assert_eq!(b.app.espace3d.sel, vec![CAMERA_ID]);
+    assert!(b.app.e3_trace());
+    // Les autres outils de la vue rendent toujours le pointeur aux cartes ; la case « Caméra » fait alors ce qu'elle faisait.
+    b.app.run_action("espace3d.outil_choisir");
+    assert!(!b.app.e3_trace() && b.app.tool == Tool::Trajectoire, "« choisir » reprend le pointeur à l'outil Trajectoire, comme avant");
+    b.app.espace3d.sel = vec![c[0]];
+    b.chauffer(2);
+    cliquer(&mut b, case.center(), Modifiers::NONE);
+    assert_eq!((b.app.espace3d.sel.clone(), b.app.espace3d.mode), (vec![CAMERA_ID], GizmoMode::Move));
+    assert!(!b.app.e3_trace());
+
+    // Avec le pinceau : la case choisit la caméra pour la déplacer et rend le pointeur aux cartes, comme avant.
+    b.app.run_action("espace3d.outil_choisir");
+    b.app.set_tool(Tool::Brush);
+    b.chauffer(2);
+    assert!(b.app.e3_dessine(), "le pinceau a le pointeur dans la vue");
+    assert_eq!(b.app.espace3d.sel, vec![c[0]], "et la carte du calque courant est choisie");
+    cliquer(&mut b, case.center(), Modifiers::NONE);
+    pointeur_ailleurs(&mut b);
+    assert_eq!((b.app.espace3d.sel.clone(), b.app.espace3d.mode), (vec![CAMERA_ID], GizmoMode::Move), "{}", b.app.status);
+    assert!(!b.app.e3_dessine() && !b.app.e3d.dessin && b.app.tool == Tool::Brush, "le pointeur est rendu aux cartes, le pinceau reste en main");
+    assert!(case_de_la_barre(&b, ph::CAMERA).1);
+}

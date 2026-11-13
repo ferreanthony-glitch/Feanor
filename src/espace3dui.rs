@@ -382,7 +382,7 @@ impl App {
             "espace3d.outil_deplacer" => self.espace3d_mode(GizmoMode::Move),
             "espace3d.outil_tourner" => self.espace3d_mode(GizmoMode::Rotate),
             "espace3d.outil_echelle" => self.espace3d_mode(GizmoMode::Scale),
-            "espace3d.outil_camera" => self.espace3d_pick_camera(),
+            "espace3d.outil_camera" => self.espace3d_pick_camera(false),
             "espace3d.vue_camera" => {
                 self.set_espace3d(true);
                 self.espace3d.through_camera = !self.espace3d.through_camera;
@@ -479,8 +479,20 @@ impl App {
     }
 
     /// Choisit la caméra du plan (pour la déplacer ou la tourner), avec l'outil Déplacer si aucun outil de manipulation
-    /// n'est actif.
-    fn espace3d_pick_camera(&mut self) {
+    /// n'est actif : le bouton « Caméra » de la barre de la vue, et sa commande.
+    ///
+    /// **Tant que l'outil Trajectoire a le pointeur dans la vue** (`e3_trace`), il le garde (Anthony, 2026-11-13 : « Le
+    /// bouton « Caméra » de la barre de la vue fait quitter l'outil Trajectoire. On garde l'outil » ; avant, le bouton
+    /// rendait le pointeur aux cartes, comme un outil de la vue). La caméra est alors choisie seule, exactement comme par
+    /// « choisir » du panneau Espace 3D (`e3_choisir_la_camera`), et le prochain trait trace son chemin. `ajouter` (Maj
+    /// tenue au clic) : elle rejoint ce qui est choisi, ou le quitte. Avec tout autre outil, rien ne change : `ajouter` ne
+    /// sert pas, et les autres outils de la vue (choisir, déplacer, tourner, taille) rendent toujours le pointeur aux cartes.
+    fn espace3d_pick_camera(&mut self, ajouter: bool) {
+        if self.e3_trace() {
+            self.e3_choisir_la_camera(ajouter);
+            self.e3_traj_dire_ce_qui_suivra();
+            return;
+        }
         if !self.espace3d.on {
             self.set_espace3d(true);
         }
@@ -508,9 +520,14 @@ impl App {
                 self.e3_manipuler();
             }
         }
-        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID) && !dessine;
-        if self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée).", "espace3d.outil_camera").clicked() {
-            self.espace3d_pick_camera();
+        // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et
+        // reste allumée tant qu'elle l'est. Anthony, 2026-11-13 : « On garde l'outil ».)
+        let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID) && (!dessine || self.e3_trace());
+        let description = "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée). Avec l'outil Trajectoire : la caméra est choisie seule et l'outil reste en main, le prochain trait trace son chemin (Maj+clic : avec les cartes choisies, ou la lâcher).";
+        let r = self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", description, "espace3d.outil_camera");
+        if r.clicked() {
+            let ajouter = ui.input(|i| i.modifiers.shift);
+            self.espace3d_pick_camera(ajouter);
         }
         ui.add_space(crate::barres::MARGE_TRAIT);
         ui.separator();
