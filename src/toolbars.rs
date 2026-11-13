@@ -84,6 +84,8 @@ impl App {
 
     /// Barre d'outils verticale, à gauche.
     pub(crate) fn vertical_tool_bar(&mut self, ui: &mut egui::Ui) {
+        // (Pour poser la fenêtre de l'aide animée quand l'icône de l'outil n'est pas dans la barre : `aideflottante.rs`.)
+        crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::BARRE, ui.max_rect());
         egui::ScrollArea::vertical().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
@@ -116,6 +118,14 @@ impl App {
         let shown = slot_tool(slot, self.tool, &self.tool_recent);
         let icon = RichText::new(self.tool_icon(shown)).size(crate::barres::ICONE);
         let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(slot.contains(&self.tool), icon));
+        // Chaque outil de la case y a son icône pour l'aide animée, même caché derrière un autre : sa fenêtre se pose à côté.
+        // (La partie visible seulement : la barre défile.)
+        let visible = resp.rect.intersect(ui.clip_rect());
+        if visible.is_positive() {
+            for &t in slot {
+                crate::aideflottante::retenir(ui.ctx(), t.action(), visible);
+            }
+        }
         let mut description = shown.description().to_string();
         // Sur la planche des Vignettes, la caméra se règle case par case (cadres A, B, C…), pas par la feuille d'un plan.
         if shown == Tool::Camera && self.espace == crate::workspace::Espace::Vignettes {

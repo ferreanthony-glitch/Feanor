@@ -5780,6 +5780,11 @@ impl App {
             self.habitudes_fenetre(ctx);
             // Le registre des explications (`aideregistre.rs`, partie 153).
             self.aide_registre_fenetre(ctx);
+            // L'aide animée, dans sa petite fenêtre à côté de l'outil (`aideflottante.rs`, partie 155) : après les barres et les
+            // panneaux, qui ont retenu où sont leurs icônes. Rien sans projet, ni en mode concentration (elle jouera en sortant).
+            if !concentre && !sans_projet && !compact {
+                self.aide_flottante_ui(ctx);
+            }
             self.friction_fenetre(ctx);
             // Le banc du stylet : ce que Windows en dit, à côté de ce que FEANOR reçoit (`styletui.rs`).
             self.stylet_fenetre(ctx);

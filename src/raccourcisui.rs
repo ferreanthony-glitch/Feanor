@@ -50,6 +50,11 @@ pub(crate) fn menu_de_commande(resp: &Response, action: &str, current: &str) {
             crate::monpanneauui::demander_ajout(ui.ctx(), action);
             ui.close_menu();
         }
+        // L'aide animée d'un outil, des Vignettes ou de l'Espace 3D : la rejouer à côté de l'icône (`aideflottante.rs`, partie 155).
+        if crate::aideflottante::a_une_explication(action) && ui.button(format!("{}  Revoir l'explication", ph::PLAY)).clicked() {
+            crate::aideflottante::demander_revoir(ui.ctx(), action);
+            ui.close_menu();
+        }
         // L'anneau sous le stylet : envoyer la commande dans une de ses huit directions (`anneauui.rs`).
         crate::anneauui::menu_envoyer(ui, action);
     });

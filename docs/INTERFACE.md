@@ -12087,3 +12087,82 @@ Ses deux décisions du 13 novembre (« On garde l'outil » ; les dessins posés 
 30. Supprime ta clé (clic droit sur la piste, « Supprimer la clé ») : le dessin de la marque d'avant reprend ses images.
 31. Duplique un calque qui a une trajectoire en clés d'images, puis glisse une marque dans la copie : la copie garde ses
     propres dessins, et redessiner une pose de la copie ne change pas l'original.
+
+## 155. L'aide animée dans une petite fenêtre flottante, à côté de l'outil (2026-11-13, branche `aide-flottante`)
+
+Demande d'Anthony : « Les animations n'apparaissent pas dans réglages mais dans des petites fenêtres flottantes à côté de
+l'outil ou la fonction concernée ». Le moteur, le catalogue, la mémoire de ce qui a été vu, la case « Afficher les
+explications » et le registre de la partie 153 ne changent pas ; seul le joueur quitte le panneau Réglages
+(`src/aideflottante.rs`).
+
+### 155.1 La fenêtre
+
+- Une petite fenêtre au-dessus des panneaux et des fenêtres (sous les menus et les bulles, qui s'ouvrent souvent au même
+  endroit), sans barre de titre : la vignette 240 × 150 dans un cadre de la couleur des
+  panneaux, arrondi en `radius-lg` (12), bordé d'un trait fin, sans ombre. Elle suit le thème, sombre ou clair.
+- Elle se pose à côté de ce qui la déclenche :
+  - un outil : à droite de son icône dans la barre d'outils de gauche (un outil caché derrière un autre dans la même case,
+    le Mélangeur derrière le Pinceau par exemple, prend l'icône de la case) ;
+  - les Vignettes : sous l'onglet « Vignettes » ; les annotations : à côté du stylo ou de la gomme d'annotation pris ; la
+    caméra de la planche : à côté de son icône ;
+  - l'Espace 3D : à côté de l'icône cube de la barre sous le dessin, ou du bouton « Ouvrir l'Espace 3D » du panneau ;
+    si la vue ouverte cache le bouton, la fenêtre reste où elle s'est posée (elle ne saute jamais vers une autre ancre) ;
+  - rien de tout cela à l'écran : à côté de la barre d'outils, sinon dans un coin.
+- Chaque icône retient son rectangle à l'image où elle est peinte (`aideflottante::retenir`). La fenêtre se pose à droite de
+  l'icône (tout en bas, elle remonte), sinon à sa gauche ; sous un onglet plus large que haut, dessous (elle glisse vers la
+  gauche au bord de l'écran), sinon dessus. Elle ne couvre jamais la barre d'outils, et ne sort jamais de l'écran.
+- Pas de fonction de panneau à part (le curseur Lissage, le bouton « Vues ») : les animations du catalogue sont rangées
+  par outil et par espace de travail, la fenêtre se pose donc à côté de l'outil.
+
+### 155.2 Elle ne gêne jamais le dessin
+
+- Elle joue une fois, puis s'efface en un fondu court (0,3 s). Une suite, comme celle des Vignettes (coupe ou continuité,
+  le trait à travers les cases, le pont), se joue l'une après l'autre dans la même fenêtre, sans bouger.
+- Un appui dessus la ferme tout de suite.
+- Elle n'a aucune zone de clic : elle est peinte sur une couche du premier plan, pas dans une `egui::Area` (une zone d'egui
+  déclare toujours un rectangle sous le pointeur, qui cache aux outils ce qu'il y a dessous). Un appui du stylet sur la
+  toile, même sous elle, dessine donc normalement ; il la ferme en même temps.
+- Pendant un geste, si le pointeur s'approche d'elle (12 points), elle se ferme : elle ne couvre jamais le trait. Un geste
+  commencé avant qu'elle s'ouvre (un outil pris au clavier pendant un trait) ne la ferme pas, pour ne pas perdre
+  l'animation : elle se cache le temps qu'il passe près d'elle.
+- Pendant qu'elle joue, l'écran est repeint ; ensuite, plus rien n'est demandé. Elle ne joue d'elle-même ni sans projet,
+  ni en mode concentration, ni dans le Montage ou quand la barre d'outils est cachée (comme avant, quand Réglages n'était
+  pas là) : elle jouera quand l'icône reparaîtra.
+- L'appui qui la ferme agit aussi sur ce qu'il y a dessous : avec le Remplissage ou la Caméra, il remplit ou déplace sur
+  la toile (annulable). C'est le prix de « ne jamais voler un clic ».
+
+### 155.3 La revoir
+
+- Clic droit sur une icône d'outil : « Revoir l'explication », dans le menu qui offrait déjà « Assigner un raccourci ». La
+  même entrée est sur l'onglet « Vignettes » et sur le bouton de l'Espace 3D. L'outil en main ne change pas.
+- Le ▶ du titre de Réglages reste : il ouvre la fenêtre à côté de l'icône de l'outil.
+- Aide > « Registre des explications », comme avant.
+- Aide > « Afficher les explications » : l'animation rejoue, dans la fenêtre, à chaque prise d'un outil.
+
+### 155.4 Les essais
+
+`src/aideflottante_tests.rs` : la première prise d'un outil ouvre la fenêtre à droite de son icône (par un vrai clic
+sur l'icône, qui ne la referme pas) et Réglages ne peint plus rien de plus ; l'Espace 3D ouvert par son icône garde sa
+fenêtre à côté d'elle ; rien ne joue dans le Montage ; elle s'efface à la fin et l'application se repose ; un appui la ferme ; un trait qui commence sur
+elle, ou qui passe dessous, dessine ; elle reste dans l'écran près des bords ; « Revoir l'explication » au clic droit et
+le ▶ de Réglages l'ouvrent à côté de l'icône ; la suite des Vignettes s'enchaîne dans une seule fenêtre ; le thème clair.
+Les essais de la partie 153 peignent maintenant Réglages puis la fenêtre flottante.
+
+### 155.5 À tester par Anthony
+
+1. Préférences : aucun réglage à changer. Pour tout revoir comme la première fois, coche Aide > « Afficher les
+   explications ».
+2. Prends la Trajectoire dans la barre de gauche : la petite fenêtre s'ouvre juste à droite de son icône, joue, puis
+   s'efface. Rien ne joue en haut de Réglages.
+3. Prends le Pinceau, et dessine tout de suite sur la toile pendant que la fenêtre joue, même en commençant sur elle : le
+   trait se fait, la fenêtre s'en va.
+4. Clique sur la fenêtre pendant qu'elle joue : elle se ferme aussitôt.
+5. Clic droit sur l'icône de la Caméra : « Revoir l'explication ». La fenêtre s'ouvre à côté de la Caméra, ton outil ne
+   change pas.
+6. Ouvre l'onglet Vignettes : la suite des Vignettes joue sous l'onglet, l'une après l'autre dans la même fenêtre, sans
+   couvrir la case où tu dessines. Dire si la place te va, ou si un coin de la planche serait mieux.
+7. Ouvre l'Espace 3D par l'icône cube sous le dessin : la fenêtre se pose à côté d'elle, et y reste pendant que la vue
+   s'ouvre. Va dans le Montage et change d'outil au clavier : rien ne joue là.
+8. Le ▶ du titre de Réglages : la fenêtre s'ouvre à côté de l'icône de l'outil.
+9. Passe en thème Papier : la fenêtre est claire.
+10. Dire si la taille (240 × 150) et la durée du fondu conviennent.

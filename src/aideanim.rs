@@ -4,8 +4,9 @@
 //! - **Une animation** (`Anim`) : un identifiant stable (retenu dans les réglages quand elle a été vue), un titre, la rubrique du
 //!   registre, les contextes où elle joue (l'outil en main, l'espace de travail : `App::aide_contexte`), une durée, une fonction de
 //!   dessin et le texte du registre (celui qui était dans le panneau, avec les raccourcis lus dans le fichier de raccourcis).
-//! - **Le joueur** (`Joueur`, dans `Confort` : partagé par les onglets) : la première prise d'un outil joue ses animations en haut de
-//!   « Réglages », puis la vignette se replie en douceur. Le bouton ▶ du titre les rejoue. Aide > « Afficher les explications »
+//! - **Le joueur** (`Joueur`, dans `Confort` : partagé par les onglets) : la première prise d'un outil joue ses animations dans une
+//!   petite fenêtre flottante posée à côté de son icône (`aideflottante.rs`, partie 155), puis la fenêtre s'efface. Le bouton ▶ du
+//!   titre de « Réglages » et le clic droit sur l'icône (« Revoir l'explication ») les rejouent. Aide > « Afficher les explications »
 //!   (`Settings::afficher_explications`) : elles rejouent à chaque prise. Pendant qu'elles jouent, l'écran est repeint ; à l'arrêt,
 //!   plus rien n'est demandé.
 //! - **Le registre** (`aideregistre.rs`) : toutes les animations rangées par rubrique, chacune rejouable avec son texte, et les
@@ -18,7 +19,7 @@
 //!
 //! Le catalogue est dans `aidecatalogue.rs` (les outils) et `aidevignettes.rs` (l'espace Vignettes).
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Shape, Stroke, StrokeKind};
 
 use crate::app::{App, Tool};
 use crate::theme;
@@ -26,13 +27,6 @@ use crate::theme;
 /// La taille logique d'une vignette : les animations sont écrites dans ce repère.
 pub(crate) const LARGEUR: f32 = 240.0;
 pub(crate) const HAUTEUR: f32 = 150.0;
-/// La vignette ne s'élargit pas au-delà (logique de l'écran) dans un panneau très large.
-const LARGEUR_MAX: f32 = 340.0;
-/// L'ouverture et le repli de la vignette dans « Réglages », en secondes.
-const OUVERTURE: f64 = 0.25;
-const REPLI: f64 = 0.45;
-/// Le temps laissé sur la dernière image d'une animation avant la suivante ou le repli.
-const TENUE: f64 = 0.6;
 
 /// Les couleurs d'une vignette, lues dans la charte (`theme.rs`) selon que le thème est sombre ou clair.
 #[derive(Clone, Copy, Debug)]
@@ -433,29 +427,18 @@ pub(crate) fn peindre(painter: &Painter, rect: Rect, a: &Anim, t: f32, teintes: 
 
 // ------------------------------------------------------------------------------------------------------ le joueur
 
-/// Une lecture en cours dans « Réglages » : les animations du contexte, l'une après l'autre, puis le repli.
-#[derive(Clone, Debug)]
-struct Lecture {
-    ids: Vec<&'static str>,
-    index: usize,
-    /// L'heure d'egui au début de l'animation `index`, et au début de toute la lecture (pour l'ouverture).
-    debut: f64,
-    ouverture: f64,
-    /// Le repli a commencé à cette heure.
-    repli: Option<f64>,
-}
-
 /// L'état de l'aide animée, partagé par les onglets (dans `Confort`).
 #[derive(Default)]
 pub(crate) struct Joueur {
     /// Les animations jouent d'elles-mêmes à la prise d'un outil (vrai dans l'application lancée par l'utilisateur ; faux pour les essais,
     /// qui ne veulent rien qui bouge sauf s'ils le demandent).
     pub auto: bool,
-    /// Le contexte de la dernière image où « Réglages » a été dessiné, et l'outil qui était en main : avec « Afficher les
+    /// Le contexte de la dernière image où l'aide a été suivie, et l'outil qui était en main : avec « Afficher les
     /// explications », seule une prise d'outil (un autre `App::tool`) rejoue ce qui a déjà été vu.
     contexte: Option<&'static str>,
     outil: Option<Tool>,
-    lecture: Option<Lecture>,
+    /// La lecture en cours dans la fenêtre flottante (`aideflottante.rs`).
+    pub(crate) lecture: Option<crate::aideflottante::Lecture>,
     /// La fenêtre « Registre des explications » est ouverte, et l'animation qui y joue (avec l'heure de son début).
     pub registre: bool,
     pub registre_joue: Option<(&'static str, f64)>,
@@ -466,15 +449,21 @@ impl Joueur {
         Joueur { auto, ..Default::default() }
     }
 
-    /// Une animation joue (ou se replie) dans « Réglages ».
+    /// Une animation joue (ou s'efface) dans la fenêtre flottante.
     #[cfg(test)]
     pub(crate) fn joue(&self) -> bool {
         self.lecture.is_some()
     }
 
-    /// L'animation qui joue dans « Réglages ».
+    /// L'animation qui joue dans la fenêtre flottante.
     pub(crate) fn en_cours(&self) -> Option<&'static str> {
         self.lecture.as_ref().and_then(|l| l.ids.get(l.index).copied())
+    }
+
+    /// Où la fenêtre flottante a été peinte à la dernière image (rien si aucune animation ne joue).
+    #[cfg(test)]
+    pub(crate) fn fenetre(&self) -> Option<Rect> {
+        self.lecture.as_ref().and_then(|l| l.rect)
     }
 }
 
@@ -482,7 +471,6 @@ impl App {
     /// Le contexte de l'aide animée : l'outil en main, précisé par ce qu'il vise (la vue Espace 3D, un calque bitmap, plusieurs
     /// calques), ou l'espace Vignettes.
     pub(crate) fn aide_contexte(&self) -> &'static str {
-        use crate::document::LayerKind;
         if self.espace == crate::workspace::Espace::Vignettes {
             if self.annot_actif() {
                 return "vignettes.annotation";
@@ -492,12 +480,19 @@ impl App {
             }
             return "vignettes";
         }
-        let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind != LayerKind::Vector);
         // La vue Espace 3D ouverte : ses gestes (la vue, les cartes, la caméra libre), sauf pour la Trajectoire, qui y a les siens.
         if self.e3_vue_montree() && self.tool != Tool::Trajectoire {
             return "espace3d";
         }
-        match self.tool {
+        self.aide_contexte_outil(self.tool)
+    }
+
+    /// Le contexte d'un outil, précisé par ce qu'il vise (la vue Espace 3D pour la Trajectoire, un calque bitmap, plusieurs
+    /// calques) : celui de l'outil en main hors des Vignettes, ou celui d'une icône qu'on veut revoir (`aideflottante.rs`).
+    pub(crate) fn aide_contexte_outil(&self, tool: Tool) -> &'static str {
+        use crate::document::LayerKind;
+        let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind != LayerKind::Vector);
+        match tool {
             Tool::Trajectoire if self.e3_vue_montree() => "trajectoire.espace",
             Tool::Trajectoire => "trajectoire",
             // (Plusieurs calques choisis, ou une sélection qui les couvre ; pas l'aplat visé ni les clés choisies d'un seul calque.)
@@ -524,31 +519,32 @@ impl App {
         }
     }
 
-    /// Une animation commence vraiment : elle est retenue comme vue (pas avant : une suite repliée, un outil changé ou FEANOR quitté
+    /// Une animation commence vraiment : elle est retenue comme vue (pas avant : une suite arrêtée, un outil changé ou FEANOR quitté
     /// pendant la première laisse les suivantes à voir).
-    fn aide_vue(&mut self, id: &'static str) {
+    pub(crate) fn aide_vue(&mut self, id: &'static str) {
         if !self.settings.explications_vues.iter().any(|v| v == id) {
             self.settings.explications_vues.push(id.to_string());
             self.settings_a_ecrire = true;
         }
     }
 
-    /// Lance les animations `ids` dans « Réglages », l'une après l'autre, depuis le début.
-    pub(crate) fn aide_jouer(&mut self, ids: Vec<&'static str>, maintenant: f64) {
+    /// Lance les animations `ids` dans la fenêtre flottante, l'une après l'autre, depuis le début ; la fenêtre se pose à côté de la
+    /// première des `ancres` peintes à l'écran (`aideflottante.rs`).
+    pub(crate) fn aide_jouer(&mut self, ids: Vec<&'static str>, ancres: Vec<&'static str>, maintenant: f64) {
         let Some(&premiere) = ids.first() else { return };
         self.aide_vue(premiere);
-        // (Une vignette déjà ouverte ne se rouvre pas : elle passe à la nouvelle animation.)
+        // (Une fenêtre déjà ouverte ne réapparaît pas en fondu : elle passe à la nouvelle animation.)
         let ouverture = match &self.confort.aide.lecture {
-            Some(l) if l.repli.is_none() => l.ouverture - OUVERTURE,
+            Some(l) if l.fin.is_none() => l.ouverture,
             _ => maintenant,
         };
-        self.confort.aide.lecture = Some(Lecture { ids, index: 0, debut: maintenant, ouverture, repli: None });
+        self.confort.aide.lecture = Some(crate::aideflottante::Lecture { ids, index: 0, debut: maintenant, ouverture, fin: None, ancres, rect: None, prise: None });
     }
 
     /// Un contexte qui change : ses animations jouent si elles n'ont jamais été vues ; avec Aide > « Afficher les explications », toutes,
     /// mais seulement à la prise d'un autre outil (pas quand le même outil passe d'un calque vectoriel à un calque bitmap, par exemple).
     /// Une animation d'un autre outil qui jouait s'arrête.
-    fn aide_suivre(&mut self, maintenant: f64) {
+    pub(crate) fn aide_suivre(&mut self, maintenant: f64) {
         let contexte = self.aide_contexte();
         if self.confort.aide.contexte == Some(contexte) {
             return;
@@ -558,13 +554,15 @@ impl App {
         let toutes = self.settings.afficher_explications && prise;
         let ids: Vec<&'static str> = du_contexte(contexte).into_iter().filter(|a| toutes || !self.settings.explications_vues.iter().any(|v| v == a.id)).map(|a| a.id).collect();
         if self.confort.aide.auto && !ids.is_empty() {
-            self.aide_jouer(ids, maintenant);
+            let ancres = crate::aideflottante::ancres_du_contexte(contexte, self.tool);
+            self.aide_jouer(ids, ancres, maintenant);
         } else if self.confort.aide.en_cours().is_some_and(|id| anim(id).is_some_and(|a| !a.contextes.contains(&contexte))) {
             self.confort.aide.lecture = None;
         }
     }
 
-    /// Le bouton ▶ du titre de « Réglages » : il rejoue les animations de l'outil en main. Rien si l'outil n'en a pas.
+    /// Le bouton ▶ du titre de « Réglages » : il rejoue les animations de l'outil en main, dans la fenêtre flottante posée à côté de
+    /// son icône. Rien si l'outil n'en a pas.
     pub(crate) fn aide_bouton_ui(&mut self, ui: &mut egui::Ui) {
         let contexte = self.aide_contexte();
         let anims = du_contexte(contexte);
@@ -573,60 +571,13 @@ impl App {
         }
         let titres: Vec<&str> = anims.iter().map(|a| a.titre).collect();
         let resp = ui.add(egui::Button::new(egui::RichText::new(egui_phosphor::regular::PLAY).small()).frame(false).min_size(vec2(18.0, 18.0)));
-        let description = format!("Rejoue l'animation qui montre l'outil : {}. Toutes les explications sont dans Aide > Registre des explications.", titres.join(" ; "));
+        let description = format!("Rejoue l'animation qui montre l'outil, à côté de son icône : {}. Aussi au clic droit sur l'icône ; toutes les explications sont dans Aide > Registre des explications.", titres.join(" ; "));
         if crate::bulles::bulle(resp, "Revoir l'explication", &description, "").clicked() {
             let maintenant = ui.input(|i| i.time);
             self.confort.aide.contexte = Some(contexte);
-            self.aide_jouer(anims.iter().map(|a| a.id).collect(), maintenant);
+            let ancres = crate::aideflottante::ancres_du_contexte(contexte, self.tool);
+            self.aide_jouer(anims.iter().map(|a| a.id).collect(), ancres, maintenant);
         }
-    }
-
-    /// La vignette de « Réglages », en haut du panneau : l'animation qui joue, son ouverture et son repli. Rien à l'arrêt.
-    pub(crate) fn aide_joueur_ui(&mut self, ui: &mut egui::Ui) {
-        let maintenant = ui.input(|i| i.time);
-        self.aide_suivre(maintenant);
-        let Some(mut l) = self.confort.aide.lecture.clone() else { return };
-        // Le temps de l'animation en cours ; au bout (plus la tenue), la suivante, ou le repli.
-        let Some(mut a) = l.ids.get(l.index).and_then(|id| anim(id)) else {
-            self.confort.aide.lecture = None;
-            return;
-        };
-        if l.repli.is_none() && maintenant - l.debut > a.duree as f64 + TENUE {
-            if l.index + 1 < l.ids.len() {
-                l.index += 1;
-                l.debut = maintenant;
-                self.aide_vue(l.ids[l.index]);
-                if let Some(b) = anim(l.ids[l.index]) {
-                    a = b;
-                }
-            } else {
-                l.repli = Some(maintenant);
-            }
-        }
-        let hauteur_relative = match l.repli {
-            Some(r) => 1.0 - adoucir(((maintenant - r) / REPLI) as f32),
-            None => adoucir(((maintenant - l.ouverture) / OUVERTURE) as f32),
-        };
-        if l.repli.is_some_and(|r| maintenant - r >= REPLI) {
-            self.confort.aide.lecture = None;
-            return;
-        }
-        let largeur = ui.available_width().clamp(60.0, LARGEUR_MAX);
-        let plein = vec2(largeur - 6.0, (largeur - 6.0) * HAUTEUR / LARGEUR);
-        let (zone, resp) = ui.allocate_exact_size(vec2(largeur, (plein.y + 6.0) * hauteur_relative), Sense::click());
-        let vignette = Rect::from_min_size(zone.min + vec2(3.0, 3.0), plein);
-        let t = if l.repli.is_some() { a.duree } else { (maintenant - l.debut) as f32 };
-        let teintes = Teintes::du_theme();
-        let painter = ui.painter().with_clip_rect(zone.intersect(ui.clip_rect()));
-        peindre(&painter, vignette, a, t, &teintes);
-        // Un clic sur la vignette la replie tout de suite.
-        if resp.clicked() && l.repli.is_none() {
-            l.repli = Some(maintenant);
-        }
-        let resp = resp.on_hover_text(format!("{} : un clic la replie.", a.titre));
-        let _ = resp;
-        self.confort.aide.lecture = Some(l);
-        ui.ctx().request_repaint();
     }
 
     /// Parmi les calques choisis (deux au moins), ceux qu'un geste de plusieurs calques laisse de côté : cachés ou verrouillés.
@@ -655,7 +606,7 @@ impl App {
         self.status = if self.settings.afficher_explications {
             "Explications : elles rejouent à chaque prise d'un outil.".into()
         } else {
-            "Explications : une seule fois par outil (le bouton ▶ des Réglages les rejoue).".into()
+            "Explications : une seule fois par outil. Clic droit sur un outil : Revoir l'explication.".into()
         };
     }
 
@@ -663,7 +614,7 @@ impl App {
     pub(crate) fn aide_menu_ui(&mut self, ui: &mut egui::Ui) {
         let mut on = self.settings.afficher_explications;
         let resp = ui.checkbox(&mut on, "Afficher les explications");
-        let resp = crate::bulles::bulle(resp, "Afficher les explications", "Cochée : l'animation d'un outil rejoue en haut des Réglages chaque fois qu'on le prend. Décochée : une seule fois, la première ; le bouton ▶ la rejoue.", &self.raccourci("aide.explications"));
+        let resp = crate::bulles::bulle(resp, "Afficher les explications", "Cochée : l'animation d'un outil rejoue à côté de son icône chaque fois qu'on le prend. Décochée : une seule fois, la première ; le clic droit sur l'icône (Revoir l'explication) ou le ▶ des Réglages la rejoue.", &self.raccourci("aide.explications"));
         if resp.clicked() {
             ui.close_menu();
             self.usage.source = Some(crate::usage::Source::Menu);

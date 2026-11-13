@@ -340,6 +340,8 @@ impl App {
                 let on = self.espace == Espace::Vignettes;
                 let vignettes = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Vignettes ").strong(), on));
                 let vignettes = self.aide(vignettes, "Vignettes", "La planche seule : dessiner dans les cases, avec le pinceau, la couleur et les personnages. Ctrl + Maj + glisser un cadre : mouvement de caméra ; Ctrl + glisser : lasso ; Maj + Alt + glisser le cadre d'une case : copie du plan.", "espace.vignettes");
+                // (La fenêtre de l'aide des Vignettes se pose à côté de cet onglet : `aideflottante.rs`.)
+                crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::VIGNETTES, vignettes.rect);
                 if on {
                     crate::theme::souligner_actif(ui, vignettes.rect);
                 }
@@ -472,7 +474,6 @@ impl App {
             ui.horizontal(|ui| {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
             });
-            self.aide_joueur_ui(ui);
             self.annot_reglages_ui(ui);
             return;
         }
@@ -484,11 +485,10 @@ impl App {
                     .small()
                     .weak(),
             );
-            // Le bouton ▶ de l'aide animée (`aideanim.rs`, partie 153).
+            // Le bouton ▶ de l'aide animée (`aideanim.rs`, partie 153) : il rejoue l'animation dans la fenêtre flottante, à côté de
+            // l'icône de l'outil (`aideflottante.rs`, partie 155 : plus rien ne joue dans ce panneau).
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
         });
-        // L'animation de l'outil, à sa première prise, puis repliée.
-        self.aide_joueur_ui(ui);
         // Sous-ligne d'aplat choisie : « Aplat de <calque> » et ses réglages (couleur, débord, trous) d'abord ; l'outil et
         // sa brosse suivent, ce sont eux qui travaillent l'aplat.
         self.aplat_section_ui(ui);
