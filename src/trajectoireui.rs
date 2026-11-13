@@ -66,6 +66,8 @@ pub(crate) enum Geste {
     /// Maj + appui sur un bout du chemin, puis un trait : il prolonge le chemin (`devant` : depuis son début), au lâcher
     /// (`trajectoireprolonge.rs`, partie 151).
     Prolonger { points: Vec<[f32; 2]>, devant: bool },
+    /// La poignée `i` prise (partie 154, `trajectoirepoignees.rs`) : tirée, le chemin se tord en douceur autour d'elle.
+    Poignee { i: usize, depart: [f32; 2], avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool },
 }
 
 /// L'état de l'outil pour un projet.
@@ -84,6 +86,10 @@ pub(crate) struct Etat {
     pub(crate) lissage: f32,
     /// Ce que la pose des dessins des jalons a laissé aux dessins posés à la main, et ce qu'il en reste à dire.
     pub(crate) a_la_main: DessinsALaMain,
+    /// La poignée choisie (partie 154) : son rang parmi celles du chemin montré (sur la feuille, celui du calque courant ;
+    /// dans l'Espace 3D, celui de référence). Dans l'espace, elle montre ses flèches x, y, z. Pas enregistrée.
+    /// (Le numéro de celui à qui est le chemin, et le rang de la poignée : `App::poignee_de`.)
+    pub(crate) poignee: Option<(u64, usize)>,
 }
 
 /// **Les dessins posés à la main dans une trajectoire en clés d'images**, pour la barre d'état. Anthony, 2026-11-13 : « Une
@@ -182,13 +188,13 @@ fn pluriel(n: usize) -> &'static str {
 
 impl App {
     /// Combien de pixels d'écran vaut un pixel de la feuille, autour du point `p` de la feuille.
-    fn trajectoire_echelle(&self, p: Pos2) -> f32 {
+    pub(crate) fn trajectoire_echelle(&self, p: Pos2) -> f32 {
         let (a, b) = (self.stage_to_screen(p), self.stage_to_screen(p + vec2(1.0, 0.0)));
         (b - a).length().max(1e-3)
     }
 
     /// La marque sous le point `p` de la feuille (à `TOL_ECRAN` près), s'il y en a une ; sinon vrai si le chemin est sous `p`.
-    fn trajectoire_sous(&self, p: Pos2) -> (Option<usize>, bool) {
+    pub(crate) fn trajectoire_sous(&self, p: Pos2) -> (Option<usize>, bool) {
         // (Une trajectoire tracée dans l'espace ne se prend pas sur la feuille : ses points ne sont pas des pixels de la feuille.)
         let Some(t) = self.layers().get(self.cur_layer).and_then(|l| l.trajectoire.as_ref()).filter(|t| t.sur_la_feuille()) else { return (None, false) };
         let tol = TOL_ECRAN / self.trajectoire_echelle(p);
@@ -200,7 +206,8 @@ impl App {
     }
 
     /// Appui avec l'outil : une marque, le chemin (`maj` : pour le déplacer en bloc ; sinon pour le tirer), ou le début d'un trait.
-    pub(crate) fn trajectoire_presser(&mut self, stage: Pos2, maj: bool) {
+    /// `ctrl` : sur le chemin, une poignée posée ; sur une poignée, retirée (partie 154) ; ailleurs, comme sans Ctrl.
+    pub(crate) fn trajectoire_presser(&mut self, stage: Pos2, maj: bool, ctrl: bool) {
         self.end_stroke();
         self.playing = false;
         if self.content_refuses() {
@@ -237,6 +244,10 @@ impl App {
                 self.trajectoire_valider(snap, "Point d'ancrage de la trajectoire");
                 self.status = "Point d'ancrage posé : c'est lui qui suit le chemin.".into();
             }
+            return;
+        }
+        // Ctrl+clic sur le chemin : une poignée ; une poignée prise : la tirer (partie 154, `trajectoirepoignees.rs`).
+        if !maj && self.trajectoire_presser_poignee(stage, ctrl) {
             return;
         }
         // Maj + appui sur un bout du chemin : le trait qui suit le prolonge (partie 151).
@@ -299,6 +310,14 @@ impl App {
                 self.trajectoire_poser_en_direct(li, t);
                 self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : il se tord là où on le prend. Maj à l'appui : le déplacer en bloc ; Maj sur un bout : le prolonger.".into() };
             }
+            Geste::Poignee { i, depart, avant, bouge, .. } => {
+                let mut t = avant.clone();
+                let rayon = t.rayon_de_tirage();
+                t.tirer_poignee(*i, [p[0] - depart[0], p[1] - depart[1], 0.0], rayon);
+                *bouge = true;
+                self.trajectoire_poser_en_direct(li, t);
+                self.status = crate::trajectoirepoignees::TIREE.into();
+            }
         }
         self.traj.geste = Some(g);
         true
@@ -342,6 +361,12 @@ impl App {
                     self.trajectoire_valider(snap, if bloc { "Déplacer la trajectoire" } else { "Tirer la trajectoire" });
                 }
             }
+            Geste::Poignee { snap, bouge, .. } => {
+                if bouge {
+                    self.trajectoire_recalculer(li);
+                    self.trajectoire_valider(snap, crate::trajectoirepoignees::TIRER);
+                }
+            }
         }
     }
 
@@ -378,8 +403,9 @@ impl App {
                         t.source = e.source;
                         t.dessins = e.dessins;
                         t.tourne = e.tourne;
-                        // (Retracé : le chemin garde son lissage, partie 151.)
+                        // (Retracé : le chemin garde son lissage, partie 151, et ses poignées, partie 154.)
                         t.lissage = e.lissage;
+                        t.poignees = e.poignees;
                     }
                     None => {
                         // La clé de départ démarre sur la tête de lecture ; la fin est posée sur la dernière image du plan (une fin
@@ -907,7 +933,7 @@ impl App {
         }
         let Some(g) = self.traj.geste.take() else { return false };
         let li = self.cur_layer;
-        if let Geste::Marque { avant, cles_avant, .. } | Geste::Chemin { avant, cles_avant, .. } = g {
+        if let Geste::Marque { avant, cles_avant, .. } | Geste::Chemin { avant, cles_avant, .. } | Geste::Poignee { avant, cles_avant, .. } = g {
             if let Some(l) = self.layers_mut().get_mut(li) {
                 l.trajectoire = Some(avant);
                 l.pos_keys = cles_avant;
@@ -950,11 +976,14 @@ impl App {
     /// Le curseur de l'outil au point `p` de l'écran : la main sur une marque ou le chemin, la croix ailleurs.
     pub(crate) fn trajectoire_curseur(&self, p: Pos2) -> CursorIcon {
         match &self.traj.geste {
-            Some(Geste::Marque { .. } | Geste::Chemin { .. }) => return CursorIcon::Grabbing,
+            Some(Geste::Marque { .. } | Geste::Chemin { .. } | Geste::Poignee { .. }) => return CursorIcon::Grabbing,
             Some(Geste::Trait { .. } | Geste::Prolonger { .. }) => return CursorIcon::Crosshair,
             None => {}
         }
         let stage = self.view.to_canvas(self.canvas_rect, self.canvas_size(), p);
+        if self.trajectoire_poignee_sous(stage).is_some() {
+            return CursorIcon::Grab;
+        }
         match self.trajectoire_sous(stage) {
             (Some(_), _) => CursorIcon::Grab,
             (None, true) => CursorIcon::PointingHand,
@@ -1045,6 +1074,11 @@ impl App {
             if t.ancre != Ancre::Depart {
                 painter.circle_stroke(c, 8.0, Stroke::new(1.0_f32, COULEUR.gamma_multiply(0.8)));
             }
+        }
+        // Les poignées (partie 154), la choisie en jade.
+        let choisie = self.poignee_de(l.id);
+        for (i, &f) in t.poignees.iter().enumerate() {
+            crate::trajectoirepoignees::peindre_poignee(painter, ecran(t.point_a(f)), choisie == Some(i));
         }
     }
 

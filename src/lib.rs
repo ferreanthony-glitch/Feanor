@@ -954,6 +954,10 @@ mod trajectoirelisse_tests;
 mod trajectoireprolonge;
 #[cfg(test)]
 mod trajectoireprolonge_tests;
+// Ctrl+clic sur le chemin : une poignée ; la tirer tord le chemin en douceur ; dans l'espace, ses flèches x, y, z (partie 154).
+mod trajectoirepoignees;
+#[cfg(test)]
+mod trajectoirepoignees_tests;
 // Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; un onglet à côté de Réglages, qui passe devant quand la vue s'ouvre.
 mod espace3dpanneau;
 #[cfg(test)]

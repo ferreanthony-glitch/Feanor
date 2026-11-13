@@ -41,7 +41,7 @@ use crate::trajectoire::{Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTIO
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
-pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
+pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic sur le chemin : une poignée, qui se tire, ou par ses flèches x, y, z ; Ctrl+clic sur elle : la retirer. Ctrl+clic ailleurs : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
 pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou la liste des cartes et « choisir » dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
@@ -64,8 +64,8 @@ pub(crate) enum Sujet {
 
 /// Un sujet tel qu'il était avant un geste (pour Échap) : sa trajectoire, et les clés de position d'une carte.
 pub(crate) struct Avant {
-    sujet: Sujet,
-    trajectoire: Trajectoire,
+    pub(crate) sujet: Sujet,
+    pub(crate) trajectoire: Trajectoire,
     cles: Vec<PosKey>,
 }
 
@@ -75,8 +75,16 @@ pub(crate) enum GesteEspace {
     Trait { support: Support, ecran: Vec<Pos2>, plan: Vec<[f32; 2]> },
     /// La marque `i` prise : glissée le long du chemin, ou arrachée.
     Marque { i: usize, avant: Vec<Avant>, snap: Edit, bouge: bool, arrachee: bool },
-    /// Le chemin pris en `fraction` (le pointeur étant alors en `depart`, dans le plan du chemin) : tiré là, ou déplacé en bloc.
-    Chemin { depart: [f32; 2], fraction: f32, bloc: bool, avant: Vec<Avant>, snap: Edit, bouge: bool },
+    /// Le chemin pris en `fraction` (le pointeur étant alors en `depart`, dans `porteur` : le plan du chemin, à la hauteur
+    /// du point pris) : tiré là, ou déplacé en bloc.
+    Chemin { depart: [f32; 2], porteur: Support, fraction: f32, bloc: bool, avant: Vec<Avant>, snap: Edit, bouge: bool },
+    /// La poignée à la fraction `fraction` prise (partie 154) et tirée dans `porteur`, le plan du chemin à sa hauteur (le
+    /// pointeur étant en `depart` à l'appui) : le chemin se tord en douceur autour d'elle.
+    /// (`rang` : son rang parmi les poignées du chemin de référence, le premier d'`avant`.)
+    Poignee { rang: usize, fraction: f32, porteur: Support, depart: [f32; 2], avant: Vec<Avant>, snap: Edit, bouge: bool },
+    /// La flèche `axe` (0 : x, 1 : y, 2 : z, du monde) de la poignée à la fraction `fraction`, prise (partie 154) : le regard
+    /// `depart` à l'appui, `origine` la poignée dans l'espace. Tirée, la poignée se déplace sur cet axe, hors du plan aussi.
+    Fleche { rang: usize, fraction: f32, axe: usize, depart: m::Ray, origine: [f32; 3], avant: Vec<Avant>, snap: Edit, bouge: bool },
     /// Maj + appui sur un bout du chemin, puis un trait sur le plan qui porte le chemin : il le prolonge (`devant` : depuis
     /// son début), au lâcher, pour tout ce qui est choisi (`trajectoireprolonge.rs`, partie 151).
     Prolonger { support: Support, devant: bool, ecran: Vec<Pos2>, plan: Vec<[f32; 2]> },
@@ -110,7 +118,8 @@ pub(crate) struct CheminVu {
 }
 
 impl CheminVu {
-    pub(crate) fn de(t: &Trajectoire, ecran: &dyn Fn([f32; 2]) -> Option<Pos2>) -> CheminVu {
+    /// (`ecran` reçoit chaque point avec sa hauteur hors du plan du chemin, partie 154.)
+    pub(crate) fn de(t: &Trajectoire, ecran: &dyn Fn([f32; 3]) -> Option<Pos2>) -> CheminVu {
         let total = t.longueur().max(1e-6);
         let mut parcouru = 0.0;
         let mut fr = Vec::with_capacity(t.points.len());
@@ -120,7 +129,7 @@ impl CheminVu {
             }
             fr.push((parcouru / total).clamp(0.0, 1.0));
         }
-        CheminVu { pts: t.points.iter().map(|p| ecran(*p)).collect(), fr }
+        CheminVu { pts: t.points3().map(ecran).collect(), fr }
     }
 
     /// Les segments visibles : leurs deux bouts à l'écran, et la fraction du chemin de chacun.
@@ -167,11 +176,11 @@ impl CheminVu {
 }
 
 /// La marque de `t` dont le point, à l'écran, est à moins de `TOL_ECRAN` pixels de `p` (la plus proche).
-fn marque_sous(t: &Trajectoire, ecran: &dyn Fn([f32; 2]) -> Option<Pos2>, p: Pos2) -> Option<usize> {
+fn marque_sous(t: &Trajectoire, ecran: &dyn Fn([f32; 3]) -> Option<Pos2>, p: Pos2) -> Option<usize> {
     t.marques
         .iter()
         .enumerate()
-        .filter_map(|(i, &f)| Some((i, ecran(t.point_a(f))?.distance(p))))
+        .filter_map(|(i, &f)| Some((i, ecran(t.point3_a(f))?.distance(p))))
         .filter(|(_, d)| *d <= TOL_ECRAN)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
@@ -180,7 +189,8 @@ fn marque_sous(t: &Trajectoire, ecran: &dyn Fn([f32; 2]) -> Option<Pos2>, p: Pos
 /// **Le chemin d'une trajectoire dans l'espace, tracé par-dessus une vue** (`ecran` : du point du chemin à l'écran ; rien :
 /// derrière l'œil) : la ligne, la barre du départ, la flèche de l'arrivée, les marques, le numéro de l'image de chaque jalon
 /// (`images`), et un point là où l'on en est (`courante`, une fraction du chemin). `tenue` : la marque prise ou survolée.
-pub(crate) fn peindre_chemin(painter: &egui::Painter, t: &Trajectoire, images: &[usize], courante: Option<f32>, ecran: &dyn Fn([f32; 2]) -> Option<Pos2>, tenue: Option<usize>) {
+/// Et ses poignées (partie 154), `choisie` en jade. `ecran` reçoit chaque point avec sa hauteur hors du plan du chemin.
+pub(crate) fn peindre_chemin(painter: &egui::Painter, t: &Trajectoire, images: &[usize], courante: Option<f32>, ecran: &dyn Fn([f32; 3]) -> Option<Pos2>, tenue: Option<usize>, choisie: Option<usize>) {
     // La ligne, par morceaux : ce qui passe derrière l'œil n'est pas tracé.
     let tracer = |pts: &mut Vec<Pos2>| {
         if pts.len() >= 2 {
@@ -191,8 +201,8 @@ pub(crate) fn peindre_chemin(painter: &egui::Painter, t: &Trajectoire, images: &
         }
     };
     let mut morceau: Vec<Pos2> = Vec::new();
-    for p in &t.points {
-        match ecran(*p) {
+    for p in t.points3() {
+        match ecran(p) {
             Some(q) => morceau.push(q),
             None => tracer(&mut morceau),
         }
@@ -200,14 +210,14 @@ pub(crate) fn peindre_chemin(painter: &egui::Painter, t: &Trajectoire, images: &
     tracer(&mut morceau);
     // La direction du chemin à l'écran, à la fraction `f`.
     let direction = |f: f32| -> Option<Vec2> {
-        let (a, b) = (ecran(t.point_a((f - 0.01).max(0.0)))?, ecran(t.point_a((f + 0.01).min(1.0)))?);
+        let (a, b) = (ecran(t.point3_a((f - 0.01).max(0.0)))?, ecran(t.point3_a((f + 0.01).min(1.0)))?);
         let d = b - a;
         Some(if d.length() > 1e-3 { d.normalized() } else { vec2(1.0, 0.0) })
     };
     let jalons = t.jalons();
     let dernier = jalons.len() - 1;
     for (k, &f) in jalons.iter().enumerate() {
-        let (Some(c), Some(d)) = (ecran(t.point_a(f)), direction(f)) else { continue };
+        let (Some(c), Some(d)) = (ecran(t.point3_a(f)), direction(f)) else { continue };
         let n = vec2(-d.y, d.x);
         if k == 0 {
             painter.line_segment([c - n * (DEMI_MARQUE + 2.0), c + n * (DEMI_MARQUE + 2.0)], Stroke::new(2.5_f32, COULEUR));
@@ -226,8 +236,13 @@ pub(crate) fn peindre_chemin(painter: &egui::Painter, t: &Trajectoire, images: &
             painter.text(c + cote * (DEMI_MARQUE + 4.0), Align2::CENTER_CENTER, format!("{}", img + 1), FontId::proportional(10.0), COULEUR);
         }
     }
-    if let Some(c) = courante.and_then(|f| ecran(t.point_a(f))) {
+    if let Some(c) = courante.and_then(|f| ecran(t.point3_a(f))) {
         painter.circle(c, 4.0, COULEUR, Stroke::new(1.5_f32, Color32::from_black_alpha(140)));
+    }
+    for (i, &f) in t.poignees.iter().enumerate() {
+        if let Some(c) = ecran(t.point3_a(f)) {
+            crate::trajectoirepoignees::peindre_poignee(painter, c, choisie == Some(i));
+        }
     }
 }
 
@@ -374,6 +389,17 @@ impl App {
     /// Parmi ce qui est choisi, ce qui peut recevoir un chemin maintenant. Une carte verrouillée, accrochée à la caméra, liée
     /// à son calque de trait, ou qui a déjà une trajectoire tracée sur la feuille est laissée, et la barre d'état dit pourquoi.
     pub(crate) fn e3_traj_sujets_libres(&mut self) -> Vec<Sujet> {
+        let (sujets, refus) = self.e3_traj_sujets_libres_et_refus();
+        if let Some(r) = refus {
+            self.status = r;
+        } else if sujets.is_empty() {
+            self.status = RIEN_A_DEPLACER.into();
+        }
+        sujets
+    }
+
+    /// `e3_traj_sujets_libres`, sans toucher à la barre d'état : les sujets libres, et la raison du dernier laissé de côté.
+    pub(crate) fn e3_traj_sujets_libres_et_refus(&self) -> (Vec<Sujet>, Option<String>) {
         let mut refus: Option<String> = None;
         let sujets: Vec<Sujet> = self
             .e3_traj_sujets()
@@ -403,12 +429,7 @@ impl App {
                 }
             })
             .collect();
-        if let Some(r) = refus {
-            self.status = r;
-        } else if sujets.is_empty() {
-            self.status = RIEN_A_DEPLACER.into();
-        }
-        sujets
+        (sujets, refus)
     }
 
     /// La trajectoire de référence d'un geste : celle du premier sujet qui en suit une. C'est elle qu'on voit et qu'on prend ;
@@ -418,7 +439,7 @@ impl App {
     }
 
     /// Les sujets qui suivent une trajectoire, tels qu'ils sont (avant un geste).
-    fn e3_traj_avant(&self, sujets: &[Sujet]) -> Vec<Avant> {
+    pub(crate) fn e3_traj_avant(&self, sujets: &[Sujet]) -> Vec<Avant> {
         sujets
             .iter()
             .filter_map(|&s| {
@@ -499,8 +520,11 @@ impl App {
                         self.e3_traj_lacher();
                         self.espace3d.drag = Some(Drag::Orbit);
                     } else if modifiers.command || modifiers.ctrl {
+                        // Ctrl+clic sur le chemin : une poignée posée, ou retirée (partie 154) ; ailleurs, choisir.
                         // (Maj n'ajoute qu'avec Ctrl : Maj seule, à l'appui, reste au chemin, qu'elle déplace en bloc.)
-                        self.e3_traj_choisir(regard, *pos, modifiers.shift);
+                        if modifiers.shift || !self.e3_traj_poignee_ctrl(regard, *pos) {
+                            self.e3_traj_choisir(regard, *pos, modifiers.shift);
+                        }
                     } else {
                         self.e3_traj_presser(regard, *pos, modifiers.shift);
                     }
@@ -584,7 +608,11 @@ impl App {
         }
         if let Some((_, t)) = self.e3_traj_reference(&sujets) {
             let Some(support) = t.support else { return };
-            let ecran = |p: [f32; 2]| regard.ecran(support.monde(p));
+            let ecran = |p: [f32; 3]| regard.ecran(support.monde3(p));
+            // Une flèche de la poignée choisie, ou une poignée : la tirer (partie 154).
+            if !maj && self.e3_traj_presser_poignee(&sujets, regard, pos) {
+                return;
+            }
             // Maj + appui sur un bout du chemin : le trait qui suit le prolonge, sur le plan du chemin (partie 151).
             if let Some(g) = Self::e3_traj_prolonger_depuis(&t, support, &regard, pos).filter(|_| maj) {
                 self.traj.espace = Some(g);
@@ -597,9 +625,11 @@ impl App {
                 let avant = self.e3_traj_avant(&sujets);
                 let snap = self.snapshot();
                 let ray = regard.rayon(pos);
-                self.traj.espace = match (marque, pres, support.couper(ray.o, ray.d)) {
+                // (Le chemin se tire dans le plan parallèle qui passe par le point pris, à sa hauteur : partie 154.)
+                let porteur = support.a_la_hauteur(pres.map_or(0.0, |(f, _)| t.hauteur_a(f)));
+                self.traj.espace = match (marque, pres, porteur.couper(ray.o, ray.d)) {
                     (Some(i), ..) => Some(GesteEspace::Marque { i, avant, snap, bouge: false, arrachee: false }),
-                    (None, Some((fraction, _)), Some(depart)) => Some(GesteEspace::Chemin { depart, fraction, bloc: maj, avant, snap, bouge: false }),
+                    (None, Some((fraction, _)), Some(depart)) => Some(GesteEspace::Chemin { depart, porteur, fraction, bloc: maj, avant, snap, bouge: false }),
                     _ => None,
                 };
                 return;
@@ -631,7 +661,7 @@ impl App {
             GesteEspace::Marque { i, avant, bouge, arrachee, .. } => {
                 let pres = avant.first().and_then(|a| {
                     let support = a.trajectoire.support?;
-                    CheminVu::de(&a.trajectoire, &|p| regard.ecran(support.monde(p))).plus_proche(pos)
+                    CheminVu::de(&a.trajectoire, &|p| regard.ecran(support.monde3(p))).plus_proche(pos)
                 });
                 if let Some((f, d)) = pres {
                     let loin = d > ARRACHE_ECRAN;
@@ -650,8 +680,10 @@ impl App {
                     self.status = if loin { "Marque arrachée : lâcher la retire.".into() } else { format!("Marque à {} % du chemin.", (f * 100.0).round()) };
                 }
             }
-            GesteEspace::Chemin { depart, fraction, bloc, avant, bouge, .. } => {
-                let ici = avant.first().and_then(|a| a.trajectoire.support).and_then(|s| s.couper(ray.o, ray.d));
+            // (Une poignée ou sa flèche : plus bas, `e3_traj_glisser_poignee`.)
+            GesteEspace::Poignee { .. } | GesteEspace::Fleche { .. } => {}
+            GesteEspace::Chemin { depart, porteur, fraction, bloc, avant, bouge, .. } => {
+                let ici = porteur.couper(ray.o, ray.d);
                 if let Some(p) = ici {
                     let (dx, dy) = (p[0] - depart[0], p[1] - depart[1]);
                     for a in avant.iter() {
@@ -668,6 +700,9 @@ impl App {
                     self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : il se tord là où on le prend. Maj à l'appui : le déplacer en bloc.".into() };
                 }
             }
+        }
+        if matches!(g, GesteEspace::Poignee { .. } | GesteEspace::Fleche { .. }) {
+            self.e3_traj_glisser_poignee(&mut g, &ray);
         }
         self.renderer.invalidate_params();
         self.traj.espace = Some(g);
@@ -698,6 +733,13 @@ impl App {
                     self.commit_named(snap, if bloc { "Déplacer la trajectoire" } else { "Tirer la trajectoire" });
                 }
             }
+            GesteEspace::Poignee { avant, snap, bouge, .. } | GesteEspace::Fleche { avant, snap, bouge, .. } => {
+                if bouge {
+                    self.e3_traj_finir(&avant);
+                    self.modified = true;
+                    self.commit_named(snap, crate::trajectoirepoignees::TIRER);
+                }
+            }
         }
     }
 
@@ -715,7 +757,7 @@ impl App {
         // Une marque ?
         let marque = self.e3_traj_reference(&sujets).zip(self.e3d.regard).and_then(|((_, t), regard)| {
             let s = t.support?;
-            CheminVu::de(&t, &|p| regard.ecran(s.monde(p))).marque_de(ecran)
+            CheminVu::de(&t, &|p| regard.ecran(s.monde3(p))).marque_de(ecran)
         });
         if let Some(f) = marque {
             let snap = self.snapshot();
@@ -750,6 +792,8 @@ impl App {
                 // (Et le lissage du chemin, partie 151.)
                 Some(e) => {
                     (t.marques, t.depart, t.fin, t.temps, t.cles, t.source, t.dessins) = (e.marques, e.depart, e.fin, e.temps, e.cles, e.source, e.dessins);
+                    // (Les poignées aussi, à leurs fractions ; le trait neuf est posé à plat, partie 154.)
+                    t.poignees = e.poignees;
                     t.lisser_a(e.lissage);
                 }
                 None => {
@@ -808,7 +852,7 @@ impl App {
     /// Échap pendant un geste de l'outil dans la vue : tout revient comme avant le geste ; vrai si la touche a servi.
     pub(crate) fn e3_traj_abandonner(&mut self) -> bool {
         let Some(g) = self.traj.espace.take() else { return false };
-        if let GesteEspace::Marque { avant, .. } | GesteEspace::Chemin { avant, .. } = g {
+        if let GesteEspace::Marque { avant, .. } | GesteEspace::Chemin { avant, .. } | GesteEspace::Poignee { avant, .. } | GesteEspace::Fleche { avant, .. } = g {
             for a in avant {
                 match a.sujet {
                     Sujet::Camera => self.panel_mut().trajectoire_camera = Some(a.trajectoire),
@@ -956,7 +1000,7 @@ impl App {
     /// La légende du bas de la vue quand le pointeur trace des trajectoires.
     pub(crate) fn e3_trajectoire_legende(&self) -> &'static str {
         if self.doc.plan_en_espace(self.cur_panel) {
-            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
+            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic sur le chemin : une poignée (la tirer, ou ses flèches x, y, z ; Ctrl+clic sur elle : la retirer) · Ctrl+clic ailleurs : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
         } else {
             "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
         }
@@ -976,13 +1020,15 @@ impl App {
         let sujets = self.e3_traj_sujets();
         let mut vues: Vec<Trajectoire> = Vec::new();
         let (mut sur_marque, mut sur_chemin) = (false, false);
+        // (La poignée choisie est celle du chemin de référence, le premier : partie 154.)
+        let reference = self.e3_traj_reference_libre().map(|(s, _)| s);
         for &s in &sujets {
             let Some(t) = self.e3_traj_de(s) else { continue };
             let Some(support) = t.support else { continue };
-            if vues.iter().any(|v| v.points == t.points && v.support == t.support && v.marques == t.marques && v.depart == t.depart && v.fin == t.fin) {
+            if vues.iter().any(|v| v.points == t.points && v.hauteurs == t.hauteurs && v.poignees == t.poignees && v.support == t.support && v.marques == t.marques && v.depart == t.depart && v.fin == t.fin) {
                 continue;
             }
-            let ecran = |p: [f32; 2]| regard.ecran(support.monde(p));
+            let ecran = |p: [f32; 3]| regard.ecran(support.monde3(p));
             let duree = self.e3_traj_duree(s);
             let tenue = match &self.traj.espace {
                 Some(GesteEspace::Marque { i, arrachee: false, .. }) => Some(*i),
@@ -994,21 +1040,24 @@ impl App {
                 sur_chemin |= survol.is_some_and(|p| CheminVu::de(t, &ecran).plus_proche(p).is_some_and(|(_, d)| d <= TOL_ECRAN));
             }
             let courante = t.fraction_suivie(self.cur_frame, duree).filter(|_| self.cur_frame >= t.depart);
-            peindre_chemin(painter, t, &t.images_des_jalons(duree), courante, &ecran, tenue);
+            let choisie = if reference == Some(s) { self.poignee_de(crate::trajectoirepoignees::proprietaire(s)) } else { None };
+            peindre_chemin(painter, t, &t.images_des_jalons(duree), courante, &ecran, tenue, choisie);
             vues.push(t.clone());
         }
+        // Les flèches x, y, z de la poignée choisie (partie 154).
+        let sur_poignee = self.e3_traj_peindre_fleches(painter, &regard, survol);
         if survol.is_none() {
             return;
         }
         let (alt, ctrl) = ctx.input(|i| (i.modifiers.alt, i.modifiers.command || i.modifiers.ctrl));
         let icone = match (&self.espace3d.drag, &self.traj.espace) {
             (Some(Drag::Orbit), _) => CursorIcon::Grabbing,
-            (_, Some(GesteEspace::Marque { .. } | GesteEspace::Chemin { .. })) => CursorIcon::Grabbing,
+            (_, Some(GesteEspace::Marque { .. } | GesteEspace::Chemin { .. } | GesteEspace::Poignee { .. } | GesteEspace::Fleche { .. })) => CursorIcon::Grabbing,
             (_, Some(GesteEspace::Trait { .. } | GesteEspace::Prolonger { .. })) => CursorIcon::Crosshair,
             _ if alt => CursorIcon::Grab,
             _ if ctrl => CursorIcon::PointingHand,
             _ if !self.doc.plan_en_espace(self.cur_panel) => CursorIcon::NotAllowed,
-            _ if sur_marque => CursorIcon::Grab,
+            _ if sur_marque || sur_poignee => CursorIcon::Grab,
             _ if sur_chemin => CursorIcon::PointingHand,
             _ => CursorIcon::Crosshair,
         };
@@ -1028,10 +1077,10 @@ impl App {
         let cam = self.doc.panel_camera_reelle(self.cur_panel, self.cur_frame);
         // (Le cadre est au centre de la feuille : `Monde::to_frame` rend des pixels du cadre.)
         let coin = vec2((world.stage[0] - world.frame[0] as f32) / 2.0, (world.stage[1] - world.frame[1] as f32) / 2.0);
-        let ecran = |p: [f32; 2]| world.to_frame(&cam, support.monde(p)).map(|q| self.stage_to_screen(q + coin));
+        let ecran = |p: [f32; 3]| world.to_frame(&cam, support.monde3(p)).map(|q| self.stage_to_screen(q + coin));
         let duree = self.frame_count();
         let courante = t.fraction_suivie(self.cur_frame, duree).filter(|_| self.cur_frame >= t.depart);
-        peindre_chemin(painter, t, &t.images_des_jalons(duree), courante, &ecran, None);
+        peindre_chemin(painter, t, &t.images_des_jalons(duree), courante, &ecran, None, None);
         true
     }
 

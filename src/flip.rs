@@ -116,8 +116,9 @@ impl App {
                 }
                 if let Some(t) = &mut l.trajectoire {
                     match t.support {
-                        Some(s) => {
-                            t.support = Some(s.miroir_x(miroir));
+                        Some(_) => {
+                            // (Les hauteurs hors du plan changent de signe avec sa normale, partie 154.)
+                            t.miroir_x(miroir);
                             dans_l_espace.push((pi, li));
                         }
                         None => t.retourner(true),
@@ -128,7 +129,7 @@ impl App {
                 k.cam = mirror_camera_x(k.cam, axis);
             }
             if let Some(t) = p.trajectoire_camera.as_mut() {
-                t.support = t.support.map(|s| s.miroir_x(miroir));
+                t.miroir_x(miroir);
             }
         }
         for (pi, li) in dans_l_espace {

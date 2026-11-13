@@ -12,8 +12,9 @@ use crate::espace3dmath::{self as m, Orbite, Ray, V3, View};
 use crate::espace3dui::Drag;
 
 const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
-const AXIS_COLORS: [Color32; 3] = [Color32::from_rgb(232, 80, 80), Color32::from_rgb(100, 205, 100), Color32::from_rgb(86, 138, 245)];
-const HOT: Color32 = Color32::from_rgb(255, 214, 70);
+/// (Aussi les flèches x, y, z d'une poignée de trajectoire, `trajectoirepoignees.rs`, partie 154.)
+pub(crate) const AXIS_COLORS: [Color32; 3] = [Color32::from_rgb(232, 80, 80), Color32::from_rgb(100, 205, 100), Color32::from_rgb(86, 138, 245)];
+pub(crate) const HOT: Color32 = Color32::from_rgb(255, 214, 70);
 /// Distance (pixels d'écran) à laquelle on attrape une poignée.
 const GRAB: f32 = 9.0;
 /// Un point plus près de l'œil que cela n'est pas dessiné.

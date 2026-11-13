@@ -12070,3 +12070,138 @@ Ses deux décisions du 13 novembre (« On garde l'outil » ; les dessins posés 
 30. Supprime ta clé (clic droit sur la piste, « Supprimer la clé ») : le dessin de la marque d'avant reprend ses images.
 31. Duplique un calque qui a une trajectoire en clés d'images, puis glisse une marque dans la copie : la copie garde ses
     propres dessins, et redessiner une pose de la copie ne change pas l'original.
+
+## 154. Les poignées de la trajectoire : Ctrl+clic sur le chemin, et dans l'espace des flèches x, y, z qui le font sortir de son plan (2026-11-13, branche `trajectoire-poignees`)
+
+Anthony, 2026-11-13 : « avec l'outil trajectoire ctrl+clic sur la trajectoire permet d'ajuster la trajectoire en ajoutant
+une poignée ». C'est aussi la suite de sa demande de la veille : « éditer une trajectoire tracée dans un environnement 3D…
+lui redonner des directions dans tous les axes x, y et z ». Ses choix : des poignées sur le chemin ; quand on en prend
+une, trois flèches x, y, z ; tirer une flèche déplace le point sur cet axe, et le chemin voisin suit en douceur, avec le
+même rayon que le tirage sur la feuille.
+
+### Les gestes
+
+Avec l'outil Trajectoire, **sur la feuille comme dans la vue Espace 3D** (la vue seule et chacune des vues multiples,
+orthographiques comprises) :
+
+| Geste | Ce qu'il fait |
+|---|---|
+| **Ctrl+clic sur le chemin** (à 10 pixels d'écran, la prise du tirage) | pose une poignée là ; elle est choisie. Une étape d'annulation, « Poser une poignée » |
+| **Ctrl+clic sur une poignée** | la retire (« Retirer une poignée ») |
+| Ctrl+clic **ailleurs** | inchangé : sur la feuille, le lasso de Ctrl ; dans la vue, choisir une carte ou la caméra (Maj+Ctrl+clic : ajouter). Maj+Ctrl+clic, même sur le chemin, choisit toujours |
+| **Glisser une poignée** | la poignée suit le pointeur dans le plan du chemin ; le chemin se tord **en douceur** autour d'elle (une cloche en cosinus, le rayon du tirage de toujours : un bon tiers du chemin, 30 pixels au moins). **Les bouts et les autres poignées restent fixes** : ils bornent l'influence. Les marques gardent leurs fractions. « Tirer une poignée » |
+| Dans la vue Espace 3D, **une flèche de la poignée choisie** | la poignée se déplace sur cet axe du monde, **y compris hors du plan où le chemin est posé** ; le chemin voisin suit en douceur. « Tirer une poignée » |
+| Glisser le chemin ailleurs qu'à une poignée | comme avant (partie 119), mais le tirage s'arrête aux poignées voisines, qui restent fixes ; sans poignée, rien ne change |
+| Échap pendant le geste | tout revient comme avant le geste |
+
+Une poignée se dessine comme un petit rond cerné de sombre : **jade quand elle est choisie**, à l'encre sinon. Dans
+l'Espace 3D, la poignée choisie montre ses trois flèches : **x rouge, y vert, z bleu**, les teintes des flèches du
+manipulateur des cartes (`espace3dview::AXIS_COLORS` ; la charte n'a pas de rouge en dehors des alertes, ces trois
+teintes sont celles que la vue utilisait déjà), avec leur lettre au bout. La flèche tenue ou survolée s'éclaire (la
+teinte « chaude » du manipulateur). Une flèche vue de bout (son axe regarde l'œil) ne se montre pas et ne se prend pas ;
+tout près de la poignée, c'est la poignée qu'on prend. Dans une vue qui regarde le plan du chemin par la tranche (une vue
+de face d'un chemin au sol), la poignée se choisit mais ne se glisse pas à plat : la barre d'état dit de tirer ses
+flèches. Dans une vue de face, la flèche y monte à l'écran : la tirer fait monter le chemin.
+
+**Plusieurs sujets choisis** (chaque carte et la caméra ont leur copie de la trajectoire) : chaque geste vaut pour tous,
+en **une** étape d'annulation (la règle d'Anthony « la sélection agit sur tout »). Le déplacement d'une flèche, ou du
+pointeur dans le plan, est lu dans l'espace puis dans le plan de chacun. Les cartes verrouillées (ou de position
+verrouillée, accrochées, liées) sont laissées de côté ; la barre d'état le dit **en tête** : « Poignée posée, un calque
+laissé de côté. » Sur la feuille, comme les autres gestes de l'outil, les poignées sont celles du calque courant.
+
+**Ce qui suit le chemin monte avec lui.** Une carte reçoit ses clés de position d'après le chemin, hauteur comprise ; la
+caméra, sans aucune clé, suit le chemin là où il monte (`Document::panel_camera_reelle`).
+
+Aucune boîte de dialogue. Les messages, dans la barre d'état, disent l'essentiel en premier (« Poignée posée : tire-la
+pour tordre le chemin… »).
+
+### Comment
+
+- **Le modèle** (`trajectoire.rs`) : deux sortes de champs **facultatifs**, le format reste **55**.
+  - `poignees` : les poignées en **fraction du chemin**, comme les marques : c'est ce qui tient le mieux au lissage (les
+    fractions gardent leur place relative), au retracé (les poignées restent à leurs fractions, comme les marques) et au
+    prolongement (leurs fractions sont recalculées pour qu'elles gardent leur place, comme les marques). Après un
+    tirage, leurs fractions sont relues sur le chemin tiré (un sommet est posé à chaque poignée avant le tirage, pour la
+    suivre).
+  - `hauteurs` (une par point de `points`) et `hauteurs_brut` (une par point du chemin brut, quand il est lissé) : **le
+    décalage de chaque point le long de la normale du plan porteur**, en unités du chemin. Le point dans l'espace est
+    `support.monde(p) + h · normale` (`Support::monde3`). Le décalage dans le plan passe par `points`, la composante
+    normale par `hauteurs` (`Support::decomposer`). Rien : 0 partout, le chemin est dans son plan (un vieux fichier, une
+    trajectoire sur la feuille, qui n'en a jamais).
+  - `tirer_poignee` (et `tirer`, borné par les poignées) : `tirer_entre`, sur le chemin brut avec ses hauteurs, puis
+    repris au pas et lissé de nouveau. `lisser_a`, `prolonger`, `echantillonner` portent les hauteurs : **lissées avec
+    le reste**, **reprises** avec leurs points ; le morceau ajouté par un prolongement part à la hauteur du bout, et le
+    trait se pose sur le plan parallèle qui passe par ce bout. Retracer pose le trait neuf à plat. Le miroir (retourner
+    un plan, `Trajectoire::miroir_x`) change le signe des hauteurs avec celui de la normale.
+  - `deplacement_a` ajoute la hauteur gagnée depuis le point de référence : les cartes (`cles_dans_l_espace`), la
+    caméra (`panel_camera_reelle`, `cuire_trajectoires_camera`) et la pose à la main d'une carte qui suit un chemin
+    (`trajectoire_espace_apres_pose`) en tiennent compte sans autre changement.
+  - **Les fractions, le temps des marques et le tirage restent mesurés à plat**, dans le plan du chemin : la logique 2D
+    (marques, temps, recalage, tirage) ne change pas.
+- **L'écran** : `CheminVu`, `peindre_chemin`, `bout_sous` reçoivent chaque point avec sa hauteur ; la peinture du chemin
+  dans la vue et sur la feuille d'un plan en Espace 3D passe par `monde3`. Le chemin se tire (`GesteEspace::Chemin`) et
+  se prolonge sur le plan parallèle qui passe par le point pris, à sa hauteur.
+- **Les gestes** : `trajectoirepoignees.rs` (nouveau) ; `GesteEspace::Poignee`, `GesteEspace::Fleche`
+  (`m::drag_along_axis`, comme les flèches du manipulateur), `Geste::Poignee` sur la feuille. `Etat::poignee` : la poignée
+  choisie (pas enregistrée), avec le numéro de celui à qui est le chemin (`App::poignee_de`) : changer de calque ou de
+  choix ne la fait jamais passer sur un autre chemin. Dans la vue, le chemin de référence (celui qu'on voit, dont on
+  prend les poignées) est le même au dessin et à l'appui : celui du premier sujet libre (`e3_traj_reference_libre`).
+  Avec plusieurs sujets, la poignée de chacun se retrouve par son rang quand ils en ont autant (les fractions de deux
+  chemins de longueurs différentes ne restent pas égales après un tirage). Sur un chemin lissé, les fractions des
+  poignées (lues sur le chemin qu'on voit) sont ramenées au chemin brut pour le tirage, puis relues sur le chemin lissé.
+  Sur la feuille, le lasso de Ctrl (`springtools.rs`) ne se prend plus, avec l'outil Trajectoire, qu'à l'appui et
+  ailleurs que sur le chemin (avant : dès que Ctrl était tenu au-dessus du dessin) ; Ctrl+Maj prend toujours le lasso
+  de tous les calques, même sur le chemin.
+- **Aide** : une animation de plus, « Poignées de trajectoire » (`aidegestes.rs`, rubrique Trajectoire, après « Tordre
+  le chemin » ; sur la feuille et dans l'espace), et son texte dans le registre. La phrase de prise de l'outil dans la
+  vue (`PRISE`) et la légende du bas de la vue disent le Ctrl+clic sur le chemin.
+
+### Essais
+
+`src/trajectoirepoignees_tests.rs`, 9 essais : le modèle (tirer une poignée : la cloche, les bouts et l'autre poignée
+fixes, les marques, le tirage du chemin borné par une poignée ; sur un zigzag lissé fort, les poignées restent où on les
+voit) ; l'écriture et la relecture (poignées et hauteurs, un
+fichier d'avant, des hauteurs abîmées, une trajectoire sur la feuille) ; lissage, prolongement par les deux bouts,
+retracé et miroir avec des hauteurs ; sur la feuille, de vrais gestes de souris (Ctrl+clic pose, Ctrl+clic ailleurs prend
+toujours le lasso, Ctrl+clic sur la poignée la retire, Ctrl+Z ; tirer une poignée, Échap, une étape, les clés suivent) ;
+dans la vue Espace 3D (deux cartes et la caméra choisies, une carte verrouillée laissée de côté et dite en tête de la
+barre d'état, la flèche y qui monte le chemin, la carte et la caméra qui montent avec lui, enregistrer et relire, Échap,
+Ctrl+Z, retirer pour tous) ; Ctrl+clic loin du chemin choisit toujours une carte, et glisser une poignée la déplace sur
+le sol ; dans une vue de face orthographique, la flèche y monte le chemin.
+
+### Ce qui reste, ce qui est douteux
+
+- **Le temps se mesure à plat.** Les fractions (marques, temps, vitesse) sont lues sur le chemin posé dans son plan :
+  sur une pente raide (une poignée montée haut sur un court morceau), ce qui suit le chemin va un peu plus vite que sur
+  le plat. À juger par Anthony ; mesurer la longueur dans l'espace changerait la place des marques des chemins déjà
+  tracés.
+- Un chemin **lissé** : c'est le chemin brut qui est tiré ; le chemin lissé passe près de la poignée, pas exactement
+  dessus, et les autres poignées peuvent bouger un peu avec le lissage.
+- Le rayon du tirage est le même pour une flèche que pour le glisser : un bon tiers du chemin. Un tirage très haut sur
+  un chemin court fait une bosse étroite.
+- Un **retracé** pose le trait neuf à plat : les hauteurs s'en vont, les poignées restent à leurs fractions.
+- Sur la feuille, seules les poignées du calque courant se voient et se prennent (comme le reste de l'outil).
+- **Un exe d'avant ce chantier** (même format 55) ouvre le projet en ignorant les poignées et les hauteurs ; avec
+  l'écriture continue, il le réécrit à plat. Ne tester cette branche que sur une copie de projet.
+- Le texte de l'animation « Trajectoire dans l'espace » (`aidecatalogue.rs`) dit encore « Ctrl+clic choisit une carte
+  ou la caméra » sans préciser « ailleurs que sur le chemin » : les fichiers de l'aide sont retouchés en parallèle sur
+  `aide-flottante`, seule l'animation des poignées a été ajoutée ici.
+- Après Ctrl+Z, la poignée choisie garde son rang : elle peut désigner une voisine de celle qu'on vient de poser.
+- Rien n'a été regardé à l'écran.
+
+### À vérifier à l'écran (par Anthony), sur une copie de projet
+
+1. Feuille, outil Trajectoire : un chemin. Ctrl+clic sur le chemin : un petit rond jade. Ctrl+clic ailleurs sur le
+   dessin : le lasso, comme avant. Ctrl+clic sur le rond : il s'en va.
+2. Deux poignées ; glisser la première : le chemin se tord en douceur, la seconde et les bouts ne bougent pas. Échap au
+   milieu : tout revient. Ctrl+Z après : un seul pas.
+3. Espace 3D, plan en Espace 3D, une carte avec un chemin au sol. Ctrl+clic sur le chemin : la poignée et ses trois
+   flèches x (rouge), y (vert), z (bleu). Tirer la flèche y : le chemin monte en douceur hors du sol ; lire le plan : la
+   carte monte et redescend. Dire si la douceur et la largeur de la bosse conviennent.
+4. Tirer x et z : la poignée glisse sur le sol. Glisser la poignée elle-même : elle suit le pointeur sur le sol.
+5. Choisir la caméra (seule, ou avec la carte), poser une poignée sur son chemin, tirer y : la caméra monte, sans clé.
+6. « Vues », 4 vues, une de face : tirer la flèche y dans la vue de face ; le chemin monte dans les quatre vues.
+7. Curseur « Lissage » sur un chemin qui monte : la bosse s'adoucit, les bouts restent. Maj + un trait depuis un bout :
+   le chemin continue, la poignée reste où elle était.
+8. Enregistrer, fermer, rouvrir : les poignées et la bosse sont là.
+9. Dire si la vitesse sur une pente raide (voir « Le temps se mesure à plat ») gêne.
