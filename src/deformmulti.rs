@@ -600,5 +600,6 @@ impl App {
             }
         });
         // (Le mode d'emploi est dans l'animation « L'enveloppe » et le registre des explications, partie 153.)
+        self.avertir_laisses_de_cote(ui);
     }
 }

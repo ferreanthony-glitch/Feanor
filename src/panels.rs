@@ -468,7 +468,10 @@ impl App {
         // « Espace 3D », `espace3dpanneau.rs`, partie 150.)
         // Le stylo ou la gomme d'annotation de la planche a ses propres réglages (`annotationsui.rs`).
         if self.annot_actif() {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
+            // (Le ▶ dans une ligne, comme sous le titre des autres outils : seul, il prendrait toute la hauteur du panneau.)
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));
+            });
             self.aide_joueur_ui(ui);
             self.annot_reglages_ui(ui);
             return;
@@ -554,6 +557,7 @@ impl App {
                 if peers >= 2 {
                     ui.label(RichText::new(format!("{peers} calques choisis : ils se déplacent, tournent et grandissent ensemble.")).strong());
                 }
+                self.avertir_laisses_de_cote(ui);
                 // x, y, largeur, hauteur et angle sur une seule ligne, sous le titre ; puis le point fixe et la rotation (où
                 // ils étaient) ; puis les clés de position (animer le calque), toujours visibles : plus de « Plus de réglages »
                 // ici (Anthony, 2026-11-08). Le mode d'emploi des poignées est dans leurs bulles (`layertools::bulle_poignee`).

@@ -193,6 +193,11 @@ impl App {
         }
         ui.add_space(6.0);
         change |= self.serveur_local_prefs_ui(ui);
+        // Un service en ligne choisi : ses licences et les données envoyées sont à vérifier (le détail est dans le registre).
+        if Role::ALL.iter().any(|&r| self.settings.generation_son.mode(r) == Mode::EnLigne) {
+            ui.add_space(6.0);
+            crate::theme::avertir_petit(ui, "Service en ligne : vérifie ses licences et ce que deviennent les données envoyées.");
+        }
         if change {
             self.settings.generation_son = std::mem::take(&mut self.settings.generation_son).sanitized();
             let _ = self.settings.save();

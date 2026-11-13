@@ -361,7 +361,7 @@ fn every_tool_is_in_the_list_of_tools_without_grey_text() {
 
 #[test]
 fn every_tool_has_its_animation() {
-    for contexte in ["trajectoire", "trajectoire.espace", "selection", "selection.bitmap", "selection.couleur", "selection.multi", "pinceau", "crayon", "melangeur", "gomme", "cutter", "remplissage", "degrade", "formes", "texte", "deformer", "sculpter", "pipette", "main", "camera", "espace3d", "vignettes", "vignettes.camera", "vignettes.annotation"] {
+    for contexte in ["trajectoire", "trajectoire.espace", "selection", "selection.bitmap", "selection.couleur", "selection.multi", "pinceau", "crayon", "melangeur", "gomme", "cutter", "remplissage", "degrade", "formes", "texte", "deformer", "sculpter", "pipette", "main", "camera", "espace3d", "vignettes", "vignettes.camera", "vignettes.annotation", "transformer", "gomme.bitmap"] {
         assert!(!aideanim::du_contexte(contexte).is_empty(), "rien pour « {contexte} »");
     }
 }

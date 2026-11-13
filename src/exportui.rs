@@ -32,6 +32,12 @@ pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
 const FINI_AFFICHE: f64 = 8.0;
 
+/// Images à la clé : combien de calques des plans `plans` ne font pas de clé (cachés, calques d'effet, calques vidéo). Les annotations,
+/// qui suivent leur case à cocher, ne comptent pas (partie 153 : l'avertissement n'est dit que s'il y en a).
+pub(crate) fn calques_sans_cle(doc: &crate::document::Document, plans: &[usize]) -> usize {
+    plans.iter().filter_map(|&pi| doc.panels.get(pi)).flat_map(|p| p.layers.iter()).filter(|l| !l.annotation && (!l.visible || l.effet.is_some() || l.video.is_some())).count()
+}
+
 fn good() -> Color32 {
     crate::theme::succes()
 }
@@ -496,6 +502,11 @@ impl App {
                             }
                             if sans > 0 && cles > 0 {
                                 crate::theme::avertir_petit(ui, format!("{sans} plan{} sans clé (rien de dessiné sur un calque visible) : pas d'image.", if sans > 1 { "s" } else { "" }));
+                            }
+                            let sans_cle = calques_sans_cle(&self.doc, &plans);
+                            if sans_cle > 0 {
+                                let pl = if sans_cle > 1 { "s" } else { "" };
+                                crate::theme::avertir_petit(ui, format!("{sans_cle} calque{pl} caché{pl}, d'effet ou vidéo : pas de clé."));
                             }
                         });
                         ui.end_row();

@@ -28,11 +28,8 @@ pub(crate) static OUTILS: &[Anim] = &[
         contextes: &["trajectoire", "trajectoire.espace"],
         duree: 5.6,
         dessin: maj_prolonger,
-        texte: "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). \
-                Maj + un trait depuis un bout du chemin le prolonge, devant ou derrière. \
-                Glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, les marques restent. \
-                Sur la timeline, glisser la première clé, la dernière ou une marque les recale dans le temps ; Suppr sur une marque la retire. \
-                Transformer déplace le calque et son chemin ensemble.",
+        // (Le reste du mode d'emploi du chemin est avec « Tordre le chemin… », `aidegestes.rs`.)
+        texte: "Maj + un trait depuis un bout du chemin le prolonge, devant ou derrière.",
     },
     Anim {
         id: "trajectoire.espace",
@@ -44,7 +41,7 @@ pub(crate) static OUTILS: &[Anim] = &[
         texte: "Dans la vue Espace 3D, d'un plan coché « Plan en Espace 3D » (panneau Espace 3D) : sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat. \
                 Trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi : chaque carte choisie, et la caméra si elle l'est, le suit depuis la tête de lecture jusqu'à la fin du plan, en partant de là où elle est. \
                 Puis de petits traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, ça va lentement ; espacées, vite. \
-                Ctrl+clic choisit ou lâche une carte, la caméra.\n\
+                Ctrl+clic choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche.\n\
                 Tirer sur le chemin le tord là où on le prend (Maj : le déplacer en bloc). Maj + un trait depuis un bout du chemin le prolonge, devant ou derrière, sur le même plan. \
                 Glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, sur la surface qu'il touche ; les marques restent. \
                 Sur la timeline, glisser la première clé, la dernière ou une marque d'une carte les recale dans le temps. \
