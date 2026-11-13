@@ -276,6 +276,12 @@ pub struct Trajectoire {
     /// le temps ou retracer le chemin ne change pas leur ordre.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dessins: Vec<DessinJalon>,
+    /// Les dessins des marques retirées depuis le dernier calcul (`retirer_marque`, `retirer_les_marques`) : c'est la trajectoire
+    /// qui les avait posés, et le calcul qui suit les reprend aux images qui les montrent encore. Sans cette note, il les
+    /// prendrait pour des dessins posés à la main, qu'il ne recouvre jamais (`trajectoireui.rs`,
+    /// `trajectoire_exposer_les_dessins`). **Jamais écrite dans le fichier** : le calcul, qui suit toujours, la vide.
+    #[serde(skip)]
+    pub retires: Vec<u64>,
     /// Le dessin tourne avec le chemin (Anthony, 2026-11-08) : il pivote, autour du point d'ancrage, pour regarder où va le chemin,
     /// en gardant son orientation du départ. Faux d'origine : il garde son orientation sur tout le chemin.
     #[serde(default, skip_serializing_if = "est_faux")]
@@ -344,6 +350,7 @@ impl Trajectoire {
             decalage_depart: [0.0, 0.0],
             source: None,
             dessins: Vec::new(),
+            retires: Vec::new(),
             tourne: false,
             support: None,
             lissage: 0.0,
@@ -525,6 +532,8 @@ impl Trajectoire {
             d.push(dessins[0]);
             d.extend(origines.iter().map(|&j| dessins[j + 1]));
             d.push(dessins[dessins.len() - 1]);
+            // (Le dessin d'une marque laissée : la trajectoire l'avait posé, le calcul suivant le reprend, `retires`.)
+            self.retires = dessins.iter().map(|x| x.dessin).filter(|c| !d.iter().any(|y| y.dessin == *c)).collect();
             d
         } else {
             dessins
@@ -959,11 +968,13 @@ impl Trajectoire {
             .map(|(i, _)| i)
     }
 
-    /// Retire la marque `i` ; en clés d'images, son dessin s'en va avec elle, les autres jalons gardent les leurs.
+    /// Retire la marque `i` ; en clés d'images, son dessin s'en va avec elle (noté dans `retires` : le calcul suivant le reprend
+    /// aux images qui le montrent), les autres jalons gardent les leurs.
     pub fn retirer_marque(&mut self, i: usize) {
         if i < self.marques.len() {
             if self.dessins.len() == self.marques.len() + 2 {
-                self.dessins.remove(i + 1);
+                let retire = self.dessins.remove(i + 1);
+                self.retires.push(retire.dessin);
             }
             self.marques.remove(i);
             match self.temps.as_mut() {
@@ -976,10 +987,12 @@ impl Trajectoire {
     }
 
     /// Toutes les marques retirées (« Retirer les marques ») : le chemin reste, à vitesse constante, en parts égales. En clés
-    /// d'images, le départ et l'arrivée gardent leurs dessins ; ceux des marques s'en vont avec elles.
+    /// d'images, le départ et l'arrivée gardent leurs dessins ; ceux des marques s'en vont avec elles (notés dans `retires`).
     pub fn retirer_les_marques(&mut self) {
         if self.dessins.len() == self.marques.len() + 2 && self.dessins.len() > 2 {
             let arrivee = self.dessins[self.dessins.len() - 1];
+            let dernier = self.dessins.len() - 1;
+            self.retires.extend(self.dessins[1..dernier].iter().map(|d| d.dessin));
             self.dessins.truncate(1);
             self.dessins.push(arrivee);
         }

@@ -549,7 +549,13 @@ impl App {
             self.espace3d.sel = vec![id];
             self.e3_follow_card(id);
         }
-        // (Ce qui est choisi, sans le repli sur la carte du calque courant : la barre d'état dit ce qui l'est vraiment.)
+        self.e3_traj_dire_ce_qui_suivra();
+    }
+
+    /// La barre d'état dit ce que le chemin déplacera : ce qui est choisi dans la vue, sans le repli sur la carte du calque
+    /// courant (elle dit ce qui l'est vraiment). Après un Ctrl+clic de l'outil (`e3_traj_choisir`), et après le bouton
+    /// « Caméra » de la barre de la vue pris avec l'outil (`espace3dui.rs`, `espace3d_pick_camera`).
+    pub(crate) fn e3_traj_dire_ce_qui_suivra(&mut self) {
         let cartes = self.espace3d.sel.iter().filter(|&&s| self.e3_card_layer(s).is_some()).count();
         let camera = self.espace3d.sel.contains(&CAMERA_ID);
         self.status = match (cartes, camera) {
@@ -870,6 +876,11 @@ impl App {
     /// marque, tirer le chemin ou recaler un jalon dans le temps ne refait donc aucun dessin : sa clé change seulement
     /// d'image. Faux, avec la raison dans la barre d'état, s'il n'y a pas de dessin au départ.
     fn trajectoire_poser_les_dessins_dans_l_espace(&mut self, pi: usize, li: usize) -> bool {
+        // Une clé de dessin posée à la main n'est jamais remplacée (`trajectoireui.rs`) : un jalon qui tomberait sur elle est
+        // posé à côté, et sa clé de position tenue le suit.
+        if self.trajectoire_ecarter_des_dessins_a_la_main(pi, li) {
+            self.trajectoire_cles_dans_l_espace(pi, li);
+        }
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
         let images = t.images_des_jalons(duree);
@@ -894,20 +905,9 @@ impl App {
             };
             dessins.push(DessinJalon { dessin, dx: 0.0, dy: 0.0, angle: 0.0 });
         }
-        let l = &mut self.doc.panels[pi].layers[li];
-        if l.frames.len() < duree {
-            l.frames.resize(duree, None);
-        }
-        for k in 0..images.len() {
-            let fin = if k + 1 < images.len() { images[k + 1] } else { duree };
-            for f in images[k]..fin.min(duree) {
-                l.frames[f] = Some(dessins[k].dessin);
-            }
-        }
-        if let Some(t) = l.trajectoire.as_mut() {
-            t.source = Some(source);
-            t.dessins = dessins;
-        }
+        // (Comme sur la feuille : les clés de dessin posées à la main entre les jalons restent à leur image, et la barre
+        // d'état le dit une fois, `trajectoireui.rs`.)
+        self.trajectoire_exposer_les_dessins(pi, li, &t, &images, source, dessins);
         true
     }
 

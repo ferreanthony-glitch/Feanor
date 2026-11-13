@@ -876,6 +876,9 @@ impl App {
         self.fusion_noms_ui(ctx);
         self.corbeille_fenetre_ui(ctx);
         self.coupe_versions_ui(ctx);
+        // La Trajectoire en clés d'images : ce qu'elle a laissé aux dessins posés à la main, dit une fois dans la barre d'état
+        // (`trajectoireui.rs`).
+        self.trajectoire_dire_les_dessins_a_la_main();
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);

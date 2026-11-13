@@ -8364,7 +8364,11 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   jalon** (2026-11-13, partie 152, à sa demande : « règle ce qui reste imparfait » ; avant, ils étaient rangés par rang, et une
   marque posée au milieu du chemin décalait d'une marque les poses redessinées) : une marque posée reçoit une copie du dessin du
   jalon d'avant, tel qu'on l'a laissé, mise à sa place sur le chemin ; une marque retirée emporte le sien ; « Retirer les
-  marques » garde ceux du départ et de l'arrivée ; seul le départ montre le dessin d'origine lui-même. Vectoriel : les traits sont translatés,
+  marques » garde ceux du départ et de l'arrivée ; seul le départ montre le dessin d'origine lui-même. **Une clé de dessin
+  posée à la main entre deux jalons n'est jamais remplacée** (2026-11-13, partie 152.2, à sa demande, sans boîte de
+  dialogue : « Tout ce qui peut s'en passer s'en passera ») : elle reste à son image avec son dessin, le dessin du jalon
+  d'avant est exposé jusqu'à elle, un jalon qui tomberait sur elle est posé sur l'image libre d'à côté, et la barre
+  d'état le dit une fois ; elle n'est ni déplacée ni tournée avec le chemin. Vectoriel : les traits sont translatés,
   le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
   suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
   le modèle des clés de position, format 49, sans emploi ici.)
@@ -11456,6 +11460,7 @@ courant comme la rangée choisie.
 | Outil Trajectoire, **Ctrl+clic** sur la caméra ou sur une carte | elle, **seule** : ce qui était choisi est lâché. Une carte choisie ainsi devient le calque courant |
 | Outil Trajectoire, **Maj+Ctrl+clic** | elle rejoint ce qui est choisi, ou le quitte : c'est ainsi qu'on choisit exprès la caméra avec des cartes, ou plusieurs cartes |
 | Outil Trajectoire, Maj seule | rien de neuf : Maj à l'appui déplace le chemin en bloc, comme avant |
+| Outil Trajectoire, **bouton « Caméra » de la barre de la vue** (ou sa commande) | elle, **seule**, et **l'outil Trajectoire garde le pointeur** : le trait suivant trace son chemin. Maj+clic : elle rejoint ce qui est choisi, ou le quitte. La case reste allumée tant que la caméra est choisie (réglé le 13 novembre, à sa demande : « Le bouton « Caméra » de la barre de la vue fait quitter l'outil Trajectoire. On garde l'outil » ; avant, le bouton rendait le pointeur aux cartes, comme un outil de la vue). Avec tout autre outil, le bouton fait ce qu'il faisait ; les autres outils de la vue (choisir, déplacer, tourner, taille) rendent toujours le pointeur aux cartes |
 | Outils de la vue, clic sur la caméra | elle, seule (comme avant) ; Maj+clic ou Ctrl+clic l'ajoute ou la lâche (avant, un second Maj+clic l'inscrivait deux fois). **Même avec une carte derrière son dessin** : la caméra passe d'abord, comme au Ctrl+clic de l'outil Trajectoire, et tirer son dessin la déplace, elle (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, la carte de derrière l'emportait) |
 | Timeline ou montage, clic sur la piste « Caméra » (son nom, le vide de sa rangée, une de ses clés) | elle, seule, la vue Espace 3D montrée (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») |
 | Panneau Espace 3D, « choisir » de la caméra | elle, seule ; **Maj+clic** : avec les cartes déjà choisies, ou lâchée |
@@ -11501,8 +11506,9 @@ commencer un trait ou un lasso dans la vue, la caméra ayant été choisie entre
 Trajectoire, lui, garde la caméra choisie : c'est elle qui suivra le chemin.
 
 **Comment.** `espace3dui.rs` : `App::e3_camera_seule`, `App::calque_montre_courant`, `App::e3_choisir_la_camera`,
-`App::e3_calque_choisi` (appelé par `App::select_layer`), `App::e3_piste_camera_cliquee` (13 novembre).
-`trajectoire3d.rs` : `e3_traj_choisir`. `espace3dview.rs` : `e3_click`, `e3_press` (la caméra d'abord, 13 novembre).
+`App::e3_calque_choisi` (appelé par `App::select_layer`), `App::e3_piste_camera_cliquee` (13 novembre),
+`espace3d_pick_camera` et `espace3d_tools` (le bouton « Caméra » qui garde l'outil Trajectoire, 13 novembre).
+`trajectoire3d.rs` : `e3_traj_choisir`, `e3_traj_dire_ce_qui_suivra` (la phrase de la barre d'état, pour le Ctrl+clic et pour le bouton). `espace3dview.rs` : `e3_click`, `e3_press` (la caméra d'abord, 13 novembre).
 `timeline.rs` (`timeline_names`, `timeline_grid`), `layerheads.rs`, `montagerows.rs` (`row_headers`), `storyboard.rs`
 (`montage_strip`) : les rangées et leurs clics. `layersui.rs` (`layer_list`, `layers_panel`), `fondui.rs`
 (`select_aplat`, `aplat_subrow`) : le panneau Calques. `espace3ddessin.rs` (`e3_dessiner`, `e3_debut_du_trait`),
@@ -11551,6 +11557,47 @@ Chacune est une seule étape d'annulation. Sans dessin à l'image du départ, ri
 (« Il manque un dessin au départ : dessine d'abord à l'image N… ») ; la carte, elle, saute quand même de jalon en jalon.
 La caméra n'a pas de dessin : rien ne change pour elle. « Clés d'interpolation » ne change pas.
 
+**Une clé de dessin posée à la main n'est jamais remplacée** (réglé le 13 novembre, à sa demande, sur la feuille comme
+dans l'espace). Anthony : « Une clé de dessin posée à la main entre deux marques est écrasée au recalcul suivant du
+chemin : une boîte de dialogue demande si on écrase le dessin ou non. » Puis, le même jour : « Je préfère qu'on évite au
+maximum la boîte de dialogue. Tout ce qui peut s'en passer s'en passera. » **Ce cas s'en passe : rien n'est demandé,
+parce que rien n'est plus jamais écrasé.**
+
+- **Ce qui est à la trajectoire** : son dessin d'origine et les dessins de ses jalons (`source`, `dessins`). Entre son
+  départ et la fin du plan, toute image où commence un autre dessin est **une clé posée à la main** (la commande
+  « Nouvelle clé », un dessin collé, des images dupliquées…).
+- **Le calcul lit la timeline comme une suite de clés**, dans l'ordre des images : les jalons et les clés posées à la
+  main. Chacune montre son dessin jusqu'à la suivante : un jalon, le sien ; une clé posée à la main, le dessin qu'on y a
+  mis. Le dessin du jalon d'avant est donc exposé jusqu'à elle, et elle tient jusqu'au jalon d'après. Une clé posée à la
+  main n'est jamais retirée, déplacée ni remplacée ; un jalon peut seulement écourter le temps où son dessin est tenu,
+  comme toute clé posée après une autre. Dans l'espace, la carte garde une clé de position tenue par jalon : le dessin
+  posé à la main se voit là où la carte est tenue.
+- **Un jalon qui tomberait exactement sur l'image d'une clé posée à la main** (une marque posée, un recalage sur la
+  timeline, « Temps égaux », « Partir » ou « Finir à la tête de lecture ») est posé sur **l'image libre la plus proche**,
+  celle d'après de préférence, sinon celle d'avant, entre ses deux jalons voisins ; dans l'espace, sa clé de position
+  tenue le suit. Le temps des marques devient alors explicite (« Temps égaux » le rend, et repose le jalon à côté s'il
+  retombe sur elle). Sans image libre entre ses voisins, le jalon reste où il est et c'est la clé posée à la main qui se
+  voit à cette image.
+- **C'est dit une fois, dans la barre d'état, jamais dans une fenêtre**, à la suite de ce que le geste y écrit :
+  « Trajectoire : 1 dessin posé à la main gardé entre les marques (image 18). » (« 2 dessins posés à la main gardés…
+  (images 7 et 18) » ; avec plusieurs cartes : « (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17) »), quand un
+  calcul laisse des clés qu'il n'avait pas encore dites ; pas à chaque calcul, ni à chaque image d'un geste. Et, pour un
+  jalon posé à côté : « Trajectoire : une marque tombait sur un dessin posé à la main, à l'image 9 : elle est posée à
+  l'image 10. » (« le départ… il est posé », « l'arrivée… elle est posée »).
+- **Retirer soi-même sa clé** : « Supprimer la clé » (menu de la piste) rend tout de suite ses images à la clé d'avant,
+  le dessin du jalon ; « en laissant un vide », le calcul suivant le comble. Suppr sur la clé vide son dessin et laisse
+  la clé : c'est toujours une clé posée à la main, vide. Aucun calcul ne suit une suppression de clé : il n'en faut pas.
+- **Glisser sur la timeline la clé de dessin d'un jalon, seule (Maj),** ne passe pas par-dessus une clé posée à la
+  main : ce geste s'arrête déjà à la clé voisine, qui garde au moins une image. (Le glisser ordinaire, qui pousse ou
+  retire des images avec la clé, reste le geste de la timeline : ce qu'il fait sortir du calque va à la corbeille, et
+  la barre d'état le dit, comme pour tout calque.)
+- **Un calque ou un plan dupliqué** : ses dessins sont des copies, mais sa trajectoire notait encore ceux de l'original
+  (et le premier calcul les exposait dans la copie : les deux calques partageaient alors leurs poses). Maintenant,
+  quand aucun des dessins notés n'est sur le calque, chaque jalon prend pour sien le dessin qui commence à son image :
+  la copie garde ses propres dessins, rien ne bouge.
+- « Clés d'interpolation », « Détacher » et « Effacer » ne touchaient déjà qu'aux dessins de la trajectoire : les clés
+  posées à la main restent.
+
 **Fichier.** Toujours le format 55 : les champs `source` et `dessins` de la trajectoire d'un calque existaient (format
 49). Avant, ils étaient oubliés à la lecture d'une trajectoire dans l'espace ; ils sont maintenant gardés
 (`Trajectoire::assainie`), sans quoi le calcul suivant aurait refait des copies et laissé de côté ce qu'on avait
@@ -11561,6 +11608,11 @@ par jalon, dans l'ordre des jalons ; c'est le programme qui garde cet ordre quan
 trajectoire relue dont les marques étaient en désordre garde chaque dessin à sa marque. Un fichier d'avant se relit tel
 quel, dans le même ordre ; une liste qui n'a pas un dessin par jalon (fichier abîmé) se relit telle quelle et le calcul
 suivant la range par rang, comme avant.
+**Rien de neuf non plus pour les clés posées à la main** (13 novembre) : aucune liste n'est gardée, le calcul les
+reconnaît à chaque fois dans la timeline (un dessin qui n'est ni `source` ni dans `dessins`). Le programme tient
+seulement, le temps d'un geste et sans jamais l'écrire, la note des dessins des marques qu'on vient de retirer
+(`Trajectoire::retires`), pour que le calcul qui suit les reprenne au lieu de les prendre pour des dessins posés à la
+main.
 
 **Comment.** `trajectoire3d.rs` : `trajectoire_recalculer_dans_l_espace` pose les clés de position
 (`trajectoire_cles_dans_l_espace`, par `cles_dans_l_espace`, inchangée) puis les dessins
@@ -11571,6 +11623,16 @@ suivant la range par rang, comme avant.
 va), `retirer_les_marques` (nouvelle), `assainie` (les dessins suivent leurs marques remises en ordre) ; le calcul des
 dessins (`trajectoire_poser_les_dessins` sur la feuille, `trajectoire_poser_les_dessins_dans_l_espace`) fait sa copie au
 jalon qui montre le même dessin que celui d'avant.
+Les clés posées à la main (13 novembre) : la règle est **dans la pose des dessins**, pas dans les gestes, pour que tout
+calcul y passe, d'où qu'il vienne (`trajectoire_recalculer`, `trajectoire_recalculer_dans`). `trajectoireui.rs` :
+`trajectoire_exposer_les_dessins` (nouvelle : le seul endroit où la pose des dessins change la timeline, pour la feuille
+et pour l'espace ; elle lit les clés posées à la main, `cles_a_la_main`, et les laisse) ;
+`trajectoire_ecarter_des_dessins_a_la_main` (nouvelle, appelée en tête des deux poses : le jalon posé à côté, le dessin
+d'un calque dupliqué pris pour le sien) ; `DessinsALaMain` et `trajectoire_dire_les_dessins_a_la_main` (la phrase de la
+barre d'état, dite une fois, à l'image d'écran suivante : `panels.rs`) ; `trajectoire_defaire_les_dessins`.
+`trajectoire3d.rs` : `trajectoire_poser_les_dessins_dans_l_espace` (elle repose les clés de position si un jalon a
+changé d'image). `trajectoire.rs` : `Trajectoire::retires` (jamais écrit), `retirer_marque`, `retirer_les_marques`,
+`assainie`.
 **Qui pose les clés d'une carte à la main doit passer par `App::trajectoire_recalculer` (ou
 `trajectoire_recalculer_dans`)** : `cles_dans_l_espace` seule ne pose que les clés de position.
 
@@ -11753,14 +11815,46 @@ pendant qu'une autre session construisait et lançait ses essais sur la même ma
 Au second, 4 613 réussis, 0 échec. Dix groupes OK les deux fois ; le seul avertissement connu (celui des fonctions jamais
 appelées de `espace3d.rs`), aucun nouveau.
 
+**Essais de ses deux décisions du 13 novembre.** `src/trajectoire3d_camera_tests.rs`, 1 essai nouveau, de vrais clics
+sur la case « Caméra » de la barre de la vue : avec l'outil Trajectoire et une carte choisie, la caméra seule, la case
+allumée, l'outil qui garde le pointeur, un trait long au sol qui donne son chemin à la caméra sans changer aucun calque ;
+Maj+clic ; la commande ; « choisir », qui reprend toujours le pointeur ; avec le pinceau, la case comme avant.
+`src/trajectoire_main_tests.rs` (nouveau), 5 essais, la vraie commande « Nouvelle clé », de vrais traits de pinceau et de
+vrais gestes de souris. Sur la feuille : une clé posée à la main entre deux jalons, dessinée, puis une marque glissée,
+une marque posée après elle et une avant, une marque arrachée, un jalon recalé sur la timeline, « Temps égaux », le
+chemin retracé, Ctrl+Z et Ctrl+Maj+Z, clés d'interpolation et retour, l'enregistrement et la relecture : elle est
+toujours à son image, avec son dessin, aucune fenêtre ne s'ouvre, et la barre d'état le dit une fois ; sa suppression
+(les deux commandes), l'annulation. Une marque qui tomberait sur son image (une marque de plus, « Temps égaux », « Finir à
+la tête de lecture ») posée à l'image d'après, avec la phrase de la barre d'état, trois annulations. Un calcul demandé
+directement (`trajectoire_recalculer_dans`, sans geste), refait douze fois : rien ne change, rien n'est redit ; une
+seconde clé se dit, une clé retirée non. Un calque dupliqué, qui garde ses propres dessins à son premier calcul. Dans
+l'espace, deux cartes choisies, trois clés posées à la main dont une dessinée au pinceau dans la vue : la marque glissée
+dans la vue, une seule phrase qui les compte toutes, les clés de position tenues inchangées ; le jalon tiré sur la
+timeline jusque sur l'image d'une clé (posé à l'image d'après avec sa clé de position, une étape, annulée), puis plus
+loin, avant elle et de retour (la clé ne bouge jamais, son exposition revient exactement) ; la marque arrachée, annulée,
+rétablie ; clés d'interpolation et retour ; l'enregistrement et la relecture ; la suppression. Adapté :
+`trajectoire_tests.rs` (le champ de plus dans une trajectoire écrite à la main). Filtre `trajectoire` : 67 réussis, aucun
+échec. Vérificateur complet (13 novembre, 10 h 07) : 4 619 réussis, 1 échec,
+`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released` (un essai de repos
+des Vignettes, que ce chantier ne touche pas et qui a déjà échoué une fois en suite complète quand la machine est
+occupée) ; repassé seul le soir, sur le même code : réussi. Dix groupes OK ; le seul avertissement connu (les cinq
+méthodes jamais appelées de `espace3d.rs`), aucun nouveau.
+
 **Ce qui n'est pas fait.**
 
-- **Le bouton « Caméra » de la barre de la vue** choisit la caméra seule, mais c'est un outil de la vue : il reprend le
-  pointeur à l'outil Trajectoire. Pour tracer le chemin de la caméra sans lâcher l'outil : Ctrl+clic sur elle,
-  « choisir » du panneau Espace 3D, ou un clic sur sa piste dans la timeline ou le montage.
-- **Une clé de dessin ajoutée à la main entre deux jalons** d'une trajectoire en clés d'images est recouverte au
-  recalcul suivant (une marque, un recalage) : le calcul repose une clé de dessin à chaque jalon, comme sur la feuille.
-  (Les poses redessinées, elles, restent à leur jalon depuis le 13 novembre.)
+- **Les clés de dessin posées à la main** (réglé le 13 novembre, voir 152.2 ; ce qui reste) : un jalon posé à côté
+  d'une clé posée à la main ne lui laisse qu'une image quand il est posé juste après elle (c'est la règle : l'image
+  libre la plus proche, celle d'après de préférence). Pendant qu'on glisse une marque dans la vue Espace 3D, la carte
+  suit par ses clés de position sans cet écart ; il se fait au lâcher, avec les dessins. Un dessin posé à la main n'est
+  ni déplacé ni tourné avec le chemin : c'est le tien, il reste où tu l'as dessiné. Un calque ou un plan dupliqué garde
+  ses propres dessins aux jalons ; mais sur la feuille, quand le départ n'est pas le dessin d'origine lui-même (ancrage
+  autre que « là où part le trait »), sa trajectoire note encore le dessin d'origine de l'original, dont elle refait ses
+  copies tournées (« le dessin tourne avec le chemin »). Les copies de calques et de plans ne font toujours pas suivre
+  à la trajectoire les numéros de leurs dessins (`layerops::layer_copy` et les autres) : c'est le calcul qui s'en
+  arrange.
+- **Échap pendant qu'on glisse la clé de position d'un jalon** d'une carte en clés d'images (timeline) rend le chemin et
+  les clés de position, pas les clés de dessin : elles restent où le geste les avait posées jusqu'au calcul suivant
+  (défaut d'avant ce chantier, vu en lisant le code, pas réglé : `cancel_pos_drag` ne rend pas les images).
 - **La caméra choisie seule, vue Espace 3D fermée** : rien ne se choisit, la piste « Caméra » ne se montre pas choisie
   (la caméra choisie n'existe que pour la vue). Les commandes du haut du panneau Calques et de ses icônes (dupliquer,
   supprimer, monter, descendre…) agissent toujours sur le calque courant, même quand aucun rang n'est montré choisi ;
@@ -11954,3 +12048,25 @@ Ce qui restait imparfait (réglé le 13 novembre, à sa demande : « règle ce q
     sa place sur le chemin). Poser une marque entre elle et la fin : une copie de la pose redessinée. Arracher une marque,
     ou Suppr sur sa clé : seule sa pose s'en va. Glisser une marque, recaler une clé sur la timeline, « Temps égaux »,
     retracer le chemin, Ctrl+Z, enregistrer et rouvrir : chaque pose reste à sa marque.
+
+Ses deux décisions du 13 novembre (« On garde l'outil » ; les dessins posés à la main, sans boîte de dialogue) :
+
+26. Vue Espace 3D d'un plan en Espace 3D, outil Trajectoire, une carte choisie. Cliquer le bouton « Caméra » de la barre
+    de la vue : la caméra est choisie, seule, la case reste allumée, et l'outil Trajectoire est toujours en main (sa
+    légende en bas de la vue, son curseur). Un trait long au sol : c'est le chemin de la caméra, aucun calque ne bouge.
+    Maj+clic sur la case : la caméra avec la carte. Avec le pinceau, la même case rend la main aux cartes, comme avant.
+27. Clés d'images, sur la feuille : un chemin, une marque. Entre le départ et la marque, pose une clé de dessin à la
+    main (« Nouvelle clé ») et dessine dessus. Glisse la marque, pose une marque avant et une après, retires-en une,
+    recale un jalon sur la timeline, « Temps égaux », retrace le chemin, passe en clés d'interpolation et reviens : ton
+    dessin est toujours à son image, tel que tu l'as laissé, et aucune fenêtre ne s'ouvre. La barre d'état le dit la
+    première fois : « Trajectoire : 1 dessin posé à la main gardé entre les marques (image N). » Dire si cette phrase
+    suffit, ou s'il faudrait le voir aussi dans la timeline (une teinte sur ces clés, par exemple).
+28. Pose une clé à la main, puis une marque de plus de sorte qu'une marque tombe sur son image (les marques se
+    partagent le temps) : la marque est posée à l'image d'après, la barre d'état le dit, ton dessin n'a pas bougé. Dire
+    si « l'image d'après » te convient (ton dessin ne tient alors qu'une image), ou s'il vaudrait mieux l'image d'avant.
+29. La même chose dans la vue Espace 3D, avec deux cartes choisies qui ont chacune une clé posée à la main : les deux
+    gardent leurs dessins, une seule phrase les compte. Glisse sur la timeline la clé de position d'une marque jusque sur
+    l'image de ta clé : elle se pose à l'image d'après, avec la clé de dessin de la marque.
+30. Supprime ta clé (clic droit sur la piste, « Supprimer la clé ») : le dessin de la marque d'avant reprend ses images.
+31. Duplique un calque qui a une trajectoire en clés d'images, puis glisse une marque dans la copie : la copie garde ses
+    propres dessins, et redessiner une pose de la copie ne change pas l'original.

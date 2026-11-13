@@ -295,6 +295,7 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
         decalage_depart: [f32::INFINITY, 0.0],
         source: None,
         dessins: vec![DessinJalon { dessin: 1, dx: f32::NAN, dy: 0.0, angle: 0.0 }, DessinJalon { dessin: 2, dx: 0.0, dy: 0.0, angle: f32::NAN }],
+        retires: Vec::new(),
         tourne: false,
         support: None,
         lissage: 0.0,

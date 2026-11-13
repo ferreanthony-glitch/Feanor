@@ -37,7 +37,7 @@ fn encre(b: &Banc, cel: CelId, x: usize, y: usize) -> bool {
 
 /// Un plan en Espace 3D d'une carte (« Carte 0 », avec un carré dessiné en (100, 80)), la vue près du sol, l'outil
 /// Trajectoire en main, les clés d'images proposées (celles d'origine). Rend le banc et le dessin du départ.
-fn banc_images(cartes: usize) -> (Banc, CelId) {
+pub(crate) fn banc_images(cartes: usize) -> (Banc, CelId) {
     let mut doc = doc_cartes(cartes);
     let source = doc.panels[0].layers[0].cel_at(0).expect("un dessin au départ");
     peindre(&mut doc, source, 100, 80, 12);
@@ -51,18 +51,18 @@ fn banc_images(cartes: usize) -> (Banc, CelId) {
 }
 
 /// Le point du monde à la fraction `f` du chemin d'essai (de (−2, 1) à (2, 3) sur le sol).
-fn sur_le_chemin(b: &Banc, f: f32) -> [f32; 3] {
+pub(crate) fn sur_le_chemin(b: &Banc, f: f32) -> [f32; 3] {
     [-2.0 + 4.0 * f, b.app.e3_world().sol_y(), 1.0 + 2.0 * f]
 }
 
 /// Un petit trait en travers du chemin d'essai, à la fraction `f` : une marque.
-fn marquer(b: &mut Banc, f: f32) {
+pub(crate) fn marquer(b: &mut Banc, f: f32) {
     let (c, sens) = (a_l_ecran(b, sur_le_chemin(b, f)), (a_l_ecran(b, sur_le_chemin(b, f + 0.02)) - a_l_ecran(b, sur_le_chemin(b, f - 0.02))).normalized());
     geste(b, &[c - sens.rot90() * 25.0, c + sens.rot90() * 25.0], Modifiers::NONE);
 }
 
 /// Les dessins exposés par le calque `li`, image par image.
-fn images(b: &Banc, li: usize) -> Vec<Option<CelId>> {
+pub(crate) fn images(b: &Banc, li: usize) -> Vec<Option<CelId>> {
     (0..b.app.frame_count()).map(|f| b.app.layers()[li].cel_at(f)).collect()
 }
 

@@ -55,7 +55,7 @@ fn bouton_avec(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
 }
 
 /// Un glisser sur les points `pts` de la feuille, une image d'écran par point.
-fn glisser(b: &mut Banc, pts: &[(f32, f32)]) {
+pub(crate) fn glisser(b: &mut Banc, pts: &[(f32, f32)]) {
     glisser_avec(b, pts, Modifiers::NONE);
 }
 
@@ -86,7 +86,7 @@ pub(crate) fn marquer_le_milieu(b: &mut Banc) {
     glisser(b, &[(200.0, 135.0), (200.0, 150.0), (200.0, 165.0)]);
 }
 
-fn derniere_etape(b: &Banc) -> String {
+pub(crate) fn derniere_etape(b: &Banc) -> String {
     b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default()
 }
 
@@ -94,7 +94,7 @@ fn cles(b: &Banc) -> Vec<(usize, f32, f32)> {
     b.app.layers()[0].pos_keys.iter().map(|k| (k.frame, k.t.x, k.t.y)).collect()
 }
 
-fn jalons(b: &Banc) -> Vec<usize> {
+pub(crate) fn jalons(b: &Banc) -> Vec<usize> {
     b.app.layers()[0].trajectoire.as_ref().map(|t| t.images_des_jalons(b.app.frame_count())).unwrap_or_default()
 }
 
@@ -723,7 +723,7 @@ fn the_tool_is_refused_in_the_vignettes_and_has_its_action_its_slot_and_its_hint
 }
 
 /// Le nombre de traits du dessin vectoriel `cel` : un dessin retouché en a de plus.
-fn traits(b: &Banc, cel: u64) -> usize {
+pub(crate) fn traits(b: &Banc, cel: u64) -> usize {
     b.app.doc.cels[&cel].vector.as_ref().map_or(0, |v| v.elements.len())
 }
 
