@@ -51,7 +51,7 @@ pub(crate) static VIGNETTES: &[Anim] = &[
         dessin: cameras,
         texte: "Sur la planche : survole une case, ses cadres se montrent. \
                 Glisser un cadre le déplace ; un coin le redimensionne (le zoom). Clic droit sur la case : ajouter ou retirer un cadre. \
-                Ctrl + Maj + glisser dans une case : le mouvement de caméra (Alt : un cadre de plus ; {vignettes.camera} tenue : pareil). \
+                Ctrl + Maj + glisser dans une case : le mouvement de caméra (Alt : un cadre de plus ; la touche du mode caméra{vignettes.camera} tenue : pareil). \
                 La case qui suit montre le dernier cadre. Le dessin ne bouge jamais : seuls les cadres bougent. \
                 Les réglages fins de la caméra (clés, adoucis, focale) sont dans le Storyboard.",
     },

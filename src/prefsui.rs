@@ -309,6 +309,12 @@ impl App {
                 self.settings_a_ecrire = true;
             }
         });
+        // Des plans ont déjà leur calque Décor : le choix ne les change pas.
+        let deja = self.doc.panels.iter().filter(|p| p.layers.iter().any(|l| l.decor)).count();
+        if deja > 0 {
+            let s = if deja > 1 { "s" } else { "" };
+            theme::avertir_petit(ui, format!("{deja} plan{s} {} déjà son calque Décor : il garde sa sorte.", if deja > 1 { "ont" } else { "a" }));
+        }
         // (2026-10-29 : la couleur et les tailles des trois pinceaux du décor sont celles des brosses dédiées Décor, réglées dans leur panneau.)
         ui.horizontal_wrapped(|ui| {
             ui.label("Brosses Décor");
@@ -440,6 +446,12 @@ impl App {
         ui.horizontal(|ui| {
             if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %, 3 variantes, 2 images par variante, épaisseur 0 %, graine 1, immobile à l'arrêt.").clicked() {
                 d = Default::default();
+            }
+            // Des calques du projet ont leur propre tremblement : ils le gardent.
+            let siens = self.doc.panels.iter().flat_map(|p| p.layers.iter()).filter(|l| l.fx.iter().any(|e| e.kind == crate::fx::EffectKind::Boil)).count();
+            if siens > 0 {
+                let s = if siens > 1 { "s" } else { "" };
+                theme::avertir_petit(ui, format!("{siens} calque{s} {} son propre tremblement : il le garde.", if siens > 1 { "ont" } else { "a" }));
             }
         });
         if d != avant {

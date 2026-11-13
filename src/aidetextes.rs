@@ -34,7 +34,7 @@ pub(crate) const EXPORTS: &str = "Exporter";
 pub(crate) static TEXTES: &[Texte] = &[
     // ------------------------------------------------------------------ Réglages (les textes sans animation)
     t(BROSSES, "Connexions", "Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (par exemple un réglage qui varie avec la pression ou la vitesse)."),
-    t(BROSSES, "Couleur A→B", "Couleur A→B : la couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source."),
+    t(BROSSES, "Couleur A→B", "La couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source."),
     t(BROSSES, "Mélange", "Modèle propre à FEANOR : à comparer avec tes outils de peinture."),
     t(BROSSES, "Toucher du stylet", "Réponse à la pression commune à tous les pinceaux, appliquée avant leurs réglages. « Ancien » : le toucher d'avant l'étude, pour comparer."),
     t(
@@ -46,5 +46,5 @@ pub(crate) static TEXTES: &[Texte] = &[
          Pinceau et crayon : peindre sous le trait, dans la forme (recoud l'aplat coupé). Clic sur le calque : revenir au trait. (La barre d'état le redit.)",
     ),
     t("Réglages : Transformer", "Clés de position", "Aucune clé : le calque garde sa pose fixe. Pose une clé, change d'image, déplace le calque."),
-    t("Réglages : Transformer", "Arrivée, départ", "Arrivée, départ : combien d'images le calque met à ralentir en arrivant à cette clé, à accélérer en repartant (0 : vitesse constante)."),
+    t("Réglages : Transformer", "Arrivée, départ", "Combien d'images le calque met à ralentir en arrivant à cette clé, à accélérer en repartant (0 : vitesse constante)."),
 ];

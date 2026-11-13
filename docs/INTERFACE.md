@@ -11903,6 +11903,23 @@ déplié ; chaque contexte a son animation ; la première ouverture des Vignette
 peint à t = 0, au milieu et à la fin, dans les deux thèmes ; pas de rouge ; pas de nom de logiciel commercial ; les
 textes des fenêtres ont quitté leur fichier.
 
+### 153.5 Après la relecture
+
+- Le ▶ des outils d'annotation est sur sa ligne (il prenait toute la hauteur du panneau et faussait la mesure des panneaux ajustés).
+- Une animation n'est retenue comme vue qu'à son début : une suite repliée, un outil changé ou FEANOR quitté pendant la première laisse
+  les suivantes à voir.
+- Avertissements rendus, courts (`theme::avertir_petit`), seulement quand ils disent vrai : un service de sons en ligne choisi (licences,
+  données envoyées) ; des plans ont déjà leur calque Décor ; des calques ont leur propre tremblement ; des calques cachés, d'effet ou vidéo
+  ne font pas de clé (images à la clé) ; des calques choisis cachés ou verrouillés sont laissés de côté (Transformer, sélection et
+  déformation de plusieurs calques). Ligne d'état « Aucune annotation pour l'instant. » rendue.
+- Transformer joue « Plusieurs calques dans une seule boîte » ; la gomme sur un calque bitmap, « La pression du stylet ».
+- Une touche tenue : le jade de la marque et son encre dans les deux thèmes (plus de 4,5:1).
+- « Afficher les explications » ne rejoue qu'à la prise d'un autre outil ; l'aplat visé et les clés choisies d'un seul calque ne sont
+  plus « plusieurs calques ».
+- Le registre ne peint que les vignettes visibles. Ses textes : le prolongement seul pour « Maj depuis un bout », « Plusieurs cartes
+  choisies ensemble » (titre et dessin) dans l'Espace 3D, plus de préfixes répétés, plus de nom de système, la touche du mode caméra des
+  Vignettes, le choix des cartes de la partie 152 (Ctrl+clic, Maj+Ctrl+clic).
+- Essais : `aideanim_relecture_tests.rs`.
 ### Ce qui reste, ce qui est douteux
 
 - Rien n'a été regardé à l'écran : les animations sont écrites d'après les choréographies, pas comparées à la maquette.

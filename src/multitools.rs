@@ -967,5 +967,6 @@ impl App {
             self.box_fields_ui(ui);
         }
         // (Le mode d'emploi est dans l'animation « Plusieurs calques dans une seule boîte » et le registre des explications.)
+        self.avertir_laisses_de_cote(ui);
     }
 }

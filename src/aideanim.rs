@@ -351,7 +351,7 @@ impl<'a> Toile<'a> {
         let galet = self.p.layout_no_wrap(texte.to_string(), police.clone(), self.t.encre);
         let taille = vec2(galet.size().x + 10.0 * self.k, 17.0 * self.k);
         let r = Rect::from_center_size(self.ecran(centre), taille);
-        let (fond, encre, bord) = if tenue { (self.t.jade, theme_sur_jade(), self.t.jade) } else { (self.t.cadre, self.t.douce, self.t.forte) };
+        let (fond, encre, bord) = couleurs_touche(&self.t, tenue);
         self.p.rect_filled(r, 3.0 * self.k, fond);
         self.p.rect_stroke(r, 3.0 * self.k, Stroke::new(1.0 * self.k, bord), StrokeKind::Inside);
         self.p.text(r.center(), Align2::CENTER_CENTER, texte, police, encre);
@@ -413,9 +413,15 @@ impl<'a> Toile<'a> {
     }
 }
 
-/// L'encre posée sur le jade (une touche tenue).
-fn theme_sur_jade() -> Color32 {
-    Color32::from_rgb(theme::SUR_JADE[0], theme::SUR_JADE[1], theme::SUR_JADE[2])
+/// Le fond, l'encre et le bord d'une touche. Tenue : le jade de la marque et l'encre posée sur lui, dans les deux thèmes (le jade
+/// « texte » du thème clair, plus sombre, ne laissait que 2,4:1 à l'encre sombre ; le jade de la marque en laisse plus de 4,5:1).
+pub(crate) fn couleurs_touche(t: &Teintes, tenue: bool) -> (Color32, Color32, Color32) {
+    let c = |v: theme::Rvb| Color32::from_rgb(v[0], v[1], v[2]);
+    if tenue {
+        (c(theme::JADE), c(theme::SUR_JADE), c(theme::JADE))
+    } else {
+        (t.cadre, t.douce, t.forte)
+    }
 }
 
 /// Peint une animation dans `rect` (aux proportions 240 × 150), au temps `t`, sur son fond, sans rien déborder.
@@ -445,8 +451,10 @@ pub(crate) struct Joueur {
     /// Les animations jouent d'elles-mêmes à la prise d'un outil (vrai dans l'application lancée par l'utilisateur ; faux pour les essais,
     /// qui ne veulent rien qui bouge sauf s'ils le demandent).
     pub auto: bool,
-    /// Le contexte de la dernière image où « Réglages » a été dessiné.
+    /// Le contexte de la dernière image où « Réglages » a été dessiné, et l'outil qui était en main : avec « Afficher les
+    /// explications », seule une prise d'outil (un autre `App::tool`) rejoue ce qui a déjà été vu.
     contexte: Option<&'static str>,
+    outil: Option<Tool>,
     lecture: Option<Lecture>,
     /// La fenêtre « Registre des explications » est ouverte, et l'animation qui y joue (avec l'heure de son début).
     pub registre: bool,
@@ -492,7 +500,8 @@ impl App {
         match self.tool {
             Tool::Trajectoire if self.e3_vue_montree() => "trajectoire.espace",
             Tool::Trajectoire => "trajectoire",
-            Tool::Select if self.multi_wanted() || self.multi.sel.is_some() => "selection.multi",
+            // (Plusieurs calques choisis, ou une sélection qui les couvre ; pas l'aplat visé ni les clés choisies d'un seul calque.)
+            Tool::Select if self.chosen_layers().len() >= 2 || self.multi.sel.is_some() => "selection.multi",
             Tool::Select if bitmap => "selection.bitmap",
             Tool::Select => "selection",
             Tool::SelectColor => "selection.couleur",
@@ -515,17 +524,19 @@ impl App {
         }
     }
 
-    /// Lance les animations `ids` dans « Réglages », depuis le début ; elles sont retenues comme vues.
+    /// Une animation commence vraiment : elle est retenue comme vue (pas avant : une suite repliée, un outil changé ou FEANOR quitté
+    /// pendant la première laisse les suivantes à voir).
+    fn aide_vue(&mut self, id: &'static str) {
+        if !self.settings.explications_vues.iter().any(|v| v == id) {
+            self.settings.explications_vues.push(id.to_string());
+            self.settings_a_ecrire = true;
+        }
+    }
+
+    /// Lance les animations `ids` dans « Réglages », l'une après l'autre, depuis le début.
     pub(crate) fn aide_jouer(&mut self, ids: Vec<&'static str>, maintenant: f64) {
-        if ids.is_empty() {
-            return;
-        }
-        for id in &ids {
-            if !self.settings.explications_vues.iter().any(|v| v == id) {
-                self.settings.explications_vues.push(id.to_string());
-                self.settings_a_ecrire = true;
-            }
-        }
+        let Some(&premiere) = ids.first() else { return };
+        self.aide_vue(premiere);
         // (Une vignette déjà ouverte ne se rouvre pas : elle passe à la nouvelle animation.)
         let ouverture = match &self.confort.aide.lecture {
             Some(l) if l.repli.is_none() => l.ouverture - OUVERTURE,
@@ -534,15 +545,17 @@ impl App {
         self.confort.aide.lecture = Some(Lecture { ids, index: 0, debut: maintenant, ouverture, repli: None });
     }
 
-    /// La prise d'un outil (un contexte qui change) : ses animations jouent si elles n'ont jamais été vues, ou toutes avec Aide >
-    /// « Afficher les explications ». Une animation d'un autre outil qui jouait s'arrête.
+    /// Un contexte qui change : ses animations jouent si elles n'ont jamais été vues ; avec Aide > « Afficher les explications », toutes,
+    /// mais seulement à la prise d'un autre outil (pas quand le même outil passe d'un calque vectoriel à un calque bitmap, par exemple).
+    /// Une animation d'un autre outil qui jouait s'arrête.
     fn aide_suivre(&mut self, maintenant: f64) {
         let contexte = self.aide_contexte();
         if self.confort.aide.contexte == Some(contexte) {
             return;
         }
         self.confort.aide.contexte = Some(contexte);
-        let toutes = self.settings.afficher_explications;
+        let prise = self.confort.aide.outil.replace(self.tool) != Some(self.tool);
+        let toutes = self.settings.afficher_explications && prise;
         let ids: Vec<&'static str> = du_contexte(contexte).into_iter().filter(|a| toutes || !self.settings.explications_vues.iter().any(|v| v == a.id)).map(|a| a.id).collect();
         if self.confort.aide.auto && !ids.is_empty() {
             self.aide_jouer(ids, maintenant);
@@ -582,6 +595,7 @@ impl App {
             if l.index + 1 < l.ids.len() {
                 l.index += 1;
                 l.debut = maintenant;
+                self.aide_vue(l.ids[l.index]);
                 if let Some(b) = anim(l.ids[l.index]) {
                     a = b;
                 }
@@ -613,6 +627,25 @@ impl App {
         let _ = resp;
         self.confort.aide.lecture = Some(l);
         ui.ctx().request_repaint();
+    }
+
+    /// Parmi les calques choisis (deux au moins), ceux qu'un geste de plusieurs calques laisse de côté : cachés ou verrouillés.
+    pub(crate) fn calques_laisses_de_cote(&self) -> usize {
+        let choisis = self.chosen_layers();
+        if choisis.len() < 2 {
+            return 0;
+        }
+        let calques = self.layers();
+        choisis.iter().filter(|&&li| calques.get(li).is_some_and(|l| !l.visible || l.locked || l.position_locked || crate::folders::locked_by_folder(calques, li))).count()
+    }
+
+    /// L'avertissement de Transformer, de la sélection et de la déformation de plusieurs calques, seulement quand il y a lieu.
+    pub(crate) fn avertir_laisses_de_cote(&self, ui: &mut egui::Ui) {
+        let n = self.calques_laisses_de_cote();
+        if n > 0 {
+            let s = if n > 1 { "s" } else { "" };
+            theme::avertir_petit(ui, format!("{n} calque{s} caché{s} ou verrouillé{s} : laissé{s} de côté."));
+        }
     }
 
     /// Aide > « Afficher les explications » : cochée, les animations rejouent à chaque prise de l'outil.

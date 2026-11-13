@@ -12,6 +12,12 @@ const VIGNETTE: f32 = 176.0;
 /// Le temps laissé sur la dernière image d'une animation rejouée dans le registre, avant le repos.
 const TENUE: f64 = 0.6;
 
+#[cfg(test)]
+thread_local! {
+    /// Combien de vignettes le registre a peintes depuis le début du fil (essais).
+    pub(crate) static PEINTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Les rubriques des animations, dans l'ordre du catalogue (chacune une fois).
 pub(crate) fn rubriques() -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
@@ -126,8 +132,14 @@ impl App {
             let (zone, resp) = ui.allocate_exact_size(taille + vec2(6.0, 6.0), Sense::click());
             let vignette = zone.shrink(3.0);
             let joue = self.confort.aide.registre_joue.filter(|(id, _)| *id == a.id).map(|(_, d)| (maintenant - d) as f32);
-            peindre(ui.painter(), vignette, a, joue.unwrap_or(a.duree), teintes);
-            if joue.is_none() {
+            // (Seules les vignettes qu'on voit sont peintes : les autres sont sous le défilement.)
+            let visible = ui.is_rect_visible(zone);
+            if visible {
+                #[cfg(test)]
+                PEINTES.with(|n| n.set(n.get() + 1));
+                peindre(ui.painter(), vignette, a, joue.unwrap_or(a.duree), teintes);
+            }
+            if joue.is_none() && visible {
                 // Le bouton ▶ sur la vignette au repos.
                 let c = vignette.right_bottom() - vec2(12.0, 12.0);
                 ui.painter().circle_filled(c, 9.0, teintes.cadre);

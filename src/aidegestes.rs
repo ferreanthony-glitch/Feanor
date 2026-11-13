@@ -44,7 +44,7 @@ pub(crate) static GESTES: &[Anim] = &[
         id: "selection.plusieurs",
         titre: "Plusieurs calques dans une seule boîte",
         rubrique: "Sélection",
-        contextes: &["selection.multi"],
+        contextes: &["selection.multi", "transformer"],
         duree: 5.0,
         dessin: plusieurs,
         texte: "Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. \
@@ -57,10 +57,10 @@ pub(crate) static GESTES: &[Anim] = &[
         id: "dessin.pression",
         titre: "La pression du stylet change l'épaisseur",
         rubrique: "Dessin",
-        contextes: &["pinceau", "crayon"],
+        contextes: &["pinceau", "crayon", "gomme.bitmap"],
         duree: 4.4,
         dessin: pression,
-        texte: "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.\n\
+        texte: "La pression vient du stylet, par le pilote du stylet. À la souris, elle vaut 100 %.\n\
                 Sur un calque vectoriel, le trait du pinceau reste modifiable avec l'outil Sélection{outil.selection}, même texturé (pointe en image, grain du papier) ; celui du crayon aussi.",
     },
     Anim {
@@ -208,12 +208,12 @@ pub(crate) static GESTES: &[Anim] = &[
         texte: "Glisse pour déplacer la vue. Sinon : Espace + glisser, ou bouton du milieu.",
     },
     Anim {
-        id: "espace3d.vue",
-        titre: "Tourner la vue",
+        id: "espace3d.ensemble",
+        titre: "Plusieurs cartes choisies ensemble",
         rubrique: "Espace 3D",
         contextes: &["espace3d"],
         duree: 4.8,
-        dessin: e3_vue,
+        dessin: e3_ensemble,
         texte: "Plusieurs cartes choisies : elles se déplacent, tournent et grandissent ensemble ; choisis-en une seule pour ses réglages.",
     },
     Anim {
@@ -859,25 +859,32 @@ fn sol_tourne(gx: f32, gz: f32, a: f32) -> Pos2 {
     sol(x, (z + 1.0) / 2.0).0
 }
 
-/// Tourner la vue : glisser autour de l'espace fait tourner le sol et les cartes.
-fn e3_vue(p: &Painter, r: Rect, t: f32, th: &Teintes) {
+/// Plusieurs cartes choisies ensemble : deux cartes debout sur le sol, cernées de jade ; glisser l'une les emmène toutes les deux, du même
+/// pas (elles grandissent en venant devant), puis elles reviennent.
+fn e3_ensemble(p: &Painter, r: Rect, t: f32, th: &Teintes) {
     let c = Toile::new(p, r, th);
     c.fond();
-    let a = 0.9 * doux(t, 0.8, 3.6) - 0.2;
     for i in 0..=6 {
         let g = -1.0 + i as f32 / 3.0;
-        c.ligne(sol_tourne(g, -1.0, a), sol_tourne(g, 1.0, a), 0.8, th.forte);
-        c.ligne(sol_tourne(-1.0, g, a), sol_tourne(1.0, g, a), 0.8, th.forte);
+        c.ligne(sol_tourne(g, -1.0, 0.0), sol_tourne(g, 1.0, 0.0), 0.8, th.forte);
+        c.ligne(sol_tourne(-1.0, g, 0.0), sol_tourne(1.0, g, 0.0), 0.8, th.forte);
     }
-    for (gx, gz) in [(-0.4, 0.2), (0.4, -0.3)] {
-        let pied = sol_tourne(gx, gz, a);
+    let pas = doux(t, 0.9, 2.8) * (1.0 - doux(t, 3.6, 4.5));
+    let decale = (0.35 * pas, -0.6 * pas);
+    let mut prise = pos2(0.0, 0.0);
+    for (k, (gx, gz)) in [(-0.5, 0.4), (0.2, 0.1)].into_iter().enumerate() {
+        let pied = sol_tourne(gx + decale.0, gz + decale.1, 0.0);
         // (L'éloignement, lu sur la hauteur du pied : `sol` place un point à 52 + 96 / d.)
         let d = (96.0 / (pied.y - 52.0).max(1.0)).clamp(1.0, 4.0);
-        c.carte(pos2(pied.x, pied.y - 20.0 / d), 28.0 / d, 38.0 / d, false);
+        let centre = pos2(pied.x, pied.y - 20.0 / d);
+        c.carte(centre, 28.0 / d, 38.0 / d, true);
+        if k == 0 {
+            prise = centre;
+        }
     }
-    if t < 4.2 {
-        let ici = pos2(mix(70.0, 170.0, doux(t, 0.8, 3.6)), 30.0);
-        c.curseur(if t < 0.8 { mixp(pos2(30.0, 130.0), pos2(70.0, 30.0), doux(t, 0.1, 0.75)) } else { ici }, t > 0.8 && t < 3.6);
+    if t < 3.4 {
+        let ici = if t < 0.9 { mixp(pos2(30.0, 130.0), prise, doux(t, 0.1, 0.85)) } else { prise };
+        c.curseur(ici, t > 0.9 && t < 2.8);
     }
 }
 
