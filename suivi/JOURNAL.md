@@ -5,8 +5,25 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
-- **Deux décisions d'Anthony sur ce qui restait imparfait** (branche `trajectoire-espace`, partie 152 ; rien n'a été regardé à
-  l'écran, l'exe n'a pas été reconstruit). **Le bouton « Caméra »** : « Le bouton « Caméra » de la barre de la vue fait quitter
+- **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la
+  branche construit à 20 h 54 puis à 21 h 10, copie du projet `afa`, réglages neufs, fenêtre rétrécie). **Le bouton
+  « Caméra »** : outil Trajectoire en main dans la vue Espace 3D du plan 1, un clic sur la case : la caméra choisie seule (son
+  dessin en bleu, sa piste allumée, plus aucun calque choisi), la case allumée, la légende de l'outil Trajectoire toujours en
+  bas de la vue ; un trait long au sol : « Trajectoire tracée : la caméra, 0 marque, de l'image 31 à l'image 60. » **Les
+  dessins posés à la main**, sur la feuille (plan 5, calque « Dessin », qui avait déjà deux dessins) : le chemin tracé en clés
+  d'images laisse le second dessin à son image ; une marque posée, « Nouveau dessin » (qui insère une image), un trait de
+  pinceau dessus, la marque glissée deux fois : les dessins restent à leurs images, aucune fenêtre ne s'ouvre. **Défaut vu
+  à l'écran, corrigé** : la phrase « dessin posé à la main gardé », écrite à la suite du message du geste, ne se lisait
+  pas : la barre d'état ne montre que la première phrase d'un message long, puis « … ». Elle passe maintenant devant, et sans
+  parenthèse pour un seul calque ; lue à l'écran après correction : « Trajectoire : 2 dessins posés à la main gardés aux
+  images 18 et 19, entre les marques… ». Les essais vérifient désormais ce que la barre montre (`messages::resume`), plus
+  seulement le message entier. À savoir : un calque qui avait déjà plusieurs dessins avant le chemin les garde tous (ils
+  comptent comme posés à la main), et ils ne suivent pas le chemin. Pas regardé à l'écran, couvert par les essais : le jalon
+  posé à côté (point 28), les deux cartes dans l'espace (29), la suppression (30), le calque dupliqué (31). Filtre
+  `trajectoire` : 67 réussis. Vérificateur complet sur ce code (21 h 11) : 4 620 réussis, 0 échec, dix groupes OK, le seul
+  avertissement connu. La fenêtre d'essai (copie du projet, faux réglages) est rouverte pour lui avec cet exe.
+- **Deux décisions d'Anthony sur ce qui restait imparfait** (branche `trajectoire-espace`, partie 152 ; regardé à l'écran le
+  soir, voir au-dessus). **Le bouton « Caméra »** : « Le bouton « Caméra » de la barre de la vue fait quitter
   l'outil Trajectoire. On garde l'outil ». Avec l'outil Trajectoire dans la vue Espace 3D, la case « Caméra » choisit la caméra
   seule (Maj+clic : avec les cartes), reste allumée, et l'outil garde le pointeur : le trait suivant trace le chemin de la
   caméra. Avec un autre outil, la case fait ce qu'elle faisait. **Les dessins posés à la main** : « Une clé de dessin posée à
@@ -15,7 +32,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   s'en passe : en clés d'images, sur la feuille comme dans l'espace, la trajectoire ne remplace plus jamais une clé de dessin
   qu'elle n'a pas posée. Ta clé reste à son image avec son dessin, le dessin de la marque d'avant est exposé jusqu'à elle ; une
   marque qui tomberait sur son image est posée sur l'image libre d'à côté ; la barre d'état le dit une fois (« Trajectoire :
-  1 dessin posé à la main gardé entre les marques (image 18). »), aucune fenêtre ne s'ouvre. Rien de neuf dans le fichier
+  1 dessin posé à la main gardé à l'image 18, entre les marques. »), aucune fenêtre ne s'ouvre. Rien de neuf dans le fichier
   (format 55). Aucun cas n'a demandé de question. Arrangé en chemin : un calque dupliqué exposait, à son premier calcul, les
   dessins de l'original (les deux calques partageaient leurs poses) ; il garde les siens. Vu en lisant le code, pas réglé :
   Échap pendant qu'on glisse sur la timeline la clé de position d'un jalon (carte en clés d'images) ne rend pas les clés de

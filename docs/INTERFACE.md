@@ -11578,12 +11578,16 @@ parce que rien n'est plus jamais écrasé.**
   tenue le suit. Le temps des marques devient alors explicite (« Temps égaux » le rend, et repose le jalon à côté s'il
   retombe sur elle). Sans image libre entre ses voisins, le jalon reste où il est et c'est la clé posée à la main qui se
   voit à cette image.
-- **C'est dit une fois, dans la barre d'état, jamais dans une fenêtre**, à la suite de ce que le geste y écrit :
-  « Trajectoire : 1 dessin posé à la main gardé entre les marques (image 18). » (« 2 dessins posés à la main gardés…
-  (images 7 et 18) » ; avec plusieurs cartes : « (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17) »), quand un
-  calcul laisse des clés qu'il n'avait pas encore dites ; pas à chaque calcul, ni à chaque image d'un geste. Et, pour un
-  jalon posé à côté : « Trajectoire : une marque tombait sur un dessin posé à la main, à l'image 9 : elle est posée à
-  l'image 10. » (« le départ… il est posé », « l'arrivée… elle est posée »).
+- **C'est dit une fois, dans la barre d'état, jamais dans une fenêtre**, **devant** ce que le geste y écrit :
+  « Trajectoire : 1 dessin posé à la main gardé à l'image 18, entre les marques. » (« 2 dessins posés à la main gardés
+  aux images 7 et 18, entre les marques. » ; avec plusieurs cartes : « 3 dessins posés à la main gardés entre les
+  marques (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17). »), quand un calcul laisse des clés qu'il n'avait
+  pas encore dites ; pas à chaque calcul, ni à chaque image d'un geste. Et, pour un jalon posé à côté : « Trajectoire :
+  une marque tombait sur un dessin posé à la main, à l'image 9 : elle est posée à l'image 10. » (« le départ… il est
+  posé », « l'arrivée… elle est posée »). Devant, et sans parenthèse pour un seul calque, parce que la barre d'état ne
+  montre que le début d'un message long (`messages::resume` le coupe après sa première phrase ou avant sa première
+  parenthèse) : à la suite du message du geste, la phrase restait cachée derrière « … » (vu à l'écran le 13 novembre
+  au soir, corrigé aussitôt). Le message du geste reste dans la bulle de la barre et dans l'historique des messages.
 - **Retirer soi-même sa clé** : « Supprimer la clé » (menu de la piste) rend tout de suite ses images à la clé d'avant,
   le dessin du jalon ; « en laissant un vide », le calcul suivant le comble. Suppr sur la clé vide son dessin et laisse
   la clé : c'est toujours une clé posée à la main, vide. Aucun calcul ne suit une suppression de clé : il n'en faut pas.
@@ -11840,13 +11844,26 @@ des Vignettes, que ce chantier ne touche pas et qui a déjà échoué une fois e
 occupée) ; repassé seul le soir, sur le même code : réussi. Dix groupes OK ; le seul avertissement connu (les cinq
 méthodes jamais appelées de `espace3d.rs`), aucun nouveau.
 
+**Regardé à l'écran le 13 novembre au soir** (Claude, souris simulée, copie du projet `afa`, réglages neufs). Le bouton
+« Caméra » avec l'outil Trajectoire : la caméra seule, la case allumée, l'outil toujours en main, un trait long au sol
+qui trace son chemin. Sur la feuille, un calque qui avait déjà deux dessins : le chemin laisse le second à son image ;
+une marque, « Nouveau dessin », un trait de pinceau, la marque glissée : les dessins restent, aucune fenêtre. **Un
+défaut que les essais ne voyaient pas** : la phrase des dessins gardés, écrite à la suite du message du geste, était
+coupée par la barre d'état (elle ne montre que le début d'un message long). Elle passe devant, sans parenthèse pour un
+seul calque ; relue à l'écran : « Trajectoire : 2 dessins posés à la main gardés aux images 18 et 19, entre les
+marques… ». `trajectoire_main_tests.rs` vérifie maintenant ce que la barre montre (`messages::resume`). Filtre
+`trajectoire` : 67 réussis. Vérificateur complet sur ce code (21 h 11) : 4 620 réussis, 0 échec, dix groupes OK, le
+seul avertissement connu.
+
 **Ce qui n'est pas fait.**
 
 - **Les clés de dessin posées à la main** (réglé le 13 novembre, voir 152.2 ; ce qui reste) : un jalon posé à côté
   d'une clé posée à la main ne lui laisse qu'une image quand il est posé juste après elle (c'est la règle : l'image
   libre la plus proche, celle d'après de préférence). Pendant qu'on glisse une marque dans la vue Espace 3D, la carte
   suit par ses clés de position sans cet écart ; il se fait au lâcher, avec les dessins. Un dessin posé à la main n'est
-  ni déplacé ni tourné avec le chemin : c'est le tien, il reste où tu l'as dessiné. Un calque ou un plan dupliqué garde
+  ni déplacé ni tourné avec le chemin : c'est le tien, il reste où tu l'as dessiné. Il en va de même d'un calque qui
+  avait déjà plusieurs dessins avant qu'on y trace un chemin en clés d'images : ils sont tous gardés à leur image (avant
+  ce chantier, le chemin les recouvrait) et ne suivent pas le chemin ; la barre d'état les compte. Un calque ou un plan dupliqué garde
   ses propres dessins aux jalons ; mais sur la feuille, quand le départ n'est pas le dessin d'origine lui-même (ancrage
   autre que « là où part le trait »), sa trajectoire note encore le dessin d'origine de l'original, dont elle refait ses
   copies tournées (« le dessin tourne avec le chemin »). Les copies de calques et de plans ne font toujours pas suivre
@@ -12059,7 +12076,7 @@ Ses deux décisions du 13 novembre (« On garde l'outil » ; les dessins posés 
     main (« Nouvelle clé ») et dessine dessus. Glisse la marque, pose une marque avant et une après, retires-en une,
     recale un jalon sur la timeline, « Temps égaux », retrace le chemin, passe en clés d'interpolation et reviens : ton
     dessin est toujours à son image, tel que tu l'as laissé, et aucune fenêtre ne s'ouvre. La barre d'état le dit la
-    première fois : « Trajectoire : 1 dessin posé à la main gardé entre les marques (image N). » Dire si cette phrase
+    première fois : « Trajectoire : 1 dessin posé à la main gardé à l'image N, entre les marques… » Dire si cette phrase
     suffit, ou s'il faudrait le voir aussi dans la timeline (une teinte sur ces clés, par exemple).
 28. Pose une clé à la main, puis une marque de plus de sorte qu'une marque tombe sur son image (les marques se
     partagent le temps) : la marque est posée à l'image d'après, la barre d'état le dit, ton dessin n'a pas bougé. Dire

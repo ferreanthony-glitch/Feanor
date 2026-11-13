@@ -148,17 +148,26 @@ pub(crate) fn cles_a_la_main(frames: &[Option<CelId>], debut: usize, fin: usize,
         .collect()
 }
 
-/// « Trajectoire : 2 dessins posés à la main gardés entre les marques (images 7 et 18). » Avec plusieurs calques (plusieurs
-/// cartes choisies dans l'espace) : le compte de tous, et les images calque par calque.
+/// « Trajectoire : 1 dessin posé à la main gardé à l'image 18, entre les marques. » (« 2 dessins posés à la main gardés aux
+/// images 7 et 18, entre les marques. ») Avec plusieurs calques (plusieurs cartes choisies dans l'espace) : le compte de
+/// tous, et les images calque par calque, entre parenthèses.
+///
+/// Pour un seul calque, pas de parenthèse : la barre d'état ne montre que le début d'un message long, coupé avant la
+/// première parenthèse ou après la première phrase (`messages::resume`), et l'image doit s'y lire.
 fn texte_des_dessins_gardes(gardes: &[((u64, u64), String, Vec<usize>)]) -> String {
     let n: usize = gardes.iter().map(|g| g.2.len()).sum();
     let s = pluriel(n);
-    let images = |v: &[usize]| format!("image{} {}", pluriel(v.len()), liste_d_images(v, 8));
-    let ou = match gardes {
-        [seul] => images(&seul.2),
-        _ => gardes.iter().map(|g| format!("« {} » : {}", g.1, images(&g.2))).collect::<Vec<_>>().join(" ; "),
-    };
-    format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} entre les marques ({ou}).")
+    match gardes {
+        [seul] => {
+            let ou = if seul.2.len() > 1 { "aux images" } else { "à l'image" };
+            format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} {ou} {}, entre les marques.", liste_d_images(&seul.2, 8))
+        }
+        _ => {
+            let images = |v: &[usize]| format!("image{} {}", pluriel(v.len()), liste_d_images(v, 8));
+            let ou = gardes.iter().map(|g| format!("« {} » : {}", g.1, images(&g.2))).collect::<Vec<_>>().join(" ; ");
+            format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} entre les marques ({ou}).")
+        }
+    }
 }
 
 /// « 7 », « 7 et 9 », « 7, 9 et 15 » ; au-delà de `max`, la liste s'arrête par « … ».
@@ -782,9 +791,11 @@ impl App {
     }
 
     /// Une fois par image d'écran (`panels.rs`) : ce que les calculs viennent de laisser aux dessins posés à la main est dit
-    /// dans la barre d'état, à la suite de ce que le geste y a écrit (« Marque posée : … Trajectoire : 1 dessin posé à la main
-    /// gardé entre les marques (image 18). »). Une fois : un calcul qui retrouve les mêmes clés ne redit rien
-    /// (`DessinsALaMain::noter`). Jamais dans une fenêtre.
+    /// dans la barre d'état, **devant** ce que le geste y a écrit (« Trajectoire : 1 dessin posé à la main gardé à l'image 18,
+    /// entre les marques. Marque posée : … »). Devant, parce que la barre ne montre que le début d'un message long
+    /// (`messages::resume` le coupe après sa première phrase) : à la suite, la phrase restait cachée derrière « … » (vu à
+    /// l'écran le 13 novembre). Ce que le geste a écrit reste dans la bulle de la barre et dans l'historique des messages.
+    /// Une fois : un calcul qui retrouve les mêmes clés ne redit rien (`DessinsALaMain::noter`). Jamais dans une fenêtre.
     pub(crate) fn trajectoire_dire_les_dessins_a_la_main(&mut self) {
         let d = &mut self.traj.a_la_main;
         if d.gardes.is_empty() && d.ecartes.is_empty() {
@@ -796,7 +807,7 @@ impl App {
             phrases.push(texte_des_dessins_gardes(&gardes));
         }
         let dit = phrases.join(" ");
-        self.status = if self.status.is_empty() { dit } else { format!("{} {dit}", self.status) };
+        self.status = if self.status.is_empty() { dit } else { format!("{dit} {}", self.status) };
     }
 
     /// La clé de l'image `de` du calque `li` du plan `pi`, un jalon de sa trajectoire (le départ, une marque, la fin), glissée à
