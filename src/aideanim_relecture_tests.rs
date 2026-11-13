@@ -308,5 +308,5 @@ fn the_register_names_no_operating_system() {
 #[test]
 fn the_camera_mode_key_and_the_space_choice_read_well() {
     assert!(aideanim::anim("vignettes.camera").unwrap().texte.contains("la touche du mode caméra{vignettes.camera} tenue : pareil"));
-    assert!(aideanim::anim("trajectoire.espace").unwrap().texte.contains("Ctrl+clic choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche."));
+    assert!(aideanim::anim("trajectoire.espace").unwrap().texte.contains("Ctrl+clic sur le chemin pose une poignée ; ailleurs, il choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche."));
 }
