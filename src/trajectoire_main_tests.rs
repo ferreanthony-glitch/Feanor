@@ -81,10 +81,15 @@ fn toujours_a_son_image(b: &Banc, li: usize, cel: CelId, image: usize, quand: &s
     assert!(!b.app.modal_open(), "{quand} : aucune fenêtre ne s'est ouverte");
 }
 
-/// La phrase de la barre d'état pour un seul calque.
+/// La phrase de la barre d'état pour un seul calque (`images` : « image 11 », « images 11 et 17 »). Elle passe devant ce
+/// que le geste a écrit : la barre ne montre que le début d'un message long.
 fn gardes_dit(n: usize, images: &str) -> String {
     let s = if n > 1 { "s" } else { "" };
-    format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} entre les marques ({images}).")
+    let ou = match images.strip_prefix("images ") {
+        Some(liste) => format!("aux images {liste}"),
+        None => format!("à l'{images}"),
+    };
+    format!("Trajectoire : {n} dessin{s} posé{s} à la main gardé{s} {ou}, entre les marques.")
 }
 
 /// « Temps égaux entre les marques », ou la sorte des clés : ce que font les boutons des réglages de la feuille.
@@ -168,7 +173,9 @@ fn on_the_sheet_a_drawing_key_placed_by_hand_between_two_marks_stays_at_its_imag
     tel_quel(&b, "une marque glissée");
     let d = des_jalons(&b, 0);
     assert_eq!((expositions(&b, 0, source), expositions(&b, 0, x), expositions(&b, 0, d[1]), expositions(&b, 0, d[2])), (vec![(0, 10)], vec![(10, 12)], vec![(12, 23)], vec![(23, 24)]), "le dessin du départ est exposé jusqu'à elle");
-    assert!(b.app.status.ends_with(&gardes_dit(1, "image 11")), "{}", b.app.status);
+    assert!(b.app.status.starts_with(&gardes_dit(1, "image 11")), "{}", b.app.status);
+    // Ce que la barre d'état montre vraiment (le début d'un message long) : la phrase entière, l'image comprise.
+    assert!(crate::messages::resume(&b.app.status).starts_with("Trajectoire : 1 dessin posé à la main gardé à l'image 11, entre les marques"), "{}", crate::messages::resume(&b.app.status));
     b.app.status.clear();
     glisser_la_marque(&mut b, 260.0, 230.0, 150.0);
     tel_quel(&b, "la marque glissée de nouveau");
@@ -243,7 +250,7 @@ fn on_the_sheet_a_drawing_key_placed_by_hand_between_two_marks_stays_at_its_imag
     r.app.trajectoire_recalculer_dans(0, 0);
     r.chauffer(3);
     assert_eq!(exposes(&r, 0), attendu, "relu, recalculé : la même timeline");
-    assert!(r.app.status.ends_with(&gardes_dit(1, "image 11")), "{}", r.app.status);
+    assert!(r.app.status.starts_with(&gardes_dit(1, "image 11")), "{}", r.app.status);
 
     // On supprime soi-même sa clé (la commande de la timeline) : la clé d'avant reprend ses images, tout de suite, et le
     // calcul suivant fait comme si elle n'avait jamais été là.
@@ -281,9 +288,10 @@ fn a_milestone_that_would_land_on_the_image_of_a_hand_placed_key_is_put_on_the_n
     toujours_a_son_image(&b, 0, x, 8, "une marque posée");
     let d = des_jalons(&b, 0);
     assert_eq!((expositions(&b, 0, source), expositions(&b, 0, x), expositions(&b, 0, d[1]), expositions(&b, 0, d[2])), (vec![(0, 8)], vec![(8, 9)], vec![(9, 15)], vec![(15, 23)]), "aucun dessin n'est perdu");
-    assert!(b.app.status.starts_with("Marque posée"), "{}", b.app.status);
-    assert!(b.app.status.contains(tombait), "{}", b.app.status);
-    assert!(b.app.status.ends_with(&gardes_dit(1, "image 9")), "{}", b.app.status);
+    // (Les deux phrases passent devant « Marque posée… » : la barre d'état ne montre que le début d'un message long.)
+    assert!(b.app.status.starts_with(&format!("{tombait} {}", gardes_dit(1, "image 9"))), "{}", b.app.status);
+    assert!(b.app.status.contains(" Marque posée"), "{}", b.app.status);
+    assert_eq!(crate::messages::resume(&b.app.status), format!("{}…", tombait.trim_end_matches('.')), "ce que la barre d'état montre");
     // « Temps égaux » la ramènerait sur la clé : elle est posée à côté de nouveau, et c'est dit de nouveau.
     b.app.status.clear();
     regler(&mut b, "Temps égaux entre les marques", |t| t.temps_egaux());
@@ -450,7 +458,8 @@ fn in_space_hand_placed_keys_of_two_chosen_cards_stay_at_their_images_and_a_reti
     assert_eq!((d0[0], d1[0]), (source0, source1));
     assert_eq!((expositions(&b, 0, source0), expositions(&b, 0, x), expositions(&b, 0, d0[1]), expositions(&b, 0, d0[2])), (vec![(0, 10)], vec![(10, 12)], vec![(12, 23)], vec![(23, 24)]));
     assert_eq!((expositions(&b, 1, source1), expositions(&b, 1, y1), expositions(&b, 1, d1[1]), expositions(&b, 1, y2)), (vec![(0, 5)], vec![(5, 12)], vec![(12, 16)], vec![(16, 23)]));
-    assert!(b.app.status.ends_with("Trajectoire : 3 dessins posés à la main gardés entre les marques (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17)."), "{}", b.app.status);
+    assert!(b.app.status.starts_with("Trajectoire : 3 dessins posés à la main gardés entre les marques (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17)."), "{}", b.app.status);
+    assert_eq!(crate::messages::resume(&b.app.status), "Trajectoire : 3 dessins posés à la main gardés entre les marques…", "ce que la barre d'état montre");
     // Les clés de position tenues ne changent pas : une par jalon ; le dessin posé à la main se voit là où la carte est tenue.
     assert_eq!((cles_tenues(&b, 0), cles_tenues(&b, 1)), (vec![0, 12, 23], vec![0, 12, 23]));
     let poses = (exposes(&b, 0), exposes(&b, 1));
@@ -473,7 +482,7 @@ fn in_space_hand_placed_keys_of_two_chosen_cards_stay_at_their_images_and_a_reti
     b.chauffer(2);
     assert_eq!((etape(&b), b.app.history.undo_len()), ("Recaler la trajectoire".to_string(), etapes + 1));
     assert_eq!((jalons(&b, 0), cles_tenues(&b, 0), expositions(&b, 0, x)), (vec![0, 11, 23], vec![0, 11, 23], vec![(10, 11)]));
-    assert!(b.app.status.ends_with("Trajectoire : une marque tombait sur un dessin posé à la main, à l'image 11 : elle est posée à l'image 12."), "{}", b.app.status);
+    assert!(b.app.status.starts_with("Trajectoire : une marque tombait sur un dessin posé à la main, à l'image 11 : elle est posée à l'image 12."), "{}", b.app.status);
     b.app.undo();
     b.chauffer(2);
     assert_eq!((exposes(&b, 0), exposes(&b, 1), jalons(&b, 0), cles_tenues(&b, 0)), (poses.0.clone(), poses.1.clone(), vec![0, 12, 23], vec![0, 12, 23]), "une annulation rend tout");
