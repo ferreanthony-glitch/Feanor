@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-13
 
+- **Partie 152 regardée à l'écran par Claude** (1 h 46 à 1 h 57, souris simulée, exe de la branche construit à 1 h 45, copie du projet
+  `afa`). Avec des réglages neufs : la vue Espace 3D ouverte, le panneau « Espace 3D » arrive dans une colonne à droite de Réglages,
+  Réglages montre le Pinceau à côté ; un clic dans la liste des cartes de la colonne choisit la carte, ses champs apparaissent.
+  Outil Trajectoire, Ctrl+clic sur la caméra : elle est choisie seule, la rangée « Caméra » du montage est la rangée choisie, aucune
+  rangée de calque ne l'est ; Ctrl+clic sur une carte la reprend et lâche la caméra. « Clés d'images » : un chemin au sol et une
+  marque sur la carte « Vectoriel 4 » donnent, dans la timeline, une clé de dessin à la marque (image 38) ; chemin retiré ensuite
+  par « Effacer ». Outil Sélection dans la vue : un lasso autour du trait bleu de la carte sélectionne cinq éléments, la boîte et ses
+  poignées sont posées sur la carte ; Échap la lâche. Dans les réglages de son propre essai, Anthony avait rangé le panneau
+  « Espace 3D » en onglet à côté de « Réglages » et « Fiche » : il y est resté, et ses boutons répondent. Piège du banc d'essai : une
+  fenêtre de l'application Claude, invisible sur les captures, couvrait la droite de l'écran et y prenait les clics ; vu avec
+  `WindowFromPoint`, contourné en rétrécissant la fenêtre d'essai, puis remise en plein écran. Pas regardé à l'écran : le stylet,
+  le déplacement de la sélection, couper / coller sur une carte, Maj+Ctrl+clic, l'espace Animation.
 - **Retours d'Anthony sur la Trajectoire dans l'Espace 3D** (partie 152, branche `trajectoire-espace`, rien fusionné, rien regardé
   à l'écran). Ses quatre phrases après son essai des parties 149 et 150, et ce qui a changé. 1. « Un calque est toujours sélectionné
   en même temps » : choisir la caméra la choisit seule (Ctrl+clic avec l'outil Trajectoire, « choisir » du panneau Espace 3D ; Maj
