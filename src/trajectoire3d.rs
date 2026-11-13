@@ -291,7 +291,7 @@ impl App {
 
     /// Les sujets que les réglages de l'outil visent : dans la vue Espace 3D, ce qui est choisi ; sur la feuille, le calque
     /// courant s'il suit une trajectoire dans l'espace.
-    fn traj_sujets_des_reglages(&self) -> Vec<Sujet> {
+    pub(crate) fn traj_sujets_des_reglages(&self) -> Vec<Sujet> {
         if self.e3_vue_montree() {
             return self.e3_traj_sujets();
         }
@@ -314,7 +314,7 @@ impl App {
 
     /// La durée sur laquelle se lit la trajectoire du sujet `s` : celle du plan (pour la caméra, davantage si la fin du
     /// chemin est après la dernière image, `Document::duree_de_la_trajectoire_camera`).
-    fn e3_traj_duree(&self, s: Sujet) -> usize {
+    pub(crate) fn e3_traj_duree(&self, s: Sujet) -> usize {
         match s {
             Sujet::Camera => Document::duree_de_la_trajectoire_camera(self.panel()),
             Sujet::Carte(_) => self.frame_count(),
@@ -323,7 +323,7 @@ impl App {
 
     /// Donne la trajectoire `t` au sujet `s` : une carte voit ses clés de position reposées, la caméra n'a rien d'autre à
     /// faire (sa trajectoire s'ajoute à ses clés quand on l'évalue).
-    fn e3_traj_poser(&mut self, s: Sujet, t: Trajectoire) {
+    pub(crate) fn e3_traj_poser(&mut self, s: Sujet, t: Trajectoire) {
         match s {
             Sujet::Camera => self.panel_mut().trajectoire_camera = Some(t),
             Sujet::Carte(id) => {
@@ -669,10 +669,12 @@ impl App {
             }
             return;
         }
-        let Some(neuve) = Trajectoire::nouvelle_dans_l_espace(plan, support) else {
+        let Some(mut neuve) = Trajectoire::nouvelle_dans_l_espace(plan, support) else {
             self.status = TROP_COURT.into();
             return;
         };
+        // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
+        neuve.lisser_a(self.traj.lissage);
         let snap = self.snapshot();
         let retrace = sujets.iter().all(|&s| self.e3_traj_de(s).is_some());
         let (image, duree) = (self.cur_frame, self.frame_count());
@@ -942,6 +944,7 @@ impl App {
             if cles_espace_ui(ui, &mut cles) {
                 self.traj.cles_propose = cles;
             }
+            self.trajectoire_lissage_ui(ui, true);
             return true;
         };
         let duree = self.e3_traj_duree(premier);
@@ -986,6 +989,8 @@ impl App {
                 true
             });
         }
+        // Le lissage du chemin, pour tout ce qui est choisi (partie 151).
+        self.trajectoire_lissage_ui(ui, true);
         ui.horizontal_wrapped(|ui| {
             let marques = avec.iter().any(|&s| self.e3_traj_de(s).is_some_and(|t| !t.marques.is_empty()));
             if marques && ui.button("Retirer les marques").on_hover_text("Le chemin reste, à vitesse constante.").clicked() {

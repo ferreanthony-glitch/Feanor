@@ -934,6 +934,10 @@ mod espace3ddessin_tests;
 mod trajectoire3d;
 #[cfg(test)]
 mod trajectoire3d_tests;
+// Le curseur « Lissage » de l'outil Trajectoire, sur la feuille et dans l'Espace 3D (partie 151).
+mod trajectoirelisse;
+#[cfg(test)]
+mod trajectoirelisse_tests;
 // Le panneau « Espace 3D » (partie 150) : les réglages de la vue, sortis du panneau Réglages ; il passe devant la couleur quand la vue s'ouvre.
 mod espace3dpanneau;
 #[cfg(test)]

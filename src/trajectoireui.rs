@@ -74,6 +74,8 @@ pub(crate) struct Etat {
     pub(crate) choisir_ancre: bool,
     /// Le geste en cours dans la vue Espace 3D (`trajectoire3d.rs`, partie 149).
     pub(crate) espace: Option<crate::trajectoire3d::GesteEspace>,
+    /// Le lissage du curseur « Lissage » (de 0 à 1, `trajectoirelisse.rs`, partie 151) : celui des prochains tracés.
+    pub(crate) lissage: f32,
 }
 
 /// Le texte du réglage « le dessin tourne avec le chemin ».
@@ -287,6 +289,8 @@ impl App {
                         t.tourne = self.traj.tourne_propose;
                     }
                 }
+                // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
+                t.lisser_a(self.traj.lissage);
                 self.layers_mut()[li].trajectoire = Some(t);
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, nom);
@@ -816,6 +820,7 @@ impl App {
                 self.traj.cles_propose = cles;
             }
             ui.checkbox(&mut self.traj.tourne_propose, TOURNE).on_hover_text(TOURNE_AIDE);
+            self.trajectoire_lissage_ui(ui, false);
             return;
         };
         let n = t.marques.len();
@@ -860,6 +865,8 @@ impl App {
             self.trajectoire_recalculer(li);
             self.trajectoire_valider(snap, "Sorte des clés de la trajectoire");
         }
+        // Le lissage du chemin, pour tous les calques choisis (partie 151).
+        self.trajectoire_lissage_ui(ui, false);
         // Le dessin tourne avec le chemin (Anthony, 2026-11-08) : il pivote autour du point d'ancrage pour suivre la direction du chemin.
         let mut tourne = t.tourne;
         if ui.checkbox(&mut tourne, TOURNE).on_hover_text(TOURNE_AIDE).changed() {

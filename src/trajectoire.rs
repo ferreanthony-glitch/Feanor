@@ -278,7 +278,23 @@ pub struct Trajectoire {
     /// départ. Rien : une trajectoire sur la feuille, celle de toujours. L'ancrage et « le dessin tourne » n'y servent pas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub support: Option<Support>,
+    /// **Le lissage du chemin** (partie 151 ; Anthony, 2026-11-12 : « la courbe tracée pour une trajectoire doit pouvoir être
+    /// lissée dans les réglages d'outils »), de 0 (le trait tel qu'il a été tracé) à 1 (le plus lisse). `points` est alors le
+    /// chemin brut (`brut`) lissé d'autant (`lissage_de`), ses deux bouts à leur place. Sans changer le format : une version
+    /// qui ne le connaît pas lit `points`, le chemin lissé, et le garde tel quel.
+    #[serde(default, skip_serializing_if = "est_zero_f32")]
+    pub lissage: f32,
+    /// Le chemin brut quand il est lissé : le trait tel qu'il a été tracé (repris au pas), tiré, déplacé ou retourné avec le
+    /// chemin. C'est de lui que le lissage est recalculé : on peut le remonter ou le redescendre à tout moment. Rien : le
+    /// chemin n'est pas lissé, `points` est le chemin brut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brut: Option<Vec<[f32; 2]>>,
 }
+
+/// À lissage 1, la demi-fenêtre de la moyenne glissante (`lissage_de`), en fraction de la longueur du chemin.
+pub const LISSAGE_FENETRE: f32 = 0.08;
+/// Le nombre de passes de la moyenne glissante (trois passes d'une moyenne simple : une cloche).
+const LISSAGE_PASSES: usize = 3;
 
 fn est_zero_usize(v: &usize) -> bool {
     *v == 0
@@ -316,7 +332,35 @@ impl Trajectoire {
             dessins: Vec::new(),
             tourne: false,
             support: None,
+            lissage: 0.0,
+            brut: None,
         })
+    }
+
+    /// Le chemin brut : le trait tel qu'il a été tracé, avant le lissage (`points` quand le chemin n'est pas lissé).
+    pub fn chemin_brut(&self) -> &[[f32; 2]] {
+        self.brut.as_deref().unwrap_or(&self.points)
+    }
+
+    /// **Lisse le chemin** à `lissage` (de 0 à 1), recalculé depuis le chemin brut : le curseur se remonte et se redescend à
+    /// tout moment, 0 rend le trait tel qu'il a été tracé. Les deux bouts restent à leur place ; les marques, des fractions,
+    /// gardent leur place relative le long du chemin.
+    pub fn lisser_a(&mut self, lissage: f32) {
+        let l = if lissage.is_finite() { lissage.clamp(0.0, 1.0) } else { 0.0 };
+        let base = self.brut.take().unwrap_or_else(|| self.points.clone());
+        self.lissage = l;        if l <= 0.0 {
+            self.points = base;
+            return;
+        }
+        let lisse = lissage_de(&base, l);
+        self.points = if lisse.len() >= 2 && longueur_de(&lisse) >= LONGUEUR_MIN { lisse } else { base.clone() };
+        self.brut = Some(base);
+    }
+
+    /// Le chemin brut vient de changer (tiré, déplacé…) : le chemin lissé est refait d'après lui.
+    fn relisser(&mut self) {
+        let l = self.lissage;
+        self.lisser_a(l);
     }
 
     /// Un chemin tracé dans l'Espace 3D : les points `brut` du trait, lus dans le plan `support`. Rien si le trait est trop court.
@@ -429,14 +473,30 @@ impl Trajectoire {
             (self.ancre, self.tourne, self.decalage_depart, self.source) = (Ancre::Depart, false, [0.0, 0.0], None);
             self.dessins.clear();
         }
+        // Le lissage : entre 0 et 1 ; le chemin brut, filtré comme les points, n'est gardé que s'il tient debout (sinon le
+        // chemin lissé devient le chemin brut).
+        self.lissage = if self.lissage.is_finite() { self.lissage.clamp(0.0, 1.0) } else { 0.0 };
+        if let Some(mut b) = self.brut.take() {
+            b.retain(|p| p[0].is_finite() && p[1].is_finite());
+            b.dedup_by(|a, c| distance(*a, *c) < 1e-3);
+            if self.lissage > 0.0 && b.len() >= 2 && longueur_de(&b) >= LONGUEUR_MIN {
+                self.brut = Some(b);
+            }
+        }
+        if self.brut.is_none() {
+            self.lissage = 0.0;
+        }
         Some(self)
     }
 
-    /// Un nouveau chemin ; les marques sont gardées, à leurs fractions. Faux (rien ne change) si le trait est trop court.
+    /// Un nouveau chemin ; les marques sont gardées, à leurs fractions, et le lissage aussi. Faux (rien ne change) si le trait
+    /// est trop court.
     pub fn retracer(&mut self, brut: &[[f32; 2]]) -> bool {
         match Trajectoire::nouvelle(brut) {
             Some(t) => {
                 self.points = t.points;
+                self.brut = None;
+                self.relisser();
                 true
             }
             None => false,
@@ -826,31 +886,29 @@ impl Trajectoire {
     /// Le chemin tiré en `fraction` de (`dx`, `dy`) : comme une corde, le point pris suit le pointeur, ses voisins le long du chemin
     /// d'autant moins qu'ils sont loin (jusqu'à `rayon` de chemin, en cloche) ; le reste ne bouge pas. Les marques, des fractions,
     /// restent où elles sont le long du chemin. Les points sont ensuite repris au pas.
+    ///
+    /// Un chemin lissé : c'est le chemin brut qui est tiré (au même endroit, sur la même part de sa longueur), puis le chemin
+    /// est lissé de nouveau (partie 151).
     pub fn tirer(&mut self, fraction: f32, dx: f32, dy: f32, rayon: f32) {
-        let total = self.longueur();
-        let s0 = fraction.clamp(0.0, 1.0) * total;
-        let rayon = rayon.max(1e-3);
-        let mut parcouru = 0.0;
-        let mut points = self.points.clone();
-        for i in 0..points.len() {
-            if i > 0 {
-                parcouru += distance(self.points[i - 1], self.points[i]);
-            }
-            let d = (parcouru - s0).abs();
-            if d < rayon {
-                let w = 0.5 * (1.0 + (std::f32::consts::PI * d / rayon).cos());
-                points[i] = [points[i][0] + dx * w, points[i][1] + dy * w];
-            }
-        }
-        let repris = echantillonner(&points);
+        let part = rayon.max(1e-3) / self.longueur().max(1e-6);
+        let repris = tirer_points(self.chemin_brut(), fraction, dx, dy, part);
         if repris.len() >= 2 && longueur_de(&repris) >= LONGUEUR_MIN {
-            self.points = repris;
+            if self.brut.is_some() {
+                self.brut = Some(repris);
+                self.relisser();
+            } else {
+                self.points = repris;
+            }
         }
     }
 
-    /// Chaque point du chemin passé par `f` (étirer, tourner…) ; les marques, des fractions, suivent d'elles-mêmes.
+    /// Chaque point du chemin passé par `f` (étirer, tourner…) ; les marques, des fractions, suivent d'elles-mêmes. Le chemin
+    /// brut d'un chemin lissé aussi.
     pub fn transformer(&mut self, f: impl Fn([f32; 2]) -> [f32; 2]) {
         for p in &mut self.points {
+            *p = f(*p);
+        }
+        for p in self.brut.iter_mut().flatten() {
             *p = f(*p);
         }
     }
@@ -897,6 +955,56 @@ fn croisement(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2]) -> Option<f32>
     let t = (ac[0] * s[1] - ac[1] * s[0]) / den;
     let u = (ac[0] * r[1] - ac[1] * r[0]) / den;
     ((0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)).then_some(t)
+}
+
+/// La ligne `points` tirée en `fraction` de sa longueur de (`dx`, `dy`), comme une corde, sur `part` de sa longueur de part et
+/// d'autre (en cloche), puis reprise au pas (`Trajectoire::tirer`).
+fn tirer_points(points: &[[f32; 2]], fraction: f32, dx: f32, dy: f32, part: f32) -> Vec<[f32; 2]> {
+    let total = longueur_de(points);
+    let s0 = fraction.clamp(0.0, 1.0) * total;
+    let rayon = (part * total).max(1e-3);
+    let mut parcouru = 0.0;
+    let mut out = points.to_vec();
+    for i in 0..out.len() {
+        if i > 0 {
+            parcouru += distance(points[i - 1], points[i]);
+        }
+        let d = (parcouru - s0).abs();
+        if d < rayon {
+            let w = 0.5 * (1.0 + (std::f32::consts::PI * d / rayon).cos());
+            out[i] = [out[i][0] + dx * w, out[i][1] + dy * w];
+        }
+    }
+    echantillonner(&out)
+}
+
+/// **Le lissage d'un chemin** (partie 151) : `base` (des points à peu près au pas) passé `LISSAGE_PASSES` fois par une
+/// moyenne glissante dont la demi-fenêtre est `lissage` × `LISSAGE_FENETRE` de sa longueur, puis repris au pas. Près des
+/// bouts, la fenêtre se resserre autant des deux côtés : **les deux bouts restent fixes**, et le chemin n'y est pas tiré
+/// vers l'intérieur. Un calcul léger (des sommes cumulées, quelques milliers de points au plus) : il se refait à chaque
+/// image d'écran quand on tire le curseur.
+pub fn lissage_de(base: &[[f32; 2]], lissage: f32) -> Vec<[f32; 2]> {
+    let n = base.len();
+    if n < 3 || !(lissage > 0.0) {
+        return base.to_vec();
+    }
+    let total = longueur_de(base);
+    let pas = (total / (n - 1) as f32).max(1e-6);
+    let demi = ((lissage.min(1.0) * LISSAGE_FENETRE * total / pas).round() as usize).clamp(1, n / 2);
+    let mut p = base.to_vec();
+    let mut cumul = vec![[0.0f64; 2]; n + 1];
+    for _ in 0..LISSAGE_PASSES {
+        for i in 0..n {
+            cumul[i + 1] = [cumul[i][0] + p[i][0] as f64, cumul[i][1] + p[i][1] as f64];
+        }
+        for i in 1..n - 1 {
+            let h = demi.min(i).min(n - 1 - i);
+            let (a, b) = (i - h, i + h + 1);
+            let k = (b - a) as f64;
+            p[i] = [((cumul[b][0] - cumul[a][0]) / k) as f32, ((cumul[b][1] - cumul[a][1]) / k) as f32];
+        }
+    }
+    echantillonner(&p)
 }
 
 /// Les points d'un trait, sans doublons, un peu lissés (les bouts restent).
