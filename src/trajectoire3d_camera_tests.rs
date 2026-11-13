@@ -10,7 +10,7 @@
 
 use eframe::egui::{pos2, Color32, Event, Modifiers, PointerButton, Pos2, Rect, Shape, Stroke};
 
-use crate::app::Mode;
+use crate::app::{Mode, Tool};
 use crate::camera::CameraKey;
 use crate::document::{CelId, Document, LayerTransform};
 use crate::espace3d;
@@ -498,4 +498,123 @@ fn a_click_on_the_camera_track_of_the_montage_or_of_the_timeline_chooses_the_cam
     b.app.run_action("espace3d.basculer");
     b.chauffer(3);
     assert!(b.app.e3_vue_montree() && !b.app.espace3d.sel.contains(&CAMERA_ID), "{:?}", b.app.espace3d.sel);
+}
+
+// ------------------------------------------------------------------------------------------------ le panneau Calques
+
+/// Le nom `nom` écrit par la dernière image dans le panneau Calques (à côté du dessin, au-dessus de la bande du bas, qui
+/// écrit les mêmes noms ; le panneau Espace 3D, qui écrit ceux des cartes, est derrière Réglages) : sa zone à l'écran.
+fn nom_dans_le_panneau_calques(b: &Banc, nom: &str) -> Rect {
+    let mut tous = Vec::new();
+    b.formes.iter().for_each(|f| zones_des_textes(&f.shape, &mut tous));
+    let dessin = b.app.canvas_rect;
+    let zones: Vec<Rect> = tous.iter().filter(|(t, z)| t == nom && !dessin.contains(z.center()) && z.center().y < dessin.bottom()).map(|(_, z)| *z).collect();
+    // (S'il y en a plusieurs : celui du panneau Calques a sa vignette, encadrée, juste à sa gauche.)
+    let mut cadres = Vec::new();
+    b.formes.iter().for_each(|f| rectangles(&f.shape, &mut cadres));
+    let a_sa_vignette = |z: &Rect| cadres.iter().any(|(r, _, s)| s.width > 0.0 && r.height() >= 12.0 && r.right() <= z.left() + 1.0 && r.right() >= z.left() - 40.0 && r.top() <= z.center().y && r.bottom() >= z.center().y);
+    let zones: Vec<Rect> = if zones.len() > 1 { zones.into_iter().filter(a_sa_vignette).collect() } else { zones };
+    let partout: Vec<&Rect> = tous.iter().filter(|(t, _)| t == nom).map(|(_, z)| z).collect();
+    assert_eq!(zones.len(), 1, "le nom « {nom} » est écrit une fois dans le panneau Calques : {zones:?} (partout : {partout:?} ; le dessin : {dessin:?})");
+    zones[0]
+}
+
+/// Ce que le panneau Calques peint pour le rang du calque `nom` : les fonds pleins de la taille d'un rang sous son nom, et
+/// combien de cadres épais (celui de la vignette du calque courant) il a à gauche de son nom.
+fn rang_peint(b: &Banc, nom: &str) -> (Vec<Color32>, usize) {
+    let z = nom_dans_le_panneau_calques(b, nom);
+    let mut tous = Vec::new();
+    b.formes.iter().for_each(|f| rectangles(&f.shape, &mut tous));
+    let fonds = tous.iter().filter(|(r, fill, _)| r.contains(z.center()) && r.height() < 80.0 && r.width() < 600.0 && *fill != Color32::TRANSPARENT).map(|r| r.1).collect();
+    let cadres = tous.iter().filter(|(r, _, s)| s.width >= 2.0 && r.top() <= z.center().y && r.bottom() >= z.center().y && r.right() <= z.left() + 1.0 && r.left() > z.left() - 200.0).count();
+    (fonds, cadres)
+}
+
+/// Comme `ouvert` (plan en Espace 3D, vue ouverte et cadrée, outil Trajectoire), dans une fenêtre plus haute (1600 × 1200) :
+/// le panneau Calques, qui partage sa colonne avec les effets au-dessus de la bande du montage, y montre tous ses rangs (à
+/// 1280 × 720, le second rang est sous le bord de la liste, et rien n'y est peint).
+fn ouvert_grand(doc: Document) -> Banc {
+    let mut b = crate::perf_tests::banc_taille(doc, false, 1600, 1200);
+    b.chauffer(2);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.app.run_action("espace3d.basculer");
+    b.app.run_action("espace3d.plan_en_espace");
+    assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
+    b.chauffer(2);
+    b.app.run_action("espace3d.cadrer");
+    b.app.run_action("outil.trajectoire");
+    b.chauffer(3);
+    assert!(b.app.e3_trace(), "l'outil a le pointeur dans la vue");
+    b
+}
+
+/// Le pointeur quitte le panneau (rien n'y est survolé), une image ou deux passent.
+fn pointeur_ailleurs(b: &mut Banc) {
+    b.image(vec![Event::PointerMoved(pos2(4.0, 4.0))], 1.0 / 60.0);
+    b.chauffer(2);
+}
+
+/// Anthony, 2026-11-13 (« règle ce qui reste imparfait ») : la caméra choisie seule, le panneau Calques montrait encore le
+/// calque courant comme choisi. Plus maintenant ; un clic sur un calque (même le courant), un outil de dessin pris dans la
+/// vue ou un trait dans la vue rendent le calque courant et lâchent la caméra. L'outil Trajectoire, lui, la garde.
+#[test]
+fn while_the_camera_is_chosen_alone_the_layers_panel_shows_no_layer_as_chosen_and_drawing_or_a_click_on_a_layer_gives_it_back() {
+    let mut b = ouvert_grand(doc_deux_cartes());
+    b.garder_formes = true;
+    let c = cartes(&b);
+    // (Le panneau Calques n'est pas de l'espace Montage : on le regarde dans le Storyboard. Réglages devant le panneau Espace 3D,
+    // qui écrit lui aussi les noms des cartes.)
+    b.app.set_espace(crate::workspace::Espace::Storyboard);
+    b.app.show_pane(crate::dock::Pane::Layers);
+    b.app.show_pane(crate::dock::Pane::ToolOptions);
+    b.chauffer(8);
+    assert!(b.app.pane_shown(crate::dock::Pane::Layers) && b.app.e3_vue_montree());
+    let (courant, autre) = (rang_peint(&b, "Carte 0"), rang_peint(&b, "Carte 1"));
+    assert_ne!(courant, autre, "le panneau Calques montre le calque courant");
+    // La caméra choisie seule : le rang du calque courant est peint comme les autres.
+    b.app.e3_choisir_la_camera(false);
+    b.chauffer(2);
+    assert_eq!(rang_peint(&b, "Carte 0"), autre, "caméra seule : aucun rang du panneau Calques n'est montré choisi");
+    assert_eq!(rang_peint(&b, "Carte 1"), autre);
+    // Un clic sur le nom du calque courant, dans le panneau : il redevient le calque choisi, la caméra est lâchée.
+    let nom = nom_dans_le_panneau_calques(&b, "Carte 0");
+    cliquer(&mut b, nom.center(), Modifiers::NONE);
+    pointeur_ailleurs(&mut b);
+    assert_eq!((b.app.espace3d.sel.clone(), b.app.cur_layer), (vec![c[0]], 0), "{}", b.app.status);
+    assert_eq!(rang_peint(&b, "Carte 0"), courant);
+    // Prendre un outil de dessin dans la vue (sa case, sa touche) : de même, pour chacun.
+    for outil in [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Mixer, Tool::Select] {
+        b.app.set_tool(Tool::Trajectoire);
+        b.app.e3_choisir_la_camera(false);
+        assert!(b.app.e3_camera_seule());
+        b.app.set_tool(outil);
+        b.chauffer(2);
+        assert_eq!(b.app.espace3d.sel, vec![c[0]], "{outil:?} : la carte du calque courant, plus la caméra");
+        assert!(!b.app.e3_camera_seule() && b.app.calque_montre_courant(0), "{outil:?}");
+    }
+    // Les cartes cachées : prendre le pinceau lâche quand même la caméra (aucune carte n'est alors choisie).
+    b.app.set_tool(Tool::Trajectoire);
+    b.app.e3_choisir_la_camera(false);
+    b.app.espace3d.show_cards = false;
+    b.app.set_tool(Tool::Brush);
+    assert!(!b.app.espace3d.sel.contains(&CAMERA_ID) && b.app.calque_montre_courant(0), "{:?}", b.app.espace3d.sel);
+    b.app.espace3d.show_cards = true;
+    b.chauffer(2);
+    // L'outil Trajectoire garde la caméra choisie : c'est elle qui suivra le chemin.
+    b.app.e3_choisir_la_camera(false);
+    b.app.set_tool(Tool::Trajectoire);
+    b.chauffer(2);
+    assert!(b.app.e3_camera_seule(), "{:?}", b.app.espace3d.sel);
+    // Le pinceau en main, la caméra choisie ensuite (« choisir » du panneau Espace 3D, ou sa piste) : un trait dans la vue va
+    // sur le calque courant, qui redevient le calque choisi.
+    b.app.set_tool(Tool::Brush);
+    b.app.e3_choisir_la_camera(false);
+    b.chauffer(2);
+    assert!(b.app.e3_camera_seule());
+    let sur = sur_la_carte(&mut b, 0);
+    geste(&mut b, &[sur, sur + eframe::egui::vec2(30.0, 12.0), sur + eframe::egui::vec2(50.0, 30.0)], Modifiers::NONE);
+    pointeur_ailleurs(&mut b);
+    assert_eq!(b.app.espace3d.sel, vec![c[0]], "{}", b.app.status);
+    assert!(!b.app.e3_camera_seule() && b.app.calque_montre_courant(0));
+    assert_eq!(rang_peint(&b, "Carte 0"), courant);
 }

@@ -41,6 +41,9 @@ impl App {
     pub(crate) fn select_aplat(&mut self, li: usize) {
         let Some(id) = self.layers().get(li).filter(|l| l.fond.is_some()).map(|l| l.id) else { return };
         self.end_stroke();
+        // (Choisir l'aplat, c'est choisir son calque, même le courant : la caméra choisie seule dans la vue Espace 3D est
+        // lâchée, `e3_calque_choisi`.)
+        self.e3_calque_choisi(li);
         if li != self.cur_layer {
             self.layer_sel.clear();
             self.select_layer(li);
@@ -76,7 +79,8 @@ impl App {
             Some(l) => (l.name.clone(), l.fond.map_or([255, 255, 255], |f| f.couleur)),
             None => (String::new(), [255, 255, 255]),
         };
-        let vise = li == self.cur_layer && self.aplat_en_cible();
+        // (La caméra choisie seule dans la vue Espace 3D : rien n'est montré choisi, l'aplat non plus.)
+        let vise = self.calque_montre_courant(li) && self.aplat_en_cible();
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), SOUS_LIGNE_H), egui::Sense::click());
         let resp = crate::bulles::bulle(
             resp,
