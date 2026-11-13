@@ -15,12 +15,13 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
 
 /// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale), la
 /// feuille d'exposition (13g), l'historique, les commentaires, les bruitages, les suggestions sonores et
-/// les références (ouverts à la demande).
+/// les références (ouverts à la demande). Ni le panneau Espace 3D : depuis la partie 152, sa colonne arrive avec la vue
+/// Espace 3D (`espace3dpanneau_tests.rs`).
 fn default_panes() -> impl Iterator<Item = Pane> {
     Pane::ALL.into_iter().filter(|p| {
         !matches!(
             p,
-            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque
+            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
         )
     })
 }
@@ -172,9 +173,10 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
 fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs() {
     // Plus de panneau Pinceaux (2026-10-24) : la couleur et les personnages restent en onglets, et le panneau
     // n'est dans aucune disposition d'origine.
-    // (Le panneau Espace 3D est un onglet de plus à côté d'eux depuis le 2026-11-12, partie 150.)
+    // (Le panneau Espace 3D a été un onglet de plus à côté d'eux le 2026-11-12, partie 150 ; depuis la partie 152 il a sa
+    // colonne à côté des réglages de l'outil, qui n'arrive qu'avec la vue Espace 3D.)
     let d = DockLayout::from_legacy(&Layout::default());
-    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d]"), "{:?}", d.principal);
+    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", d.principal);
     for l in [d, DockLayout::pour_les_vignettes(), DockLayout::pour_le_montage(290.0)] {
         assert_eq!(count(&l, Pane::Brushes), 0, "{:?}", l.principal);
     }
@@ -191,7 +193,7 @@ fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs(
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Personnages);
     l.open(Pane::Personnages);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d]"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
 }
 
 #[test]
@@ -223,7 +225,7 @@ fn a_saved_layout_that_still_has_the_brushes_tab_loads_without_it() {
     // l'onglet actif est un onglet qui existe.
     let l = Layout { panneaux: Some(back), ..Layout::default() }.dock_layout();
     assert_eq!(count(&l, Pane::Brushes), 0);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages, Espace3d], actif: 0 }"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
     // Dans l'état d'egui_dock non plus.
     let state = dock::to_state(&l);
     assert!(state.find_tab(&Pane::Brushes).is_none());
@@ -411,7 +413,9 @@ fn a_whole_group_toggles_at_once() {
     l.toggle_group(Group::Left);
     assert!(Group::Left.panes().iter().all(|p| !l.contains(*p)));
     l.toggle_group(Group::Left);
-    assert!(Group::Left.panes().iter().all(|p| l.contains(*p)));
+    // (Tous, sauf celui qui ne s'ouvre qu'à la demande : le panneau Espace 3D, dont la colonne arrive avec la vue.)
+    assert!(Group::Left.panes().iter().all(|p| l.contains(*p) != p.on_demand()));
+    assert!(!l.contains(Pane::Espace3d));
     // Un seul panneau du groupe affiché : le bouton du groupe le masque.
     l.close(Pane::Tools);
     l.close(Pane::Color);

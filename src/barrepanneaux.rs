@@ -51,8 +51,8 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::ToolOptions, "vue.reglages", "Réglages de l'outil", "Taille, opacité et options de l'outil courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Personnages, "vue.personnages", "Brosses dédiées", "Les brosses dédiées : personnages du projet, classiques et décors, chacune avec sa couleur de trait et son aplat. Un clic l'ouvre ou le met devant, un autre le ferme."),
-        // Le panneau « Espace 3D » (`espace3dpanneau.rs`, partie 150) : en onglet avec la couleur, sous les réglages de l'outil.
-        entree(Pane::Espace3d, "vue.espace3d_panneau", "Panneau Espace 3D","Les réglages de la vue Espace 3D : les cartes (les calques du plan) et la caméra du plan. Il passe devant la couleur quand la vue s'ouvre. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        // Le panneau « Espace 3D » (`espace3dpanneau.rs`, parties 150 et 152) : dans une colonne à lui, à côté des réglages de l'outil.
+        entree(Pane::Espace3d, "vue.espace3d_panneau", "Panneau Espace 3D","Les réglages de la vue Espace 3D : les cartes (les calques du plan) et la caméra du plan. Il s'ouvre tout seul à côté des réglages de l'outil quand la vue s'ouvre, et se referme avec elle. Un clic l'ouvre ou le met devant, un autre le ferme : ouvert d'un clic, il reste ouvert."),
     ],
     &[
         entree(Pane::Layers, "vue.calques", "Calques", "Les calques du plan, leur mode et leur opacité. Un clic l'ouvre ou le met devant, un autre le ferme."),

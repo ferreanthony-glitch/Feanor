@@ -10,13 +10,19 @@ impl App {
     /// La disposition telle qu'elle est à l'écran.
     pub(crate) fn current_layout(&self) -> Layout {
         let mut panes = self.dock_layout();
+        // La colonne du panneau Espace 3D, posée par la vue ouverte à côté des réglages de l'outil : la disposition
+        // retenue est celle sans elle (elle repart quand la vue se ferme, et FEANOR se lance la vue fermée). Rangé
+        // ailleurs à la main, le panneau n'est plus dans cette colonne : il est retenu là où il est (`espace3dpanneau.rs`).
+        if self.e3_panneau.colonne {
+            panes.retirer_la_colonne(Pane::Espace3d);
+        }
         // En storyboard, la feuille d'exposition est mise de côté : la disposition retenue la garde
         // (elle revient au prochain passage en animation).
         if let (Mode::Storyboard, Some(saved)) = (self.mode, &self.exposition_masquee) {
             panes = panes.retour_animation(saved);
         }
-        // Le panneau Espace 3D, mis devant par la vue ouverte : la disposition retenue garde l'onglet que l'utilisateur
-        // avait devant (la couleur, d'ordinaire), pas celui que la vue y a mis pour un moment (`espace3dpanneau.rs`).
+        // Le panneau Espace 3D rangé en onglet, mis devant par la vue ouverte : la disposition retenue garde l'onglet que
+        // l'utilisateur avait devant, pas celui que la vue y a mis pour un moment (`espace3dpanneau.rs`).
         if let Some(avant) = self.e3_panneau.avant {
             panes.remettre_devant(Pane::Espace3d, avant);
         }
@@ -46,7 +52,7 @@ impl App {
         self.exposition_masquee = None;
         self.set_dock_layout(layout.dock_layout());
         self.layout = layout;
-        // (Une disposition neuve : si la vue Espace 3D est ouverte, son panneau y repasse devant à l'image suivante.)
+        // (Une disposition neuve : si la vue Espace 3D est ouverte, son panneau y arrive à l'image suivante.)
         self.e3_panneau = Default::default();
     }
 

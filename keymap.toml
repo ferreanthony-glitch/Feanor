@@ -1938,7 +1938,7 @@ action = "espace3d.dessiner"
 touches = []
 source = "FEANOR (Espace 3D, dessiner sur la carte du calque courant ; aucune touche choisie : les touches du pinceau, du crayon et de la gomme l'allument)"
 
-# Panneau Espace 3D : les réglages de la vue (cartes, caméra du plan), en onglet avec la couleur ; il passe devant quand la vue s'ouvre (sans touche : à choisir).
+# Panneau Espace 3D : les réglages de la vue (cartes, caméra du plan), dans une colonne à côté des réglages de l'outil ; elle arrive quand la vue s'ouvre et repart quand elle se ferme (sans touche : à choisir).
 [[raccourci]]
 action = "vue.espace3d_panneau"
 touches = []

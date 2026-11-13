@@ -79,6 +79,11 @@ pub struct Settings {
     /// Espace 3D s'ouvre (elle le remet à sa place).
     #[serde(default, rename = "panneau_espace3d_pose", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_espace3d_pose: bool,
+    /// Le panneau « Espace 3D » a quitté, une fois, la place que la partie 150 lui donnait dans les dispositions retenues
+    /// (un onglet du groupe de la couleur) : depuis la partie 152 (2026-11-13, « Place-le à côté de réglages plutôt »), sa
+    /// colonne arrive à côté des réglages de l'outil quand la vue Espace 3D s'ouvre (`poser_le_panneau_espace3d`).
+    #[serde(default, rename = "panneau_espace3d_a_cote", skip_serializing_if = "std::ops::Not::not")]
+    pub panneau_espace3d_a_cote: bool,
     /// « Avec les annotations » des fenêtres d'export (la planche des Vignettes, les images, la vidéo, le GIF, le storyboard PDF) : coché,
     /// les calques d'annotation (de la planche et des plans) sont dans l'export. Décoché d'origine ; retenu par poste de travail, d'une séance à
     /// l'autre (`calqueannot.rs`).
@@ -394,6 +399,7 @@ impl Default for Settings {
             vignettes_layout: None,
             panneau_vignettes_pose: false,
             panneau_espace3d_pose: false,
+            panneau_espace3d_a_cote: false,
             export_annotations: false,
             exports: Default::default(),
             storyboard_space: Espace::Storyboard,
@@ -566,35 +572,43 @@ impl Settings {
         }
     }
 
-    /// Une fois : le panneau « Espace 3D » rejoint les dispositions retenues qui datent d'avant lui, sans rien y changer
-    /// d'autre (ni les parts, ni l'onglet qui est devant). Celles du Storyboard et de l'Animation (les espaces où l'on
-    /// dessine avec les réglages de l'outil et la couleur), et les espaces de travail enregistrés qui montrent le dessin
-    /// avec ses réglages ou sa couleur. Sa place (`DockLayout::open`) : un onglet du groupe de la couleur ; sans la couleur
-    /// ni les brosses dédiées, juste sous les réglages de l'outil. Les dispositions des Vignettes (la planche ne montre pas
-    /// la vue Espace 3D) et du Montage (ni réglages de l'outil ni couleur) ne le reçoivent pas ; sans disposition retenue,
-    /// l'origine du jour l'a déjà. Une fois posé, c'est à l'utilisateur de le garder ou de le fermer.
+    /// Le panneau « Espace 3D » dans les dispositions retenues (toutes : le Storyboard, l'Animation, le Montage, les
+    /// Vignettes, et les espaces de travail enregistrés).
+    ///
+    /// **Partie 152** (2026-11-13, Anthony : « Place-le à côté de réglages plutôt ») : le panneau n'est plus un onglet
+    /// du groupe de la couleur. Sa colonne arrive à côté des réglages de l'outil quand la vue Espace 3D s'ouvre, et repart
+    /// quand elle se ferme (`espace3dpanneau.rs`) : une disposition n'a donc plus besoin de l'avoir. Une fois
+    /// (`panneau_espace3d_a_cote`), il quitte la place que la partie 150 lui avait donnée dans les dispositions retenues
+    /// (`DockLayout::retirer_de_la_place_150` : un onglet du groupe de la couleur ou des brosses dédiées, ou seul juste
+    /// sous les réglages de l'outil), sans rien y changer d'autre. Rangé ailleurs à la main (un autre groupe, un panneau
+    /// flottant à lui, sa propre fenêtre), il y reste. Un panneau remis à la main dans le groupe de la couleur ne se
+    /// distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là ; remis ensuite, il y
+    /// reste.
+    ///
+    /// **Partie 150** (2026-11-12) : le panneau était ajouté, une fois, aux dispositions retenues d'avant lui
+    /// (`panneau_espace3d_pose`). Ce n'est plus fait : la marque est seulement posée, pour qu'un fichier de réglages
+    /// garde le même sens d'une version à l'autre.
     pub fn poser_le_panneau_espace3d(&mut self) {
-        if std::mem::replace(&mut self.panneau_espace3d_pose, true) {
+        self.panneau_espace3d_pose = true;
+        if std::mem::replace(&mut self.panneau_espace3d_a_cote, true) {
             return;
         }
         use crate::dock::Pane;
-        let poser = |l: &mut Layout| {
-            // (Une disposition d'avant 6a devient la disposition d'origine du jour, qui a le panneau : `Layout::modernisee`.)
+        let ranger = |l: &mut Layout| {
+            // (Une disposition d'avant 6a devient la disposition d'origine du jour, sans le panneau : `Layout::modernisee`.)
             if l.is_before_6a() {
                 return;
             }
             let mut d = l.dock_layout();
-            if !d.contains(Pane::Espace3d) && (d.contains(Pane::ToolOptions) || d.contains(Pane::Color)) {
-                d.open(Pane::Espace3d);
+            if d.retirer_de_la_place_150(Pane::Espace3d) {
                 l.panneaux = Some(d);
             }
         };
-        for l in [self.layout.as_mut(), self.animation_layout.as_mut()].into_iter().flatten() {
-            poser(l);
+        for l in [self.layout.as_mut(), self.animation_layout.as_mut(), self.montage_layout.as_mut(), self.vignettes_layout.as_mut()].into_iter().flatten() {
+            ranger(l);
         }
-        // (Un espace enregistré depuis la planche des Vignettes ne le reçoit pas.)
-        for w in self.workspaces.iter_mut().filter(|w| !w.layout.vignettes) {
-            poser(&mut w.layout);
+        for w in self.workspaces.iter_mut() {
+            ranger(&mut w.layout);
         }
     }
 
