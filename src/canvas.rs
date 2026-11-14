@@ -247,6 +247,11 @@ impl App {
             }
         }
 
+        // La grille de repère du calque courant, si c'est un calque 3D qui l'a allumée (`espace3ddecor.rs`) : par-dessus
+        // l'image, jamais dans le dessin.
+        if zone.is_none() {
+            self.peindre_grille_du_calque(&painter);
+        }
         // (La grande case d'un mouvement de caméra a ses propres cadres, A, B, C… : `vignettecamui.rs`.)
         if zone.is_none() {
             self.paint_camera(&painter, rect);

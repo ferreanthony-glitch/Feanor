@@ -12339,3 +12339,97 @@ l'arrêtent pas ; un appui sur la fenêtre la ferme (le trait dessiné sous elle
    sous l'onglet, de la première animation à la dernière, sans que tu changes d'onglet.
 3. Pendant qu'elle joue, dessine dans une case : le trait se fait ; un appui sur la fenêtre la ferme.
 4. Décoche la case et relance : rien ne joue.
+
+## 157. L'environnement de l'Espace 3D, et les calques 3D Sol, Mur, Ciel avec leur grille (2026-11-14, branche `espace3d-decor`)
+
+Demande d'Anthony : « Concernant l'environnement 3D j'aimerais que l'environnement soit paramétrable. La couleur du fond, le
+maillage, la possibilité d'ajouter une grille pour le calque de sol, le mur et le ciel. (ces calques sont disponibles dans la
+création des calques dans un regroupement de calques 3D). Les outils de dessin dans l'environnement 3D et la façon de les
+utiliser doivent rester exactement pareils. Rien ne doit changer des habitudes de dessins habituelles en 2D ». Tout est dans
+`src/espace3ddecor.rs` ; le format reste 55.
+
+### 157.1 L'environnement (panneau Espace 3D)
+
+- Une section **Environnement** (repliée d'origine) sous l'aimantation : **Fond** (la couleur du fond de la vue, une ou
+  plusieurs vues) ; **Maillage** (montré ou non — la même chose que le bouton « Grille du sol » —, sa couleur, son opacité) ;
+  **Pas** (« auto » : comme avant, le pas suit ce qu'on regarde ; sinon un trait tous les tant de mètres, un plus marqué tous
+  les cinq). « Aspect d'origine » remet le fond et le maillage d'avant.
+- Les axes rouge et bleu du maillage gardent leur couleur : ils disent où est l'origine. L'opacité les atténue aussi.
+- **Choix : le projet le retient**, pas les réglages de l'application. Champ facultatif `environnement_3d` du manifeste, comme
+  les vues (`vues_3d`, partie 144) : un film de nuit et un film de jour n'ont pas le même fond, et le projet emporte son aspect
+  sur une autre machine. Hors de l'annulation, comme les vues : c'est une façon de regarder, jamais l'image du film (Ctrl+Z ne
+  défait pas une couleur de fond). D'origine, rien n'est écrit : un projet qui n'y touche pas garde le même manifeste ; un
+  projet d'avant s'ouvre avec l'aspect d'avant, exactement (même gris, mêmes traits au bit près). Un champ abîmé ou écrit par
+  une version plus récente redonne l'aspect d'origine, il n'empêche jamais d'ouvrir le projet.
+- Le maillage caché est maintenant retenu par le projet (avant, il revenait à chaque ouverture).
+- Limite, la même que pour les vues : un **projet partagé** (travail à plusieurs) ne l'écrit pas dans sa structure ; il
+  revient à l'aspect d'origine à la réouverture. Les calques 3D et leur grille, eux, sont dans les plans et restent.
+
+### 157.2 Les calques 3D (menu « Nouveau calque »)
+
+- Le menu du « + » du panneau Calques (et Calques > Nouveau calque, le clic droit dans le vide du panneau) a un regroupement
+  **Calques 3D** avec **Sol**, **Mur**, **Ciel** (commandes `calque.nouveau_sol`, `calque.nouveau_mur`, `calque.nouveau_ciel`,
+  sans touche ; clic droit sur l'entrée pour lui en donner une).
+- Chacun est **un calque de dessin ordinaire** (vectoriel ou bitmap, comme le calque courant), posé dans l'espace par la même
+  règle que « Nouvelle surface » (`Monde::surface_xf`, à la distance du panneau) : le Sol couché au sol devant la caméra, le
+  Mur debout sur le sol face à elle. Il est le calque courant, sa carte est choisie ; une seule étape d'annulation, aucune
+  fenêtre. Nommé « Sol », « Mur », « Ciel » (puis « Sol 2 »…).
+- **Le Ciel** (nouveau, `Surface::Ciel`) : debout face à la caméra à l'horizontale, **vingt fois plus loin** que la distance
+  du panneau (au plus 200 fois la distance de référence), **centré sur l'horizon** (la hauteur de l'œil), à la taille de la
+  feuille à cette distance : il remplit le cadre. Choix : centré plutôt que posé au-dessus de l'horizon, parce que dans un plan
+  en Espace 3D ce qui est devant cache ce qui est derrière — sa moitié basse, derrière le sol, bouche le vide entre le bout du
+  sol et l'horizon ; sa moitié haute est le ciel.
+- **Hors d'un plan en Espace 3D : refusé**, comme « Nouvelle surface » aujourd'hui (une carte au sol n'a de sens que dans un
+  plan dont la caméra est libre). La barre d'état commence par « Sol refusé : ce plan n'est pas en Espace 3D », et dit de
+  cocher « Plan en Espace 3D ». Le sous-menu le rappelle en petit dessous.
+- Enregistré : `calque_3d` du calque (sorte, grille, pas), facultatif, sans changer le format ; une version d'avant ouvre ces
+  calques comme des calques ordinaires, à la même place.
+
+### 157.3 La grille de repère
+
+- Chaque calque Sol, Mur ou Ciel a une option **Grille** (éteinte d'origine) et son **pas** en mètres de la carte (1 m au sol
+  et au mur, 10 m au ciel). Où : dans le panneau Espace 3D sous les réglages de la carte choisie (bouton grille + pas), dans
+  Plus > Réglages avancés du menu du calque (« Grille de repère »), et la commande `calque.grille_3d` (calque courant).
+  Allumer ou éteindre, changer le pas : une étape d'annulation. Plusieurs calques choisis : la grille s'allume ou s'éteint
+  sur tous les calques 3D du choix (règle « la sélection agit sur tout », partie 136), les autres n'en ont pas.
+- Elle ne se peint ni pendant la lecture, ni sur un calque caché ou rangé dans un dossier caché.
+- Des traits bleus (le bleu du crayon de repère), un plus marqué tous les cinq depuis le milieu de la feuille, peints **par
+  dessus** la carte dans la vue Espace 3D (toutes les cartes qui l'ont allumée) et par-dessus l'image du dessin quand ce
+  calque est le calque courant (vue fermée). Au plus 200 traits dans chaque sens (sinon le pas montré est multiplié par cinq).
+- Elle **n'est pas un dessin** : jamais dans le dessin du calque, ni sous la gomme, ni dans les exports, les vignettes ou la
+  lecture. Rien dans le moteur de dessin ni dans le rendu ne la lit.
+
+### 157.4 Le dessin ne change pas
+
+Aucun outil de dessin n'a été touché. Un calque 3D se dessine exactement comme la surface au sol de toujours : mêmes
+outils, mêmes gestes, mêmes raccourcis, même rendu, dans la vue Espace 3D comme à plat. L'essai le prouve pixel pour pixel.
+
+Pas d'animation d'aide : le sous-menu dit en une phrase ce que fait chaque entrée, la grille est un bouton à bascule, et le
+refus hors d'un plan en Espace 3D est dit dans la barre d'état. Rien qui demande une explication animée (et la branche
+`vignettes-premiere` touche l'aide en même temps).
+
+### 157.5 Les essais
+
+`src/espace3ddecor_tests.rs` : l'environnement d'origine est l'aspect d'avant au bit près ; couleur, opacité et pas du
+maillage, sans étape d'annulation, le maillage caché retenu ; un ancien projet sans ces champs (et des champs abîmés) s'ouvre
+à l'aspect d'origine avec des calques ordinaires ; l'aller-retour JSON et projet des deux champs, format 55 ; le menu pose
+Sol, Mur et Ciel en une étape chacun (couché, posé sur le sol, au fond centré sur l'horizon et remplissant le cadre), refus
+hors d'un plan en Espace 3D dit en tête de la barre d'état ; un trait au pinceau sur un Sol du menu, grille allumée, donne le
+même dessin pixel pour pixel qu'une surface au sol ordinaire ; les traits de la grille suivent le pas et restent bornés ; la
+grille n'est jamais dans le dessin, ni sous la gomme, ni dans l'image exportée.
+
+### 157.6 À tester par Anthony
+
+1. Ouvre une **copie** d'un projet, un plan, la vue Espace 3D. Panneau Espace 3D > « Environnement » : change le fond (par
+   exemple un bleu nuit), la couleur et l'opacité du maillage, décoche « auto » et mets 0,5 m. La vue suit tout de suite, en
+   une vue comme en quatre. « Aspect d'origine » remet tout.
+2. Enregistre, ferme, rouvre : le fond et le maillage sont restés. Un autre projet garde le gris d'origine.
+3. Coche « Plan en Espace 3D ». « + » du panneau Calques > Calques 3D > **Sol** : un calque « Sol » couché devant la caméra,
+   déjà calque courant. Puis **Mur** et **Ciel** : le ciel est tout au fond, il remplit le cadre. Ctrl+Z enlève chacun d'un
+   coup.
+4. Sur un plan qui n'est pas en Espace 3D, Calques 3D > Sol : la barre d'état dit pourquoi ça ne se fait pas.
+5. Choisis la carte du Sol : sous ses réglages, le bouton **Grille** et son pas. Allume-la : des traits bleus sur la carte.
+   Dessine dessus au pinceau, au crayon, gomme : tout se fait comme d'habitude, la gomme n'efface jamais la grille.
+6. Ferme la vue : la grille reste visible sur le dessin tant que le Sol est le calque courant. Exporte une image : pas de
+   grille dedans.
+7. Dire si le bleu de la grille se voit bien sur ton papier, et si le ciel est à la bonne place (centré sur l'horizon).

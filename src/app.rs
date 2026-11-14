@@ -1638,7 +1638,7 @@ impl App {
     /// Dans un plan en Espace 3D dont la caméra n'est pas la caméra de référence (`Document::repere_du_plan`), toute carte
     /// est dans ce cas, même à plat : sa matrice est passée dans le repère de la caméra, et l'œil est celui de référence
     /// (comme `espace3d::place_dans` la pose dans l'image). Un calque accroché à la caméra reste dans le cadre.
-    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
+    pub(crate) fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
         let l = self.layer();
         let t = l.pose(self.cur_frame);
         let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame).filter(|_| !l.accroche);
@@ -5140,6 +5140,11 @@ impl App {
             // Calque de couleur (`calquecouleurui.rs`) : en ajouter un, le détacher, griffonner.
             "calque.nouveau_couleur" => self.new_colour_layer(),
             "calque.nouveau_annotation" => self.nouveau_calque_d_annotation(),
+            // Calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel ; la grille de repère du calque courant.
+            "calque.nouveau_sol" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Sol),
+            "calque.nouveau_mur" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Mur),
+            "calque.nouveau_ciel" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Ciel),
+            "calque.grille_3d" => self.basculer_grille_3d(self.cur_layer),
             "calque.detacher_couleur" => self.detach_colour_layer(),
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).

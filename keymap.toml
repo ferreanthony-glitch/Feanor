@@ -1718,6 +1718,26 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "calque.nouveau_sol"
+touches = []
+source = "FEANOR (calque 3D Sol, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.nouveau_mur"
+touches = []
+source = "FEANOR (calque 3D Mur, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.nouveau_ciel"
+touches = []
+source = "FEANOR (calque 3D Ciel, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.grille_3d"
+touches = []
+source = "FEANOR (grille de repère d'un calque 3D, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
 action = "calque.detacher_couleur"
 touches = []
 source = "FEANOR (calque de couleur sous le trait)"

@@ -966,6 +966,10 @@ mod trajectoirepoignees_tests;
 mod espace3dpanneau;
 #[cfg(test)]
 mod espace3dpanneau_tests;
+// L'environnement de l'Espace 3D (fond, maillage) et les calques 3D (sol, mur, ciel, leur grille de repère) : partie 157.
+mod espace3ddecor;
+#[cfg(test)]
+mod espace3ddecor_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

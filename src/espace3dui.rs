@@ -126,6 +126,8 @@ impl App {
         s.card_textures.clear();
         // (Les vues retenues par le projet ; un projet qui n'en dit rien s'ouvre en une vue.)
         self.espace3d.vues = crate::espace3dvues::Vues::depuis(self.doc.vues_3d.as_ref());
+        // (Le maillage montré ou non : ce que le projet retient, `espace3ddecor.rs` ; un projet qui n'en dit rien le montre.)
+        self.espace3d.show_grid = self.e3_environnement().maillage;
     }
 
     /// Entre dans l'Espace 3D, ou en sort.
@@ -335,15 +337,33 @@ impl App {
             self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.", sorte.nom());
             return;
         }
-        if self.content_refuses() {
+        let distance = self.espace3d_distance_surface();
+        let Some((nom, plus_petite)) = self.espace3d_poser_surface(sorte, sorte.nom(), None) else {
+            if self.status.is_empty() {
+                self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait trop loin de la feuille pour être une carte. Rapproche la caméra de la feuille.", sorte.nom());
+            }
             return;
+        };
+        self.status = if plus_petite {
+            format!("« {nom} » posée à {distance:.1} m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le cadre.")
+        } else {
+            format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.")
+        };
+    }
+
+    /// Le travail de `espace3d_nouvelle_surface`, partagé avec les calques 3D du menu « Nouveau calque »
+    /// (`espace3ddecor.rs`, partie 157) : un calque neuf nommé `nom_base` (puis « `nom_base` 2 »…), posé par
+    /// `Monde::surface_xf`, marqué `calque_3d`, juste au-dessus du calque courant ; une seule étape d'annulation. Rend
+    /// son nom et s'il est plus petit que demandé ; rien s'il est refusé (la barre d'état est vidée, ou dit pourquoi). Le
+    /// plan doit être en Espace 3D : l'appelant l'a vérifié.
+    pub(crate) fn espace3d_poser_surface(&mut self, sorte: espace3d::Surface, nom_base: &str, calque_3d: Option<crate::espace3ddecor::Calque3d>) -> Option<(String, bool)> {
+        self.status.clear();
+        if self.content_refuses() {
+            return None;
         }
         let world = self.e3_world();
         let distance = self.espace3d_distance_surface();
-        let Some(xf) = world.surface_xf(&self.current_camera(), sorte, distance) else {
-            self.status = format!("{} refusée : à {distance:.1} m devant cette caméra, elle tomberait trop loin de la feuille pour être une carte. Rapproche la caméra de la feuille.", sorte.nom());
-            return;
-        };
+        let xf = world.surface_xf(&self.current_camera(), sorte, distance)?;
         self.end_stroke();
         let snap = self.snapshot();
         let frame = self.cur_frame;
@@ -351,10 +371,11 @@ impl App {
             Some(l) if !l.folder && l.effet.is_none() => l.kind,
             _ => crate::document::LayerKind::Vector,
         };
-        let deja = self.layers().iter().filter(|l| l.name.starts_with(sorte.nom())).count();
-        let nom = if deja == 0 { sorte.nom().to_string() } else { format!("{} {}", sorte.nom(), deja + 1) };
+        let deja = self.layers().iter().filter(|l| l.name.starts_with(nom_base)).count();
+        let nom = if deja == 0 { nom_base.to_string() } else { format!("{nom_base} {}", deja + 1) };
         let mut layer = crate::document::Layer::new(nom.clone(), kind);
         layer.parent = self.layers().get(self.cur_layer).and_then(|l| if l.folder { None } else { l.parent });
+        layer.calque_3d = calque_3d;
         world.apply_card_xf_libre(&mut layer, frame, &xf);
         // (Près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la feuille : son échelle
         // s'arrête à 100, et sous `Layer::MIN_DEPTH` sa taille ne grandit plus avec sa profondeur. Une surface demandée
@@ -366,16 +387,12 @@ impl App {
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
         self.vsel = None;
-        let before = self.history.context.replace(sorte.nom().to_string());
+        let before = self.history.context.replace(nom_base.to_string());
         self.commit_structure(snap);
         self.history.context = before;
         self.espace3d.sel = vec![espace3d::card_selection(id)];
         self.espace3d.last_layer = id;
-        self.status = if plus_petite {
-            format!("« {nom} » posée à {distance:.1} m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le cadre.")
-        } else {
-            format!("« {nom} » posée à {distance:.1} m : c'est le calque courant, dessine dessus.")
-        };
+        Some((nom, plus_petite))
     }
 
     /// Les commandes de l'Espace 3D. Vrai si l'action est la sienne.
@@ -413,7 +430,8 @@ impl App {
                 self.espace3d.snap = !self.espace3d.snap;
                 self.status = if self.espace3d.snap { "Aimantation à la grille : allumée.".into() } else { "Aimantation : éteinte.".into() };
             }
-            "espace3d.grille" => self.espace3d.show_grid = !self.espace3d.show_grid,
+            // (Le projet retient le maillage montré ou non : `espace3ddecor.rs`, partie 157.)
+            "espace3d.grille" => self.e3_maillage_basculer(),
             // Dessiner sur la carte, ou rendre la main aux cartes (`espace3ddessin.rs`, partie 146).
             crate::espace3ddessin::ACTION => self.espace3d_basculer_dessin(),
             _ => return false,
@@ -600,7 +618,7 @@ impl App {
             }
             let r = self.bouton_etat(ui, self.espace3d.show_grid, ph::GRID_FOUR, "Grille du sol", "Quadrillage au sol, un trait plus marqué tous les cinq.", "espace3d.grille");
             if r.clicked() {
-                self.espace3d.show_grid = !self.espace3d.show_grid;
+                self.e3_maillage_basculer();
             }
             // Une, deux ou quatre vues (`espace3dvues.rs`, partie 144) : un réglage de la vue, donc ici et dans la barre
             // de la vue, pas dans le panneau Réglages (partie 150).
@@ -628,6 +646,8 @@ impl App {
                 crate::bulles::bulle(r, "Pas de taille", "Tailles aimantées à ce pas.", "");
             });
         }
+        // L'environnement : le fond de la vue, le maillage du sol (`espace3ddecor.rs`, partie 157).
+        self.e3_environnement_ui(ui);
         // Poser une surface à dessiner (plan en Espace 3D seulement) : face à la caméra, au sol, en mur, à la distance dite.
         if self.doc.plan_en_espace(self.cur_panel) {
             ui.horizontal(|ui| {
@@ -694,6 +714,8 @@ impl App {
         if let [li] = chosen_cards.as_slice() {
             ui.separator();
             self.espace3d_card_fields(ui, *li);
+            // (Un calque Sol, Mur ou Ciel : sa grille de repère, `espace3ddecor.rs`.)
+            self.e3_grille_carte_ui(ui, *li);
         } else if chosen_cards.len() > 1 {
             ui.separator();
             ui.horizontal(|ui| {

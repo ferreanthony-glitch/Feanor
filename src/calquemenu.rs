@@ -124,12 +124,15 @@ impl Sorte {
     pub(crate) fn actions_du_menu() -> Vec<&'static str> {
         let mut v: Vec<&'static str> = Sorte::TOUTES.iter().filter_map(|s| s.action()).collect();
         v.extend(["effet.vide", ACTION_AVEC_NOM]);
+        v.extend(crate::espace3ddecor::Sorte3d::TOUTES.iter().map(|s| s.action()));
         v
     }
 }
 
 /// « Nom, groupe, place… » : la fenêtre « Nouveau calque ».
 pub(crate) const ACTION_AVEC_NOM: &str = "calque.nouveau";
+/// Le regroupement des calques 3D dans le menu « Nouveau calque » (`espace3ddecor.rs`).
+pub(crate) const CALQUES_3D: &str = "Calques 3D";
 
 /// Une entrée de menu à deux lignes : l'icône et le nom, la phrase dessous en plus discret.
 fn entree(ui: &egui::Ui, icone: &str, teinte: Color32, nom: &str, phrase: &str) -> LayoutJob {
@@ -160,7 +163,7 @@ impl App {
     pub(crate) fn layer_plus_button(&mut self, ui: &mut egui::Ui) {
         let button = egui::Button::new(RichText::new(ph::PLUS).size(crate::bulles::TAILLE)).min_size(vec2(24.0, 0.0));
         let resp = egui::menu::menu_custom_button(ui, button, |ui| self.layer_new_menu(ui)).response;
-        crate::bulles::bulle(resp, "Nouveau calque", "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier.", "");
+        crate::bulles::bulle(resp, "Nouveau calque", "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier, calques 3D.", "");
     }
 
     /// Le menu « Nouveau calque » : une entrée par sorte (icône, nom, une phrase), puis la fenêtre avec le nom, le
@@ -181,8 +184,26 @@ impl App {
                 }
             }
         }
+        // Les calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel, posés dans l'espace d'un plan en Espace 3D.
+        let job = entree(ui, ph::CUBE, crate::theme::accent(), CALQUES_3D, "Sol, mur, ciel posés dans l'Espace 3D ; on y dessine comme partout.");
+        ui.menu_button(job, |ui| self.calques_3d_menu(ui));
         ui.separator();
         self.action_item(ui, "Nom, groupe, place…", ACTION_AVEC_NOM);
+    }
+
+    /// Le sous-menu « Calques 3D » : Sol, Mur, Ciel. Chacun crée un calque de dessin ordinaire posé dans l'espace du plan
+    /// (un plan en Espace 3D), en une étape d'annulation (`App::nouveau_calque_3d`).
+    fn calques_3d_menu(&mut self, ui: &mut egui::Ui) {
+        ui.set_min_width(250.0);
+        for s in crate::espace3ddecor::Sorte3d::TOUTES {
+            let job = entree(ui, s.icone(), crate::theme::accent(), s.nom(), s.phrase());
+            let shortcut = self.keymap.label(s.action());
+            let resp = ui.add(egui::Button::new(job).shortcut_text(&shortcut));
+            self.entree_creation(ui, &resp, s.action());
+        }
+        if !self.doc.plan_en_espace(self.cur_panel) {
+            ui.label(RichText::new("Ce plan n'est pas en Espace 3D : coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.").small().weak());
+        }
     }
 
     /// Clic sur une entrée de création : l'action ; clic droit : lui assigner un raccourci.

@@ -347,5 +347,11 @@ impl App {
             self.basculer_accroche(li);
         }
         self.depth_item(ui, li);
+        // La grille de repère d'un calque Sol, Mur ou Ciel (`espace3ddecor.rs`, partie 157) : jamais dans le dessin.
+        if let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) {
+            if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille sur la carte, dans la vue Espace 3D et dans le dessin. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {
+                self.basculer_grille_3d(li);
+            }
+        }
     }
 }
