@@ -46,9 +46,19 @@ pub(crate) struct GridLine {
 }
 
 /// Les traits du quadrillage du sol autour de `target`, à l'échelle de ce qu'on regarde.
+#[cfg(test)]
 pub(crate) fn grid_lines(target: V3, distance: f32) -> Vec<GridLine> {
-    let step = nice_step((distance * 2.4).clamp(1.0, 400.0));
-    let n = 15i32;
+    grid_lines_pas(target, distance, None)
+}
+
+/// `grid_lines`, au pas `pas` (mètres) s'il est donné (l'environnement de l'Espace 3D, `espace3ddecor.rs`) : les traits
+/// couvrent la même étendue qu'au pas automatique, 300 au plus de chaque côté.
+pub(crate) fn grid_lines_pas(target: V3, distance: f32, pas: Option<f32>) -> Vec<GridLine> {
+    let auto = nice_step((distance * 2.4).clamp(1.0, 400.0));
+    let (step, n) = match pas.filter(|p| p.is_finite() && *p > 0.0) {
+        Some(p) => (p, ((15.0 * auto / p).ceil() as i32).clamp(1, 300)),
+        None => (auto, 15i32),
+    };
     let (cx, cz) = ((target[0] / step).round() * step, (target[2] / step).round() * step);
     let half = n as f32 * step;
     let mut out = Vec::with_capacity(((2 * n + 1) * 2) as usize);
@@ -81,10 +91,14 @@ impl App {
     /// l'espace qui lui fait face. La même fonction pour la vue seule et pour chaque vue.
     pub(crate) fn e3_quadrillage(&self, target: V3, distance: f32, ortho: Option<(crate::espace3dvues::PointDeVue, crate::espace3dvues::Ortho, f32)>) -> Vec<GridLine> {
         let sol = self.e3_hauteur_sol();
-        match ortho {
-            Some((p, o, aspect)) => crate::espace3dvues::grille_ortho(p, &o, aspect, sol),
-            None => grid_lines(target, distance).into_iter().map(|l| GridLine { a: [l.a[0], l.a[1] + sol, l.a[2]], b: [l.b[0], l.b[1] + sol, l.b[2]], color: l.color }).collect(),
-        }
+        // (L'environnement du projet : le pas, la couleur et l'opacité du maillage, `espace3ddecor.rs`. D'origine : rien ne
+        // change.)
+        let env = self.e3_environnement();
+        let lignes = match ortho {
+            Some((p, o, aspect)) => crate::espace3dvues::grille_ortho_pas(p, &o, aspect, sol, env.pas_du_maillage()),
+            None => grid_lines_pas(target, distance, env.pas_du_maillage()).into_iter().map(|l| GridLine { a: [l.a[0], l.a[1] + sol, l.a[2]], b: [l.b[0], l.b[1] + sol, l.b[2]], color: l.color }).collect(),
+        };
+        env.teinter_maillage(lignes)
     }
 
     /// Peint ces traits de quadrillage (`proj` : du monde à l'écran).
@@ -644,7 +658,8 @@ impl App {
         let to_screen = |q: [f32; 2]| pos2(draw.left() + q[0], draw.top() + q[1]);
         let proj = |p: V3| view.project(p, center).map(to_screen);
 
-        painter.rect_filled(rect, 0.0, Color32::from_gray(26));
+        // Le fond : la couleur de l'environnement (`espace3ddecor.rs` ; d'origine, le gris de toujours).
+        painter.rect_filled(rect, 0.0, self.e3_environnement().couleur_du_fond());
         // Le quadrillage du sol.
         if self.espace3d.show_grid {
             let distance = self.espace3d.cam.map_or(8.0, |c| c.distance);
@@ -750,6 +765,13 @@ impl App {
                         painter.add(Shape::mesh(feuille));
                     }
                 }
+            }
+            // La grille de repère d'un calque 3D (`espace3ddecor.rs`, partie 157) : peinte sur la carte, par-dessus son dessin,
+            // jamais dans le dessin.
+            if let Some(g) = self.layers()[li].calque_3d.filter(|g| g.grille) {
+                let lignes = crate::espace3ddecor::lignes_de_grille(world.stage, [xf.size[0].abs(), xf.size[1].abs()], g.pas);
+                let [w, h] = world.stage;
+                crate::espace3ddecor::peindre_grille(painter, &lignes, &|p: Pos2| view.project(at(p.x / w, p.y / h), center).map(to_screen));
             }
             let corners = world.card_corners(&xf);
             let stroke = if selected { Stroke::new(2.0_f32, ACCENT) } else { Stroke::new(1.0_f32, crate::viewbar::veil(90)) };

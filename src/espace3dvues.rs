@@ -393,12 +393,15 @@ impl Vues {
 /// Les traits de la grille d'une vue orthographique : dans le plan de l'espace face à la vue (le sol vu du dessus ou du
 /// dessous, le plan de la feuille vu de face ou de derrière, le plan de côté vu de gauche ou de droite), un trait plus marqué
 /// tous les cinq, les axes à leur couleur. `aspect` : largeur / hauteur de la vue.
-pub(crate) fn grille_ortho(point: PointDeVue, o: &Ortho, aspect: f32, sol: f32) -> Vec<GridLine> {
+///
+/// `pas` : le pas (mètres) de l'environnement de l'Espace 3D (`espace3ddecor.rs`), s'il en donne un ; sinon, un pas rond à
+/// l'échelle de la vue. Le nombre de traits reste borné (200 de chaque côté).
+pub(crate) fn grille_ortho_pas(point: PointDeVue, o: &Ortho, aspect: f32, sol: f32, pas: Option<f32>) -> Vec<GridLine> {
     let Some((forward, r, u)) = point.axes() else { return Vec::new() };
     let axe = |v: V3| (0..3).max_by(|&a, &b| v[a].abs().total_cmp(&v[b].abs())).unwrap_or(0);
     let (kr, ku, kf) = (axe(r), axe(u), axe(forward));
     let span = o.span.max(1e-3);
-    let step = nice_step(span * 1.2);
+    let step = pas.filter(|p| p.is_finite() && *p > 0.0).unwrap_or_else(|| nice_step(span * 1.2));
     let (half_w, half_h) = (span * 0.55 + step, span * 0.55 / aspect.max(0.05) + step);
     let couleur = |k: usize| match k {
         0 => [0.9, 0.32, 0.32, 0.75],
@@ -803,7 +806,7 @@ impl App {
         let painter = ui.painter_at(r);
         let to_screen = |q: [f32; 2]| pos2(draw.left() + q[0], draw.top() + q[1]);
         let proj = |p: V3| view.project(p, center).map(to_screen);
-        painter.rect_filled(r, 0.0, Color32::from_gray(26));
+        painter.rect_filled(r, 0.0, self.e3_environnement().couleur_du_fond());
         if self.espace3d.show_grid {
             // (Le même quadrillage que la vue seule, `App::e3_quadrillage`.)
             let lignes = match c.point {

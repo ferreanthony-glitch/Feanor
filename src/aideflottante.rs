@@ -65,7 +65,13 @@ pub(crate) struct Lecture {
     /// à sa place quand elle disparaît (la vue Espace 3D qui s'ouvre cache son bouton) ; elle ne saute jamais vers une autre.
     pub rect: Option<Rect>,
     pub prise: Option<&'static str>,
+    /// L'heure de la dernière image où elle a été suivie : une image qui tarde (`RETARD`) ne la fait pas avancer d'autant.
+    pub vue: f64,
 }
+
+/// Au-delà de cet écart entre deux images (un projet qui s'ouvre, une longue adoption), l'animation ne compte pas le temps passé :
+/// elle reprend où elle était au lieu de sauter à la suivante (partie 156).
+const RETARD: f64 = 0.5;
 
 // ------------------------------------------------------------------------------------------------------ les ancres
 
@@ -197,7 +203,11 @@ impl App {
         }
         // Sans barre d'outils (l'espace Montage, ou la barre cachée), rien ne joue de soi-même : le contexte n'est pas suivi, et
         // l'animation jouera quand l'icône reparaîtra.
-        if self.espace != crate::workspace::Espace::Montage && self.layout.tool_bar {
+        // Pendant qu'un projet s'ouvre, ou que la séance d'avant revient (ses projets s'ouvrent l'un après l'autre, « Ouverture… »),
+        // rien ne commence non plus : au démarrage sur la page Vignettes, la suite attend que la page soit prête (partie 156) ;
+        // elle jouait derrière la fenêtre d'ouverture du projet suivant.
+        let ouverture = self.open_job.is_some() || !self.session_prete;
+        if self.espace != crate::workspace::Espace::Montage && self.layout.tool_bar && !ouverture {
             self.aide_suivre(maintenant);
         }
         let Some(mut l) = self.confort.aide.lecture.clone() else { return };
@@ -205,6 +215,19 @@ impl App {
             self.confort.aide.lecture = None;
             return;
         };
+        // Une image en retard : le temps passé ne compte pas (une animation entière aurait sauté, retenue comme vue sans être vue).
+        let ecart = maintenant - l.vue;
+        // (Elle avance encore d'une demi-seconde : sur une machine dont chaque image tarde, elle ne gèle pas. L'apparition aussi
+        // est décalée : la fenêtre née juste avant l'image lente garde son fondu d'entrée.)
+        if ecart > RETARD {
+            let decale = ecart - RETARD;
+            l.debut += decale;
+            l.ouverture += decale;
+            if let Some(f) = l.fin.as_mut() {
+                *f += decale;
+            }
+        }
+        l.vue = maintenant;
         // Un appui sur la fenêtre la ferme tout de suite ; un geste dont le pointeur s'en approche aussi (elle ne couvre jamais le
         // trait). L'appui continue son chemin : il dessine, ou clique ce qu'il y a dessous.
         // Un geste commencé avant qu'elle s'ouvre (un outil pris au clavier pendant un trait) ne la ferme pas, pour ne pas perdre

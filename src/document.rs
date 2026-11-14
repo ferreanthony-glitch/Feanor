@@ -457,6 +457,10 @@ pub struct Layer {
     /// Accroché à la caméra (`accroche.rs`, Anthony 2026-11-11) : le calque garde sa place dans l'image filmée, quoi que fasse la caméra
     /// (déplacement, zoom, rotation, avancée). Sa pose se lit alors dans le cadre de la caméra, et le multiplan ne le fait plus défiler.
     pub accroche: bool,
+    /// Calque 3D (`espace3ddecor.rs`, Anthony 2026-11-14, partie 157) : un Sol, un Mur ou un Ciel créé par « Nouveau calque > Calques 3D »,
+    /// avec sa grille de repère (jamais dessinée dans le calque, jamais exportée). Un calque de dessin ordinaire pour tout le reste. Aucun :
+    /// calque ordinaire.
+    pub calque_3d: Option<crate::espace3ddecor::Calque3d>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -533,6 +537,7 @@ impl Layer {
             personnage: None,
             annotation: false,
             accroche: false,
+            calque_3d: None,
         }
     }
 
@@ -1477,6 +1482,10 @@ pub struct Document {
     /// Les vues de l'Espace 3D retenues par le projet (`espace3dvues.rs`) : écrites dans le manifeste (champ facultatif
     /// `vues_3d`). Hors de l'annulation : c'est une façon de regarder, pas une retouche du film. Rien : une vue.
     pub vues_3d: Option<crate::espace3dvues::Retenue>,
+    /// L'environnement de la vue Espace 3D retenu par le projet (`espace3ddecor.rs`, partie 157) : couleur du fond, maillage du sol
+    /// (montré, couleur, opacité, pas). Écrit dans le manifeste (champ facultatif `environnement_3d`, sans changer `VERSION`). Hors de
+    /// l'annulation, comme `vues_3d` : une façon de regarder, jamais dans l'image du film. Rien : l'aspect d'origine.
+    pub environnement_3d: Option<crate::espace3ddecor::Environnement3d>,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1546,6 +1555,7 @@ impl Document {
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
+            environnement_3d: None,
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1621,6 +1631,7 @@ impl Document {
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
+            environnement_3d: None,
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1673,6 +1684,7 @@ impl Document {
             decor_bitmap: self.decor_bitmap,
             duree_plan_neuf: self.duree_plan_neuf,
             vues_3d: self.vues_3d.clone(),
+            environnement_3d: self.environnement_3d,
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
