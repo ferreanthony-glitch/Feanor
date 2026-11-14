@@ -174,18 +174,16 @@ pub(crate) fn doc_cartes(n: usize) -> Document {
 }
 
 /// Le banc, la vue Espace 3D ouverte et cadrée, le calque 0 courant, l'outil Trajectoire en main (clés d'interpolation).
-/// `espace` : le plan est un plan en Espace 3D.
+/// `espace` : le plan est un plan venu du format 55 en Espace 3D (`Panel::espace` : son image passe par le changement de
+/// repère dès que sa caméra bouge, ses cartes se cachent selon leur distance). Faux : un plan neuf, dessiné à plat (partie
+/// 159 : il est dans l'espace lui aussi ; avant, le bouton « Plan en Espace 3D » faisait la différence).
 pub(crate) fn ouvert(doc: Document, espace: bool) -> Banc {
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
-    // (La vue met d'elle-même le plan en Espace 3D quand rien n'en change, partie 158 : le bouton le rend ordinaire.)
     b.chauffer(1);
-    if b.app.doc.plan_en_espace(0) != espace {
-        b.app.run_action("espace3d.plan_en_espace");
-    }
-    assert_eq!(b.app.doc.plan_en_espace(0), espace, "{}", b.app.status);
+    b.app.doc.panels[0].espace = espace;
     b.chauffer(2);
     b.app.run_action("espace3d.cadrer");
     b.app.traj.cles_propose = Cles::Interpolation;
@@ -565,17 +563,17 @@ fn moving_a_card_that_follows_a_path_moves_its_own_pose_at_every_image_and_the_p
 }
 
 #[test]
-fn an_ordinary_plan_refuses_with_its_message_and_the_sheet_only_shows_a_path_in_space() {
-    // Plan ordinaire : la vue répond qu'il faut un plan en Espace 3D, rien n'est posé.
+fn a_plan_drawn_flat_takes_a_path_in_space_too_and_the_sheet_only_shows_a_path_in_space() {
+    // Partie 159 : tout plan est dans l'espace. Un plan neuf, dessiné à plat, prend la trajectoire sans refuser (avant : « il faut
+    // un plan en Espace 3D », rien n'était posé).
     let mut b = ouvert(doc_cartes(1), false);
-    assert_eq!(b.app.status, t3::PLAN_ORDINAIRE);
+    assert_eq!(b.app.status, t3::PRISE);
     let etapes = b.app.history.undo_len();
-    b.app.status.clear();
     let (a, c) = (sol(&b, -2.0, 1.0), sol(&b, 2.0, 3.0));
     geste(&mut b, &[a, c], Modifiers::NONE);
-    assert_eq!(b.app.status, t3::PLAN_ORDINAIRE);
-    assert!(b.app.layers()[0].trajectoire.is_none() && b.app.doc.panels[0].trajectoire_camera.is_none());
-    assert_eq!(b.app.history.undo_len(), etapes);
+    assert!(b.app.layers()[0].trajectoire.as_ref().is_some_and(|t| t.support.is_some()), "{}", b.app.status);
+    assert_eq!(b.app.history.undo_len(), etapes + 1);
+    b.app.undo();
     // Alt+glisser tourne toujours la vue avec l'outil en main.
     let vue = b.app.espace3d.cam.expect("la vue");
     geste(&mut b, &[a, c], Modifiers::ALT);
@@ -600,12 +598,7 @@ fn an_ordinary_plan_refuses_with_its_message_and_the_sheet_only_shows_a_path_in_
     geste(&mut b, &[centre, centre + eframe::egui::vec2(120.0, 30.0)], Modifiers::NONE);
     assert_eq!(b.app.status, t3::SUR_LA_FEUILLE);
     assert_eq!((trajectoire(&b, 0), b.app.history.undo_len()), (avant, etapes), "rien n'a changé");
-    // Décocher « Plan en Espace 3D » : la trajectoire dans l'espace est détachée, ses clés restent ; une annulation rend tout.
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(!b.app.doc.plan_en_espace(0));
-    assert!(b.app.layers()[0].trajectoire.is_none() && b.app.layers()[0].pos_keys.len() == 24);
-    b.app.undo();
-    assert!(b.app.doc.plan_en_espace(0) && b.app.layers()[0].trajectoire.is_some());
+    // (Partie 159 : « Plan en Espace 3D » n'existe plus, il n'y a plus rien à décocher qui détacherait la trajectoire.)
 }
 
 // ------------------------------------------------------------------------------------------------ le fichier
@@ -630,7 +623,7 @@ fn both_kinds_of_paths_in_space_survive_a_save_and_a_reload_and_a_format_54_proj
     project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
     let texte = std::fs::read_to_string(&manifest).expect("manifeste");
     assert!(texte.contains("\"support\"") && texte.contains("\"trajectoire_camera\""), "les deux champs sont écrits");
-    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 55, "sous le format 55, sans changer de numéro");
+    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 56, "sous le format 56 (partie 159), celui de tout projet d'aujourd'hui");
     let relu = project::load(&manifest).expect("relu").doc;
     assert_eq!(relu.panels[0].layers[1].trajectoire.as_ref(), Some(&carte_avant), "la trajectoire de la carte revient telle quelle");
     assert_eq!(relu.panels[0].trajectoire_camera.as_ref(), Some(&camera_avant), "celle de la caméra aussi");
@@ -759,14 +752,14 @@ fn cutting_trimming_and_inserting_images_keep_the_camera_where_its_path_put_it()
 // ------------------------------------------------------------------------------------------------ les défauts corrigés avec elle
 
 #[test]
-fn the_plan_in_space_toggle_no_longer_says_it_is_under_construction() {
+fn the_order_toggle_that_replaced_the_plan_in_space_toggle_says_what_it_does() {
+    // (Partie 159 : le bouton « Plan en Espace 3D » est parti ; reste le choix de l'ordre des calques, dans la vue de la scène.)
     let mut b = banc_taille(doc_cartes(1), false, 1280, 720);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.doc.plan_en_espace(0));
-    assert!(!b.app.status.contains("En construction") && !b.app.status.contains("ne change pas encore"), "{}", b.app.status);
-    assert!(b.app.status.contains("caméra est libre"), "{}", b.app.status);
+    b.app.run_action("espace3d.ordre_distance");
+    assert!(b.app.doc.ordre_par_la_distance(0));
+    assert!(b.app.status.starts_with("Devant cache derrière : allumé"), "{}", b.app.status);
 }
 
 #[test]

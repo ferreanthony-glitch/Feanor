@@ -588,7 +588,7 @@ impl App {
         let resp = bulle(
             resp,
             "Verrouiller la position",
-            "L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.",
+            "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.",
             "",
         );
         if resp.clicked() {

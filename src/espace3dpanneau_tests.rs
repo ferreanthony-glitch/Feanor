@@ -215,8 +215,7 @@ fn in_the_3d_view_the_settings_pane_shows_the_brush_and_the_space_pane_the_cards
 fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space_path_and_the_space_pane_does_not() {
     let mut b = banc_d_essai(2);
     ouvrir_la_vue(&mut b);
-    // (La vue l'y a mis d'elle-même, partie 158.)
-    assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
+    // (Partie 159 : tout plan est dans l'espace.)
     b.app.traj.cles_propose = Cles::Interpolation;
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);
@@ -250,21 +249,18 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
 }
 
 #[test]
-fn in_an_ordinary_plan_the_trajectory_settings_point_to_the_space_pane_for_the_checkbox() {
+fn in_any_plan_the_trajectory_settings_show_the_path_in_space_without_any_checkbox_to_tick() {
+    // (Partie 159 : plus de « Plan en Espace 3D » à cocher. Un plan neuf, dessiné à plat, a la trajectoire dans l'espace.)
     let mut b = banc_d_essai(1);
     ouvrir_la_vue(&mut b);
-    // (La vue l'a mis en Espace 3D, partie 158 : décoché à la main, il reste ordinaire.)
-    b.app.run_action("espace3d.plan_en_espace");
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);
-    assert!(!b.app.doc.plan_en_espace(0));
+    assert!(!b.app.doc.panels[0].espace && !b.app.doc.panels[0].camera_libre);
     let textes = textes_du_panneau(&mut b.app, Pane::ToolOptions);
-    assert!(contient(&textes, "Trajectoire dans l'espace") && contient(&textes, "du panneau Espace 3D"), "{textes:?}");
-    assert!(!contient(&textes, "plus bas"), "la case n'est plus sous ces réglages : {textes:?}");
-    // La case est bien dans le panneau Espace 3D (son bouton y est, avec les autres options de la vue).
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace"]);
+    assert!(contient(&textes, "Trajectoire dans l'espace") && contient(&textes, "Choisi :"), "{textes:?}");
+    assert!(!contient(&textes, "Plan en Espace 3D") && !contient(&textes, "plus bas"), "plus de case à cocher : {textes:?}");
+    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Plan en Espace 3D"]);
 }
-
 // ------------------------------------------------------------------------------------------------ vue fermée
 
 /// Un clic dans le panneau `pane`, au point `p` de son contexte à part.
@@ -435,10 +431,11 @@ fn opening_the_view_brings_the_pane_in_front_of_the_tool_settings_and_closing_it
     assert_eq!(onglets_de(&retenue, Pane::Espace3d), Some((ONGLETS_DE_REGLAGES.to_vec(), Pane::ToolOptions)));
     let ecrite = b.app.settings.layout_of(Espace::Storyboard).expect("la disposition du Storyboard est retenue").dock_layout();
     assert_eq!(onglets_de(&ecrite, Pane::Espace3d), Some((ONGLETS_DE_REGLAGES.to_vec(), Pane::ToolOptions)), "dans les réglages aussi");
-    // La vue se ferme : Réglages revient devant ; l'onglet reste, derrière lui.
+    // La vue se ferme : Réglages revient devant, et l'onglet que la vue avait ouvert s'en va (partie 159 : hors de la vue de la
+    // scène, aucun onglet ne dit la 3D ; avant, il restait derrière Réglages).
     fermer_la_vue(&mut b);
-    assert!(devant(&b, Pane::ToolOptions) && !devant(&b, Pane::Espace3d) && b.app.pane_shown(Pane::Espace3d));
-    assert_eq!(groupe(&b, Pane::Espace3d), ONGLETS_DE_REGLAGES.to_vec());
+    assert!(devant(&b, Pane::ToolOptions) && !b.app.pane_shown(Pane::Espace3d));
+    assert!(meme_forme(&b.app.dock_layout().principal, &origine.principal), "la disposition d'origine revient");
     assert_eq!(b.app.e3_panneau.avant, None);
     // Rouverte : il repasse devant, à la même place, une seule fois.
     ouvrir_la_vue(&mut b);
@@ -551,7 +548,7 @@ fn each_work_space_gets_the_tab_in_front_while_the_view_is_open_and_restoring_th
     let animation = b.app.settings.layout_of(Espace::Animation).expect("la disposition de l'Animation est retenue").dock_layout();
     assert_eq!(onglets_de(&animation, Pane::Espace3d), Some((ONGLETS_DE_REGLAGES.to_vec(), Pane::ToolOptions)));
     fermer_la_vue(&mut b);
-    assert!(devant(&b, Pane::ToolOptions) && b.app.pane_shown(Pane::Espace3d));
+    assert!(devant(&b, Pane::ToolOptions) && !b.app.pane_shown(Pane::Espace3d), "partie 159 : l'onglet de Réglages part avec la vue");
     // « Rétablir la disposition », la vue fermée : la disposition d'origine, sans le panneau.
     b.app.run_action("espace.retablir");
     b.chauffer(3);
@@ -563,7 +560,8 @@ fn each_work_space_gets_the_tab_in_front_while_the_view_is_open_and_restoring_th
     assert_eq!(groupe(&b, Pane::Espace3d), ONGLETS_DE_REGLAGES.to_vec());
     assert!(devant(&b, Pane::Espace3d) && b.app.e3_panneau.avant == Some(Pane::ToolOptions));
     fermer_la_vue(&mut b);
-    assert!(devant(&b, Pane::ToolOptions) && b.app.pane_shown(Pane::Espace3d));
+    // (Partie 159 : l'onglet que la vue avait ouvert s'en va avec elle.)
+    assert!(devant(&b, Pane::ToolOptions) && !b.app.pane_shown(Pane::Espace3d));
     // Sans les réglages de l'outil dans la disposition : il arrive en onglet du groupe de sa colonne (avec la fiche),
     // devant, et l'onglet d'avant revient à la fermeture (le panneau reste).
     b.app.run_action("espace.retablir");
@@ -775,19 +773,19 @@ fn his_own_layout_with_the_pane_as_a_tab_of_the_settings_keeps_it_and_the_view_u
     let d = lu.layout.as_ref().expect("storyboard").dock_layout();
     assert!(d.close_to(&la_sienne), "{d:#?}");
     assert_eq!(onglets_de(&d, Pane::Espace3d), Some((ONGLETS_DE_REGLAGES.to_vec(), Pane::Espace3d)));
-    // À l'écran, Réglages devant d'abord : la vue fait passer le panneau devant, sans l'ajouter une seconde fois, et rend
-    // Réglages à sa fermeture.
+    // À l'écran (partie 159 : hors de la vue de la scène, aucun onglet ne dit la 3D) : vue fermée, l'onglet n'est pas montré ;
+    // la vue le remet à sa place, en onglet de Réglages, devant, une seule fois, et le retire à sa fermeture, Réglages devant.
     let mut b = banc_d_essai(2);
     let mut d = d;
     assert!(mettre_devant(&mut d.principal, Pane::ToolOptions));
     b.app.set_dock_layout(d);
     b.chauffer(2);
-    assert!(devant(&b, Pane::ToolOptions) && groupe(&b, Pane::Espace3d) == ONGLETS_DE_REGLAGES.to_vec());
+    assert!(devant(&b, Pane::ToolOptions) && !b.app.pane_shown(Pane::Espace3d));
     ouvrir_la_vue(&mut b);
     assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d) == ONGLETS_DE_REGLAGES.to_vec());
     assert_eq!(b.app.dock_layout().panes().iter().filter(|p| **p == Pane::Espace3d).count(), 1);
     fermer_la_vue(&mut b);
-    assert!(devant(&b, Pane::ToolOptions) && b.app.pane_shown(Pane::Espace3d));
+    assert!(devant(&b, Pane::ToolOptions) && !b.app.pane_shown(Pane::Espace3d));
 }
 
 // ------------------------------------------------------------------------------------------------ sa commande, son icône, les messages
@@ -822,9 +820,15 @@ fn the_pane_has_its_name_its_cube_its_command_its_icon_in_the_bar_and_its_line_i
     b.app.run_action(action);
     b.chauffer(1);
     assert!(!b.app.pane_shown(Pane::Espace3d) && devant(&b, Pane::ToolOptions), "devant : la commande le ferme");
-    // Derrière Réglages (la vue, en se fermant, l'y a laissé) : elle le met devant ; une seconde fois, elle le ferme.
+    // La vue, en se fermant, retire l'onglet qu'elle avait ouvert (partie 159). Derrière Réglages (ouvert par la commande, puis
+    // Réglages mis devant à la main) : elle le met devant ; une seconde fois, elle le ferme.
     ouvrir_la_vue(&mut b);
     fermer_la_vue(&mut b);
+    assert!(!b.app.pane_shown(Pane::Espace3d) && devant(&b, Pane::ToolOptions));
+    b.app.run_action(action);
+    b.chauffer(1);
+    b.app.show_pane(Pane::ToolOptions);
+    b.chauffer(1);
     assert!(b.app.pane_shown(Pane::Espace3d) && !devant(&b, Pane::Espace3d) && devant(&b, Pane::ToolOptions));
     b.app.run_action(action);
     b.chauffer(1);
@@ -846,32 +850,20 @@ fn the_pane_has_its_name_its_cube_its_command_its_icon_in_the_bar_and_its_line_i
 #[test]
 fn the_messages_send_to_the_space_pane_and_no_longer_to_the_settings_pane() {
     use crate::trajectoire3d as t3;
-    for message in [crate::espace3ddessin::CARTES_CACHEES, t3::PLAN_ORDINAIRE, t3::RIEN_A_DEPLACER] {
+    for message in [crate::espace3ddessin::CARTES_CACHEES, t3::RIEN_A_DEPLACER] {
         assert!(message.contains("panneau Espace 3D") && !message.contains("Réglages"), "{message}");
     }
     let mut b = banc_d_essai(1);
-    // (Une carte penchée : la vue ne met pas ce plan en Espace 3D d'elle-même, partie 158.)
     b.app.doc.panels[0].layers[0].transform.tilt_x = 20.0;
-    // La vue s'ouvre sur un plan ordinaire, puis sur un plan en Espace 3D.
     b.app.run_action("espace3d.basculer");
     assert!(b.app.status.contains("Réglages de la vue : le panneau Espace 3D.") && !b.app.status.contains("panneau Réglages"), "{}", b.app.status);
     b.chauffer(1);
-    assert!(!b.app.doc.plan_en_espace(0));
-    // « Nouvelle surface » sur ce plan : refusée, le bouton dit est celui du panneau Espace 3D.
+    // (Partie 159 : « Nouvelle surface » se pose sur tout plan, même avec une carte penchée.)
     b.app.run_action("espace3d.surface_sol");
-    assert!(b.app.status.contains("refusé") && b.app.status.contains("« Plan en Espace 3D »") && !b.app.status.contains("Réglages"), "{}", b.app.status);
-    // La légende de l'outil Trajectoire dans un plan ordinaire.
+    assert_eq!(b.app.layer().name, "Surface au sol", "{}", b.app.status);
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);
-    assert_eq!(b.app.status, t3::PLAN_ORDINAIRE);
+    assert_eq!(b.app.status, t3::PRISE);
     let legende = b.app.e3_trajectoire_legende();
-    assert!(legende.contains("(panneau Espace 3D)") && !legende.contains("Réglages"), "{legende}");
-    b.app.run_action("espace3d.plan_en_espace");
-    b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.basculer");
-    assert!(b.app.status.contains("« Nouvelle surface » dans le panneau Espace 3D") && !b.app.status.contains("dans Réglages"), "{}", b.app.status);
-    // L'outil Caméra sur la feuille d'un plan en Espace 3D : les champs de la caméra sont dans le panneau Espace 3D.
-    b.app.run_action("espace3d.basculer");
-    b.app.camera_press(pos2(10.0, 10.0), pos2(10.0, 10.0));
-    assert!(b.app.status.contains("ses champs dans le panneau Espace 3D") && !b.app.status.contains("dans Réglages"), "{}", b.app.status);
+    assert!(!legende.contains("Réglages") && !legende.contains("Plan en Espace 3D"), "{legende}");
 }

@@ -245,9 +245,11 @@ impl Monde {
         Monde::new([doc.width, doc.height], doc.frame)
     }
 
-    /// Le monde du plan `index` du projet : celui de `of`, qui sait en plus si le plan est en Espace 3D (`libre`).
-    pub fn du_plan(doc: &crate::document::Document, index: usize) -> Monde {
-        Monde { libre: doc.plan_en_espace(index), ..Monde::of(doc) }
+    /// Le monde du plan `index` du projet : celui de `of`, où la profondeur des cartes est libre (`libre`). Depuis le format
+    /// 56 (`docs/INTERFACE.md`, partie 159), c'est vrai de tout plan : une carte peut passer la borne d'autrefois dans tout plan
+    /// (`Layer::depth_libre_at` ; un calque d'un ancien projet tenu à la borne, `Layer::profondeur_bornee`, se lit borné).
+    pub fn du_plan(_doc: &crate::document::Document, _index: usize) -> Monde {
+        Monde { libre: true, ..Monde::of(_doc) }
     }
 
     // ------------------------------------------------------------------------------ caméra
@@ -508,6 +510,8 @@ impl Monde {
 
     /// Pose la carte `xf` sur `layer` à l'image `frame` : sa clé de cette image (créée au besoin) s'il est animé, sa
     /// pose fixe et sa profondeur sinon.
+    // (Partie 159 : la vue de la scène pose toujours libre, `apply_card_xf_libre` ; celle-ci reste pour les essais de la borne.)
+    #[cfg(test)]
     pub fn apply_card_xf(&self, layer: &mut Layer, frame: usize, xf: &Xf) {
         self.apply_card_xf_selon(layer, frame, xf, false)
     }

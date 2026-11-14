@@ -36,10 +36,11 @@ fn ouvert(doc: Document) -> Banc {
     b
 }
 
-/// Ouvert, et le plan en Espace 3D (la vue l'y met d'elle-même : rien de son image n'en change, partie 158).
+/// Ouvert, sur un plan venu du format 55 en Espace 3D (`Panel::espace`). (Partie 159 : tout plan est dans l'espace ; ces
+/// essais de la partie 157 gardent le plan sur lequel ils ont été écrits. Un plan neuf : `espace3ddirect_tests.rs`.)
 fn en_espace(kind: LayerKind) -> Banc {
-    let b = ouvert(doc_carte(kind));
-    assert!(b.app.doc.plan_en_espace(0));
+    let mut b = ouvert(doc_carte(kind));
+    b.app.doc.panels[0].espace = true;
     b
 }
 
@@ -201,7 +202,7 @@ fn les_nouveaux_champs_font_l_aller_retour_sans_changer_le_format() {
     let text = std::fs::read_to_string(&manifest).expect("manifeste");
     assert!(text.contains("\"environnement_3d\"") && text.contains("\"calque_3d\""), "le manifeste les retient");
     assert!(text.contains(&format!("\"version\": {}", project::VERSION)), "le numéro de format ne change pas");
-    assert_eq!(project::VERSION, 55, "on reste au format 55");
+    assert!(project::VERSION >= 55, "le format 55 les lisait déjà (la partie 159 l'a monté à 56 pour autre chose)");
     let relu = project::load(&manifest).expect("relu");
     assert_eq!(relu.doc.environnement_3d, Some(env));
     assert_eq!(relu.doc.panels[0].layers[0].calque_3d, Some(c));
@@ -223,17 +224,15 @@ fn le_menu_calques_3d_pose_un_sol_un_mur_et_un_ciel_en_une_etape_chacun() {
     for s in Sorte3d::TOUTES {
         assert!(du_menu.contains(&s.action()), "{} est dans le menu", s.nom());
     }
-    // Un plan ordinaire qui ne peut pas passer en Espace 3D sans changer d'image (une carte penchée) : refusé, rien ne
-    // bouge, la barre d'état dit d'abord pourquoi (partie 158 ; un plan qui le peut y passe, `espace3ddirect_tests.rs`).
+    // Un plan dessiné à plat avec une carte penchée : partie 159, le Sol se pose sans refus (avant : « Sol refusé : il a une
+    // carte penchée »), en une étape.
     let mut doc = doc_carte(LayerKind::Bitmap);
     doc.panels[0].layers[0].transform.tilt_x = 30.0;
     let mut b = ouvert(doc);
-    assert!(!b.app.doc.plan_en_espace(0));
     let (n, etapes) = (b.app.layers().len(), b.app.history.undo_len());
     b.app.run_action("calque.nouveau_sol");
-    assert_eq!((b.app.layers().len(), b.app.history.undo_len()), (n, etapes));
-    assert!(b.app.status.starts_with("Sol refusé : il a une carte penchée"), "{}", b.app.status);
-    assert!(crate::messages::resume(&b.app.status).contains("carte penchée"), "la phrase utile tient dans la barre : {}", crate::messages::resume(&b.app.status));
+    assert_eq!((b.app.layers().len(), b.app.history.undo_len()), (n + 1, etapes + 1), "{}", b.app.status);
+    assert!(b.app.status.starts_with("« Sol » posé à"), "{}", b.app.status);
 
     let mut b = en_espace(LayerKind::Bitmap);
     let world = b.app.e3_world();

@@ -323,13 +323,12 @@ impl App {
     }
 
     /// « Nouveau calque > Calques 3D » : un Sol, un Mur ou un Ciel posé dans l'espace du plan courant (`espace3d_poser_surface`),
-    /// le calque courant, une étape d'annulation. Un plan ordinaire passe en Espace 3D dans cette même étape, si rien de son
-    /// image ni de ses dessins n'en change (partie 158) ; sinon : refusé, comme « Nouvelle surface », et la barre d'état
-    /// dit d'abord pourquoi.
+    /// le calque courant, une étape d'annulation, sur tout plan (partie 159). Un calque de la scène se pose dans la vue de la
+    /// scène : demandé d'ailleurs (un raccourci), il l'ouvre d'abord.
     pub(crate) fn nouveau_calque_3d(&mut self, sorte: Sorte3d) {
         let nom = sorte.nom();
-        if !self.e3_espace_permis(&format!("{nom} refusé")) {
-            return;
+        if !self.e3_vue_montree() {
+            self.set_espace3d(true);
         }
         let distance = self.espace3d_distance_surface();
         // (Les bornes de `Monde::surface_xf` : le nombre dit est celui de la pose.)
@@ -337,12 +336,15 @@ impl App {
         let distance = distance.clamp(d0 * 0.05, d0 * 200.0);
         let recul = if sorte == Sorte3d::Ciel { format!("{:.0} m", (distance * crate::espace3d::CIEL_RECUL).min(d0 * 200.0)) } else { format!("{distance:.1} m") };
         match self.espace3d_poser_surface(sorte.surface(), nom, Some(Calque3d::neuf(sorte))) {
-            Some((pose, plus_petit)) => {
+            Some((pose, plus_petit, pile)) => {
                 self.status = if plus_petit {
                     format!("« {pose} » posé à {recul}, mais plus petit que le cadre : près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la feuille.")
                 } else {
                     format!("« {pose} » posé à {recul} : c'est le calque courant, dessine dessus comme sur tout calque. Sa grille : panneau Espace 3D.")
                 };
+                if pile {
+                    self.status = format!("{} {}", self.status, crate::espace3ddirect::PILE_GARDEE);
+                }
             }
             None => {
                 if self.status.is_empty() {
@@ -356,7 +358,7 @@ impl App {
     /// d'annulation. Un calque qui n'est pas un calque 3D n'en a pas : la barre d'état le dit.
     pub(crate) fn basculer_grille_3d(&mut self, li: usize) {
         let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) else {
-            self.status = "Grille : seulement sur un calque Sol, Mur ou Ciel (Nouveau calque > Calques 3D).".into();
+            self.status = "Grille : seulement sur un calque Sol, Mur ou Ciel.".into();
             return;
         };
         let grille = !c.grille;
@@ -373,10 +375,13 @@ impl App {
             }
         }
         if lis.len() >= 2 {
-            self.status = format!("Grille {} sur {} calques 3D.", if grille { "allumée" } else { "éteinte" }, lis.len());
+            self.status = format!("Grille {} sur {} calques Sol, Mur ou Ciel.", if grille { "allumée" } else { "éteinte" }, lis.len());
             return;
         }
-        self.status = if grille {
+        // (Hors de la vue de la scène, rien ne dit la 3D, partie 159 : ni mètres ni carte.)
+        self.status = if grille && !self.espace3d_vue_ouverte() {
+            "Grille allumée : un repère seulement, jamais dans le dessin ni les exports.".into()
+        } else if grille {
             format!("Grille allumée : un trait tous les {} m sur la carte. Un repère seulement, jamais dans le dessin ni les exports.", nombre(c.pas))
         } else {
             "Grille éteinte.".into()

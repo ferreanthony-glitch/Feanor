@@ -344,8 +344,9 @@ fn showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_
     champ_profondeur_du_calque(&ctx, &mut b.app, &mut t, 1);
     assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » du menu du calque n'a rien écrit");
     assert_eq!(b.app.history.names().0.len(), etapes, "aucune étape d'annulation");
-    // Un plan ordinaire garde sa borne : le même champ y ramène à −0,9 un calque qui l'aurait passée.
+    // Un plan dessiné à plat (partie 159 : lui aussi est dans l'espace) : le même champ ne la ramène pas non plus. (Avant, un
+    // plan ordinaire la ramenait à −0,9.)
     b.app.doc.panels[0].espace = false;
     champ_profondeur_du_calque(&ctx, &mut b.app, &mut t, 1);
-    assert_eq!(b.app.layers()[1].depth, Layer::MIN_DEPTH);
+    assert_eq!(b.app.layers()[1].depth, -2.5);
 }

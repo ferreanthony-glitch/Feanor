@@ -81,10 +81,17 @@ impl App {
         ui.separator();
         let contexte = self.aide_contexte();
         let teintes = Teintes::du_theme();
+        // (Hors de la vue de la scène, rien de ce qui parle de la 3D, partie 159 : ses explications se lisent quand elle est
+        // ouverte.)
+        let scene = self.espace3d_vue_ouverte();
+        let montre = |t: &str| scene || !crate::espace3ddirect::dit_la_3d(t);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             ui.label(RichText::new("Les outils et les gestes").strong());
-            for rubrique in rubriques() {
-                let anims: Vec<&'static Anim> = aideanim::toutes().filter(|a| a.rubrique == rubrique).collect();
+            for rubrique in rubriques().into_iter().filter(|r| montre(r)) {
+                let anims: Vec<&'static Anim> = aideanim::toutes().filter(|a| a.rubrique == rubrique && montre(a.titre) && montre(a.texte)).collect();
+                if anims.is_empty() {
+                    continue;
+                }
                 egui::CollapsingHeader::new(RichText::new(rubrique).strong()).id_salt(("registre", rubrique)).default_open(true).show(ui, |ui| {
                     for a in anims {
                         self.aide_registre_ligne(ui, a, maintenant, &teintes, a.contextes.contains(&contexte));
@@ -93,7 +100,7 @@ impl App {
             }
             ui.add_space(10.0);
             ui.label(RichText::new("Les panneaux et les fenêtres").strong());
-            for fenetre in fenetres() {
+            for fenetre in fenetres().into_iter().filter(|f| montre(f)) {
                 egui::CollapsingHeader::new(RichText::new(fenetre).strong()).id_salt(("registre_fenetre", fenetre)).default_open(true).show(ui, |ui| {
                     // Les catégories des brosses : leur texte est aussi leur info-bulle (`Categorie::help`).
                     if fenetre == crate::aidetextes::BROSSES {
@@ -103,7 +110,7 @@ impl App {
                             ui.add_space(4.0);
                         }
                     }
-                    for t in crate::aidetextes::tous().filter(|t| t.fenetre == fenetre) {
+                    for t in crate::aidetextes::tous().filter(|t| t.fenetre == fenetre && montre(t.sujet) && montre(t.texte)) {
                         if !t.sujet.is_empty() {
                             ui.label(RichText::new(t.sujet).strong());
                         }

@@ -88,7 +88,7 @@ impl Layer {
         } else if self.trajectoire.is_some() {
             Some("il a une trajectoire, tracée sur la feuille")
         } else if self.transform.is_tilted() || self.pos_keys.iter().any(|k| k.t.is_tilted()) {
-            Some("carte inclinée de l'Espace 3D")
+            Some("calque incliné")
         } else {
             None
         }

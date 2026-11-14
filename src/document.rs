@@ -461,6 +461,12 @@ pub struct Layer {
     /// avec sa grille de repère (jamais dessinée dans le calque, jamais exportée). Un calque de dessin ordinaire pour tout le reste. Aucun :
     /// calque ordinaire.
     pub calque_3d: Option<crate::espace3ddecor::Calque3d>,
+    /// **Profondeur tenue à la borne d'autrefois** (format 56, `docs/INTERFACE.md` partie 159) : un calque d'un plan dessiné à
+    /// plat d'un projet d'avant le format 56, dont une clé de position passait `MIN_DEPTH` et que le format 55 montrait à cette
+    /// borne, sans qu'on puisse ramener ses clés à la borne sans changer son image entre deux clés (`Layer::ramener_si_rien_ne_change`).
+    /// Sa profondeur se lit alors toujours bornée (`depth_libre_at` = `depth_at`), comme avant : la même image. Faux pour tout
+    /// autre calque.
+    pub profondeur_bornee: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -538,6 +544,7 @@ impl Layer {
             annotation: false,
             accroche: false,
             calque_3d: None,
+            profondeur_bornee: false,
         }
     }
 
@@ -630,7 +637,40 @@ impl Layer {
     /// `MIN_DEPTH`. Sous cette borne, la carte ne change plus de taille avec sa profondeur (`Monde::card_xf`) : elle avance
     /// seulement, jusqu'à la caméra de référence, puis derrière elle.
     pub fn depth_libre_at(&self, frame: usize) -> f32 {
+        // (Un calque d'un ancien projet dont les clés ne se ramenaient pas à la borne sans changer l'image : toujours lu
+        // borné, comme le format 55 le montrait. Partie 159.)
+        if self.profondeur_bornee {
+            return self.depth_at(frame);
+        }
         Self::clamp_depth_libre(self.depth + self.pose(frame).dz)
+    }
+
+    /// **À l'ouverture d'un projet d'avant le format 56** (partie 159, point c) : un calque d'un plan dessiné à plat dont la
+    /// profondeur passe `MIN_DEPTH` à l'une des images `0..images` (une clé de position, que le format 55 montrait à la
+    /// borne). Ses clés sont ramenées à la borne (`ramener_a_la_borne`) **si et seulement si** cela ne change rien de ce qui
+    /// fait son image à aucune de ces images : la même pose, la même profondeur lue, au bit près. Sinon le calque garde ses
+    /// valeurs et se lit borné pour toujours (`profondeur_bornee`) : la même image aussi. Rend vrai si quelque chose a changé
+    /// dans le calque.
+    pub fn ramener_si_rien_ne_change(&mut self, images: usize) -> bool {
+        let images = images.max(1).max(self.pos_keys.last().map_or(0, |k| k.frame + 1));
+        if (0..images).all(|f| self.depth_libre_at(f) == self.depth_at(f)) && self.depth >= Self::MIN_DEPTH {
+            return false;
+        }
+        let avant: Vec<(LayerTransform, f32)> = (0..images).map(|f| (self.pose(f), self.depth_at(f))).collect();
+        let mut essai = self.clone();
+        essai.ramener_a_la_borne();
+        // (La pose de chaque image, l'écart de profondeur mis à part : il se lit avec `depth`, que la borne recompte.)
+        let sans_dz = |t: LayerTransform| LayerTransform { dz: 0.0, ..t };
+        let pareil = (0..images).all(|f| {
+            let (t, d) = avant[f];
+            sans_dz(essai.pose(f)) == sans_dz(t) && essai.depth_libre_at(f).to_bits() == d.to_bits() && essai.depth_at(f).to_bits() == d.to_bits()
+        });
+        if pareil {
+            *self = essai;
+        } else {
+            self.profondeur_bornee = true;
+        }
+        true
     }
 
     /// `depth_libre_at` dans un plan en Espace 3D (`libre`), `depth_at` dans un plan ordinaire.
@@ -691,7 +731,7 @@ impl Layer {
     /// base et celle de chacune de ses clés de position. Une carte passée derrière la caméra de référence revient devant
     /// elle, à la borne ; sa place en largeur et en hauteur, sa taille et son orientation dans l'espace ne changent pas
     /// (sous la borne, la taille ne dépend plus de la profondeur). Vrai si le calque, ou l'une de ses clés, était au-delà de
-    /// la borne. C'est ce que fait « Plan en Espace 3D » quand on le décoche (`App::espace3d_basculer_plan_en_espace`).
+    /// la borne. C'est ce que fait l'ouverture d'un projet d'avant le format 56, quand cela ne change rien (`Layer::ramener_si_rien_ne_change`).
     pub fn ramener_a_la_borne(&mut self) -> bool {
         let avant = self.depth;
         // (Comme `passe_la_borne` : une carte posée à la borne, à l'arrondi près, n'est pas « ramenée ».)
@@ -963,19 +1003,46 @@ pub struct Panel {
     pub cues: Cues,
     /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
     pub color: Option<u8>,
-    /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
-    /// se cachent selon leur distance ; l'image montre ce que cette caméra filme (`repere_du_plan`). Faux : un plan ordinaire.
+    /// **Plan venu du format 55 en Espace 3D** (`docs/ESPACE-LIBRE.md`, formats 54 et 55 ; `docs/INTERFACE.md`, partie 159) :
+    /// son image passe par le changement de repère dès que sa caméra quitte la caméra d'origine (`repere_du_plan`), et ses
+    /// cartes se cachent selon leur distance. Depuis le format 56, **tous les plans sont dans l'espace** et rien ne pose plus
+    /// ce champ : il ne garde que l'image de ces anciens plans au pixel près. Faux pour tout autre plan.
     pub espace: bool,
-    /// Le plan est en Espace 3D seulement parce que la vue Espace 3D le montre, sans qu'on l'ait choisi
-    /// (`espace3ddirect.rs`, partie 158) : il redevient ordinaire quand on le quitte, si rien en lui n'en a l'usage. **Jamais
-    /// enregistré** : le fichier garde le plan ordinaire (`espace` est écrit faux). Suit les clichés d'annulation.
-    pub espace_tout_seul: bool,
+    /// **La caméra du plan est sortie des anciennes limites** (format 56, partie 159) : posée telle quelle dans la vue de la
+    /// scène (elle s'est retournée, a basculé au-delà de ce que voyait la feuille, a passé la feuille…), ou elle suit une
+    /// trajectoire dans l'espace. À chaque image où elle est hors de ces limites (`Document::camera_dans_les_anciennes_limites`),
+    /// l'image passe par le changement de repère ; aux autres, par le chemin de toujours. Faux : la caméra du plan est
+    /// toujours lue comme avant le format 56.
+    pub camera_libre: bool,
+    /// **Ce qui est devant cache ce qui est derrière** (format 56, partie 159) : les calques se posent du plus loin au plus
+    /// près de la caméra (`espace3d::ordre_par_distance`). Faux : dans l'ordre de la pile, comme tout plan dessiné à plat.
+    /// Un plan venu du format 55 en Espace 3D (`espace`) l'a toujours.
+    pub ordre_distance: bool,
     /// **La trajectoire de la caméra** d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149, format 55) : un chemin tracé dans
     /// l'espace (toujours avec son `support`), que la caméra du plan suit. Elle **ne pose aucune clé de caméra** : à chaque image,
     /// la caméra des clés est déplacée dans l'espace du déplacement du chemin depuis son départ (`deplacement_de_la_camera`),
     /// comme l'effet de caméra vivant s'ajoute aux clés ; panoramique, bascule, rotation et focale restent ceux des clés. Rien :
     /// la caméra des clés, telle quelle.
     pub trajectoire_camera: Option<crate::trajectoire::Trajectoire>,
+}
+
+/// **Un plan lu d'un projet d'avant le format 56** (`docs/INTERFACE.md`, partie 159), sans question ni fenêtre : il devient un
+/// plan du format 56 qui donne la même image, au pixel près, à toutes ses images.
+///
+/// - Un plan en Espace 3D du format 55 (`espace`) garde ce champ : son chemin d'image et l'ordre par la distance restent ceux
+///   d'alors.
+/// - Un plan ordinaire garde l'ordre de sa pile (`ordre_distance` faux) et sa caméra d'avant (`camera_libre` faux : elle passe
+///   toujours par le chemin de toujours). Ses calques dont une clé de profondeur passe la borne d'autrefois, que le format
+///   55 montrait à la borne, sont ramenés à la borne si cela ne change rien, sinon tenus à la borne
+///   (`Layer::ramener_si_rien_ne_change`) : depuis le format 56, la profondeur d'une carte est libre partout.
+pub fn migrer_vers_56(panel: &mut Panel) {
+    if panel.espace {
+        return;
+    }
+    let images = panel.frame_count();
+    for l in &mut panel.layers {
+        l.ramener_si_rien_ne_change(images);
+    }
 }
 
 /// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
@@ -1087,6 +1154,12 @@ pub struct ImageMark {
 }
 
 impl Panel {
+    /// Ses calques se posent du plus loin au plus près de la caméra (`ordre_distance`, ou un plan venu du format 55 en
+    /// Espace 3D, `espace`), au lieu de l'ordre de la pile.
+    pub fn ordre_par_la_distance(&self) -> bool {
+        self.ordre_distance || self.espace
+    }
+
     pub fn frame_count(&self) -> usize {
         self.layers
             .iter()
@@ -1839,11 +1912,14 @@ impl Document {
     /// **Plan en Espace 3D** (`Panel::espace`, `docs/ESPACE-LIBRE.md`) : la caméra qui **cadre** l'image est la caméra de
     /// référence (au centre de la feuille, de face), parce que les cartes sont déjà posées comme la caméra du plan les voit
     /// (`repere_du_plan`). Ce qui décrit ou règle la caméra du plan elle-même lit `panel_camera_reelle`.
+    ///
+    /// **Depuis le format 56** (partie 159), c'est image par image : la caméra de référence aux images que le changement de
+    /// repère compose (`repere_du_plan`), la caméra du plan elle-même aux autres, comme toujours.
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
-        if self.plan_en_espace(index) {
+        if self.repere_du_plan(index, frame).is_some() {
             return self.default_camera();
         }
-        self.panel_camera_selon(index, frame, true, true)
+        self.panel_camera_reelle(index, frame)
     }
 
     /// La caméra du plan `index` à l'image `frame` telle qu'elle est dans l'espace (paliers et effet vivant compris), même
@@ -1857,7 +1933,7 @@ impl Document {
     pub fn panel_camera_reelle(&self, index: usize, frame: usize) -> Camera {
         let cam = self.panel_camera_selon(index, frame, true, true);
         match self.panels.get(index) {
-            Some(p) if p.espace && p.trajectoire_camera.is_some() => {
+            Some(p) if p.trajectoire_camera.is_some() => {
                 let image = Self::image_du_palier(p, &self.cles_montrees(index), frame);
                 self.camera_sur_la_trajectoire_de(p, cam, image)
             }
@@ -1870,9 +1946,6 @@ impl Document {
     /// Le déplacement dans l'espace (mètres) que la trajectoire de caméra du plan `p` donne à sa caméra à l'image `frame` : rien
     /// sans trajectoire, hors d'un plan en Espace 3D, ou si le plan s'arrête avant que le chemin ne commence.
     pub fn deplacement_de_la_camera(&self, p: &Panel, frame: usize) -> Option<[f32; 3]> {
-        if !p.espace {
-            return None;
-        }
         p.trajectoire_camera.as_ref()?.deplacement_a_l_image(frame, Self::duree_de_la_trajectoire_camera(p))
     }
 
@@ -1938,7 +2011,7 @@ impl Document {
             cuit = true;
             let dernier = p.frame_count().saturating_sub(1);
             let jalons = p.trajectoire_camera.as_ref().map(|t| t.images_des_jalons(Self::duree_de_la_trajectoire_camera(p))).unwrap_or_default();
-            let (Some(&depart), Some(&fin), true) = (jalons.first(), jalons.last(), p.espace && jalons.first().is_some_and(|&d| d <= dernier)) else {
+            let (Some(&depart), Some(&fin), true) = (jalons.first(), jalons.last(), jalons.first().is_some_and(|&d| d <= dernier)) else {
                 self.panels[i].trajectoire_camera = None;
                 continue;
             };
@@ -1959,38 +2032,63 @@ impl Document {
         cuit
     }
 
-    /// Le plan `index` est un plan en Espace 3D (`Panel::espace`).
-    pub fn plan_en_espace(&self, index: usize) -> bool {
-        self.panels.get(index).is_some_and(|p| p.espace)
+    /// **Les calques du plan `index` se posent du plus loin au plus près de la caméra** (`Panel::ordre_distance`, ou un plan
+    /// venu du format 55 en Espace 3D) ; sinon dans l'ordre de la pile, comme tout plan dessiné à plat.
+    pub fn ordre_par_la_distance(&self, index: usize) -> bool {
+        self.panels.get(index).is_some_and(Panel::ordre_par_la_distance)
     }
 
-    /// Le changement de repère de la caméra du plan `index` à son image `frame`, s'il en faut un : le plan est en Espace 3D
-    /// et sa caméra n'est pas la caméra de référence, ou l'une de ses cartes a passé la borne des plans ordinaires
-    /// (`repere_d_un_plan_en_espace`). Rien sinon : le plan se compose par le chemin de toujours (mêmes pixels). Les deux
-    /// constructeurs de plan le passent à `espace3d::place_dans`.
+    /// La caméra `cam` est **dans les anciennes limites** (partie 159) : celles de toute caméra d'avant le format 56, que le
+    /// chemin de toujours (le multiplan, puis le cadre sur la feuille) filme juste. Le cadre voit encore la feuille par ses
+    /// quatre coins (`Camera::sees_reference`, bascule et panoramique d'au plus 85°), et la caméra n'a pas avancé jusqu'à la
+    /// feuille (`Camera::distance` ne la retient pas). Hors de ces limites, seule la vue de la scène la met (`Panel::camera_libre`).
+    pub fn camera_dans_les_anciennes_limites(&self, cam: &Camera) -> bool {
+        let d0 = crate::camera::ref_distance(self.frame);
+        let fini = [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].iter().all(|v| v.is_finite());
+        fini && cam.tilt.abs() <= 85.0 && cam.pan.abs() <= 85.0 && d0 - cam.dolly > d0 * 0.02 && cam.sees_reference(self.frame)
+    }
+
+    /// La caméra du plan `index` se dit par des **cadres sur la feuille** (les mouvements de caméra des Vignettes) : ses clés
+    /// sont toutes dans les anciennes limites, sans chemin dans l'espace, et le plan ne vient pas du format 55 en Espace 3D
+    /// (son image montre alors ce que la caméra filme, pas la feuille). C'est le cas de tout plan dont la vue de la scène n'a
+    /// pas libéré la caméra (partie 159).
+    pub fn camera_en_cadres(&self, index: usize) -> bool {
+        self.panels.get(index).is_some_and(|p| !p.espace && p.trajectoire_camera.is_none() && (!p.camera_libre || p.camera.iter().all(|k| self.camera_dans_les_anciennes_limites(&k.cam))))
+    }
+
+    /// Le changement de repère de la caméra du plan `index` à son image `frame`, s'il en faut un (`repere_d_un_plan`) ; rien :
+    /// le plan se compose à cette image par le chemin de toujours (mêmes pixels). Les deux constructeurs de plan le passent
+    /// à `espace3d::place_dans`.
     pub fn repere_du_plan(&self, index: usize, frame: usize) -> Option<crate::espace3dmath::M4> {
-        let p = self.panels.get(index).filter(|p| p.espace)?;
-        self.repere_d_un_plan_en_espace(p, &self.panel_camera_reelle(index, frame), frame)
+        let p = self.panels.get(index)?;
+        self.repere_d_un_plan(p, &self.panel_camera_reelle(index, frame), frame)
     }
 
     /// Comme `repere_du_plan`, pour un plan rangé (une version qui n'est pas dans `panels`).
     pub fn repere_du_plan_range(&self, p: &Panel, frame: usize) -> Option<crate::espace3dmath::M4> {
-        if !p.espace {
-            return None;
-        }
-        self.repere_d_un_plan_en_espace(p, &self.camera_reelle_du_plan_range(p, frame), frame)
+        self.repere_d_un_plan(p, &self.camera_reelle_du_plan_range(p, frame), frame)
     }
 
-    /// Le changement de repère du plan en Espace 3D `p`, filmé par sa caméra `cam` à son image `frame`. Rien quand le
-    /// chemin de toujours donne la bonne image : la caméra est la caméra de référence **et** aucune carte n'a passé la borne
-    /// des plans ordinaires (`Layer::passe_la_borne`). Une carte au-delà de cette borne (tout contre la caméra de référence,
-    /// ou derrière elle : `docs/INTERFACE.md`, partie 148) ne se pose pas par le multiplan, qui la montrerait à la borne :
-    /// le plan prend alors son repère même sous la caméra de référence (c'est l'identité), et chaque carte passe par un
-    /// maillage, qui écarte ce qui est derrière la caméra. Un calque accroché à la caméra ne compte pas : il reste dans le
-    /// cadre, sa profondeur ne joue pas.
-    fn repere_d_un_plan_en_espace(&self, p: &Panel, cam: &Camera, frame: usize) -> Option<crate::espace3dmath::M4> {
+    /// Le changement de repère du plan `p`, filmé par sa caméra `cam` à son image `frame` (partie 159 : tous les plans sont
+    /// dans l'espace, mais le chemin de toujours reste celui de toute image qu'il sait filmer). Il en faut un :
+    ///
+    /// - quand l'une de ses cartes a passé la borne d'autrefois (`Layer::passe_la_borne` : tout contre la caméra de
+    ///   référence, ou derrière elle, `docs/INTERFACE.md` partie 148) : le multiplan la montrerait à la borne ;
+    /// - pour un plan dont la caméra est libre (`Panel::camera_libre`), aux images où elle est hors des anciennes limites
+    ///   (`camera_dans_les_anciennes_limites`) : le cadre sur la feuille ne sait pas la filmer ;
+    /// - pour un plan venu du format 55 en Espace 3D (`Panel::espace`), dès que sa caméra n'est pas la caméra de référence,
+    ///   comme alors : la même image au pixel près.
+    ///
+    /// Partout ailleurs, rien : le chemin de toujours, les mêmes pixels qu'avant le format 56. Un calque accroché à la caméra
+    /// ne compte pas : il reste dans le cadre, sa profondeur ne joue pas.
+    fn repere_d_un_plan(&self, p: &Panel, cam: &Camera, frame: usize) -> Option<crate::espace3dmath::M4> {
         let une_carte_passe = || p.layers.iter().any(|l| crate::espace3d::is_card(l) && !l.accroche && l.passe_la_borne(frame));
-        (*cam != self.default_camera() || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
+        let par_la_camera = if p.espace {
+            *cam != self.default_camera()
+        } else {
+            p.camera_libre && !self.camera_dans_les_anciennes_limites(cam)
+        };
+        (par_la_camera || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }
 
     /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la
@@ -2084,7 +2182,7 @@ impl Document {
     ///
     /// Plan en Espace 3D : la caméra de référence, comme `panel_camera` ; la sienne est `camera_reelle_du_plan_range`.
     pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
-        if p.espace {
+        if self.repere_du_plan_range(p, frame).is_some() {
             return self.default_camera();
         }
         self.camera_reelle_du_plan_range(p, frame)
@@ -2777,7 +2875,8 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
             espace: source.espace,
-            espace_tout_seul: source.espace_tout_seul,
+            camera_libre: source.camera_libre,
+            ordre_distance: source.ordre_distance,
             // (La trajectoire de la caméra est devenue des clés avant la coupe, comme l'effet vivant.)
             trajectoire_camera: None,
         };
@@ -2970,13 +3069,6 @@ impl Document {
         self.panels.iter().position(|p| p.id == id).unwrap_or(0)
     }
 
-    /// Un plan peut-il devenir un plan en Espace 3D (`Panel::espace`) ? Il faut que le cadre tienne dans la feuille : la zone
-    /// filmée d'un plan en Espace 3D est le cadre au centre de la feuille (`docs/ESPACE-LIBRE.md`, A0 point 2). Toujours vrai
-    /// pour un projet créé ou redimensionné par FEANOR (la feuille fait au moins le double du cadre).
-    pub fn accepte_plan_en_espace(&self) -> bool {
-        self.frame[0] <= self.width && self.frame[1] <= self.height
-    }
-
     /// Un panneau vide de deux secondes dans la scène `scene`, avec un calque vectoriel.
     pub fn make_panel(&mut self, scene: u64) -> Panel {
         Panel {
@@ -2994,7 +3086,8 @@ impl Document {
             cues: Cues::default(),
             color: None,
             espace: false,
-            espace_tout_seul: false,
+            camera_libre: false,
+            ordre_distance: false,
             trajectoire_camera: None,
         }
     }

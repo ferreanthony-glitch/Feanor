@@ -173,7 +173,8 @@ fn dans_l_espace_maj_depuis_la_fin_prolonge_le_chemin_sur_son_plan() {
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.plan_en_espace");
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = true;
     b.chauffer(2);
     b.app.run_action("espace3d.cadrer");
     b.app.run_action("outil.trajectoire");

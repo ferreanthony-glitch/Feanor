@@ -214,7 +214,8 @@ fn dans_l_espace_le_lissage_agit_sur_les_cartes_choisies_et_la_camera() {
     let mut b = crate::perf_tests::banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.plan_en_espace");
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = true;
     b.app.run_action("outil.trajectoire");
     b.chauffer(3);
     let world = b.app.e3_world();

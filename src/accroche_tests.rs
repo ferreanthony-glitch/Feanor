@@ -310,7 +310,7 @@ fn ce_qui_ne_s_accroche_pas_le_dit() {
     assert!(l.raison_sans_accroche().is_some_and(|r| r.contains("Décor")));
     l.decor = false;
     l.transform.tilt_x = 20.0;
-    assert!(l.raison_sans_accroche().is_some_and(|r| r.contains("inclinée")));
+    assert!(l.raison_sans_accroche().is_some_and(|r| r.contains("incliné")));
     assert!(Layer::new_folder("D").raison_sans_accroche().is_some());
     // Dans l'application : le calque Décor est laissé de côté, avec sa raison.
     let mut doc = doc_carre();

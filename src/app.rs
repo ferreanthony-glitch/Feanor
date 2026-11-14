@@ -1677,7 +1677,7 @@ impl App {
     pub(crate) fn to_layer_opt(&self, stage: Pos2) -> Option<Pos2> {
         let Some((world, mx, eye)) = self.tilted_card() else { return Some(self.to_layer_a_plat(stage)) };
         let p = world.sheet_to_card_m(eye, &mx, stage)?;
-        if self.doc.plan_en_espace(self.cur_panel) && !crate::espace3ddessin::carte_montre(p, world.stage) {
+        if self.image_par_le_repere() && !crate::espace3ddessin::carte_montre(p, world.stage) {
             return None;
         }
         Some(p)
@@ -1692,6 +1692,14 @@ impl App {
         } else {
             crate::espace3ddessin::PAS_SOUS_LE_POINTEUR
         }
+    }
+
+    /// L'image courante du plan courant se compose par le changement de repère de sa caméra (`Document::repere_du_plan`), ou
+    /// le plan vient du format 55 en Espace 3D (`Panel::espace`) : le pinceau ne peint que sur la carte, et sa taille est
+    /// celle qu'un pixel de la carte a sous le pointeur. Partout ailleurs, les outils de dessin font ce qu'ils ont toujours fait
+    /// (partie 159).
+    pub(crate) fn image_par_le_repere(&self) -> bool {
+        self.panel().espace || self.doc.repere_du_plan(self.cur_panel, self.cur_frame).is_some()
     }
 
     /// `to_layer` pour un calque posé par une affinité (ni carte inclinée, ni plan en Espace 3D à la caméra tournée).
@@ -1730,7 +1738,7 @@ impl App {
         // Plan en Espace 3D : la carte est vue en perspective, un pixel de son dessin n'a pas partout la même taille à
         // l'écran. On prend celle qu'il a sous le pointeur (au centre de la carte s'il n'y est pas) : le curseur du
         // pinceau a la taille du trait qu'il va laisser à cet endroit.
-        if self.doc.plan_en_espace(self.cur_panel) {
+        if self.image_par_le_repere() {
             if let Some((world, mx, eye)) = self.tilted_card() {
                 let [w, h] = world.stage;
                 let ici = self.hover_canvas.and_then(|s| self.to_layer_opt(s)).unwrap_or(egui::pos2(w / 2.0, h / 2.0));
@@ -1905,7 +1913,7 @@ impl App {
         // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
         let order = crate::calqueannot::ordre(layers, annotations);
         // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près, comme les sorties (`render.rs`).
-        let par_distance = self.doc.plan_en_espace(self.cur_panel);
+        let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
         let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
         let mut portees = crate::calqueffet::Portees::new(par_distance);
         for li in order {
@@ -5580,9 +5588,6 @@ impl App {
             ctx.request_repaint();
         }
         self.ppp = ctx.pixels_per_point();
-        // La vue Espace 3D met le plan qu'elle montre en Espace 3D quand rien n'en change, et rend ordinaire celui qu'on a
-        // quitté s'il n'en a pas l'usage (`espace3ddirect.rs`, partie 158).
-        self.e3_espace_direct();
         // Taille de l'interface choisie dans les préférences (`echelle.rs`).
         self.appliquer_echelle(ctx);
         // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout

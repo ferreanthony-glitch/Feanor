@@ -40,7 +40,6 @@ use crate::poskeys::PosKey;
 use crate::trajectoire::{Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
-pub(crate) const PLAN_ORDINAIRE: &str = "Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D » dans le panneau Espace 3D ; ou trace la trajectoire sur la feuille, hors de cette vue.";
 pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic sur le chemin : une poignée, qui se tire, ou par ses flèches x, y, z ; Ctrl+clic sur elle : la retirer. Ctrl+clic ailleurs : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
 pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou la liste des cartes et « choisir » dans le panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
@@ -291,7 +290,7 @@ impl App {
         self.e3d.vive = None;
         self.espace3d.drag = None;
         self.traj.espace = None;
-        self.status = if self.doc.plan_en_espace(self.cur_panel) { PRISE.into() } else { PLAN_ORDINAIRE.into() };
+        self.status = PRISE.into();
     }
 
     /// Ce qui est choisi dans la vue et peut suivre une trajectoire : les cartes choisies, la caméra du plan ; rien de
@@ -348,7 +347,13 @@ impl App {
     /// clés quand on l'évalue).
     pub(crate) fn e3_traj_poser(&mut self, s: Sujet, t: Trajectoire) {
         match s {
-            Sujet::Camera => self.panel_mut().trajectoire_camera = Some(t),
+            // (Une caméra qui suit un chemin dans l'espace peut sortir des anciennes limites : à ces images, le changement de
+            // repère, partie 159.)
+            Sujet::Camera => {
+                let p = self.panel_mut();
+                p.trajectoire_camera = Some(t);
+                p.camera_libre |= !p.espace;
+            }
             Sujet::Carte(id) => {
                 if let Some(li) = self.traj_rang(id) {
                     self.layers_mut()[li].trajectoire = Some(t);
@@ -364,7 +369,13 @@ impl App {
     /// de position à rendre.
     pub(crate) fn e3_traj_poser_en_direct(&mut self, s: Sujet, t: Trajectoire) {
         match s {
-            Sujet::Camera => self.panel_mut().trajectoire_camera = Some(t),
+            // (Une caméra qui suit un chemin dans l'espace peut sortir des anciennes limites : à ces images, le changement de
+            // repère, partie 159.)
+            Sujet::Camera => {
+                let p = self.panel_mut();
+                p.trajectoire_camera = Some(t);
+                p.camera_libre |= !p.espace;
+            }
             Sujet::Carte(id) => {
                 if let Some(li) = self.traj_rang(id) {
                     let pi = self.cur_panel;
@@ -595,10 +606,6 @@ impl App {
     fn e3_traj_presser(&mut self, regard: Regard3d, pos: Pos2, maj: bool) {
         self.end_stroke();
         self.playing = false;
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            self.status = PLAN_ORDINAIRE.into();
-            return;
-        }
         if self.content_refuses() {
             return;
         }
@@ -981,29 +988,11 @@ impl App {
         true
     }
 
-    /// « Plan en Espace 3D » vient d'être décoché pour le plan `pi` : une trajectoire dans l'espace n'a plus de sens dans un
-    /// plan ordinaire. Celles des calques sont détachées (leurs clés restent, à la main) et celle de la caméra devient ses
-    /// clés. À appeler avant de changer la case.
-    pub(crate) fn trajectoires_espace_quitter(doc: &mut Document, pi: usize) {
-        doc.cuire_trajectoires_camera(&[pi]);
-        if let Some(p) = doc.panels.get_mut(pi) {
-            for l in &mut p.layers {
-                if l.trajectoire.as_ref().is_some_and(|t| t.support.is_some()) {
-                    l.trajectoire = None;
-                }
-            }
-        }
-    }
-
     // -------------------------------------------------------------------------------------------- par-dessus la vue
 
     /// La légende du bas de la vue quand le pointeur trace des trajectoires.
     pub(crate) fn e3_trajectoire_legende(&self) -> &'static str {
-        if self.doc.plan_en_espace(self.cur_panel) {
-            "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic sur le chemin : une poignée (la tirer, ou ses flèches x, y, z ; Ctrl+clic sur elle : la retirer) · Ctrl+clic ailleurs : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
-        } else {
-            "Trajectoire dans l'espace : il faut un « Plan en Espace 3D » (panneau Espace 3D) · Alt+glisser ou clic droit : tourner la vue"
-        }
+        "Trajectoire · un trait sur une carte ou le sol : le chemin de ce qui est choisi · petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · Maj + trait depuis un bout : le prolonger · glisser une marque (loin du chemin : la retirer) · Ctrl+clic sur le chemin : une poignée (la tirer, ou ses flèches x, y, z ; Ctrl+clic sur elle : la retirer) · Ctrl+clic ailleurs : choisir une carte ou la caméra, seule (Maj+Ctrl+clic : ajouter) · Alt+glisser ou clic droit : tourner la vue · Échap : abandonner"
     }
 
     /// Ce que l'outil ajoute à l'image de la vue : le chemin de ce qui est choisi (une fois chaque chemin différent), ses
@@ -1056,7 +1045,6 @@ impl App {
             (_, Some(GesteEspace::Trait { .. } | GesteEspace::Prolonger { .. })) => CursorIcon::Crosshair,
             _ if alt => CursorIcon::Grab,
             _ if ctrl => CursorIcon::PointingHand,
-            _ if !self.doc.plan_en_espace(self.cur_panel) => CursorIcon::NotAllowed,
             _ if sur_marque || sur_poignee => CursorIcon::Grab,
             _ if sur_chemin => CursorIcon::PointingHand,
             _ => CursorIcon::Crosshair,
@@ -1070,9 +1058,6 @@ impl App {
     pub(crate) fn paint_trajectoire_dans_l_espace(&self, painter: &egui::Painter) -> bool {
         let Some(t) = self.layers().get(self.cur_layer).and_then(|l| l.trajectoire.as_ref()) else { return false };
         let Some(support) = t.support else { return false };
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            return true;
-        }
         let world = self.e3_world();
         let cam = self.doc.panel_camera_reelle(self.cur_panel, self.cur_frame);
         // (Le cadre est au centre de la feuille : `Monde::to_frame` rend des pixels du cadre.)
@@ -1117,10 +1102,6 @@ impl App {
             return false;
         }
         ui.label(RichText::new("Trajectoire dans l'espace").strong());
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            ui.label("Ce plan n'est pas un « Plan en Espace 3D » (case du panneau Espace 3D).");
-            return true;
-        }
         let avec: Vec<Sujet> = sujets.iter().copied().filter(|&s| self.e3_traj_de(s).is_some()).collect();
         let cartes = sujets.iter().filter(|s| matches!(s, Sujet::Carte(_))).count();
         let qui = match (cartes, sujets.contains(&Sujet::Camera)) {

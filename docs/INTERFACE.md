@@ -12562,3 +12562,199 @@ le passage tout seul ne regarde pas le verrou du storyboard ni le film partagé 
    passe quand même (l'image changerait un peu, voir 158.4).
 4. Ferme la vue sur un plan où tu n'as rien fait : l'outil Caméra de la feuille marche comme avant sur ce plan.
 5. Exporte l'image d'un plan avant et après avoir ouvert la vue : la même.
+
+## 159. Tous les plans dans l'espace, et la 3D qui ne se sent jamais à plat (2026-11-14, branche `tout-en-3d`)
+
+Décision d'Anthony, mot pour mot : « On va au bout. Attention la 3D ne doit jamais se sentir tant qu'on ne bascule pas dans
+la vue de la "scène 3D". N'importe quelle personne qui prend le logiciel en main doit se dire que c'est de la 2D. » Avant
+cela il avait choisi que tous les plans soient en Espace 3D dès leur création (anciens projets aussi à l'ouverture), qu'il
+n'y ait plus deux sortes de plans, plus de bouton « Plan en Espace 3D », le cube ne servant qu'à regarder la scène. Les quatre
+conditions de 158.4 sont tenues. **Format 56.**
+
+### 159.1 Ce qui change pour Anthony
+
+- **Il n'y a plus de « Plan en Espace 3D »** : ni bouton, ni refus « Plan gardé ordinaire », ni « Sol refusé : sa caméra a
+  bougé… », ni message « Plan passé en Espace 3D tout seul ». Le cube ouvre la vue de la scène sur **n'importe quel plan**,
+  sans rien y changer (aucun pixel, aucune étape d'annulation). Sol, Mur, Ciel, Nouvelle surface, la Trajectoire dans
+  l'espace, la caméra libre (se retourner, basculer à la verticale, passer la feuille) marchent sur tout plan, sans refus.
+- **À plat, rien ne dit la 3D** (le critère principal de ce chantier). Hors de la vue de la scène : pas de sous-menu
+  « Calques 3D » dans « Nouveau calque » (il n'y paraît que vue ouverte), pas d'icône « Espace 3D » dans la barre des
+  panneaux, pas d'onglet dans le groupe de Réglages (le panneau y revient avec la vue et en repart avec elle, même dans une disposition
+  enregistrée qui l'y gardait, comme celle d'Anthony depuis la partie 150 ; ouvert à la main la vue fermée, rangé ailleurs ou
+  dans sa propre fenêtre, il reste où l'utilisateur l'a mis), aucune
+  commande de la 3D dans la palette Ctrl+K ni dans l'éditeur de raccourcis, aucune explication de la 3D dans le registre des
+  explications, aucune phrase de la barre d'état. La seule porte : le cube (et Affichage > Plateau > Espace 3D, et la ligne
+  « Espace 3D (afficher / quitter) » de la palette).
+- **Ce qui existait déjà à plat garde ses mots et son aspect** : la profondeur des calques (multiplan) et son champ, borné
+  comme avant à −0,9 (il ne s'ouvre plus loin que pour un calque que la vue de la scène a déjà posé au-delà), la vue de
+  dessus, l'outil Caméra et ses champs (±85°, comme avant), les mouvements de caméra des Vignettes.
+- **Dans la vue de la scène**, le vocabulaire 3D reste. Le bouton « Plan en Espace 3D » du panneau Espace 3D est remplacé par
+  **« Devant cache derrière »** (commande `espace3d.ordre_distance`) : allumé, les calques du plan se posent du plus loin au
+  plus près de la caméra ; éteint (d'origine), dans l'ordre de la pile, comme dans tout logiciel de dessin. Sol, Mur, Ciel et
+  Nouvelle surface l'allument d'eux-mêmes, dans leur étape, si la pile est déjà dans l'ordre des distances (rien de l'image
+  ne change) ; sinon la pile garde son ordre et la barre d'état le dit (« La pile garde son ordre : « Devant cache derrière »
+  (panneau Espace 3D) pour ordonner par la distance. »).
+- Les calques 3D demandés d'ailleurs que la vue (un raccourci posé à la main) ouvrent d'abord la vue de la scène.
+
+### 159.2 Comment l'image reste la même : le chemin de toujours tant qu'il sait filmer (condition a)
+
+Un plan se compose par **le chemin de toujours** (le multiplan, puis le cadre sur la feuille) partout où il sait filmer ; le
+changement de repère de la partie 148 ne sert qu'aux images où il ne le sait pas (`Document::repere_du_plan`) :
+
+- une carte au-delà de la borne d'autrefois (tout contre la caméra de référence, ou derrière elle) ;
+- pour un plan dont **la vue de la scène a libéré la caméra** (`Panel::camera_libre`, posé par `App::set_current_camera_libre`
+  quand elle sort des anciennes limites, ou par une trajectoire de caméra), **aux seules images** où elle est hors des
+  anciennes limites (`Document::camera_dans_les_anciennes_limites` : le cadre voit la feuille par ses quatre coins, bascule et
+  panoramique d'au plus 85°, la caméra n'a pas avancé jusqu'à la feuille). Aux autres images de ce plan, le chemin de toujours ;
+- pour un plan venu du format 55 en Espace 3D (`Panel::espace`, gardé tel quel), dès que sa caméra quitte la caméra
+  d'origine, comme alors.
+
+Un plan neuf, dessiné à plat, ne passe donc par **aucune ligne nouvelle** tant que la vue de la scène n'y a pas posé une
+caméra libre ou une carte derrière la feuille. Une caméra libérée reste libre (le champ ne retombe pas) : ses images dans les
+limites passent quand même par le chemin de toujours.
+
+### 159.3 La migration (conditions b et c) : un projet 55 s'ouvre et devient 56 sans question
+
+`project::VERSION` 55 → 56. Trois champs facultatifs, écrits seulement vrais : `camera_libre` et `ordre_distance` d'un plan,
+`profondeur_bornee` d'un calque. Une version 55 refuse un projet 56 (« créé par une version plus récente ») : attendu, elle
+montrerait l'ordre de la pile et une caméra bridée. À l'ouverture d'un projet 55 ou plus ancien (`document::migrer_vers_56`,
+plan par plan, aucune fenêtre, aucun avertissement) :
+
+- **un plan ordinaire** garde l'ordre de sa pile (`ordre_distance` faux : c'est le choix « ordre de la pile » de 158.4, point
+  2, pris d'office pour tout plan d'avant) et sa caméra d'avant (`camera_libre` faux : jamais de repère pour sa caméra, même
+  si une interpolation ancienne la mettait hors des limites) ;
+- **ses calques dont une clé de profondeur passe la borne** (−0,9), que le format 55 montrait à la borne : ramenés à la borne
+  (`Layer::ramener_a_la_borne`) **si et seulement si** la pose et la profondeur lue sont les mêmes, au bit près, à chaque
+  image du plan (`Layer::ramener_si_rien_ne_change`, vérifié image par image entre deux clés). Sinon (deux clés entre
+  lesquelles la borne était atteinte en route, par exemple) le calque garde ses valeurs et est **tenu à la borne**
+  (`profondeur_bornee`) : sa profondeur se lit bornée pour toujours, la même image ;
+- **un plan en Espace 3D du format 55** garde `espace` : son chemin d'image et l'ordre par la distance ;
+- **un projet partagé** : chaque fichier de plan (`plans/<n°>.json`) porte son propre numéro, `VERSION_PLAN` 1 → 2 ; un plan
+  écrit en 1 se lit comme un plan d'un projet 55 et passe par la même migration (`PanelEntry::format_ancien`, jamais écrit),
+  un plan écrit en 2 se lit tel quel ; une version d'avant refuse un plan écrit en 2 au lieu de perdre ses champs.
+
+Trouvé en chemin : les champs Bascule et Panoramique de l'outil Caméra (±85°) ramenaient à 85° une caméra tournée plus loin,
+rien qu'en se montrant (le défaut d'egui, `clamp_existing_to_range`) ; ils la laissent maintenant telle quelle.
+
+### 159.4 Les outils de la feuille avec la caméra libre (condition d)
+
+Les trois commandes qui posent un calque de la scène (Sol, Mur, Ciel, et les Nouvelles surfaces) ouvrent la vue de la scène si on les
+demande d'ailleurs (un raccourci posé à la main). La vue « par la caméra » du plan pose elle aussi la caméra telle quelle.
+
+
+- **L'outil Caméra** : sur une image composée par le chemin de toujours, exactement les mêmes gestes et le même résultat
+  (`cam0.shifted`, `limited`). Sur une image composée par le changement de repère (caméra libre, plan venu du format 55
+  en Espace 3D), la feuille montre ce que la caméra filme, le cadre est au centre : on le tire de même, la caméra se déplace
+  dans son propre plan (`camera_glissee`, le dessin suit la main), un coin zoome, la poignée tourne ; plus de refus.
+- **La vue de dessus** : sur tout plan, la même vue qu'avant (caméra réelle, panoramique compris ; une carte au sol y est un
+  trait à sa profondeur, comme tout calque). Un calque que la vue de la scène a posé plus près que la borne ne s'y tire pas
+  (il sauterait à la borne) : la barre d'état le dit.
+- **Les mouvements de caméra des Vignettes** : sur tout plan dont la caméra se dit en cadres sur la feuille
+  (`Document::camera_en_cadres` : toutes ses clés dans les anciennes limites, sans chemin dans l'espace, pas un plan venu du
+  format 55 en Espace 3D), exactement comme avant ; ailleurs la vignette montre ce que la caméra filme, sans cadre, et la barre
+  d'état le dit (« Pas de cadre sur cette vignette : elle montre ce que la caméra filme. Règle la caméra avec l'outil Caméra. »).
+
+### 159.5 Les textes 3D retirés du mode à plat
+
+Relevé fait par recherche dans les sources (« 3D », « Espace 3D », « carte », « dans l'espace », « mètres », « scène 3D »),
+puis vérifié par l'essai `en_2d_aucun_texte_de_l_interface_ne_dit_la_3d` :
+
+| Où | Avant | Maintenant |
+|---|---|---|
+| Barre d'état, accrocher un calque penché | « … carte inclinée de l'Espace 3D » | « … calque incliné » |
+| Barre d'état, fusionner | « … incliné ou avancé en 3D : une carte de l'Espace 3D ne se fusionne pas » | « … incliné, ou sa profondeur change pendant le plan : il ne se fusionne pas » |
+| Bulle « Position verrouillée » (en-tête de calque, menu du calque) | « L'outil Transformer et le déplacement en 3D ne bougent plus… » | « L'outil Transformer ne bouge plus… » |
+| Bulle « Grille de repère » d'un Sol, Mur, Ciel (menu du calque) | « Une grille sur la carte, dans la vue Espace 3D… » | « Une grille de repère sur ce calque, à l'écran… » |
+| Barre d'état de la grille, à plat | « … un trait tous les 1 m sur la carte… », « (Nouveau calque > Calques 3D) », « … calques 3D » | sans mètres ni carte ; « calques Sol, Mur ou Ciel » |
+| Préférences > Exports, Caméra | « … pour un script de compositing ou de 3D » | « … pour un script de compositing » |
+| Bulle « Nouveau calque » | « …, dossier, calques 3D » | « …, dossier » (vue ouverte : comme avant) |
+| Menu « Nouveau calque » | sous-menu « Calques 3D » et sa note « Plan gardé ordinaire… » | sous-menu vue ouverte seulement, note partie |
+| Barre d'état en quittant la vue | « Espace 3D quitté. » | « Retour au dessin. » |
+| Onglet et icône « Panneau Espace 3D » | restaient après la première ouverture | l'icône n'est montrée que vue ouverte ; l'onglet du groupe de Réglages part avec la vue |
+| Palette Ctrl+K, éditeur de raccourcis | toutes les commandes « Espace 3D : … », « Nouveau calque 3D : … » | vue ouverte seulement (`keymap::de_la_scene`) ; la porte reste |
+| Registre des explications | rubrique « Espace 3D », « Trajectoire dans l'espace »… | vue ouverte seulement |
+| Aide animée des poignées de trajectoire (jouée à plat) | « Dans la vue Espace 3D, la poignée choisie montre trois flèches… carte… » | ces phrases passées dans « Trajectoire dans l'espace », jouée dans la vue |
+| Messages de la partie 158 | « Plan passé en Espace 3D tout seul… », « Plan gardé ordinaire : … », « Sol refusé : … » | partis |
+| Outil Caméra sur la feuille d'un plan en Espace 3D | « Plan en Espace 3D : la caméra se règle dans la vue Espace 3D… » | parti : l'outil marche |
+| Vignettes d'un plan en Espace 3D | « Plan en Espace 3D : sa caméra ne se règle pas par des cadres… » | « Pas de cadre sur cette vignette : elle montre ce que la caméra filme… » |
+| Vue de dessus d'un plan en Espace 3D | « Ce plan est en Espace 3D : … » | partie : la vue marche |
+| Libellés de commandes | « … (plan en Espace 3D) » | sans la parenthèse |
+| Barre d'état, pinceau hors du calque sur la feuille | « … la carte du calque courant… Dans un plan en Espace 3D, une carte… » | « … hors des bords du calque courant… », « le calque courant n'est pas sous le pointeur… » |
+| Noms d'étapes d'annulation des gestes de la vue (lus dans l'Historique, aussi à plat) | « Déplacer dans l'espace 3D », « Placer la carte dans l'espace 3D », « Échelle de la carte », « Déplacer la caméra 3D »… | « Déplacer le calque », « Placer le calque », « Échelle du calque », « Déplacer la caméra »… |
+
+Laissés exprès : la porte (le cube, son nom « Espace 3D » et sa bulle ; Affichage > Plateau > Espace 3D), les noms des calques
+qu'on a créés soi-même dans la vue (« Sol », « Mur », « Ciel ») et leur grille de repère, qui reste visible sur la feuille.
+Le détecteur (`espace3ddirect::dit_la_3d`) ne prend pas « carte graphique », « carte dédiée » ni « espace de travail ».
+
+### 159.6 Les essais
+
+`src/espace3ddirect_tests.rs` (les deux du maillage de la partie 158 restent tels quels) :
+
+- un projet fabriqué du format 55 (trois plans : caméra animée dans les anciennes limites avec zoom, rotation, avancée,
+  bascule et panoramique ; pile dans le désordre des profondeurs ; calque penché ; clé de profondeur au-delà de la borne qu'on
+  ne peut ramener ; plan sans clé de caméra, deux clés au-delà de la borne qu'on ramène, calque posé juste à la borne ; mouvement de caméra des Vignettes sur deux cases) s'ouvre sans avertissement et donne **les mêmes images, au
+  pixel près, à toutes les images de tous les plans, à l'écran et à l'export**, que ce que montrait le format 55 ; rouge sans
+  la migration (le calque à la clé au-delà de la borne irait à sa vraie place) ; enregistré, il est au format 56 et l'aller-
+  retour garde les images ;
+- le projet d'essai complet du dépôt (`fiabilite_fixture::projet_complet`), renuméroté 55 : les mêmes images ;
+- un plan en Espace 3D du format 55 : `espace` gardé, ordre des distances, les mêmes images ;
+- un projet partagé dont les fichiers de plan sont du format d'avant : migré plan par plan, les mêmes images ; repartagé et relu,
+  rien n'est migré deux fois ;
+- un projet 56 neuf : `ordre_distance`, `camera_libre`, `profondeur_bornee`, une caméra retournée et une profondeur au-delà
+  de la borne font l'aller-retour ; un format 57 est refusé ;
+- la caméra libre ne passe par le repère qu'aux images hors des limites, les autres images gardent leurs pixels ;
+- le cube sur le plan d'avant le plus difficile ne change aucun pixel ni n'ajoute d'étape ; Sol, Mur, Ciel, surface s'y
+  posent sans refus (la pile garde son ordre, la barre d'état le dit) ; sur un plan dont la pile est dans l'ordre des
+  distances, le Sol allume « Devant cache derrière » dans sa seule étape, Ctrl+Z rend tout ;
+- la caméra posée retournée dans la vue de la scène, puis l'outil Caméra de la feuille la fait glisser sans refus ; sur un plan
+  à plat, le même geste donne exactement `cam0.shifted(…)` borné, comme toujours ;
+- les Vignettes : un cadre de plus sur un plan neuf comme avant ; une caméra retournée : pas de cadre, la phrase dite ;
+- **la 3D ne se sent jamais à plat** : après l'ouverture et douze gestes courants (images, plans, vue de dessus, clé de
+  caméra, calque neuf, annuler, rétablir, accrocher et fusionner un calque penché), l'outil Caméra, l'outil Trajectoire, et
+  après avoir ouvert et fermé la vue de la scène, ni la barre d'état ni aucun texte peint à l'écran ne dit la 3D ; la palette
+  n'en propose que la porte ; aucune aide animée jouée à plat, aucune bulle des barres de commandes, de la barre des panneaux
+  ni de la barre d'outils n'en parle ; le détecteur lui-même est essayé.
+
+Essais anciens changés, et pourquoi : ceux qui cochaient « Plan en Espace 3D » (la commande n'existe plus) posent
+`Panel::espace` (le plan du format 55 sur lequel ils ont été écrits) ou rien quand la fonction marche maintenant sur tout plan ;
+ceux qui vérifiaient un refus sur un plan ordinaire (Trajectoire dans l'espace, Sol sur une carte penchée, Nouvelle surface)
+vérifient qu'il n'y a plus de refus ; « Décocher ramène les cartes à la borne » et « refusé quand le cadre dépasse la feuille »
+sont partis avec la case ; « dans un plan ordinaire, Transformer ramène la carte à la borne » vérifie qu'elle reste où la vue de
+la scène l'a posée ; « le panneau Espace 3D reste dans la disposition après la vue » vérifie que celui que la vue a ouvert en
+part, même venu d'une disposition enregistrée (rangé ailleurs ou ouvert à la main, il reste, comme avant) ; le numéro de
+format épinglé (55 → 56, « plus récent » 56 → 57), comme à chaque format. Les essais de l'outil Caméra, de la vue de dessus et
+des Vignettes sur des plans ordinaires passent sans changement.
+
+### 159.7 Ce que l'unification rend possible pour la previz
+
+Un seul genre de plan : tout plan du storyboard est déjà une scène. Le storyboarder dessine à plat comme toujours ; le jour
+où il ouvre le cube, il trouve ses calques posés en profondeur, pose un sol, un mur, un ciel, déplace la caméra où il veut, et
+revient à la feuille sans avoir rien converti. Prochaines marches possibles : un décor partagé entre les plans d'une séquence
+(étape B de `docs/ESPACE-LIBRE.md`), des mouvements de caméra dessinés dans la scène et relus dans les Vignettes, une vue de
+dessus qui sache dire les cartes couchées, l'export de la caméra libre vers un logiciel de compositing ou de mise en scène.
+
+Limites connues : une caméra libérée reste libre ; éteindre « Devant cache derrière » sur un plan venu du format 55 en
+Espace 3D en fait un plan du format 56 à caméra libre (ses images dont la caméra est dans les anciennes limites repassent par le
+chemin de toujours, Ctrl+Z le rend) ; le contenu rogné d'un ancien plan (réserve du rognage) n'est pas migré : un calque ramené
+à la borne qui retrouve, en rallongeant le plan, une clé coupée au-delà de la borne la montrerait à sa vraie place ; une image passée par le changement de repère ne filme pas l'encre hors de
+la feuille (limite de la partie 148), donc un plan dont la caméra sort des limites en cours de route peut voir cette encre
+apparaître et disparaître à la frontière ; un calque tenu à la borne (`profondeur_bornee`) ne passe plus derrière la caméra,
+même dans la vue de la scène ; un cadre de projet plus grand que la feuille n'est plus refusé pour la scène (il n'y en a pas
+dans un projet créé par FEANOR).
+
+### 159.8 À tester par Anthony
+
+**Toujours sur une copie**, jamais sur un projet de `Projets` (l'exe de cette branche les réécrirait au format 56, qu'une
+version d'avant refuse).
+
+1. Ouvre la copie d'un projet d'avant : aucune fenêtre ; exporte une image d'un plan à caméra animée et compare avec l'export
+   fait avant par l'exe de `main` : la même.
+2. À plat, sans ouvrir le cube : parcours les menus, la palette Ctrl+K, « + » des calques, les bulles des barres : nulle part
+   « 3D », « Espace 3D », « carte », « scène 3D ».
+3. Clique le cube sur un plan dont la caméra bouge : rien ne change, aucun message de refus. Pose un Sol (« + » > Calques 3D) :
+   il se pose. Ferme le cube : l'onglet Espace 3D s'en va, la barre d'état dit « Retour au dessin. ».
+4. Dans le cube, retourne la caméra (panoramique 150°), ferme : la feuille montre ce qu'elle filme ; l'outil Caméra la fait
+   encore glisser, zoomer, tourner.
+5. Sur un plan neuf : outil Caméra, vue de dessus, cadres des Vignettes, comme avant.
+6. Dans le panneau Espace 3D, « Devant cache derrière » : allume-le sur un plan dont la pile est dans le désordre, puis
+   Ctrl+Z.

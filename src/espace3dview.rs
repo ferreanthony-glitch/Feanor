@@ -121,12 +121,8 @@ impl App {
     /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
     /// chaque vue (`espace3dvues.rs`).
     pub(crate) fn e3_hauteur_sol(&self) -> f32 {
-        // (Plan en Espace 3D : le sol des surfaces, `Monde::sol_y`.)
-        if self.doc.plan_en_espace(self.cur_panel) {
-            self.e3_world().sol_y()
-        } else {
-            0.0
-        }
+        // (Le sol des surfaces, `Monde::sol_y` : tout plan est dans l'espace, partie 159.)
+        self.e3_world().sol_y()
     }
 
     /// Le quadrillage d'une vue : le sol autour de `target`, à l'échelle de `distance` (perspective, caméra du plan) ; ou,
@@ -186,7 +182,7 @@ impl App {
     /// l'image.
     pub(crate) fn e3_cartes_a_tracer(&self, view: &View) -> Vec<usize> {
         let visibles = self.e3_visible_cards();
-        if !self.doc.plan_en_espace(self.cur_panel) {
+        if !self.doc.ordre_par_la_distance(self.cur_panel) {
             return visibles;
         }
         let layers = self.layers();
@@ -303,7 +299,7 @@ impl App {
         if moving_camera {
             self.gesture_change(GESTURE_CAMERA, |s| {
                 let snap = s.snapshot();
-                let before = s.history.context.replace("Déplacer la caméra 3D".to_string());
+                let before = s.history.context.replace("Déplacer la caméra".to_string());
                 s.history.push(snap);
                 s.history.context = before;
             });
@@ -326,7 +322,7 @@ impl App {
             }
             let mut new = world.camera_from_scene(&sc.sanitized());
             new.zoom = base.zoom;
-            self.set_current_camera(new);
+            self.set_current_camera_libre(new);
         }
     }
 
@@ -487,9 +483,9 @@ impl App {
                     return;
                 }
                 let name = match gizmo.mode {
-                    GizmoMode::Rotate => "Tourner dans l'espace 3D",
-                    GizmoMode::Scale => "Mettre à l'échelle dans l'espace 3D",
-                    _ => "Déplacer dans l'espace 3D",
+                    GizmoMode::Rotate => "Tourner le calque",
+                    GizmoMode::Scale => "Mettre le calque à l'échelle",
+                    _ => "Déplacer le calque",
                 };
                 self.e3_begin(handle, gizmo.mode, gizmo, ray, px, name);
                 return;
@@ -525,7 +521,7 @@ impl App {
                 (true, true) => Handle::Axis(2),
                 (true, false) => Handle::Plane(2),
             };
-            let name = if id == CAMERA_ID { "Déplacer la caméra" } else { "Déplacer dans l'espace 3D" };
+            let name = if id == CAMERA_ID { "Déplacer la caméra" } else { "Déplacer le calque" };
             self.e3_begin(handle, GizmoMode::Move, gizmo, ray, px, name);
             return;
         }

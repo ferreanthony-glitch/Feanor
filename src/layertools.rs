@@ -571,8 +571,8 @@ impl App {
     /// qu'on la déplace ou qu'on annule sa transformation (`Layer::set_pose_selon`, partie 148).
     pub(crate) fn set_layer_pose(&mut self, li: usize, t: LayerTransform) {
         let f = self.cur_frame;
-        let libre = self.doc.plan_en_espace(self.cur_panel);
-        self.layers_mut()[li].set_pose_selon(f, t, libre);
+        // (Tout plan est dans l'espace, partie 159 : la même chose qu'avant pour une profondeur dans la borne.)
+        self.layers_mut()[li].set_pose_selon(f, t, true);
     }
 
     /// La pose du calque `li` à l'image courante telle que l'outil Transformer la travaille : la sienne ; pour un calque accroché à la

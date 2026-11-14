@@ -1030,24 +1030,23 @@ fn the_plan_in_space_flag_survives_a_save_and_a_reload_and_an_ordinary_plan_writ
 }
 
 #[test]
-fn checking_plan_in_space_is_one_undo_step_and_does_not_change_the_image_yet() {
+fn the_order_toggle_is_one_undo_step_and_does_not_change_an_image_whose_stack_is_in_depth_order() {
+    // (Partie 159 : la case « Plan en Espace 3D » est partie, tous les plans sont dans l'espace. Ce qui reste un choix du plan :
+    // « devant cache derrière », l'ordre des distances au lieu de celui de la pile.)
     let doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5), (GREEN, [100, 40, 200, 120], -0.3)]);
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
-    let plan_before = render::panel_plan_at(&b.app.doc, 0, 0, None);
     let pixels_before = sheet(&b.app.doc, 0);
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.doc.panels[0].espace, "la commande coche la case du plan courant");
-    assert!(render::panel_plan_at(&b.app.doc, 0, 0, None) == plan_before, "étape A1 : le plan d'une image ne dépend pas encore de la case");
-    assert!(sheet(&b.app.doc, 0) == pixels_before, "mêmes pixels");
+    b.app.run_action("espace3d.ordre_distance");
+    assert!(b.app.doc.panels[0].ordre_distance, "la commande allume l'ordre des distances du plan courant");
+    assert!(sheet(&b.app.doc, 0) == pixels_before, "la pile est déjà dans l'ordre des profondeurs : mêmes pixels");
     b.app.undo();
-    assert!(!b.app.doc.panels[0].espace, "une seule étape d'annulation");
+    assert!(!b.app.doc.panels[0].ordre_distance, "une seule étape d'annulation");
     b.app.redo();
-    assert!(b.app.doc.panels[0].espace);
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(!b.app.doc.panels[0].espace, "la même commande décoche");
+    assert!(b.app.doc.panels[0].ordre_distance);
+    b.app.run_action("espace3d.ordre_distance");
+    assert!(!b.app.doc.panels[0].ordre_distance, "la même commande l'éteint");
 }
-
 #[test]
 fn splitting_duplicating_and_swapping_versions_keep_the_plan_in_space_flag() {
     let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5)]);
@@ -1064,19 +1063,6 @@ fn splitting_duplicating_and_swapping_versions_keep_the_plan_in_space_flag() {
     // Un plan neuf est un plan ordinaire.
     let scene = doc.panels[0].scene;
     assert!(!doc.make_panel(scene).espace);
-}
-
-#[test]
-fn plan_in_space_is_refused_when_the_frame_does_not_fit_in_the_sheet() {
-    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.5)]);
-    assert!(doc.accepte_plan_en_espace(), "un projet ordinaire : le cadre tient dans la feuille");
-    doc.frame = [doc.width * 2, doc.height];
-    assert!(!doc.accepte_plan_en_espace());
-    let mut b = banc_taille(doc, false, 1280, 720);
-    b.chauffer(2);
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(!b.app.doc.panels[0].espace, "la case reste décochée");
-    assert!(b.app.status.contains("refusé"), "et l'utilisateur sait pourquoi : {}", b.app.status);
 }
 
 // ------------------------------------------------------------------------------ plan en Espace 3D, étape A2 : le repère de la caméra
@@ -1764,14 +1750,12 @@ fn a_surface_on_the_ground_lies_flat_and_a_wall_stands_on_it() {
 fn the_new_surface_command_adds_the_current_layer_in_one_undo_step_and_survives_a_save() {
     let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
     doc.panels[0].camera = vec![CameraKey::new(0, Camera { tilt: -15.0, y: 100.0, ..doc.default_camera() })];
+    // (Un plan venu du format 55 en Espace 3D : son image passe par le repère de sa caméra tournée, comme l'essai le calcule.)
+    doc.panels[0].espace = true;
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
-    // Hors d'un plan en Espace 3D : refusé, avec la marche à suivre.
-    b.app.run_action("espace3d.surface_sol");
-    assert_eq!(b.app.layers().len(), 1);
-    assert!(b.app.status.contains("Plan en Espace 3D"), "{}", b.app.status);
-    // Dans un plan en Espace 3D : un calque de plus, juste au-dessus, du même genre, courant et choisi.
-    b.app.run_action("espace3d.plan_en_espace");
+    // Sur tout plan (partie 159 ; avant, hors d'un plan en Espace 3D, c'était refusé) : un calque de plus, juste au-dessus, du
+    // même genre, courant et choisi.
     b.app.run_action("espace3d.surface_sol");
     assert_eq!(b.app.layers().len(), 2);
     assert_eq!(b.app.cur_layer, 1);
@@ -1815,18 +1799,19 @@ fn the_tilt_of_a_card_is_free_only_in_a_plan_in_space() {
     let w = monde_a2();
     let xf = Xf { pos: [0.0, 0.0, 0.0], rot: [-90.0, 140.0, 0.0], size: [6.0, 3.0, 1.0] };
     let prev = LayerTransform::default();
-    // Plan ordinaire : la borne de toujours.
+    // La borne d'autrefois (`card_from_xf`, gardée pour ce qui la demande).
     let (t, _) = w.card_from_xf(&prev, 0.0, &xf);
     assert_eq!((t.tilt_x, t.tilt_y), (-85.0, 85.0));
     // Plan en Espace 3D : jusqu'au demi-tour.
     let (t, _) = w.card_from_xf_libre(&prev, 0.0, &xf);
     assert_eq!((t.tilt_x, t.tilt_y), (-90.0, 140.0));
-    // À l'écran : les poignées d'une carte suivent le plan.
+    // À l'écran (partie 159 : tout plan est dans l'espace) : les poignées d'une carte vont jusqu'au demi-tour sur tout plan,
+    // un plan neuf dessiné à plat comme un plan venu du format 55 en Espace 3D.
     let mut b = banc_taille(doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]), false, 1280, 720);
     b.chauffer(2);
     let id = espace3d::card_selection(b.app.layer().id);
     b.app.e3_set_xfs(&[(id, xf)]);
-    assert_eq!(b.app.layer().pose(0).tilt_y, 85.0);
+    assert_eq!(b.app.layer().pose(0).tilt_y, 140.0);
     b.app.doc.panels[0].espace = true;
     b.app.e3_set_xfs(&[(id, xf)]);
     assert_eq!(b.app.layer().pose(0).tilt_y, 140.0);
@@ -1861,8 +1846,8 @@ fn the_edit_view_draws_the_cards_of_a_plan_in_space_from_the_farthest_to_the_nea
     for v in [&devant, &derriere, &cote] {
         assert_eq!(b.app.e3_cartes_a_tracer(v), vec![0, 1, 2, 3]);
     }
-    // Plan en Espace 3D : du plus loin au plus près de l'œil de la vue.
-    b.app.run_action("espace3d.plan_en_espace");
+    // Plan en Espace 3D (venu du format 55, ou « devant cache derrière » allumé, partie 159) : du plus loin au plus près de l'œil.
+    b.app.doc.panels[0].espace = true;
     assert_eq!(b.app.e3_cartes_a_tracer(&devant), vec![1, 2, 3, 0]);
     assert_eq!(b.app.e3_cartes_a_tracer(&derriere), vec![0, 2, 3, 1]);
     // De côté : les deux cartes du même plan gardent l'ordre de la pile.
@@ -1888,7 +1873,8 @@ fn the_edit_view_opens_on_a_plan_in_space_with_its_surfaces_and_says_what_it_is(
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
-    assert!(b.app.status.contains("ce plan est en Espace 3D"), "{}", b.app.status);
+    // (Partie 159 : un seul message, pour tout plan, qui dit comment faire dans la vue.)
+    assert!(b.app.status.starts_with("Espace 3D : clic sur une carte"), "{}", b.app.status);
     // Un sol, un mur, une surface de face : la vue les trace (cartes à 90° comprises), d'orbite puis par la caméra.
     for a in ["espace3d.surface_sol", "espace3d.surface_mur", "espace3d.surface_face"] {
         b.app.run_action(a);
@@ -1901,7 +1887,7 @@ fn the_edit_view_opens_on_a_plan_in_space_with_its_surfaces_and_says_what_it_is(
     // Choisir à la souris prend la carte la plus proche le long du regard, comme la vue les trace.
     let ray = vue_depuis(b.app.e3_world().eye(&b.app.current_camera()), [0.0, 0.0, 0.0]);
     let _ = b.app.e3_pick(&m::Ray::new(ray.eye, ray.forward));
-    // Un plan ordinaire garde son message d'avant.
+    // Un plan dessiné à plat : le même message.
     b.app.run_action("espace3d.basculer");
     b.app.doc.panels[0].espace = false;
     b.app.run_action("espace3d.basculer");
@@ -1976,7 +1962,8 @@ fn what_does_not_describe_a_plan_in_space_steps_aside_and_the_camera_export_says
     let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]);
     let cam = Camera { pan: 140.0, tilt: 60.0, dolly: 300.0, ..doc.default_camera() };
     doc.panels[0].camera = vec![CameraKey::new(0, doc.default_camera()), CameraKey::new(6, cam)];
-    // L'export de caméra : la vraie caméra du plan, et le champ `espace_3d` seulement pour un plan en Espace 3D.
+    // L'export de caméra : la vraie caméra du plan, et le champ `espace_3d` seulement pour un plan venu du format 55 en Espace
+    // 3D ou dont la vue de la scène a libéré la caméra (`Panel::camera_libre`, partie 159).
     let ordinaire = exportcamera::build(&doc, &[0], "Film", &CameraSettings { per_frame: true, ..Default::default() });
     assert!(!ordinaire.json.contains("espace_3d"));
     doc.panels[0].espace = true;
@@ -1986,15 +1973,16 @@ fn what_does_not_describe_a_plan_in_space_steps_aside_and_the_camera_export_says
     assert_eq!(plan["espace_3d"], serde_json::json!(true));
     let derniere = plan["par_image"].as_array().expect("par image").iter().find(|f| f["image"] == serde_json::json!(6)).expect("image 6");
     assert_eq!((derniere["panoramique"].as_f64(), derniere["bascule"].as_f64()), (Some(140.0), Some(60.0)), "la caméra réelle, pas la caméra qui cadre");
-    // Les Vignettes : pas de cadre de caméra à tirer sur une case d'un plan en Espace 3D, et la commande le dit.
+    // Les Vignettes : pas de cadre de caméra à tirer sur une case d'un plan en Espace 3D, et la commande le dit, sans un mot
+    // de 3D (partie 159 : la vignette montre ce que la caméra filme).
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     assert!(!b.app.cam_possible_ici(0, 0));
     let cles = b.app.doc.panels[0].camera.clone();
     b.app.cam_ajouter_cadre_case(0, 0);
     assert_eq!(b.app.doc.panels[0].camera, cles, "aucune clé de plus");
-    assert!(b.app.status.contains("Plan en Espace 3D"), "{}", b.app.status);
-    // La vue de dessus s'ouvre sans tomber, sur son mot d'explication.
+    assert_eq!(b.app.status, crate::vignettecamui::CAMERA_SANS_CADRES);
+    // La vue de dessus s'ouvre sans tomber (partie 159 : elle montre le plan, comme pour tout plan).
     b.app.run_action("vue.dessus");
     b.chauffer(4);
     assert!(b.app.top_view);
@@ -2129,22 +2117,25 @@ fn an_ordinary_plan_still_stops_its_cards_before_the_reference_camera() {
     l.depth = -3.0;
     assert_eq!((l.depth_at(0), l.depth_selon(0, false)), (Layer::MIN_DEPTH, Layer::MIN_DEPTH));
     assert!(near(w.carte(&l, 0).pos[2], 0.9 * w.d0, 1e-4));
-    // À l'image : pas de repère pour un plan ordinaire, et ce calque à −3 est filmé comme à −0,9, caméra décalée.
+    // À l'image : un calque tenu à la borne (`profondeur_bornee` : celui d'un plan ordinaire d'un projet d'avant le format 56,
+    // partie 159) ne fait pas prendre de repère, et ce calque à −3 est filmé comme à −0,9, caméra décalée.
     let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], -3.0)]);
+    doc.panels[0].layers[0].profondeur_bornee = true;
     doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 324.0, y: 178.0, ..doc.default_camera() })];
     assert!(doc.repere_du_plan(0, 0).is_none());
     let au_dela = filmee(&doc, 0);
     doc.panels[0].layers[0].depth = Layer::MIN_DEPTH;
     assert!(au_dela.iter().any(|c| c.a() > 0), "le calque est dans l'image");
     assert!(filmee(&doc, 0) == au_dela, "un plan ordinaire montre à la borne un calque qui la passe");
-    // Dans l'application : les poignées d'une carte d'un plan ordinaire s'arrêtent à la borne.
+    // Dans l'application (partie 159 : tout plan est dans l'espace) : les poignées d'une carte d'un plan neuf, dessiné à plat,
+    // la posent où on la tire, derrière la caméra de référence comprise. (Avant, un plan ordinaire l'arrêtait à la borne.)
     let mut b = banc_taille(doc_espace(&[(RED, [300, 170, 340, 190], 0.0)]), false, 1280, 720);
     b.chauffer(2);
     let w = b.app.e3_world();
-    assert!(!w.libre);
+    assert!(w.libre && !b.app.doc.panels[0].espace);
     let id = espace3d::card_selection(b.app.layer().id);
     b.app.e3_set_xfs(&[(id, carte_en_z(&w, 2.0))]);
-    assert_eq!(b.app.layer().depth, Layer::MIN_DEPTH);
+    assert!(near(b.app.layer().depth, -2.0, 1e-4), "{}", b.app.layer().depth);
 }
 
 #[test]
@@ -2215,11 +2206,18 @@ fn a_card_behind_the_reference_camera_is_filmed_by_a_camera_behind_it_and_not_by
 #[test]
 fn past_the_bound_a_card_keeps_coming_grows_then_leaves_the_image_of_the_reference_camera() {
     // Un rectangle de 80 × 60 au centre du dessin, filmé par la caméra de référence, à la profondeur donnée.
+    // (`espace` faux : un plan ordinaire d'un projet d'avant le format 56, dont le calque est tenu à la borne, partie 159.)
     let image_a = |depth: f32, espace: bool| {
         let mut doc = doc_espace(&[(RED, [280, 150, 360, 210], depth)]);
         doc.panels[0].espace = espace;
+        doc.panels[0].layers[0].profondeur_bornee = !espace;
         filmee(&doc, 0)
     };
+    // Un plan neuf du format 56, dessiné à plat : sa carte va où sa profondeur la met, comme dans un plan en Espace 3D.
+    let image_neuve = |depth: f32| filmee(&doc_espace(&[(RED, [280, 150, 360, 210], depth)]), 0);
+    for depth in [0.0f32, -0.5, -0.95, -1.5] {
+        assert!(image_neuve(depth) == image_a(depth, true), "profondeur {depth} : un plan neuf comme un plan en Espace 3D");
+    }
     // Devant la borne et à la borne, plan en Espace 3D ou non : la carte paraît telle qu'elle est dessinée, mêmes pixels.
     for depth in [0.0f32, -0.5, Layer::MIN_DEPTH] {
         let ordinaire = image_a(depth, false);
@@ -2313,9 +2311,9 @@ fn a_depth_behind_the_reference_camera_survives_a_save_in_a_plan_in_space_only_a
     assert_eq!(back.panels[0].layers[0].depth, -2.5);
     assert_eq!(back.panels[0].layers[1].pos_keys, doc.panels[0].layers[1].pos_keys);
     assert!(near(back.panels[0].layers[1].depth_libre_at(6), -2.75, 1e-6));
-    // Plan ordinaire : la borne de toujours, à la lecture pour le calque fixe, à l'emploi pour la clé.
-    assert_eq!(back.panels[ordinaire].layers[0].depth, Layer::MIN_DEPTH);
-    assert_eq!(back.panels[ordinaire].layers[1].depth_at(6), Layer::MIN_DEPTH);
+    // Plan dessiné à plat, au format 56 (partie 159 : tout plan est dans l'espace) : les mêmes valeurs, la même lecture.
+    assert_eq!(back.panels[ordinaire].layers[0].depth, -2.5);
+    assert!(near(back.panels[ordinaire].layers[1].depth_libre_at(6), -2.75, 1e-6));
     // Les mêmes images qu'avant l'enregistrement, dans les deux plans.
     for pi in [0, ordinaire] {
         for f in [0usize, 3, 6] {
@@ -2337,6 +2335,11 @@ fn a_depth_behind_the_reference_camera_survives_a_save_in_a_plan_in_space_only_a
     std::fs::write(&manifest, ancien).expect("écrit");
     let old = project::load(&manifest).expect("un projet du format 54 s'ouvre").doc;
     assert!(old.panels[0].espace && !old.panels[ordinaire].espace);
+    // (L'image d'alors : un plan ordinaire tenait ses profondeurs à la borne. Depuis le format 56, partie 159, une carte va
+    // partout dans tout plan, et `migrer_vers_56` tient à la borne ce calque d'un projet d'avant : la même image.)
+    for l in &mut doc.panels[ordinaire].layers {
+        l.profondeur_bornee = true;
+    }
     for pi in [0, ordinaire] {
         for (a, b) in old.panels[pi].layers.iter().zip(&doc.panels[pi].layers) {
             assert_eq!((a.depth, a.transform, &a.pos_keys), (b.depth, b.transform, &b.pos_keys), "plan {pi}, calque {}", b.name);
@@ -2387,68 +2390,12 @@ fn removing_the_position_keys_of_a_card_behind_the_reference_camera_leaves_it_th
     assert!(near(b.app.layer().depth, -2.0, 1e-4));
     b.app.set_layer_pose(0, LayerTransform::default());
     assert!(near(b.app.layer().depth, -2.0, 1e-4), "profondeur {}", b.app.layer().depth);
-    // Le même geste dans un plan ordinaire : la borne de toujours.
+    // Le même geste dans un plan dessiné à plat (partie 159 : lui aussi est dans l'espace) : la carte que la vue de la scène a
+    // posée derrière la caméra y reste. (Avant, un plan ordinaire la ramenait à la borne : il ne pouvait pas la tenir là.)
     b.app.doc.panels[0].espace = false;
     b.app.set_layer_pose(0, LayerTransform::default());
-    assert_eq!(b.app.layer().depth, Layer::MIN_DEPTH);
+    assert!(near(b.app.layer().depth, -2.0, 1e-4), "profondeur {}", b.app.layer().depth);
 }
 
-#[test]
-fn unchecking_plan_in_space_brings_the_cards_past_the_bound_back_to_it_in_one_undo_step() {
-    let mut doc = doc_espace(&[(RED, [300, 170, 340, 190], 0.0), (GREEN, [100, 100, 200, 200], -0.5), (BLUE, [400, 100, 500, 200], 0.4)]);
-    doc.panels[0].espace = true;
-    let w = Monde::du_plan(&doc, 0);
-    // Carte 0, fixe, derrière la caméra d'origine. Carte 1, animée : devant à l'image 0, derrière à l'image 6. Carte 2 : devant.
-    w.apply_card_xf_libre(&mut doc.panels[0].layers[0], 0, &Xf { pos: [0.6, -0.3, 2.0 * w.d0], ..carte_en_z(&w, 2.0) });
-    doc.panels[0].layers[1].pos_keys = vec![PosKey::new(0, pose(10.0, 5.0)), PosKey::new(6, LayerTransform { dz: -1.0, ..pose(40.0, -8.0) })];
-    let mut b = banc_taille(doc, false, 1280, 720);
-    b.chauffer(2);
-    let avant = b.app.layers().to_vec();
-    assert!(avant[0].passe_la_borne(6) && avant[1].passe_la_borne(6) && !avant[1].passe_la_borne(0) && !avant[2].passe_la_borne(6));
-    let place = w.carte(&avant[0], 6);
-    let etapes = b.app.history.names().0.len();
-    // Décocher : un plan ordinaire ne tient pas ces cartes là. Elles reviennent à la borne, et la barre d'état le dit.
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(!b.app.doc.panels[0].espace);
-    assert_eq!(b.app.history.names().0.len(), etapes + 1, "une seule étape d'annulation");
-    assert!(b.app.status.contains("2 cartes") && b.app.status.contains("Ctrl+Z"), "{}", b.app.status);
-    let ordinaire = b.app.e3_world();
-    assert!(!ordinaire.libre);
-    {
-        let l = b.app.layers();
-        // La carte fixe : à la borne, à la même place en largeur et en hauteur, de la même taille, dans le même sens.
-        assert_eq!(l[0].depth, Layer::MIN_DEPTH);
-        let p = ordinaire.carte(&l[0], 6);
-        assert!(near(p.pos[0], place.pos[0], 1e-3) && near(p.pos[1], place.pos[1], 1e-3) && near(p.pos[2], 0.9 * w.d0, 1e-3), "{p:?} contre {place:?}");
-        assert!(near3(p.size, place.size, 1e-3) && near3(p.rot, place.rot, 1e-3));
-        // La carte animée : la clé passée derrière la caméra revient à la borne, la clé de devant garde sa profondeur ; le
-        // reste de leurs poses ne bouge pas.
-        assert!(near(l[1].depth_libre_at(6), Layer::MIN_DEPTH, 1e-6) && near(l[1].depth_libre_at(0), -0.5, 1e-6), "{:?}", l[1].pos_keys);
-        assert_eq!(l[1].depth, -0.5);
-        for (k, a) in l[1].pos_keys.iter().zip(&avant[1].pos_keys) {
-            assert_eq!(LayerTransform { dz: 0.0, ..k.t }, LayerTransform { dz: 0.0, ..a.t });
-        }
-        // La carte de devant : rien.
-        assert_eq!(l[2], avant[2]);
-    }
-    // Ctrl+Z : la case et les cartes, comme avant.
-    b.app.undo();
-    assert!(b.app.doc.panels[0].espace);
-    assert!(b.app.layers() == &avant[..], "un seul Ctrl+Z rend la case et les cartes");
-    // Recochée après coup : les cartes restent à la borne, elles y ont été ramenées pour de bon.
-    b.app.redo();
-    assert!(!b.app.doc.panels[0].espace);
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.doc.panels[0].espace);
-    assert_eq!(b.app.layers()[0].depth, Layer::MIN_DEPTH);
-    // Sans carte au-delà de la borne : décocher ne touche à rien d'autre que la case, avec son message d'avant.
-    let la = b.app.layers().to_vec();
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(!b.app.doc.panels[0].espace && b.app.layers() == &la[..]);
-    assert!(b.app.status.ends_with("un plan ordinaire."), "{}", b.app.status);
-    // Une seule carte : le message est au singulier.
-    b.app.run_action("espace3d.plan_en_espace");
-    b.app.layers_mut()[2].depth = -1.2;
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.status.contains("Une carte") && b.app.layers()[2].depth == Layer::MIN_DEPTH, "{}", b.app.status);
-}
+// (« Décocher Plan en Espace 3D », qui ramenait les cartes à la borne, est parti avec la case, partie 159. La même règle sert à
+// l'ouverture d'un projet d'avant le format 56 : `Layer::ramener_si_rien_ne_change`, `espace3ddirect_tests.rs`.)

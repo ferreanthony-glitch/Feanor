@@ -198,7 +198,14 @@ impl App {
     /// travail.
     pub(crate) fn panel_bar(&mut self, ui: &mut egui::Ui) {
         let animation = self.mode == Mode::Animation;
-        let groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
+        let mut groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
+        // (Le panneau Espace 3D n'a son icône que vue de la scène ouverte, partie 159 : hors d'elle, rien ne dit la 3D.)
+        if !self.espace3d_vue_ouverte() {
+            for g in &mut groupes {
+                g.retain(|e| e.pane != Pane::Espace3d);
+            }
+            groupes.retain(|g| !g.is_empty());
+        }
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
             for (g, groupe) in groupes.iter().enumerate() {

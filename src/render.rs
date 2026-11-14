@@ -899,8 +899,10 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
     // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près ; sinon l'ordre de la pile.
-    let order = if panel.espace { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
-    let mut portees = crate::calqueffet::Portees::new(panel.espace);
+    // (Partie 159 : `Panel::ordre_distance`, ou un plan venu du format 55 en Espace 3D.)
+    let par_distance = panel.ordre_par_la_distance();
+    let order = if par_distance { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
+    let mut portees = crate::calqueffet::Portees::new(par_distance);
     // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
     for &li in &order {
         let l = &panel.layers[li];

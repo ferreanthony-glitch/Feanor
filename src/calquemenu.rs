@@ -163,7 +163,9 @@ impl App {
     pub(crate) fn layer_plus_button(&mut self, ui: &mut egui::Ui) {
         let button = egui::Button::new(RichText::new(ph::PLUS).size(crate::bulles::TAILLE)).min_size(vec2(24.0, 0.0));
         let resp = egui::menu::menu_custom_button(ui, button, |ui| self.layer_new_menu(ui)).response;
-        crate::bulles::bulle(resp, "Nouveau calque", "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier, calques 3D.", "");
+        // (Les calques 3D ne se disent que dans la vue de la scène, partie 159.)
+        let quoi = if self.espace3d_vue_ouverte() { "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier, calques 3D." } else { "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier." };
+        crate::bulles::bulle(resp, "Nouveau calque", quoi, "");
     }
 
     /// Le menu « Nouveau calque » : une entrée par sorte (icône, nom, une phrase), puis la fenêtre avec le nom, le
@@ -184,15 +186,18 @@ impl App {
                 }
             }
         }
-        // Les calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel, posés dans l'espace d'un plan en Espace 3D.
-        let job = entree(ui, ph::CUBE, crate::theme::accent(), CALQUES_3D, "Sol, mur, ciel posés dans l'Espace 3D ; on y dessine comme partout.");
-        ui.menu_button(job, |ui| self.calques_3d_menu(ui));
+        // Les calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel, posés dans l'espace du plan. Seulement dans la vue de
+        // la scène (partie 159 : hors d'elle, rien ne dit la 3D).
+        if self.espace3d_vue_ouverte() {
+            let job = entree(ui, ph::CUBE, crate::theme::accent(), CALQUES_3D, "Sol, mur, ciel posés dans l'Espace 3D ; on y dessine comme partout.");
+            ui.menu_button(job, |ui| self.calques_3d_menu(ui));
+        }
         ui.separator();
         self.action_item(ui, "Nom, groupe, place…", ACTION_AVEC_NOM);
     }
 
     /// Le sous-menu « Calques 3D » : Sol, Mur, Ciel. Chacun crée un calque de dessin ordinaire posé dans l'espace du plan
-    /// (un plan en Espace 3D), en une étape d'annulation (`App::nouveau_calque_3d`).
+    /// (tout plan, partie 159), en une étape d'annulation (`App::nouveau_calque_3d`).
     fn calques_3d_menu(&mut self, ui: &mut egui::Ui) {
         ui.set_min_width(250.0);
         for s in crate::espace3ddecor::Sorte3d::TOUTES {
@@ -200,10 +205,6 @@ impl App {
             let shortcut = self.keymap.label(s.action());
             let resp = ui.add(egui::Button::new(job).shortcut_text(&shortcut));
             self.entree_creation(ui, &resp, s.action());
-        }
-        // (Un plan ordinaire passe en Espace 3D avec son calque 3D, si rien n'en change : partie 158. Sinon, pourquoi.)
-        if let Some(g) = (!self.doc.plan_en_espace(self.cur_panel)).then(|| self.doc.garde_de_l_espace(self.cur_panel)).flatten() {
-            ui.label(RichText::new(g.phrase()).small().weak());
         }
     }
 

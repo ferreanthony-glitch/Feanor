@@ -113,7 +113,8 @@ fn a_card_the_eye_cuts_down_to_less_than_one_square_sends_no_piece_without_trian
 #[test]
 fn walking_through_the_surfaces_of_a_plan_en_espace_never_sends_a_piece_without_triangles_and_stays_fast() {
     let mut b = ouvert(doc_cartes(8, 1920, 1080));
-    b.app.run_action("espace3d.plan_en_espace");
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = true;
     for a in ["espace3d.surface_sol", "espace3d.surface_mur", "espace3d.surface_face"] {
         b.app.run_action(a);
     }
@@ -198,7 +199,8 @@ fn every_gesture_of_a_walk_in_a_plan_en_espace_stays_within_the_frame_budget() {
     b.chauffer(2);
     b.app.cur_layer = 0;
     b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.plan_en_espace");
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = true;
     for a in ["espace3d.surface_sol", "espace3d.surface_mur", "espace3d.surface_face"] {
         b.app.run_action(a);
     }

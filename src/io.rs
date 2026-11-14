@@ -247,7 +247,8 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             cues: Default::default(),
             color: None,
             espace: false,
-            espace_tout_seul: false,
+            camera_libre: false,
+            ordre_distance: false,
             trajectoire_camera: None,
         });
     }

@@ -1964,24 +1964,24 @@ touches = []
 source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
-action = "espace3d.plan_en_espace"
+action = "espace3d.ordre_distance"
 touches = []
-source = "FEANOR (mettre le plan courant en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, devant cache derrière pour le plan courant ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_face"
 touches = []
-source = "FEANOR (nouvelle surface face à la caméra, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface face à la caméra ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_sol"
 touches = []
-source = "FEANOR (nouvelle surface au sol, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface au sol ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_mur"
 touches = []
-source = "FEANOR (nouvelle surface en mur, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface en mur ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.aimanter"

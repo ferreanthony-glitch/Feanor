@@ -741,7 +741,8 @@ impl App {
         // Plan en Espace 3D (partie 148) : la profondeur est libre, une carte peut être derrière la caméra d'origine du plan.
         // Le champ descend donc sous la borne des plans ordinaires : borné, il ramènerait la carte à sa borne rien qu'en
         // se montrant (un champ écrit la valeur qu'il a dû borner), sans qu'on y touche.
-        let plus_pres = if self.doc.plan_en_espace(self.cur_panel) { -crate::document::Layer::MAX_DEPTH_LIBRE } else { crate::document::Layer::MIN_DEPTH };
+        // (Partie 159 : la borne de toujours, sauf pour un calque que la vue de la scène a déjà posé au-delà.)
+        let plus_pres = if depth < crate::document::Layer::MIN_DEPTH { -crate::document::Layer::MAX_DEPTH_LIBRE } else { crate::document::Layer::MIN_DEPTH };
         let resp = ui
             .horizontal(|ui| {
                 ui.label("Profondeur");

@@ -52,8 +52,9 @@ pub(crate) const CARTES_CACHEES: &str = "Les cartes sont cachées dans cette vue
 pub(crate) const AUCUNE_CARTE_ICI: &str = "Ctrl+clic : aucune carte sous le pointeur.";
 /// Sur la feuille (hors de la vue Espace 3D), plan en Espace 3D : les deux raisons de `App::to_layer_opt` de ne rien
 /// rendre (`App::rien_a_peindre`).
-pub(crate) const HORS_CARTE_FEUILLE: &str = "Rien à peindre ici : le pointeur est hors des bords de la carte du calque courant. Dans un plan en Espace 3D, une carte ne montre que sa feuille : un trait au-delà ne se verrait pas.";
-pub(crate) const PAS_SOUS_LE_POINTEUR: &str = "Rien à peindre ici : la carte du calque courant n'est pas sous le pointeur (elle est derrière la caméra, ou vue par la tranche).";
+// (Ces deux-là se disent sur la feuille, hors de la vue de la scène : sans un mot de 3D, partie 159.)
+pub(crate) const HORS_CARTE_FEUILLE: &str = "Rien à peindre ici : le pointeur est hors des bords du calque courant, un trait au-delà ne se verrait pas.";
+pub(crate) const PAS_SOUS_LE_POINTEUR: &str = "Rien à peindre ici : le calque courant n'est pas sous le pointeur (derrière la caméra, ou vu par la tranche).";
 pub(crate) const MANIPULE: &str = "Espace 3D : le pointeur manipule de nouveau les cartes. Le pinceau, le crayon ou la gomme (leur case ou leur touche) le font dessiner sur la carte ; l'outil Sélection y trace son lasso.";
 
 /// L'outil dessine un trait : pinceau, mélangeur, crayon, gomme.

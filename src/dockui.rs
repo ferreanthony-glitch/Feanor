@@ -398,6 +398,10 @@ impl App {
         }
         let mut layout = self.dock_layout();
         let opening = !layout.contains(pane);
+        // (Le panneau Espace 3D ouvert à la main, la vue fermée : il reste, partie 159, `espace3d_panneau_retirer`.)
+        if pane == Pane::Espace3d {
+            self.e3_panneau.a_la_main = opening && !self.espace3d_vue_ouverte();
+        }
         if opening {
             layout.open(pane);
         } else {

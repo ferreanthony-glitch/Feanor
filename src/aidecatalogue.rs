@@ -38,14 +38,15 @@ pub(crate) static OUTILS: &[Anim] = &[
         contextes: &["trajectoire.espace"],
         duree: 6.0,
         dessin: trajectoire_espace,
-        texte: "Dans la vue Espace 3D, d'un plan coché « Plan en Espace 3D » (panneau Espace 3D) : sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat. \
+        texte: "Dans la vue Espace 3D, sur tout plan : sur la feuille, hors de cette vue, l'outil trace le chemin du calque à plat. \
                 Trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi : chaque carte choisie, et la caméra si elle l'est, le suit depuis la tête de lecture jusqu'à la fin du plan, en partant de là où elle est. \
                 Puis de petits traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, ça va lentement ; espacées, vite. \
                 Ctrl+clic sur le chemin pose une poignée ; ailleurs, il choisit une carte ou la caméra, seule ; Maj+Ctrl+clic en ajoute une, ou la lâche.\n\
                 Tirer sur le chemin le tord là où on le prend (Maj : le déplacer en bloc). Maj + un trait depuis un bout du chemin le prolonge, devant ou derrière, sur le même plan. \
                 Glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, sur la surface qu'il touche ; les marques restent. \
                 Sur la timeline, glisser la première clé, la dernière ou une marque d'une carte les recale dans le temps. \
-                La caméra ne reçoit aucune clé : son chemin s'ajoute à celles qu'elle a.",
+                La caméra ne reçoit aucune clé : son chemin s'ajoute à celles qu'elle a. \
+                Une poignée choisie montre trois flèches, x, y et z : tirer une flèche la déplace sur cet axe, y compris hors de la surface où le chemin est posé (y : en hauteur) ; ce qui suit le chemin, carte ou caméra, monte ou descend avec lui. Avec plusieurs cartes choisies, chacune a sa poignée, en une étape d'annulation.",
     },
     Anim {
         id: "selection.boite",

@@ -334,7 +334,7 @@ impl App {
         }
         if ui
             .checkbox(&mut fixed.clone(), "Verrouiller la position")
-            .on_hover_text("L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.")
+            .on_hover_text("L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.")
             .clicked()
         {
             self.set_layer_flag(li, |l| l.position_locked = !fixed);
@@ -349,7 +349,7 @@ impl App {
         self.depth_item(ui, li);
         // La grille de repère d'un calque Sol, Mur ou Ciel (`espace3ddecor.rs`, partie 157) : jamais dans le dessin.
         if let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) {
-            if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille sur la carte, dans la vue Espace 3D et dans le dessin. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {
+            if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille de repère sur ce calque, à l'écran. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {
                 self.basculer_grille_3d(li);
             }
         }

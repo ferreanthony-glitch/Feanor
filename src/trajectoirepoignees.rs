@@ -201,9 +201,6 @@ impl App {
     /// choisi ; sur une de ses poignées, retirée. Vrai si l'appui a servi aux poignées (faux : ni chemin ni poignée sous le
     /// pointeur, Ctrl+clic choisit une carte ou la caméra, comme avant).
     pub(crate) fn e3_traj_poignee_ctrl(&mut self, regard: Regard3d, pos: Pos2) -> bool {
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            return false;
-        }
         let Some((reference, t)) = self.e3_traj_reference_libre() else { return false };
         let Some(support) = t.support else { return false };
         let ecran = |p: [f32; 3]| regard.ecran(support.monde3(p));

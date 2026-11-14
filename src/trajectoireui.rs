@@ -469,7 +469,7 @@ impl App {
         let ancre = self.trajectoire_point_d_ancrage(pi, li, &t, base);
         let pivot = self.doc.stage_center();
         // (Plan en Espace 3D : un calque redevenu fixe garde sa profondeur, même derrière la caméra d'origine du plan.)
-        let libre = self.doc.plan_en_espace(pi);
+        let libre = true;
         let l = &mut self.doc.panels[pi].layers[li];
         match t.cles {
             Cles::Interpolation => {
@@ -912,7 +912,7 @@ impl App {
         }
         let apres = self.layers()[li].pose(f);
         let delta = [apres.x - avant.x, apres.y - avant.y];
-        let libre = self.doc.plan_en_espace(self.cur_panel);
+        let libre = true;
         let l = &mut self.layers_mut()[li];
         // La pose propre : celle du départ, moins ce que la trajectoire y ajoutait. Le geste s'y applique, sauf s'il a changé la pose du
         // départ lui-même (la clé du départ, ou la pose fixe) : elle le porte déjà.
@@ -1217,7 +1217,7 @@ impl App {
                 let snap = self.snapshot();
                 let pi = self.cur_panel;
                 self.trajectoire_defaire_les_dessins(pi, li);
-                let libre = self.doc.plan_en_espace(pi);
+                let libre = true;
                 let l = &mut self.layers_mut()[li];
                 l.transform = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
                 l.pos_keys.clear();

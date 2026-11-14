@@ -264,7 +264,18 @@ pub const FORMAT: &str = "pelure-projet";
 /// trajectoire que suit la caméra d'un plan en Espace 3D, toujours avec son `support` ; elle ne pose aucune clé de caméra). Un
 /// projet sans eux se lit comme avant. Et la bascule et le panoramique des clés de caméra d'un plan en Espace 3D ne sont plus
 /// ramenés à ±85° à la lecture (`bornes_de_camera`) : une caméra retournée revient comme elle était.
-pub const VERSION: u32 = 55;
+/// 56 (2026-11-14, `docs/INTERFACE.md` partie 159) : **tous les plans sont dans l'espace** — plus deux sortes de plans. Trois champs
+/// facultatifs, écrits seulement quand ils sont vrais : `camera_libre` d'un plan (sa caméra a été posée hors des anciennes limites,
+/// par la vue de la scène : aux images où elle en sort, l'image passe par le changement de repère), `ordre_distance` d'un plan (ce
+/// qui est devant cache ce qui est derrière, au lieu de l'ordre de la pile) et `profondeur_bornee` d'un calque (un calque d'un
+/// ancien projet que le format 55 montrait à la borne de profondeur et qu'on ne pouvait ramener sans changer son image). Une
+/// version précédente ignorerait ces champs sans rien dire (l'ordre de la pile, une caméra bridée : une autre image) : elle le
+/// refuse donc. **Un projet de version 55 ou moins s'ouvre sans question et devient 56 au premier enregistrement, avec les mêmes
+/// images au pixel près** : un plan ordinaire garde l'ordre de sa pile et sa caméra d'avant ; ses clés de profondeur au-delà de
+/// la borne sont ramenées à la borne si l'image n'en change à aucune image, sinon le calque est marqué `profondeur_bornee` ; un
+/// plan en Espace 3D garde `espace` (et donc son chemin d'image et l'ordre par la distance). Une trajectoire tracée dans l'espace
+/// d'un plan ordinaire d'un projet d'avant reste écartée comme alors ; au format 56 elle vaut pour tout plan.
+pub const VERSION: u32 = 56;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -606,6 +617,16 @@ pub(crate) struct PanelEntry {
     /// Plan en Espace 3D (format 54, `Panel::espace` ; absent : un plan ordinaire).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     espace: bool,
+    /// La caméra du plan est sortie des anciennes limites (format 56, `Panel::camera_libre` ; absent : faux).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    camera_libre: bool,
+    /// Ce qui est devant cache ce qui est derrière (format 56, `Panel::ordre_distance` ; absent : l'ordre de la pile).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    ordre_distance: bool,
+    /// Lu d'un fichier de plan d'un projet partagé écrit avant le format 56 (`projet_partage::VERSION_PLAN` 1) : il se lit
+    /// comme un plan d'un projet 55, puis `migrer_vers_56` (partie 159). Jamais écrit.
+    #[serde(default, skip_serializing)]
+    pub(crate) format_ancien: bool,
     /// Trajectoire de la caméra d'un plan en Espace 3D (format 55, partie 149, `Panel::trajectoire_camera`) : un chemin tracé dans
     /// l'espace, avec son `support` ; absente : la caméra des clés, telle quelle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -865,6 +886,9 @@ struct LayerEntry {
     /// (`Calque3d::lire`) : une valeur mal formée redonne un calque ordinaire, jamais un projet qui ne s'ouvre pas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     calque_3d: Option<serde_json::Value>,
+    /// Profondeur tenue à la borne d'autrefois (format 56, `Layer::profondeur_bornee` ; absent : faux).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    profondeur_bornee: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2562,6 +2586,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 annotation: l.annotation,
                 accroche_camera: l.accroche,
                 calque_3d: l.calque_3d.and_then(|c| serde_json::to_value(c).ok()),
+                profondeur_bornee: l.profondeur_bornee,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -2615,8 +2640,10 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             .iter()
             .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
             .collect(),
-        // (Un plan que la vue Espace 3D a mis en Espace 3D sans qu'on l'ait choisi s'enregistre ordinaire, partie 158.)
-        espace: panel.espace && !panel.espace_tout_seul,
+        espace: panel.espace,
+        camera_libre: panel.camera_libre,
+        ordre_distance: panel.ordre_distance,
+        format_ancien: false,
         trajectoire_camera: panel.trajectoire_camera.clone(),
     };
     if digest {
@@ -3044,6 +3071,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
+    // (Le format du projet lu : un projet d'avant le format 56 passe par `migrer_vers_56`, plan par plan.)
+    let version_lue = manifest.version;
     // Les vues de l'Espace 3D (facultatives) : posées sur le document une fois fait.
     let vues_3d = manifest.vues_3d.take().and_then(crate::espace3dvues::Retenue::lire);
     // L'environnement de l'Espace 3D (facultatif, partie 157), lu en souple.
@@ -3322,6 +3351,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
                 let couleurs: Vec<Option<CouleurEntry>> = p.calques.iter().map(|l| l.calque_couleur.clone()).collect();
                 let en_espace = p.espace;
+                // (Format 56, partie 159 : tous les plans sont dans l'espace. Un projet d'avant se lit comme alors, puis
+                // migrer_vers_56.)
+                let format_56 = version_lue >= 56 && !p.format_ancien;
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -3361,13 +3393,13 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         pos_keys: crate::poskeys::from_entries(l.cles_position),
                         // (Une trajectoire tracée dans l'espace ne vaut que dans un plan en Espace 3D : ailleurs, ses clés restent,
                         // à la main.)
-                        trajectoire: l.trajectoire.filter(|t| en_espace || t.support.is_none()).and_then(crate::trajectoire::Trajectoire::assainie),
+                        trajectoire: l.trajectoire.filter(|t| en_espace || format_56 || t.support.is_none()).and_then(crate::trajectoire::Trajectoire::assainie),
                         opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
                         unie: l.couleur_unie,
                         // (Plan en Espace 3D, format 55 : la profondeur est libre, la carte peut être derrière la caméra de
                         // référence. Plan ordinaire : la borne de toujours.)
                         depth: if l.profondeur.is_finite() {
-                            l.profondeur.clamp(if en_espace { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH }, 1000.0)
+                            l.profondeur.clamp(if en_espace || format_56 { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH }, 1000.0)
                         } else {
                             0.0
                         },
@@ -3409,6 +3441,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         annotation: l.annotation,
                         accroche: l.accroche_camera,
                         calque_3d: l.calque_3d.and_then(crate::espace3ddecor::Calque3d::lire),
+                        profondeur_bornee: l.profondeur_bornee,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -3462,7 +3495,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         // (Plan ordinaire : la caméra tournée doit encore voir la feuille, bascule et panoramique s'arrêtent à 85°.
                         // Plan en Espace 3D : sa caméra est libre, elle bascule jusqu'à la verticale et tourne tout autour ; une
                         // caméra retournée revient comme elle était, `bornes_de_camera`.)
-                        let (bascule, panoramique) = bornes_de_camera(p.espace, k.bascule, k.panoramique);
+                        let (bascule, panoramique) = bornes_de_camera(p.espace || p.camera_libre, k.bascule, k.panoramique);
                         let cam = Camera {
                             x: k.x,
                             y: k.y,
@@ -3527,10 +3560,16 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     },
                     color: p.couleur.filter(|k| (*k as usize) < crate::marks::COLORS.len()),
                     espace: p.espace,
-                    espace_tout_seul: false,
-                    // (Une trajectoire de caméra n'a de sens que dans un plan en Espace 3D, et avec son support.)
-                    trajectoire_camera: p.trajectoire_camera.filter(|t| p.espace && t.support.is_some()).and_then(crate::trajectoire::Trajectoire::assainie),
+                    // (Format 56 : une caméra libre ne se lit pas d'un projet d'avant, qui n'en a pas.)
+                    camera_libre: p.camera_libre && format_56,
+                    ordre_distance: p.ordre_distance && format_56,
+                    // (Une trajectoire de caméra n'a de sens qu'avec son support ; avant le format 56, que dans un plan en
+                    // Espace 3D.)
+                    trajectoire_camera: p.trajectoire_camera.filter(|t| (p.espace || format_56) && t.support.is_some()).and_then(crate::trajectoire::Trajectoire::assainie),
                 });
+                if !format_56 {
+                    crate::document::migrer_vers_56(structure.panels.last_mut().expect("le plan vient d'être posé"));
+                }
             }
         }
     }

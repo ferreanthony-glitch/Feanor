@@ -6,7 +6,7 @@
 //! il a choisi : « Onglet de Réglages ».
 //!
 //! **Ce qu'il montre.** Vue ouverte : les réglages de la vue (`App::espace3d_options_panel`, `espace3dui.rs`) : le repère
-//! des poignées, l'aimantation et ses pas, la grille, « Plan en Espace 3D », « Nouvelle surface », la liste des cartes, les
+//! des poignées, l'aimantation et ses pas, la grille, « Devant cache derrière », « Nouvelle surface », la liste des cartes, les
 //! champs et les boutons de clés de la carte choisie, la caméra du plan. Vue fermée : une phrase, et le bouton qui ouvre
 //! la vue. Les réglages de l'outil en main (pinceau, crayon, gomme, Trajectoire dans l'espace…) sont dans le panneau
 //! Réglages, que la vue soit ouverte ou non (`App::tool_options_panel`).
@@ -15,9 +15,9 @@
 //! (`DockLayout::open`) : l'un ou l'autre devant. Il n'est pas dans les dispositions d'origine. **Quand la vue s'ouvre**,
 //! il y arrive s'il n'est pas dans la disposition, et dans tous les cas il passe devant les onglets de son groupe ;
 //! l'onglet qui était devant (Réglages, d'ordinaire) est retenu. **Quand elle se ferme**, cet onglet repasse devant, si le
-//! panneau y est encore devant, dans le même groupe. L'onglet **reste** dans la disposition : c'est un onglet comme les
-//! autres, qu'on peut fermer ou glisser ailleurs, et la vue ne le déplace jamais (rangé ailleurs, elle le met seulement
-//! devant là où il est). Si les onglets ont été rangés autrement pendant que la vue était ouverte (un autre onglet mis
+//! panneau y est encore devant, dans le même groupe, et **le panneau quitte le groupe de Réglages** (partie 159 : hors de la
+//! vue de la scène, aucun onglet ne dit la 3D). Rangé ailleurs à la main, ouvert à la main la vue fermée, ou dans sa propre
+//! fenêtre, il reste : la vue ne le déplace jamais (rangé ailleurs, elle le met seulement devant là où il est). Si les onglets ont été rangés autrement pendant que la vue était ouverte (un autre onglet mis
 //! devant, le panneau glissé ailleurs ou fermé), rien n'est défait à la fermeture. La disposition retenue dans les
 //! réglages garde l'onglet d'avant devant, pas celui que la vue y a mis pour un moment (`App::current_layout`,
 //! `DockLayout::remettre_devant`).
@@ -44,6 +44,9 @@ pub(crate) struct Suivi {
     /// L'onglet que le panneau a remplacé devant son groupe quand la vue s'est ouverte (Réglages, d'ordinaire) ; rien s'il
     /// y était déjà devant, s'il y est seul, ou s'il est dans sa propre fenêtre.
     pub avant: Option<Pane>,
+    /// Le panneau a été ouvert à la main (son icône, sa commande) pendant que la vue était fermée : il reste, même dans le
+    /// groupe de Réglages (`espace3d_panneau_retirer`), jusqu'à ce qu'on le ferme.
+    pub a_la_main: bool,
 }
 
 impl App {
@@ -83,15 +86,40 @@ impl App {
     pub(crate) fn espace3d_panneau_suivre(&mut self) {
         let vue = self.espace3d_vue_ouverte();
         // (Sans disposition encore posée, on attend l'image suivante.)
-        if vue == self.e3_panneau.vue || self.dock.is_none() {
+        if self.dock.is_none() {
             return;
         }
-        self.e3_panneau.vue = vue;
-        if vue {
-            self.espace3d_panneau_montrer();
-        } else if let Some(avant) = self.e3_panneau.avant.take() {
-            self.espace3d_panneau_rendre(avant);
+        if vue != self.e3_panneau.vue {
+            self.e3_panneau.vue = vue;
+            if vue {
+                self.espace3d_panneau_montrer();
+            } else if let Some(avant) = self.e3_panneau.avant.take() {
+                self.espace3d_panneau_rendre(avant);
+            }
         }
+        // (Vue fermée : pas d'onglet « Espace 3D » dans le groupe de Réglages, même venu d'une disposition enregistrée avant la
+        // partie 159.)
+        if !vue {
+            self.espace3d_panneau_retirer();
+        }
+    }
+
+    /// Vue fermée : le panneau quitte la disposition s'il est dans le groupe de Réglages, là où la vue le met (partie 159 :
+    /// hors de la vue de la scène, aucun onglet ni icône ne dit la 3D ; une disposition enregistrée avant l'y avait laissé). Il
+    /// y revient, à sa place, quand elle se rouvre (`espace3d_panneau_montrer`). Ouvert à la main la vue fermée, rangé
+    /// ailleurs ou dans sa propre fenêtre : il reste, c'est un choix de l'utilisateur.
+    fn espace3d_panneau_retirer(&mut self) {
+        if self.e3_panneau.a_la_main || self.detached.iter().any(|d| d.panneau == Pane::Espace3d) {
+            return;
+        }
+        let Some(state) = self.dock.as_ref() else { return };
+        let (Some(ici), Some(reglages)) = (state.find_tab(&Pane::Espace3d), state.find_tab(&Pane::ToolOptions)) else { return };
+        if (ici.0, ici.1) != (reglages.0, reglages.1) {
+            return;
+        }
+        let mut layout = self.dock_layout();
+        layout.close(Pane::Espace3d);
+        self.set_dock_layout(layout);
     }
 
     /// La vue s'ouvre. Le panneau n'est pas dans la disposition : il y arrive à sa place (`DockLayout::open` : un onglet

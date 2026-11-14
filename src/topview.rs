@@ -186,17 +186,8 @@ impl App {
     }
 
     fn top_view_ui(&mut self, ui: &mut egui::Ui) {
-        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, étape A8) : ce schéma montre des calques parallèles devant une caméra
-        // qui regarde la feuille de face. Avec une caméra libre, des cartes au sol ou en mur, il serait faux.
-        if self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(
-                egui::RichText::new(
-                    "Ce plan est en Espace 3D : sa caméra est libre et ses cartes peuvent être au sol ou en mur. La vue de dessus, qui montre des calques parallèles devant une caméra de face, ne le décrit pas. Regarde-le dans la vue Espace 3D (bouton cube), en tournant la vue au-dessus du décor.",
-                )
-                .weak(),
-            );
-            return;
-        }
+        // (Partie 159 : sur tout plan, la même vue qu'avant. Elle montre la caméra du plan telle qu'elle est, panoramique
+        // compris ; une carte couchée au sol ou en mur y est un trait à sa profondeur, comme tout calque.)
         ui.label(
             egui::RichText::new(
                 "Glisser un calque vers le haut l'éloigne (il défile moins vite quand la caméra \
@@ -224,6 +215,10 @@ impl App {
                         self.status = "Calque verrouillé : déverrouille-le pour changer sa profondeur.".into();
                     } else if self.layers()[li].position_locked {
                         self.status = "Position verrouillée : déverrouille-la pour changer la profondeur du calque.".into();
+                    } else if self.layers()[li].passe_la_borne(self.cur_frame) {
+                        // (Partie 159 : un calque posé plus près que la vue de dessus ne sait le montrer ne saute pas à sa borne
+                        // au premier glissé.)
+                        self.status = format!("Calque « {} » : plus près que la vue de dessus ne sait le montrer, sa profondeur ne se règle pas ici.", self.layers()[li].name);
                     } else {
                         let y = fit.to_screen(rect, 0.0, items[li].shown).y;
                         self.top_drag = Some(TopDrag {

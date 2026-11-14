@@ -28,9 +28,7 @@ pub(crate) static GESTES: &[Anim] = &[
         duree: 6.4,
         dessin: poignees,
         texte: "Ctrl+clic sur le chemin pose une poignée ; Ctrl+clic sur elle la retire. \
-                Tirer une poignée tord le chemin en douceur autour d'elle : les bouts et les autres poignées restent fixes, les marques gardent leur place. \
-                Dans la vue Espace 3D, la poignée choisie montre trois flèches, x, y et z : tirer une flèche la déplace sur cet axe, y compris hors de la surface où le chemin est posé (y : en hauteur). \
-                Ce qui suit le chemin, carte ou caméra, monte ou descend avec lui. Avec plusieurs cartes choisies, chacune a sa poignée, en une étape d'annulation.",
+                Tirer une poignée tord le chemin en douceur autour d'elle : les bouts et les autres poignées restent fixes, les marques gardent leur place.",
     },
     Anim {
         id: "selection.lasso",

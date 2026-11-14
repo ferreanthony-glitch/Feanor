@@ -140,8 +140,8 @@ fn a_mouse_stroke_in_the_orbit_view_inks_the_card_from_the_front_tilted_and_flat
     verifier_un_trait(&mut b, "carte penchée", pos2(220.0, 120.0), pos2(420.0, 240.0));
 
     // Plan en Espace 3D, surface au sol (couchée à 90°) : elle est le calque courant, on dessine dessus vue de dessus.
+    // (Partie 159 : la surface se pose sur tout plan.)
     let mut b = ouvert(doc_cartes(1, LayerKind::Bitmap));
-    b.app.run_action("espace3d.plan_en_espace");
     b.app.run_action("espace3d.surface_sol");
     assert_eq!(b.app.layer().name, "Surface au sol", "{}", b.app.status);
     assert!((b.app.layer().pose(0).tilt_x.abs() - 90.0).abs() < 0.5, "la surface est couchée : {:?}", b.app.layer().pose(0));
@@ -178,8 +178,8 @@ fn a_mouse_stroke_through_the_camera_inks_the_card_in_an_ordinary_plan_and_in_a_
 
     // Plan en Espace 3D, caméra tournée, surface posée face à elle (donc penchée dans le monde) : par la caméra.
     let mut b = ouvert(doc_cartes(1, LayerKind::Bitmap));
-    // (La vue l'y a mis d'elle-même, partie 158.)
-    assert!(b.app.doc.plan_en_espace(0));
+    // (Un plan venu du format 55 en Espace 3D : son image passe par le changement de repère dès que sa caméra bouge.)
+    b.app.doc.panels[0].espace = true;
     let tournee = crate::camera::Camera { pan: 12.0, tilt: -6.0, ..b.app.current_camera() };
     b.app.set_current_camera(tournee);
     b.app.run_action("espace3d.surface_face");
@@ -500,8 +500,8 @@ fn feuille_en_espace(doc: Document) -> Banc {
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
     b.app.cur_layer = 0;
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
+    // (Un plan venu du format 55 en Espace 3D, partie 159 : le seul qui garde ce chemin d'image caméra immobile.)
+    b.app.doc.panels[0].espace = true;
     b.app.run_action("outil.pinceau");
     let (rect, size) = (b.app.canvas_rect, b.app.canvas_size());
     b.app.view.zoom_around(rect, size, rect.center(), 0.45);
@@ -525,6 +525,9 @@ fn on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_
     let mut b = feuille_en_espace(doc_cartes(1, LayerKind::Vector));
     b.app.run_action("espace3d.surface_sol");
     assert_eq!(b.app.layer().name, "Surface au sol", "{}", b.app.status);
+    // (Partie 159 : une surface se pose dans la vue de la scène, qu'elle ouvre ; on revient sur la feuille.)
+    b.app.set_espace3d(false);
+    b.chauffer(1);
     let li = b.app.cur_layer;
     let dos = Camera { pan: 180.0, ..b.app.current_camera() };
     b.app.set_current_camera(dos);

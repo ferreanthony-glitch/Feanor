@@ -538,8 +538,8 @@ fn ouvert_grand(doc: Document) -> Banc {
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
-    b.app.run_action("espace3d.plan_en_espace");
-    assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = true;
     b.chauffer(2);
     b.app.run_action("espace3d.cadrer");
     b.app.run_action("outil.trajectoire");

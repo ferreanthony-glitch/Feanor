@@ -1,239 +1,100 @@
-//! **La vue Espace 3D suffit** (`docs/INTERFACE.md`, partie 158). Ouvrir la vue Espace 3D (le petit cube) sur un plan le
-//! met en Espace 3D (`Panel::espace`, `docs/ESPACE-LIBRE.md`) tout seul, sans le bouton « Plan en Espace 3D », **quand ce
-//! passage ne change rien** : ni un pixel de l'image filmée, ni un dessin, ni la façon dont les outils de dessin
-//! touchent ses calques. Les calques 3D (Sol, Mur, Ciel) et « Nouvelle surface » font de même au lieu de refuser.
+//! **Tous les plans sont dans l'espace** (`docs/INTERFACE.md`, parties 158 et 159). Il n'y a plus deux sortes de plans ni
+//! de bouton « Plan en Espace 3D » : la vue de la scène (le petit cube) montre et règle n'importe quel plan, et Sol, Mur,
+//! Ciel ou une surface se posent sur n'importe quel plan, sans refus. La règle d'Anthony (2026-11-14) : « la 3D ne doit
+//! jamais se sentir tant qu'on ne bascule pas dans la vue de la "scène 3D". N'importe quelle personne qui prend le logiciel
+//! en main doit se dire que c'est de la 2D. »
 //!
-//! Ce que le passage change, et quand (relevé de la partie 158, `Garde`) :
+//! Ce qui tient cette règle, plan par plan (format 56) :
 //!
-//! - la caméra du plan n'est pas la caméra d'origine à l'une de ses images : l'image passerait par le changement de
-//!   repère (des pixels différents au bord des formes, l'encre hors de la feuille plus filmée) ;
-//! - une carte est au-delà de la borne des plans ordinaires (`Layer::passe_la_borne`) : elle ne serait plus montrée à
-//!   la borne ;
-//! - une carte est penchée : dans un plan en Espace 3D, le pinceau n'y peint plus hors de ses bords
-//!   (`App::to_layer_opt`) ;
-//! - l'ordre de la pile et celui des profondeurs ne disent pas la même chose : ce qui est devant passerait devant
-//!   (`espace3d::ordre_par_distance`).
+//! - **le chemin d'image** : un plan se compose par le chemin de toujours (le multiplan, puis le cadre sur la feuille) tant
+//!   que sa caméra reste dans les anciennes limites (`Document::camera_dans_les_anciennes_limites`) et qu'aucune carte n'a
+//!   passé la borne d'autrefois. Seules les images où la vue de la scène a mis la caméra hors de ces limites
+//!   (`Panel::camera_libre`), ou une carte au-delà de la borne, passent par le changement de repère (`Document::repere_du_plan`).
+//!   Un plan dessiné à plat ne change donc d'aucun pixel ;
+//! - **l'ordre des calques** : celui de la pile, comme dans tout logiciel de dessin, sauf si le plan a « ce qui est devant
+//!   cache ce qui est derrière » (`Panel::ordre_distance`), un réglage de la vue de la scène ;
+//! - **les outils de la feuille** (outil Caméra, vue de dessus, mouvements de caméra des Vignettes) : les mêmes gestes, le
+//!   même résultat, sur tout plan ; la caméra que la feuille règle reste bridée comme avant, celle que la vue de la scène pose
+//!   est libre (`App::set_current_camera_libre`).
 //!
-//! Hors de ces cas, le plan en Espace 3D se compose par le chemin de toujours (`Document::repere_du_plan` ne rend rien),
-//! dans l'ordre de la pile : les mêmes pixels. Dans ces cas, le plan reste ordinaire et la barre d'état dit pourquoi ; le
-//! bouton « Plan en Espace 3D » l'y met quand même, en connaissance de cause.
-//!
-//! **Le retour** : un plan que la vue a mis en Espace 3D (marqué `Panel::espace_tout_seul`, jamais enregistré : le
-//! fichier le garde ordinaire) redevient ordinaire quand on le quitte (autre plan, vue fermée, Ctrl+Z…) si rien en lui
-//! n'a besoin de l'Espace 3D (`Document::garde_du_retour`) : regarder un plan dans la vue ne lui laisse rien, et l'outil
-//! Caméra, la vue de dessus et les mouvements de caméra des Vignettes, réservés aux plans ordinaires, le retrouvent comme
-//! avant. Dès qu'il s'en sert (un calque 3D, une caméra déplacée, une carte penchée…), la marque tombe : c'est un vrai plan
-//! en Espace 3D, enregistré comme tel.
-//!
-//! **L'annulation** : ce passage n'est pas une étape (il ne change ni l'image ni le dessin, comme les vues ou
-//! l'environnement). Une étape d'annulation qui ramène le plan ordinaire est suivie : s'il est encore dans la vue et que
-//! rien ne s'y oppose, il y repasse. Les calques 3D et les surfaces mettent le plan en Espace 3D dans **leur** étape :
-//! Ctrl+Z enlève le calque et rend le plan ordinaire d'un coup. Le bouton reste une étape, comme avant.
+//! Les plans d'un projet du format 55 en Espace 3D gardent leur image au pixel près (`Panel::espace`).
 
 use crate::app::App;
 use crate::document::Document;
 
-/// Ce qui empêche un plan ordinaire de passer tout seul en Espace 3D : le passage changerait quelque chose.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Garde {
-    /// Le cadre du projet est plus grand que la feuille (`Document::accepte_plan_en_espace`).
-    Cadre,
-    /// La caméra du plan n'est pas la caméra d'origine à l'une de ses images.
-    Camera,
-    /// Une carte est au-delà de la borne des plans ordinaires, à l'une des images.
-    Borne,
-    /// Une carte est penchée, à l'une des images.
-    Penchee,
-    /// L'ordre de la pile et celui des profondeurs ne disent pas la même chose, à l'une des images.
-    Ordre,
-    /// Le plan a ce qu'un plan ordinaire n'a pas : un calque 3D, une trajectoire dans l'espace (pour le retour seulement).
-    TroisD,
-}
+/// Les mots qui disent la 3D (partie 159) : hors de la vue de la scène, aucun texte de l'interface ne doit les montrer.
+pub(crate) const MOTS_DE_LA_3D: [&str; 8] = ["3D", "3d", "en mètres", "carte inclinée", "cartes (", "Plan en Espace", "plan en Espace", "scène 3D"];
 
-impl Garde {
-    /// La phrase de la barre d'état quand le plan reste ordinaire : l'essentiel dans ses ~70 premiers caractères
-    /// (`messages::resume`).
-    pub(crate) fn phrase(self) -> &'static str {
-        match self {
-            Garde::Cadre => "Plan gardé ordinaire : le cadre du projet dépasse la feuille. Agrandis la feuille (Fichier > Réglages du projet) pour l'Espace 3D.",
-            Garde::Camera => "Plan gardé ordinaire : sa caméra a bougé, la 3D changerait l'image. Bouton « Plan en Espace 3D » pour l'y mettre quand même.",
-            Garde::Borne => "Plan gardé ordinaire : une carte est contre la caméra. Bouton « Plan en Espace 3D » pour l'y mettre quand même.",
-            Garde::Penchee => "Plan gardé ordinaire : il a une carte penchée. Bouton « Plan en Espace 3D » pour l'y mettre quand même (le pinceau n'y peint plus hors de la carte).",
-            Garde::Ordre => "Plan gardé ordinaire : sa pile n'est pas dans l'ordre des profondeurs. Bouton « Plan en Espace 3D » pour l'y mettre quand même.",
-            Garde::TroisD => "Plan gardé ordinaire : il a un calque 3D ou un chemin dans l'espace. Bouton « Plan en Espace 3D » pour l'y remettre.",
-        }
+/// Le texte `texte` parle de la 3D (`MOTS_DE_LA_3D`, et le mot « carte » d'une carte de l'espace) : il n'a pas sa place hors
+/// de la vue de la scène. (« carte graphique », « carte dédiée », la petite carte de la visite : pas de la 3D.)
+pub(crate) fn dit_la_3d(texte: &str) -> bool {
+    if MOTS_DE_LA_3D.iter().any(|m| texte.contains(m)) {
+        return true;
     }
+    // (« dans l'espace » : la scène, pas l'espace de travail.)
+    if texte.match_indices("dans l'espace").any(|(i, m)| !texte[i + m.len()..].starts_with(" de travail")) {
+        return true;
+    }
+    let bas = texte.to_lowercase();
+    bas.match_indices("carte").any(|(i, _)| {
+        let (avant, suite) = (&bas[..i], &bas[i..]);
+        // (Un mot entier : « carte », « cartes », pas « écarte » ni « cartel ».)
+        let mot = avant.chars().next_back().is_none_or(|c| !c.is_alphanumeric()) && suite[5..].chars().next().is_none_or(|c| c == 's' || !c.is_alphanumeric());
+        let autre_carte = ["carte graphique", "cartes graphiques", "carte dédiée", "carte virtuelle", "carte en bas", "carte s'en va"].iter().any(|ok| suite.starts_with(ok)) || avant.ends_with("petite ");
+        mot && !autre_carte
+    })
 }
-
-/// La phrase de la barre d'état quand la vue vient de mettre le plan en Espace 3D.
-pub(crate) const PASSE: &str = "Plan passé en Espace 3D tout seul : son image filmée ne change pas. Caméra libre, ce qui est devant cache ce qui est derrière.";
 
 impl Document {
-    /// Ce qui empêche le plan `index` d'être un plan en Espace 3D ou un plan ordinaire **sans que rien ne change**
-    /// (`Garde`) ; rien : les deux donnent la même image, les mêmes dessins, les mêmes outils de dessin. La vue s'en sert
-    /// pour mettre un plan ordinaire en Espace 3D.
-    pub(crate) fn garde_de_l_espace(&self, index: usize) -> Option<Garde> {
-        let p = self.panels.get(index)?;
-        if !self.accepte_plan_en_espace() {
-            return Some(Garde::Cadre);
-        }
-        if Self::a_de_l_espace(p) {
-            return Some(Garde::TroisD);
-        }
-        // La caméra : celle de l'image (clés, celles d'un plan voisin, paliers), à chaque image. (Un effet de caméra vivant
-        // la fait bouger : sans la recuire image par image.)
-        if p.effet_camera.is_some() {
-            return Some(Garde::Camera);
-        }
-        let origine = self.default_camera();
-        if (0..p.frame_count().max(1)).any(|f| self.panel_camera_reelle(index, f) != origine) {
-            return Some(Garde::Camera);
-        }
-        self.garde_des_cartes(index)
-    }
-
-    /// Ce qui garde en Espace 3D un plan que la vue y a mis tout seul (`Panel::espace_tout_seul`) : comme
-    /// `garde_de_l_espace`, mais seule la caméra du plan lui-même compte (ses clés, son effet, sa trajectoire). Une caméra
-    /// tenue d'un plan voisin, qui a bougé depuis, ne le garde pas : il revient à l'image d'un plan ordinaire, qu'il avait
-    /// avant que la vue ne le montre.
-    pub(crate) fn garde_du_retour(&self, index: usize) -> Option<Garde> {
-        let p = self.panels.get(index)?;
-        if Self::a_de_l_espace(p) {
-            return Some(Garde::TroisD);
-        }
-        let origine = self.default_camera();
-        if p.effet_camera.is_some() || p.camera.iter().any(|k| k.cam != origine) {
-            return Some(Garde::Camera);
-        }
-        self.garde_des_cartes(index)
-    }
-
-    /// Un calque 3D, une trajectoire dans l'espace : ce qu'un plan ordinaire n'a pas.
-    fn a_de_l_espace(p: &crate::document::Panel) -> bool {
-        p.trajectoire_camera.is_some() || p.layers.iter().any(|l| l.calque_3d.is_some() || l.trajectoire.as_ref().is_some_and(|t| t.support.is_some()))
-    }
-
-    /// Ce que les cartes du plan `index` changent au passage : borne, carte penchée, ordre (`Garde`).
-    fn garde_des_cartes(&self, index: usize) -> Option<Garde> {
-        let p = self.panels.get(index)?;
-        // Les cartes : à chaque image s'il y en a une d'animée (clés de position), sinon la première suffit.
+    /// L'ordre de la pile du plan `index` est déjà celui des distances à sa caméra, à toutes ses images (une seule s'il n'a
+    /// aucun calque animé) : passer à « ce qui est devant cache ce qui est derrière » ne change rien de son image.
+    pub(crate) fn pile_dans_l_ordre_des_distances(&self, index: usize) -> bool {
+        let Some(p) = self.panels.get(index) else { return true };
         let n = p.frame_count().max(1);
-        let images = if p.layers.iter().any(|l| !l.pos_keys.is_empty()) { n } else { 1 };
-        let cartes = || p.layers.iter().filter(|l| crate::espace3d::is_card(l));
-        if cartes().any(|l| (0..images).any(|f| l.passe_la_borne(f))) {
-            return Some(Garde::Borne);
-        }
-        if cartes().any(|l| (0..images).any(|f| l.pose(f).is_tilted())) {
-            return Some(Garde::Penchee);
-        }
-        // L'ordre de pose : celui de la pile dans un plan ordinaire, celui des distances dans un plan en Espace 3D (sous la
-        // caméra d'origine). Les dossiers ne posent rien eux-mêmes : seul l'ordre de leurs calques compte.
-        let world = crate::espace3d::Monde { libre: true, ..crate::espace3d::Monde::of(self) };
+        let images = if p.layers.iter().any(|l| !l.pos_keys.is_empty() || l.trajectoire.is_some()) || p.camera.len() > 1 || p.trajectoire_camera.is_some() || p.effet_camera.is_some() { n } else { 1 };
+        let world = crate::espace3d::Monde::du_plan(self, index);
         let pile = crate::calqueannot::ordre(&p.layers, true);
+        // (Les dossiers ne posent rien eux-mêmes : seul l'ordre de leurs calques compte.)
         let sans_dossiers = |o: &[usize]| o.iter().copied().filter(|&li| !p.layers[li].folder).collect::<Vec<_>>();
         let attendu = sans_dossiers(&pile);
-        if (0..images).any(|f| sans_dossiers(&crate::espace3d::ordre_par_distance(&world, &p.layers, &pile, f, None)) != attendu) {
-            return Some(Garde::Ordre);
-        }
-        None
+        (0..images).all(|f| {
+            let repere = self.repere_du_plan(index, f);
+            sans_dossiers(&crate::espace3d::ordre_par_distance(&world, &p.layers, &pile, f, repere.as_ref())) == attendu
+        })
     }
 }
 
-/// Ce que la vue retient du passage tout seul (`Espace3dState::direct`). Ce qui a été mis en Espace 3D tout seul est
-/// marqué dans le plan lui-même (`Panel::espace_tout_seul`) : la marque suit l'annulation, les versions, la duplication.
-#[derive(Default)]
-pub(crate) struct Direct {
-    /// Le plan montré par la vue et l'empreinte de l'historique à la dernière image : rien à refaire tant qu'ils ne
-    /// changent pas.
-    vu: Option<(Option<u64>, (usize, usize, u64, u64))>,
-    /// Les plans dont « Plan en Espace 3D » a été décoché à la main pendant la séance : la vue ne les y remet pas.
-    refuses: Vec<u64>,
-}
-
-impl Direct {
-    /// Le bouton « Plan en Espace 3D » vient de mettre le plan `id` en Espace 3D (`on`) ou de le rendre ordinaire : c'est
-    /// un choix, la vue ne l'y remet plus d'elle-même.
-    pub(crate) fn choix_a_la_main(&mut self, id: u64, on: bool) {
-        self.refuses.retain(|&m| m != id);
-        if !on {
-            self.refuses.push(id);
-        }
-    }
-}
+/// Ce que la barre d'état ajoute quand un calque de la scène (Sol, Mur, Ciel, une surface) se pose sur un plan qui garde
+/// l'ordre de sa pile parce que l'ordre des distances changerait son image.
+pub(crate) const PILE_GARDEE: &str = "La pile garde son ordre : « Devant cache derrière » (panneau Espace 3D) pour ordonner par la distance.";
 
 impl App {
-    /// À chaque image (`App::frame`) : le plan que montre la vue Espace 3D passe en Espace 3D si rien ne change ; un plan
-    /// qu'elle y avait mis et qu'on a quitté redevient ordinaire s'il n'en a pas l'usage ; et un plan mis tout seul qui
-    /// s'en sert maintenant (un calque 3D, une caméra déplacée…) devient un vrai plan en Espace 3D, enregistré comme tel.
-    /// Ne fait rien tant que le plan montré et l'historique sont les mêmes qu'à l'image d'avant.
-    pub(crate) fn e3_espace_direct(&mut self) {
-        let ici = self.espace3d_vue_ouverte().then(|| self.panel().id);
-        let cle = (ici, self.history.empreinte());
-        let avant = self.espace3d.direct.vu.replace(cle);
-        if avant == Some(cle) {
-            return;
-        }
-        let nouveau_plan = avant.map_or(true, |(vu, _)| vu != ici);
-        for pi in 0..self.doc.panels.len() {
-            let p = &self.doc.panels[pi];
-            if !(p.espace && p.espace_tout_seul) {
-                continue;
-            }
-            let montre = Some(p.id) == ici;
-            match self.doc.garde_du_retour(pi) {
-                // (Il s'en sert : un vrai plan en Espace 3D, qui s'enregistre comme tel.)
-                Some(_) => {
-                    self.doc.panels[pi].espace_tout_seul = false;
-                    self.modified = true;
-                }
-                // (Quitté sans s'en servir : ordinaire de nouveau. Rien d'enregistré n'a changé.)
-                None if !montre => {
-                    let p = &mut self.doc.panels[pi];
-                    p.espace = false;
-                    p.espace_tout_seul = false;
-                }
-                None => {}
-            }
-        }
-        // Le plan montré.
-        let Some(id) = ici else { return };
+    /// Un calque de la scène (Sol, Mur, Ciel, une surface) va se poser sur le plan courant, dans l'étape d'annulation en
+    /// cours : si le plan compose encore dans l'ordre de sa pile et que l'ordre des distances ne changerait rien de son image,
+    /// il passe à « ce qui est devant cache ce qui est derrière » (le calque neuf prend alors sa place selon sa distance, un
+    /// sol derrière ce qui est debout dessus). Sinon il garde sa pile : vrai, la barre d'état le dira (`PILE_GARDEE`).
+    pub(crate) fn e3_ordre_pour_un_calque_de_la_scene(&mut self) -> bool {
         let pi = self.cur_panel;
-        if self.doc.panels[pi].espace || self.espace3d.direct.refuses.contains(&id) {
-            return;
+        if self.doc.ordre_par_la_distance(pi) {
+            return false;
         }
-        match self.doc.garde_de_l_espace(pi) {
-            None => {
-                // (Pas d'étape d'annulation, pas d'enregistrement : rien de l'image ni des dessins ne change, et le fichier
-                // garde le plan ordinaire tant que rien ne s'en sert.)
-                let p = &mut self.doc.panels[pi];
-                p.espace = true;
-                p.espace_tout_seul = true;
-                if nouveau_plan {
-                    self.status = PASSE.into();
-                }
-            }
-            Some(g) => {
-                if nouveau_plan {
-                    self.status = g.phrase().into();
-                }
-            }
+        if self.doc.pile_dans_l_ordre_des_distances(pi) {
+            self.doc.panels[pi].ordre_distance = true;
+            return false;
         }
+        true
     }
 
-    /// Les calques 3D et « Nouvelle surface » sur un plan ordinaire : vrai si le plan peut passer en Espace 3D sans que
-    /// rien ne change (`garde_de_l_espace`), ce que fera leur étape d'annulation ; faux sinon, et la barre d'état dit
-    /// d'abord pourquoi (`refus` : le début de la phrase, « Sol refusé »).
-    pub(crate) fn e3_espace_permis(&mut self, refus: &str) -> bool {
-        if self.doc.plan_en_espace(self.cur_panel) {
-            return true;
+    /// Règle la caméra du plan courant depuis **la vue de la scène** : comme `set_current_camera`, mais la caméra est prise
+    /// telle quelle (elle se retourne, bascule jusqu'à la verticale, passe la feuille). Si elle sort ainsi des anciennes
+    /// limites, le plan le retient (`Panel::camera_libre`) : à ces images, l'image passe par le changement de repère. Dans
+    /// les anciennes limites, rien ne change : le chemin de toujours.
+    pub(crate) fn set_current_camera_libre(&mut self, cam: crate::camera::Camera) {
+        let pi = self.cur_panel;
+        if !self.doc.panels[pi].espace && !self.doc.camera_dans_les_anciennes_limites(&cam) && !self.doc.panels[pi].camera_libre {
+            self.doc.panels[pi].camera_libre = true;
+            self.renderer.invalidate_all();
         }
-        match self.doc.garde_de_l_espace(self.cur_panel) {
-            None => true,
-            Some(g) => {
-                let phrase = g.phrase().strip_prefix("Plan gardé ordinaire : ").unwrap_or(g.phrase());
-                self.status = format!("{refus} : {phrase}");
-                false
-            }
-        }
+        self.poser_la_camera(cam);
     }
 }

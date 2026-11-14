@@ -60,10 +60,8 @@ fn ouvert(doc: Document, espace: bool, disposition: Disposition) -> Banc {
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
-    if espace {
-        b.app.run_action("espace3d.plan_en_espace");
-        assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
-    }
+    // (Un plan venu du format 55 en Espace 3D, partie 159.)
+    b.app.doc.panels[0].espace = espace;
     b.app.run_action(disposition.action());
     b.chauffer(4);
     assert!(b.app.espace3d.on && !b.app.camera_view && b.app.e3_vues_multiples(), "les vues multiples sont montrées");

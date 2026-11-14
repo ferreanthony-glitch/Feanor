@@ -1320,13 +1320,13 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
     let camera = f
         .camera
         .iter()
-        .filter_map(|k| cam_of(k, panel.espace).map(|cam| CameraKey { frame: k.frame, cam, smooth: k.doux, ease_in: k.adoucir_entree.max(0.0), ease_out: k.adoucir_sortie.max(0.0) }))
+        .filter_map(|k| cam_of(k, panel.espace || panel.camera_libre).map(|cam| CameraKey { frame: k.frame, cam, smooth: k.doux, ease_in: k.adoucir_entree.max(0.0), ease_out: k.adoucir_sortie.max(0.0) }))
         .collect();
     Piece {
         len,
         layers,
         camera,
-        cam_edge: f.camera_bord.as_ref().and_then(|c| cam_of(c, panel.espace)),
+        cam_edge: f.camera_bord.as_ref().and_then(|c| cam_of(c, panel.espace || panel.camera_libre)),
         marks: f
             .marques
             .into_iter()
