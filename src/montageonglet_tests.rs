@@ -223,7 +223,8 @@ fn the_montage_layout_is_made_for_editing() {
 fn entering_the_montage_shows_its_panes_and_the_camera_and_leaving_gives_the_stage_back() {
     let mut b = banc();
     assert!(!b.app.camera_view);
-    assert!(has(&b.app, Pane::Layers) && has(&b.app, Pane::Color) && b.app.layout.tool_bar);
+    // (Partie 160 : plus de panneau Calques ; les effets ont sa colonne.)
+    assert!(has(&b.app, Pane::Effects) && has(&b.app, Pane::Color) && b.app.layout.tool_bar);
     b.app.set_espace(Espace::Montage);
     b.chauffer(4);
     for p in [Pane::Canvas, Pane::Montage, Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History] {
@@ -237,7 +238,7 @@ fn entering_the_montage_shows_its_panes_and_the_camera_and_leaving_gives_the_sta
     b.app.set_espace(Espace::Storyboard);
     b.chauffer(2);
     assert!(!b.app.camera_view, "la vue du plateau revient, puisque c'est l'entrée dans le Montage qui l'avait changée");
-    assert!(b.app.layout.tool_bar && has(&b.app, Pane::Layers));
+    assert!(b.app.layout.tool_bar && has(&b.app, Pane::Effects));
     assert_eq!(b.app.pane_title(Pane::Canvas), "Dessin");
     // Une vue caméra choisie avant d'entrer dans le Montage reste telle quelle en en sortant.
     b.app.set_camera_view(true);

@@ -377,7 +377,7 @@ impl App {
             self.status = "Pas d'effet à copier : choisis un effet dans la pile du calque (clic sur son nom, dans le panneau Effets).".into();
             return;
         }
-        let tail = " Ctrl+V sur un autre calque (cliqué dans le panneau Calques, ou le panneau Effets ouvert dessus) le colle avec les mêmes réglages.";
+        let tail = " Ctrl+V sur un autre calque (cliqué dans la colonne des calques, ou le panneau Effets ouvert dessus) le colle avec les mêmes réglages.";
         if effects.len() == 1 {
             let (keys, label) = (effects[0].keys.len(), effects[0].kind.label());
             self.set_fx_stack_clip(effects);

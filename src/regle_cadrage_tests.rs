@@ -192,14 +192,15 @@ fn the_composition_marks_have_their_own_icon_right_after_cadrage_in_the_bottom_b
     let textes = ecran.chauffer(&mut app, 4, &mut barre);
     let cadrage = trouver(&textes, ph::CROP).expect("Cadrage").1;
     let reperes = trouver(&textes, ph::GRID_FOUR).expect("l'icône des repères est dans la barre du bas").1;
-    let ajuster = trouver(&textes, ph::ARROWS_OUT).expect("ajuster").1;
-    let loupe = trouver(&textes, ph::MAGNIFYING_GLASS).expect("loupe").1;
-    // Juste à droite de Cadrage, avant le trait et « ajuster ».
-    assert!(cadrage.center().x < reperes.center().x && reperes.center().x < ajuster.center().x, "{cadrage:?} {reperes:?} {ajuster:?}");
-    // Même taille d'icône, même écart que deux icônes voisines de la barre (ajuster, loupe).
-    assert!((reperes.height() - loupe.height()).abs() < 0.5 && (reperes.width() - loupe.width()).abs() < 1.5, "{reperes:?} / {loupe:?}");
+    // (Partie 160 : ajuster et le zoom sont montés dans la barre du haut ; la pelure d'oignon suit le trait de la barre du bas.)
+    let pelure = trouver(&textes, ph::CIRCLES_THREE).expect("pelure").1;
+    assert!(trouver(&textes, ph::ARROWS_OUT).is_none() && trouver(&textes, ph::MAGNIFYING_GLASS).is_none(), "ajuster et le zoom ne sont plus en bas");
+    // Juste à droite de Cadrage, avant le trait et la pelure.
+    assert!(cadrage.center().x < reperes.center().x && reperes.center().x < pelure.center().x, "{cadrage:?} {reperes:?} {pelure:?}");
+    // Même taille d'icône que les autres icônes de la barre (la pelure), même écart que deux cases voisines.
+    assert!((reperes.height() - pelure.height()).abs() < 0.5 && (reperes.width() - pelure.width()).abs() < 1.5, "{reperes:?} / {pelure:?}");
     let pas = reperes.center().x - cadrage.center().x;
-    let pas_voisins = loupe.center().x - ajuster.center().x;
+    let pas_voisins = crate::barres::CASE[0] + crate::barres::ECART;
     assert!((pas - pas_voisins).abs() < 1.5, "écart Cadrage → repères {pas}, ajuster → zoom {pas_voisins}");
     assert!(!app.reperes_any_on());
     // Un clic ouvre son petit panneau : les repères et l'aspect de leurs traits ; rien du cadrage ni de la perspective.
@@ -244,11 +245,11 @@ fn the_framing_menu_is_the_first_icon_of_the_bottom_view_bar() {
     let mut barre = |a: &mut App, ui: &mut egui::Ui| a.view_tools_bar(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut barre);
     let cadrage = trouver(&textes, ph::CROP).expect("l'icône Cadrage est dans la barre du bas");
-    let ajuster = trouver(&textes, ph::ARROWS_OUT).expect("ajuster");
-    assert!(cadrage.1.center().x < ajuster.1.center().x, "Cadrage est tout à gauche, avant « ajuster »");
+    // (Partie 160 : ajuster et le zoom sont montés ; la pelure d'oignon est la voisine de droite, après le trait.)
+    let pelure = trouver(&textes, ph::CIRCLES_THREE).expect("pelure");
+    assert!(cadrage.1.center().x < pelure.1.center().x, "Cadrage est tout à gauche, avant la pelure");
     // Même taille d'icône que le reste de la barre.
-    let loupe = trouver(&textes, ph::MAGNIFYING_GLASS).expect("loupe");
-    assert!((cadrage.1.height() - loupe.1.height()).abs() < 0.5 && (cadrage.1.width() - loupe.1.width()).abs() < 0.5);
+    assert!((cadrage.1.height() - pelure.1.height()).abs() < 0.5 && (cadrage.1.width() - pelure.1.width()).abs() < 0.5);
     assert!(!app.framing_any_on());
     // Un clic ouvre le petit panneau : format et zones de sécurité (l'aspect des traits est sous la règle).
     let t = ecran.cliquer(&mut app, cadrage.1.center(), &mut barre);
@@ -374,7 +375,8 @@ fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing
 #[test]
 fn the_pastilles_scroll_instead_of_wrapping_when_the_bar_is_too_narrow() {
     use crate::personnages::Personnage;
-    let mut b = banc_taille(Document::new(400, 300, 24), false, 700, 600);
+    // (Partie 160 : 820 points de large, 700 avant : ajuster, zoom, rotation et miroir sont montés dans la barre, avant les pastilles.)
+    let mut b = banc_taille(Document::new(400, 300, 24), false, 820, 600);
     b.app.tool = Tool::Brush;
     // Beaucoup de personnages : la rangée ne tient plus dans la barre.
     for k in 0..14 {

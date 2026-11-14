@@ -60,14 +60,19 @@ fn tenir(b: &mut Banc, pressed: bool) {
 #[test]
 fn dragging_a_layer_opacity_bar_sends_no_tile_to_the_gpu() {
     let Some(mut b) = plan_lourd() else { return };
+    // (Partie 160 : seul le calque courant a sa ligne complète, avec sa barre d'opacité : le calque du haut, dont la ligne est à
+    // l'écran.)
+    b.app.cur_layer = b.app.layers().len() - 1;
     b.garder_formes = true;
     b.chauffer(2);
     let mut vus = Vec::new();
     for s in &b.formes {
         textes(&s.shape, &mut vus);
     }
-    // La barre d'opacité d'un calque, dans les en-têtes des calques : « 100 % ».
-    let Some(&(_, centre)) = vus.iter().find(|(t, _)| t == "100 %") else { panic!("aucune barre d'opacité à l'écran : {:?}", vus.iter().map(|v| &v.0).take(60).collect::<Vec<_>>()) };
+    // La barre d'opacité d'un calque, dans les en-têtes des calques (sous le dessin : le curseur du passe-partout, dans la barre sous
+    // l'image, écrit aussi « 100 % ») : « 100 % ».
+    let bas_du_dessin = b.app.canvas_rect.bottom() + crate::viewbar::TOOLS_BAR_H;
+    let Some(&(_, centre)) = vus.iter().find(|(t, c)| t == "100 %" && c.y > bas_du_dessin) else { panic!("aucune barre d'opacité à l'écran : {:?}", vus.iter().map(|v| &v.0).take(60).collect::<Vec<_>>()) };
     b.garder_formes = false;
     let (copies, composes) = carte(&b);
     let avant: Vec<f32> = b.app.layers().iter().map(|l| l.opacity).collect();
@@ -78,7 +83,7 @@ fn dragging_a_layer_opacity_bar_sends_no_tile_to_the_gpu() {
     }
     let pendant = carte(&b);
     let apres: Vec<f32> = b.app.layers().iter().map(|l| l.opacity).collect();
-    assert_ne!(apres, avant, "le geste a changé une opacité");
+    assert_ne!(apres, avant, "le geste a changé une opacité (barre en {centre:?}, dessin {:?}, calque courant {}, autour : {:?})", b.app.canvas_rect, b.app.cur_layer, vus.iter().filter(|(_, p)| (p.y - centre.y).abs() < 30.0).collect::<Vec<_>>());
     assert_eq!(pendant.0, copies, "pendant le geste, aucune tuile n'est renvoyée à la carte graphique");
     assert!(pendant.1 >= composes + 6, "l'image se recompose à chaque opacité ({} compositions)", pendant.1 - composes);
     let fin = pos2(centre.x - 48.0, centre.y);

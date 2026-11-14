@@ -151,7 +151,10 @@ fn focus_restores_the_exact_layout_even_after_the_user_arranged_panels() {
     // L'utilisateur a rangé ses panneaux : un panneau de plus, un onglet choisi.
     b.app.show_pane(Pane::History);
     b.app.show_pane(Pane::Comments);
-    b.chauffer(6);
+    // (Les commentaires, une liste, passent devant dans le groupe des réglages : le bord au-dessus de la couleur glisse vers sa
+    // nouvelle place pendant quelques images, partie 161. On prend la disposition une fois posée.)
+    b.chauffer(30);
+    assert!(!b.app.fit_busy);
     let espace = b.app.espace;
     let (dock, courant, retenu) = (b.app.dock_layout(), b.app.current_layout(), b.app.settings.layout_of(espace).cloned());
     for _ in 0..3 {
@@ -191,7 +194,8 @@ fn the_other_workspaces_keep_their_own_layouts_while_focus_is_on() {
             assert!(b.app.settings.layout_of(*e).is_some(), "{e:?}");
         }
     }
-    assert!(b.app.pane_shown(Pane::Layers), "le panneau Calques est revenu");
+    // (Partie 160 : le panneau Calques n'existe plus ; les effets, son voisin de colonne, sont revenus.)
+    assert!(b.app.pane_shown(Pane::Effects), "le panneau Effets est revenu");
 }
 
 #[test]

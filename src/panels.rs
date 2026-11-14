@@ -480,11 +480,14 @@ impl App {
         let vector = self.layer().kind == LayerKind::Vector;
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
-            ui.label(
-                RichText::new(if vector { "calque vectoriel" } else { "calque bitmap" })
-                    .small()
-                    .weak(),
-            );
+            // (Dans les Vignettes, plus le mot « calque », partie 160 : la case n'a pas de calques à montrer.)
+            if self.espace != crate::workspace::Espace::Vignettes {
+                ui.label(
+                    RichText::new(if vector { "calque vectoriel" } else { "calque bitmap" })
+                        .small()
+                        .weak(),
+                );
+            }
             // Le bouton ▶ de l'aide animée (`aideanim.rs`, partie 153) : il rejoue l'animation dans la fenêtre flottante, à côté de
             // l'icône de l'outil (`aideflottante.rs`, partie 155 : plus rien ne joue dans ce panneau).
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.aide_bouton_ui(ui));

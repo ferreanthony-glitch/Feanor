@@ -78,7 +78,7 @@ fn the_right_click_menus_have_about_ten_entries_at_most() {
         let transition = app_transition_id.expect("une transition");
         mesure("dessin", &mut |a, ui| a.canvas_menu(ui));
         mesure("transition", &mut |a, ui| a.transition_menu(ui, transition));
-        mesure("calque, panneau Calques", &mut |a, ui| a.layer_full_menu(ui, 0, false));
+        mesure("calque, ligne de la timeline", &mut |a, ui| a.layer_head_menu(ui, 0));
         mesure("calque, montage", &mut |a, ui| a.montage_layer_menu(ui, 0));
         mesure("calque, en-tête de la timeline", &mut |a, ui| a.layer_head_menu(ui, 0));
         mesure("fond de la planche des vignettes", &mut |a, ui| a.board_background_menu(ui));

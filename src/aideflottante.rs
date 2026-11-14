@@ -194,6 +194,28 @@ impl App {
 
     // -------------------------------------------------------------------------------------------------- la fenêtre
 
+    /// L'écran où la fenêtre se pose : tout l'écran, moins la colonne des panneaux de droite et la barre des panneaux quand le
+    /// dessin est à leur gauche (partie 161.4). Sous l'onglet « Vignettes », en haut à droite, elle se posait sur le panneau
+    /// Planche et sur la barre des panneaux ; elle glisse maintenant à gauche de la colonne, toujours sous l'onglet.
+    pub(crate) fn aide_ecran(&self, ctx: &egui::Context) -> Rect {
+        let ecran = ctx.screen_rect();
+        let dessin = self.dock.as_ref().and_then(|state| {
+            let (s, n, _) = state.find_tab(&crate::dock::Pane::Canvas)?;
+            if s != egui_dock::SurfaceIndex::main() {
+                return None;
+            }
+            match &state[s][n] {
+                egui_dock::Node::Leaf { rect, .. } => Some(*rect),
+                _ => None,
+            }
+        });
+        match dessin {
+            // (Une place assez large à gauche de la colonne, sinon tout l'écran : elle ne se tasse jamais contre un bord.)
+            Some(d) if d.right() < ecran.right() - 1.0 && d.right() - ecran.left() >= taille().x + 2.0 * BORD_ECRAN => Rect::from_min_max(ecran.min, pos2(d.right(), ecran.bottom())),
+            _ => ecran,
+        }
+    }
+
     /// À chaque image, après les barres et les panneaux : suit l'outil en main, lance ce qu'il y a à jouer, et peint la fenêtre
     /// flottante. Rien (et aucun repaint) quand rien ne joue.
     pub(crate) fn aide_flottante_ui(&mut self, ctx: &egui::Context) {
@@ -270,7 +292,7 @@ impl App {
         .clamp(0.0, 1.0);
         // La place : à côté de l'ancre qui l'a posée, tant qu'elle est peinte ; sinon là où elle était. À la première image : la
         // première ancre à l'écran (la barre d'outils en dernier), sinon un coin.
-        let ecran = ctx.screen_rect();
+        let ecran = self.aide_ecran(ctx);
         let rect = match (l.prise.and_then(|c| ancre(ctx, c)), l.rect) {
             (Some(r), _) => placer(r, taille(), ecran),
             (None, Some(avant)) => recaler(avant, ecran.shrink(BORD_ECRAN)),

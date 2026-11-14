@@ -22,7 +22,7 @@ impl App {
         }
         Layout {
             tools: panes.contains(Pane::Tools),
-            sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
+            sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Effects),
             strip: panes.contains(Pane::Montage),
             panneaux: Some(panes),
             top_view: self.top_view,
@@ -135,6 +135,8 @@ impl App {
             "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
             "vue.reajuster_panneaux" => self.refit_panes(),
             "vue.barre_panneaux" => self.toggle_panel_bar(),
+            // L'ancien panneau Calques (partie 160) : la colonne des calques de la timeline, montrée et mise en main.
+            "vue.calques" => self.montrer_colonne_des_calques(),
             // La liste des brosses (l'ancien panneau Pinceaux) : dans les réglages de l'outil.
             "vue.pinceaux" => self.basculer_liste_pinceaux(),
             // Les panneaux de la barre des panneaux : même règle que son clic.

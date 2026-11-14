@@ -4,7 +4,7 @@
 //!
 //! Dans le Storyboard et le Montage (l'onglet Animation garde sa timeline, tous calques dépliés), deux façons de montrer la pile, au
 //! choix dans la barre du bas de la bande et dans Préférences > Montage (`Pile`, réglage du poste) :
-//! - **trois calques** (d'office) : le calque **actif** au milieu, toujours à la même place (`LAYER_H`, 40), entre son voisin du dessus
+//! - **trois calques** (d'office) : le calque **actif** au milieu, toujours à la même place (`LAYER_H`, 44 depuis la partie 160 : deux rangées d'options), entre son voisin du dessus
 //!   et celui du dessous (`VOISIN_H`, 19). Au-dessus et au-dessous, une **fine bande** compte les autres calques (« 4 au-dessus ») et les
 //!   montre en traits ; un clic y saute de trois calques. La fenêtre fait toujours la même hauteur (`MARGE_H` + `LAYER_H` + `MARGE_H`) ;
 //! - **toute la pile** : le calque actif déplié, tous les autres en bandes (`FOLDED_H`, 17).
@@ -17,8 +17,8 @@
 //!
 //! Dans la colonne de gauche, une piste porte l'œil, une pastille de la couleur de la sorte du calque (vectoriel, bitmap…), le nom et le
 //! cadenas d'un calque verrouillé ; un **filet de la couleur de son dossier** court à sa gauche (`folders::couleur_du_rangement` : la
-//! bande dit le type, le filet dit le rangement). L'opacité, le mode de fusion… sont au clic droit sur la piste (`montage_layer_menu`)
-//! et dans le panneau Calques. Cliquer un calque (son nom ou l'un de ses blocs) le rend actif, et le panneau Calques suit.
+//! bande dit le type, le filet dit le rangement). La piste du calque actif porte en plus toutes ses options sur deux rangées (`piste_active_head`, partie 160 :
+//! le panneau Calques n'existe plus) ; tout est aussi au clic droit sur la piste (`montage_layer_menu`). Cliquer un calque (son nom ou l'un de ses blocs) le rend actif, et le panneau Calques suit.
 //!
 //! **Rien n'est écrit dans le projet** pour la fenêtre : le calque actif et les pistes dépliées à la main sont de l'affichage (par
 //! poste, par séance). Le drapeau `Layer::collapsed` reste celui des « lignes réduites » de la timeline de l'animation et des dossiers
@@ -63,6 +63,11 @@ const DOT_W: f32 = 10.0;
 pub(crate) const RETRAIT: f32 = 6.0;
 /// Place du cadenas d'un calque verrouillé, à droite du nom.
 const VERROU_W: f32 = 13.0;
+/// Une rangée de la piste du calque actif (partie 160 : deux rangées, `LAYER_H` = 2 × 22).
+pub(crate) const RANGEE_ACTIVE: f32 = 22.0;
+/// La colonne doit avoir au moins cette largeur pour que la piste du calque actif montre aussi la vignette de son dessin (à la
+/// largeur d'origine, 104 points, les réglages prennent toute la rangée du bas).
+pub(crate) const LARGEUR_VIGNETTE: f32 = 150.0;
 
 /// Ce qu'une ligne des pistes est.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -676,6 +681,152 @@ impl App {
             };
             clip.text(pos2(at.name.left(), y), Align2::LEFT_CENTER, &name, FontId::proportional(size), ink);
         }
+    }
+
+    /// La piste du calque actif `li`, dans `r` (deux rangées de 22 points, partie 160 : elle porte toutes les options qui étaient au
+    /// panneau Calques et au clic droit). En haut : le filet du dossier, l'œil, la pastille de la sorte, le nom (et celui du dossier),
+    /// le cadenas, le ⋮ du menu du calque. En bas : la vignette du dessin (ou la couleur d'un calque Couleur unie) quand la colonne est
+    /// assez large, la pelure d'oignon du calque, les effets, l'accroche à la caméra, le mode de fusion, le losange des clés
+    /// d'opacité et l'opacité. Le fond de la rangée (clic, glissé, clic droit) est déjà posé.
+    pub(crate) fn piste_active_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32) {
+        let layers = self.layers();
+        let Some(l) = layers.get(li) else { return };
+        let (id, name, visible, dot, locked, onion, accroche, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.locked, l.onion, l.accroche, l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
+        let opacity = l.opacity_at(self.cur_frame);
+        let accrochable = !l.folder && l.effet.is_none() && !l.keys_follow_line();
+        let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
+        let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
+        let retrait = if filet.is_some() { RETRAIT } else { 0.0 };
+        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + RANGEE_ACTIVE));
+        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - RANGEE_ACTIVE), r.max);
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("tete_piste_active", id)));
+        // (Rien ne sort de la piste, même dans la colonne étroite.)
+        child.set_clip_rect(r.intersect(ui.clip_rect()));
+        let ui = &mut child;
+        let large = r.width() >= LARGEUR_VIGNETTE;
+        let fg = ui.visuals().text_color();
+        let off = fg.gamma_multiply(0.35);
+        let shade = |on: bool| if on { fg } else { off };
+        if let Some(c) = filet {
+            ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 2.0, r.top() + 1.0), pos2(r.left() + 5.0, r.bottom() - 1.0)), 1.0, c);
+        }
+        // ---- En haut.
+        let at = head_layout_en(haut, false, retrait);
+        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, 13.0, if visible { fg } else { off });
+        if crate::bulles::bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait).", "").clicked() {
+            self.toggle_layer_visible(li);
+        }
+        // (Colonne étroite : la couleur d'un calque Couleur unie prend la place de la pastille de sa sorte.)
+        if unie && !large {
+            let v = Rect::from_center_size(at.dot, vec2(DOT_W, 12.0));
+            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
+            c.spacing_mut().interact_size = v.size();
+            self.couleur_unie_champ(&mut c, li);
+        } else {
+            ui.painter().circle_filled(at.dot, at.dot_r, if visible { dot } else { dot.gamma_multiply(0.4) });
+        }
+        // La sorte du calque (vectoriel, bitmap, couleur…) dans la bulle de sa pastille (partie 160 : l'icône de la sorte était sur
+        // sa ligne du panneau Calques).
+        let sorte = crate::calquemenu::Sorte::of(&self.layers()[li]);
+        let resp = ui.interact(Rect::from_center_size(at.dot, vec2(DOT_W, haut.height())), egui::Id::new(("sorte_piste", id)), Sense::hover());
+        crate::bulles::bulle(resp, &format!("{}  {}", sorte.icone_ligne(), sorte.nom()), sorte.phrase(), "");
+        let menu = Rect::from_min_size(pos2(haut.right() - 15.0, haut.top() + 2.0), vec2(14.0, haut.height() - 4.0));
+        let verrou = Rect::from_min_size(pos2(menu.left() - 15.0, haut.top() + 2.0), vec2(14.0, haut.height() - 4.0));
+        self.lock_button(ui, verrou, li, locked, shade(locked));
+        let mut m = ui.new_child(egui::UiBuilder::new().max_rect(menu).id_salt(("options_piste", id)));
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0).color(fg)).frame(false);
+        let resp = egui::menu::menu_custom_button(&mut m, button, |ui| self.montage_layer_menu(ui, li)).response;
+        crate::bulles::bulle(resp, "Commandes du calque", "Renommer, dupliquer, organiser, apparence, effets, aplat… (aussi : clic droit sur la piste).", "");
+        let nom = Rect::from_min_max(at.name.min, pos2((verrou.left() - 2.0).max(at.name.min.x + 1.0), haut.bottom()));
+        let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == id && n.in_montage);
+        if renaming {
+            let mut field = ui.new_child(egui::UiBuilder::new().max_rect(nom.expand2(vec2(0.0, 2.0))).id_salt(("nom_calque_montage", id)));
+            let done = self.layer_rename_field(&mut field, nom.width());
+            self.finish_layer_rename(done);
+        } else {
+            let ink = if visible { name_color } else { name_color.gamma_multiply(0.5) };
+            let clip = ui.painter().with_clip_rect(nom.expand2(vec2(0.0, 1.0)));
+            let mut x = nom.left();
+            // Rangé dans un dossier : son nom d'abord, en petit, pour savoir où l'on est.
+            if let Some(d) = dossier {
+                let g = clip.text(pos2(x, nom.center().y), Align2::LEFT_CENTER, format!("{d} ›"), FontId::proportional(9.5), filet.unwrap_or(off));
+                x = g.right() + 3.0;
+            }
+            clip.text(pos2(x, nom.center().y), Align2::LEFT_CENTER, &name, FontId::proportional(12.0), ink);
+        }
+        // ---- En bas.
+        let y = bas.center().y;
+        let mut x = bas.left() + 2.0 + retrait;
+        // (Des cases de 13 points : à la largeur d'origine de la colonne, il reste une vingtaine de points à la barre d'opacité.)
+        const PAS: f32 = 13.0;
+        let case = |x: f32| Rect::from_center_size(pos2(x + PAS * 0.5, y), vec2(PAS, bas.height() - 4.0));
+        // La vignette (ou la couleur unie) : seulement si la colonne est assez large pour tout le reste.
+        if large {
+            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, bas.height() - 6.0));
+            if unie {
+                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
+                c.spacing_mut().interact_size = v.size();
+                self.couleur_unie_champ(&mut c, li);
+            } else {
+                match cel.and_then(|c| self.layer_thumb(ui.ctx(), c)) {
+                    Some(t) => {
+                        ui.painter().image(t.id(), v, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), if visible { Color32::WHITE } else { Color32::from_gray(120) });
+                    }
+                    None => {
+                        ui.painter().rect_filled(v, 0.0, theme::controle());
+                    }
+                }
+                ui.painter().rect_stroke(v, 0.0, Stroke::new(1.0_f32, theme::bord()), egui::StrokeKind::Inside);
+            }
+            x = v.right() + 3.0;
+        }
+        let resp = crate::layerheads::icon_at(ui, case(x), ph::CIRCLES_THREE, shade(onion));
+        let resp = crate::bulles::bulle(resp, "Pelure d'oignon du calque", "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant. Clic droit : le panneau de la pelure.", "");
+        if resp.clicked() {
+            self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
+        }
+        if resp.secondary_clicked() {
+            self.onion_window = true;
+        }
+        x += PAS;
+        if let Some(resp) = self.fx_switch(ui, li, Some(case(x)), fg) {
+            if resp.clicked() {
+                self.toggle_layer_fx(li);
+            }
+            x += PAS;
+        }
+        if accrochable {
+            let resp = crate::layerheads::icon_at(ui, case(x), ph::VIDEO_CAMERA, shade(accroche));
+            if self.aide(resp, crate::accroche::NOM, crate::accroche::PHRASE, crate::accroche::ACTION).clicked() {
+                self.basculer_accroche(li);
+            }
+            x += PAS;
+        }
+        // Le mode de fusion : une icône, la liste au clic (le nom du mode dans la bulle).
+        let mut f = ui.new_child(egui::UiBuilder::new().max_rect(case(x)).id_salt(("fusion_piste", id)));
+        let button = egui::Button::new(RichText::new(ph::CIRCLE_HALF).size(12.0).color(shade(blend != crate::blend::BlendMode::ALL[0]))).frame(false);
+        let resp = egui::menu::menu_custom_button(&mut f, button, |ui| {
+            for m in crate::blend::BlendMode::ALL {
+                if crate::blend::BlendMode::FAMILY_STARTS.contains(&m) {
+                    ui.separator();
+                }
+                if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
+                    ui.close_menu();
+                    self.regler_mode_calques(li, m);
+                }
+            }
+        })
+        .response;
+        crate::bulles::bulle(resp, "Mode de fusion", &format!("{} : {}", blend.label(), blend.hint()), "");
+        x += PAS;
+        // (Le losange vise le calque courant : sur la piste du trait d'un calque de couleur courant, il n'y est pas.)
+        if li == self.cur_layer {
+            self.losange_opacite(ui, case(x), fg, off);
+            x += PAS;
+        }
+        let barre = Rect::from_min_max(pos2(x + 1.0, y - 6.5), pos2((bas.right() - 2.0).max(x + 8.0), y + 6.5));
+        let painter = ui.painter().clone();
+        self.opacity_bar(ui, &painter, barre, r, li, egui::Id::new(("opacite_piste", id)), opacity, true, "Opacité du calque", "Cliquer ou tirer dans la barre.");
     }
 
     /// La ligne fine du dossier `li`, dans `r` : son triangle (couché : fermé ; droit : ouvert ; de biais : fermé, ouvert le temps du

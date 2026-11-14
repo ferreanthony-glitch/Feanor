@@ -542,6 +542,10 @@ impl App {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             ui.spacing_mut().slider_width = 70.0;
+            // La barre d'actions des calques, sous la colonne des calques (partie 160, `barrecalques.rs`) ; le zoom à sa droite.
+            // (La barre du bas a une marge de 4 points à gauche : la barre finit au bord de la colonne.)
+            self.barre_calques(ui, self.montage_head_w - 4.0);
+            ui.add_space(4.0);
             let small = |icon: &str| egui::Button::new(RichText::new(icon).size(11.0)).frame(false).min_size(vec2(16.0, 14.0));
             let (out, inn, all) = (self.raccourci("bande.zoom_arriere"), self.raccourci("bande.zoom_avant"), self.raccourci("bande.tout_voir"));
             if bulle(ui.add(small(ph::MAGNIFYING_GLASS_MINUS)), "Zoom arrière", "Ou Ctrl + molette sur la bande.", &out).clicked() {

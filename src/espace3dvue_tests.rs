@@ -228,14 +228,16 @@ fn every_gesture_of_a_walk_in_a_plan_en_espace_stays_within_the_frame_budget() {
     // Tirer la caméra du plan par sa poignée : le plan change à chaque image.
     b.app.espace3d.sel = vec![CAMERA_ID];
     b.app.espace3d.mode = GizmoMode::Move;
-    b.chauffer(2);
+    // (Le temps que la vue se pose après la molette : la poignée est visée là où elle est dessinée.)
+    b.chauffer(30);
+    let r = b.app.canvas_rect;
     let view = b.app.espace3d.cam.expect("la vue d'orbite").view(r.width());
     let centre = [r.width() / 2.0, r.height() / 2.0];
     let gizmo = b.app.e3_gizmo(&view).expect("le manipulateur de la caméra");
     let bout = view.project(gizmo.axis_tip(0), centre).expect("la poignée est devant l'œil");
     let avant = b.app.current_camera();
     let m = glisser(&mut b, PointerButton::Primary, pos2(r.left() + bout[0], r.top() + bout[1]), vec2(2.0, 0.0), 120);
-    assert_ne!(b.app.current_camera(), avant, "la poignée a bien déplacé la caméra du plan : {}", b.app.status);
+    assert_ne!(b.app.current_camera(), avant, "la poignée a bien déplacé la caméra du plan : {} (poignée {bout:?} dans la vue {r:?}, vue d'aujourd'hui {:?})", b.app.status, b.app.canvas_rect);
     pire = pire.max(resume("tirer la caméra du plan par sa poignée", &m, &b));
 
     // Regarder par la caméra : la promenade déplace la caméra du plan elle-même.

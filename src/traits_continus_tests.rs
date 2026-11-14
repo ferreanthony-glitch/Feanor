@@ -251,6 +251,11 @@ fn a_vertical_stroke_down_a_column_and_a_stroke_on_the_japanese_board_stay_conti
         let (v0, v2) = (xf.rect(l.cards[0].thumb), xf.rect(l.cards[2].thumb));
         let x = v0.left() + v0.width() * 0.3;
         let (de, a) = (pos2(x, v0.center().y), pos2(x, v2.center().y));
+        // (À la japonaise, la page entière tient dans la hauteur de la vue : les cases sont petites, une centaine de pixels de large.
+        // Le pinceau de 14 pixels du dessin y faisait moins d'un pixel d'écran, un filet trop pâle pour être relevé ; il garde au moins
+        // deux pixels d'écran. À la taille de vue d'avant la partie 161, le filet passait de justesse.)
+        let echelle = v0.width() / b.app.doc.width as f32;
+        b.app.brush.size = (2.0 / echelle).max(14.0);
         tracer(&mut b, de, a);
         repos(&mut b);
         let rgba = b.capturer().unwrap();

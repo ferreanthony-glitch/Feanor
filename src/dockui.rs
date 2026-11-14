@@ -7,6 +7,9 @@ use eframe::egui::{self, Id, WidgetText};
 use crate::app::{App, BoardView, Mode};
 use crate::dock::{self, DetachedPanel, DockLayout, Group, Pane};
 
+/// Ce que dit la bulle de la poignée d'un panneau (partie 160).
+pub(crate) const POIGNEE: &str = "Glisser cette poignée : poser le panneau ailleurs, ou le faire flotter. Clic droit : dans une fenêtre à part. L'icône de la barre des panneaux, à droite, l'ouvre, le met devant ou le ferme.";
+
 /// Ce qu'egui_dock affiche dans chaque onglet.
 struct Panes<'a> {
     app: &'a mut App,
@@ -15,8 +18,10 @@ struct Panes<'a> {
 impl egui_dock::TabViewer for Panes<'_> {
     type Tab = Pane;
 
-    fn title(&mut self, tab: &mut Pane) -> WidgetText {
-        format!("{} {}", tab.icon(), self.app.pane_title(*tab)).into()
+    /// Plus de nom écrit en haut des groupes (partie 160, Anthony : « Les noms écrits en haut des groupes disparaissent ; l'icône
+    /// allumée dit quel onglet est devant ») : l'onglet n'est plus qu'une fine poignée, son nom dans sa bulle.
+    fn title(&mut self, _tab: &mut Pane) -> WidgetText {
+        WidgetText::default()
     }
 
     fn id(&mut self, tab: &mut Pane) -> Id {
@@ -83,10 +88,10 @@ impl egui_dock::TabViewer for Panes<'_> {
         }
     }
 
+    /// La bulle de la poignée : le nom du panneau et comment le déplacer.
     fn on_tab_button(&mut self, tab: &mut Pane, response: &egui::Response) {
-        if tab.tab_name() != tab.name() {
-            response.clone().on_hover_text(tab.name());
-        }
+        let aide = if *tab == Pane::Canvas { "" } else { POIGNEE };
+        crate::bulles::bulle(response.clone(), self.app.pane_title(*tab), aide, "");
     }
 }
 
@@ -121,6 +126,7 @@ impl App {
 
     fn pane_content(&mut self, ui: &mut egui::Ui, pane: Pane) {
         if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
+            crate::theme::densifier_panneau(ui.style_mut());
             fit_to_pane(ui);
         }
         // Références : la place du panneau docké (pour y recevoir les fichiers lâchés, `referencesui.rs`).
@@ -148,11 +154,8 @@ impl App {
             // Retiré : les guides sont dans le menu de la règle (`cadrageui.rs`), `sanitized` ôte ce panneau.
             Pane::Guides => {}
             Pane::Sheet => self.panel_inspector(ui),
-            Pane::Layers => {
-                self.layers_panel(ui);
-                // Des effets viennent d'être copiés et ce panneau a la main : Ctrl+V les colle sur le calque cliqué.
-                self.focus_mark(ui, self.layers_pane_focus && self.fx_pile_recent && self.fx_stack_clipboard.is_some(), false);
-            }
+            // Retiré (partie 160) : les calques sont dans la colonne de la timeline, sanitized ôte ce panneau.
+            Pane::Layers => {}
             // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
             // main (copier, coller, supprimer visent ses plans, ses clés ou ses images), un cadre de
             // la couleur d'accent.
@@ -227,11 +230,15 @@ impl App {
             .style(style)
             .show_leaf_collapse_buttons(false)
             .show_leaf_close_all_buttons(false)
+            // (Plus de croix sur les poignées, trop fines : la barre des panneaux et Affichage > Panneaux ferment un panneau.)
+            .show_close_buttons(false)
             .show(ctx, &mut Panes { app: self });
         // (Un panneau peut avoir remplacé la disposition pendant l'affichage : on la garde.)
         if self.dock.is_none() {
             self.poignee_du_montage(ctx, &mut state);
             self.fit_panes(ctx, &mut state, sep, body_margin);
+            // La colonne des panneaux garde sa largeur, l'image prend le reste (partie 161).
+            self.fit_columns(ctx, &mut state, sep);
             self.dock = Some(state);
         }
         if let Some(pane) = self.detach_request.take() {

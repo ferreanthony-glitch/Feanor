@@ -141,52 +141,52 @@ fn trouver<'a>(textes: &'a [(String, Rect)], morceau: &str) -> Option<&'a (Strin
 use egui_phosphor::regular as ph;
 
 #[test]
-fn the_layers_toolbar_has_five_icons_and_a_more_button() {
+fn the_layers_action_bar_has_its_six_buttons_under_the_column() {
+    // Partie 160 : le panneau Calques n'existe plus ; sa barre (« + », dupliquer, supprimer, monter, descendre, « … ») devient la
+    // barre d'actions, en bas de la colonne des calques : « + » · Nouveau dossier · Nouveau calque d'effet · Dupliquer · Supprimer ·
+    // « ⋯ ». Monter et descendre sont au menu ⋮ du calque (Organiser) et au glisser.
     let mut app = app_one_layer("barre", LayerKind::Vector);
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    // Les cinq icônes et le « … ».
-    for (icone, nom) in [(ph::PLUS, "+"), (ph::COPY_SIMPLE, "dupliquer"), (ph::TRASH, "supprimer"), (ph::ARROW_UP, "monter"), (ph::ARROW_DOWN, "descendre"), (ph::DOTS_THREE, "…")] {
-        assert!(contient(&textes, icone), "l'icône « {nom} » est là : {textes:?}");
-    }
-    // Les autres ont quitté la barre : ni dossier, ni calque de couleur, ni effet, ni copier, ni coller, ni fusionner.
-    for (icone, nom) in [
-        (ph::FOLDER_PLUS, "nouveau dossier"),
-        (ph::FOLDER_NOTCH_PLUS, "ranger dans un dossier"),
-        (ph::PALETTE, "calque de couleur"),
-        (ph::SPARKLE, "calque d'effet"),
-        (ph::COPY, "copier"),
-        (ph::CLIPBOARD, "coller"),
-        (ph::ARROWS_IN_SIMPLE, "fusionner"),
-        (ph::PAINT_BRUSH_BROAD, "nouveau calque bitmap"),
-    ] {
-        assert!(!contient(&textes, icone), "l'icône « {nom} » n'est plus dans la barre : {textes:?}");
-    }
-    // Les icônes de la barre sont toutes au-dessus de la liste, et « … » est le plus à droite.
-    let (_, plus) = trouver(&textes, ph::PLUS).unwrap();
-    let (_, plus_loin) = trouver(&textes, ph::DOTS_THREE).unwrap();
+    let bas = |icone: &str| textes.iter().filter(|(t, _)| t.trim() == icone).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).map(|(_, r)| *r);
+    let ordre = [ph::PLUS, ph::FOLDER_PLUS, ph::SPARKLE, ph::COPY_SIMPLE, ph::TRASH, ph::DOTS_THREE];
+    let cases: Vec<Rect> = ordre.iter().map(|i| bas(i).unwrap_or_else(|| panic!("l'icône {i:?} de la barre d'actions : {textes:?}"))).collect();
     let (_, ligne) = trouver(&textes, "C1").unwrap();
-    assert!(plus.center().y < ligne.center().y && plus_loin.center().y < ligne.center().y);
-    assert!(plus_loin.center().x > plus.center().x + 100.0, "« … » est à droite : {plus:?} {plus_loin:?}");
+    for (k, r) in cases.iter().enumerate() {
+        assert!((r.center().y - cases[0].center().y).abs() < 2.0, "une seule rangée : {cases:?}");
+        assert!(r.center().y > ligne.center().y, "sous la colonne des calques : {cases:?}");
+        if k > 0 {
+            assert!(r.center().x > cases[k - 1].center().x, "dans l'ordre : {cases:?}");
+        }
+    }
+    // Elle tient sous la colonne des calques (sa largeur), à gauche des onglets Notes, Son…
+    assert!(cases[5].right() <= crate::layerheads::HEAD_W + 16.0, "{cases:?}");
+    let (_, notes) = trouver(&textes, "Notes").expect("l'onglet Notes");
+    assert!(notes.left() > cases[5].right(), "les onglets du bas à sa droite");
+    // Ni monter ni descendre dans la barre.
+    let rangee: Vec<&(String, Rect)> = textes.iter().filter(|(_, r)| (r.center().y - cases[0].center().y).abs() < 2.0).collect();
+    assert!(rangee.iter().all(|(t, _)| !t.contains(ph::ARROW_UP) && !t.contains(ph::ARROW_DOWN)), "{rangee:?}");
 }
 
 #[test]
-fn a_layer_row_shows_its_kind_as_an_icon_not_as_a_word() {
+fn a_layer_row_shows_its_kind_as_a_sign_not_as_a_word() {
     let mut app = app_layers("sortes", &[LayerKind::Bitmap, LayerKind::Vector]);
     let mut dossier = Layer::new_folder("Rangement");
     dossier.collapsed = false;
     app.layers_mut().push(dossier);
     app.cur_layer = 1;
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert!(!contient(&textes, "vectoriel") && !contient(&textes, "bitmap") && !contient(&textes, "dossier"), "plus de mot de sorte : {textes:?}");
-    // Dans la liste (sous la barre) : l'icône vectoriel, l'icône bitmap, l'icône dossier.
-    let (_, mode) = trouver(&textes, "Normal").unwrap();
-    let dessous = |icone: &str| textes.iter().any(|(t, r)| t.contains(icone) && r.center().y > mode.bottom() + 10.0);
-    assert!(dessous(ph::BEZIER_CURVE) && dessous(ph::PAINT_BRUSH_BROAD) && dessous(ph::FOLDER), "{textes:?}");
+    // Sur les lignes : la lettre de la sorte (V, B) et l'icône du dossier.
+    assert!(textes.iter().any(|(t, _)| t.trim() == LayerKind::Vector.badge()) && textes.iter().any(|(t, _)| t.trim() == LayerKind::Bitmap.badge()), "{textes:?}");
+    assert!(contient(&textes, ph::FOLDER_OPEN), "{textes:?}");
 }
+
 
 #[test]
 fn the_kind_of_each_layer_has_its_own_icon() {
@@ -207,11 +207,12 @@ fn the_kind_of_each_layer_has_its_own_icon() {
 
 #[test]
 fn the_plus_menu_offers_every_kind_of_layer_with_a_sentence() {
+    // (Partie 160 : le « + » est le premier bouton de la barre d'actions, sous la colonne des calques.)
     let mut app = app_one_layer("plus", LayerKind::Vector);
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, plus) = trouver(&textes, ph::PLUS).unwrap().clone();
+    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == ph::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).unwrap().clone();
     let textes = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
     for s in crate::calquemenu::Sorte::TOUTES {
         assert!(contient(&textes, s.nom()), "« {} » est dans le menu : {textes:?}", s.nom());
@@ -275,7 +276,7 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     }
     // Et un menu les porte : le « + » (créer), le « … » ou le clic droit d'un calque (le reste). On lit le texte des
     // menus : chaque identifiant y figure.
-    let menus = [include_str!("calquemenu.rs"), include_str!("layerops.rs"), include_str!("layersui.rs"), include_str!("fondui.rs"), include_str!("fxui.rs"), include_str!("prereglagesui.rs"), include_str!("folders.rs"), include_str!("menucalque.rs")].join("\n");
+    let menus = [include_str!("calquemenu.rs"), include_str!("layerops.rs"), include_str!("barrecalques.rs"), include_str!("fondui.rs"), include_str!("fxui.rs"), include_str!("prereglagesui.rs"), include_str!("folders.rs"), include_str!("menucalque.rs")].join("\n");
     // (« calque.effets » est l'interrupteur « fx » : sa case est dans « Effets » du menu d'un calque par `fx_switch_item`.)
     for id in ["calque.nouveau_vectoriel", "calque.nouveau_bitmap", "dossier.nouveau", "calque.nouveau_couleur", "effet.vide", "calque.copier", "calque.coller", "calque.fusionner_choisis", "calque.fusionner_dessous", "dossier.ranger", "pinceau.fond"] {
         assert!(menus.contains(&format!("\"{id}\"")), "{id} est dans un menu");
@@ -283,15 +284,18 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     assert!(include_str!("menucalque.rs").contains("fx_switch_item") && include_str!("menucalque.rs").contains("aplat_item"));
 }
 
-/// Ouvre le menu « … » du panneau Calques et rend tous les textes que ses sous-menus montrent au survol.
+/// Ouvre le menu ⋮ du calque courant (sur sa ligne de la timeline : le même menu que l'ancien « … » du panneau Calques, qui n'existe
+/// plus depuis la partie 160) et rend tous les textes que ses sous-menus montrent au survol.
 fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let mut vus: Vec<String> = Vec::new();
     // (Un écran neuf par sous-menu : le survol d'un second sous-menu n'ouvre rien tant que le premier est ouvert.)
     for sous in ["Organiser", "Apparence", "Plus"] {
         let mut ecran = Ecran::new();
         let textes = ecran.chauffer(app, 4, &mut ui_calques);
-        let (_, plus) = trouver(&textes, ph::DOTS_THREE).unwrap().clone();
+        let (_, plus) = trouver(&textes, ph::DOTS_THREE_VERTICAL).unwrap().clone();
         let ouvert = ecran.cliquer(app, plus.center(), &mut ui_calques);
         vus.extend(ouvert.iter().map(|(t, _)| t.clone()));
         if let Some((_, r)) = trouver(&ouvert, sous).cloned() {
@@ -307,7 +311,7 @@ fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
     let mut app = app_layers("plus-menu", &[LayerKind::Bitmap, LayerKind::Vector]);
     let vus = textes_du_menu_plus(&mut app);
     let a = |morceau: &str| vus.iter().any(|t| t.contains(morceau));
-    // (§82 : le « … » ouvre le même menu que le clic droit d'un calque ; ses groupes sont à un sous-menu.)
+    // (§82 : le « … » ouvrait le même menu que le clic droit d'un calque ; depuis la partie 160, c'est le ⋮ de sa ligne.)
     assert!(a("Fusionner vers le bas") && a("Fusionner les calques choisis"), "fusionner : {vus:?}");
     assert!(a("Nouveau calque") && a("Dupliquer") && a("Renommer") && a("Supprimer"), "les gestes : {vus:?}");
     assert!(a("Organiser") && a("Apparence") && a("Plus"), "les groupes : {vus:?}");
@@ -317,13 +321,24 @@ fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
 }
 
 #[test]
-fn the_layers_panel_shows_blend_mode_and_opacity_once_for_the_current_layer() {
+fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer() {
+    // (Partie 160 : la ligne complète du calque courant de la timeline les porte, comme le haut de l'ancien panneau Calques ; les
+    // lignes fines des autres calques ne les ont pas.)
     let mut app = app_layers("fusion", &[LayerKind::Bitmap, LayerKind::Vector, LayerKind::Vector]);
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 1, "un seul mode de fusion : {textes:?}");
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains("100 %")).count(), 1, "une seule opacité : {textes:?}");
+    // (La barre d'opacité écrit sa valeur deux fois au même endroit : sur sa partie pleine et sur le reste.)
+    let mut places: Vec<Rect> = Vec::new();
+    for (_, r) in textes.iter().filter(|(t, _)| t.contains("100 %")) {
+        if !places.iter().any(|p| p.center().distance(r.center()) < 1.0) {
+            places.push(*r);
+        }
+    }
+    assert_eq!(places.len(), 1, "une seule opacité : {textes:?}");
 }
 
 // ============================================================================================= 2. Couleur

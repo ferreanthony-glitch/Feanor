@@ -118,8 +118,12 @@ fn noirs(b: &Banc) -> (Vec<Rect>, Vec<[Pos2; 3]>) {
     (rects, tris)
 }
 
+/// (Un triangle sans aire, ses trois sommets confondus, ne couvre rien à l'écran ; `dans_polygone` le disait pourtant autour de
+/// n'importe quel point. Il en vient d'un morceau du passe-partout réduit à un point, à certaines tailles de planche : à la largeur de
+/// vue de la partie 161, une rangée de faux « couvert » en diagonale à travers une case.)
 fn dans_triangle(t: &[Pos2; 3], p: Pos2) -> bool {
-    dans_polygone(t, p)
+    let aire = ((t[1] - t[0]).x * (t[2] - t[0]).y - (t[1] - t[0]).y * (t[2] - t[0]).x).abs() * 0.5;
+    aire > 1e-3 && dans_polygone(t, p)
 }
 
 #[test]
@@ -148,6 +152,9 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
             if bord > 1.5 {
                 if trou == couvert(p) {
                     faux += 1;
+                    if faux <= 3 {
+                        println!("FAUX {p:?} : {} (bord à {bord:.1})", if trou { "couvert dans un trou" } else { "ouvert hors des trous" });
+                    }
                 }
                 if trou { ouverts += 1 } else { couverts += 1 }
             }

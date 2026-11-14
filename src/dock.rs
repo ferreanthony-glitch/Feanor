@@ -133,14 +133,13 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 20] = [
+    pub const ALL: [Pane; 19] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::ToolOptions,
         Pane::Espace3d,
         Pane::Sheet,
-        Pane::Layers,
         Pane::Montage,
         Pane::XSheet,
         Pane::Effects,
@@ -393,14 +392,31 @@ fn place_in_family(tabs: &mut Vec<Pane>, pane: Pane, family: &[Pane]) {
     tabs.insert(at, pane);
 }
 
+/// La colonne des panneaux, à droite du dessin (partie 161, Anthony : « Amincis comme sur la maquette ») : une seule colonne
+/// étroite, les réglages de l'outil en haut avec, en onglets derrière eux, la fiche du plan, les effets et le scénario ; la
+/// couleur et les brosses dédiées dessous. La barre des panneaux (bord droit) met devant celui qu'on veut. Plus de deux colonnes
+/// côte à côte (Effets et Scénario d'un côté, Réglages et Couleur de l'autre).
+fn side_column(top: Vec<Pane>, bottom: Vec<Pane>) -> Option<DockNode> {
+    let keep = |list: Vec<Pane>| (!list.is_empty()).then(|| tabs(list));
+    stack(&[(0.55, keep(top)), (1.0, keep(bottom))])
+}
+
+/// Largeur de la colonne des panneaux, en points de l'écran (partie 161) : celle de la maquette (240 pixels pour une fenêtre de
+/// 1 440, barre des icônes comprise), un peu plus pour que la palette de couleurs, les curseurs et la liste de la bibliothèque
+/// (nom, durée, taille) tiennent sans être coupés.
+/// Elle ne suit pas la largeur de la fenêtre : l'image prend toute la place gagnée (`App::fit_columns`, `ajuste.rs`). Tirer
+/// le bord à la main la fixe où on l'a mise, comme une hauteur.
+pub const COLONNE: f32 = 290.0;
+
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
 /// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
 /// part sous le montage) ; 5 le même jour (en onglets) ; 6 le même jour (une seule bande, comme
 /// avant : le montage en storyboard, la timeline en animation) ; 7 le même jour (le panneau
 /// Effets, sous les réglages) ; 8 le même jour (choix d'Anthony : les calques avec les effets
-/// dessous, puis les réglages avec la couleur dessous).
-pub const LAYOUT_VERSION: u32 = 8;
+/// dessous, puis les réglages avec la couleur dessous) ; 9 depuis la partie 161 (une seule colonne étroite : deux colonnes de
+/// panneaux côte à côte se fondent en une, `DockNode::une_seule_colonne`).
+pub const LAYOUT_VERSION: u32 = 9;
 
 /// La bande du bas : une seule (Anthony, 2026-10-17 : « je ne veux pas de double timeline ») ;
 /// elle montre le montage en storyboard, la timeline en animation.
@@ -441,11 +457,8 @@ fn right_column(only: &[Pane]) -> Option<DockNode> {
 /// parts de la nouvelle (largeur hors barre d'outils verticale).
 const REF_WIDTH: f32 = 1454.0;
 const REF_HEIGHT: f32 = 820.0;
-/// Largeur de la colonne des réglages (quatre onglets depuis 9b).
-const TOOLS_WIDTH: f32 = 350.0;
-/// Part du lecteur, dans l'espace Montage, de la largeur au-dessus de la bande (le reste : la fiche
-/// du plan et les panneaux du montage).
-const MONTAGE_LECTEUR_PART: f32 = 0.7;
+// (La largeur de la colonne des réglages, 350 points, et la part du lecteur dans l'espace Montage, 0,7, ont laissé la place à
+// `COLONNE`, partie 161.)
 
 impl DockNode {
     fn collect(&self, out: &mut Vec<Pane>) {
@@ -488,6 +501,62 @@ impl DockNode {
             }
             DockNode::Column { part, haut, bas } => column(part, haut.strips_as_tabs(), bas.strips_as_tabs()),
             DockNode::Row { part, gauche, droite } => row(part, gauche.strips_as_tabs(), droite.strips_as_tabs()),
+            t => t,
+        }
+    }
+
+    /// Une partie de côté : ni le dessin, ni la bande du bas.
+    fn est_un_cote(&self) -> bool {
+        let mut v = Vec::new();
+        self.collect(&mut v);
+        !v.iter().any(|p| matches!(p, Pane::Canvas | Pane::Montage | Pane::Timeline))
+    }
+
+    /// Les onglets du premier groupe (en haut à gauche), à changer.
+    fn first_tabs_mut(&mut self) -> &mut Vec<Pane> {
+        match self {
+            DockNode::Tabs { panneaux, .. } => panneaux,
+            DockNode::Row { gauche: a, .. } | DockNode::Column { haut: a, .. } => a.first_tabs_mut(),
+        }
+    }
+
+    /// Une seule colonne de panneaux (partie 161) : deux parties de côté posées côte à côte (aucune n'a le dessin ni la bande)
+    /// n'en font plus qu'une. Les onglets de celle de gauche rejoignent le groupe du haut de celle de droite, derrière ceux qui
+    /// y sont (dans la disposition d'avant : les effets et le scénario derrière les réglages de l'outil et la fiche du plan).
+    /// Seules sont fondues les colonnes de côté posées à côté du dessin : une rangée de panneaux rangée à la main ailleurs (sous le
+    /// dessin, dans un coin) reste comme elle est.
+    pub(crate) fn une_seule_colonne(self) -> DockNode {
+        fn fondre(n: DockNode) -> DockNode {
+            match n {
+                DockNode::Row { part, gauche, droite } => {
+                    let (g, mut d) = (fondre(*gauche), fondre(*droite));
+                    if g.est_un_cote() && d.est_un_cote() {
+                        let mut venus = Vec::new();
+                        g.collect(&mut venus);
+                        d.first_tabs_mut().extend(venus);
+                        d
+                    } else {
+                        row(part, g, d)
+                    }
+                }
+                t => t,
+            }
+        }
+        let a_le_dessin = |n: &DockNode| {
+            let mut v = Vec::new();
+            n.collect(&mut v);
+            v.contains(&Pane::Canvas)
+        };
+        match self {
+            DockNode::Row { part, gauche, droite } => {
+                let (g, d) = (*gauche, *droite);
+                match (a_le_dessin(&g), a_le_dessin(&d)) {
+                    (true, false) if d.est_un_cote() => row(part, g.une_seule_colonne(), fondre(d)),
+                    (false, true) if g.est_un_cote() => row(part, fondre(g), d.une_seule_colonne()),
+                    _ => row(part, g.une_seule_colonne(), d.une_seule_colonne()),
+                }
+            }
+            DockNode::Column { part, haut, bas } => column(part, haut.une_seule_colonne(), bas.une_seule_colonne()),
             t => t,
         }
     }
@@ -607,28 +676,26 @@ impl DockLayout {
     /// pixels), ou celle d'un espace de travail de Pelure.
     pub fn from_legacy(l: &Layout) -> DockLayout {
         let mut center = tabs(vec![Pane::Canvas]);
-        // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
-        let mut settings = Vec::new();
-        if l.tools {
-            // (Le panneau Espace 3D n'est pas dans la disposition d'origine : il arrive en onglet des réglages de l'outil
-            // quand la vue Espace 3D s'ouvre, et y reste. `espace3dpanneau.rs`, partie 152.)
-            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages]);
-            if l.sheet {
-                settings.push(Pane::Sheet);
-            }
-        }
-        let tools = left_column(&settings);
+        // À droite du dessin, une seule colonne étroite (partie 161) : les réglages de l'outil, et derrière eux, en onglets, la
+        // fiche du plan et les effets ; la couleur et les brosses dédiées dessous.
+        // (Le panneau Espace 3D n'est pas dans la disposition d'origine : il arrive en onglet des réglages de l'outil
+        // quand la vue Espace 3D s'ouvre, et y reste. `espace3dpanneau.rs`, partie 152.)
         // La feuille d'exposition n'est pas ouverte d'office.
-        let layers = if l.sheet { right_column(&[Pane::Layers, Pane::Effects]) } else { None };
-        let layers_w = l.sheet_width.clamp(160.0, 900.0);
-        let side = match (layers, tools) {
-            (Some(a), Some(b)) => Some((row(layers_w / (layers_w + TOOLS_WIDTH), a, b), layers_w + TOOLS_WIDTH)),
-            (Some(a), None) => Some((a, layers_w)),
-            (None, Some(b)) => Some((b, TOOLS_WIDTH)),
-            (None, None) => None,
-        };
-        if let Some((side, w)) = side {
-            center = row(1.0 - w / REF_WIDTH, center, side);
+        // (Partie 160 : plus de panneau Calques, les calques sont dans la colonne de la timeline ; les effets restent.)
+        let mut top = Vec::new();
+        let mut bottom = Vec::new();
+        if l.tools {
+            top.push(Pane::ToolOptions);
+            if l.sheet {
+                top.push(Pane::Sheet);
+            }
+            bottom.extend(COLOR_TABS);
+        }
+        if l.sheet {
+            top.push(Pane::Effects);
+        }
+        if let Some(side) = side_column(top, bottom) {
+            center = row(1.0 - COLONNE / REF_WIDTH, center, side);
         }
         if l.strip {
             let h = l.montage_height.clamp(140.0, 1200.0);
@@ -652,7 +719,8 @@ impl DockLayout {
             tabs(vec![Pane::Sheet]),
             tabs(vec![Pane::Bruitages, Pane::Comments, Pane::History]),
         );
-        let haut = row(MONTAGE_LECTEUR_PART, lecteur, cote);
+        // (La colonne garde la largeur `COLONNE` quelle que soit la fenêtre, `App::fit_columns` ; la part n'est que celle du départ.)
+        let haut = row(1.0 - COLONNE / REF_WIDTH, lecteur, cote);
         let h = bande_hauteur.clamp(140.0, 1200.0);
         DockLayout { principal: column(1.0 - h / REF_HEIGHT, haut, tabs(vec![Pane::Montage])), ..DockLayout::empty() }.sanitized()
     }
@@ -667,14 +735,16 @@ impl DockLayout {
         // Le scénario est un onglet de plus à côté de la couleur (il ne prend aucune place de plus).
         let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Scenario]));
         let cote = column(0.2, tabs(vec![Pane::Vignettes]), reglages);
-        DockLayout { principal: row(1.0 - TOOLS_WIDTH / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
+        DockLayout { principal: row(1.0 - COLONNE / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
     }
 
-    /// La disposition d'origine de l'espace Storyboard : la disposition standard, avec le scénario en onglet à côté des calques
+    /// La disposition d'origine de l'espace Storyboard : la disposition standard, avec le scénario en onglet à côté des effets
     /// (fermé dans les autres espaces ; il s'ouvre tout seul après un import).
     pub fn pour_le_storyboard() -> DockLayout {
         let mut d = DockLayout::from_legacy(&Layout::default());
-        if let Some(t) = d.principal.tabs_with(&[Pane::Layers]) {
+        // (Partie 160 : le scénario au-dessus des effets, à la place du panneau Calques ; partie 161 : un onglet de plus dans la
+        // colonne unique, après les effets.)
+        if let Some(t) = d.principal.tabs_with(&[Pane::Effects]) {
             t.push(Pane::Scenario);
         }
         d.sanitized()
@@ -717,6 +787,12 @@ impl DockLayout {
         // les Effets sous les Calques ») ; les panneaux flottants ou dans leur fenêtre restent.
         if (6..8).contains(&self.version) {
             self.principal = DockLayout::from_legacy(&Layout::default()).principal;
+        }
+        // Partie 161 : une seule colonne étroite ; deux colonnes de panneaux côte à côte se fondent en une (les panneaux
+        // flottants et ceux dans leur fenêtre ne bougent pas).
+        if self.version < 9 {
+            let principal = std::mem::replace(&mut self.principal, tabs(Vec::new()));
+            self.principal = principal.une_seule_colonne();
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -852,7 +928,9 @@ impl DockLayout {
         // L'ancienne timeline à part (versions 4 et 5), l'ancien panneau Vue (ses outils sont sous le
         // dessin), l'ancien panneau Guides (dans le menu de la règle) et l'ancien panneau Pinceaux (sa liste est dans
         // les réglages de l'outil) sont enlevés partout.
-        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides, Pane::Brushes];
+        // (Et, depuis la partie 160, l'ancien panneau Calques : ses commandes sont sur la ligne du calque courant et dans la barre
+        // d'actions de la colonne des calques.)
+        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides, Pane::Brushes, Pane::Layers];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {
@@ -914,7 +992,8 @@ impl DockLayout {
     /// Rouvre un panneau à sa place : avec les panneaux de son groupe s'il en reste, sinon dans
     /// la colonne (ou la bande) de son groupe, recréée à côté du dessin.
     pub fn open(&mut self, pane: Pane) {
-        if self.contains(pane) {
+        // (L'ancien panneau Calques ne s'ouvre plus, partie 160 : `vue.calques` montre la colonne des calques de la timeline.)
+        if self.contains(pane) || pane == Pane::Layers {
             return;
         }
         let group = pane.group();
@@ -978,6 +1057,20 @@ impl DockLayout {
                 return;
             }
         }
+        // Une seule colonne (partie 161) : un panneau de l'ancienne colonne de droite (effets, historique, commentaires,
+        // bruitages…) qui n'y trouve aucun voisin devient un onglet du haut de la colonne des réglages, au lieu de refaire une
+        // deuxième colonne à côté d'elle.
+        // (Un panneau flottant qui a des panneaux de ce groupe les reçoit, comme avant : règle plus bas.)
+        if group == Group::Right && self.principal.tabs_of_group(Group::Right).is_none() && self.fenetres.iter_mut().all(|w| w.panneaux.tabs_of_group(Group::Right).is_none()) {
+            if let Some(t) = self.principal.tabs_with(&[Pane::ToolOptions, Pane::Sheet, Pane::Espace3d]) {
+                t.push(pane);
+                return;
+            }
+            if let Some(t) = self.principal.tabs_with(&COLOR_TABS) {
+                t.push(pane);
+                return;
+            }
+        }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {
                 t.push(pane);
@@ -1017,6 +1110,22 @@ impl DockLayout {
             Group::Left => {
                 // La colonne des réglages, tout à droite (au-dessus de la bande s'il y en a une).
                 let Some(col) = left_column(panes) else { return };
+                // Une seule colonne (partie 161) : s'il reste des panneaux de l'ancienne colonne de droite (les effets…), les réglages
+                // se posent au-dessus d'eux au lieu de faire une deuxième colonne.
+                // (Pas un groupe rangé à la main avec le dessin ou la bande : on ne pose rien sur eux.)
+                let anchor = self
+                    .principal
+                    .tabs_of_group(Group::Right)
+                    .filter(|t| !t.iter().any(|p| matches!(p, Pane::Canvas | Pane::Montage | Pane::Timeline)))
+                    .and_then(|t| t.iter().copied().find(|p| p.group() == Group::Right));
+                if let Some(anchor) = anchor {
+                    let mut col = Some(col);
+                    let mut above = |n: DockNode| column(0.55, col.take().unwrap_or_else(|| tabs(Vec::new())), n);
+                    self.principal.wrap_tabs_of(anchor, &mut above);
+                    let version = self.version;
+                    *self = DockLayout { version, ..std::mem::replace(self, DockLayout::empty()) }.sanitized();
+                    return;
+                }
                 let main = std::mem::replace(&mut self.principal, tabs(Vec::new()));
                 self.principal = match main {
                     DockNode::Column { part, haut, bas } if bas.first_tabs().iter().any(|p| p.group() == Group::Bottom) => {
@@ -1026,6 +1135,15 @@ impl DockLayout {
                 };
             }
             Group::Right => {
+                // Une seule colonne (partie 161) : en onglets du haut de la colonne des réglages, s'il y en a une.
+                let list: Vec<Pane> = panes.iter().copied().filter(|p| p.group() == Group::Right).collect();
+                let reglages = [Pane::ToolOptions, Pane::Sheet, Pane::Espace3d, Pane::Color, Pane::Personnages];
+                if let (false, Some(t)) = (list.is_empty(), self.principal.tabs_with(&reglages)) {
+                    t.extend(list);
+                    let version = self.version;
+                    *self = DockLayout { version, ..std::mem::replace(self, DockLayout::empty()) }.sanitized();
+                    return;
+                }
                 let Some(right) = right_column(panes) else { return };
                 let mut right = Some(right);
                 self.principal

@@ -1268,9 +1268,18 @@ fn when_everything_is_cancelled_the_layers_and_settings_panes_say_so() {
         b.chauffer(4);
         let dits = b.textes.iter().filter(|t| t.contains(crate::planannuleui::TEXTE_FILM_VIDE)).count();
         println!("TEXTES {espace:?} : {dits} fois le texte du film vide");
-        // (Au Storyboard : le dessin, le montage, les Calques et les Réglages ; dans les Vignettes, ce que son agencement montre, le montage au moins.)
-        let attendus = if espace == crate::workspace::Espace::Storyboard { 4 } else { 1 };
+        // (Au Storyboard : le montage et les Réglages — le panneau Calques n'existe plus, partie 160, et les Effets sont un onglet derrière
+        // les Réglages, partie 161 ; dans les Vignettes, ce que son agencement montre, le montage au moins.)
+        let attendus = if espace == crate::workspace::Espace::Storyboard { 2 } else { 1 };
         assert!(dits >= attendus, "{espace:?} : les panneaux le disent : {dits} fois");
+        if espace == crate::workspace::Espace::Storyboard {
+            // Les Effets, mis devant, le disent aussi.
+            b.app.show_pane(crate::dock::Pane::Effects);
+            b.chauffer(4);
+            let dits = b.textes.iter().filter(|t| t.contains(crate::planannuleui::TEXTE_FILM_VIDE)).count();
+            assert!(dits >= 2, "les Effets le disent : {dits} fois");
+            b.app.show_pane(crate::dock::Pane::ToolOptions);
+        }
         assert!(!b.textes.iter().any(|t| t.contains(&nom_du_support)), "{espace:?} : le calque du support est montré");
         // Le réglage de l'outil non plus : pas son titre « calque vectoriel ».
         assert!(!b.textes.iter().any(|t| t == "calque vectoriel" || t == "calque bitmap"), "{espace:?} : les Réglages parlent du calque du support");

@@ -25,7 +25,7 @@
 //! # Pour un import
 //! `Document::ajouter_couleur_unie(plan, couleur, nom, rang)` crée le calque (sans historique) et rend son numéro.
 
-use eframe::egui::{self, RichText};
+use eframe::egui;
 
 use crate::app::App;
 use crate::document::{Document, Layer, LayerKind};
@@ -83,22 +83,19 @@ impl App {
         self.layer_sel.clear();
         self.vsel = None;
         self.commit_structure(snap);
-        self.status = format!("Calque « {name} » : toute la feuille en gris moyen ; sa couleur se change dans le panneau Calques, et on dessine par-dessus.");
+        self.status = format!("Calque « {name} » : toute la feuille en gris moyen ; sa couleur se change sur sa ligne de la timeline, et on dessine par-dessus.");
     }
 
-    /// La couleur du calque courant, dans le panneau Calques, s'il est de la sorte Couleur unie : la case de couleur commune (avec sa
-    /// pipette). Une étape d'annulation par geste ; le fond est recoloré, les dessins du calque ne changent pas.
-    pub(crate) fn couleur_unie_ui(&mut self, ui: &mut egui::Ui) {
-        let li = self.cur_layer;
+    /// La couleur du calque `li`, s'il est de la sorte Couleur unie : la case de couleur commune (avec sa pipette), sur la ligne du
+    /// calque courant de la timeline et de la colonne de la bande (partie 160 ; avant, dans le panneau Calques). Une étape
+    /// d'annulation par geste ; le fond est recoloré, les dessins du calque ne changent pas.
+    pub(crate) fn couleur_unie_champ(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some(mut couleur) = self.layers().get(li).and_then(|l| l.unie) else { return };
-        ui.horizontal(|ui| {
-            crate::bulles::etiquette(ui, egui_phosphor::regular::SQUARE, "Couleur unie du calque", "Le fond du calque, sur toute la feuille, sous ses dessins.");
-            ui.label(RichText::new("Couleur").small());
-            let resp = crate::champcouleur::srgb(ui, &mut couleur);
-            if self.edited(&resp) {
-                self.layers_mut()[li].unie = Some(couleur);
-                self.renderer.invalidate_all();
-            }
-        });
+        let resp = crate::champcouleur::srgb(ui, &mut couleur);
+        let resp = crate::bulles::bulle(resp, "Couleur unie du calque", "Le fond du calque, sur toute la feuille, sous ses dessins.", "");
+        if self.edited(&resp) {
+            self.layers_mut()[li].unie = Some(couleur);
+            self.renderer.invalidate_all();
+        }
     }
 }
