@@ -12515,3 +12515,65 @@ seules la place de quelques éléments et la densité changent. Pas de format no
 9. Vignettes : la ligne « Annotations » (œil, clic : stylo) et « Dessin de la case » ; clic droit : les couches.
 10. Clic droit sur un calque qui a un aplat : « Réglages de l'aplat » est sous « Retirer l'aplat ». Dis si cela te va, ou si
     l'aplat doit encore changer.
+
+## 161. Amincir comme sur la maquette : une seule colonne étroite, des panneaux plus denses (2026-11-14, branche `panneaux-fins`)
+
+Anthony, devant les captures de la partie 160 : « En gros tu as juste viré les noms sur les panneaux », puis « Amincis comme sur la
+maquette ». Les couleurs ne changent pas (thème Gris sombre et ses dérivés) ; chaque outil et chaque réglage reste dans son panneau,
+dans le même ordre ; aucun format nouveau dans les projets (seule la disposition retenue dans les réglages passe à la version 9).
+
+### 161.1 Ce qui a changé
+
+1. **Une seule colonne de panneaux à droite, de 290 points** (avant : deux colonnes côte à côte, Effets et Scénario d'un côté,
+   Réglages et Couleur de l'autre, environ 40 % de la largeur : 990 pixels dans une fenêtre de 2 576). En haut, les Réglages de
+   l'outil, et derrière eux, en onglets, la Fiche du plan, les Effets et, au Storyboard, le Scénario ; dessous, la Couleur et les
+   Brosses dédiées. La barre des panneaux (bord droit) met devant celui qu'on veut, comme avant.
+2. **La colonne garde sa largeur quelle que soit la fenêtre** : l'image prend toute la place gagnée (dans la fenêtre de 2 576 : la
+   vue passe d'environ 1 470 à environ 2 180 pixels de large). Tirer le bord à la main le fixe où on l'a mis ; « Réajuster les
+   panneaux » (Affichage > Panneaux) le rend à sa largeur. Même règle dans les Vignettes et le Montage (la Fiche et les panneaux du
+   son, 290 points au lieu de 30 % de la largeur).
+3. **Les dispositions retenues** qui avaient deux colonnes côte à côte n'en ont plus qu'une : les onglets de la colonne de gauche
+   rejoignent le groupe du haut de celle de droite, derrière ceux qui y sont. Aucun panneau ne se perd ; les panneaux flottants et
+   ceux dans leur fenêtre ne bougent pas. Un panneau de l'ancienne colonne de droite (Historique, Commentaires, Bruitages,
+   Feuille d'exposition, Bibliothèque…) ouvert à la demande devient un onglet de ce groupe, jamais une deuxième colonne.
+4. **Une liste devant** (Scénario, Bibliothèque, Historique…) prend la hauteur au-dessus de la Couleur, qui garde celle de son
+   contenu ; les Réglages devant reprennent la hauteur de leur contenu.
+5. **Plus de bandes vides au-dessus des panneaux** : la bande des poignées passe de 26 à 8 points (au-dessus de chaque panneau, du
+   dessin et de la bande du bas). La poignée se glisse toujours pour déplacer ou faire flotter un panneau ; clic droit : dans une
+   fenêtre à part.
+6. **Densité** : dans les panneaux de la colonne, texte de 11,5 points (12,5 avant), lignes à 2 points d'écart (3 avant), marges
+   du corps de 5 points sur les côtés et 3 en haut et en bas (6 avant). Le dessin, la bande et les menus gardent leur densité.
+7. **La barre d'actions des calques** : cases de 18 points, au moins 5 points d'écart (1 avant, des icônes qui se touchaient),
+   icônes de 14 points. Sous une colonne plus étroite que ses six cases (la colonne des pistes du Storyboard, 104 points
+   d'origine), elle la déborde de ce qu'il faut ; plus large, ses cases s'écartent.
+
+### 161.2 Les deux essais qui retenaient la bande de 26 points
+
+- `traits_continus` (le trait vertical sur la planche à la japonaise) : à la japonaise, la page entière tient dans la hauteur de
+  la vue, les cases n'ont qu'une centaine de pixels de large et le pinceau de 14 pixels du dessin y faisait moins d'un pixel
+  d'écran ; le filet, trop pâle, n'était plus relevé. Ce n'était pas une coupure du trait : l'essai garde maintenant un pinceau d'au
+  moins deux pixels d'écran.
+- `espace3dvue` (la poignée de la caméra à 1280 × 720) : l'essai visait la poignée juste après les coups de molette, avant que la
+  vue se pose ; il attend maintenant que la vue soit posée.
+- En passant : l'essai du passe-partout balayé comptait un triangle sans aire (trois sommets confondus) comme couvrant ; il les
+  ignore. Les essais de la planche (`vignettes_tests::ouvert`) ont une fenêtre de 1 282 de large, où la planche a la largeur d'avant.
+
+### 161.3 Ce qui reste
+
+- Le panneau Planche des Vignettes (frise des séquences, « Toutes ») est un peu à l'étroit à 290 points : sa frise déborde à droite.
+- Le panneau Espace 3D devant, avec la Couleur dessous, ne montre pas tout d'un coup (il défile) : sa caméra va jusqu'à la focale.
+- La colonne des pistes du Storyboard reste à 104 points d'origine (sa largeur est un réglage d'Anthony).
+- La largeur de la colonne est tenue même si « les panneaux s'ajustent » est décoché (cette case parle des hauteurs), et aussi pour
+  un panneau large (Feuille d'exposition, Références) qu'on aurait posé seul à côté du dessin : tirer le bord le libère.
+- `vignettecam::dans_polygone` répond « dedans » pour un polygone sans aire (sommets confondus ou alignés) ; il sert au repérage de
+  la planche (`board.rs`, `debord.rs`, `horschamp.rs`). Défaut d'avant, à corriger à part.
+
+### 161.4 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard : une seule colonne étroite à droite (Réglages, Couleur dessous) ; l'image va presque jusqu'au bord. Les icônes de
+   la barre des panneaux mettent devant la Fiche, les Effets, le Scénario.
+2. Agrandis ou rétrécis la fenêtre : la colonne ne change pas de largeur. Tire son bord : elle reste où tu l'as mise ;
+   Affichage > Panneaux > Réajuster les panneaux la remet.
+3. Plus de bandes grises vides au-dessus des panneaux ; glisse la fine poignée d'un panneau pour le déplacer.
+4. Sous la colonne des calques, la barre + · dossier · effet · dupliquer · supprimer · ⋯ : des icônes qui ne se touchent plus.
+5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
