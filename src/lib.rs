@@ -253,6 +253,10 @@ mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
+// La barre d'actions des calques, sous la colonne des calques (partie 160).
+mod barrecalques;
+#[cfg(test)]
+mod panneaux_fins_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

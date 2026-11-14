@@ -944,6 +944,13 @@ pub fn polices(fonts: &mut FontDefinitions) -> bool {
     true
 }
 
+/// Hauteur de la bande des poignées en haut de chaque groupe de panneaux (partie 160). Elle garde la hauteur de la bande des onglets
+/// écrits d'avant, 26 points : le dessin et le contenu des panneaux ne bougent pas d'un point (à 10 points, le dessin grandissait
+/// de 16 points et deux essais de géométrie, la planche à la japonaise et la poignée de la caméra en Espace 3D, ne tombaient plus juste).
+pub const POIGNEE_ONGLET: f32 = 26.0;
+/// Largeur de la poignée d'un panneau dans cette bande.
+pub const LARGEUR_POIGNEE: f32 = 30.0;
+
 /// Onglets et séparations des panneaux (egui_dock) : barres d'onglets, onglet actif de la couleur
 /// du panneau, séparations du fond qui prennent l'accent au survol.
 pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
@@ -958,7 +965,10 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s.separator.color_dragged = p.accent_texte;
     s.tab_bar.bg_fill = p.entete;
     s.tab_bar.hline_color = p.entete;
-    s.tab_bar.height = 26.0;
+    // Partie 160 : plus de noms écrits en haut des groupes, la barre des panneaux (bord droit) sert d'onglets. Il reste une
+    // poignée par panneau, à la hauteur d'avant, qu'on glisse pour le déplacer ou le faire flotter (clic droit : dans une fenêtre à part).
+    s.tab_bar.height = POIGNEE_ONGLET;
+    s.tab.minimum_width = Some(LARGEUR_POIGNEE);
     // Des onglets qui ne tiennent plus dans un panneau rétréci : une petite barre pour les
     // atteindre (Anthony, 2026-10-17 : « toujours utilisables même lorsqu'ils sont réduits »).
     s.tab_bar.show_scroll_bar_on_overflow = true;

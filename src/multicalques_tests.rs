@@ -1066,8 +1066,9 @@ fn a_new_key_with_a_single_chosen_layer_is_unchanged() {
     assert!(b.app.status.contains("Nouvelle clé sur « Calque 1 »"), "{}", b.app.status);
 }
 
-/// Le champ d'opacité du panneau Calques : le calque courant est mis à 37 % (une valeur que rien d'autre n'affiche), et le texte
-/// « 37 % » peint une seule fois est celui du champ (la ligne du calque, dans la liste, le peint aussi : deux fois, au même endroit).
+/// Le champ d'opacité du calque courant (partie 160 : la barre de la piste du calque actif de la bande, à la place du champ du
+/// panneau Calques) : le calque courant est mis à 37 % (une valeur que rien d'autre n'affiche) ; la barre peint « 37 % » deux fois au
+/// même endroit (sur sa partie pleine et sur le reste) : une seule place à l'écran.
 fn champ_opacite(b: &mut Banc) -> Pos2 {
     b.app.doc.panels[0].layers[0].opacity = 0.37;
     b.garder_formes = true;
@@ -1081,7 +1082,12 @@ fn champ_opacite(b: &mut Banc) -> Pos2 {
         }
     }
     b.garder_formes = false;
-    let seuls: Vec<Pos2> = trouves.iter().copied().filter(|p| trouves.iter().filter(|q| q.distance(*p) < 1.0).count() == 1).collect();
+    let mut seuls: Vec<Pos2> = Vec::new();
+    for p in trouves.iter().copied() {
+        if !seuls.iter().any(|q| q.distance(p) < 1.0) {
+            seuls.push(p);
+        }
+    }
     assert_eq!(seuls.len(), 1, "un seul champ « 37 % » à l'écran : {trouves:?}");
     seuls[0]
 }

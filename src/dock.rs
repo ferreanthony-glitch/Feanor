@@ -133,14 +133,13 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 20] = [
+    pub const ALL: [Pane; 19] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::ToolOptions,
         Pane::Espace3d,
         Pane::Sheet,
-        Pane::Layers,
         Pane::Montage,
         Pane::XSheet,
         Pane::Effects,
@@ -619,7 +618,8 @@ impl DockLayout {
         }
         let tools = left_column(&settings);
         // La feuille d'exposition n'est pas ouverte d'office.
-        let layers = if l.sheet { right_column(&[Pane::Layers, Pane::Effects]) } else { None };
+        // (Partie 160 : plus de panneau Calques, les calques sont dans la colonne de la timeline ; les effets restent.)
+        let layers = if l.sheet { right_column(&[Pane::Effects]) } else { None };
         let layers_w = l.sheet_width.clamp(160.0, 900.0);
         let side = match (layers, tools) {
             (Some(a), Some(b)) => Some((row(layers_w / (layers_w + TOOLS_WIDTH), a, b), layers_w + TOOLS_WIDTH)),
@@ -674,8 +674,10 @@ impl DockLayout {
     /// (fermé dans les autres espaces ; il s'ouvre tout seul après un import).
     pub fn pour_le_storyboard() -> DockLayout {
         let mut d = DockLayout::from_legacy(&Layout::default());
-        if let Some(t) = d.principal.tabs_with(&[Pane::Layers]) {
-            t.push(Pane::Scenario);
+        // (Partie 160 : le scénario au-dessus des effets, à la place du panneau Calques.)
+        if d.principal_has(Pane::Effects) {
+            let mut above = |n: DockNode| column(0.6, tabs(vec![Pane::Scenario]), n);
+            d.principal.wrap_tabs_of(Pane::Effects, &mut above);
         }
         d.sanitized()
     }
@@ -852,7 +854,9 @@ impl DockLayout {
         // L'ancienne timeline à part (versions 4 et 5), l'ancien panneau Vue (ses outils sont sous le
         // dessin), l'ancien panneau Guides (dans le menu de la règle) et l'ancien panneau Pinceaux (sa liste est dans
         // les réglages de l'outil) sont enlevés partout.
-        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides, Pane::Brushes];
+        // (Et, depuis la partie 160, l'ancien panneau Calques : ses commandes sont sur la ligne du calque courant et dans la barre
+        // d'actions de la colonne des calques.)
+        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides, Pane::Brushes, Pane::Layers];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {
@@ -914,7 +918,8 @@ impl DockLayout {
     /// Rouvre un panneau à sa place : avec les panneaux de son groupe s'il en reste, sinon dans
     /// la colonne (ou la bande) de son groupe, recréée à côté du dessin.
     pub fn open(&mut self, pane: Pane) {
-        if self.contains(pane) {
+        // (L'ancien panneau Calques ne s'ouvre plus, partie 160 : `vue.calques` montre la colonne des calques de la timeline.)
+        if self.contains(pane) || pane == Pane::Layers {
             return;
         }
         let group = pane.group();

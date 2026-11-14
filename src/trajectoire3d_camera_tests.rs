@@ -500,36 +500,7 @@ fn a_click_on_the_camera_track_of_the_montage_or_of_the_timeline_chooses_the_cam
     assert!(b.app.e3_vue_montree() && !b.app.espace3d.sel.contains(&CAMERA_ID), "{:?}", b.app.espace3d.sel);
 }
 
-// ------------------------------------------------------------------------------------------------ le panneau Calques
-
-/// Le nom `nom` écrit par la dernière image dans le panneau Calques (à côté du dessin, au-dessus de la bande du bas, qui
-/// écrit les mêmes noms ; le panneau Espace 3D, qui écrit ceux des cartes, est derrière Réglages) : sa zone à l'écran.
-fn nom_dans_le_panneau_calques(b: &Banc, nom: &str) -> Rect {
-    let mut tous = Vec::new();
-    b.formes.iter().for_each(|f| zones_des_textes(&f.shape, &mut tous));
-    let dessin = b.app.canvas_rect;
-    let zones: Vec<Rect> = tous.iter().filter(|(t, z)| t == nom && !dessin.contains(z.center()) && z.center().y < dessin.bottom()).map(|(_, z)| *z).collect();
-    // (S'il y en a plusieurs : celui du panneau Calques a sa vignette, encadrée, juste à sa gauche.)
-    let mut cadres = Vec::new();
-    b.formes.iter().for_each(|f| rectangles(&f.shape, &mut cadres));
-    let a_sa_vignette = |z: &Rect| cadres.iter().any(|(r, _, s)| s.width > 0.0 && r.height() >= 12.0 && r.right() <= z.left() + 1.0 && r.right() >= z.left() - 40.0 && r.top() <= z.center().y && r.bottom() >= z.center().y);
-    let zones: Vec<Rect> = if zones.len() > 1 { zones.into_iter().filter(a_sa_vignette).collect() } else { zones };
-    let partout: Vec<&Rect> = tous.iter().filter(|(t, _)| t == nom).map(|(_, z)| z).collect();
-    assert_eq!(zones.len(), 1, "le nom « {nom} » est écrit une fois dans le panneau Calques : {zones:?} (partout : {partout:?} ; le dessin : {dessin:?})");
-    zones[0]
-}
-
-/// Ce que le panneau Calques peint pour le rang du calque `nom` : les fonds pleins de la taille d'un rang sous son nom, et
-/// combien de cadres épais (celui de la vignette du calque courant) il a à gauche de son nom.
-fn rang_peint(b: &Banc, nom: &str) -> (Vec<Color32>, usize) {
-    let z = nom_dans_le_panneau_calques(b, nom);
-    let mut tous = Vec::new();
-    b.formes.iter().for_each(|f| rectangles(&f.shape, &mut tous));
-    let fonds = tous.iter().filter(|(r, fill, _)| r.contains(z.center()) && r.height() < 80.0 && r.width() < 600.0 && *fill != Color32::TRANSPARENT).map(|r| r.1).collect();
-    let cadres = tous.iter().filter(|(r, _, s)| s.width >= 2.0 && r.top() <= z.center().y && r.bottom() >= z.center().y && r.right() <= z.left() + 1.0 && r.left() > z.left() - 200.0).count();
-    (fonds, cadres)
-}
-
+// ------------------------------------------------------------------------------------------------ la ligne du calque
 /// Comme `ouvert` (plan en Espace 3D, vue ouverte et cadrée, outil Trajectoire), dans une fenêtre plus haute (1600 × 1200) :
 /// le panneau Calques, qui partage sa colonne avec les effets au-dessus de la bande du montage, y montre tous ses rangs (à
 /// 1280 × 720, le second rang est sous le bord de la liste, et rien n'y est peint).
@@ -558,30 +529,26 @@ fn pointeur_ailleurs(b: &mut Banc) {
 /// calque courant comme choisi. Plus maintenant ; un clic sur un calque (même le courant), un outil de dessin pris dans la
 /// vue ou un trait dans la vue rendent le calque courant et lâchent la caméra. L'outil Trajectoire, lui, la garde.
 #[test]
-fn while_the_camera_is_chosen_alone_the_layers_panel_shows_no_layer_as_chosen_and_drawing_or_a_click_on_a_layer_gives_it_back() {
+fn while_the_camera_is_chosen_alone_no_layer_is_shown_as_chosen_and_drawing_or_a_click_on_a_layer_gives_it_back() {
+    // (Le panneau Calques n'existe plus, partie 160 : la timeline et la bande, qui montrent la même chose, ont leurs essais à la
+    // partie 152 ; ici, ce que fait le clic sur la ligne du calque et la prise d'un outil.)
     let mut b = ouvert_grand(doc_deux_cartes());
     b.garder_formes = true;
     let c = cartes(&b);
-    // (Le panneau Calques n'est pas de l'espace Montage : on le regarde dans le Storyboard. Réglages devant le panneau Espace 3D,
-    // qui écrit lui aussi les noms des cartes.)
     b.app.set_espace(crate::workspace::Espace::Storyboard);
-    b.app.show_pane(crate::dock::Pane::Layers);
     b.app.show_pane(crate::dock::Pane::ToolOptions);
     b.chauffer(8);
-    assert!(b.app.pane_shown(crate::dock::Pane::Layers) && b.app.e3_vue_montree());
-    let (courant, autre) = (rang_peint(&b, "Carte 0"), rang_peint(&b, "Carte 1"));
-    assert_ne!(courant, autre, "le panneau Calques montre le calque courant");
-    // La caméra choisie seule : le rang du calque courant est peint comme les autres.
+    assert!(b.app.e3_vue_montree());
+    assert!(b.app.calque_montre_courant(0));
+    // La caméra choisie seule : aucun calque n'est montré choisi.
     b.app.e3_choisir_la_camera(false);
     b.chauffer(2);
-    assert_eq!(rang_peint(&b, "Carte 0"), autre, "caméra seule : aucun rang du panneau Calques n'est montré choisi");
-    assert_eq!(rang_peint(&b, "Carte 1"), autre);
-    // Un clic sur le nom du calque courant, dans le panneau : il redevient le calque choisi, la caméra est lâchée.
-    let nom = nom_dans_le_panneau_calques(&b, "Carte 0");
-    cliquer(&mut b, nom.center(), Modifiers::NONE);
-    pointeur_ailleurs(&mut b);
+    assert!(!b.app.calque_montre_courant(0) && !b.app.calque_montre_courant(1), "caméra seule : aucun calque n'est montré choisi");
+    // Un clic sur la ligne du calque courant : il redevient le calque choisi, la caméra est lâchée.
+    b.app.click_layer_head(0, false, false);
+    b.chauffer(2);
     assert_eq!((b.app.espace3d.sel.clone(), b.app.cur_layer), (vec![c[0]], 0), "{}", b.app.status);
-    assert_eq!(rang_peint(&b, "Carte 0"), courant);
+    assert!(b.app.calque_montre_courant(0));
     // Prendre un outil de dessin dans la vue (sa case, sa touche) : de même, pour chacun.
     for outil in [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Mixer, Tool::Select] {
         b.app.set_tool(Tool::Trajectoire);
@@ -616,7 +583,6 @@ fn while_the_camera_is_chosen_alone_the_layers_panel_shows_no_layer_as_chosen_an
     pointeur_ailleurs(&mut b);
     assert_eq!(b.app.espace3d.sel, vec![c[0]], "{}", b.app.status);
     assert!(!b.app.e3_camera_seule() && b.app.calque_montre_courant(0));
-    assert_eq!(rang_peint(&b, "Carte 0"), courant);
 }
 
 // ------------------------------------------------------------------------------------------------ la case « Caméra » de la barre de la vue
@@ -629,8 +595,15 @@ fn case_de_la_barre(b: &Banc, icone: &str) -> (Rect, bool) {
     b.formes.iter().for_each(|f| zones_des_textes(&f.shape, &mut tous));
     let dessin = b.app.canvas_rect;
     let barre = Rect::from_min_max(pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), pos2(dessin.right(), dessin.top()));
-    let zones: Vec<Rect> = tous.into_iter().filter(|(t, z)| t == icone && barre.contains(z.center())).map(|(_, z)| z).collect();
-    assert_eq!(zones.len(), 1, "une case {icone:?} dans la barre de la vue {barre:?} : {zones:?}");
+    // (Partie 160 : les outils de la vue Espace 3D, dont la case « Caméra », sont en tête de la barre d'outils de gauche, au-dessus
+    // des outils de dessin ; les options de la vue restent dans la barre au-dessus du dessin.)
+    let pinceau = tous.iter().filter(|(t, z)| t == Tool::Brush.icon() && z.center().x < dessin.left()).map(|(_, z)| z.top()).fold(f32::INFINITY, f32::min);
+    let tete = Rect::from_min_max(pos2(0.0, dessin.top() - crate::viewbar::VIEW_BAR_H), pos2(dessin.left(), pinceau));
+    let mut zones: Vec<Rect> = tous.iter().filter(|(t, z)| t == icone && barre.contains(z.center())).map(|(_, z)| *z).collect();
+    if zones.is_empty() {
+        zones = tous.iter().filter(|(t, z)| t == icone && tete.contains(z.center())).map(|(_, z)| *z).collect();
+    }
+    assert_eq!(zones.len(), 1, "une case {icone:?} dans la barre de la vue {barre:?} ou en tête de la barre d'outils {tete:?} : {zones:?}");
     let mut fonds = Vec::new();
     b.formes.iter().for_each(|f| rectangles(&f.shape, &mut fonds));
     let allumee = fonds.iter().any(|(r, fond, _)| *fond != Color32::TRANSPARENT && r.contains(zones[0].center()) && r.width() < 60.0 && r.height() < 60.0);

@@ -343,7 +343,7 @@ fn the_pane_opens_as_the_last_tab_of_the_tool_settings_group_and_nothing_else_mo
     let mut sans = d.clone();
     sans.close(Pane::Espace3d);
     assert!(sans.close_to(&origine), "{:#?}", sans.principal);
-    for p in [Pane::Color, Pane::Layers, Pane::Effects, Pane::Canvas, Pane::Montage] {
+    for p in [Pane::Color, Pane::Effects, Pane::Canvas, Pane::Montage] {
         assert_eq!(onglets_de(&d, p), onglets_de(&origine, p), "{p:?} garde ses onglets et celui de devant");
     }
     // L'aller-retour par egui_dock ne le perd pas. Une seconde fois : rien (il y est déjà).
@@ -358,10 +358,10 @@ fn the_pane_opens_as_the_last_tab_of_the_tool_settings_group_and_nothing_else_mo
     sans_fiche.open(Pane::Espace3d);
     assert_eq!(onglets_de(&sans_fiche, Pane::Espace3d).map(|g| g.0), Some(vec![Pane::ToolOptions, Pane::Espace3d]));
     let mut avec_les_calques = origine.clone();
-    avec_les_calques.close(Pane::Layers);
-    assert!(ajouter_onglet(&mut avec_les_calques.principal, Pane::ToolOptions, Pane::Layers));
+    avec_les_calques.close(Pane::Effects);
+    assert!(ajouter_onglet(&mut avec_les_calques.principal, Pane::ToolOptions, Pane::Effects));
     avec_les_calques.open(Pane::Espace3d);
-    assert_eq!(onglets_de(&avec_les_calques, Pane::Espace3d).map(|g| g.0), Some(vec![Pane::ToolOptions, Pane::Sheet, Pane::Layers, Pane::Espace3d]));
+    assert_eq!(onglets_de(&avec_les_calques, Pane::Espace3d).map(|g| g.0), Some(vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Espace3d]));
     // Les Vignettes (ouvert à la main) : un onglet des réglages de l'outil, au-dessus de la couleur ; rien d'autre ne bouge.
     let mut v = DockLayout::pour_les_vignettes();
     v.open(Pane::Espace3d);
@@ -415,13 +415,13 @@ fn opening_the_view_brings_the_pane_in_front_of_the_tool_settings_and_closing_it
     // Au repos, d'origine : pas de panneau Espace 3D ; Réglages, la couleur et les calques devant.
     let origine = b.app.dock_layout();
     assert!(!b.app.pane_shown(Pane::Espace3d) && !origine.contains(Pane::Espace3d));
-    assert!(devant(&b, Pane::ToolOptions) && devant(&b, Pane::Color) && devant(&b, Pane::Layers));
+    assert!(devant(&b, Pane::ToolOptions) && devant(&b, Pane::Color) && devant(&b, Pane::Effects));
     // La vue s'ouvre : il arrive en onglet après Réglages et la fiche, et passe devant. La couleur et les calques se
     // voient toujours, et rien d'autre n'a bougé.
     ouvrir_la_vue(&mut b);
     assert_eq!(groupe(&b, Pane::Espace3d), ONGLETS_DE_REGLAGES.to_vec());
     assert!(devant(&b, Pane::Espace3d) && !devant(&b, Pane::ToolOptions), "le panneau est devant Réglages");
-    assert!(devant(&b, Pane::Color) && devant(&b, Pane::Layers));
+    assert!(devant(&b, Pane::Color) && devant(&b, Pane::Effects));
     assert_eq!(b.app.e3_panneau.avant, Some(Pane::ToolOptions));
     let mut sans = b.app.dock_layout();
     sans.close(Pane::Espace3d);
@@ -474,17 +474,17 @@ fn a_pane_placed_or_closed_by_hand_is_respected_the_view_never_moves_it() {
     let mut b = banc_d_essai(2);
     // Rangé à la main en onglet avec les calques : la vue le met devant là où il est, et rend l'onglet d'avant en se fermant.
     let mut d = b.app.dock_layout();
-    assert!(ajouter_onglet(&mut d.principal, Pane::Layers, Pane::Espace3d));
+    assert!(ajouter_onglet(&mut d.principal, Pane::Effects, Pane::Espace3d));
     b.app.set_dock_layout(d);
     b.chauffer(2);
-    assert!(devant(&b, Pane::Layers) && groupe(&b, Pane::Espace3d).contains(&Pane::Layers));
+    assert!(devant(&b, Pane::Effects) && groupe(&b, Pane::Espace3d).contains(&Pane::Effects));
     ouvrir_la_vue(&mut b);
-    assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Layers), "il passe devant, sans changer de place");
+    assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Effects), "il passe devant, sans changer de place");
     assert!(devant(&b, Pane::ToolOptions) && !groupe(&b, Pane::ToolOptions).contains(&Pane::Espace3d));
-    assert_eq!(b.app.e3_panneau.avant, Some(Pane::Layers));
-    assert_eq!(onglets_de(&b.app.current_layout().dock_layout(), Pane::Espace3d).map(|g| g.1), Some(Pane::Layers), "la disposition retenue garde les calques devant");
+    assert_eq!(b.app.e3_panneau.avant, Some(Pane::Effects));
+    assert_eq!(onglets_de(&b.app.current_layout().dock_layout(), Pane::Espace3d).map(|g| g.1), Some(Pane::Effects), "la disposition retenue garde les calques devant");
     fermer_la_vue(&mut b);
-    assert!(devant(&b, Pane::Layers) && groupe(&b, Pane::Espace3d).contains(&Pane::Layers), "les calques reviennent devant, le panneau reste où on l'a mis");
+    assert!(devant(&b, Pane::Effects) && groupe(&b, Pane::Espace3d).contains(&Pane::Effects), "les calques reviennent devant, le panneau reste où on l'a mis");
     // Fermé à la main, la vue fermée : il reste fermé ; la vue, en s'ouvrant, le ramène à sa place, en onglet de Réglages.
     b.app.toggle_pane(Pane::Espace3d);
     b.chauffer(2);
@@ -504,14 +504,14 @@ fn a_pane_placed_or_closed_by_hand_is_respected_the_view_never_moves_it() {
     assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::ToolOptions));
     let mut d = b.app.dock_layout();
     d.close(Pane::Espace3d);
-    assert!(ajouter_onglet(&mut d.principal, Pane::Layers, Pane::Espace3d));
+    assert!(ajouter_onglet(&mut d.principal, Pane::Effects, Pane::Espace3d));
     b.app.set_dock_layout(d);
     b.chauffer(2);
     fermer_la_vue(&mut b);
-    assert!(b.app.pane_shown(Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Layers) && !groupe(&b, Pane::ToolOptions).contains(&Pane::Espace3d));
-    assert!(devant(&b, Pane::Layers));
+    assert!(b.app.pane_shown(Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Effects) && !groupe(&b, Pane::ToolOptions).contains(&Pane::Espace3d));
+    assert!(devant(&b, Pane::Effects));
     ouvrir_la_vue(&mut b);
-    assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Layers));
+    assert!(devant(&b, Pane::Espace3d) && groupe(&b, Pane::Espace3d).contains(&Pane::Effects));
     fermer_la_vue(&mut b);
     // Ouvert à la main, la vue fermée (son icône, sa commande) : à sa place, devant. La vue ne le déplace pas ; il était
     // déjà devant, il n'y a rien à rendre : il y reste à la fermeture.
@@ -537,7 +537,7 @@ fn each_work_space_gets_the_tab_in_front_while_the_view_is_open_and_restoring_th
     b.chauffer(3);
     assert!(b.app.espace == Espace::Animation && b.app.espace3d_vue_ouverte());
     assert_eq!(groupe(&b, Pane::Espace3d), ONGLETS_DE_REGLAGES.to_vec(), "{:?}", b.app.dock_layout().principal);
-    assert!(devant(&b, Pane::Espace3d) && devant(&b, Pane::Color) && devant(&b, Pane::Layers));
+    assert!(devant(&b, Pane::Espace3d) && devant(&b, Pane::Color) && devant(&b, Pane::Effects));
     let storyboard = b.app.settings.layout_of(Espace::Storyboard).expect("retenue en quittant le Storyboard").dock_layout();
     assert_eq!(onglets_de(&storyboard, Pane::Espace3d), Some((ONGLETS_DE_REGLAGES.to_vec(), Pane::ToolOptions)));
     // Retour au Storyboard : l'onglet y est, devant. (Le temps que les bords de l'Animation finissent de glisser : sa
@@ -634,7 +634,7 @@ fn the_tab_that_was_in_front_comes_back_only_if_the_pane_is_still_in_front_of_it
     let mut d = origine.clone();
     mettre_devant(&mut d.principal, Pane::Espace3d);
     let avant = d.clone();
-    assert!(!d.remettre_devant(Pane::Espace3d, Pane::Layers));
+    assert!(!d.remettre_devant(Pane::Espace3d, Pane::Effects));
     assert_eq!(d, avant);
     d.close(Pane::Color);
     assert!(!d.remettre_devant(Pane::Espace3d, Pane::Color));
@@ -663,7 +663,7 @@ fn retained_layouts_that_had_the_pane_with_the_colour_lose_it_once_and_a_pane_pl
     assert!(mettre_devant(&mut de_150.principal, Pane::Personnages));
     // L'Animation : le panneau rangé à la main, en onglet avec les calques.
     let mut a_la_main = disposition_d_avant();
-    assert!(ajouter_onglet(&mut a_la_main.principal, Pane::Layers, Pane::Espace3d));
+    assert!(ajouter_onglet(&mut a_la_main.principal, Pane::Effects, Pane::Espace3d));
     // Cinq espaces enregistrés : le panneau flottant, seul (rangé à la main) ; seul juste sous les réglages de l'outil (la
     // place de la partie 150 sans la couleur) ; avec la couleur dans un panneau flottant (la partie 150 l'y rejoignait) ;
     // en onglet de Réglages (sa place depuis la partie 152) ; en onglet d'un groupe de Réglages qui a aussi la couleur.
@@ -723,7 +723,7 @@ fn retained_layouts_that_had_the_pane_with_the_colour_lose_it_once_and_a_pane_pl
     assert_eq!(d.fenetres.len(), 1, "le panneau flottant de la fiche est resté");
     // L'Animation : rangé à la main avec les calques, il y reste, et la disposition n'a pas changé.
     let d = lu.animation_layout.as_ref().expect("animation").dock_layout();
-    assert_eq!(onglets_de(&d, Pane::Espace3d).map(|g| g.0), Some(vec![Pane::Layers, Pane::Espace3d]));
+    assert_eq!(onglets_de(&d, Pane::Espace3d).map(|g| g.0), Some(vec![Pane::Effects, Pane::Espace3d]));
     assert!(d.close_to(&a_la_main));
     assert_eq!(lu.animation_layout.as_ref().unwrap().montage_height, Espace::Animation.defaut().montage_height, "les autres réglages de la disposition restent");
     assert!(lu.montage_layout.as_ref().unwrap().dock_layout().close_to(&DockLayout::pour_le_montage(500.0)));
@@ -832,7 +832,7 @@ fn the_pane_has_its_name_its_cube_its_command_its_icon_in_the_bar_and_its_line_i
     assert!(!b.app.pane_shown(Pane::Espace3d));
     // Rangé en onglet derrière un autre : elle le met devant.
     let mut d = b.app.dock_layout();
-    assert!(ajouter_onglet(&mut d.principal, Pane::Layers, Pane::Espace3d));
+    assert!(ajouter_onglet(&mut d.principal, Pane::Effects, Pane::Espace3d));
     b.app.set_dock_layout(d);
     b.chauffer(1);
     assert!(b.app.pane_shown(Pane::Espace3d) && !devant(&b, Pane::Espace3d));

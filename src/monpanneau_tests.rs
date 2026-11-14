@@ -423,7 +423,7 @@ fn the_icon_of_a_command_is_its_usual_one() {
     let annuler = infos(&ctx, "edition.annuler");
     assert_eq!((annuler.icone.as_str(), annuler.nom.as_str()), (egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE, "Annuler"));
     // Un panneau : l'icône de la barre des panneaux.
-    assert_eq!(infos(&ctx, "vue.calques").icone, Pane::Layers.icon());
+    assert_eq!(infos(&ctx, "vue.fiche").icone, Pane::Sheet.icon());
     assert_eq!(infos(&ctx, crate::monpanneau::ACTION).icone, Pane::MonPanneau.icon());
     // Une commande sans icône au registre : une icône par défaut, sous son nom du registre ; jamais d'identifiant brut.
     let autre = infos(&ctx, "vue.cadres_securite");

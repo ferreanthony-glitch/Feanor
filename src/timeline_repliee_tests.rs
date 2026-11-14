@@ -1,4 +1,4 @@
-﻿//! Montage plus lisible (Anthony, 2026-10-28, branche `timeline-repliee`) : seul le calque actif est déplié dans le Storyboard et le
+//! Montage plus lisible (Anthony, 2026-10-28, branche `timeline-repliee`) : seul le calque actif est déplié dans le Storyboard et le
 //! Montage (tous les calques restent dépliés dans l'Animation) ; les clés de tous les calques d'un plan sont de petits traits de la
 //! couleur de leur sorte sur son bloc ; un calque de couleur lié n'a plus de piste, un liseré rose sous le bloc de son trait le montre ; un
 //! bloc n'écrit son nom que s'il diffère de celui de sa rangée ; au repos, rien ne repeint et rien ne se recalcule.
@@ -227,12 +227,13 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
         assert_eq!(hs, [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "{espace:?}");
     }
-    // L'Animation : sa timeline (tous les calques dépliés, comme avant) ne lit pas l'état des pistes du montage.
+    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 160 : le calque courant y a sa ligne complète, les
+    // autres une ligne fine).
     let mut b = banc_montage();
     b.app.set_espace(Espace::Animation);
     b.chauffer(8);
-    let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups);
-    assert!(rows.iter().all(|r| r.h == crate::layerheads::ROW_FULL), "tous les calques de la timeline sont dépliés");
+    let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
+    assert!(rows.iter().all(|r| r.h == if r.li == b.app.cur_layer { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE }), "le courant complet, les autres fins");
     assert_eq!(rows.len(), 4);
     for nom in ["Perso", "Décor", "Fond", "Vide"] {
         assert!(combien(&b, nom) >= 1, "« {nom} » manque dans la timeline de l'animation");

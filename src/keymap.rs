@@ -518,7 +518,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     // donné continue de servir.)
     act("vue.pinceaux", "Liste des pinceaux, dans les réglages (déplier / replier)", true, false),
     act("vue.couleur", "Panneau Couleur (ouvrir / fermer)", true, false),
-    act("vue.calques", "Panneau Calques (ouvrir / fermer)", true, false),
+    act("vue.calques", "Calques (la colonne de la timeline)", true, false),
     act("vue.fiche", "Panneau Fiche du plan (ouvrir / fermer)", true, false),
     act("vue.barre_panneaux", "Barre des panneaux, sur le bord droit (montrer / cacher)", true, false),
     act("role.cle", "Rôle des images visées : clé", true, false),

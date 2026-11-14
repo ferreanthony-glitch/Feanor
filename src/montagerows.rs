@@ -28,8 +28,9 @@ use crate::theme;
 /// Hauteur de la piste Caméra et d'une piste de calque.
 pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
-/// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40).
-pub(crate) const LAYER_H: f32 = 40.0;
+/// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
+/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandit d'autant).
+pub(crate) const LAYER_H: f32 = 44.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
@@ -138,6 +139,12 @@ impl App {
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
     /// le rend courant.
     pub(crate) fn row_headers(&mut self, ui: &mut egui::Ui, rect: Rect, rows: &Rows) {
+        // Un clic sur les pistes de calques de la colonne lui donne la main, comme au panneau Calques d'avant (partie 160) : Ctrl+C,
+        // Ctrl+V copient et collent le calque, ou collent les effets copiés sur le calque cliqué (`fxcopie.rs`).
+        let calques = Rect::from_min_max(pos2(rect.left(), rect.top() + rows.layers_top()), pos2(rect.right(), rect.top() + rows.background_top()));
+        if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(calques) {
+            self.take_layers_pane_focus();
+        }
         let painter = ui.painter_at(rect);
         let visuals = ui.visuals().clone();
         let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(rect.width() - 8.0, h - 2.0));
@@ -264,7 +271,16 @@ impl App {
                 pick = Some((k, resp.secondary_clicked()));
             }
             if let (true, Some(p)) = (resp.double_clicked(), resp.interact_pointer_pos()) {
-                let name_rect = crate::pistes::head_layout(r, track.folded).name;
+                let mut name_rect = crate::pistes::head_layout(r, track.folded).name;
+                // (La piste du calque actif écrit le nom de son dossier avant le sien, partie 160 : la zone du nom commence après.)
+                if current && !track.folded {
+                    let layers = &self.doc.panels[self.cur_panel].layers;
+                    if let Some(d) = crate::folders::parent_index(layers, k).map(|fi| layers[fi].name.clone()) {
+                        let w = ui.fonts(|f| f.layout_no_wrap(format!("{d} ›"), FontId::proportional(9.5), Color32::WHITE).size().x);
+                        let retrait = if crate::folders::couleur_du_rangement(layers, k, &self.doc.groups).is_some() { crate::pistes::RETRAIT } else { 0.0 };
+                        name_rect.min.x += w + 3.0 + retrait;
+                    }
+                }
                 if self.double_click_is_on_name(ui, p, name_rect, &name, crate::pistes::name_size(track.folded)) {
                     let id = self.doc.panels[self.cur_panel].layers[k].id;
                     self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
@@ -273,7 +289,12 @@ impl App {
                 }
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
-            self.montage_head(ui, r, k, color, track.folded);
+            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160) ; les autres, l'œil, la pastille, le nom.
+            if current && !track.folded && track.h >= 2.0 * crate::pistes::RANGEE_ACTIVE {
+                self.piste_active_head(ui, r, k, color);
+            } else {
+                self.montage_head(ui, r, k, color, track.folded);
+            }
         }
         // (Les calques ont changé pendant les rangées : le glissé et le clic de cette image visaient les rangs d'avant.)
         tient &= self.calques_tiennent(&avant, usize::MAX);

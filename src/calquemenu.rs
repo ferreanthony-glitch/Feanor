@@ -7,7 +7,7 @@
 //!
 //! La même icône, sans le mot, dit la sorte de chaque ligne du panneau (`Sorte::of`).
 
-use eframe::egui::{self, text::LayoutJob, vec2, Color32, FontId, Response, RichText, TextFormat};
+use eframe::egui::{self, text::LayoutJob, Color32, FontId, Response, RichText, TextFormat};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -159,12 +159,7 @@ pub(crate) fn teinte(_ui: &egui::Ui, s: Sorte) -> Color32 {
 }
 
 impl App {
-    /// Le bouton « + » du panneau Calques : un menu des sortes de calques à créer.
-    pub(crate) fn layer_plus_button(&mut self, ui: &mut egui::Ui) {
-        let button = egui::Button::new(RichText::new(ph::PLUS).size(crate::bulles::TAILLE)).min_size(vec2(24.0, 0.0));
-        let resp = egui::menu::menu_custom_button(ui, button, |ui| self.layer_new_menu(ui)).response;
-        crate::bulles::bulle(resp, "Nouveau calque", "Dessin vectoriel ou bitmap, calque de couleur, calque d'effet, vidéo, dossier, calques 3D.", "");
-    }
+    // (Le « + » du panneau Calques est devenu le premier bouton de la barre d'actions des calques, partie 160, `barrecalques.rs`.)
 
     /// Le menu « Nouveau calque » : une entrée par sorte (icône, nom, une phrase), puis la fenêtre avec le nom, le
     /// groupe et la place. Aussi dans le menu Calques et le clic droit dans le vide du panneau.

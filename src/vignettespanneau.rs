@@ -91,131 +91,99 @@ impl App {
         }
     }
 
-    /// Le bloc « Calques » du panneau : les calques d'annotation de la planche (le dernier est au-dessus), puis « Dessin » (le dessin de la
-    /// case) tout en bas. Un clic vise un calque : le stylo, la gomme et le lasso d'annotation y agissent ; « Dessin » range ces outils, les
-    /// outils de dessin agissent de nouveau sur la case. L'œil montre ou cache le calque ; double-clic : renommer ; clic droit : monter,
-    /// descendre, supprimer. Ce bloc est dans le panneau « Planche » plutôt que dans un panneau à lui : il n'a de sens que sur la planche, comme
-    /// ses autres réglages, et chaque disposition de fenêtre déjà enregistrée le montre sans avoir à le chercher.
+    /// La ligne « Annotations » du panneau (partie 160, Anthony : « Une seule ligne "Annotations" avec son œil, sans liste. Si tu te sers
+    /// de plusieurs couches d'annotation, on les garde au clic droit. ») : l'œil montre ou cache les annotations (un affichage), un clic
+    /// sur « Annotations » prend le stylo d'annotation, « Dessin de la case » rend la main au pinceau. Au clic droit de la ligne, les
+    /// couches d'annotation d'un projet qui en a plusieurs : viser, montrer ou cacher, renommer, monter, descendre, supprimer, en
+    /// ajouter une. Plus le mot « calque » dans les Vignettes.
     fn vignettes_calques(&mut self, ui: &mut egui::Ui) {
+        let vise = self.vignettes.annot.outil.is_some();
+        let montrees = self.vignettes.annot.visible;
+        let traits: usize = self.doc.annotations.calques.iter().map(|c| self.doc.annotations.traits_du_calque(c.id)).sum();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Calques d'annotation").small().weak());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let resp = ui.add(egui::Button::new(RichText::new(ph::PLUS)).min_size(egui::vec2(22.0, 0.0)));
-                let action = "vignettes.annotation_calque_nouveau";
-                if self.aide(resp, "Nouveau calque d'annotation", "Un calque de plus pour les annotations de la planche, au-dessus des autres : on y trace, on le montre ou on le cache à part.", action).clicked() {
-                    self.run_action(action);
+                ui.spacing_mut().item_spacing.x = 3.0;
+                let eye = if montrees { ph::EYE } else { ph::EYE_SLASH };
+                let resp = ui.add(egui::Button::new(RichText::new(eye)).frame(false).min_size(egui::vec2(22.0, 0.0)));
+                let resp = crate::bulles::bulle(resp, if montrees { "Cacher les annotations" } else { "Montrer les annotations" }, "Un affichage : rien n'est effacé.", "");
+                if resp.clicked() {
+                    self.annot_basculer_visibles();
                 }
-            });
-        });
-        let calques: Vec<(u64, String, bool, usize)> = self.doc.annotations.calques.iter().rev().map(|c| (c.id, c.nom.clone(), c.visible, self.doc.annotations.traits_du_calque(c.id))).collect();
-        let vise = self.vignettes.annot.outil.is_some().then(|| self.annot_calque_actif()).flatten();
-        let haut = calques.first().map(|c| c.0);
-        let bas = calques.last().map(|c| c.0);
-        // Sans calque encore : une ligne d'état ; « le premier trait d'annotation crée son calque » est dans l'animation « Annotations » du
-        // registre des explications (partie 153).
-        if calques.is_empty() {
-            ui.label(RichText::new("Aucune annotation pour l'instant.").small().weak());
-        }
-        // Le glissé d'un calque (Anthony, 2026-10-24) : on tient un calque par son nom et on le dépose entre deux autres ; le dépôt est une
-        // seule étape d'annulation. Les rectangles des lignes, du haut vers le bas, disent où il tombe (`annotationsui::depot_du_calque`).
-        let mut lignes: Vec<(u64, egui::Rect)> = Vec::new();
-        let mut lache: Option<u64> = None;
-        for (id, nom, visible, traits) in calques {
-            let ligne = ui.push_id(("calque_annotation", id), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 3.0;
-                    let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
-                    let resp = ui.add(egui::Button::new(RichText::new(eye)).frame(false).min_size(egui::vec2(22.0, 0.0)));
-                    if crate::bulles::bulle(resp, if visible { "Cacher le calque" } else { "Montrer le calque" }, "Un affichage : rien n'est effacé.", "").clicked() {
-                        self.annot_calque_basculer(id);
-                    }
-                    if self.vignettes.annot.renomme.as_ref().is_some_and(|r| r.0 == id) {
-                        self.vignettes_renommer_calque(ui, id);
-                        return;
-                    }
-                    let on = vise == Some(id);
-                    let texte = if visible { RichText::new(&nom) } else { RichText::new(&nom).weak() };
-                    let largeur = (ui.available_width() - 26.0).max(40.0);
-                    let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(texte, on)).selected(on).min_size(egui::vec2(largeur, 0.0)).sense(egui::Sense::click_and_drag()));
-                    let resp = crate::bulles::bulle(resp, &nom, "Un clic vise ce calque : le stylo, la gomme et le lasso d'annotation y agissent. Glisse-le pour le ranger entre deux autres. Double-clic : renommer. Clic droit : monter, descendre, supprimer.", "");
-                    if resp.clicked() {
+                resp.context_menu(|ui| self.vignettes_couches_menu(ui));
+                let largeur = ((ui.available_width() - 30.0) * 0.5).max(40.0);
+                let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new(format!("{}  Annotations", ph::MARKER_CIRCLE)), vise)).selected(vise).min_size(egui::vec2(largeur, 0.0)));
+                let resp = crate::bulles::bulle(resp, "Annotations", "Un clic prend le stylo d'annotation : on note par-dessus la planche, jamais dans les exports du dessin. Clic droit : les couches d'annotation.", "");
+                if resp.clicked() {
+                    if let Some(id) = self.annot_calque_actif() {
                         self.annot_viser_le_calque(id);
+                    } else {
+                        self.annot_choisir(crate::annotationsui::Outil::Stylo);
                     }
-                    if resp.dragged() {
-                        self.vignettes.annot.glisse = Some(id);
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-                    }
-                    if resp.drag_stopped() {
-                        lache = Some(id);
-                    }
-                    if resp.double_clicked() {
-                        self.vignettes.annot.renomme = Some((id, nom.clone()));
-                    }
-                    resp.context_menu(|ui| {
-                        if ui.button("Renommer").clicked() {
-                            ui.close_menu();
-                            self.vignettes.annot.renomme = Some((id, nom.clone()));
-                        }
-                        if ui.add_enabled(haut != Some(id), egui::Button::new("Monter")).clicked() {
-                            ui.close_menu();
-                            self.annot_calque_deplacer(id, true);
-                        }
-                        if ui.add_enabled(bas != Some(id), egui::Button::new("Descendre")).clicked() {
-                            ui.close_menu();
-                            self.annot_calque_deplacer(id, false);
-                        }
-                        ui.separator();
-                        if ui.button(format!("Supprimer (et ses {traits} annotation{})", if traits > 1 { "s" } else { "" })).clicked() {
-                            ui.close_menu();
-                            self.annot_calque_supprimer(id);
-                        }
-                    });
-                    ui.label(RichText::new(traits.to_string()).small().weak());
-                })
-                .response
-                .rect
+                }
+                resp.context_menu(|ui| self.vignettes_couches_menu(ui));
+                let largeur = (ui.available_width() - 26.0).max(40.0);
+                let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new("Dessin de la case"), !vise)).selected(!vise).min_size(egui::vec2(largeur, 0.0)));
+                let resp = crate::bulles::bulle(resp, "Dessin de la case", "Le dessin de la case : le pinceau, la gomme et le lasso de la barre d'outils y agissent. Un clic range les outils d'annotation.", "");
+                if resp.clicked() {
+                    self.annot_viser_le_dessin();
+                }
+                resp.context_menu(|ui| self.vignettes_couches_menu(ui));
+                let resp = ui.label(RichText::new(traits.to_string()).small().weak()).on_hover_text("Annotations sur la planche.");
+                resp.context_menu(|ui| self.vignettes_couches_menu(ui));
             });
-            lignes.push((id, ligne.inner));
-        }
-        self.vignettes_glisser_les_calques(ui, &lignes, lache);
-        // Le dessin de la case : tout en bas, sous les annotations.
-        let on = self.vignettes.annot.outil.is_none();
-        let courant = self.layer().name.clone();
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            ui.add_space(25.0);
-            let largeur = (ui.available_width() - 26.0).max(40.0);
-            let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new("Dessin de la case"), on)).selected(on).min_size(egui::vec2(largeur, 0.0)));
-            let resp = crate::bulles::bulle(resp, "Dessin de la case", &format!("Le dessin de la case : le pinceau, la gomme et le lasso de la barre d'outils y agissent (calque « {courant} »). Un clic range les outils d'annotation."), "");
-            if resp.clicked() {
-                self.annot_viser_le_dessin();
-            }
-        });
         ui.add_space(2.0);
         ui.separator();
     }
 
-    /// Le glissé d'un calque d'annotation dans la liste : pendant qu'on le tient, un trait d'accent montre où il tombera ; au lâcher il est
-    /// posé là, une étape d'annulation (`annot_calque_placer`). `lignes` : les lignes de la liste du haut vers le bas ; `lache` : le calque
-    /// dont le glissé s'arrête à cette image.
-    fn vignettes_glisser_les_calques(&mut self, ui: &mut egui::Ui, lignes: &[(u64, egui::Rect)], lache: Option<u64>) {
-        let Some(tenu) = lache.or(self.vignettes.annot.glisse) else { return };
-        let (Some(d), Some(y)) = (lignes.iter().position(|l| l.0 == tenu), ui.input(|i| i.pointer.latest_pos()).map(|p| p.y)) else {
-            self.vignettes.annot.glisse = None;
-            return;
-        };
-        let centres: Vec<f32> = lignes.iter().map(|l| l.1.center().y).collect();
-        let (ligne, vers) = crate::annotationsui::depot_du_calque(&centres, d, y);
-        if lache.is_some() {
-            self.vignettes.annot.glisse = None;
-            self.annot_calque_placer(tenu, vers);
-            return;
+    /// Le clic droit de la ligne « Annotations » : les couches d'annotation (la dernière est au-dessus), chacune avec son sous-menu.
+    fn vignettes_couches_menu(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Couches d'annotation").small().weak());
+        let couches: Vec<(u64, String, bool, usize)> = self.doc.annotations.calques.iter().rev().map(|c| (c.id, c.nom.clone(), c.visible, self.doc.annotations.traits_du_calque(c.id))).collect();
+        let vise = self.vignettes.annot.outil.is_some().then(|| self.annot_calque_actif()).flatten();
+        let haut = couches.first().map(|c| c.0);
+        let bas = couches.last().map(|c| c.0);
+        if couches.is_empty() {
+            ui.label(RichText::new("Aucune annotation pour l'instant.").small().weak());
         }
-        // Le trait d'insertion, entre deux lignes (ou sous la dernière) ; rien si le calque retomberait où il est.
-        let bornes = lignes.iter().fold(egui::Rect::NOTHING, |r, l| r.union(l.1));
-        let ligne_y = if ligne < lignes.len() { lignes[ligne].1.top() - 1.0 } else { lignes[lignes.len() - 1].1.bottom() + 1.0 };
-        ui.painter().hline(bornes.x_range(), ligne_y, egui::Stroke::new(2.0_f32, crate::theme::accent()));
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        for (id, nom, visible, traits) in couches {
+            if self.vignettes.annot.renomme.as_ref().is_some_and(|r| r.0 == id) {
+                ui.horizontal(|ui| self.vignettes_renommer_calque(ui, id));
+                continue;
+            }
+            let titre = format!("{}  {nom} ({traits})", if vise == Some(id) { ph::PENCIL_SIMPLE } else if visible { ph::EYE } else { ph::EYE_SLASH });
+            ui.menu_button(titre, |ui| {
+                if ui.button("Viser cette couche").on_hover_text("Le stylo, la gomme et le lasso d'annotation y agissent.").clicked() {
+                    ui.close_menu();
+                    self.annot_viser_le_calque(id);
+                }
+                if ui.button(if visible { "Cacher" } else { "Montrer" }).on_hover_text("Un affichage : rien n'est effacé.").clicked() {
+                    ui.close_menu();
+                    self.annot_calque_basculer(id);
+                }
+                if ui.button("Renommer").clicked() {
+                    self.vignettes.annot.renomme = Some((id, nom.clone()));
+                }
+                if ui.add_enabled(haut != Some(id), egui::Button::new("Monter")).clicked() {
+                    ui.close_menu();
+                    self.annot_calque_deplacer(id, true);
+                }
+                if ui.add_enabled(bas != Some(id), egui::Button::new("Descendre")).clicked() {
+                    ui.close_menu();
+                    self.annot_calque_deplacer(id, false);
+                }
+                ui.separator();
+                if ui.button(format!("Supprimer (et ses {traits} annotation{})", if traits > 1 { "s" } else { "" })).clicked() {
+                    ui.close_menu();
+                    self.annot_calque_supprimer(id);
+                }
+            });
+        }
+        ui.separator();
+        let action = "vignettes.annotation_calque_nouveau";
+        let key = self.raccourci(action);
+        if ui.add(egui::Button::new(format!("{}  Nouvelle couche d'annotation", ph::PLUS)).shortcut_text(key)).on_hover_text("Une couche de plus pour les annotations de la planche, au-dessus des autres : on y trace, on la montre ou on la cache à part.").clicked() {
+            ui.close_menu();
+            self.run_action(action);
+        }
     }
 
     /// Le champ de renommage d'un calque d'annotation : Entrée (ou un clic ailleurs) valide, Échap abandonne.

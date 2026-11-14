@@ -11,15 +11,16 @@
 //!   en fait la cible du dessin (`App::aplat_cible`) : pinceau, crayon, gomme, pot de peinture et cutter travaillent
 //!   l'aplat seul ; un clic sur le calque revient au trait. Ses réglages (couleur, débord, trous) sont dans Réglages
 //!   quand la sous-ligne est choisie, et dans son clic droit.
+//!
+//! **Partie 160** : le panneau Calques n'existe plus, et la sous-ligne n'est pas recréée (Anthony : « On enlève dessiner dans
+//! l'aplat »). Le moteur qui dessine dans l'aplat reste (« Peint sur l'aplat » de Réglages s'en sert) ; ses réglages (couleur,
+//! débord, trous…) sont au clic droit du calque, « Réglages de l'aplat », sous « Retirer l'aplat ».
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::{App, Tool};
 use crate::fond::FondReglages;
-
-/// Hauteur de la sous-ligne de l'aplat dans le panneau Calques : moins de la moitié d'un rang de calque (36 px + marges).
-pub(crate) const SOUS_LIGNE_H: f32 = 16.0;
 
 impl App {
     /// La cible du dessin est l'aplat du calque courant : sa sous-ligne a été choisie, et le calque en a toujours un.
@@ -38,6 +39,10 @@ impl App {
     /// Un clic sur la sous-ligne de l'aplat du calque `li` : il devient la cible du dessin (le calque aussi). Un outil qui
     /// ne dessine pas cède la place au pinceau. Un personnage choisi garde ses couleurs : c'est sa couleur d'aplat que
     /// prennent le pinceau et le pot de peinture sur l'aplat (`perso_fond_ou`).
+    ///
+    /// (Depuis la partie 160, plus rien ne l'appelle dans l'interface : la sous-ligne du panneau Calques est retirée, à la demande
+    /// d'Anthony ; il reste pour les essais du dessin dans l'aplat, en attendant sa décision sur la suite.)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn select_aplat(&mut self, li: usize) {
         let Some(id) = self.layers().get(li).filter(|l| l.fond.is_some()).map(|l| l.id) else { return };
         self.end_stroke();
@@ -68,40 +73,6 @@ impl App {
             _ => "peindre sous le trait, dans la forme (recoud l'aplat coupé)",
         };
         format!("Aplat de {nom} · {quoi} · clic sur le calque : revenir au trait")
-    }
-
-    /// La sous-ligne de l'aplat du calque `li`, fine (moins de la moitié d'un rang), en retrait sous le rang du calque :
-    /// une pastille de la couleur de l'aplat et « Aplat ». Surlignée comme un calque choisi quand l'aplat est la cible du
-    /// dessin. `hue` : la couleur de la sorte du calque ; `retrait` : le décalage en plus (calque rangé dans un dossier,
-    /// calque de couleur). Le clic et le clic droit sont à l'appelant (`layersui.rs`).
-    pub(crate) fn aplat_subrow(&mut self, ui: &mut egui::Ui, li: usize, hue: egui::Color32, retrait: f32) -> egui::Response {
-        let (nom, couleur) = match self.layers().get(li) {
-            Some(l) => (l.name.clone(), l.fond.map_or([255, 255, 255], |f| f.couleur)),
-            None => (String::new(), [255, 255, 255]),
-        };
-        // (La caméra choisie seule dans la vue Espace 3D : rien n'est montré choisi, l'aplat non plus.)
-        let vise = self.calque_montre_courant(li) && self.aplat_en_cible();
-        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), SOUS_LIGNE_H), egui::Sense::click());
-        let resp = crate::bulles::bulle(
-            resp,
-            &format!("Aplat de {nom}"),
-            "L'aplat sous le trait de ce calque. Clic : peindre, gommer ou remplir l'aplat seul, sans toucher au trait. Clic sur le calque : revenir au trait. Clic droit : ses réglages, ou le retirer.",
-            "",
-        );
-        if ui.is_rect_visible(rect) {
-            let painter = ui.painter();
-            if vise {
-                painter.rect_filled(rect, 3.0, hue.gamma_multiply(0.55));
-            } else if resp.hovered() {
-                painter.rect_filled(rect, 3.0, hue.gamma_multiply(0.12));
-            }
-            let pastille = egui::Rect::from_center_size(egui::pos2(rect.left() + 28.0 + retrait, rect.center().y), egui::vec2(14.0, 9.0));
-            painter.rect_filled(pastille, 2.0, egui::Color32::from_rgb(couleur[0], couleur[1], couleur[2]));
-            painter.rect_stroke(pastille, 2.0, egui::Stroke::new(1.0_f32, crate::theme::bord()), egui::StrokeKind::Inside);
-            let encre = if vise { crate::theme::texte() } else { crate::theme::texte_doux() };
-            painter.text(egui::pos2(pastille.right() + 6.0, rect.center().y), egui::Align2::LEFT_CENTER, "Aplat", egui::FontId::proportional(10.5), encre);
-        }
-        resp
     }
 
     /// Les réglages de l'aplat du calque `li` : couleur, débord, fermeture des trous, bord de l'image. Une étape
@@ -219,6 +190,11 @@ impl App {
             ui.close_menu();
             self.toggle_fond(li);
         }
+        // Ses réglages (couleur, débord, trous, aplat intelligent), juste dessous : ils étaient au clic droit de la sous-ligne du
+        // panneau Calques, qui n'existe plus (partie 160).
+        if on {
+            ui.menu_button("Réglages de l'aplat", |ui| self.aplat_menu(ui, li));
+        }
     }
 
     /// Sous-menu « Aplat sous le trait » (menu Calques). `courant` : avec la ligne du calque courant (les clics droits
@@ -269,7 +245,7 @@ impl App {
         self.status = if on {
             "Aplat : retiré de ce calque (Ctrl+Z le remet, avec ce qu'on y avait peint).".into()
         } else {
-            "Aplat : chaque dessin du calque a maintenant un aplat, recalculé à chaque trait. Clique sur sa sous-ligne (panneau Calques) pour le peindre ou le gommer seul.".into()
+            "Aplat : chaque dessin du calque a maintenant un aplat, recalculé à chaque trait. « Peint sur l'aplat », dans Réglages, peint dedans.".into()
         };
     }
 
@@ -285,9 +261,9 @@ impl App {
         let size = if small { 12.0 } else { crate::bulles::TAILLE };
         let key = self.raccourci("pinceau.fond");
         let about = if on {
-            "Ce calque a un aplat sous son trait : tout ce que le trait enferme, plus un léger débord, en une seule forme qui se recalcule à chaque trait. Clic : le retirer. Sa sous-ligne, juste dessous, sert à peindre ou gommer l'aplat seul ; ses réglages sont dans Réglages quand elle est choisie."
+            "Ce calque a un aplat sous son trait : tout ce que le trait enferme, plus un léger débord, en une seule forme qui se recalcule à chaque trait. Clic : le retirer. Ses réglages (couleur, débord, trous) : clic droit sur le calque, « Réglages de l'aplat »."
         } else {
-            "Donner un aplat à ce calque : tout ce que le trait enferme, plus un léger débord, en une seule forme sous le trait, qui se recalcule à chaque trait. Une sous-ligne apparaît sous le calque : un clic dessus, et l'on peint, gomme ou remplit l'aplat sans toucher au trait."
+            "Donner un aplat à ce calque : tout ce que le trait enferme, plus un léger débord, en une seule forme sous le trait, qui se recalcule à chaque trait."
         };
         let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new(ph::USER_SQUARE).size(size), on)).selected(on).frame(on).min_size(egui::vec2(18.0, 0.0)));
         let resp = crate::bulles::bulle(resp, "Aplat sous le trait", about, &key);

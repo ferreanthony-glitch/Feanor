@@ -191,7 +191,8 @@ fn the_other_workspaces_keep_their_own_layouts_while_focus_is_on() {
             assert!(b.app.settings.layout_of(*e).is_some(), "{e:?}");
         }
     }
-    assert!(b.app.pane_shown(Pane::Layers), "le panneau Calques est revenu");
+    // (Partie 160 : le panneau Calques n'existe plus ; les effets, son voisin de colonne, sont revenus.)
+    assert!(b.app.pane_shown(Pane::Effects), "le panneau Effets est revenu");
 }
 
 #[test]

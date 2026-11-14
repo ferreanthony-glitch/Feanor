@@ -513,7 +513,7 @@ impl App {
         match effet.contenu {
             crate::calqueffet::Contenu::Ajustement => {
                 ui.label(RichText::new(format!("{}  Calque d'effet : sa pile agit sur tout ce qui est dessous{}.", ph::SPARKLE, if l.parent.is_some() { " dans son dossier" } else { "" })).small())
-                    .on_hover_text("Il agit aux images où il a une exposition (comme un dessin tenu dans la timeline) ; les clés des effets font varier les réglages. Son opacité et son mode de fusion sont ceux du panneau Calques.");
+                    .on_hover_text("Il agit aux images où il a une exposition (comme un dessin tenu dans la timeline) ; les clés des effets font varier les réglages. Son opacité et son mode de fusion sont sur sa ligne de la timeline.");
                 ui.separator();
             }
             crate::calqueffet::Contenu::Incrustation(mut inc) => {

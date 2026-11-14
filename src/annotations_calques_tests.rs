@@ -93,20 +93,6 @@ pub(crate) fn texte_en(b: &Banc, t: &str) -> Option<Pos2> {
     })
 }
 
-/// Le texte `t` le plus proche, à l'horizontale, de `x` (plusieurs textes de l'écran peuvent s'écrire pareil : on prend celui de la colonne).
-fn texte_pres_de(b: &Banc, t: &str, x: f32) -> Option<Pos2> {
-    textes_en(b, t).into_iter().min_by(|p, q| (p.x - x).abs().total_cmp(&(q.x - x).abs()))
-}
-
-fn textes_en(b: &Banc, t: &str) -> Vec<Pos2> {
-    let mut v: Vec<Pos2> = b.formes.iter().filter_map(|s| match &s.shape {
-        egui::epaint::Shape::Text(x) if x.galley.job.text == t => Some(x.pos + x.galley.size() * 0.5),
-        _ => None,
-    }).collect();
-    v.sort_by(|a, b| a.y.total_cmp(&b.y));
-    v
-}
-
 pub(crate) fn clic(b: &mut Banc, p: Pos2) {
     b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
     b.image(vec![appui(p, true, Modifiers::NONE)], 1.0 / 60.0);
@@ -407,8 +393,36 @@ fn layers_are_added_renamed_deleted_and_reordered_each_in_one_undo_step() {
     assert_eq!(b.app.doc.annotations.calques[0].id, c);
 }
 
+/// Un clic droit en `p`.
+fn clic_droit(b: &mut Banc, p: Pos2) {
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    for pressed in [true, false] {
+        b.image(vec![Event::PointerButton { pos: p, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    }
+    b.chauffer(3);
+}
+
+/// Le texte de l'écran qui contient `t`.
+fn texte_qui_contient(b: &Banc, t: &str) -> Option<Pos2> {
+    b.formes.iter().find_map(|s| match &s.shape {
+        egui::epaint::Shape::Text(x) if x.galley.job.text.contains(t) => Some(x.pos + x.galley.size() * 0.5),
+        _ => None,
+    })
+}
+
+/// Ouvre le clic droit de la ligne « Annotations » et le sous-menu de la couche `nom`.
+fn menu_de_la_couche(b: &mut Banc, nom: &str) {
+    let ligne = texte_qui_contient(b, "Annotations").expect("la ligne « Annotations »");
+    clic_droit(b, ligne);
+    let couche = texte_qui_contient(b, &format!("{nom} (")).unwrap_or_else(|| panic!("la couche « {nom} » dans le clic droit"));
+    b.image(vec![Event::PointerMoved(couche)], 1.0 / 60.0);
+    b.chauffer(4);
+}
+
 #[test]
-fn the_planche_panel_lists_the_layers_with_the_drawing_below_and_one_click_switches_the_target() {
+fn the_planche_panel_has_one_annotations_line_and_the_layers_at_its_right_click() {
+    // Partie 160 (Anthony : « Une seule ligne "Annotations" avec son œil, sans liste. Si tu te sers de plusieurs couches d'annotation,
+    // on les garde au clic droit. ») : plus de liste « Calques d'annotation » ; une ligne, et les couches au clic droit.
     let mut b = ouvert_vignettes(quatre_plans(), 3);
     assert!(b.app.dock_layout().contains(crate::dock::Pane::Vignettes), "le panneau Planche est à l'écran avec l'onglet");
     let a = b.app.doc.annotations.calque_ou_premier(None);
@@ -417,55 +431,50 @@ fn the_planche_panel_lists_the_layers_with_the_drawing_below_and_one_click_switc
     poser(&mut b, Some(a), 0, 40.0);
     b.garder_formes = true;
     b.chauffer(3);
-    let reprises = texte_en(&b, "Reprises").expect("le calque « Reprises » est listé");
-    let annotations = texte_en(&b, "Annotations").expect("le calque « Annotations » est listé");
-    let dessin = texte_pres_de(&b, "Dessin de la case", annotations.x).expect("« Dessin de la case » est listé");
-    assert!(texte_en(&b, "Calques d'annotation").is_some());
-    assert!(reprises.y < annotations.y && annotations.y < dessin.y, "le dernier calque est dessus, « Dessin » tout en bas");
+    assert!(texte_en(&b, "Calques d'annotation").is_none() && texte_en(&b, "Reprises").is_none(), "plus de liste");
+    let annotations = texte_qui_contient(&b, "Annotations").expect("la ligne « Annotations »");
+    let dessin = texte_en(&b, "Dessin de la case").expect("« Dessin de la case »");
+    assert!((annotations.y - dessin.y).abs() < 4.0, "sur la même ligne");
     // Au départ aucun outil d'annotation : le dessin de la case est visé.
     assert!(!b.app.annot_actif());
-    // Un clic sur « Reprises » le vise : le stylo est pris.
-    clic(&mut b, reprises);
-    assert_eq!(b.app.annot_calque_actif(), Some(c));
-    assert!(b.app.annot_actif(), "le stylo est pris");
-    // Un clic sur « Annotations » : l'autre calque, l'outil ne change pas.
-    b.app.run_action("vignettes.annotation_lasso");
-    b.chauffer(2);
-    let annotations = texte_en(&b, "Annotations").unwrap();
+    // Un clic sur « Annotations » prend le stylo, sur la couche active.
     clic(&mut b, annotations);
-    assert_eq!(b.app.annot_calque_actif(), Some(a));
-    assert_eq!(b.app.vignettes.annot.outil, Some(crate::annotationsui::Outil::Lasso));
-    // Un clic sur « Dessin » range les outils d'annotation.
-    let ax = texte_en(&b, "Annotations").unwrap().x;
-    let dessin = texte_pres_de(&b, "Dessin de la case", ax).unwrap();
+    assert!(b.app.annot_actif(), "le stylo est pris");
+    // « Dessin de la case » range les outils d'annotation.
     clic(&mut b, dessin);
     assert!(!b.app.annot_actif());
-    // L'œil d'un calque : le premier œil de la liste est celui du calque du dessus.
-    let yeux = textes_en(&b, egui_phosphor::regular::EYE);
-    assert_eq!(yeux.len(), 2, "un œil par calque");
-    clic(&mut b, yeux[0]);
-    assert!(!b.app.doc.annotations.calque(c).unwrap().visible, "l'œil du dessus cache « Reprises »");
+    // Au clic droit : les couches, la dernière au-dessus ; « Viser cette couche » vise « Reprises ».
+    menu_de_la_couche(&mut b, "Reprises");
+    let viser = texte_qui_contient(&b, "Viser cette couche").expect("« Viser cette couche »");
+    clic(&mut b, viser);
+    assert_eq!(b.app.annot_calque_actif(), Some(c));
+    assert!(b.app.annot_actif(), "le stylo est pris");
+    // « Cacher » une couche : un affichage, rien n'est effacé.
+    menu_de_la_couche(&mut b, "Reprises");
+    let cacher = texte_en(&b, "Cacher").expect("« Cacher »");
+    clic(&mut b, cacher);
+    assert!(!b.app.doc.annotations.calque(c).unwrap().visible, "« Reprises » est cachée");
     assert!(b.app.doc.annotations.calque(a).unwrap().visible);
     assert_eq!(b.app.doc.annotations.traces.len(), 1, "rien n'est effacé");
-    // Le panneau n'est que dans l'espace Vignettes : on ne le voit pas dans une autre disposition.
+    // L'œil de la ligne montre ou cache toutes les annotations.
+    let avant = b.app.vignettes.annot.visible;
+    let oeil = texte_en(&b, if avant { egui_phosphor::regular::EYE } else { egui_phosphor::regular::EYE_SLASH }).expect("l'œil de la ligne");
+    clic(&mut b, oeil);
+    assert_ne!(b.app.vignettes.annot.visible, avant);
     assert!(b.app.vignettes.annot.renomme.is_none());
 }
 
 #[test]
-fn a_double_click_renames_a_layer_in_the_panel() {
+fn a_layer_is_renamed_from_the_right_click_of_the_annotations_line() {
     let mut b = ouvert_vignettes(quatre_plans(), 3);
     let a = b.app.doc.annotations.calque_ou_premier(None);
     poser(&mut b, Some(a), 0, 40.0);
     b.garder_formes = true;
     b.chauffer(3);
-    let p = texte_en(&b, "Annotations").expect("listé");
-    clic(&mut b, p);
-    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
-    for _ in 0..2 {
-        b.image(vec![appui(p, true, Modifiers::NONE)], 1.0 / 60.0);
-        b.image(vec![appui(p, false, Modifiers::NONE)], 1.0 / 60.0);
-    }
-    b.chauffer(2);
+    let nom = b.app.doc.annotations.calque(a).unwrap().nom.clone();
+    menu_de_la_couche(&mut b, &nom);
+    let renommer = texte_en(&b, "Renommer").expect("« Renommer »");
+    clic(&mut b, renommer);
     assert_eq!(b.app.vignettes.annot.renomme.as_ref().map(|r| r.0), Some(a), "le champ de renommage est ouvert");
     // On valide un nom : Entrée.
     b.app.vignettes.annot.renomme = Some((a, "Notes de Léa".into()));
@@ -477,6 +486,7 @@ fn a_double_click_renames_a_layer_in_the_panel() {
     assert!(b.app.vignettes.annot.renomme.is_none());
     assert_eq!(dernier_nom(&b), "Renommer un calque d'annotation");
 }
+
 
 #[test]
 fn annotation_layers_and_the_lasso_save_and_reopen_as_they_were() {

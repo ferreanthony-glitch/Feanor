@@ -58,6 +58,9 @@ impl App {
         }
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
+            // La barre d'actions des calques, sous leur colonne (partie 160, `barrecalques.rs`) ; les onglets à sa droite.
+            self.barre_calques(ui, crate::layerheads::HEAD_W);
+            ui.add_space(2.0);
             for tab in BottomTab::ALL {
                 let (icon, name, description) = tab.label();
                 let on = self.bottom_tab == Some(tab);

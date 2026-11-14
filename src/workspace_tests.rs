@@ -188,11 +188,11 @@ fn the_old_single_layout_becomes_the_storyboard_one() {
     let ctx = egui::Context::default();
     let mut app = App::sans_fenetre(&ctx, None);
     assert_eq!(app.espace, Espace::Storyboard);
-    assert!(!has(&app, Pane::Layers) && !has(&app, Pane::ToolOptions), "la disposition d'avant, telle quelle");
+    assert!(!has(&app, Pane::Effects) && !has(&app, Pane::ToolOptions), "la disposition d'avant, telle quelle");
     app.set_mode(Mode::Animation);
-    assert!(has(&app, Pane::Layers) && has(&app, Pane::ToolOptions), "l'animation : sa disposition d'origine");
+    assert!(has(&app, Pane::Effects) && has(&app, Pane::ToolOptions), "l'animation : sa disposition d'origine");
     app.set_mode(Mode::Storyboard);
-    assert!(!has(&app, Pane::Layers), "et le storyboard garde l'ancienne");
+    assert!(!has(&app, Pane::Effects), "et le storyboard garde l'ancienne");
 }
 
 #[test]
@@ -214,18 +214,18 @@ fn the_montage_space_is_a_storyboard_layout_and_the_mode_button_returns_to_it() 
     let (_ctx, mut app) = headless("montage");
     app.run_action("espace.montage");
     assert_eq!((app.espace, app.mode), (Espace::Montage, Mode::Storyboard));
-    assert!(has(&app, Pane::Montage) && has(&app, Pane::Sheet) && !has(&app, Pane::Layers) && !has(&app, Pane::Color));
+    assert!(has(&app, Pane::Montage) && has(&app, Pane::Sheet) && !has(&app, Pane::Effects) && !has(&app, Pane::Color));
     assert_eq!(app.settings.storyboard_space, Espace::Montage);
     // Animation, puis retour : on retrouve le montage (le côté storyboard où l'on était).
     app.set_mode(Mode::Animation);
-    assert!(has(&app, Pane::Layers));
+    assert!(has(&app, Pane::Effects));
     app.set_mode(Mode::Storyboard);
     assert_eq!(app.espace, Espace::Montage);
-    assert!(!has(&app, Pane::Layers));
+    assert!(!has(&app, Pane::Effects));
     // Le menu et la palette ramènent à la disposition du storyboard.
     app.run_action("espace.storyboard");
     assert_eq!((app.espace, app.mode), (Espace::Storyboard, Mode::Storyboard));
-    assert!(has(&app, Pane::Layers) && has(&app, Pane::Color));
+    assert!(has(&app, Pane::Effects) && has(&app, Pane::Color) && !has(&app, Pane::Layers));
     assert_eq!(app.settings.storyboard_space, Espace::Storyboard);
 }
 

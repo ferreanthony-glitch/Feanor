@@ -27,37 +27,36 @@ fn default_panes() -> impl Iterator<Item = Pane> {
 }
 
 #[test]
-fn the_history_opens_as_a_tab_with_the_layers() {
+fn the_history_opens_as_a_tab_with_the_effects() {
+    // (Partie 160 : plus de panneau Calques ; la colonne du milieu commence par les effets.)
     let mut l = DockLayout::from_legacy(&Layout::default());
     assert_eq!(count(&l, Pane::History), 0, "fermé par défaut");
     l.open(Pane::History);
     assert_eq!(count(&l, Pane::History), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Layers, History]"), "{:?}", l.principal);
-    // Rouvrir le groupe des calques ne l'ouvre pas.
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Effects, History]"), "{:?}", l.principal);
+    // Rouvrir le groupe ne l'ouvre pas.
     l.close(Pane::History);
-    l.close(Pane::Layers);
     l.close(Pane::Effects);
     l.toggle_group(Group::Right);
-    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::History)), (1, 0));
+    assert_eq!((count(&l, Pane::Effects), count(&l, Pane::History), count(&l, Pane::Layers)), (1, 0, 0));
 }
 
 #[test]
-fn the_exposure_sheet_opens_next_to_the_layers() {
+fn the_exposure_sheet_opens_next_to_the_effects() {
     let mut l = DockLayout::from_legacy(&Layout::default());
     assert_eq!(count(&l, Pane::XSheet), 0, "fermée par défaut");
     l.open(Pane::XSheet);
     assert_eq!(count(&l, Pane::XSheet), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Layers, XSheet]"), "{:?}", l.principal);
-    // Sans les calques : une colonne à elle.
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Effects, XSheet]"), "{:?}", l.principal);
+    // Sans les effets : une colonne à elle.
     let mut l = DockLayout::from_legacy(&Layout::default());
-    l.close(Pane::Layers);
+    l.close(Pane::Effects);
     l.open(Pane::XSheet);
     assert_eq!(count(&l, Pane::XSheet), 1);
-    // Rouvrir le groupe des calques ne l'ouvre pas.
+    // Rouvrir le groupe ne l'ouvre pas.
     l.close(Pane::XSheet);
-    l.close(Pane::Effects);
     l.toggle_group(Group::Right);
-    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::XSheet), count(&l, Pane::Effects)), (1, 0, 1));
+    assert_eq!((count(&l, Pane::XSheet), count(&l, Pane::Effects)), (0, 1));
 }
 
 #[test]
@@ -103,7 +102,7 @@ fn back_in_animation_the_exposure_sheet_returns_where_it_was() {
     let back = changed.retour_animation(&saved);
     assert_eq!(count(&back, Pane::XSheet), 1);
     assert_eq!(count(&back, Pane::Sheet), 0, "ce qu'on a fermé reste fermé");
-    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [Layers, XSheet]"), "{:?}", back.principal);
+    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [Effects, XSheet]"), "{:?}", back.principal);
     // Une feuille qui n'était pas ouverte ne s'ouvre pas.
     let closed = DockLayout::from_legacy(&Layout::default());
     assert_eq!(closed.retour_animation(&closed), closed);
@@ -128,8 +127,10 @@ fn default_layout_has_every_panel_once() {
     let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
     let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
-    // Les calques, les effets dessous (disposition 8, choix d'Anthony).
-    assert!(matches!(&**layers, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::Layers]) && **bas == tabs(&[Pane::Effects])), "{layers:?}");
+    // Les effets (disposition 8, choix d'Anthony : les calques au-dessus ; partie 160 : plus de panneau Calques, les calques sont
+    // dans la colonne de la timeline).
+    assert_eq!(**layers, tabs(&[Pane::Effects]), "{layers:?}");
+    assert_eq!(count(&l, Pane::Layers), 0);
     for p in [Pane::ToolOptions, Pane::Sheet, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
@@ -147,10 +148,10 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     // On remet la fiche sous les calques, à la main.
     fn put_below(n: &mut DockNode) -> bool {
         match n {
-            DockNode::Tabs { panneaux, .. } if panneaux == &vec![Pane::Layers] => {
+            DockNode::Tabs { panneaux, .. } if panneaux == &vec![Pane::Effects] => {
                 *n = DockNode::Column {
                     part: 0.6,
-                    haut: Box::new(DockNode::Tabs { panneaux: vec![Pane::Layers], actif: 0 }),
+                    haut: Box::new(DockNode::Tabs { panneaux: vec![Pane::Effects], actif: 0 }),
                     bas: Box::new(DockNode::Tabs { panneaux: vec![Pane::Sheet], actif: 0 }),
                 };
                 true
@@ -247,16 +248,16 @@ fn the_brushes_tab_leaves_no_hole_when_it_was_alone_floating_or_in_its_own_windo
         principal: row(canvas.clone(), col(tabs(&[Pane::ToolOptions]), col(tabs(&[Pane::Brushes]), tabs(&[Pane::Color])))),
         fenetres: vec![
             FloatingPanel { panneaux: tabs(&[Pane::Brushes]), x: 10.0, y: 10.0, largeur: 300.0, hauteur: 300.0 },
-            FloatingPanel { panneaux: tabs(&[Pane::Brushes, Pane::Layers]), x: 40.0, y: 40.0, largeur: 300.0, hauteur: 300.0 },
+            FloatingPanel { panneaux: tabs(&[Pane::Brushes, Pane::Effects]), x: 40.0, y: 40.0, largeur: 300.0, hauteur: 300.0 },
         ],
         detachees: vec![dock::DetachedPanel { panneau: Pane::Brushes, x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 }],
     };
     let l = old.sanitized();
     assert_eq!(count(&l, Pane::Brushes), 0);
     assert_eq!(l.principal, row(canvas, col(tabs(&[Pane::ToolOptions]), tabs(&[Pane::Color]))), "pas de trou : {:?}", l.principal);
-    // La fenêtre flottante qui n'avait que lui disparaît ; l'autre garde ses calques.
+    // La fenêtre flottante qui n'avait que lui disparaît ; l'autre garde ses effets.
     assert_eq!(l.fenetres.len(), 1);
-    assert_eq!(l.fenetres[0].panneaux, tabs(&[Pane::Layers]));
+    assert_eq!(l.fenetres[0].panneaux, tabs(&[Pane::Effects]));
     assert!(l.detachees.is_empty());
 }
 
@@ -328,22 +329,17 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     l.close(Pane::Canvas);
     assert!(l.contains(Pane::Canvas), "le dessin ne se ferme pas");
     l.close(Pane::Sheet);
-    assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Layers));
+    assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Effects));
     l.open(Pane::Sheet);
     // Revenue avec les onglets des réglages (pas avec la couleur).
     assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{:?}", l.principal);
-    // Les calques rouverts : au-dessus des effets restés à leur place.
-    l.close(Pane::Layers);
-    l.open(Pane::Layers);
-    let s = format!("{:?}", l.principal);
-    assert!(s.contains("Column { part: 0.6, haut: Tabs { panneaux: [Layers], actif: 0 }, bas: Tabs { panneaux: [Effects]"), "{s}");
-    // Plus rien du groupe : une colonne recréée à droite du dessin.
-    l.close(Pane::Layers);
+    // Plus rien du groupe : une colonne recréée à droite du dessin. (Partie 160 : l'ancien panneau Calques ne se rouvre plus.)
     l.close(Pane::Effects);
     l.open(Pane::Layers);
+    assert_eq!(count(&l, Pane::Layers), 0, "le panneau Calques n'existe plus");
+    l.open(Pane::Effects);
     let s = format!("{:?}", l.principal);
     assert!(s.contains("Row { part: 0.78, gauche: Tabs { panneaux: [Canvas]"), "{s}");
-    l.open(Pane::Effects);
     // La bande revient en bas de tout ; l'ancienne timeline à part ne s'ouvre plus, c'est la bande.
     l.close(Pane::Montage);
     assert!(!l.contains(Pane::Montage));
@@ -524,7 +520,8 @@ fn panel_layouts_are_kept_in_the_settings() {
 }
 
 #[test]
-fn the_effects_pane_comes_under_the_layers() {
+fn the_effects_pane_comes_back_in_the_middle_column() {
+    // (Partie 160 : plus de panneau Calques au-dessus ; les effets ont la colonne du milieu.)
     // Anthony : « A, avec les Effets sous les Calques » : calques et effets dessous, puis
     // réglages et couleur dessous. Une disposition de ce jour (6 ou 7) prend la nouvelle.
     let v6 = DockLayout {
@@ -535,17 +532,17 @@ fn the_effects_pane_comes_under_the_layers() {
     };
     let l = v6.upgraded();
     assert_eq!(l.principal, DockLayout::from_legacy(&Layout::default()).principal);
-    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("haut: Tabs { panneaux: [Layers], actif: 0 }, bas: Tabs { panneaux: [Effects]");
+    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("gauche: Tabs { panneaux: [Effects], actif: 0 }, droite: Column");
     assert!(under(&l), "{:?}", l.principal);
     for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
     }
-    // Fermé puis rouvert : il revient sous les calques.
+    // Fermé puis rouvert : il revient à droite du dessin (sa colonne d'avant s'est refermée avec lui).
     let mut again = l.clone();
     again.close(Pane::Effects);
     assert!(!again.contains(Pane::Effects));
     again.open(Pane::Effects);
-    assert!(under(&again), "{:?}", again.principal);
+    assert!(format!("{:?}", again.principal).contains("gauche: Tabs { panneaux: [Canvas], actif: 0 }, droite: Tabs { panneaux: [Effects]"), "{:?}", again.principal);
 }
 #[test]
 fn the_old_view_pane_disappears_from_saved_layouts() {

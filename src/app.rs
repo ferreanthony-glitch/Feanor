@@ -3474,9 +3474,9 @@ impl App {
         let what = if clip.layer.folder { "Dossier" } else { "Calque" };
         let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
         self.status = if n > 1 {
-            format!("{n} calques copiés : Ctrl+V dans le panneau Calques (ou X) pour les coller, ici ou dans un autre plan.")
+            format!("{n} calques copiés : Ctrl+V dans la colonne des calques (ou X) pour les coller, ici ou dans un autre plan.")
         } else {
-            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", clip.layer.name)
+            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans la colonne des calques) pour le coller dans un autre plan.", clip.layer.name)
         };
         // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
         self.layer_clip_recent = true;
@@ -5712,6 +5712,7 @@ impl App {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
+        // (La même règle que `barre_outils_montree`, qui dit où sont les outils de la vue Espace 3D.)
         if self.layout.tool_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")

@@ -536,7 +536,9 @@ fn the_bubble_and_the_panel_say_what_draws() {
     b.chauffer(4);
     assert_eq!(b.app.dediee_etiquette(Choix::Classique(0)), "Suit le pinceau");
     assert!(b.textes.iter().any(|x| x.contains("Suit le pinceau")), "le panneau le dit : {:?}", b.textes.iter().take(60).collect::<Vec<_>>());
-    assert!(b.textes.iter().any(|x| x.contains("Brosses dédiées")), "le panneau a son nouveau nom");
+    // (Partie 160 : plus de nom écrit en haut des panneaux ; le nom est dans la bulle de sa poignée et de son icône.)
+    assert_eq!(b.app.pane_title(crate::dock::Pane::Personnages), "Brosses dédiées", "le panneau a son nouveau nom");
+    assert!(!crate::bulles::vus::ou("Brosses dédiées").is_empty(), "sa poignée et son icône le disent");
     b.app.dediee_ecrire(Choix::Classique(0), Some(Specifique { nom: Some("Feutre noir".into()), ..feutre(20.0) }));
     assert_eq!(b.app.dediee_etiquette(Choix::Classique(0)), "Feutre noir, 20 px, pinceau");
     assert_eq!(b.app.dediee_outil(Choix::Classique(0)), Some(false));

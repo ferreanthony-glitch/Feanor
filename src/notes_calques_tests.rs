@@ -219,35 +219,40 @@ fn app_with_folder(name: &str) -> App {
 }
 
 #[test]
-fn the_layers_panel_shows_the_folder_its_layers_indented_and_a_new_folder_button() {
+fn the_timeline_column_shows_the_folder_its_layers_indented_and_the_action_bar_makes_folders() {
+    // (Partie 160 : le panneau Calques n'existe plus ; c'est la colonne des calques de la timeline, et sa barre d'actions.)
     let mut app = app_with_folder("panneau");
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     for nom in ["Décors", "C1", "C2", "Hors dossier"] {
         assert!(trouver(&textes, nom).is_some(), "{nom} : {textes:?}");
     }
-    // La ligne du dossier porte l'icône de sa sorte et le nombre de ses calques (plus le mot « dossier »).
-    assert!(contient(&textes, egui_phosphor::regular::FOLDER) && textes.iter().any(|(t, _)| t.trim() == "2"), "{textes:?}");
+    // La ligne fine du dossier porte l'icône de dossier et le nombre de ses calques (plus le mot « dossier »).
+    assert!(contient(&textes, egui_phosphor::regular::FOLDER_OPEN) && textes.iter().any(|(t, _)| t.trim() == "2"), "{textes:?}");
     assert!(!contient(&textes, "dossier ·"), "{textes:?}");
-    // Le nouveau dossier se crée par le « + » du panneau (plus de bouton à part).
-    assert!(!contient(&textes, egui_phosphor::regular::FOLDER_PLUS));
-    let (_, plus) = trouver(&textes, egui_phosphor::regular::PLUS).unwrap().clone();
+    // Le nouveau dossier : le deuxième bouton de la barre d'actions, sous la colonne ; et l'entrée « Dossier » du « + ».
+    let (_, dossier) = trouver(&textes, egui_phosphor::regular::FOLDER_PLUS).expect("Nouveau dossier, dans la barre d'actions").clone();
+    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == egui_phosphor::regular::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).expect("le + de la barre d'actions").clone();
+    assert!((plus.center().y - dossier.center().y).abs() < 2.0 && plus.center().x < dossier.center().x, "« + » puis Nouveau dossier, sur la même barre");
     let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
-    assert!(contient(&menu, egui_phosphor::regular::FOLDER_PLUS) && contient(&menu, "Pour ranger des calques ensemble"), "{menu:?}");
-    let textes = ecran.cliquer(&mut app, egui::pos2(300.0, 600.0), &mut ui_calques);
-    let _ = textes;
-    // Un calque rangé dans le dossier est décalé vers la droite.
+    assert!(contient(&menu, "Pour ranger des calques ensemble"), "{menu:?}");
+    let textes = ecran.cliquer(&mut app, egui::pos2(630.0, 20.0), &mut ui_calques);
+    // Un calque rangé dans le dossier est décalé vers la droite de la ligne de son dossier. (« Hors dossier », le calque courant,
+    // a sa ligne complète : son nom est après sa vignette.)
     let x = |nom: &str| trouver(&textes, nom).unwrap().1.left();
-    assert!(x("C1") > x("Hors dossier") + 10.0, "C1 {} contre {}", x("C1"), x("Hors dossier"));
+    assert!(x("C1") > x("Décors") + 10.0, "C1 {} contre {}", x("C1"), x("Décors"));
     assert!((x("C1") - x("C2")).abs() < 0.5);
 }
 
 #[test]
-fn a_folder_closes_and_opens_from_its_triangle_in_the_layers_panel() {
+fn a_folder_closes_and_opens_from_its_triangle_in_the_timeline_column() {
+    // (Partie 160 : la ligne fine du dossier, dans la colonne des calques de la timeline ; avant, le panneau Calques.)
     let mut app = app_with_folder("plier");
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     let (_, ligne) = trouver(&textes, "Décors").unwrap().clone();
     let (_, caret) = textes
@@ -257,35 +262,52 @@ fn a_folder_closes_and_opens_from_its_triangle_in_the_layers_panel() {
         .clone();
     let textes = ecran.cliquer(&mut app, caret.center(), &mut ui_calques);
     assert!(app.layers()[2].collapsed, "le dossier est fermé : {textes:?}");
-    assert!(trouver(&textes, "C1").is_none() && trouver(&textes, "C2").is_none(), "ses calques n'ont plus de rang : {textes:?}");
+    assert!(trouver(&textes, "C1").is_none() && trouver(&textes, "C2").is_none(), "ses calques n'ont plus de ligne : {textes:?}");
     assert!(trouver(&textes, "Hors dossier").is_some() && trouver(&textes, "Décors").is_some());
     // Rouvert, ses calques reviennent.
-    let (_, caret) = textes.iter().find(|(t, _)| t.contains(egui_phosphor::regular::CARET_RIGHT)).expect("le triangle fermé").clone();
+    let (_, ligne) = trouver(&textes, "Décors").unwrap().clone();
+    let (_, caret) = textes
+        .iter()
+        .find(|(t, r)| t.contains(egui_phosphor::regular::CARET_RIGHT) && (r.center().y - ligne.center().y).abs() < 12.0 && r.right() < ligne.left())
+        .expect("le triangle fermé")
+        .clone();
     let textes = ecran.cliquer(&mut app, caret.center(), &mut ui_calques);
     assert!(!app.layers()[2].collapsed);
     assert!(trouver(&textes, "C1").is_some() && trouver(&textes, "C2").is_some());
+    // Les calques n'ont plus de triangle (partie 160) : à gauche des noms, un seul, celui du dossier (le calque courant garde les
+    // flèches du mode de fusion, à droite).
+    let gauche = |t: &str| textes.iter().filter(|(x, r)| x.contains(t) && r.left() < 30.0).count();
+    assert_eq!(gauche(egui_phosphor::regular::CARET_DOWN) + gauche(egui_phosphor::regular::CARET_RIGHT), 1, "{textes:?}");
 }
 
 #[test]
-fn the_current_layer_stays_listed_even_in_a_closed_folder() {
+fn the_current_layer_in_a_closed_folder_is_announced_and_one_click_opens_it() {
+    // (Le panneau Calques gardait le calque courant d'un dossier fermé dans sa liste ; il n'existe plus, partie 160. La colonne de
+    // la timeline le dit dans son en-tête, et un clic rouvre le dossier.)
     let mut app = app_with_folder("courant");
     app.layers_mut()[2].collapsed = true;
     app.cur_layer = 0;
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(trouver(&textes, "C1").is_some(), "le calque courant ne se perd pas de vue : {textes:?}");
+    let (_, avis) = textes.iter().find(|(t, _)| t.contains("Calque courant dans « Décors »")).unwrap_or_else(|| panic!("l'avis de l'en-tête : {textes:?}")).clone();
     assert!(trouver(&textes, "C2").is_none());
+    let textes = ecran.cliquer(&mut app, avis.center(), &mut ui_calques);
+    assert!(!app.layers()[2].collapsed, "un clic rouvre le dossier");
+    let textes = if trouver(&textes, "C1").is_some() { textes } else { ecran.chauffer(&mut app, 2, &mut ui_calques) };
+    assert!(trouver(&textes, "C1").is_some(), "le calque courant ne se perd pas de vue : {textes:?}");
 }
 
 #[test]
 fn the_new_folder_button_creates_one_folder_in_one_undo_step() {
+    // (Partie 160 : le bouton Nouveau dossier de la barre d'actions, sous la colonne des calques ; et l'entrée « Dossier » du « + ».)
     let mut app = app_one_layer("nouveau-dossier", LayerKind::Vector);
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    // Le « + » du panneau ouvre le menu des sortes de calques ; l'entrée « Dossier » crée le dossier.
-    let (_, plus) = textes.iter().find(|(t, _)| t.contains(egui_phosphor::regular::PLUS)).expect("le bouton +").clone();
+    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == egui_phosphor::regular::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).expect("le bouton +").clone();
     let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
     let (_, bouton) = menu.iter().find(|(t, _)| t.contains("Pour ranger des calques ensemble")).expect("l'entrée Dossier").clone();
     let n0 = app.history.names().0.len();
@@ -294,6 +316,12 @@ fn the_new_folder_button_creates_one_folder_in_one_undo_step() {
     assert_eq!(app.history.names().0.len(), n0 + 1, "une étape d'annulation");
     app.undo();
     assert!(app.layers().iter().all(|l| !l.folder));
+    // Le bouton à part, juste à droite du « + ».
+    let textes = ecran.chauffer(&mut app, 3, &mut ui_calques);
+    let (_, dossier) = trouver(&textes, egui_phosphor::regular::FOLDER_PLUS).expect("Nouveau dossier").clone();
+    ecran.cliquer(&mut app, dossier.center(), &mut ui_calques);
+    assert_eq!(app.layers().iter().filter(|l| l.folder).count(), 1, "{}", app.status);
+    assert_eq!(app.history.names().0.len(), n0 + 1, "une étape d'annulation");
 }
 
 #[test]
@@ -368,12 +396,15 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    // (Partie 160 : le panneau Calques n'existe plus ; la ligne complète du calque courant de la timeline porte le bouton, les
+    // lignes fines des autres calques ne l'ont pas.) « C1 » est le calque courant.
+    app.cur_layer = 0;
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.timeline_heads(ui, 24.0, 0.0);
+    };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    // Un bouton sur chaque ligne de calque de dessin (pas sur le dossier) : 3 calques ; plus de bouton dans la barre
-    // de commandes (l'aplat du calque courant est dans le menu « … », `panneaux_tests.rs`).
     let n = textes.iter().filter(|(t, _)| t.contains(ph_fond)).count();
-    assert_eq!(n, 3, "{textes:?}");
+    assert_eq!(n, 1, "{textes:?}");
     // Un clic sur celui de la ligne « C1 » lui donne un fond.
     let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
     let (_, bouton) = textes
@@ -395,8 +426,7 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     assert!(contient(&textes, egui_phosphor::regular::SQUARE_HALF_BOTTOM), "« Peint sur l'aplat » y est");
     assert!(!contient(&textes, egui_phosphor::regular::PAINT_BUCKET), "plus de « Remplir la forme »");
     assert!(!contient(&textes, "Peindre dans"), "la bascule Trait / Fond a disparu");
-    // Un calque qui en a un ne montre rien non plus sous le pinceau : ses réglages sont dans Réglages quand sa
-    // sous-ligne est choisie (`aplat_tests.rs`).
+    // Un calque qui en a un ne montre rien non plus sous le pinceau : ses réglages sont au clic droit du calque (`aplat_tests.rs`).
     app.cur_layer = 0;
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
     assert!(!contient(&textes, "Peindre dans") && !contient(&textes, "Couleur de l'aplat"), "{textes:?}");
@@ -483,10 +513,11 @@ fn the_fx_button_only_shows_on_a_layer_with_effects_or_with_effects_switched_off
 }
 
 #[test]
-fn the_fx_button_is_painted_in_the_layers_panel_and_the_timeline_header() {
+fn the_fx_button_is_painted_on_the_active_track_of_the_strip_and_the_timeline_header() {
+    // (Partie 160 : la piste du calque actif de la bande des plans, à la place du panneau Calques.)
     let mut app = app_one_layer("fx-peint", LayerKind::Vector);
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.montage_panel(ui);
     let mut ui_tete = |a: &mut App, ui: &mut egui::Ui| {
         a.timeline_heads(ui, 24.0, 0.0);
     };

@@ -10,13 +10,12 @@
 
 use eframe::egui::{pos2, Event};
 
-use crate::calques_timeline_tests::{banc_de_retakes, colonne, nom_au_panneau, rang, trouver};
+use crate::calques_timeline_tests::{banc_de_retakes, colonne, rang, trouver};
 use crate::document::{Layer, LayerKind};
 use crate::folders::{poser, Pose};
 use crate::layerheads::{cible_du_glisse, Cible, Row};
 use crate::pistes::Pile;
 use crate::pistes_tests::{etapes, glisser};
-use crate::workspace::Espace;
 
 // ------------------------------------------------------------------------------------ l'outillage
 
@@ -167,50 +166,7 @@ fn parent(app: &crate::app::App, nom: &str) -> Option<String> {
     l[rang(app, nom)].parent.and_then(|p| l.iter().find(|f| f.id == p)).map(|f| f.name.clone())
 }
 
-#[test]
-fn on_screen_chosen_layers_dragged_onto_a_folder_of_the_layers_panel_go_in() {
-    // « Dossier 2 » fermé. Le panneau Calques, de haut en bas : Dossier 2, V13, Dossier 1 [Dessin, V5, V4], Réf.
-    let mut b = banc_de_retakes(true, "V13");
-    b.app.set_espace(Espace::Storyboard);
-    b.app.show_pane(crate::dock::Pane::Layers);
-    b.chauffer(8);
-    // « V13 » (courant) et « Réf » choisis.
-    let reference = rang(&b.app, "Réf");
-    b.app.click_layer_head(reference, true, false);
-    b.chauffer(3);
-    assert_eq!(b.app.chosen_layers().len(), 2);
-    let n0 = etapes(&b);
-    // (Le pointeur arrive d'ailleurs : son premier geste se perd dans le banc d'essai.)
-    b.image(vec![Event::PointerMoved(pos2(900.0, 300.0))], 1.0 / 60.0);
-    b.chauffer(2);
-    // On prend « V13 » par son nom et on le lâche au milieu du rang de « Dossier 1 ».
-    let (de, sur) = (nom_au_panneau(&b, "V13"), nom_au_panneau(&b, "Dossier 1"));
-    glisser(&mut b, de.center(), pos2(sur.center().x, sur.center().y + 10.0));
-    assert_eq!((parent(&b.app, "V13"), parent(&b.app, "Réf")), (Some("Dossier 1".to_string()), Some("Dossier 1".to_string())), "{}", b.app.status);
-    assert_eq!(etapes(&b), n0 + 1, "une seule étape d'annulation");
-    assert!(b.app.status.contains("2 calques rangés dans « Dossier 1 »"), "{}", b.app.status);
-    // En haut du dossier, dans leur ordre ; le calque courant et le choix n'ont pas changé.
-    let fi = rang(&b.app, "Dossier 1");
-    let enfants: Vec<String> = crate::folders::children_of(b.app.layers(), fi).iter().rev().map(|&i| b.app.layers()[i].name.clone()).collect();
-    assert_eq!(enfants, ["V13", "Réf", "Dessin", "V5", "V4"]);
-    assert_eq!(b.app.layers()[b.app.cur_layer].name, "V13");
-    assert_eq!(b.app.chosen_layers().len(), 2, "les deux calques restent choisis");
-    // Ctrl+Z rend tout.
-    b.app.undo();
-    b.chauffer(4);
-    assert_eq!((parent(&b.app, "V13"), parent(&b.app, "Réf")), (None, None));
-    // Un calque seul, lâché sur un dossier fermé : dedans, et le dossier reste fermé.
-    b.image(Vec::new(), 0.5);
-    let reference = rang(&b.app, "Réf");
-    b.app.click_layer_head(reference, false, false);
-    b.chauffer(4);
-    let (de, sur) = (nom_au_panneau(&b, "Réf"), nom_au_panneau(&b, "Dossier 2"));
-    glisser(&mut b, de.center(), pos2(sur.center().x, sur.center().y + 10.0));
-    assert_eq!(parent(&b.app, "Réf"), Some("Dossier 2".to_string()), "{}", b.app.status);
-    assert!(b.app.layers()[rang(&b.app, "Dossier 2")].collapsed, "le dossier reste fermé");
-    assert!(b.app.status.contains("1 calque rangé dans « Dossier 2 »"), "{}", b.app.status);
-    assert_eq!(parent(&b.app, "V13"), None, "« V13 » n'était plus choisi : il n'a pas suivi");
-}
+// (Le glissé sur un dossier du panneau Calques : le panneau n'existe plus, partie 160 ; le même glissé dans la bande des plans est l'essai suivant.)
 
 #[test]
 fn on_screen_a_layer_dragged_onto_the_thin_line_of_a_folder_in_the_strip_goes_in() {
