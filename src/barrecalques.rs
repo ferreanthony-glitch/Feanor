@@ -16,8 +16,16 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::bulles::bulle;
 
-/// La taille d'une case de la barre.
-pub(crate) const CASE: [f32; 2] = [16.0, 18.0];
+/// La taille d'une case de la barre, et l'écart entre deux cases (partie 161 : 16 points et 1 d'écart avant, des icônes qui se
+/// touchaient).
+pub(crate) const CASE: [f32; 2] = [18.0, 18.0];
+pub(crate) const ECART: f32 = 5.0;
+/// La taille des icônes de la barre.
+const ICONE: f32 = 14.0;
+
+/// La largeur où les six cases se lisent : la barre la prend au moins, même sous une colonne plus étroite (la colonne des
+/// pistes du Storyboard, 104 points d'origine) ; plus large, les cases s'écartent pour remplir la largeur de la colonne.
+pub(crate) const LARGEUR_LISIBLE: f32 = CASE[0] * 6.0 + ECART * 5.0;
 
 /// Les noms (ceux des bulles) des commandes de la barre, dans l'ordre.
 pub(crate) const NOMS: [&str; 6] = ["Nouveau calque", "Nouveau dossier", "Nouveau calque d'effet", "Dupliquer les calques choisis", "Supprimer les calques choisis", "Plus de commandes des calques"];
@@ -40,17 +48,21 @@ impl App {
 
     /// La barre d'actions, `largeur` points de large (celle de la colonne des calques), dans une rangée de barre.
     pub(crate) fn barre_calques(&mut self, ui: &mut egui::Ui, largeur: f32) {
-        let (rect, vide) = ui.allocate_exact_size(vec2(largeur.max(CASE[0] * 6.0 + 5.0), CASE[1]), Sense::click());
+        let largeur = largeur.max(LARGEUR_LISIBLE);
+        let (rect, vide) = ui.allocate_exact_size(vec2(largeur, CASE[1]), Sense::click());
         // (Le clic droit dans la barre, posé avant les boutons : ils restent au-dessus et gardent leurs clics.)
         vide.context_menu(|ui| {
             ui.menu_button(format!("{}  Nouveau calque", ph::PLUS), |ui| self.layer_new_menu(ui));
             self.action_item(ui, "Coller le calque", "calque.coller");
         });
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt("barre_calques").layout(egui::Layout::left_to_right(egui::Align::Center)));
-        child.spacing_mut().item_spacing.x = 1.0;
+        // (Les cases s'écartent pour remplir la colonne, sans dépasser 12 points d'écart.)
+        child.spacing_mut().item_spacing.x = ((largeur - CASE[0] * 6.0) / 5.0).clamp(ECART, 12.0);
+        // (Une case a la largeur de son icône et deux points de chaque côté : `CASE`.)
+        child.spacing_mut().button_padding = vec2(2.0, 1.0);
         child.set_clip_rect(rect.intersect(ui.clip_rect()));
         let ui = &mut child;
-        let case = |icone: &str| egui::Button::new(RichText::new(icone).size(13.0)).frame(false).min_size(vec2(CASE[0], CASE[1]));
+        let case = |icone: &str| egui::Button::new(RichText::new(icone).size(ICONE)).frame(false).min_size(vec2(CASE[0], CASE[1]));
         let resp = egui::menu::menu_custom_button(ui, case(ph::PLUS), |ui| self.layer_new_menu(ui)).response;
         bulle(resp, NOMS[0], "Dessin vectoriel ou bitmap, calque de couleur, couleur unie, calque d'effet, annotation, vidéo, dossier, calques 3D, et « Nom, groupe, place… ».", "");
         let resp = ui.add(case(ph::FOLDER_PLUS));

@@ -126,6 +126,7 @@ impl App {
 
     fn pane_content(&mut self, ui: &mut egui::Ui, pane: Pane) {
         if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
+            crate::theme::densifier_panneau(ui.style_mut());
             fit_to_pane(ui);
         }
         // Références : la place du panneau docké (pour y recevoir les fichiers lâchés, `referencesui.rs`).
@@ -236,6 +237,8 @@ impl App {
         if self.dock.is_none() {
             self.poignee_du_montage(ctx, &mut state);
             self.fit_panes(ctx, &mut state, sep, body_margin);
+            // La colonne des panneaux garde sa largeur, l'image prend le reste (partie 161).
+            self.fit_columns(ctx, &mut state, sep);
             self.dock = Some(state);
         }
         if let Some(pane) = self.detach_request.take() {

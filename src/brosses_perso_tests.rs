@@ -535,7 +535,7 @@ fn the_bubble_and_the_panel_say_what_draws() {
     b.app.show_pane(crate::dock::Pane::Personnages);
     b.chauffer(4);
     assert_eq!(b.app.dediee_etiquette(Choix::Classique(0)), "Suit le pinceau");
-    assert!(b.textes.iter().any(|x| x.contains("Suit le pinceau")), "le panneau le dit : {:?}", b.textes.iter().take(60).collect::<Vec<_>>());
+    assert!(b.textes.iter().any(|x| x.contains("Suit le pinceau")), "le panneau le dit : {:?} ; bulles : {:?} ; trait : {:?} ; supprimer : {:?}", b.textes.iter().filter(|t| t.chars().count() > 3).collect::<Vec<_>>(), crate::bulles::vus::noms(), crate::bulles::vus::ou("Couleur du trait"), crate::bulles::vus::ou("Supprimer la brosse"));
     // (Partie 160 : plus de nom écrit en haut des panneaux ; le nom est dans la bulle de sa poignée et de son icône.)
     assert_eq!(b.app.pane_title(crate::dock::Pane::Personnages), "Brosses dédiées", "le panneau a son nouveau nom");
     assert!(!crate::bulles::vus::ou("Brosses dédiées").is_empty(), "sa poignée et son icône le disent");

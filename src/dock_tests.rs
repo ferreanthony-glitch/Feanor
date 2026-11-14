@@ -28,12 +28,12 @@ fn default_panes() -> impl Iterator<Item = Pane> {
 
 #[test]
 fn the_history_opens_as_a_tab_with_the_effects() {
-    // (Partie 160 : plus de panneau Calques ; la colonne du milieu commence par les effets.)
+    // (Partie 160 : plus de panneau Calques ; partie 161 : une seule colonne, les effets sont un onglet derrière les réglages.)
     let mut l = DockLayout::from_legacy(&Layout::default());
     assert_eq!(count(&l, Pane::History), 0, "fermé par défaut");
     l.open(Pane::History);
     assert_eq!(count(&l, Pane::History), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Effects, History]"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects, History]"), "{:?}", l.principal);
     // Rouvrir le groupe ne l'ouvre pas.
     l.close(Pane::History);
     l.close(Pane::Effects);
@@ -47,8 +47,8 @@ fn the_exposure_sheet_opens_next_to_the_effects() {
     assert_eq!(count(&l, Pane::XSheet), 0, "fermée par défaut");
     l.open(Pane::XSheet);
     assert_eq!(count(&l, Pane::XSheet), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Effects, XSheet]"), "{:?}", l.principal);
-    // Sans les effets : une colonne à elle.
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects, XSheet]"), "{:?}", l.principal);
+    // Sans les effets : un onglet des réglages (partie 161 : jamais une deuxième colonne).
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Effects);
     l.open(Pane::XSheet);
@@ -102,7 +102,7 @@ fn back_in_animation_the_exposure_sheet_returns_where_it_was() {
     let back = changed.retour_animation(&saved);
     assert_eq!(count(&back, Pane::XSheet), 1);
     assert_eq!(count(&back, Pane::Sheet), 0, "ce qu'on a fermé reste fermé");
-    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [Effects, XSheet]"), "{:?}", back.principal);
+    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [ToolOptions, Effects, XSheet]"), "{:?}", back.principal);
     // Une feuille qui n'était pas ouverte ne s'ouvre pas.
     let closed = DockLayout::from_legacy(&Layout::default());
     assert_eq!(closed.retour_animation(&closed), closed);
@@ -124,18 +124,17 @@ fn default_layout_has_every_panel_once() {
     // Une seule bande (le montage en storyboard, la timeline en animation), à 290 points.
     assert_eq!(**bas, tabs(&[Pane::Montage]));
     assert!((part - (1.0 - 290.0 / 820.0)).abs() < 1e-4, "{part}");
-    let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
+    let DockNode::Row { gauche: center, droite: tools, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
-    let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
-    // Les effets (disposition 8, choix d'Anthony : les calques au-dessus ; partie 160 : plus de panneau Calques, les calques sont
-    // dans la colonne de la timeline).
-    assert_eq!(**layers, tabs(&[Pane::Effects]), "{layers:?}");
+    // Une seule colonne (partie 161) : les effets sont un onglet derrière les réglages et la fiche (partie 160 : plus de panneau
+    // Calques, les calques sont dans la colonne de la timeline).
+    assert!(matches!(&**tools, DockNode::Column { .. }), "{tools:?}");
     assert_eq!(count(&l, Pane::Layers), 0);
     for p in [Pane::ToolOptions, Pane::Sheet, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
     // La fiche est un onglet des réglages (9b).
-    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{tools:?}");
+    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]"), "{tools:?}");
 }
 
 #[test]
@@ -148,10 +147,12 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     // On remet la fiche sous les calques, à la main.
     fn put_below(n: &mut DockNode) -> bool {
         match n {
-            DockNode::Tabs { panneaux, .. } if panneaux == &vec![Pane::Effects] => {
+            // (Partie 161 : les effets sont un onglet de la colonne unique.)
+            DockNode::Tabs { panneaux, .. } if panneaux.contains(&Pane::Effects) => {
+                let haut = panneaux.clone();
                 *n = DockNode::Column {
                     part: 0.6,
-                    haut: Box::new(DockNode::Tabs { panneaux: vec![Pane::Effects], actif: 0 }),
+                    haut: Box::new(DockNode::Tabs { panneaux: haut, actif: 0 }),
                     bas: Box::new(DockNode::Tabs { panneaux: vec![Pane::Sheet], actif: 0 }),
                 };
                 true
@@ -166,7 +167,7 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     let d = l.dock_layout();
     assert_eq!(d.version, dock::LAYOUT_VERSION);
     let s = format!("{:?}", d.principal);
-    assert!(s.contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{s}");
+    assert!(s.contains("Tabs { panneaux: [ToolOptions, Effects, Sheet]"), "{s}");
     assert_eq!(count(&d, Pane::Sheet), 1);
 }
 
@@ -332,14 +333,16 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Effects));
     l.open(Pane::Sheet);
     // Revenue avec les onglets des réglages (pas avec la couleur).
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{:?}", l.principal);
-    // Plus rien du groupe : une colonne recréée à droite du dessin. (Partie 160 : l'ancien panneau Calques ne se rouvre plus.)
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Effects, Sheet]"), "{:?}", l.principal);
+    // Plus rien du groupe : un onglet des réglages (partie 161 : une seule colonne). (Partie 160 : l'ancien panneau Calques ne se
+    // rouvre plus.)
     l.close(Pane::Effects);
     l.open(Pane::Layers);
     assert_eq!(count(&l, Pane::Layers), 0, "le panneau Calques n'existe plus");
     l.open(Pane::Effects);
     let s = format!("{:?}", l.principal);
-    assert!(s.contains("Row { part: 0.78, gauche: Tabs { panneaux: [Canvas]"), "{s}");
+    assert!(s.contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]"), "{s}");
+    assert_eq!(l.principal.clone().une_seule_colonne(), l.principal, "pas de deuxième colonne");
     // La bande revient en bas de tout ; l'ancienne timeline à part ne s'ouvre plus, c'est la bande.
     l.close(Pane::Montage);
     assert!(!l.contains(Pane::Montage));
@@ -532,17 +535,18 @@ fn the_effects_pane_comes_back_in_the_middle_column() {
     };
     let l = v6.upgraded();
     assert_eq!(l.principal, DockLayout::from_legacy(&Layout::default()).principal);
-    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("gauche: Tabs { panneaux: [Effects], actif: 0 }, droite: Column");
+    // (Partie 161 : une seule colonne, les effets en onglet derrière les réglages et la fiche.)
+    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]");
     assert!(under(&l), "{:?}", l.principal);
     for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
     }
-    // Fermé puis rouvert : il revient à droite du dessin (sa colonne d'avant s'est refermée avec lui).
+    // Fermé puis rouvert : il revient à sa place d'onglet, dans la colonne unique.
     let mut again = l.clone();
     again.close(Pane::Effects);
     assert!(!again.contains(Pane::Effects));
     again.open(Pane::Effects);
-    assert!(format!("{:?}", again.principal).contains("gauche: Tabs { panneaux: [Canvas], actif: 0 }, droite: Tabs { panneaux: [Effects]"), "{:?}", again.principal);
+    assert!(under(&again), "{:?}", again.principal);
 }
 #[test]
 fn the_old_view_pane_disappears_from_saved_layouts() {

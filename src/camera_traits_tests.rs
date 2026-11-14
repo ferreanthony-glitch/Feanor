@@ -120,7 +120,18 @@ fn scene(bitmap: bool, tremble: bool, dx: f32, dy: f32) -> Option<Scene> {
     poser_b(&mut b, PLAN, dx, dy);
     // (Le cadre B vu en entier : le stylet ne dessine pas hors du panneau.)
     let (vue, tout) = (b.app.vignettes.view, cadres_ecran(&b, PLAN).iter().fold(Rect::NOTHING, |r, c| r.union(*c)));
-    b.app.board_pan += vec2((vue.left() + 12.0 - tout.left()).max(0.0), (vue.top() + 12.0 - tout.top()).max(0.0));
+    // (Dans un sens ou dans l'autre : la vue est plus large depuis la partie 161, les cases plus grandes, et un cadre B posé vers le
+    // bas peut sortir par le bas.)
+    let decale = |bas: f32, haut: f32, debut: f32, fin: f32| {
+        if debut < bas + 12.0 {
+            bas + 12.0 - debut
+        } else if fin > haut - 12.0 {
+            (haut - 12.0 - fin).max(bas + 12.0 - debut)
+        } else {
+            0.0
+        }
+    };
+    b.app.board_pan += vec2(decale(vue.left(), vue.right(), tout.left(), tout.right()), decale(vue.top(), vue.bottom(), tout.top(), tout.bottom()));
     b.chauffer(4);
     let tout = cadres_ecran(&b, PLAN).iter().fold(Rect::NOTHING, |r, c| r.union(*c));
     assert!(vue.contains_rect(tout), "les cadres sont dans la vue : {tout:?} {vue:?}");

@@ -148,18 +148,26 @@ const DU_PANNEAU: &[&str] = &[
 ];
 
 /// La colonne des calques et sa barre d'actions : toutes les commandes de l'ancien panneau sont à l'écran, et la barre d'actions
-/// est d'une seule rangée, sous la colonne (qui finit à l'abscisse `colonne`), plus bas que la ligne du calque courant.
-fn la_colonne_porte_tout(colonne: f32, ligne_du_calque: Rect) {
+/// est d'une seule rangée, sous la colonne (qui commence à l'abscisse `debut` et finit à `colonne`), plus bas que la ligne du
+/// calque courant. Ses cases ne se touchent pas (partie 161 : au moins `barrecalques::ECART` points entre deux) ; elle tient
+/// dans la colonne quand la colonne a la place de ses six cases lisibles, sinon elle la déborde juste de ce qu'il faut.
+fn la_colonne_porte_tout(debut: f32, colonne: f32, ligne_du_calque: Rect) {
+    use crate::barrecalques::{ECART, LARGEUR_LISIBLE};
     for nom in DU_PANNEAU {
         assert!(present(nom), "« {nom} » n'est plus à l'écran : {:?}", vus::noms());
     }
     let barre: Vec<Rect> = crate::barrecalques::NOMS.iter().map(|n| *vus::ou(n).last().unwrap_or_else(|| panic!("« {n} » : {:?}", vus::noms()))).collect();
+    // (La barre part du bord gauche de la bande, sous la colonne ; elle va au bout de la colonne, ou de ses six cases lisibles.)
+    let fin = colonne.max(barre[0].left() + LARGEUR_LISIBLE);
+    assert!(barre[0].left() >= debut - 2.0 && barre[0].left() < colonne, "la barre commence sous la colonne : {barre:?} / {debut}");
     for (k, r) in barre.iter().enumerate() {
         assert!((r.center().y - barre[0].center().y).abs() < 2.0, "une seule rangée : {barre:?}");
         assert!(r.center().y > ligne_du_calque.bottom(), "sous la colonne des calques : {barre:?}");
-        assert!(r.right() <= colonne + 2.0, "sous la colonne, pas plus large : {r:?} / {colonne}");
+        assert!(r.right() <= fin + 2.0, "sous la colonne, pas plus large qu'il ne faut : {r:?} / {fin}");
+        assert!(r.width() >= crate::barrecalques::CASE[0] - 0.5, "une case lisible : {r:?}");
         if k > 0 {
             assert!(r.center().x > barre[k - 1].center().x, "dans l'ordre : {barre:?}");
+            assert!(r.left() - barre[k - 1].right() >= ECART - 0.5, "les cases ne se touchent pas : {barre:?}");
         }
     }
 }
@@ -172,7 +180,7 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
     assert_eq!(fusion.len(), 1, "une seule ligne complète, celle du calque courant : {fusion:?}");
     // (La colonne commence au bord gauche de la bande, après la barre d'outils : la barre d'actions part de là.)
     let debut = vus::ou(crate::barrecalques::NOMS[0]).last().copied().expect("la barre d'actions").left();
-    la_colonne_porte_tout(debut + crate::layerheads::HEAD_W + 2.0, fusion[0]);
+    la_colonne_porte_tout(debut, debut + crate::layerheads::HEAD_W + 2.0, fusion[0]);
     // L'en-tête de la colonne n'a plus ses boutons (ils sont dans la barre d'actions) ni « Tout réduire ».
     let haut_des_lignes = fusion[0].top() - crate::layerheads::ROW_FULL;
     for nom in ["Nouveau dossier", "Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
@@ -206,7 +214,8 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     }
     let (haut, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
     assert!(bas.center().y - haut.center().y > 12.0 && bas.center().y - haut.center().y < 30.0, "deux rangées : {haut:?} {bas:?}");
-    la_colonne_porte_tout(colonne, fusion[0]);
+    // (La barre du bas de la bande part de son bord gauche, à gauche des en-têtes de la colonne.)
+    la_colonne_porte_tout(0.0, colonne, fusion[0]);
     // La barre d'actions est à gauche du zoom de la bande.
     let zoom = ou("Zoom arrière");
     assert!(zoom.left() > ou(crate::barrecalques::NOMS[5]).right(), "le zoom à sa droite");
@@ -268,4 +277,145 @@ fn the_vignettes_have_one_annotations_line_and_no_word_layer() {
     assert!(b.app.vignettes.annot.outil.is_some());
     clic(&mut b, ou("Dessin de la case").center(), Modifiers::NONE);
     assert!(b.app.vignettes.annot.outil.is_none());
+}
+
+// ------------------------------------------------------------------------------------ partie 161 : amincir
+
+/// Le rectangle de la partie (onglets compris) qui tient `pane` dans la fenêtre principale, et la hauteur de sa barre de poignées.
+fn partie_de(b: &Banc, pane: Pane) -> Option<(Rect, f32)> {
+    let state = b.app.dock.as_ref()?;
+    let (s, n, _) = state.find_tab(&pane)?;
+    if s != egui_dock::SurfaceIndex::main() {
+        return None;
+    }
+    match &state[s][n] {
+        egui_dock::Node::Leaf { rect, viewport, .. } => Some((*rect, viewport.top() - rect.top())),
+        _ => None,
+    }
+}
+
+/// Deux parties de côté posées côte à côte (ni le dessin ni la bande dans l'une ou l'autre) : il ne doit plus y en avoir.
+fn deux_colonnes(n: &crate::dock::DockNode) -> bool {
+    n.clone().une_seule_colonne() != *n
+}
+
+#[test]
+fn every_default_layout_has_one_narrow_column_on_the_right() {
+    use crate::dock::{DockLayout, COLONNE};
+    // Aucune disposition d'origine n'a deux colonnes de panneaux côte à côte (espaces de travail et dispositions de FEANOR).
+    for e in Espace::TOUS {
+        let d = e.defaut().dock_layout();
+        assert!(!deux_colonnes(&d.principal), "{e:?} : {:?}", d.principal);
+    }
+    for (id, _, l) in crate::workspace::builtin() {
+        assert!(!deux_colonnes(&l.dock_layout().principal), "{id}");
+    }
+    // Rien ne se perd : dans le Storyboard, les réglages, la fiche, les effets et le scénario sont des onglets du même groupe,
+    // la couleur et les brosses dédiées dessous.
+    let sb = DockLayout::pour_le_storyboard();
+    for p in [Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario, Pane::Color, Pane::Personnages] {
+        assert!(sb.contains(p), "{p:?}");
+    }
+    // À l'écran, dans la vraie fenêtre (1 920 points de large) : la colonne fait `COLONNE` points, quelle que soit la largeur de
+    // la fenêtre, et le dessin prend le reste.
+    for e in [Espace::Storyboard, Espace::Animation, Espace::Vignettes, Espace::Montage] {
+        let mut b = banc_dans(e);
+        b.chauffer(3);
+        let pane = if e == Espace::Montage { Pane::Sheet } else { Pane::ToolOptions };
+        let (col, _) = partie_de(&b, pane).unwrap_or_else(|| panic!("{e:?} : {pane:?} absent"));
+        assert!((col.width() - COLONNE).abs() <= 3.0, "{e:?} : la colonne fait {} points", col.width());
+        let (dessin, _) = partie_de(&b, Pane::Canvas).expect("le dessin");
+        assert!(dessin.width() > b.taille.x - COLONNE - 160.0, "{e:?} : le dessin prend la place, {dessin:?}");
+        // Une fenêtre plus large : la colonne ne grandit pas, l'image si.
+        b.taille.x += 400.0;
+        b.chauffer(3);
+        let (col2, _) = partie_de(&b, pane).expect("toujours là");
+        let (dessin2, _) = partie_de(&b, Pane::Canvas).expect("le dessin");
+        assert!((col2.width() - COLONNE).abs() <= 3.0, "{e:?} : {} points après agrandissement", col2.width());
+        assert!(dessin2.width() > dessin.width() + 390.0, "{e:?} : {dessin:?} → {dessin2:?}");
+    }
+}
+
+#[test]
+fn a_saved_two_column_layout_becomes_one_column_and_keeps_every_panel() {
+    use crate::dock::DockLayout;
+    // La disposition de la partie 160 (version 8) : les effets et le scénario dans une colonne, les réglages et la couleur à côté.
+    let ancienne = r#"{"version":8,"principal":{"type":"dessus_dessous","part":0.65,
+        "haut":{"type":"cote_a_cote","part":0.6,"gauche":{"type":"onglets","panneaux":["dessin"]},
+            "droite":{"type":"cote_a_cote","part":0.4,
+                "gauche":{"type":"dessus_dessous","part":0.6,"haut":{"type":"onglets","panneaux":["scenario"]},"bas":{"type":"onglets","panneaux":["effets"]}},
+                "droite":{"type":"dessus_dessous","part":0.55,"haut":{"type":"onglets","panneaux":["reglages","fiche"],"actif":0},"bas":{"type":"onglets","panneaux":["couleur","personnages"]}}}},
+        "bas":{"type":"onglets","panneaux":["bande"]}}}"#;
+    let d: DockLayout = serde_json::from_str(ancienne).expect("disposition lisible");
+    let avant = d.panes();
+    let l = crate::workspace::Layout { panneaux: Some(d), ..Default::default() };
+    let n = l.dock_layout();
+    assert_eq!(n.version, crate::dock::LAYOUT_VERSION);
+    assert!(!deux_colonnes(&n.principal), "{:?}", n.principal);
+    let mut apres = n.panes();
+    let mut avant = avant;
+    apres.sort_by_key(|p| format!("{p:?}"));
+    avant.sort_by_key(|p| format!("{p:?}"));
+    assert_eq!(apres, avant, "aucun panneau perdu");
+    // Les réglages de l'outil restent devant ; les effets et le scénario sont derrière eux, dans le même groupe.
+    let mut b = banc_dans(Espace::Storyboard);
+    b.app.set_dock_layout(n);
+    b.chauffer(3);
+    use crate::barrepanneaux::EtatIcone;
+    assert_eq!(b.app.etat_dans_la_barre(Pane::ToolOptions), EtatIcone::Devant);
+    assert_eq!(b.app.etat_dans_la_barre(Pane::Effects), EtatIcone::Derriere);
+    assert_eq!(b.app.etat_dans_la_barre(Pane::Scenario), EtatIcone::Derriere);
+    assert_eq!(b.app.etat_dans_la_barre(Pane::Color), EtatIcone::Devant);
+}
+
+#[test]
+fn no_empty_band_on_top_of_the_panels() {
+    // La barre des poignées n'est plus une bande vide de 26 points au-dessus de chaque panneau : une fine poignée.
+    assert!(crate::theme::POIGNEE_ONGLET <= 8.0);
+    let mut b = banc_dans(Espace::Storyboard);
+    b.chauffer(2);
+    for pane in [Pane::ToolOptions, Pane::Color, Pane::Canvas, Pane::Montage] {
+        let (_, barre) = partie_de(&b, pane).unwrap_or_else(|| panic!("{pane:?}"));
+        assert!(barre <= crate::theme::POIGNEE_ONGLET + 1.0, "{pane:?} : {barre} points au-dessus du panneau");
+    }
+    // Les panneaux de la colonne sont plus denses : texte de 11,5, lignes à 2 points d'écart.
+    let mut style = (*b.ctx.style()).clone();
+    crate::theme::densifier_panneau(&mut style);
+    assert_eq!(style.text_styles[&eframe::egui::TextStyle::Body].size, crate::theme::TEXTE_PANNEAU);
+    assert!(crate::theme::TEXTE_PANNEAU < b.ctx.style().text_styles[&eframe::egui::TextStyle::Body].size);
+    assert_eq!(style.spacing.item_spacing.y, crate::theme::LIGNE_PANNEAU);
+}
+
+#[test]
+fn every_panel_of_the_column_is_reached_from_the_panel_bar() {
+    use crate::barrepanneaux::EtatIcone;
+    // Chaque panneau d'office de chaque espace s'ouvre ou passe devant d'un clic sur son icône, dans la colonne unique.
+    for e in [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage] {
+        let mut b = banc_dans(e);
+        for &pane in crate::barrepanneaux::panneaux_d_office(e) {
+            if pane == Pane::References || pane == Pane::Bibliotheque {
+                continue; // (Ils s'ouvrent aussi, mais peuvent partir dans leur fenêtre à part.)
+            }
+            if b.app.etat_dans_la_barre(pane) != EtatIcone::Devant {
+                b.app.clic_panneau(pane);
+            }
+            b.chauffer(2);
+            assert_eq!(b.app.etat_dans_la_barre(pane), EtatIcone::Devant, "{e:?} : {pane:?}");
+            let layout = b.app.dock_layout();
+            assert!(!deux_colonnes(&layout.principal), "{e:?} : {pane:?} a refait une deuxième colonne : {:?}", layout.principal);
+        }
+    }
+}
+
+#[test]
+fn only_the_side_columns_next_to_the_drawing_are_merged() {
+    use crate::dock::DockNode;
+    let t = |p: &[Pane]| DockNode::Tabs { panneaux: p.to_vec(), actif: 0 };
+    let row = |part: f32, a: DockNode, b: DockNode| DockNode::Row { part, gauche: Box::new(a), droite: Box::new(b) };
+    let col = |part: f32, a: DockNode, b: DockNode| DockNode::Column { part, haut: Box::new(a), bas: Box::new(b) };
+    // Une rangée rangée à la main sous le dessin (commentaires | historique) reste comme elle est ; la colonne double à côté du
+    // dessin, elle, se fond.
+    let n = col(0.6, row(0.6, t(&[Pane::Canvas]), row(0.4, t(&[Pane::Effects]), t(&[Pane::ToolOptions]))), row(0.5, t(&[Pane::Comments]), t(&[Pane::History])));
+    let attendu = col(0.6, row(0.6, t(&[Pane::Canvas]), t(&[Pane::ToolOptions, Pane::Effects])), row(0.5, t(&[Pane::Comments]), t(&[Pane::History])));
+    assert_eq!(n.une_seule_colonne(), attendu);
 }

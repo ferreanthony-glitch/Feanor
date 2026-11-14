@@ -35,6 +35,16 @@ fn when_both_overflow_the_color_gets_its_share() {
 }
 
 #[test]
+fn a_list_in_front_of_the_settings_tab_takes_the_room_above_the_color() {
+    // Partie 161 : le scénario (ou la bibliothèque…) devant, dans le groupe des réglages ; la couleur (300 points) dessous.
+    let color = Want::Flex { min: 200.0, content: Some(300.0) };
+    assert_eq!(top_height(704.0, 4.0, flex(120.0), color), Some(400.0));
+    // Une couleur plus petite que son minimum garde son minimum ; une couleur immense laisse son minimum à la liste.
+    assert_eq!(top_height(704.0, 4.0, flex(120.0), Want::Flex { min: 200.0, content: Some(50.0) }), Some(500.0));
+    assert_eq!(top_height(704.0, 4.0, flex(120.0), Want::Flex { min: 200.0, content: Some(5000.0) }), Some(120.0));
+}
+
+#[test]
 fn two_fitting_panes_share_when_they_do_not_fit() {
     assert_eq!(top_height(500.0, 0.0, Want::Fit(100.0), Want::Fit(150.0)), Some(100.0), "ils tiennent : celui du haut a sa hauteur");
     assert_eq!(top_height(500.0, 0.0, Want::Fit(400.0), Want::Fit(600.0)), Some(200.0), "chacun sa part");

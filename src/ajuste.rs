@@ -72,6 +72,10 @@ pub fn top_height(total: f32, sep: f32, top: Want, bottom: Want) -> Option<f32> 
         (Want::Flex { min, content }, Want::Fit(b)) => room - share(b, min, content, room),
         (Want::Fit(a), Want::Fit(b)) if a + b <= room => a,
         (Want::Fit(a), Want::Fit(b)) => room * a / (a + b),
+        // Une liste qui sait prendre toute la place (le scénario, la bibliothèque, l'historique…, devant dans le groupe des
+        // réglages de la colonne unique, partie 161) au-dessus de la couleur : la couleur a la hauteur de son contenu, la liste
+        // le reste ; chacune garde son minimum.
+        (Want::Flex { min: top_min, content: None }, Want::Flex { min, content: Some(c) }) => room - c.max(min).min(room - top_min),
         (Want::Flex { .. }, Want::Flex { .. }) => return None,
     };
     Some(h.clamp(MIN_FIT, room - MIN_FIT))
@@ -119,7 +123,97 @@ fn first_pane(tree: &Tree<Pane>, at: NodeIndex) -> Option<Pane> {
     }
 }
 
+/// La partie `at` montre-t-elle l'un des panneaux `panes` ?
+fn has_any(tree: &Tree<Pane>, at: NodeIndex, panes: &[Pane]) -> bool {
+    match node(tree, at) {
+        Some(Node::Leaf { tabs, .. }) => tabs.iter().any(|t| panes.contains(t)),
+        Some(Node::Vertical { .. } | Node::Horizontal { .. }) => has_any(tree, at.left(), panes) || has_any(tree, at.right(), panes),
+        _ => false,
+    }
+}
+
+/// Le nombre de colonnes côte à côte de la partie `at`.
+fn colonnes(tree: &Tree<Pane>, at: NodeIndex) -> usize {
+    match node(tree, at) {
+        Some(Node::Leaf { .. }) => 1,
+        Some(Node::Horizontal { .. }) => colonnes(tree, at.left()) + colonnes(tree, at.right()),
+        Some(Node::Vertical { .. }) => colonnes(tree, at.left()).max(colonnes(tree, at.right())),
+        _ => 0,
+    }
+}
+
+/// La largeur que prend une partie de côté de `colonnes` colonnes, à côté du dessin (partie 161) : `dock::COLONNE` par
+/// colonne, en laissant au dessin au moins la moitié de la place.
+pub fn largeur_de_cote(total: f32, colonnes: usize) -> f32 {
+    (crate::dock::COLONNE * colonnes.max(1) as f32).min(total * 0.5)
+}
+
+/// La part (`fraction` d'egui_dock : celle de la partie de gauche) qui donne `w` points à la partie de droite (`right`), ou à
+/// celle de gauche.
+pub fn fraction_for_width(total: f32, sep: f32, w: f32, right: bool) -> f32 {
+    let left = if right { total - w - sep * 0.5 } else { w + sep * 0.5 };
+    (left / total).clamp(0.05, 0.95)
+}
+
 impl App {
+    /// La colonne des panneaux garde sa largeur (`dock::COLONNE`, partie 161), quelle que soit la largeur de la fenêtre : la
+    /// place gagnée va à l'image. Seules sont tenues les parties de côté posées à côté du dessin (ni le dessin ni la bande en
+    /// elles) ; un bord que l'on a tiré à la main est retenu et n'est plus touché, comme les hauteurs (`fit_panes`). La
+    /// largeur est prise d'un coup : c'est la fenêtre qui a changé, pas le contenu d'un panneau.
+    pub(crate) fn fit_columns(&mut self, ctx: &egui::Context, state: &mut DockState<Pane>, sep: f32) {
+        const DESSIN_OU_BANDE: [Pane; 3] = [Pane::Canvas, Pane::Montage, Pane::Timeline];
+        let pressed = ctx.input(|i| i.pointer.any_down());
+        let tree = state.main_surface_mut();
+        let mut fixed_now = Vec::new();
+        let mut moved = false;
+        for i in 0..tree.len() {
+            let at = NodeIndex(i);
+            let Some(Node::Horizontal { rect, fraction, .. }) = node(tree, at) else { continue };
+            let (rect, fraction) = (*rect, *fraction);
+            let (Some(a), Some(b)) = (first_pane(tree, at.left()), first_pane(tree, at.right())) else { continue };
+            // Le côté tenu : celui qui n'a ni le dessin ni la bande, à côté de celui qui a le dessin.
+            let droite = !has_any(tree, at.right(), &DESSIN_OU_BANDE) && has_any(tree, at.left(), &[Pane::Canvas]);
+            let gauche = !has_any(tree, at.left(), &DESSIN_OU_BANDE) && has_any(tree, at.right(), &[Pane::Canvas]);
+            if !droite && !gauche {
+                continue;
+            }
+            let key = (a, b);
+            if self.settings.panes_fixed.contains(&key) {
+                continue;
+            }
+            // Un bord qui n'est plus où on l'a mis : on l'a tiré à la main.
+            if let Some(set) = self.fit_set.get(&key) {
+                if (set - fraction).abs() > 1e-4 {
+                    self.fit_set.remove(&key);
+                    fixed_now.push(key);
+                    continue;
+                }
+            }
+            if pressed || !rect.is_finite() || rect.width() <= 0.0 {
+                continue;
+            }
+            let cote = if droite { at.right() } else { at.left() };
+            let w = largeur_de_cote(rect.width(), colonnes(tree, cote));
+            let f = fraction_for_width(rect.width(), sep, w, droite);
+            if (f - fraction).abs() * rect.width() < 0.5 {
+                self.fit_set.insert(key, fraction);
+                continue;
+            }
+            if let Node::Horizontal { fraction, .. } = &mut tree[at] {
+                *fraction = f;
+            }
+            self.fit_set.insert(key, f);
+            moved = true;
+        }
+        if moved {
+            ctx.request_repaint();
+        }
+        if !fixed_now.is_empty() {
+            self.settings.panes_fixed.extend(fixed_now);
+            let _ = self.settings.save();
+        }
+    }
+
     /// Ce que demande la partie `at` d'une colonne : la hauteur de son contenu (mesurée à
     /// l'affichage, `pane_heights`) si son onglet devant s'ajuste, sinon le reste.
     fn want(&self, tree: &Tree<Pane>, at: NodeIndex, body_margin: f32) -> Option<Want> {
