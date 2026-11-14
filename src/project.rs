@@ -376,6 +376,11 @@ pub(crate) struct Manifest {
     /// (une valeur quelconque, `Retenue::lire`) : un champ mal formé redonne une vue, il n'empêche jamais d'ouvrir le projet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vues_3d: Option<serde_json::Value>,
+    /// L'environnement de la vue Espace 3D (`espace3ddecor.rs`, `docs/INTERFACE.md` partie 157) : couleur du fond, maillage du sol.
+    /// Facultatif, sans changer `VERSION`, comme `vues_3d` : une version qui ne le connaît pas l'ignore ; absent : l'aspect d'origine.
+    /// Lu en souple (`Environnement3d::lire`) : un champ mal formé redonne l'aspect d'origine, il n'empêche jamais d'ouvrir le projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    environnement_3d: Option<serde_json::Value>,
 }
 
 /// Propriétés du projet (format 17). Dates en secondes depuis 1970.
@@ -855,6 +860,11 @@ struct LayerEntry {
     /// Calque accroché à la caméra (format 53, `accroche.rs`) : il garde sa place dans l'image filmée ; absent : calque ordinaire.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     accroche_camera: bool,
+    /// Calque 3D (`espace3ddecor.rs`, partie 157) : sol, mur ou ciel, et sa grille de repère ; absent : calque ordinaire. Sans changer
+    /// `VERSION` (une version d'avant l'ouvre comme un calque de dessin ordinaire, à la même place). Lu en souple
+    /// (`Calque3d::lire`) : une valeur mal formée redonne un calque ordinaire, jamais un projet qui ne s'ouvre pas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_3d: Option<serde_json::Value>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2551,6 +2561,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 personnage: l.personnage,
                 annotation: l.annotation,
                 accroche_camera: l.accroche,
+                calque_3d: l.calque_3d.and_then(|c| serde_json::to_value(c).ok()),
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -2706,6 +2717,7 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         dessins_hors: Vec::new(),
         partage: None,
         vues_3d: None,
+        environnement_3d: None,
     };
     let loaded = load_manifest(manifest, dir, quick, None);
     for (id, previous) in videos {
@@ -2854,6 +2866,8 @@ fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: 
         dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
         partage: None,
         vues_3d: if avec_plans { doc.vues_3d.as_ref().and_then(|r| serde_json::to_value(r).ok()) } else { None },
+        // (L'aspect d'origine n'écrit rien : un projet qui n'y a pas touché garde le même manifeste.)
+        environnement_3d: if avec_plans { doc.environnement_3d.filter(|e| !e.est_d_origine()).and_then(|e| serde_json::to_value(e).ok()) } else { None },
     }
 }
 
@@ -3031,6 +3045,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let mut warnings = Vec::new();
     // Les vues de l'Espace 3D (facultatives) : posées sur le document une fois fait.
     let vues_3d = manifest.vues_3d.take().and_then(crate::espace3dvues::Retenue::lire);
+    // L'environnement de l'Espace 3D (facultatif, partie 157), lu en souple.
+    let environnement_3d = manifest.environnement_3d.take().and_then(crate::espace3ddecor::Environnement3d::lire);
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings, annexes.plans_seuls);
     crate::imagevec::charger_dossier(dir, &mut warnings, annexes.plans_seuls);
@@ -3391,6 +3407,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         personnage: l.personnage,
                         annotation: l.annotation,
                         accroche: l.accroche_camera,
+                        calque_3d: l.calque_3d.and_then(crate::espace3ddecor::Calque3d::lire),
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -3584,6 +3601,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
     doc.vues_3d = vues_3d;
+    doc.environnement_3d = environnement_3d;
     if !annexes.plans_seuls {
         // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
         if let Some(fx) = load_sound_fx(dir, &mut warnings) {

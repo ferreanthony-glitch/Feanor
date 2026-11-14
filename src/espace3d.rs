@@ -196,7 +196,13 @@ pub enum Surface {
     Face,
     Sol,
     Mur,
+    /// Le ciel (`espace3ddecor.rs`, partie 157) : debout comme un mur, mais `CIEL_RECUL` fois plus loin, centré sur
+    /// l'horizon (la hauteur de l'œil de la caméra).
+    Ciel,
 }
+
+/// Le ciel se pose à `CIEL_RECUL` fois la distance d'une surface (`Monde::surface_xf`) : loin derrière tout le reste.
+pub const CIEL_RECUL: f32 = 20.0;
 
 impl Surface {
     /// Le nom du calque créé et de l'étape d'annulation.
@@ -205,6 +211,7 @@ impl Surface {
             Surface::Face => "Surface face à la caméra",
             Surface::Sol => "Surface au sol",
             Surface::Mur => "Surface en mur",
+            Surface::Ciel => "Ciel",
         }
     }
 }
@@ -366,12 +373,17 @@ impl Monde {
     /// - `Face` : face à la caméra, sur son axe, à `distance` ; elle suit sa bascule et sa rotation.
     /// - `Sol` : couchée au sol (`sol_y`), devant la caméra à `distance` à l'horizontale, son haut vers le fond.
     /// - `Mur` : debout sur le sol, face à la caméra à l'horizontale (sans sa bascule), à `distance`.
+    /// - `Ciel` : debout, face à la caméra à l'horizontale, à `CIEL_RECUL` fois `distance` (au plus 200 fois la distance de
+    ///   référence), centré sur l'horizon (la hauteur de l'œil) : sa moitié haute est le ciel, sa moitié basse, derrière le
+    ///   sol, bouche le vide entre le bout du sol et l'horizon. Il a la taille de la feuille à cette distance, donc remplit
+    ///   le cadre.
     ///
     /// La surface se pose où que regarde la caméra, **derrière la caméra de référence comprise** (`docs/INTERFACE.md`,
     /// partie 148 ; avant, elle y était refusée). Rien seulement si elle tomberait plus loin de la feuille que ce qu'une
     /// carte sait tenir (`Layer::MAX_DEPTH_LIBRE` fois la distance de référence, devant ou derrière).
     pub fn surface_xf(&self, cam: &Camera, sorte: Surface, distance: f32) -> Option<Xf> {
         let distance = if distance.is_finite() { distance.clamp(self.d0 * 0.05, self.d0 * 200.0) } else { self.d0 };
+        let distance = if sorte == Surface::Ciel { (distance * CIEL_RECUL).min(self.d0 * 200.0) } else { distance };
         let eye = self.eye(cam);
         let (sr, cr) = cam.angle.to_radians().sin_cos();
         let (st, ct) = cam.tilt.to_radians().sin_cos();
@@ -395,6 +407,7 @@ impl Monde {
             ),
             Surface::Sol => (devant, right, fond, [0.0, 1.0, 0.0]),
             Surface::Mur => (m::add(devant, [0.0, h / 2.0, 0.0]), right, [0.0, 1.0, 0.0], m::scale(fond, -1.0)),
+            Surface::Ciel => (m::add(eye, m::scale(fond, distance)), right, [0.0, 1.0, 0.0], m::scale(fond, -1.0)),
         };
         if !(pos[2].abs() <= self.d0 * Layer::MAX_DEPTH_LIBRE) {
             return None;
