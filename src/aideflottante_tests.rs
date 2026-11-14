@@ -369,7 +369,7 @@ fn opening_feanor_for_the_first_time_on_the_vignettes_page_plays_the_vignettes_s
     assert_eq!(b.app.confort.aide.en_cours(), suite.first().copied(), "au démarrage sur la page Vignettes, la suite joue d'elle-même");
     let f = b.app.confort.aide.fenetre().expect("la fenêtre est peinte");
     let onglet = aideflottante::ancre(&b.ctx, aideflottante::VIGNETTES).expect("l'onglet Vignettes est à l'écran");
-    assert_eq!(f, placer(onglet, taille(), b.ctx.screen_rect()), "sous l'onglet Vignettes");
+    assert_eq!(f, placer(onglet, taille(), b.app.aide_ecran(&b.ctx)), "sous l'onglet Vignettes, à gauche de la colonne des panneaux");
     // Elle joue jusqu'au bout, toute la suite.
     let mut vues: Vec<&'static str> = Vec::new();
     let mut images = 0;

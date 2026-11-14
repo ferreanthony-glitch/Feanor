@@ -12560,15 +12560,30 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 
 ### 161.3 Ce qui reste
 
-- Le panneau Planche des Vignettes (frise des séquences, « Toutes ») est un peu à l'étroit à 290 points : sa frise déborde à droite.
-- Le panneau Espace 3D devant, avec la Couleur dessous, ne montre pas tout d'un coup (il défile) : sa caméra va jusqu'à la focale.
+- Le panneau Planche des Vignettes (frise des séquences, « Toutes ») est un peu à l'étroit à 290 points : sa frise déborde à droite. (Corrigé en 161.4.)
+- Le panneau Espace 3D devant, avec la Couleur dessous, ne montre pas tout d'un coup (il défile) : sa caméra va jusqu'à la focale. (Corrigé en 161.4.)
 - La colonne des pistes du Storyboard reste à 104 points d'origine (sa largeur est un réglage d'Anthony).
 - La largeur de la colonne est tenue même si « les panneaux s'ajustent » est décoché (cette case parle des hauteurs), et aussi pour
   un panneau large (Feuille d'exposition, Références) qu'on aurait posé seul à côté du dessin : tirer le bord le libère.
 - `vignettecam::dans_polygone` répond « dedans » pour un polygone sans aire (sommets confondus ou alignés) ; il sert au repérage de
   la planche (`board.rs`, `debord.rs`, `horschamp.rs`). Défaut d'avant, à corriger à part.
 
-### 161.4 Comment Anthony teste (sur une copie de projet)
+### 161.4 Les deux débords corrigés (Anthony a validé les 290 points)
+
+- **Vignettes, en haut à droite** : la boîte sombre aux petites cases « 1 2 + » qui passait par-dessus le panneau Planche et la
+  barre des panneaux est la fenêtre de l'aide animée (la suite des Vignettes, sous l'onglet « Vignettes »). Elle se pose maintenant
+  à gauche de la colonne des panneaux, toujours sous l'onglet (`App::aide_ecran`). Dans le panneau lui-même, seule la ligne d'une
+  séquence au long nom débordait : le nom est coupé par « … » (le nombre de plans garde sa place, le nom entier est dans la bulle).
+  Rien d'autre ne bouge : mêmes boutons, même ordre.
+- **Espace 3D** : la caméra entière se voit sans faire défiler (fenêtre de 2 576 × 1 048, Couleur dessous). Une ligne de moins en
+  haut (le titre, puis sur la même ligne le repère, l'aimantation, la grille, les vues, le plan en Espace 3D ; « cartes et caméra »
+  passe dans la bulle du titre, en texte gras comme « Cartes (calques) » et « Caméra du plan ») ; panoramique, bascule et rotation
+  sur une seule ligne « Angles (°) » (`pan`, `basc.`, `rot.`, chacun avec sa bulle) ; filets de 2 points au lieu de 6. Aucun réglage
+  retiré, même ordre. La focale a sa bulle.
+- Essais : `panneaux_fins_tests::the_board_panel_fits_in_the_column_and_the_vignettes_suite_does_not_cover_it` et
+  `the_whole_camera_of_the_3d_space_panel_shows_without_scrolling` (rouges avant : 34,5 points de débord, 52 points sous le bas).
+
+### 161.5 Comment Anthony teste (sur une copie de projet)
 
 1. Storyboard : une seule colonne étroite à droite (Réglages, Couleur dessous) ; l'image va presque jusqu'au bord. Les icônes de
    la barre des panneaux mettent devant la Fiche, les Effets, le Scénario.
@@ -12577,3 +12592,5 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 3. Plus de bandes grises vides au-dessus des panneaux ; glisse la fine poignée d'un panneau pour le déplacer.
 4. Sous la colonne des calques, la barre + · dossier · effet · dupliquer · supprimer · ⋯ : des icônes qui ne se touchent plus.
 5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
+6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
+   en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.

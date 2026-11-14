@@ -417,7 +417,10 @@ impl App {
                     let texte = if montree { RichText::new(&nom) } else { RichText::new(&nom).weak() };
                     let largeur = (ui.available_width() - 56.0).max(40.0);
                     let actuelle = id == courante;
-                    let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(texte, actuelle)).selected(actuelle).min_size(vec2(largeur, 0.0)).sense(egui::Sense::click_and_drag()));
+                    // (Un long nom est coupé par « … » à la largeur de la ligne, le nombre de plans gardant sa place à droite :
+                    // la ligne tient dans la colonne de 290 points, partie 161.4. Le nom entier est dans la bulle.)
+                    let bouton = egui::Button::new(crate::bulles::encre_etat(texte, actuelle)).selected(actuelle).min_size(vec2(largeur, 0.0)).wrap_mode(egui::TextWrapMode::Truncate).sense(egui::Sense::click_and_drag());
+                    let resp = ui.allocate_ui(vec2(largeur, 0.0), |ui| ui.add(bouton)).inner;
                     let resp = crate::bulles::bulle(resp, &nom, "Un clic va à cette séquence ; double-clic ou clic droit : la renommer. Glisse-la pour choisir son rang sur la planche (l'ordre du film ne change pas).", "");
                     if resp.clicked() {
                         va_a = Some(id);

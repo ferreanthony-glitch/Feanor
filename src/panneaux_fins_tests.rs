@@ -419,3 +419,82 @@ fn only_the_side_columns_next_to_the_drawing_are_merged() {
     let attendu = col(0.6, row(0.6, t(&[Pane::Canvas]), t(&[Pane::ToolOptions, Pane::Effects])), row(0.5, t(&[Pane::Comments]), t(&[Pane::History])));
     assert_eq!(n.une_seule_colonne(), attendu);
 }
+// ------------------------------------------------------------------------------------ partie 161.4 : ce qui débordait
+
+/// Les éléments du panneau Planche des Vignettes, dans l'ordre où il les montre.
+const DE_LA_PLANCHE: &[&str] = &[
+    "Annotations",
+    "Dessin de la case",
+    "Nouvelle séquence",
+    "Toutes",
+    "Seulement la courante",
+    "Aucune autre",
+    "Cacher la séquence",
+    "En lignes",
+    "À la japonaise",
+    "Cases par ligne",
+    "Action",
+    "Dialogue",
+    "Notes",
+    "Numéros de plan",
+];
+
+#[test]
+fn the_board_panel_fits_in_the_column_and_the_vignettes_suite_does_not_cover_it() {
+    let mut b = banc_dans(Espace::Vignettes);
+    b.app.show_pane(Pane::Vignettes);
+    // Une séquence au long nom (jusqu'à 200 signes) : sa ligne tient dans la colonne.
+    assert!(!b.app.doc.sequences.is_empty(), "le film a une séquence");
+    b.app.doc.sequences[0].name = "Une séquence au nom très long, comme un intitulé de scénario : INT. CUISINE DE LA FERME, NUIT, ORAGE".into();
+    b.chauffer(4);
+    let (col, _) = partie_de(&b, Pane::Vignettes).expect("le panneau Planche est dans la colonne");
+    assert!((col.width() - crate::dock::COLONNE).abs() <= 3.0, "{col:?}");
+    let nom = b.app.doc.sequence_label(b.app.doc.sequences[0].id);
+    let mut noms: Vec<&str> = DE_LA_PLANCHE.to_vec();
+    noms.push(&nom);
+    let mut y = f32::MIN;
+    for n in noms.iter().take(DE_LA_PLANCHE.len()) {
+        let r = *vus::ou(n).iter().find(|r| col.contains_rect(r.shrink(0.5)) || (r.center().x > col.left() && r.center().y > col.top() && r.center().y < col.bottom())).unwrap_or_else(|| panic!("« {n} » n'est pas dans le panneau Planche : {:?}", vus::ou(n)));
+        assert!(r.center().y >= y - 1.0, "« {n} » : dans le même ordre");
+        y = y.max(r.top());
+    }
+    for n in &noms {
+        for r in vus::ou(n).into_iter().filter(|r| r.center().x > col.left() && r.center().y > col.top() && r.center().y < col.bottom()) {
+            assert!(r.left() >= col.left() - 0.5 && r.right() <= col.right() + 0.5, "« {n} » déborde de la colonne de {} points : {r:?} / {col:?}", r.right() - col.right());
+        }
+    }
+    // La suite des Vignettes joue sous l'onglet « Vignettes » (en haut à droite) : sa fenêtre se pose à côté de la colonne, sans
+    // passer par-dessus le panneau Planche ni par-dessus la barre des panneaux.
+    let t0 = b.ctx.input(|i| i.time);
+    assert!(b.app.aide_revoir(crate::aideflottante::VIGNETTES, t0));
+    b.chauffer(2);
+    let onglet = crate::aideflottante::ancre(&b.ctx, crate::aideflottante::VIGNETTES).expect("l'onglet Vignettes");
+    let f = b.app.confort.aide.fenetre().expect("la fenêtre joue");
+    assert!(f.right() <= col.left(), "la fenêtre de l'aide passe par-dessus la colonne : {f:?} / {col:?}");
+    assert!(f.top() >= onglet.bottom() && b.ctx.screen_rect().contains_rect(f), "sous l'onglet, dans l'écran : {f:?} / {onglet:?}");
+}
+
+#[test]
+fn the_whole_camera_of_the_3d_space_panel_shows_without_scrolling() {
+    // La fenêtre des captures d'Anthony (2 576 × 1 048, la barre de titre en moins), le Storyboard, la vue Espace 3D ouverte, six
+    // cartes (comme « retakes brawlydays »), l'aimantation allumée (d'origine) ; la Couleur sous le panneau Espace 3D.
+    let mut doc = crate::pistes_tests::doc_with(&[&["Dessin", "Vectoriel 13", "Vectoriel 8", "Vectoriel 9", "Vectoriel 10", "Vectoriel 11"], &["Seul"]]);
+    doc.panels[0].set_length(24);
+    let mut b = crate::perf_tests::banc_taille(doc, false, 2576, 1010);
+    b.app.set_espace(Espace::Storyboard);
+    b.chauffer(4);
+    b.app.run_action("espace3d.basculer");
+    b.chauffer(6);
+    assert!(b.app.espace3d.snap, "l'aimantation d'origine");
+    let state = b.app.dock.as_ref().expect("le dock");
+    let (s, n, _) = state.find_tab(&Pane::Espace3d).expect("le panneau Espace 3D");
+    let vue = match &state[s][n] {
+        egui_dock::Node::Leaf { viewport, .. } => *viewport,
+        _ => panic!("une feuille"),
+    };
+    assert!(b.app.pane_shown(Pane::Color), "la Couleur dessous");
+    // Le bas de la caméra : la focale (« Viser la sélection » est sur la dernière ligne de la caméra).
+    let bas = *vus::ou("Viser la sélection").iter().find(|r| vue.contains(r.center()) || (r.center().x > vue.left() && r.center().x < vue.right())).unwrap_or_else(|| panic!("{:?}", vus::noms()));
+    let focale = *vus::ou("Focale de la caméra").first().unwrap_or_else(|| panic!("la focale : {:?}", vus::noms()));
+    assert!(focale.bottom() <= vue.bottom() + 0.5 && bas.bottom() <= vue.bottom() + 0.5, "la caméra dépasse le bas du panneau de {} points : {bas:?} / {vue:?} ({:?} {:?} {:?})", bas.bottom() - vue.bottom(), vus::ou("Aimanter à la grille"), vus::ou("Pas de taille"), vus::ou("Rotation"));
+}
