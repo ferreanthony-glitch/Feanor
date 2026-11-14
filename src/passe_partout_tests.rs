@@ -315,9 +315,10 @@ fn the_bottom_bar_ends_with_the_passe_partout_toggle_and_opacity_slider_in_the_s
     let mut app = app_camera("barre");
     let (textes, _) = glyphes(&mut app, 4);
     let trouver = |glyphe: &str| textes.iter().find(|(t, _)| t.trim() == glyphe).map(|(_, r)| *r);
+    // (Partie 160 : ajuster et miroir sont montés dans la barre du haut ; la barre du bas commence par le cadrage et les repères.)
     let (ajuster, miroir, pelure, lampe, passe) = (
-        trouver(ph::ARROWS_OUT).expect("ajuster"),
-        trouver(ph::FLIP_HORIZONTAL).expect("miroir"),
+        trouver(ph::CROP).expect("cadrage"),
+        trouver(ph::GRID_FOUR).expect("repères"),
         trouver(ph::CIRCLES_THREE).expect("pelure"),
         trouver(ph::LIGHTBULB).expect("table lumineuse"),
         trouver(ph::SELECTION_INVERSE).expect("passe-partout"),

@@ -537,8 +537,23 @@ impl App {
 
     // ------------------------------------------------------------------------- barre d'outils
 
-    /// Outils de l'Espace 3D, dans la barre au-dessus du dessin : une seule rangée.
+    /// Les options de vue de l'Espace 3D, dans la barre au-dessus du dessin : recadrer, regarder par la caméra, une, deux ou
+    /// quatre vues. Ses outils (dessiner sur la carte, choisir, déplacer, tourner, taille, caméra) sont en tête de la barre
+    /// d'outils de gauche tant que la vue est ouverte (partie 160, `espace3d_outils`).
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
+        if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : les cartes et la caméra.", "espace3d.cadrer").clicked() {
+            self.espace3d_fit();
+        }
+        if self.case_icone(ui, ph::BINOCULARS, Some(self.e3_par_la_camera()), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : dans la vue active). Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
+            self.e3_basculer_par_la_camera();
+        }
+        // Une, deux ou quatre vues (`espace3dvues.rs`).
+        self.e3_vues_bouton(ui);
+    }
+
+    /// Les outils de la vue Espace 3D, en tête de la barre d'outils de gauche quand la vue est ouverte (partie 160 ; avant,
+    /// dans la barre au-dessus du dessin) : une colonne, dans le même ordre qu'avant.
+    pub(crate) fn espace3d_outils(&mut self, ui: &mut egui::Ui) {
         // « Dessiner sur la carte » (`espace3ddessin.rs`, partie 146) : allumé, le pointeur dessine et les outils de la
         // vue sont éteints ; un outil de la vue lui rend les cartes.
         // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.
@@ -560,17 +575,6 @@ impl App {
             let ajouter = ui.input(|i| i.modifiers.shift);
             self.espace3d_pick_camera(ajouter);
         }
-        ui.add_space(crate::barres::MARGE_TRAIT);
-        ui.separator();
-        ui.add_space(crate::barres::MARGE_TRAIT);
-        if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : les cartes et la caméra.", "espace3d.cadrer").clicked() {
-            self.espace3d_fit();
-        }
-        if self.case_icone(ui, ph::BINOCULARS, Some(self.e3_par_la_camera()), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : dans la vue active). Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
-            self.e3_basculer_par_la_camera();
-        }
-        // Une, deux ou quatre vues (`espace3dvues.rs`).
-        self.e3_vues_bouton(ui);
     }
 
     // ------------------------------------------------------------------------ panneau Espace 3D
