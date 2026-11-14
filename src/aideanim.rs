@@ -538,7 +538,7 @@ impl App {
             Some(l) if l.fin.is_none() => l.ouverture,
             _ => maintenant,
         };
-        self.confort.aide.lecture = Some(crate::aideflottante::Lecture { ids, index: 0, debut: maintenant, ouverture, fin: None, ancres, rect: None, prise: None });
+        self.confort.aide.lecture = Some(crate::aideflottante::Lecture { ids, index: 0, debut: maintenant, ouverture, fin: None, ancres, rect: None, prise: None, vue: maintenant });
     }
 
     /// Un contexte qui change : ses animations jouent si elles n'ont jamais été vues ; avec Aide > « Afficher les explications », toutes,

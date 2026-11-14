@@ -12301,3 +12301,41 @@ Les essais de la partie 153 peignent maintenant Réglages puis la fenêtre flott
 8. Le ▶ du titre de Réglages : la fenêtre s'ouvre à côté de l'icône de l'outil.
 9. Passe en thème Papier : la fenêtre est claire.
 10. Dire si la taille (240 × 150) et la durée du fondu conviennent.
+
+## 156. Au démarrage sur la page Vignettes, la suite des Vignettes joue d'elle-même (2026-11-14, branche `vignettes-premiere`)
+
+Demande d'Anthony : « ça mérite d'afficher le fonctionnement de Vignettes quand on ouvre le logiciel pour la première fois
+sur cette page. »
+
+### 156.1 Pourquoi elle ne se voyait pas
+
+Le code suivait déjà le démarrage : dès la première image où un projet est ouvert sur la page Vignettes, la suite (coupe ou
+continuité, le trait à travers les cases, le pont) partait, sans attendre un changement d'onglet (un essai le montre). Mais
+FEANOR rouvre les projets de la séance d'avant **l'un après l'autre** : la suite partait dès le premier, pendant que la
+fenêtre « Ouverture… » du suivant occupait l'écran. Et une image qui tardait (un gros projet adopté d'un coup) faisait
+sauter une animation entière, retenue comme vue sans avoir été vue.
+
+### 156.2 Ce qui change (`src/aideflottante.rs`)
+
+- Rien ne commence de soi-même pendant qu'un projet s'ouvre ou que la séance d'avant revient : la suite des Vignettes attend
+  que la page soit prête, puis joue sous l'onglet « Vignettes », du début.
+- Une image en retard ne compte que pour une demi-seconde : l'animation reprend où elle était, elle ne saute plus.
+- Le reste ne change pas : déjà vue (case Aide > « Afficher les explications » décochée), rien ne joue ; cochée, la suite
+  rejoue à chaque démarrage sur la page. Un appui sur la fenêtre la ferme, un trait sur la toile se dessine, même dessous ;
+  aucune boîte de dialogue.
+
+### 156.3 Les essais
+
+`src/aideflottante_tests.rs` : un démarrage sur la page Vignettes (l'accueil sans projet, puis un projet qui s'ouvre) joue
+toute la suite sous l'onglet et la retient comme vue ; déjà vue, rien ; pendant que la séance revient, rien ne commence, puis
+la suite part au début ; une image de dix secondes ne saute rien ; un second onglet, puis le retour au premier, ne
+l'arrêtent pas ; un appui sur la fenêtre la ferme (le trait dessiné sous elle est l'essai de la partie 155).
+
+### 156.4 À tester par Anthony
+
+1. Coche Aide > « Afficher les explications » (tes explications des Vignettes sont déjà vues : sans la case, rien ne
+   rejouerait).
+2. Va sur la page Vignettes, quitte FEANOR, relance-le : quand tes projets sont rouverts, la suite des Vignettes joue
+   sous l'onglet, de la première animation à la dernière, sans que tu changes d'onglet.
+3. Pendant qu'elle joue, dessine dans une case : le trait se fait ; un appui sur la fenêtre la ferme.
+4. Décoche la case et relance : rien ne joue.

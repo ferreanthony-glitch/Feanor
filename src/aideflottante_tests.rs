@@ -335,6 +335,151 @@ fn the_vignettes_suite_plays_one_after_the_other_in_a_single_window() {
     assert!(!app.confort.aide.joue());
 }
 
+/// Partie 156 (Anthony : « ça mérite d'afficher le fonctionnement de Vignettes quand on ouvre le logiciel pour la première fois sur
+/// cette page ») : FEANOR démarre sur la page Vignettes (l'espace où il l'avait quittée), d'abord sans projet (l'accueil), puis un
+/// projet s'ouvre. La suite des Vignettes joue d'elle-même, sans changer d'onglet ; déjà vue, rien.
+fn demarrer_sur_les_vignettes(vues: Vec<String>) -> Banc {
+    let mut b = banc_taille(Document::with_frame(400, 300, 24), false, 1600, 900);
+    b.garder_formes = true;
+    b.app.set_espace(crate::workspace::Espace::Vignettes);
+    b.chauffer(3);
+    // Le démarrage : l'accueil, aucun projet ; l'aide est neuve, comme à l'ouverture du logiciel.
+    b.app.welcome = true;
+    b.app.path = None;
+    b.app.modified = false;
+    b.app.history.clear();
+    b.app.confort.aide = aideanim::Joueur::new(true);
+    b.app.settings.explications_vues = vues;
+    b.app.settings.afficher_explications = false;
+    assert!(b.app.sans_projet());
+    b.chauffer(4);
+    assert!(!b.app.confort.aide.joue(), "sans projet, rien ne joue");
+    // Le projet s'ouvre (comme `finish_open_avec`).
+    assert!(b.app.charger_projet(Document::with_frame(400, 300, 24)));
+    assert!(!b.app.sans_projet());
+    b.chauffer(6);
+    assert_eq!(b.app.espace, crate::workspace::Espace::Vignettes, "toujours sur la page Vignettes");
+    b
+}
+
+#[test]
+fn opening_feanor_for_the_first_time_on_the_vignettes_page_plays_the_vignettes_suite() {
+    let mut b = demarrer_sur_les_vignettes(Vec::new());
+    let suite: Vec<&'static str> = aideanim::du_contexte("vignettes").iter().map(|a| a.id).collect();
+    assert_eq!(b.app.confort.aide.en_cours(), suite.first().copied(), "au démarrage sur la page Vignettes, la suite joue d'elle-même");
+    let f = b.app.confort.aide.fenetre().expect("la fenêtre est peinte");
+    let onglet = aideflottante::ancre(&b.ctx, aideflottante::VIGNETTES).expect("l'onglet Vignettes est à l'écran");
+    assert_eq!(f, placer(onglet, taille(), b.ctx.screen_rect()), "sous l'onglet Vignettes");
+    // Elle joue jusqu'au bout, toute la suite.
+    let mut vues: Vec<&'static str> = Vec::new();
+    let mut images = 0;
+    while b.app.confort.aide.joue() && images < 600 {
+        if let Some(id) = b.app.confort.aide.en_cours() {
+            if vues.last() != Some(&id) {
+                vues.push(id);
+            }
+        }
+        b.image(Vec::new(), 0.1);
+        images += 1;
+    }
+    assert_eq!(vues, suite, "toute la suite, dans l'ordre");
+    assert!(suite.iter().all(|id| b.app.settings.explications_vues.iter().any(|v| v == id)), "retenue comme vue");
+}
+
+#[test]
+fn the_vignettes_suite_at_startup_survives_a_second_tab_and_the_return_to_the_first() {
+    let mut b = demarrer_sur_les_vignettes(Vec::new());
+    let suite: Vec<&'static str> = aideanim::du_contexte("vignettes").iter().map(|a| a.id).collect();
+    assert_eq!(b.app.confort.aide.en_cours(), suite.first().copied());
+    // La séance d'avant avait deux projets : le second s'ouvre dans un onglet à lui, puis l'onglet affiché revient.
+    b.app.settings.open_in_new_tab = true;
+    assert!(b.app.charger_projet(Document::with_frame(400, 300, 24)));
+    b.chauffer(3);
+    assert!(b.app.activer_onglet(0));
+    b.chauffer(3);
+    let mut vues: Vec<&'static str> = Vec::new();
+    let mut images = 0;
+    while b.app.confort.aide.joue() && images < 600 {
+        if let Some(id) = b.app.confort.aide.en_cours() {
+            if vues.last() != Some(&id) {
+                vues.push(id);
+            }
+        }
+        b.image(Vec::new(), 0.1);
+        images += 1;
+    }
+    assert_eq!(vues, suite, "toute la suite, malgré l'ouverture des autres projets de la séance");
+}
+
+/// Ce qui la faisait manquer au démarrage : FEANOR rouvre les projets de la séance d'avant l'un après l'autre (« Ouverture… »),
+/// et la suite commençait dès le premier, derrière cette fenêtre ; une image qui tardait (un gros projet adopté) sautait une
+/// animation entière, retenue comme vue. Maintenant elle attend que la séance soit revenue, et une image en retard ne saute rien.
+#[test]
+fn the_vignettes_suite_waits_for_the_session_to_come_back_and_skips_nothing_on_a_slow_frame() {
+    let mut b = banc_taille(Document::with_frame(400, 300, 24), false, 1600, 900);
+    b.garder_formes = true;
+    b.app.set_espace(crate::workspace::Espace::Vignettes);
+    b.chauffer(3);
+    b.app.welcome = true;
+    b.app.path = None;
+    b.app.modified = false;
+    b.app.history.clear();
+    b.app.confort.aide = aideanim::Joueur::new(true);
+    b.app.settings.explications_vues.clear();
+    b.app.settings.afficher_explications = false;
+    b.chauffer(3);
+    // La séance d'avant revient : le premier projet est là, les suivants s'ouvrent encore (une image chacun ici).
+    b.app.session_prete = false;
+    b.app.session_file = (0..30).map(|i| std::env::temp_dir().join(format!("feanor-absent-{i}.shot"))).collect();
+    assert!(b.app.charger_projet(Document::with_frame(400, 300, 24)));
+    let mut images = 0;
+    while !b.app.session_prete && images < 100 {
+        assert!(!b.app.confort.aide.joue(), "pendant que la séance revient, rien ne commence (image {images})");
+        b.image(Vec::new(), 0.1);
+        images += 1;
+    }
+    assert!(images >= 30, "la séance a mis {images} images à revenir");
+    assert!(b.app.session_prete);
+    b.chauffer(2);
+    let suite: Vec<&'static str> = aideanim::du_contexte("vignettes").iter().map(|a| a.id).collect();
+    assert_eq!(b.app.confort.aide.en_cours(), suite.first().copied(), "la séance revenue : la suite commence, au début");
+    // Une image qui tarde dix secondes (plus qu'une animation entière) : l'animation reprend où elle était.
+    assert!(aideanim::anim(suite[0]).is_some_and(|a| (a.duree as f64) < 10.0));
+    b.image(Vec::new(), 10.0);
+    assert_eq!(b.app.confort.aide.en_cours(), suite.first().copied(), "une image en retard ne saute pas l'animation");
+    assert!(!b.app.settings.explications_vues.iter().any(|v| Some(v.as_str()) == suite.get(1).copied()), "la suivante n'est pas retenue comme vue");
+    let mut vues: Vec<&'static str> = Vec::new();
+    let mut n = 0;
+    while b.app.confort.aide.joue() && n < 600 {
+        if let Some(id) = b.app.confort.aide.en_cours() {
+            if vues.last() != Some(&id) {
+                vues.push(id);
+            }
+        }
+        b.image(Vec::new(), 0.1);
+        n += 1;
+    }
+    assert_eq!(vues, suite, "toute la suite, dans l'ordre");
+}
+
+#[test]
+fn opening_feanor_on_the_vignettes_page_again_plays_nothing_once_seen() {
+    let vues = aideanim::toutes().map(|a| a.id.to_string()).collect();
+    let b = demarrer_sur_les_vignettes(vues);
+    assert!(!b.app.confort.aide.joue(), "déjà vue : rien ne joue");
+}
+
+#[test]
+fn a_press_on_the_startup_vignettes_window_closes_it() {
+    let mut b = demarrer_sur_les_vignettes(Vec::new());
+    let f = b.app.confort.aide.fenetre().expect("la suite joue");
+    // Un appui sur la fenêtre la ferme ; le clic continue son chemin.
+    b.image(vec![Event::PointerMoved(f.center())], 1.0 / 60.0);
+    b.image(vec![bouton(f.center(), PointerButton::Primary, true)], 1.0 / 60.0);
+    assert!(!b.app.confort.aide.joue(), "l'appui la ferme aussitôt");
+    b.image(vec![bouton(f.center(), PointerButton::Primary, false)], 1.0 / 60.0);
+}
+
 // ------------------------------------------------------------------------------------------------------ le thème clair
 
 #[test]
