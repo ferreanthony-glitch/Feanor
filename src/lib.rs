@@ -970,6 +970,10 @@ mod espace3dpanneau_tests;
 mod espace3ddecor;
 #[cfg(test)]
 mod espace3ddecor_tests;
+// La vue Espace 3D met d'elle-même le plan en Espace 3D, et le maillage tout près de la scène : partie 158.
+mod espace3ddirect;
+#[cfg(test)]
+mod espace3ddirect_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]

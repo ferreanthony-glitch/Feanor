@@ -966,6 +966,10 @@ pub struct Panel {
     /// **Plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, format 54) : la caméra du plan est libre dans l'Espace 3D et les cartes
     /// se cachent selon leur distance ; l'image montre ce que cette caméra filme (`repere_du_plan`). Faux : un plan ordinaire.
     pub espace: bool,
+    /// Le plan est en Espace 3D seulement parce que la vue Espace 3D le montre, sans qu'on l'ait choisi
+    /// (`espace3ddirect.rs`, partie 158) : il redevient ordinaire quand on le quitte, si rien en lui n'en a l'usage. **Jamais
+    /// enregistré** : le fichier garde le plan ordinaire (`espace` est écrit faux). Suit les clichés d'annulation.
+    pub espace_tout_seul: bool,
     /// **La trajectoire de la caméra** d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149, format 55) : un chemin tracé dans
     /// l'espace (toujours avec son `support`), que la caméra du plan suit. Elle **ne pose aucune clé de caméra** : à chaque image,
     /// la caméra des clés est déplacée dans l'espace du déplacement du chemin depuis son départ (`deplacement_de_la_camera`),
@@ -2773,6 +2777,7 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
             espace: source.espace,
+            espace_tout_seul: source.espace_tout_seul,
             // (La trajectoire de la caméra est devenue des clés avant la coupe, comme l'effet vivant.)
             trajectoire_camera: None,
         };
@@ -2989,6 +2994,7 @@ impl Document {
             cues: Cues::default(),
             color: None,
             espace: false,
+            espace_tout_seul: false,
             trajectoire_camera: None,
         }
     }

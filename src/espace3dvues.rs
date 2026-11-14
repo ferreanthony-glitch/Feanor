@@ -814,7 +814,7 @@ impl App {
                 PointDeVue::Perspective => self.e3_quadrillage(c.orbite.target, c.orbite.distance, None),
                 p => self.e3_quadrillage(c.ortho.target, c.ortho.span, Some((p, c.ortho, draw.width() / draw.height().max(1.0)))),
             };
-            Self::e3_peindre_quadrillage(&painter, &proj, lignes);
+            Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
         if !camera {

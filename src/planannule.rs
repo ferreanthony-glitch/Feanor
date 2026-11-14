@@ -587,6 +587,7 @@ pub(crate) fn document_de_la_planche(doc: &Document) -> (Document, Vec<Rang>) {
                 cues: Default::default(),
                 color: None,
                 espace: p.espace,
+                espace_tout_seul: p.espace_tout_seul,
                 trajectoire_camera: p.trajectoire_camera.clone(),
             }
         })

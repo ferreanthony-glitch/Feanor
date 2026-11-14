@@ -52,11 +52,12 @@ pub(crate) fn grid_lines(target: V3, distance: f32) -> Vec<GridLine> {
 }
 
 /// `grid_lines`, au pas `pas` (mètres) s'il est donné (l'environnement de l'Espace 3D, `espace3ddecor.rs`) : les traits
-/// couvrent la même étendue qu'au pas automatique, 300 au plus de chaque côté.
+/// couvrent au moins la même étendue qu'au pas automatique, et au moins 60 pas de chaque côté (vue tout près de la scène,
+/// le sol reste quadrillé loin vers l'horizon, partie 158) ; 300 au plus de chaque côté.
 pub(crate) fn grid_lines_pas(target: V3, distance: f32, pas: Option<f32>) -> Vec<GridLine> {
     let auto = nice_step((distance * 2.4).clamp(1.0, 400.0));
     let (step, n) = match pas.filter(|p| p.is_finite() && *p > 0.0) {
-        Some(p) => (p, ((15.0 * auto / p).ceil() as i32).clamp(1, 300)),
+        Some(p) => (p, ((15.0 * auto / p).ceil() as i32).clamp(60, 300)),
         None => (auto, 15i32),
     };
     let (cx, cz) = ((target[0] / step).round() * step, (target[2] / step).round() * step);
@@ -70,6 +71,48 @@ pub(crate) fn grid_lines_pas(target: V3, distance: f32, pas: Option<f32>) -> Vec
         let line_z = if x.abs() < step * 0.01 { [0.35, 0.5, 0.95, 0.75] } else { minor };
         out.push(GridLine { a: [cx - half, 0.0, z], b: [cx + half, 0.0, z], color: line_x });
         out.push(GridLine { a: [x, 0.0, cz - half], b: [x, 0.0, cz + half], color: line_z });
+    }
+    out
+}
+
+/// Le morceau du trait du monde `a`–`b` qui est devant l'œil de `view` (plus loin que `NEAR` en perspective) ; rien s'il
+/// est tout entier derrière.
+///
+/// (Partie 158. Avant, un trait dont un bout passait derrière l'œil n'était pas dessiné du tout. Les traits du maillage
+/// traversent tout le sol autour de ce qu'on regarde : vue tout près de la scène, presque tous ont un bout derrière
+/// l'œil, et il ne restait que ceux du lointain, en bande vers l'horizon.)
+pub(crate) fn devant_l_oeil(view: &View, a: V3, b: V3) -> Option<(V3, V3)> {
+    let proche = if view.is_ortho() { 1e-5 } else { NEAR };
+    let (da, db) = (view.to_view(a)[2], view.to_view(b)[2]);
+    if !(da.is_finite() && db.is_finite()) || (da < proche && db < proche) {
+        return None;
+    }
+    // (Le point du trait à la profondeur `proche`, depuis le bout `p` (derrière) vers le bout `q` (devant).)
+    let coupe = |p: V3, q: V3, dp: f32, dq: f32| {
+        let t = (proche - dp) / (dq - dp);
+        [0, 1, 2].map(|k| p[k] + (q[k] - p[k]) * t)
+    };
+    let a2 = if da < proche { coupe(a, b, da, db) } else { a };
+    let b2 = if db < proche { coupe(b, a, db, da) } else { b };
+    Some((a2, b2))
+}
+
+/// Les traits du quadrillage `lignes` tels que `view` les montre : à l'écran (`center` : le point de l'image où elle regarde,
+/// `origine` : le coin de l'image à l'écran), avec leur couleur. Un trait qui passe derrière l'œil est coupé là où il
+/// le passe (`devant_l_oeil`), puis au bord de `zone` (le morceau coupé tout près de l'œil part très loin hors de l'écran).
+pub(crate) fn traits_a_l_ecran(view: &View, center: [f32; 2], origine: Pos2, zone: Rect, lignes: &[GridLine]) -> Vec<(Pos2, Pos2, [f32; 4])> {
+    let ecran = |p: V3| view.project(p, center).map(|q| pos2(origine.x + q[0], origine.y + q[1]));
+    let zone = zone.expand(2.0);
+    let mut out = Vec::with_capacity(lignes.len());
+    for l in lignes {
+        let Some((a, b)) = devant_l_oeil(view, l.a, l.b) else { continue };
+        let (Some(a), Some(b)) = (ecran(a), ecran(b)) else { continue };
+        if !(a.x.is_finite() && a.y.is_finite() && b.x.is_finite() && b.y.is_finite()) {
+            continue;
+        }
+        if let Some((a, b)) = crate::guides::clip_line(a, b - a, zone, true) {
+            out.push((a, b, l.color));
+        }
     }
     out
 }
@@ -101,14 +144,12 @@ impl App {
         env.teinter_maillage(lignes)
     }
 
-    /// Peint ces traits de quadrillage (`proj` : du monde à l'écran).
-    pub(crate) fn e3_peindre_quadrillage(painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, lignes: Vec<GridLine>) {
-        for l in lignes {
-            if let (Some(a), Some(b)) = (proj(l.a), proj(l.b)) {
-                let [r, g, bl, alpha] = l.color;
-                let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
-                painter.line_segment([a, b], Stroke::new(1.0_f32, c));
-            }
+    /// Peint ces traits de quadrillage, vus par `view` (`center` : le point de l'image où elle regarde, `origine` : le coin
+    /// de l'image à l'écran ; `traits_a_l_ecran`).
+    pub(crate) fn e3_peindre_quadrillage(painter: &egui::Painter, view: &View, center: [f32; 2], origine: Pos2, lignes: Vec<GridLine>) {
+        for (a, b, [r, g, bl, alpha]) in traits_a_l_ecran(view, center, origine, painter.clip_rect(), &lignes) {
+            let c = Color32::from_rgba_unmultiplied((r * 255.0) as u8, (g * 255.0) as u8, (bl * 255.0) as u8, (alpha * 255.0) as u8);
+            painter.line_segment([a, b], Stroke::new(1.0_f32, c));
         }
     }
 
@@ -667,7 +708,7 @@ impl App {
             // (Le même quadrillage que chacune des vues multiples, `e3_quadrillage`, à la hauteur du sol,
             // `e3_hauteur_sol`.)
             let lignes = self.e3_quadrillage(target, if through { 8.0 } else { distance }, None);
-            Self::e3_peindre_quadrillage(&painter, &proj, lignes);
+            Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
 
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.

@@ -12,8 +12,9 @@
 //! - **Les calques 3D** (`Calque3d`) : « Nouveau calque > Calques 3D > Sol, Mur, Ciel ». Chacun est un calque de dessin
 //!   ordinaire (vectoriel ou bitmap, comme le calque courant) posé dans l'espace par `Monde::surface_xf` (`Surface::Sol`,
 //!   `Surface::Mur`, `Surface::Ciel`) : la commande « Nouvelle surface » du panneau, avec un nom court et une marque. Une
-//!   seule étape d'annulation, aucune fenêtre. Un plan qui n'est pas en Espace 3D refuse, comme « Nouvelle surface » : la
-//!   barre d'état le dit d'abord.
+//!   seule étape d'annulation, aucune fenêtre. Un plan qui n'est pas en Espace 3D y passe dans cette même étape quand rien
+//!   de son image n'en change (`espace3ddirect.rs`, partie 158) ; sinon il refuse, comme « Nouvelle surface », et la barre
+//!   d'état dit d'abord pourquoi.
 //! - **La grille de repère** d'un calque 3D (`Calque3d::grille`, `Calque3d::pas`) : des traits bleus peints **par-dessus**
 //!   la carte dans la vue Espace 3D, et par-dessus l'image quand ce calque est le calque courant dans le dessin. Elle n'est
 //!   jamais dans le dessin : ni dans les exports, ni sous la gomme, ni dans les traits. Le dessin, lui, ne change pas d'un
@@ -322,12 +323,12 @@ impl App {
     }
 
     /// « Nouveau calque > Calques 3D » : un Sol, un Mur ou un Ciel posé dans l'espace du plan courant (`espace3d_poser_surface`),
-    /// le calque courant, une étape d'annulation. Hors d'un plan en Espace 3D : refusé, comme « Nouvelle surface », et la
-    /// barre d'état le dit d'abord.
+    /// le calque courant, une étape d'annulation. Un plan ordinaire passe en Espace 3D dans cette même étape, si rien de son
+    /// image ni de ses dessins n'en change (partie 158) ; sinon : refusé, comme « Nouvelle surface », et la barre d'état
+    /// dit d'abord pourquoi.
     pub(crate) fn nouveau_calque_3d(&mut self, sorte: Sorte3d) {
         let nom = sorte.nom();
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            self.status = format!("{nom} refusé : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D, puis recommence.");
+        if !self.e3_espace_permis(&format!("{nom} refusé")) {
             return;
         }
         let distance = self.espace3d_distance_surface();

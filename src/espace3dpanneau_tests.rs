@@ -215,7 +215,7 @@ fn in_the_3d_view_the_settings_pane_shows_the_brush_and_the_space_pane_the_cards
 fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space_path_and_the_space_pane_does_not() {
     let mut b = banc_d_essai(2);
     ouvrir_la_vue(&mut b);
-    b.app.run_action("espace3d.plan_en_espace");
+    // (La vue l'y a mis d'elle-même, partie 158.)
     assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
     b.app.traj.cles_propose = Cles::Interpolation;
     b.app.run_action("outil.trajectoire");
@@ -253,6 +253,8 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
 fn in_an_ordinary_plan_the_trajectory_settings_point_to_the_space_pane_for_the_checkbox() {
     let mut b = banc_d_essai(1);
     ouvrir_la_vue(&mut b);
+    // (La vue l'a mis en Espace 3D, partie 158 : décoché à la main, il reste ordinaire.)
+    b.app.run_action("espace3d.plan_en_espace");
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);
     assert!(!b.app.doc.plan_en_espace(0));
@@ -848,12 +850,16 @@ fn the_messages_send_to_the_space_pane_and_no_longer_to_the_settings_pane() {
         assert!(message.contains("panneau Espace 3D") && !message.contains("Réglages"), "{message}");
     }
     let mut b = banc_d_essai(1);
+    // (Une carte penchée : la vue ne met pas ce plan en Espace 3D d'elle-même, partie 158.)
+    b.app.doc.panels[0].layers[0].transform.tilt_x = 20.0;
     // La vue s'ouvre sur un plan ordinaire, puis sur un plan en Espace 3D.
     b.app.run_action("espace3d.basculer");
     assert!(b.app.status.contains("Réglages de la vue : le panneau Espace 3D.") && !b.app.status.contains("panneau Réglages"), "{}", b.app.status);
-    // « Nouvelle surface » hors d'un plan en Espace 3D : la case est dans le panneau Espace 3D.
+    b.chauffer(1);
+    assert!(!b.app.doc.plan_en_espace(0));
+    // « Nouvelle surface » sur ce plan : refusée, le bouton dit est celui du panneau Espace 3D.
     b.app.run_action("espace3d.surface_sol");
-    assert!(b.app.status.contains("« Plan en Espace 3D » dans le panneau Espace 3D") && !b.app.status.contains("dans Réglages"), "{}", b.app.status);
+    assert!(b.app.status.contains("refusé") && b.app.status.contains("« Plan en Espace 3D »") && !b.app.status.contains("Réglages"), "{}", b.app.status);
     // La légende de l'outil Trajectoire dans un plan ordinaire.
     b.app.run_action("outil.trajectoire");
     b.chauffer(2);

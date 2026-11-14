@@ -201,8 +201,9 @@ impl App {
             let resp = ui.add(egui::Button::new(job).shortcut_text(&shortcut));
             self.entree_creation(ui, &resp, s.action());
         }
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            ui.label(RichText::new("Ce plan n'est pas en Espace 3D : coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.").small().weak());
+        // (Un plan ordinaire passe en Espace 3D avec son calque 3D, si rien n'en change : partie 158. Sinon, pourquoi.)
+        if let Some(g) = (!self.doc.plan_en_espace(self.cur_panel)).then(|| self.doc.garde_de_l_espace(self.cur_panel)).flatten() {
+            ui.label(RichText::new(g.phrase()).small().weak());
         }
     }
 

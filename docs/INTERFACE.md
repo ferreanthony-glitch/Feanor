@@ -12433,3 +12433,132 @@ grille n'est jamais dans le dessin, ni sous la gomme, ni dans l'image exportée.
 6. Ferme la vue : la grille reste visible sur le dessin tant que le Sol est le calque courant. Exporte une image : pas de
    grille dedans.
 7. Dire si le bleu de la grille se voit bien sur ton papier, et si le ciel est à la bonne place (centré sur l'horizon).
+
+## 158. Le maillage tout près de la scène, et la vue Espace 3D qui suffit (2026-11-14, branche `espace3d-direct`)
+
+Deux retours d'Anthony après la partie 157 : « Il y a un bug sur le maillage, quand la caméra est trop proche il
+disparait. » et « Je constate qu'il faut cliquer sur le bouton environnement 3D pour pouvoir vraiment utiliser la 3D,
+c'est une friction. On a pas besoin d'appuyer sur ce bouton, le petit cube à côté de la caméra suffit à nous faire
+basculer dans un environnement 3D immédiatement. » Format inchangé (55).
+
+### 158.1 Le maillage qui disparaît de près : la cause
+
+Les traits du maillage traversent tout le sol autour de ce que la vue regarde (de 15 pas automatiques de chaque côté, ou
+plus au pas fixe). Chaque trait était projeté par ses deux bouts, et **un trait dont un bout passait derrière l'œil
+n'était pas dessiné du tout** (`e3_peindre_quadrillage` demandait les deux bouts à `View::project`, qui ne rend rien
+derrière l'œil). De loin, l'œil est au-dessus du sol et presque tous les bouts sont devant lui : le sol est quadrillé.
+Tout près de la scène, l'œil est au milieu du quadrillage : presque tous les traits ont un bout derrière lui, il ne
+restait que ceux du lointain, en bande vers l'horizon — exactement la capture d'Anthony (pas 0,60 m, 9 traits montrés,
+aucun dans le bas de l'image). Les autres pistes ont été vérifiées et écartées : la borne du nombre de traits (300 de chaque
+côté) ne recentre rien, le quadrillage reste centré sur ce que la vue regarde ; l'étendue tirée de la distance de la vue
+garde l'œil dans le quadrillage ; pas automatique et pas fixe avaient le même défaut (l'essai rouge le montre dans les
+deux cas).
+
+**Correction** (`espace3dview.rs`, `devant_l_oeil`, `traits_a_l_ecran`) : un trait est **coupé** là où il passe le plan
+proche de l'œil (5 cm), puis au bord de la vue (le bout coupé tout près de l'œil part très loin hors de l'écran). Les
+traits tout entiers devant l'œil sont montrés exactement comme avant. Même fonction pour la vue seule et pour chacune des
+vues multiples (perspective, caméra, orthographiques). Au pas fixe, le maillage couvre aussi au moins 60 pas de chaque
+côté : tout près de la scène, le sol reste quadrillé loin vers l'horizon (au plus 2 × 601 traits, comme avant la borne).
+
+### 158.2 La vue Espace 3D met le plan en Espace 3D d'elle-même
+
+**Ce que le passage en Espace 3D change à un plan** (relevé avant de coder, `espace3ddirect.rs`) :
+
+- caméra du plan différente de la caméra d'origine à l'une de ses images : l'image passe par le changement de repère
+  (partie 148, A3) — même géométrie, mais pas les mêmes pixels au bord des formes, et l'encre hors de la feuille n'est
+  plus filmée ;
+- une carte plus près que la borne des plans ordinaires (`Layer::MIN_DEPTH`) à l'une des images (une clé de profondeur
+  par exemple) : dans un plan ordinaire elle est montrée à la borne, en Espace 3D à sa vraie place ;
+- une carte penchée : en Espace 3D, le pinceau n'y peint plus hors de ses bords (`App::to_layer_opt`) ;
+- la pile dans un autre ordre que les profondeurs : en Espace 3D, ce qui est devant passe devant
+  (`espace3d::ordre_par_distance`) ;
+- et, pour l'interface seulement, l'outil Caméra de la feuille, la vue de dessus et les mouvements de caméra des Vignettes
+  sont réservés aux plans ordinaires (A8).
+
+Hors des quatre premiers cas, un plan en Espace 3D se compose par le chemin de toujours (`repere_du_plan` ne rend rien,
+la profondeur libre égale la profondeur bornée, l'ordre des distances est celui de la pile) : **les mêmes pixels**.
+
+**Ce qui change pour Anthony :**
+
+- Ouvrir la vue Espace 3D (le cube) sur un plan le met en Espace 3D **tout de suite**, sans bouton, quand rien de cela
+  n'arrive. La barre d'état commence par « Plan passé en Espace 3D tout seul : son image filmée ne change pas. » Aucune
+  fenêtre.
+- Dans l'un des quatre cas, le plan reste ordinaire et la barre d'état dit pourquoi en tête (« Plan gardé ordinaire : sa
+  caméra a bougé, l'Espace 3D changerait l'image. »…).
+- **Sol, Mur, Ciel** (menu Nouveau calque) et **Nouvelle surface** ne refusent plus pour « pas en Espace 3D » : ils
+  mettent le plan en Espace 3D dans leur propre étape d'annulation, même vue fermée. Ils ne refusent que dans les quatre
+  cas, et disent pourquoi (« Sol refusé : sa caméra a bougé… »). Le sous-menu Calques 3D ne montre plus la note que dans
+  ces cas.
+- **Le retour** : un plan que la vue a mis en Espace 3D porte une marque (`Panel::espace_tout_seul`) qui suit
+  l'annulation, les versions et la duplication, et **n'est jamais enregistrée** : le fichier garde ce plan ordinaire. Il
+  redevient ordinaire quand on le quitte (autre plan, vue fermée, planche des Vignettes, Ctrl+Z, rétablir), si rien en
+  lui n'a besoin de l'Espace 3D (`Document::garde_du_retour` : un calque 3D, une carte penchée ou derrière la borne, une
+  caméra du plan lui-même déplacée, une trajectoire dans l'espace, la pile réordonnée par la profondeur). Regarder un
+  plan dans la vue ne lui laisse donc rien : l'outil Caméra, la vue de dessus et les mouvements de caméra des Vignettes le
+  retrouvent comme avant. Dès qu'il s'en sert, la marque tombe : c'est un vrai plan en Espace 3D, enregistré comme tel.
+- Sol, Mur, Ciel ou Nouvelle surface sur un plan ordinaire, à une distance de surface si courte que la carte neuve serait
+  plus près que la feuille : refusé (sinon tout le plan passerait par le changement de repère et l'image des autres
+  cartes changerait) ; la barre d'état dit d'éloigner la distance.
+- **Le bouton « Plan en Espace 3D » reste**, pour deux raisons qu'on ne peut pas faire sans lui : rendre un plan ordinaire
+  (la vue respecte alors ce choix, elle ne l'y remet plus de la séance), et mettre en Espace 3D un plan des quatre cas en
+  connaissance de cause. Sa bulle le dit.
+
+**Annulation (choix)** : le passage tout seul n'est pas une étape — il ne change ni l'image ni les dessins, comme les vues
+et l'environnement. Les calques 3D et les surfaces font le passage dans leur étape (un Ctrl+Z enlève le calque et rend le
+plan ordinaire). Le bouton reste une étape, comme avant. Si Ctrl+Z ramène ordinaire un plan encore montré par la vue, il
+y repasse (même règle).
+
+Aucun outil de dessin n'a changé. Aucun calcul de profondeur n'a changé (lecture par `Monde::du_plan`,
+`Monde::profondeur`, `depth_selon`).
+
+### 158.3 Les essais
+
+`src/espace3ddirect_tests.rs` : la vue tout près (1,5 m au pas de 0,60 m, 0,6 m au pas de 0,15 m, et pas automatique à 1,5 m et 0,3 m)
+quadrille le bas de l'image, et chaque point montré tombe sur une ligne du pas (rouge avant la correction : 0 trait dans
+le bas de l'image) ; de loin, les traits sont exactement ceux d'avant. Ouvrir la vue sur un plan ordinaire de trois cartes à
+des profondeurs différentes, l'une animée, ne change **aucun pixel de l'image filmée à aucune image**, ni une pose ; pas
+d'étape d'annulation ; Sol posé sans refus ; vue fermée, le plan redevient ordinaire, image identique. Caméra déplacée :
+plan gardé ordinaire, image identique, Sol et Nouvelle surface refusés en disant pourquoi, le bouton l'y met quand même et
+ça reste. Pile dans le désordre, carte penchée, carte au-delà de la borne par une clé : chacun reconnu. Un Mur sans ouvrir
+la vue : une étape, Ctrl+Z rend l'image d'avant. Un Sol garde le plan en Espace 3D à la fermeture ; Ctrl+Z hors de la vue le
+rend ordinaire ; une étape prise vue ouverte puis Ctrl+Z et rétablir, vue fermée, ne laissent pas le plan en Espace 3D ;
+un plan mis tout seul s'enregistre ordinaire ; décocher à la main est respecté. Sept essais anciens qui ouvraient la vue puis cochaient le bouton ont été
+ajustés (le bouton aurait décoché).
+
+### 158.4 Pour la suite (previz 2D/3D) : un seul genre de plan
+
+Anthony veut aller plus loin : tous les plans en Espace 3D, neufs et anciens, plus de bouton. Ce n'est **pas** fait ici,
+parce qu'avec le moteur d'aujourd'hui ce passage change l'image de plans existants dans trois cas relevés ci-dessus : une
+caméra qui bouge (le cas courant du storyboard : pixels du bord, encre hors feuille), une pile dans un autre ordre que
+les profondeurs, une clé de profondeur au-delà de la borne. Pour l'unifier sans bouger un pixel, il faudra :
+
+1. que le chemin de rendu d'un plan en Espace 3D garde le chemin multiplan d'aujourd'hui tant que la caméra reste dans les
+   limites d'avant et que rien ne demande l'Espace 3D (ou bien que le chemin par repère filme aussi l'encre hors feuille
+   et rééchantillonne une seule fois de la même façon) ;
+2. un choix « ordre de la pile » par plan, retenu pour les plans d'un ancien projet dont la pile et les profondeurs ne
+   s'accordent pas — un champ nouveau, donc **un format 56** (une version 55 montrerait sinon une autre image) ;
+3. ramener à l'ouverture les clés de profondeur au-delà de la borne (`Layer::ramener_a_la_borne`, à vérifier image par
+   image entre deux clés) ;
+4. rendre aux plans en Espace 3D l'outil Caméra de la feuille, la vue de dessus et les mouvements de caméra des Vignettes,
+   pour une caméra libre.
+
+Ce que la partie 158 prépare : la règle `Document::garde_de_l_espace` dit déjà, plan par plan, ce qui empêche l'unification
+— c'est la liste des cas à traiter, et l'essai de l'image identique s'y réutilise tel quel. Rien n'a été ajouté qui
+ferme la porte : aucun champ enregistré nouveau (la marque `espace_tout_seul` ne vit qu'en mémoire), pas de second genre de
+plan de plus. Une fois les quatre points faits, la marque, la règle et le bouton disparaissent ensemble.
+
+Limites connues : un plan mis tout seul dont la caméra est tenue d'un plan voisin, si ce voisin change pendant qu'il est
+montré (montage), peut montrer une image d'Espace 3D jusqu'à ce qu'on le quitte, où il redevient ordinaire ; annuler un
+« Plan en Espace 3D » coché à la main, vue ouverte, le remet aussitôt en Espace 3D tout seul (sans changement d'image) ;
+le passage tout seul ne regarde pas le verrou du storyboard ni le film partagé (il ne touche ni l'image ni le fichier).
+
+### 158.5 À tester par Anthony
+
+1. Sur une **copie** d'un projet : un plan neuf, ou un plan sans mouvement de caméra. Clique le cube : la barre d'état dit
+   « Plan passé en Espace 3D tout seul ». Tourne autour, pose un Sol (« + » > Calques 3D > Sol) : pas de refus.
+2. Approche la vue tout près du sol (molette), maillage au pas 0,60 m : le sol reste quadrillé jusque sous la vue, en une
+   vue comme en quatre. Puis recule : rien ne saute.
+3. Un plan dont la caméra bouge : le cube dit « Plan gardé ordinaire : sa caméra a bougé… ». Dire si tu préfères qu'il y
+   passe quand même (l'image changerait un peu, voir 158.4).
+4. Ferme la vue sur un plan où tu n'as rien fait : l'outil Caméra de la feuille marche comme avant sur ce plan.
+5. Exporte l'image d'un plan avant et après avoir ouvert la vue : la même.

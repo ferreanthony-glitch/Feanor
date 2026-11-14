@@ -68,6 +68,8 @@ pub(crate) struct Espace3dState {
     pub vues: crate::espace3dvues::Vues,
     /// Plan de la dernière image (la sélection ne passe pas d'un plan à l'autre).
     pub last_panel: u64,
+    /// Le passage tout seul en Espace 3D d'un plan montré dans la vue (`espace3ddirect.rs`, partie 158).
+    pub direct: crate::espace3ddirect::Direct,
 }
 
 impl Default for Espace3dState {
@@ -92,6 +94,7 @@ impl Default for Espace3dState {
             hover: None,
             vues: Default::default(),
             last_panel: 0,
+            direct: Default::default(),
         }
     }
 }
@@ -124,6 +127,8 @@ impl App {
         s.last_panel = 0;
         s.last_layer = 0;
         s.card_textures.clear();
+        // (Les plans que la vue a mis en Espace 3D sont ceux de l'autre projet.)
+        s.direct = Default::default();
         // (Les vues retenues par le projet ; un projet qui n'en dit rien s'ouvre en une vue.)
         self.espace3d.vues = crate::espace3dvues::Vues::depuis(self.doc.vues_3d.as_ref());
         // (Le maillage montré ou non : ce que le projet retient, `espace3ddecor.rs` ; un projet qui n'en dit rien le montre.)
@@ -298,6 +303,8 @@ impl App {
             }
             let p = &mut s.doc.panels[pi];
             p.espace = on;
+            // (Un choix à la main : un vrai plan en Espace 3D, ou ordinaire ; plus « mis tout seul par la vue », partie 158.)
+            p.espace_tout_seul = false;
             let mut cartes = 0;
             if !on {
                 for l in &mut p.layers {
@@ -309,6 +316,9 @@ impl App {
             cartes
         });
         self.renderer.invalidate_all();
+        // (Un choix à la main : la vue ne remet plus ce plan d'elle-même dans un sens ni dans l'autre, partie 158.)
+        let id = self.panel().id;
+        self.espace3d.direct.choix_a_la_main(id, on);
         self.status = if on {
             "Plan en Espace 3D : coché pour ce plan. Sa caméra est libre dans l'espace, et ce qui est devant cache ce qui est derrière.".into()
         } else if ramenees == 1 {
@@ -333,8 +343,9 @@ impl App {
     /// peut être. Elle se pose aussi derrière la caméra d'origine du plan (partie 148) ; si la carte ne peut pas être aussi
     /// grande que demandé, la barre d'état le dit.
     pub(crate) fn espace3d_nouvelle_surface(&mut self, sorte: espace3d::Surface) {
-        if !self.doc.plan_en_espace(self.cur_panel) {
-            self.status = format!("{} : ce plan n'est pas en Espace 3D. Coche d'abord « Plan en Espace 3D » dans le panneau Espace 3D.", sorte.nom());
+        // (Un plan ordinaire y passe dans l'étape de la surface, si rien n'en change ; sinon la barre d'état dit pourquoi.
+        // Partie 158.)
+        if !self.e3_espace_permis(&format!("{} refusée", sorte.nom())) {
             return;
         }
         let distance = self.espace3d_distance_surface();
@@ -355,17 +366,29 @@ impl App {
     /// (`espace3ddecor.rs`, partie 157) : un calque neuf nommé `nom_base` (puis « `nom_base` 2 »…), posé par
     /// `Monde::surface_xf`, marqué `calque_3d`, juste au-dessus du calque courant ; une seule étape d'annulation. Rend
     /// son nom et s'il est plus petit que demandé ; rien s'il est refusé (la barre d'état est vidée, ou dit pourquoi). Le
-    /// plan doit être en Espace 3D : l'appelant l'a vérifié.
+    /// plan doit être en Espace 3D, ou pouvoir y passer sans que rien ne change (`App::e3_espace_permis`) : l'appelant l'a
+    /// vérifié. Un plan ordinaire passe alors en Espace 3D dans la même étape d'annulation (partie 158).
     pub(crate) fn espace3d_poser_surface(&mut self, sorte: espace3d::Surface, nom_base: &str, calque_3d: Option<crate::espace3ddecor::Calque3d>) -> Option<(String, bool)> {
         self.status.clear();
         if self.content_refuses() {
             return None;
         }
-        let world = self.e3_world();
-        let distance = self.espace3d_distance_surface();
-        let xf = world.surface_xf(&self.current_camera(), sorte, distance)?;
         self.end_stroke();
         let snap = self.snapshot();
+        let pi = self.cur_panel;
+        let (avant, tout_seul) = (self.doc.panels[pi].espace, self.doc.panels[pi].espace_tout_seul);
+        let basculer = !avant;
+        self.doc.panels[pi].espace = true;
+        let remettre = |s: &mut Self| {
+            s.doc.panels[pi].espace = avant;
+            s.doc.panels[pi].espace_tout_seul = tout_seul;
+        };
+        let world = self.e3_world();
+        let distance = self.espace3d_distance_surface();
+        let Some(xf) = world.surface_xf(&self.current_camera(), sorte, distance) else {
+            remettre(self);
+            return None;
+        };
         let frame = self.cur_frame;
         let kind = match self.layers().get(self.cur_layer) {
             Some(l) if !l.folder && l.effet.is_none() => l.kind,
@@ -377,6 +400,13 @@ impl App {
         layer.parent = self.layers().get(self.cur_layer).and_then(|l| if l.folder { None } else { l.parent });
         layer.calque_3d = calque_3d;
         world.apply_card_xf_libre(&mut layer, frame, &xf);
+        // (Un plan ordinaire qui passe en Espace 3D avec cette carte : si elle est plus près que la borne des plans
+        // ordinaires, tout le plan passerait par le changement de repère et l'image des autres cartes changerait. Partie 158.)
+        if basculer && layer.passe_la_borne(frame) {
+            remettre(self);
+            self.status = format!("{nom_base} : pas sur ce plan à {distance:.1} m, plus près que la feuille l'image des autres cartes changerait. Éloigne la distance (panneau Espace 3D).");
+            return None;
+        }
         // (Près de la caméra d'origine du plan et derrière elle, une carte ne dépasse pas dix fois la feuille : son échelle
         // s'arrête à 100, et sous `Layer::MIN_DEPTH` sa taille ne grandit plus avec sa profondeur. Une surface demandée
         // plus grande est posée plus petite : on le dit.)
@@ -387,6 +417,8 @@ impl App {
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
         self.vsel = None;
+        // (Un calque posé dans l'espace : le plan est un vrai plan en Espace 3D, enregistré comme tel.)
+        self.doc.panels[pi].espace_tout_seul = false;
         let before = self.history.context.replace(nom_base.to_string());
         self.commit_structure(snap);
         self.history.context = before;
@@ -629,7 +661,7 @@ impl App {
                 self.panel().espace,
                 ph::CUBE_TRANSPARENT,
                 "Plan en Espace 3D",
-                "Ce plan devient un plan en Espace 3D : sa caméra est libre dans l'espace (elle tourne tout autour, passe derrière les cartes), ce qui est devant cache ce qui est derrière, et l'image montre ce que cette caméra filme. La case est enregistrée avec le plan.",
+                "La vue y met le plan d'elle-même quand son image n'en change pas. Ce bouton le rend ordinaire, ou l'y met quand même (caméra qui a bougé, carte penchée…) : sa caméra est alors libre dans l'espace, ce qui est devant cache ce qui est derrière, et l'image montre ce que cette caméra filme.",
                 "espace3d.plan_en_espace",
             );
             if r.clicked() {

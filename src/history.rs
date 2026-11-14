@@ -283,6 +283,11 @@ impl History {
         self.undo.len()
     }
 
+    /// Une empreinte de l'historique : elle change à chaque étape posée, annulée ou rétablie (`espace3ddirect.rs`).
+    pub fn empreinte(&self) -> (usize, usize, u64, u64) {
+        (self.undo.len(), self.redo.len(), self.undo_ids.last().copied().unwrap_or(0), self.redo_ids.last().copied().unwrap_or(0))
+    }
+
     /// Une marque de l'historique à cet instant : `regrouper_depuis` regroupera tout ce qui est posé après elle (partie 125).
     pub fn marque(&self) -> u64 {
         self.next_id

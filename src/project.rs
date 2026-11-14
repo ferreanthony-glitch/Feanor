@@ -2615,7 +2615,8 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             .iter()
             .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
             .collect(),
-        espace: panel.espace,
+        // (Un plan que la vue Espace 3D a mis en Espace 3D sans qu'on l'ait choisi s'enregistre ordinaire, partie 158.)
+        espace: panel.espace && !panel.espace_tout_seul,
         trajectoire_camera: panel.trajectoire_camera.clone(),
     };
     if digest {
@@ -3526,6 +3527,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     },
                     color: p.couleur.filter(|k| (*k as usize) < crate::marks::COLORS.len()),
                     espace: p.espace,
+                    espace_tout_seul: false,
                     // (Une trajectoire de caméra n'a de sens que dans un plan en Espace 3D, et avec son support.)
                     trajectoire_camera: p.trajectoire_camera.filter(|t| p.espace && t.support.is_some()).and_then(crate::trajectoire::Trajectoire::assainie),
                 });

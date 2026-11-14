@@ -180,10 +180,12 @@ pub(crate) fn ouvert(doc: Document, espace: bool) -> Banc {
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
-    if espace {
+    // (La vue met d'elle-même le plan en Espace 3D quand rien n'en change, partie 158 : le bouton le rend ordinaire.)
+    b.chauffer(1);
+    if b.app.doc.plan_en_espace(0) != espace {
         b.app.run_action("espace3d.plan_en_espace");
-        assert!(b.app.doc.plan_en_espace(0), "{}", b.app.status);
     }
+    assert_eq!(b.app.doc.plan_en_espace(0), espace, "{}", b.app.status);
     b.chauffer(2);
     b.app.run_action("espace3d.cadrer");
     b.app.traj.cles_propose = Cles::Interpolation;

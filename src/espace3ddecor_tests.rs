@@ -36,11 +36,9 @@ fn ouvert(doc: Document) -> Banc {
     b
 }
 
-/// Ouvert, et le plan en Espace 3D.
+/// Ouvert, et le plan en Espace 3D (la vue l'y met d'elle-même : rien de son image n'en change, partie 158).
 fn en_espace(kind: LayerKind) -> Banc {
-    let mut b = ouvert(doc_carte(kind));
-    b.app.run_action("espace3d.plan_en_espace");
-    b.chauffer(2);
+    let b = ouvert(doc_carte(kind));
     assert!(b.app.doc.plan_en_espace(0));
     b
 }
@@ -225,13 +223,17 @@ fn le_menu_calques_3d_pose_un_sol_un_mur_et_un_ciel_en_une_etape_chacun() {
     for s in Sorte3d::TOUTES {
         assert!(du_menu.contains(&s.action()), "{} est dans le menu", s.nom());
     }
-    // Hors d'un plan en Espace 3D : refusé, rien ne bouge, la barre d'état le dit d'abord.
-    let mut b = ouvert(doc_carte(LayerKind::Bitmap));
+    // Un plan ordinaire qui ne peut pas passer en Espace 3D sans changer d'image (une carte penchée) : refusé, rien ne
+    // bouge, la barre d'état dit d'abord pourquoi (partie 158 ; un plan qui le peut y passe, `espace3ddirect_tests.rs`).
+    let mut doc = doc_carte(LayerKind::Bitmap);
+    doc.panels[0].layers[0].transform.tilt_x = 30.0;
+    let mut b = ouvert(doc);
+    assert!(!b.app.doc.plan_en_espace(0));
     let (n, etapes) = (b.app.layers().len(), b.app.history.undo_len());
     b.app.run_action("calque.nouveau_sol");
     assert_eq!((b.app.layers().len(), b.app.history.undo_len()), (n, etapes));
-    assert!(b.app.status.starts_with("Sol refusé : ce plan n'est pas en Espace 3D"), "{}", b.app.status);
-    assert!(crate::messages::resume(&b.app.status).contains("pas en Espace 3D"), "la phrase utile tient dans la barre : {}", crate::messages::resume(&b.app.status));
+    assert!(b.app.status.starts_with("Sol refusé : il a une carte penchée"), "{}", b.app.status);
+    assert!(crate::messages::resume(&b.app.status).contains("carte penchée"), "la phrase utile tient dans la barre : {}", crate::messages::resume(&b.app.status));
 
     let mut b = en_espace(LayerKind::Bitmap);
     let world = b.app.e3_world();

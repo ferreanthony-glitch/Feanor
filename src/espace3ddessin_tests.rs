@@ -178,7 +178,8 @@ fn a_mouse_stroke_through_the_camera_inks_the_card_in_an_ordinary_plan_and_in_a_
 
     // Plan en Espace 3D, caméra tournée, surface posée face à elle (donc penchée dans le monde) : par la caméra.
     let mut b = ouvert(doc_cartes(1, LayerKind::Bitmap));
-    b.app.run_action("espace3d.plan_en_espace");
+    // (La vue l'y a mis d'elle-même, partie 158.)
+    assert!(b.app.doc.plan_en_espace(0));
     let tournee = crate::camera::Camera { pan: 12.0, tilt: -6.0, ..b.app.current_camera() };
     b.app.set_current_camera(tournee);
     b.app.run_action("espace3d.surface_face");

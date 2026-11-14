@@ -5580,6 +5580,9 @@ impl App {
             ctx.request_repaint();
         }
         self.ppp = ctx.pixels_per_point();
+        // La vue Espace 3D met le plan qu'elle montre en Espace 3D quand rien n'en change, et rend ordinaire celui qu'on a
+        // quitté s'il n'en a pas l'usage (`espace3ddirect.rs`, partie 158).
+        self.e3_espace_direct();
         // Taille de l'interface choisie dans les préférences (`echelle.rs`).
         self.appliquer_echelle(ctx);
         // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout
