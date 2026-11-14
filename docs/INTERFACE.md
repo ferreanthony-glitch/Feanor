@@ -12433,3 +12433,85 @@ grille n'est jamais dans le dessin, ni sous la gomme, ni dans l'image exportée.
 6. Ferme la vue : la grille reste visible sur le dessin tant que le Sol est le calque courant. Exporte une image : pas de
    grille dedans.
 7. Dire si le bleu de la grille se voit bien sur ton papier, et si le ciel est à la bonne place (centré sur l'horizon).
+
+
+## 160. L'interface à panneaux fins : plus de panneau Calques, les calques portent leurs options dans la timeline (2026-11-14, branche `panneaux-fins`)
+
+La règle d'Anthony : « ce doit être simple, en plus de ce que nous avons changé pour les calques, rien ne doit bouger pour le
+reste. Tout doit rester à sa place actuelle et trouver sa place dans cette nouvelle interface ». Liste de travail :
+`Chantiers\inventaire-interface-panneaux-fins.md` (233 éléments) et ses six réponses. Les couleurs et le thème ne changent pas :
+seules la place de quelques éléments et la densité changent. Pas de format nouveau (rien n'est écrit autrement dans les projets).
+
+### 160.1 Ce qui a bougé
+
+1. **Barres de la vue, deux familles.** En haut, comment on regarde : vue du plateau, vue caméra, Espace 3D, règle, puis
+   **Ajuster à la fenêtre, Zoom, Rotation, Miroir** (montés de la barre du bas, dans le même ordre ; leurs petits panneaux
+   s'ouvrent dessous) ; les pastilles des brosses dédiées restent au bout à droite. En bas, ce qui se superpose au dessin :
+   Cadrage, Repères, Pelure d'oignon, Table lumineuse, Passe-partout, et le texte des touches de l'outil.
+2. **Outils de l'Espace 3D** : vue ouverte, Dessiner sur la carte, Choisir, Déplacer, Tourner, Mettre à l'échelle et Caméra
+   sont **en tête de la barre d'outils de gauche** ; la barre du haut garde Recadrer, Regarder par la caméra et 1/2/4 vues.
+   Vue fermée, la barre d'outils est celle d'avant.
+3. **Plus de noms d'onglets en haut des groupes.** Chaque panneau garde une poignée sans texte, à la hauteur de la bande d'avant (26 points : le dessin et les panneaux ne bougent pas) ; sa bulle dit son nom.
+   La barre des panneaux (bord droit) sert d'onglets : icône allumée = panneau devant ; petit point sous l'icône = ouvert,
+   caché derrière un autre. **Déplacer ou faire flotter un panneau : glisser sa poignée** ; clic droit sur la poignée : dans
+   une fenêtre à part. Plus de croix sur les poignées : la barre des panneaux et Affichage > Panneaux ferment.
+4. **Timeline d'animation** : le calque courant a toujours sa ligne complète (toutes ses options, comme avant), les autres
+   des lignes fines de 22 points d'elles-mêmes ; les dossiers des lignes fines repliables (complètes quand ils sont le
+   courant). Plus de triangle sur les calques, plus de « Tout réduire / tout agrandir », plus de « Agrandir / Réduire la
+   ligne » au menu. La ligne complète reçoit aussi ce que montrait le panneau Calques : le losange des clés d'opacité (clic
+   droit : supprimer la clé d'ici, toutes les clés), la couleur d'un calque Couleur unie (à la place de la vignette), l'aplat
+   sous le trait, le maillon de la planche-mère, « sous <trait> » et le nombre de couleurs.
+5. **Bande des plans** : la piste du calque actif porte toutes ses options sur deux rangées de 22 (œil, pastille, nom,
+   cadenas, ⋮ ; pelure, effets, accroche à la caméra, mode de fusion, losange, opacité ; la vignette quand la colonne est
+   élargie à 150 points ou plus). La fenêtre des trois calques passe de 130 à 134 points.
+6. **Barre d'actions des calques**, sous la colonne des calques, dans la barre du bas (timeline : à gauche des onglets Notes,
+   Son… ; bande des plans : à gauche du zoom) : « + » Nouveau calque · Nouveau dossier · Nouveau calque d'effet · Dupliquer ·
+   Supprimer · « ⋯ » (Groupes de calques, Opérations sur les calques). Clic droit dans la barre : nouveau calque, coller le
+   calque.
+7. **Le panneau Calques n'existe plus** : ni d'office, ni dans la barre des panneaux, ni dans Affichage > Panneaux (une
+   disposition enregistrée qui l'avait le perd, comme Guides). Sa commande `vue.calques` (raccourci, palette) montre la bande
+   du bas si elle est cachée et donne la main à la colonne des calques. Un clic dans la colonne lui donne la main comme au
+   panneau d'avant : Ctrl+C / Ctrl+V copient et collent le calque, ou collent des effets copiés sur le calque cliqué. Monter /
+   Descendre : menu ⋮ > Organiser, et le glisser. Le « … » du panneau est supprimé (c'était le menu ⋮). Dans le Storyboard, le
+   Scénario prend la place de l'onglet Calques, au-dessus des Effets.
+8. **Vignettes** : le bloc « Calques d'annotation » devient une ligne **« Annotations »** (œil : montrer, cacher ; clic :
+   le stylo d'annotation) avec « Dessin de la case ». Les couches d'annotation d'un projet qui en a plusieurs : **clic droit
+   sur la ligne** (viser, montrer ou cacher, renommer, monter, descendre, supprimer, nouvelle couche). Plus « calque
+   vectoriel / bitmap » sous le titre de Réglages dans les Vignettes, plus le nom du calque dans la bulle de « Dessin de la
+   case ».
+9. **Aplat** : la sous-ligne « dessiner dans l'aplat » n'est pas recréée (« On enlève dessiner dans l'aplat »). Pour ne rien
+   perdre, ses réglages (couleur, débord, trous, aplat intelligent) sont au clic droit du calque, **« Réglages de l'aplat »**,
+   juste sous « Retirer l'aplat ». Le bouton Aplat sous le trait et « Peint sur l'aplat » ne bougent pas.
+
+### 160.2 Ce qui reste
+
+- La densité « libellé à gauche, valeur à droite » n'est pas refaite panneau par panneau : les lignes y font déjà 21 points
+  (18 + 3). La bande des poignées garde ses 26 points : à 10, le dessin grandissait de 16 points et deux essais de géométrie
+  (le trait sur la planche à la japonaise, la poignée de la caméra en Espace 3D à 1280 × 720) échouaient ; à regarder à part
+  avant d'amincir cette bande.
+- Le glissé d'une couche d'annotation dans la liste du panneau Planche n'existe plus (il n'y a plus de liste) : Monter et
+  Descendre au clic droit le remplacent.
+- Des messages de la barre d'état des Vignettes disent encore « calque d'annotation » ; les menus de la ligne disent
+  « couche ».
+- Avec la colonne de la bande à sa largeur d'origine (104 points), la vignette du calque actif n'a pas de place : elle vient
+  quand on élargit la colonne.
+
+### 160.3 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard : en haut de l'image, après la règle, Ajuster, Zoom, Rotation, Miroir ; le zoom et la rotation s'ouvrent
+   dessous. En bas : Cadrage, Repères, Pelure, Table lumineuse, Passe-partout.
+2. Ouvre la vue Espace 3D (le cube) : ses outils en tête de la barre d'outils de gauche ; Recadrer, Regarder par la caméra
+   et les vues restent en haut. Referme : la barre d'outils d'avant.
+3. Plus de noms en haut des panneaux : survole la poignée (son nom), glisse-la pour déplacer ou faire flotter un
+   panneau ; clic droit : fenêtre à part. L'icône allumée de la barre des panneaux dit qui est devant.
+4. Double-clic sur un plan (Animation) : le calque courant en entier, les autres fins ; clique un autre calque, il
+   s'ouvre. Les dossiers se replient par leur triangle.
+5. Sur la ligne du calque courant : le losange à droite de l'opacité (clic droit : supprimer des clés), l'aplat, le mode.
+6. La barre d'actions sous la colonne : +, dossier, effet, dupliquer, supprimer, ⋯ (Groupes, Opérations).
+7. Storyboard : la piste du calque actif sur deux rangées (pelure, effets, caméra, fusion, losange, opacité, ⋮) ;
+   double-clic sur le bord de la colonne pour voir aussi la vignette.
+8. Le raccourci ou la commande « Calques » : la bande revient si elle était cachée. Ctrl+C / Ctrl+V après un clic dans la
+   colonne copient et collent un calque.
+9. Vignettes : la ligne « Annotations » (œil, clic : stylo) et « Dessin de la case » ; clic droit : les couches.
+10. Clic droit sur un calque qui a un aplat : « Réglages de l'aplat » est sous « Retirer l'aplat ». Dis si cela te va, ou si
+    l'aplat doit encore changer.
