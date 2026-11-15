@@ -12919,3 +12919,136 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
 6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
    en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
+
+## 162. Un panneau Espace 3D qu'on manipule : la scène, le calque, la caméra en graphiques (2026-11-15, branche `panneau-3d-visuel`)
+
+Anthony, devant le panneau de la partie 161 : « très austère, très chargé et surtout peu intuitif ». Sa règle : « des panneaux moins
+dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être manipulés ». Il a validé une maquette (trois
+états du panneau, la caméra choisie en situation) à une condition : « si l'on doit interagir avec les graphiques pour modifier
+directement la scène c'est super ». Les couleurs restent celles du thème (gris, l'accent de la sélection, la couleur de la caméra
+du thème) ; tout est peint (egui `Painter`, `src/espace3dgraphes.rs`), aucune image. Pas de format nouveau, aucune fenêtre.
+
+### 162.1 Ce qui change pour Anthony
+
+Le panneau Espace 3D (la colonne de 290 points) montre **ce qui va avec ce qui est choisi** :
+
+1. **Rien n'est choisi : la scène.**
+   - « Ajouter à la scène » : quatre vignettes dessinées, **Surface** (face à la caméra), **Sol**, **Mur** (les surfaces du menu « + »
+     d'avant) et **Ciel** (le calque 3D Ciel de « Nouveau calque »). Dessous, « posés à … m de la caméra » (la distance d'avant).
+   - « Le plateau, vu de dessus » : la caméra (le triangle de la couleur de la caméra), son cône (ce qu'elle voit, selon la focale
+     et le panoramique), chaque calque en trait à sa place, son nom à droite. **On glisse un trait** vers le haut pour reculer le
+     calque, vers le bas pour l'avancer : c'est le chemin du champ Profondeur (`Layer::set_depth_selon`, il garde sa taille dans
+     le cadre), au pas de l'aimant s'il est allumé, **une étape d'annulation par geste** (« Distance du calque »). **Un clic** sur
+     un trait choisit son calque (il devient le calque courant) ; sur la caméra, choisit la caméra. Les calques au même endroit
+     (d'ordinaire tous à la feuille) font un seul trait, « Dessin +5 » : le geste prend le calque courant, un deuxième clic le
+     suivant (après « Revenir à la scène ») ; un calque verrouillé ne masque pas, pour le glissé, un calque libre au même endroit ;
+     le survol écrit tous leurs noms en bas. Le ciel, loin derrière tout, ne compte pas pour cadrer : il se montre au bord.
+   - « Le plus proche passe devant » : la case de l'ancien « Devant cache derrière » (même commande `espace3d.ordre_distance`,
+     même étape d'annulation, renommée), et à côté « Ordonner la pile selon la profondeur ».
+2. **Un calque choisi** (dans la vue, le plateau ou la timeline).
+   - En-tête : son nom, la clé de position (◆, corbeille), et × « Revenir à la scène ».
+   - « Comment il est posé » : **Face, Au sol, Mur g., Mur d.** Un clic tourne le calque, à sa place et à sa distance (Face :
+     parallèle à la caméra ; Au sol : couché, son haut vers le fond ; Mur g. : debout, tourné vers la droite de la caméra ; Mur
+     d. : vers sa gauche). Allumé : la pose qu'il a déjà (à 3° près). Une étape chacun (aucune si la pose est déjà la bonne).
+   - « Distance à la caméra » : une réglette, la caméra à gauche, le calque en trait qu'on glisse (la même profondeur que le
+     plateau), la distance en mètres au-dessus, discrète (« derrière, … m » s'il est passé derrière la caméra).
+   - « Taille dans le cadre » : un curseur entre un petit et un grand carré (l'échelle, de 10 à 1 000 %, logarithmique).
+   - « ▸ Précis » (replié d'origine, retenu pour la séance) : tous les champs d'avant.
+3. **La caméra choisie.**
+   - En-tête « Caméra du plan », la clé de caméra (◆, corbeille), ×.
+   - « Objectif » : cinq vignettes 18, 35, 50, 85, 135 (un personnage plus ou moins gros dans le cadre) ; un clic pose la focale.
+     Légende « grand-angle · large · normal · portrait · télé ». Dessous, le cône vu de dessus, « 35 mm · champ 54° » : **glisser
+     vers la droite resserre** (focale plus longue), vers la gauche élargit, pour une focale libre.
+   - « Hauteur et plongée » : la caméra de côté, à côté d'un personnage de 1,70 m. **Glisser la caméra** la monte ou la descend
+     (au pas de l'aimant) ; **glisser ailleurs** tire sa ligne de visée (la bascule). Texte : « Hauteur 1,7 m · à plat » (légère
+     plongée, plongée, forte plongée, légère contre-plongée…).
+   - « Panoramique et horizon » : **un cadran qu'on tourne** (le panoramique, plus d'un tour compris, au pas de rotation de
+     l'aimant) et **un horizon qu'on penche** (la rotation de la caméra ; l'horizon est montré tel que l'image le verra, donc
+     dans l'autre sens que le cadre).
+   - « Regarder par elle » et « Viser la sélection » en gros boutons. Viser, la caméra choisie seule, la tourne vers le calque
+     courant (avant, le bouton était grisé dans ce cas).
+   - « ▸ Précis » (replié) : position, angles, focale, objectifs, champ.
+   Chaque geste passe par `set_current_camera_libre` (sa clé de l'image courante si elle est animée) : une étape par geste
+   (« Objectif de la caméra », « Focale de la caméra », « Hauteur de la caméra », « Bascule de la caméra », « Panoramique de la
+   caméra », « Rotation de la caméra »).
+4. **Plusieurs calques choisis** : « N calques choisis » et leur clé de position en tête, puis la scène.
+5. **La barre au-dessus de la vue 3D** (qui n'existe que vue ouverte) gagne, après Recadrer, Regarder par la caméra et Vues, deux
+   icônes qui ouvrent leur petit panneau dessous : **Affichage** (grille du sol, montrer les calques, poignées dans le repère du
+   calque, et l'environnement : couleur du fond, couleur du maillage, qu'on déplie sur place, son opacité, son pas, aspect
+   d'origine ; « montrer le maillage » de l'environnement d'avant est la même chose que « Grille du sol », qui le remplace) et **Aimant** (allumé quand l'aimantation l'est : aimanter à la grille, pas de déplacement, de
+   rotation, de taille).
+6. **La liste des cartes disparaît** du panneau : on choisit dans la vue, dans le plateau ou dans la timeline.
+
+### 162.2 Où est passé chaque réglage d'avant
+
+| Avant (panneau Espace 3D, partie 161) | Maintenant |
+|---|---|
+| Titre « Espace 3D » et sa bulle | parti (le panneau dit ce qui est choisi) |
+| Manipulateur dans le repère de la carte | barre de la vue > Affichage > « Poignées dans le repère du calque » |
+| Aimanter à la grille ; pas de la grille, de rotation, de taille | barre de la vue > Aimant (l'icône est allumée quand l'aimant l'est) |
+| Grille du sol | barre de la vue > Affichage > « Grille du sol » (commande `espace3d.grille` inchangée) |
+| 1, 2 ou 4 vues | barre de la vue > Vues (il y était déjà ; parti du panneau) |
+| Devant cache derrière | état Scène > « Le plus proche passe devant » (même commande, renommée partout : bulle, barre d'état, étape, palette) |
+| Environnement (fond, maillage : couleur, opacité, pas, aspect d'origine) | barre de la vue > Affichage, section Environnement (les couleurs se déplient dans le petit panneau) |
+| Cartes (calques) : montrer les cartes | barre de la vue > Affichage > « Montrer les calques » |
+| Ordonner la pile selon la profondeur | état Scène, à droite de « Le plus proche passe devant » |
+| « + » Nouvelle surface : face, sol, mur | état Scène > « Ajouter à la scène » : Surface, Sol, Mur (+ Ciel) |
+| « + » Distance de la surface | état Scène, sous les vignettes : « posés à … m de la caméra » |
+| Liste des cartes (clic : choisir, Maj : ajouter) et leur profondeur | le plateau (clic : choisir ; la profondeur se voit et se glisse) ; Maj+clic dans la vue pour en choisir plusieurs |
+| Carte : clé de position (◆, corbeille) | état Calque, en-tête |
+| Carte : position, rotation, échelle, étirement, profondeur, remettre à plat | état Calque > Précis (et, en graphiques : Comment il est posé, Distance, Taille) |
+| Carte : « verrouillée », « animée : on règle la clé de cette image » | en-tête (« verrouillé ») ; Précis (« Animé : … ») |
+| Calque Sol, Mur, Ciel : grille de repère, son pas | état Calque > Précis |
+| N cartes choisies : clés de position | « N calques choisis », en tête de l'état Scène |
+| Caméra : « choisir » (Maj : ajouter) | un clic sur la caméra du plateau ; la case Caméra de la barre d'outils ; la piste Caméra de la timeline ; Maj+clic dans la vue |
+| Caméra : clé (◆, corbeille) | état Caméra, en-tête |
+| Caméra : position, angles (pan, basc., rot.), focale et objectifs, champ horizontal | état Caméra > Précis (et, en graphiques : Objectif, Hauteur et plongée, Panoramique et horizon) |
+| Regarder par la caméra, Viser la sélection | état Caméra, en gros boutons (Regarder par la caméra reste aussi dans la barre de la vue) |
+
+Trouvé en chemin : « Remettre à plat » (Précis du calque) ne faisait pas d'étape d'annulation ; il en fait une.
+
+### 162.3 Les essais
+
+`src/espace3dgraphes_tests.rs` (le panneau dessiné dans un contexte à part, à la souris) :
+
+- le plateau : glisser le trait recule le calque courant, les autres ne bougent pas, **une** étape « Distance du calque », Ctrl+Z
+  la rend ; un clic choisit le calque et le panneau passe au calque ; × revient à la scène ; un calque verrouillé ne bouge pas ;
+- les quatre vignettes d'ajout posent une surface, un sol, un mur (surfaces) et un ciel (calque 3D Ciel) ;
+- Face, Au sol, Mur g., Mur d. posent l'orientation (allumée ensuite), une étape chacun, l'autre calque ne bouge pas ; au sol, la
+  normale est la verticale et le calque garde sa place ;
+- la réglette éloigne le calque, le curseur l'agrandit, une étape chacun ; « Précis » déplie les champs d'avant ;
+- la vignette 85 met la focale à 85 (une étape « Objectif de la caméra »), le cône glissé à droite l'allonge ;
+- la vue de côté : glisser la caméra change sa position Y (pas sa bascule), glisser ailleurs change sa bascule (pas sa hauteur) ;
+- le cadran : un quart de tour donne un panoramique de 90° ; l'horizon penché de 45° donne une rotation de −45° ; Viser, la
+  caméra seule, la tourne vers le calque courant ;
+- au repos, dans les trois états, « Précis » déplié, avec une carte derrière la caméra et une caméra retournée : aucune étape,
+  rien ne bouge ;
+- vue fermée : ni le plateau, ni les vignettes, ni Affichage, ni Aimant ne se montrent ;
+- chaque réglage d'avant (33 noms de bulles) est joignable : dans un état du panneau, dans Affichage ou Aimant, ou dans la barre.
+
+Essais anciens changés, et pourquoi : ceux du panneau (`espace3dpanneau_tests`) attendent les mots de l'état montré (scène, calque
+ou caméra) au lieu de « Cartes (calques) », « Position (m) », « Focale » ; celui des boutons de clés (`espace3dcles_tests`) les
+trouve sur la ligne du calque choisi, puis, la caméra choisie, sur la ligne « Caméra du plan », puis sur « 2 calques choisis » ;
+celui de la carte derrière la caméra lit sa profondeur dans « Précis » (la liste n'existe plus) ; celui de la hauteur
+(`panneaux_fins_tests::the_whole_camera_of_the_3d_space_panel_shows_without_scrolling`) choisit la caméra et vérifie que tout
+l'état Caméra, de l'objectif à « Précis », tient dans la colonne de 290 points sans défiler, la Couleur dessous ; la barre d'état
+de « Le plus proche passe devant » (`trajectoire3d_tests`).
+
+### 162.4 Ce qui reste
+
+- Au sol et Mur tournent le calque sur place : un sol posé ainsi flotte à la hauteur où il était (le Sol d'« Ajouter à la scène »,
+  lui, se pose au sol). Le poser aussi au sol d'un clic serait une suite possible.
+- La distance de la réglette se mesure le long de la profondeur de la scène : pour une caméra très tournée (panoramique proche de
+  90°), elle n'est plus la distance à la caméra.
+- Le plateau ne tire pas la caméra elle-même (on la choisit d'un clic, puis on la règle dans son état ou dans la vue).
+- « Précis » déplié est retenu pour la séance, pas d'une séance à l'autre.
+
+### 162.5 Comment Anthony teste (sur une copie de projet)
+
+1. Ouvre le cube : le panneau montre la scène. Clique Sol : un sol se pose. Glisse un trait du plateau vers le haut : le calque
+   recule dans la vue ; Ctrl+Z le remet.
+2. Clique un trait : le calque est choisi. Clique Au sol, puis Face ; glisse la réglette ; tire la taille.
+3. Clique la caméra du plateau (le triangle) : clique 85, glisse le cône ; monte la caméra à côté du personnage ; tire sa visée ;
+   tourne le cadran ; penche l'horizon. Chaque fois, un seul Ctrl+Z défait le geste.
+4. Dans la barre au-dessus de la vue : Affichage (grille, calques, fond) et Aimant.
+5. Dis si le panneau donne envie d'être manipulé, ce qui manque, et ce qui est encore trop chargé.

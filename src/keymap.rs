@@ -668,7 +668,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),
     // (Partie 159 : « Plan en Espace 3D » n'existe plus, tous les plans sont dans l'espace ; l'ordre des calques reste un choix.)
-    act("espace3d.ordre_distance", "Espace 3D : devant cache derrière, pour le plan courant (oui / non)", true, false),
+    act("espace3d.ordre_distance", "Espace 3D : le plus proche passe devant, pour le plan courant (oui / non)", true, false),
     act("espace3d.surface_face", "Espace 3D : nouvelle surface face à la caméra", true, false),
     act("espace3d.surface_sol", "Espace 3D : nouvelle surface au sol", true, false),
     act("espace3d.surface_mur", "Espace 3D : nouvelle surface en mur", true, false),

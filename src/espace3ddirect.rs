@@ -66,7 +66,7 @@ impl Document {
 
 /// Ce que la barre d'état ajoute quand un calque de la scène (Sol, Mur, Ciel, une surface) se pose sur un plan qui garde
 /// l'ordre de sa pile parce que l'ordre des distances changerait son image.
-pub(crate) const PILE_GARDEE: &str = "La pile garde son ordre : « Devant cache derrière » (panneau Espace 3D) pour ordonner par la distance.";
+pub(crate) const PILE_GARDEE: &str = "La pile garde son ordre : « Le plus proche passe devant » (panneau Espace 3D) pour ordonner par la distance.";
 
 impl App {
     /// Un calque de la scène (Sol, Mur, Ciel, une surface) va se poser sur le plan courant, dans l'étape d'annulation en

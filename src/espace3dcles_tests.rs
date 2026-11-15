@@ -113,32 +113,33 @@ fn the_settings_of_the_3d_view_carry_the_key_buttons_and_a_click_poses_and_remov
     // La carte 2 est choisie ; le calque courant reste le calque 0.
     choisir(&mut b, &[2]);
     let (ctx, mut t) = (egui::Context::default(), 0.0);
-    let ligne_carte = format!("{} Carte 2", ph::SQUARE);
+    // (Partie 162 : le panneau est contextuel. La carte choisie : ses boutons sont sur la ligne de son nom.)
+    let ligne_carte = "Carte 2";
     let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
-    // Les deux boutons sont sur la ligne de la caméra et sur celle de la carte choisie.
-    for ligne in ["Caméra du plan", ligne_carte.as_str()] {
-        let (losange, corbeille) = (bouton_de_la_ligne(&textes, ligne, ph::DIAMOND), bouton_de_la_ligne(&textes, ligne, ph::TRASH));
-        assert!(losange.x < corbeille.x, "« {ligne} » : le losange, puis la corbeille");
-    }
-    // Le losange de la caméra : une clé à l'image courante (la caméra fixe devient la clé du début).
-    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, "Caméra du plan", ph::DIAMOND));
-    assert_eq!(cles_camera(&b), vec![0, 5], "{}", b.app.status);
+    let (losange, corbeille) = (bouton_de_la_ligne(&textes, ligne_carte, ph::DIAMOND), bouton_de_la_ligne(&textes, ligne_carte, ph::TRASH));
+    assert!(losange.x < corbeille.x, "le losange, puis la corbeille");
     // Le losange de la carte : une clé de position pour la carte choisie, pas pour le calque courant.
-    let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
-    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, &ligne_carte, ph::DIAMOND));
+    cliquer(&ctx, &mut b.app, &mut t, losange);
     assert_eq!(cles(&b, 2), vec![5], "{}", b.app.status);
     assert!(cles(&b, 0).is_empty() && cles(&b, 1).is_empty());
-    // Les corbeilles les retirent.
+    let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
+    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, ligne_carte, ph::TRASH));
+    assert!(cles(&b, 2).is_empty(), "{}", b.app.status);
+    // La caméra choisie : ses deux boutons sont sur la ligne « Caméra du plan ».
+    b.app.espace3d.sel = vec![CAMERA_ID];
+    let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
+    let (losange, corbeille) = (bouton_de_la_ligne(&textes, "Caméra du plan", ph::DIAMOND), bouton_de_la_ligne(&textes, "Caméra du plan", ph::TRASH));
+    assert!(losange.x < corbeille.x, "le losange, puis la corbeille");
+    // Le losange de la caméra : une clé à l'image courante (la caméra fixe devient la clé du début).
+    cliquer(&ctx, &mut b.app, &mut t, losange);
+    assert_eq!(cles_camera(&b), vec![0, 5], "{}", b.app.status);
     let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
     cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, "Caméra du plan", ph::TRASH));
     assert_eq!(cles_camera(&b), vec![0], "{}", b.app.status);
-    let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
-    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, &ligne_carte, ph::TRASH));
-    assert!(cles(&b, 2).is_empty(), "{}", b.app.status);
-    // Plusieurs cartes choisies : les boutons sont sur la ligne « N cartes choisies », et servent toutes les cartes.
+    // Plusieurs cartes choisies : les boutons sont sur la ligne « N calques choisis », et servent toutes les cartes.
     choisir(&mut b, &[1, 2]);
     let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
-    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, "2 cartes choisies", ph::DIAMOND));
+    cliquer(&ctx, &mut b.app, &mut t, bouton_de_la_ligne(&textes, "2 calques choisis", ph::DIAMOND));
     assert_eq!((cles(&b, 1), cles(&b, 2)), (vec![5], vec![5]), "{}", b.app.status);
     // La vue tracée par le banc, les boutons allumés : rien ne casse.
     b.chauffer(4);
@@ -332,9 +333,11 @@ fn showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_
     choisir(&mut b, &[1]);
     let etapes = b.app.history.names().0.len();
     let (ctx, mut t) = (egui::Context::default(), 0.0);
-    // Le panneau Espace 3D : la liste des cartes dit la profondeur vraie, et le champ ne l'a pas changée.
+    // Le panneau Espace 3D, « Précis » déplié : le champ dit la profondeur vraie et ne l'a pas changée ; la réglette de la
+    // distance la montre derrière la caméra d'origine.
+    b.app.espace3d.precis_carte = true;
     let textes = textes_du_panneau(&ctx, &mut b.app, &mut t);
-    assert!(textes.iter().any(|(s, _)| s.contains("Carte 1") && s.contains("(-2.50)")), "{textes:?}");
+    assert!(textes.iter().any(|(s, _)| s.trim() == "-2.50" || s.trim() == "-2.5"), "{textes:?}");
     assert_eq!(b.app.layers()[1].depth, -2.5, "le champ « Profondeur » du panneau Espace 3D n'a rien écrit");
     // La vue tracée par le banc, la carte choisie : rien ne bouge non plus.
     b.chauffer(4);

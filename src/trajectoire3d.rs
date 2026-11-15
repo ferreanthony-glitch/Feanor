@@ -41,7 +41,7 @@ use crate::trajectoire::{Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTIO
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic sur le chemin : une poignée, qui se tire, ou par ses flèches x, y, z ; Ctrl+clic sur elle : la retirer. Ctrl+clic ailleurs : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
-pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou la liste des cartes et « choisir » dans le panneau Espace 3D).";
+pub(crate) const RIEN_A_DEPLACER: &str = "Trajectoire : rien n'est choisi qui puisse suivre un chemin. Choisis une carte ou la caméra (Ctrl+clic dans la vue, ou un clic sur un calque ou sur la caméra dans le plateau du panneau Espace 3D).";
 pub(crate) const PAS_DE_SURFACE: &str = "Trajectoire : pas de surface sous le pointeur pour y poser le chemin. Tourne la vue (Alt+glisser ou clic droit) pour voir le sol ou une carte.";
 pub(crate) const TROP_COURT: &str = "Trajectoire : trace d'un trait plus long, sur une carte ou sur le sol, le chemin de ce qui est choisi ; puis de petits traits en travers pour les marques.";
 pub(crate) const SUR_LA_FEUILLE: &str = "Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même outil.";

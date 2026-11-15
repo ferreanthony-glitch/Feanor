@@ -5,9 +5,10 @@
 //! à lui a été essayée ; entre elle et un onglet du groupe de Réglages, comme il l'avait rangé lui-même dans son essai,
 //! il a choisi : « Onglet de Réglages ».
 //!
-//! **Ce qu'il montre.** Vue ouverte : les réglages de la vue (`App::espace3d_options_panel`, `espace3dui.rs`) : le repère
-//! des poignées, l'aimantation et ses pas, la grille, « Devant cache derrière », « Nouvelle surface », la liste des cartes, les
-//! champs et les boutons de clés de la carte choisie, la caméra du plan. Vue fermée : une phrase, et le bouton qui ouvre
+//! **Ce qu'il montre.** Vue ouverte : les réglages de la vue (`App::espace3d_options_panel`, `espace3dui.rs`), selon ce qui est
+//! choisi depuis la partie 162 (`espace3dgraphes.rs`) : rien, la scène (ajouter un calque, le plateau vu de dessus, « Le plus
+//! proche passe devant ») ; un calque, ses graphiques et « Précis » ; la caméra, les siens et « Précis ». L'affichage et
+//! l'aimant sont dans la barre au-dessus de la vue. Vue fermée : une phrase, et le bouton qui ouvre
 //! la vue. Les réglages de l'outil en main (pinceau, crayon, gomme, Trajectoire dans l'espace…) sont dans le panneau
 //! Réglages, que la vue soit ouverte ou non (`App::tool_options_panel`).
 //!
