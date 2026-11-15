@@ -257,6 +257,11 @@ mod barrepanneaux_tests;
 mod barrecalques;
 #[cfg(test)]
 mod panneaux_fins_tests;
+// Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
+mod panneauxvisuels;
+mod panneauxvisuelsui;
+#[cfg(test)]
+mod panneauxvisuels_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

@@ -1916,9 +1916,20 @@ impl App {
         ui.add_space(4.0);
         ui.heading(crate::planversui::titre_long_avec_version(&self.doc, i));
         self.kitsu_etiquette(ui, i);
+        // Partie 163.1 : la durée, une barre qu'on étire ; les versions, de petites vignettes. Les champs en chiffres sont sous « Précis ».
+        crate::panneauxvisuels::titre(ui, "Durée");
+        self.fiche_duree_barre(ui);
+        crate::panneauxvisuels::titre(ui, "Versions");
+        self.fiche_versions(ui);
+        // Une durée cible dépassée se voit sans ouvrir « Précis ».
+        for (nom, budget) in [("de la séquence", self.doc.budget_de_sequence(self.doc.sequence_of(i))), ("du film", self.doc.budget_du_film())] {
+            if let Some(b) = budget.filter(|b| b.depasse()) {
+                ui.colored_label(ui.visuals().error_fg_color, format!("Cible {nom} : {} : trop long", b.texte(fps)));
+            }
+        }
         // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on
         // reporte la valeur (une étape par saisie).
-        egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
+        crate::panneauxvisuels::precis(ui, "Fiche du plan", |ui| egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
             ui.label("Séquence");
             if let Some(mut name) = self.doc.sequences.iter().find(|s| s.id == seq).map(|s| s.name.clone()) {
                 let resp = ui
@@ -1976,7 +1987,7 @@ impl App {
                 }
                 ui.end_row();
             }
-        });
+        }));
         ui.label("Caméra").on_hover_text("Décalage du centre, zoom, rotation (outil Caméra pour la régler à la souris)");
         self.camera_fields(ui);
         for (label, field, rows) in [("Action", 0, 3), ("Dialogue", 1, 2), ("Notes", 2, 2)] {

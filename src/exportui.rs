@@ -159,11 +159,27 @@ impl App {
         let mut go = false;
         let mut close = false;
         let mut choose = false;
+        let mut montage = false;
+        // Partie 163.4 : le storyboard, le film et les images se choisissent par une vignette de ce qu'on obtient, avec un aperçu et un gros
+        // bouton ; tous leurs réglages sont sous « Précis ». Le son, les calques séparés et la caméra gardent leur fenêtre telle quelle.
+        let visuel = crate::panneauxvisuels::Famille::de(s.format).is_some();
         let modal = egui::Modal::new(egui::Id::new("fenetre_export")).show(ctx, |ui| {
             ui.set_width(460.0);
             ui.heading("Exporter");
             ui.add_space(6.0);
-            egui::Grid::new("grille_export").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+            if visuel {
+                montage = self.export_tuiles(ui, &mut s);
+                ui.add_space(4.0);
+                self.export_apercu(ui, &s, &frames);
+                ui.add_space(4.0);
+                let texte = RichText::new(crate::panneauxvisuelsui::texte_exporter(s.format)).size(14.0).strong();
+                let b = ui.add_enabled(!nom_erreur, egui::Button::new(texte).min_size(vec2(ui.available_width(), 32.0)));
+                go = bulles::bulle(b, "Exporter", "Demande où écrire, puis exporte : tu pourras continuer à travailler pendant qu'il tourne.", "").clicked();
+                if nom_erreur {
+                    crate::theme::avertir_petit(ui, "La nomenclature des fichiers est à corriger (Précis).");
+                }
+            }
+            let mut grille = |ui: &mut egui::Ui| egui::Grid::new("grille_export").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                 // Le format : seulement ceux de la famille ouverte (le film en a quatre) ; un format que ce ffmpeg ne sait pas faire est
                 // grisé, avec la raison.
                 let family = family_of(s.format);
@@ -583,6 +599,13 @@ impl App {
                     ui.end_row();
                 }
             });
+            if visuel {
+                crate::panneauxvisuels::precis(ui, "Exporter", |ui| {
+                    grille(ui);
+                });
+            } else {
+                grille(ui);
+            }
             if s.format.uses_ffmpeg() {
                 ui.add_space(6.0);
                 ui.separator();
@@ -614,7 +637,9 @@ impl App {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                go = ui.add_enabled(!nom_erreur, egui::Button::new("Exporter…")).on_disabled_hover_text("La nomenclature des fichiers est à corriger (voir plus haut).").clicked();
+                if !visuel {
+                    go = ui.add_enabled(!nom_erreur, egui::Button::new("Exporter…")).on_disabled_hover_text("La nomenclature des fichiers est à corriger (voir plus haut).").clicked();
+                }
                 close = ui.button("Annuler").clicked();
             });
             ui.add_space(4.0);
@@ -622,6 +647,11 @@ impl App {
         });
         if choose {
             self.choose_ffmpeg();
+        }
+        // « Pour le montage » : sa fenêtre à elle prend la place de celle-ci (aucune fenêtre de plus).
+        if montage {
+            self.run_action("fichier.exporter_montage");
+            return;
         }
         // Le choix « Avec les annotations » est retenu par poste de travail, tout de suite (avec les réglages de l'application).
         if s.format.has_images() && self.settings.export_annotations != s.annotations {
@@ -989,12 +1019,12 @@ fn bouton_arreter(ui: &mut egui::Ui) -> bool {
 /// Les formats qu'une fenêtre d'export propose ensemble (celui qu'on a ouvert et ses voisins).
 fn family_of(format: Format) -> &'static [Format] {
     match format {
-        Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr => &[Format::Mp4, Format::ProRes, Format::ProRes4444, Format::DnxHr],
-        Format::Gif => &[Format::Gif],
-        Format::Png => &[Format::Png],
+        // (Partie 163.4 : la vignette « Film vidéo » tient aussi le GIF, « Images une à une » les images par image et par plan ; chacun
+        // se choisit dans « Précis ».)
+        Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr | Format::Gif => &[Format::Mp4, Format::ProRes, Format::ProRes4444, Format::DnxHr, Format::Gif],
+        Format::Png | Format::Stills => &[Format::Png, Format::Stills],
         Format::Wav => &[Format::Wav],
         Format::Pdf => &[Format::Pdf],
-        Format::Stills => &[Format::Stills],
         Format::Stems => &[Format::Stems],
         Format::SonPlans => &[Format::SonPlans],
         Format::Layers => &[Format::Layers],

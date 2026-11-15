@@ -421,21 +421,22 @@ fn only_the_side_columns_next_to_the_drawing_are_merged() {
 }
 // ------------------------------------------------------------------------------------ partie 161.4 : ce qui débordait
 
-/// Les éléments du panneau Planche des Vignettes, dans l'ordre où il les montre.
+/// Les éléments du panneau Planche des Vignettes, dans l'ordre où il les montre (partie 163.3 : les dessins de la planche, puis sous
+/// « Précis » les séquences et les numéros).
 const DE_LA_PLANCHE: &[&str] = &[
     "Annotations",
     "Dessin de la case",
-    "Nouvelle séquence",
-    "Toutes",
-    "Seulement la courante",
-    "Aucune autre",
-    "Cacher la séquence",
     "En lignes",
     "À la japonaise",
     "Cases par ligne",
     "Action",
     "Dialogue",
     "Notes",
+    "Nouvelle séquence",
+    "Toutes",
+    "Seulement la courante",
+    "Aucune autre",
+    "Cacher la séquence",
     "Numéros de plan",
 ];
 
@@ -446,6 +447,7 @@ fn the_board_panel_fits_in_the_column_and_the_vignettes_suite_does_not_cover_it(
     // Une séquence au long nom (jusqu'à 200 signes) : sa ligne tient dans la colonne.
     assert!(!b.app.doc.sequences.is_empty(), "le film a une séquence");
     b.app.doc.sequences[0].name = "Une séquence au nom très long, comme un intitulé de scénario : INT. CUISINE DE LA FERME, NUIT, ORAGE".into();
+    crate::panneauxvisuels::ouvrir_precis(&b.ctx, "Planche", true);
     b.chauffer(4);
     let (col, _) = partie_de(&b, Pane::Vignettes).expect("le panneau Planche est dans la colonne");
     assert!((col.width() - crate::dock::COLONNE).abs() <= 3.0, "{col:?}");

@@ -152,7 +152,7 @@ impl App {
 
     /// Les clés du mouvement `m` du plan `pi`, comptées depuis le début de sa case et rangées sur sa durée (`vignettecam::recale`) ; aucune
     /// s'il n'existe pas encore (la case va le commencer). Et la caméra dont il part : son premier cadre, la case.
-    fn cles_du_mouvement(&self, pi: usize, m: &MouvementCase) -> (Vec<CameraKey>, Camera) {
+    pub(crate) fn cles_du_mouvement(&self, pi: usize, m: &MouvementCase) -> (Vec<CameraKey>, Camera) {
         if !m.porte {
             return (Vec::new(), m.depart);
         }
@@ -184,7 +184,7 @@ impl App {
 
     /// Ce que dit la ligne d'état quand la case qui commence à l'image `debut` du plan `pi` ne peut pas porter de mouvement : la caméra y
     /// est en route, avec les images du mouvement qui la traverse (pour qu'on sache quelles clés ramener dans leur case, au montage).
-    fn refus_camera_en_route(&self, pi: usize, debut: usize) -> String {
+    pub(crate) fn refus_camera_en_route(&self, pi: usize, debut: usize) -> String {
         let Some(p) = self.doc.panels.get(pi) else { return String::new() };
         let cases = vignettecam::cases_du_plan(&self.doc, pi);
         let fin = cases.iter().copied().find(|&f| f > debut).unwrap_or(p.frame_count());
@@ -473,7 +473,7 @@ impl App {
     /// Le mouvement du plan `pi` vient d'être créé (ses clés sont posées ; `avant` : celles d'avant) : si le plan a d'autres cases derrière la
     /// première, elles passent dans un plan neuf, juste après (`Document::scinder_apres_mouvement`). Vrai si le plan s'est coupé.
     /// (Partie 142) `debut` : l'image où commence la case qui porte le mouvement ; ce sont les cases **derrière elle** qui partent.
-    fn scinder_derriere_le_mouvement(&mut self, pi: usize, avant: &[CameraKey], debut: usize) -> bool {
+    pub(crate) fn scinder_derriere_le_mouvement(&mut self, pi: usize, avant: &[CameraKey], debut: usize) -> bool {
         let p = &self.doc.panels[pi];
         if p.camera.len() < 2 || !p.marks.iter().any(|m| m.frame > debut) {
             return false;
@@ -491,7 +491,7 @@ impl App {
     }
 
     /// Prend l'étape d'annulation `snap`, sous le nom `nom`.
-    fn etape_camera(&mut self, snap: Edit, nom: &str) {
+    pub(crate) fn etape_camera(&mut self, snap: Edit, nom: &str) {
         let avant = self.history.context.replace(nom.to_string());
         self.history.push(snap);
         self.history.context = avant;

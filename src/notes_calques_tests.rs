@@ -791,7 +791,8 @@ fn the_gif_is_in_the_export_menus_the_command_palette_and_the_keymap() {
     app.run_action("fichier.exporter_gif");
     let s = app.export_dialog.as_ref().expect("la fenêtre d'export s'ouvre");
     assert_eq!(s.format, crate::export::Format::Gif);
-    // La fenêtre : le choix du GIF, sa taille, sa cadence, la boucle et le tramage.
+    // La fenêtre : le choix du GIF, sa taille, sa cadence, la boucle et le tramage (sous « Précis », partie 163.4).
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut ecran = Ecran::new();
     let mut ui_export = |a: &mut App, ui: &mut egui::Ui| {
         let ctx = ui.ctx().clone();
