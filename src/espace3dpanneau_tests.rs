@@ -177,7 +177,24 @@ fn verifier(app: &mut App, pane: Pane, la: &[&str], pas_la: &[&str]) {
 }
 
 /// Ce qui ne se voit que dans les réglages de la vue Espace 3D.
-const DE_LA_VUE: [&str; 5] = ["Cartes (calques)", "Carte 0", "Caméra du plan", "Position (m)", "Focale"];
+/// (Partie 162 : le panneau est contextuel. Rien de choisi : la scène ; un calque choisi : le calque ; la caméra choisie : elle.)
+const DE_LA_SCENE: [&str; 4] = ["Ajouter à la scène", "Le plateau, vu de dessus", "Carte 0", "Le plus proche passe devant"];
+const DU_CALQUE: [&str; 4] = ["Comment il est posé", "Distance à la caméra", "Taille dans le cadre", "Précis"];
+const DE_LA_CAMERA: [&str; 4] = ["Caméra du plan", "Objectif", "Hauteur et plongée", "Panoramique et horizon"];
+const DE_LA_VUE: [&str; 11] = ["Ajouter à la scène", "Le plateau, vu de dessus", "Le plus proche passe devant", "Comment il est posé", "Distance à la caméra", "Taille dans le cadre", "Précis", "Caméra du plan", "Objectif", "Hauteur et plongée", "Panoramique et horizon"];
+
+/// Le panneau Espace 3D montre ce qui va avec ce qui est choisi (partie 162), et aucun mot de `pas_la`.
+fn verifier_vue(app: &mut App, pas_la: &[&str]) {
+    let cartes = app.espace3d.sel.iter().filter(|s| app.e3_card_layer(**s).is_some()).count();
+    let la: &[&str] = if app.espace3d.sel.contains(&crate::espace3dgizmo::CAMERA_ID) {
+        &DE_LA_CAMERA
+    } else if cartes == 1 {
+        &DU_CALQUE
+    } else {
+        &DE_LA_SCENE
+    };
+    verifier(app, Pane::Espace3d, la, pas_la);
+}
 
 // ------------------------------------------------------------------------------------------------ Réglages montre l'outil
 
@@ -191,8 +208,7 @@ fn in_the_3d_view_the_settings_pane_shows_the_brush_and_the_space_pane_the_cards
     // Réglages : le pinceau (son nom, son opacité, « Plus de réglages »), et rien de la vue.
     verifier(&mut b.app, Pane::ToolOptions, &[Tool::Brush.label(), "Opacité", "Plus de réglages"], &DE_LA_VUE);
     // Le panneau Espace 3D : les cartes et la caméra, et rien du pinceau.
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Opacité", "Plus de réglages", VUE_FERMEE]);
-    verifier(&mut b.app, Pane::Espace3d, &["Carte 1", "Espace 3D"], &[]);
+    verifier_vue(&mut b.app, &["Opacité", "Plus de réglages", VUE_FERMEE]);
     // Le crayon et la gomme aussi.
     for outil in [Tool::Pencil, Tool::Eraser] {
         b.app.set_tool(outil);
@@ -205,7 +221,7 @@ fn in_the_3d_view_the_settings_pane_shows_the_brush_and_the_space_pane_the_cards
     b.chauffer(1);
     assert!(!b.app.e3_dessine() && b.app.tool == Tool::Eraser);
     verifier(&mut b.app, Pane::ToolOptions, &[Tool::Eraser.label()], &DE_LA_VUE);
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &[]);
+    verifier_vue(&mut b.app, &[]);
     // Vue fermée : Réglages n'a pas changé de sujet.
     fermer_la_vue(&mut b);
     verifier(&mut b.app, Pane::ToolOptions, &[Tool::Eraser.label(), "Opacité"], &DE_LA_VUE);
@@ -224,7 +240,7 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
     // registre des explications, partie 153).
     let (images, interpolation) = (Cles::Images.label(), Cles::Interpolation.label());
     verifier(&mut b.app, Pane::ToolOptions, &[Tool::Trajectoire.label(), "Trajectoire dans l'espace", "Choisi : 1 carte.", images, interpolation], &DE_LA_VUE);
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Choisi :", "Trace d'un trait"]);
+    verifier_vue(&mut b.app, &["Trajectoire dans l'espace", "Choisi :", "Trace d'un trait"]);
     // La carte du calque courant suit un chemin au sol, avec une marque recalée à la main : toutes les commandes du chemin
     // sont dans Réglages.
     let world = b.app.e3_world();
@@ -240,7 +256,7 @@ fn with_the_trajectory_tool_in_a_plan_in_space_the_settings_pane_shows_the_space
     b.chauffer(1);
     let commandes = ["Choisi : 1 carte. 1 marque", "Partir de la tête de lecture", "Finir à la tête de lecture", "Temps égaux entre les marques", images, interpolation, "Retirer les marques", "Détacher", "Effacer"];
     verifier(&mut b.app, Pane::ToolOptions, &commandes, &DE_LA_VUE);
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Choisi :", "Partir de la tête de lecture", "Détacher", "Retirer les marques", "Temps égaux"]);
+    verifier_vue(&mut b.app, &["Trajectoire dans l'espace", "Choisi :", "Partir de la tête de lecture", "Détacher", "Retirer les marques", "Temps égaux"]);
     // Sur la feuille, pour un calque sans chemin dans l'espace : les réglages de la trajectoire à plat, comme avant.
     fermer_la_vue(&mut b);
     b.app.cur_layer = 1;
@@ -259,7 +275,7 @@ fn in_any_plan_the_trajectory_settings_show_the_path_in_space_without_any_checkb
     let textes = textes_du_panneau(&mut b.app, Pane::ToolOptions);
     assert!(contient(&textes, "Trajectoire dans l'espace") && contient(&textes, "Choisi :"), "{textes:?}");
     assert!(!contient(&textes, "Plan en Espace 3D") && !contient(&textes, "plus bas"), "plus de case à cocher : {textes:?}");
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &["Trajectoire dans l'espace", "Plan en Espace 3D"]);
+    verifier_vue(&mut b.app, &["Trajectoire dans l'espace", "Plan en Espace 3D"]);
 }
 // ------------------------------------------------------------------------------------------------ vue fermée
 
@@ -287,7 +303,7 @@ fn with_the_view_closed_the_pane_shows_one_sentence_and_a_button_that_opens_the_
     cliquer(&ctx, &mut b.app, Pane::Espace3d, &mut t, textes[1].1.center());
     assert!(b.app.espace3d_vue_ouverte(), "le bouton ouvre la vue ({})", b.app.status);
     b.chauffer(3);
-    verifier(&mut b.app, Pane::Espace3d, &DE_LA_VUE, &[VUE_FERMEE, OUVRIR]);
+    verifier_vue(&mut b.app, &[VUE_FERMEE, OUVRIR]);
     // La vue caméra cache la vue Espace 3D : le panneau le dit comme une vue fermée.
     b.app.set_camera_view(true);
     b.chauffer(2);
@@ -297,7 +313,7 @@ fn with_the_view_closed_the_pane_shows_one_sentence_and_a_button_that_opens_the_
     b.app.set_espace(Espace::Vignettes);
     b.chauffer(3);
     assert!(b.app.board_shown() && b.app.espace3d.on && !b.app.espace3d_vue_ouverte());
-    verifier(&mut b.app, Pane::Espace3d, &[SUR_LA_PLANCHE], &[OUVRIR, "Cartes (calques)"]);
+    verifier(&mut b.app, Pane::Espace3d, &[SUR_LA_PLANCHE], &[OUVRIR, "Ajouter à la scène"]);
     let outil = b.app.tool.label();
     verifier(&mut b.app, Pane::ToolOptions, &[outil], &DE_LA_VUE);
 }
@@ -892,7 +908,10 @@ fn the_pane_has_its_name_its_cube_its_command_its_icon_in_the_bar_and_its_line_i
 #[test]
 fn the_messages_send_to_the_space_pane_and_no_longer_to_the_settings_pane() {
     use crate::trajectoire3d as t3;
-    for message in [crate::espace3ddessin::CARTES_CACHEES, t3::RIEN_A_DEPLACER] {
+    // (Partie 162 : montrer les calques est passé au menu Affichage de la barre de la vue.)
+    let cachees = crate::espace3ddessin::CARTES_CACHEES;
+    assert!(cachees.contains("menu Affichage de la barre de la vue") && !cachees.contains("Réglages"), "{cachees}");
+    for message in [t3::RIEN_A_DEPLACER] {
         assert!(message.contains("panneau Espace 3D") && !message.contains("Réglages"), "{message}");
     }
     let mut b = banc_d_essai(1);

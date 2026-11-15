@@ -12,10 +12,10 @@ use eframe::egui::{self, RichText, TextureHandle};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
-use crate::camera::{focal_label, Camera, FOCAL_PRESETS};
+use crate::camera::{focal_label, FOCAL_PRESETS};
 use crate::document::{CelId, Layer, LayerTransform};
 use crate::espace3d::{self, Monde, SceneCam, Xf, MAX_FOCAL, MAX_TILT, MIN_FOCAL};
-use crate::espace3dgizmo::{self as gz, Gizmo, Handle, Mode as GizmoMode, Originals, CAMERA_ID};
+use crate::espace3dgizmo::{Gizmo, Handle, Mode as GizmoMode, Originals, CAMERA_ID};
 use crate::espace3dmath::{Orbite, Ray, V3};
 use crate::history::Edit;
 
@@ -72,6 +72,9 @@ pub(crate) struct Espace3dState {
     pub vues: crate::espace3dvues::Vues,
     /// Plan de la dernière image (la sélection ne passe pas d'un plan à l'autre).
     pub last_panel: u64,
+    /// « Précis » déplié dans le panneau, pour un calque choisi et pour la caméra (partie 162 ; replié d'origine).
+    pub precis_carte: bool,
+    pub precis_camera: bool,
 }
 
 impl Default for Espace3dState {
@@ -96,6 +99,8 @@ impl Default for Espace3dState {
             hover: None,
             vues: Default::default(),
             last_panel: 0,
+            precis_carte: false,
+            precis_camera: false,
         }
     }
 }
@@ -286,7 +291,7 @@ impl App {
     pub(crate) fn espace3d_basculer_ordre(&mut self) {
         let pi = self.cur_panel;
         let on = !self.doc.ordre_par_la_distance(pi);
-        self.espace3d_step("Devant cache derrière", |s| {
+        self.espace3d_step("Le plus proche passe devant", |s| {
             let p = &mut s.doc.panels[pi];
             if !on && p.espace {
                 p.espace = false;
@@ -296,9 +301,9 @@ impl App {
         });
         self.renderer.invalidate_all();
         self.status = if on {
-            "Devant cache derrière : allumé pour ce plan. Ses calques se posent du plus loin au plus près de la caméra.".into()
+            "Le plus proche passe devant : allumé pour ce plan. Ses calques se posent du plus loin au plus près de la caméra.".into()
         } else {
-            "Devant cache derrière : éteint pour ce plan. Ses calques se posent dans l'ordre de la pile.".into()
+            "Le plus proche passe devant : éteint pour ce plan. Ses calques se posent dans l'ordre de la pile.".into()
         };
     }
     /// La distance où une surface neuve se pose (mètres) : celle du panneau Espace 3D, sinon la distance de référence.
@@ -538,6 +543,8 @@ impl App {
         }
         // Une, deux ou quatre vues (`espace3dvues.rs`).
         self.e3_vues_bouton(ui);
+        // L'affichage et l'aimant (partie 162 : avant, en haut du panneau Espace 3D).
+        self.e3_menus_de_la_vue(ui);
     }
 
     /// Les outils de la vue Espace 3D, en tête de la barre d'outils de gauche quand la vue est ouverte (partie 160 ; avant,
@@ -575,7 +582,7 @@ impl App {
         self.history.context = before;
     }
 
-    fn edited3d(&mut self, resp: &egui::Response, name: &str) -> bool {
+    pub(crate) fn edited3d(&mut self, resp: &egui::Response, name: &str) -> bool {
         let before = self.history.context.replace(name.to_string());
         let changed = self.edited(resp);
         self.history.context = before;
@@ -592,149 +599,125 @@ impl App {
         changed
     }
 
-    /// Les réglages de la vue Espace 3D : ce que montre le panneau « Espace 3D » quand la vue est ouverte
-    /// (`espace3dpanneau.rs`, partie 150 ; avant elle, ils prenaient la place des réglages de l'outil dans le panneau
-    /// Réglages). Les réglages de l'outil en main n'y sont pas : ceux de la Trajectoire dans l'espace, comme ceux du pinceau,
-    /// sont dans le panneau Réglages (`trajectoire_espace_options_ui`).
+    /// Les réglages de la vue Espace 3D : ce que montre le panneau « Espace 3D » quand la vue est ouverte (`espace3dpanneau.rs`,
+    /// partie 150). **Contextuel depuis la partie 162** (les graphiques : `espace3dgraphes.rs`) : la caméra choisie, les siens ;
+    /// un calque choisi, les siens ; rien (ou plusieurs calques), la scène. Les options d'affichage et l'aimantation sont dans la
+    /// barre au-dessus de la vue (`e3_menus_de_la_vue`). Les réglages de l'outil en main n'y sont pas : ceux de la Trajectoire
+    /// dans l'espace, comme ceux du pinceau, sont dans le panneau Réglages (`trajectoire_espace_options_ui`).
     pub(crate) fn espace3d_options_panel(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::interrupteur;
-        // Le titre, puis sur la même ligne le repère des poignées, l'aimantation, la grille, les vues, le plan en Espace 3D
-        // (partie 161.4 : une ligne de moins, pour que la caméra entière se voie dans la colonne de 290 points ; « cartes et
-        // caméra », qui suivait le titre, est dans sa bulle). La ligne passe à la suivante si la colonne est trop étroite.
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(format!("{}  Espace 3D", ph::CUBE)).strong()).on_hover_text("Cartes et caméra du plan.");
-            interrupteur(ui, &mut self.espace3d.local, ph::CUBE_FOCUS, "Manipulateur dans le repère de la carte", "Les axes suivent la carte (une seule carte choisie) au lieu de ceux de l'espace.", "");
-            let r = self.bouton_etat(ui, self.espace3d.snap, ph::MAGNET, "Aimanter à la grille", "Déplacements au pas de la grille, rotations et tailles par paliers.", "espace3d.aimanter");
-            if r.clicked() {
-                self.espace3d.snap = !self.espace3d.snap;
+        let cartes: Vec<usize> = self.espace3d.sel.iter().filter_map(|&s| self.e3_card_layer(s)).collect();
+        if self.espace3d.sel.contains(&CAMERA_ID) {
+            self.e3_etat_camera(ui);
+        } else if let [li] = cartes.as_slice() {
+            self.e3_etat_calque(ui, *li);
+        } else {
+            if cartes.len() > 1 {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{} calques choisis", cartes.len())).strong());
+                    // (Les clés de position des cartes choisies, toutes ensemble : `espace3dcles.rs`.)
+                    self.espace3d_boutons_cle_position(ui);
+                    self.e3_bouton_rien(ui);
+                });
+                ui.add(egui::Separator::default().spacing(SEPARATEUR));
             }
-            let r = self.bouton_etat(ui, self.espace3d.show_grid, ph::GRID_FOUR, "Grille du sol", "Quadrillage au sol, un trait plus marqué tous les cinq.", "espace3d.grille");
-            if r.clicked() {
-                self.e3_maillage_basculer();
-            }
-            // Une, deux ou quatre vues (`espace3dvues.rs`, partie 144) : un réglage de la vue, donc ici et dans la barre
-            // de la vue, pas dans le panneau Réglages (partie 150).
-            self.e3_vues_bouton(ui);
+            self.e3_etat_scene(ui);
+        }
+    }
+
+    /// La place à laisser, à droite d'un en-tête, pour `n` boutons icônes : ils vont au bout de la ligne.
+    fn e3_pousser_a_droite(ui: &mut egui::Ui, n: usize) {
+        let reste = ui.available_width() - n as f32 * 28.0;
+        if reste > 0.0 {
+            ui.add_space(reste);
+        }
+    }
+
+    /// Un petit bouton qui lâche ce qui est choisi : le panneau revient à la scène.
+    fn e3_bouton_rien(&mut self, ui: &mut egui::Ui) {
+        if crate::bulles::icone(ui, ph::X, "Revenir à la scène", "Plus rien n'est choisi : le panneau montre la scène (le plateau, ajouter un calque).", "").clicked() {
+            self.espace3d.sel.clear();
+            self.espace3d.last_layer = self.layer().id;
+        }
+    }
+
+    /// Rien n'est choisi : la scène (partie 162, état 1).
+    fn e3_etat_scene(&mut self, ui: &mut egui::Ui) {
+        self.e3_ajouter_a_la_scene(ui);
+        ui.add_space(4.0);
+        ui.label(RichText::new("Le plateau, vu de dessus").strong());
+        self.e3_plateau(ui);
+        ui.label(RichText::new("Glisse un calque pour l'avancer ou le reculer. Le cône : ce que voit la caméra.").small().color(crate::theme::texte_doux()));
+        ui.horizontal(|ui| {
             // Ce qui est devant cache ce qui est derrière (`Panel::ordre_distance`, partie 159) : un réglage du plan courant.
-            let r = self.bouton_etat(
-                ui,
-                self.doc.ordre_par_la_distance(self.cur_panel),
-                ph::CUBE_TRANSPARENT,
-                "Devant cache derrière",
-                "Allumé : les calques de ce plan se posent du plus loin au plus près de la caméra, où qu'elle regarde. Éteint (d'origine) : dans l'ordre de la pile. Sol, Mur, Ciel et Nouvelle surface l'allument d'eux-mêmes quand l'image du plan n'en change pas.",
-                "espace3d.ordre_distance",
-            );
-            if r.clicked() {
+            let mut on = self.doc.ordre_par_la_distance(self.cur_panel);
+            let r = ui.checkbox(&mut on, "Le plus proche passe devant");
+            let description = "Coché : les calques de ce plan se posent du plus loin au plus près de la caméra, où qu'elle regarde. Décoché (d'origine) : dans l'ordre de la pile. Sol, Mur, Ciel et Surface le cochent d'eux-mêmes quand l'image du plan n'en change pas.";
+            if self.aide(r, "Le plus proche passe devant", description, "espace3d.ordre_distance").clicked() {
                 self.espace3d_basculer_ordre();
             }
-        });
-        if self.espace3d.snap {
-            ui.horizontal(|ui| {
-                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_move).speed(0.01).range(0.01..=10.0).suffix(" m").prefix("pas "));
-                crate::bulles::bulle(r, "Pas de la grille", "Déplacements aimantés à ce pas.", "");
-                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_rot).speed(0.5).range(1.0..=90.0).suffix("°"));
-                crate::bulles::bulle(r, "Pas de rotation", "Rotations aimantées à ce pas.", "");
-                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_scale).speed(0.01).range(0.01..=2.0));
-                crate::bulles::bulle(r, "Pas de taille", "Tailles aimantées à ce pas.", "");
-            });
-        }
-        // L'environnement : le fond de la vue, le maillage du sol (`espace3ddecor.rs`, partie 157).
-        self.e3_environnement_ui(ui);
-        ui.add(egui::Separator::default().spacing(SEPARATEUR));
-
-        // Les cartes : les calques du plan, le dessus de la pile d'abord. Sur la même ligne, poser une surface à dessiner
-        // (partie 159 : face à la caméra, au sol, en mur, à la distance dite) — une ligne de moins, pour que la caméra entière
-        // se voie dans la colonne de 290 points (partie 161.4). La ligne passe à la suivante si la colonne est trop étroite.
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(format!("{}  Cartes (calques)", ph::STACK)).strong());
-            interrupteur(ui, &mut self.espace3d.show_cards, ph::EYE, "Montrer les cartes", "Les calques du plan sont montrés dans l'espace. Ils restent dans l'image, montrés ici ou non.", "");
+            Self::e3_pousser_a_droite(ui, 1);
             if self.bouton(ui, ph::ARROWS_DOWN_UP, "Ordonner la pile selon la profondeur", "Met les calques du plus loin (en bas de la pile) au plus près : l'image compose les cartes dans l'ordre de la pile.", "espace3d.ordonner_profondeur").clicked() {
                 self.espace3d_order_by_depth();
             }
-            // (Nouvelle surface, partie 159 : un menu, pour que la ligne tienne dans la colonne de 290 points, partie 161.4.)
-            let bouton = egui::Button::new(RichText::new(ph::PLUS).size(crate::bulles::TAILLE));
-            let resp = egui::menu::menu_custom_button(ui, bouton, |ui| {
-                for (sorte, icone, action, description) in [
-                    (espace3d::Surface::Face, ph::FRAME_CORNERS, "espace3d.surface_face", "Un calque neuf posé face à la caméra, à la distance choisie : le cadre tombe en son centre."),
-                    (espace3d::Surface::Sol, ph::ALIGN_BOTTOM, "espace3d.surface_sol", "Un calque neuf couché au sol, devant la caméra, à la distance choisie."),
-                    (espace3d::Surface::Mur, ph::WALL, "espace3d.surface_mur", "Un calque neuf debout sur le sol, face à la caméra, à la distance choisie."),
-                ] {
-                    let r = ui.button(format!("{icone}  {}", sorte.nom()));
-                    if crate::bulles::bulle(r, sorte.nom(), description, action).clicked() {
-                        self.espace3d_nouvelle_surface(sorte);
-                        ui.close_menu();
-                    }
-                }
-                ui.horizontal(|ui| {
-                    ui.label("Distance");
-                    let mut d = self.espace3d_distance_surface();
-                    let r = ui.add(egui::DragValue::new(&mut d).speed(0.05).range(0.3..=500.0).suffix(" m"));
-                    if crate::bulles::bulle(r, "Distance de la surface", "À combien de mètres devant la caméra la surface neuve se pose. La distance d'origine de la caméra : celle de la feuille.", "").changed() {
-                        self.espace3d.surface_distance = d;
-                    }
-                });
-            })
-            .response;
-            crate::bulles::bulle(resp, "Nouvelle surface", "Un calque neuf à dessiner, posé face à la caméra, au sol ou en mur, à la distance choisie.", "");
         });
-        let frame = self.cur_frame;
-        let world = self.e3_world();
-        let cards: Vec<(usize, u64, String, f32, bool)> = self
-            .e3_visible_cards()
-            .into_iter()
-            .rev()
-            .map(|li| {
-                let l = &self.layers()[li];
-                (li, l.id, l.name.clone(), world.profondeur(l, frame), l.locked || l.position_locked)
-            })
-            .collect();
-        egui::ScrollArea::vertical().id_salt("espace3d_cartes").max_height(130.0).auto_shrink([true, true]).show(ui, |ui| {
-            for (li, id, name, depth, locked) in &cards {
-                let key = espace3d::card_selection(*id);
-                let selected = self.espace3d.sel.contains(&key);
-                let r = ui.selectable_label(selected, format!("{} {}  ({:+.2})", if *locked { ph::LOCK } else { ph::SQUARE }, name, depth));
-                if r.clicked() {
-                    if ui.input(|i| i.modifiers.shift || i.modifiers.command) {
-                        match self.espace3d.sel.iter().position(|s| *s == key) {
-                            Some(p) => {
-                                self.espace3d.sel.remove(p);
-                            }
-                            None => self.espace3d.sel.push(key),
-                        }
-                    } else {
-                        self.espace3d.sel = vec![key];
-                        self.select_layer(*li);
-                        self.espace3d.last_layer = *id;
-                    }
-                }
-            }
-        });
-        let chosen_cards: Vec<usize> = self.espace3d.sel.iter().filter_map(|&s| self.e3_card_layer(s)).collect();
-        if let [li] = chosen_cards.as_slice() {
-            ui.add(egui::Separator::default().spacing(SEPARATEUR));
-            self.espace3d_card_fields(ui, *li);
-            // (Un calque Sol, Mur ou Ciel : sa grille de repère, `espace3ddecor.rs`.)
-            self.e3_grille_carte_ui(ui, *li);
-        } else if chosen_cards.len() > 1 {
-            ui.add(egui::Separator::default().spacing(SEPARATEUR));
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} cartes choisies", chosen_cards.len())).strong());
-                // (Les clés de position des cartes choisies, toutes ensemble : `espace3dcles.rs`.)
-                self.espace3d_boutons_cle_position(ui);
-            });
-            // (Ce qu'elles font ensemble est dans le registre des explications, rubrique Espace 3D, partie 153.)
-        }
-        ui.add(egui::Separator::default().spacing(SEPARATEUR));
-        self.espace3d_camera_fields(ui);
     }
 
-    /// Les réglages d'une carte (un calque du plan) : position et rotation dans l'espace, échelle, étirements, profondeur
-    /// du multiplan. Un calque animé règle la clé de l'image courante (comme l'outil Transformer).
+    /// Un calque choisi (partie 162, état 2) : comment il est posé, sa distance à la caméra, sa taille dans le cadre, puis
+    /// « Précis » (tous les champs d'avant) replié.
+    fn e3_etat_calque(&mut self, ui: &mut egui::Ui, li: usize) {
+        let l = &self.layers()[li];
+        let (name, locked) = (l.name.clone(), l.locked || l.position_locked);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&name).strong());
+            if locked {
+                ui.label(RichText::new(format!("{} verrouillé", ph::LOCK)).small().weak());
+            }
+            Self::e3_pousser_a_droite(ui, 3);
+            // (La clé de position de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_position(ui);
+            self.e3_bouton_rien(ui);
+        });
+        self.e3_comment_il_est_pose(ui, li, !locked);
+        self.e3_reglette_distance(ui, li, !locked);
+        self.e3_taille_dans_le_cadre(ui, li, !locked);
+        let mut ouvert = self.espace3d.precis_carte;
+        if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {
+            self.espace3d_card_fields(ui, li);
+            // (Un calque Sol, Mur ou Ciel : sa grille de repère, `espace3ddecor.rs`.)
+            self.e3_grille_carte_ui(ui, li);
+        }
+        self.espace3d.precis_carte = ouvert;
+    }
+
+    /// La caméra choisie (partie 162, état 3) : l'objectif, la hauteur et la plongée, le panoramique et l'horizon, regarder
+    /// par elle, viser la sélection, puis « Précis » replié.
+    fn e3_etat_camera(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(ph::VIDEO_CAMERA).color(crate::theme::camera()));
+            ui.label(RichText::new("Caméra du plan").strong());
+            Self::e3_pousser_a_droite(ui, 3);
+            // (La clé de caméra de cette image : la poser, la retirer. `espace3dcles.rs`.)
+            self.espace3d_boutons_cle_camera(ui);
+            self.e3_bouton_rien(ui);
+        });
+        self.e3_objectif(ui);
+        self.e3_hauteur_et_plongee(ui);
+        self.e3_panoramique_et_horizon(ui);
+        self.e3_boutons_camera(ui);
+        let mut ouvert = self.espace3d.precis_camera;
+        if App::e3_precis(ui, &mut ouvert, "position, angles en degrés") {
+            self.espace3d_camera_fields(ui);
+        }
+        self.espace3d.precis_camera = ouvert;
+    }
+
+    /// Les réglages d'une carte (un calque du plan), en chiffres (« Précis ») : position et rotation dans l'espace, échelle,
+    /// étirements, profondeur du multiplan. Un calque animé règle la clé de l'image courante (comme l'outil Transformer).
     fn espace3d_card_fields(&mut self, ui: &mut egui::Ui, li: usize) {
         let world = self.e3_world();
         let frame = self.cur_frame;
         let layer = &self.layers()[li];
-        let (name, locked, animated) = (layer.name.clone(), layer.locked || layer.position_locked, layer.is_animated());
+        let (locked, animated) = (layer.locked || layer.position_locked, layer.is_animated());
         let t0 = layer.pose(frame);
         // (Plan en Espace 3D : la profondeur est libre, la carte peut être derrière la caméra d'origine du plan.)
         let d0 = world.profondeur(layer, frame);
@@ -742,17 +725,9 @@ impl App {
         let mut t = t0;
         let mut depth = d0;
         let (mut moved, mut scaled, mut deepened, mut flat) = (false, false, false, false);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("{} {}", ph::SQUARE, name)).strong());
-            // (La clé de position de cette image : la poser, la retirer. `espace3dcles.rs`.)
-            self.espace3d_boutons_cle_position(ui);
-            if locked {
-                ui.label(RichText::new("verrouillée").small().weak());
-            }
-            if animated {
-                ui.label(RichText::new("animée : on règle la clé de cette image").small().weak());
-            }
-        });
+        if animated {
+            ui.label(RichText::new("Animé : on règle la clé de cette image.").small().weak());
+        }
         ui.add_enabled_ui(!locked, |ui| {
             egui::Grid::new("espace3d_carte").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
                 ui.label("Position (m)");
@@ -804,6 +779,10 @@ impl App {
                 ui.end_row();
             });
         });
+        if flat {
+            // (Un bouton : sa propre étape d'annulation.)
+            self.record_named("Remettre à plat");
+        }
         if moved || scaled || deepened || flat {
             self.modified = true;
             // (Tout plan est dans l'espace, partie 159 : la profondeur et l'inclinaison sont libres dans la vue de la scène.)
@@ -831,35 +810,23 @@ impl App {
         // (Les axes de rotation d'une carte : l'animation « Une carte et ses axes de rotation », registre des explications.)
     }
 
-    /// La caméra du plan, seule caméra de l'espace : placement, focale (objectifs du plan), vue par la caméra.
-    /// Ce qu'on règle ici est réglé à l'image courante, ou sur la clé de cette image si la caméra est animée.
+    /// La caméra du plan, en chiffres (« Précis ») : placement, angles, focale (objectifs du plan). Ce qu'on règle ici est réglé
+    /// à l'image courante, ou sur la clé de cette image si la caméra est animée.
     fn espace3d_camera_fields(&mut self, ui: &mut egui::Ui) {
         let world = self.e3_world();
         let base = self.current_camera();
         let mut cam: SceneCam = world.scene_cam(&base);
         let mut changed = false;
         let keys = self.doc.panels[self.cur_panel].camera.len();
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("{}  Caméra du plan", ph::VIDEO_CAMERA)).strong());
-            let selected = self.espace3d.sel.contains(&CAMERA_ID);
-            // (Seule : les cartes sont lâchées, la timeline montre la piste « Caméra » choisie. Maj+clic : avec les cartes.)
-            if ui.selectable_label(selected, "choisir").on_hover_text("Choisir la caméra, seule, pour la déplacer, la tourner, ou tracer son chemin dans la vue : les cartes sont lâchées. Maj+clic : l'ajouter aux cartes choisies, ou la lâcher.").clicked() {
-                let ajouter = ui.input(|i| i.modifiers.shift);
-                self.e3_choisir_la_camera(ajouter);
-            }
-            // (La clé de caméra de cette image : la poser, la retirer. `espace3dcles.rs`.)
-            self.espace3d_boutons_cle_camera(ui);
-        });
         egui::Grid::new("espace3d_camera").num_columns(2).spacing([6.0, 2.0]).show(ui, |ui| {
             ui.label("Position (m)");
             ui.horizontal(|ui| changed |= self.vec3_fields(ui, &mut cam.pos, 0.02, "Placer la caméra", -1e4, 1e4));
             ui.end_row();
-            // (Partie 161.4 : panoramique, bascule et rotation sur une seule ligne, dans cet ordre, pour que la caméra entière se
-            // voie sans faire défiler le panneau dans la colonne de 290 points.)
+            // (Partie 161.4 : panoramique, bascule et rotation sur une seule ligne, dans cet ordre.)
             ui.label("Angles (°)");
             ui.horizontal(|ui| {
                 let r = ui.add(egui::DragValue::new(&mut cam.pan).speed(0.3).max_decimals(1).prefix("pan "));
-                let r = crate::bulles::bulle(r, "Panoramique", "En degrés : positif, la caméra regarde vers la droite.", "");
+                let r = crate::bulles::bulle(r, "Panoramique (degrés)", "En degrés : positif, la caméra regarde vers la droite.", "");
                 changed |= self.edited3d(&r, "Orienter la caméra");
                 let r = ui.add(egui::DragValue::new(&mut cam.tilt).speed(0.3).max_decimals(1).range(-MAX_TILT..=MAX_TILT).prefix("basc. "));
                 let r = crate::bulles::bulle(r, "Bascule", "En degrés : la caméra lève ou baisse le nez.", "");
@@ -887,8 +854,7 @@ impl App {
             });
             ui.end_row();
         });
-        // (Ce que peut la caméra libre : dans la bulle de cette ligne, pour que la caméra entière se voie dans la colonne de
-        // 290 points, partie 161.4 ; et l'animation « La caméra libre », registre des explications.)
+        // (Ce que peut la caméra libre : dans la bulle de cette ligne ; et l'animation « La caméra libre », registre des explications.)
         ui.label(RichText::new(format!("Champ horizontal {:.0}° (pellicule de 36 mm).{}", cam.angle_of_view(), if keys >= 2 { format!(" {keys} clés de caméra : on règle la clé de l'image courante.") } else { String::new() })).small().weak())
             .on_hover_text("La caméra est libre : elle se retourne, bascule jusqu'à la verticale, passe la feuille.");
         if changed {
@@ -901,19 +867,57 @@ impl App {
             self.set_current_camera_libre(new);
             self.modified = true;
         }
-        ui.horizontal(|ui| {
-            if self.bouton_etat(ui, self.e3_par_la_camera(), ph::BINOCULARS, "Regarder par la caméra", "La vue montre ce que la caméra du plan filme, au format du cadre (avec plusieurs vues : la vue active).", "espace3d.vue_camera").clicked() {
-                self.e3_basculer_par_la_camera();
-            }
-            let some = self.espace3d.sel.iter().any(|i| *i != CAMERA_ID);
-            if crate::bulles::icone_si(ui, some, ph::CROSSHAIR, "Viser la sélection", "Tourne la caméra vers les cartes choisies.", "").clicked() {
-                let ids: Vec<u64> = self.espace3d.sel.iter().copied().filter(|i| *i != CAMERA_ID).collect();
-                let target = gz::pivot_of(&self.e3_xfs(&ids));
-                let mut sc = world.scene_cam(&self.current_camera());
-                sc.aim_at(target);
-                let aimed = Camera { pan: sc.pan, tilt: sc.tilt, ..self.current_camera() };
-                self.espace3d_step("Viser avec la caméra", |s| s.set_current_camera_libre(aimed));
-            }
+    }
+
+    // ------------------------------------------------------------------------ barre de la vue : affichage et aimant
+
+    /// L'affichage et l'aimantation de la vue, dans la barre au-dessus d'elle (partie 162 ; avant, en haut du panneau Espace
+    /// 3D) : deux icônes qui ouvrent leur petit panneau dessous.
+    fn e3_menus_de_la_vue(&mut self, ui: &mut egui::Ui) {
+        let resp = self.case_icone(ui, ph::EYE, None, "Affichage", "Ce que la vue montre : la grille du sol, les calques, le repère des poignées, le fond et le maillage.", "");
+        self.panneau_de_case(ui, "e3_affichage", &resp, 240.0, |app, ui| app.e3_affichage_ui(ui));
+        let resp = self.case_icone(ui, ph::MAGNET, Some(self.espace3d.snap), "Aimant", "L'aimantation à la grille, et ses pas : déplacements, rotations, tailles.", "");
+        self.panneau_de_case(ui, "e3_aimant", &resp, 220.0, |app, ui| app.e3_aimant_ui(ui));
+    }
+
+    /// Le petit panneau « Affichage » de la vue : la grille du sol, les cartes montrées, le repère des poignées, l'environnement.
+    pub(crate) fn e3_affichage_ui(&mut self, ui: &mut egui::Ui) {
+        let mut grille = self.espace3d.show_grid;
+        let r = ui.checkbox(&mut grille, format!("{}  Grille du sol", ph::GRID_FOUR));
+        if self.aide(r, "Grille du sol", "Quadrillage au sol, un trait plus marqué tous les cinq.", "espace3d.grille").clicked() {
+            self.e3_maillage_basculer();
+        }
+        let r = ui.checkbox(&mut self.espace3d.show_cards, format!("{}  Montrer les calques", ph::STACK));
+        crate::bulles::bulle(r, "Montrer les cartes", "Les calques du plan sont montrés dans l'espace. Ils restent dans l'image, montrés ici ou non.", "");
+        let r = ui.checkbox(&mut self.espace3d.local, format!("{}  Poignées dans le repère du calque", ph::CUBE_FOCUS));
+        crate::bulles::bulle(r, "Manipulateur dans le repère de la carte", "Les axes suivent la carte (une seule carte choisie) au lieu de ceux de l'espace.", "");
+        ui.separator();
+        // L'environnement : le fond de la vue, le maillage du sol (`espace3ddecor.rs`, partie 157).
+        self.e3_environnement_ui(ui);
+    }
+
+    /// Le petit panneau « Aimant » de la vue : l'aimantation et ses trois pas.
+    pub(crate) fn e3_aimant_ui(&mut self, ui: &mut egui::Ui) {
+        let mut on = self.espace3d.snap;
+        let r = ui.checkbox(&mut on, format!("{}  Aimanter à la grille", ph::MAGNET));
+        if self.aide(r, "Aimanter à la grille", "Déplacements au pas de la grille, rotations et tailles par paliers.", "espace3d.aimanter").clicked() {
+            self.espace3d.snap = !self.espace3d.snap;
+        }
+        ui.add_enabled_ui(self.espace3d.snap, |ui| {
+            egui::Grid::new("espace3d_pas").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
+                ui.label("Déplacement");
+                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_move).speed(0.01).range(0.01..=10.0).suffix(" m"));
+                crate::bulles::bulle(r, "Pas de la grille", "Déplacements aimantés à ce pas.", "");
+                ui.end_row();
+                ui.label("Rotation");
+                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_rot).speed(0.5).range(1.0..=90.0).suffix("°"));
+                crate::bulles::bulle(r, "Pas de rotation", "Rotations aimantées à ce pas.", "");
+                ui.end_row();
+                ui.label("Taille");
+                let r = ui.add(egui::DragValue::new(&mut self.espace3d.step_scale).speed(0.01).range(0.01..=2.0));
+                crate::bulles::bulle(r, "Pas de taille", "Tailles aimantées à ce pas.", "");
+                ui.end_row();
+            });
         });
     }
 }

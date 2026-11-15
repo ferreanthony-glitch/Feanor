@@ -388,52 +388,61 @@ impl App {
         };
     }
 
-    /// Le panneau Espace 3D, section « Environnement » : la couleur du fond, le maillage du sol (couleur, opacité, pas).
+    /// Le petit panneau « Affichage » de la vue (partie 162 ; avant, une section du panneau Espace 3D), « Environnement » : la
+    /// couleur du fond, le maillage du sol (couleur, opacité, pas). Les couleurs se choisissent dans le petit panneau même, en
+    /// le dépliant (une fenêtre de choix le fermerait).
     pub(crate) fn e3_environnement_ui(&mut self, ui: &mut egui::Ui) {
         let mut env = Environnement3d { maillage: self.espace3d.show_grid, ..self.e3_environnement() };
         let avant = env;
-        egui::CollapsingHeader::new(RichText::new(format!("{}  Environnement", ph::SUN_HORIZON)).strong()).id_salt("espace3d_environnement").default_open(false).show(ui, |ui| {
-            egui::Grid::new("espace3d_environnement_grille").num_columns(2).spacing([6.0, 4.0]).show(ui, |ui| {
-                ui.label("Fond");
-                let r = crate::champcouleur::srgb(ui, &mut env.fond);
-                crate::bulles::bulle(r, "Couleur du fond", "Le fond de la vue Espace 3D. Une façon de regarder : jamais dans l'image du film.", "");
-                ui.end_row();
-                ui.label("Maillage");
-                ui.horizontal(|ui| {
-                    let r = ui.checkbox(&mut env.maillage, "");
-                    crate::bulles::bulle(r, "Montrer le maillage", "Le quadrillage du sol de la vue (le bouton « Grille du sol » : la même chose).", "espace3d.grille");
-                    let mut c = env.couleur_du_maillage();
-                    let r = crate::champcouleur::srgb(ui, &mut c);
-                    if crate::bulles::bulle(r, "Couleur du maillage", "Ses traits ordinaires ; les axes gardent leur couleur.", "").changed() {
-                        env.maillage_couleur = Some(c);
-                    }
-                    let mut pct = env.maillage_opacite * 100.0;
-                    let r = ui.add(egui::DragValue::new(&mut pct).speed(1.0).range(0.0..=100.0).max_decimals(0).suffix(" %"));
-                    if crate::bulles::bulle(r, "Opacité du maillage", "100 % : celle d'origine.", "").changed() {
-                        env.maillage_opacite = pct / 100.0;
-                    }
-                });
-                ui.end_row();
-                ui.label("Pas");
-                ui.horizontal(|ui| {
-                    let mut auto = env.maillage_pas <= 0.0;
-                    let r = ui.checkbox(&mut auto, "auto");
-                    if crate::bulles::bulle(r, "Pas automatique", "Le pas suit ce qu'on regarde : de près des cases fines, de loin de grandes cases.", "").changed() {
-                        env.maillage_pas = if auto { 0.0 } else { 1.0 };
-                    }
-                    let mut pas = if auto { 1.0 } else { env.maillage_pas };
-                    let r = ui.add_enabled(!auto, egui::DragValue::new(&mut pas).speed(0.05).range(PAS_MIN..=PAS_MAX).max_decimals(2).suffix(" m"));
-                    if crate::bulles::bulle(r, "Taille des cases", "Un trait tous les tant de mètres, un plus marqué tous les cinq.", "").changed() {
-                        env.maillage_pas = pas;
-                    }
-                });
-                ui.end_row();
+        ui.label(RichText::new(format!("{}  Environnement", ph::SUN_HORIZON)).strong());
+        // Une couleur : sa pastille, et un clic sur la ligne déplie le choix.
+        let couleur = |ui: &mut egui::Ui, id: &str, nom: &str, description: &str, c: &mut [u8; 3]| -> bool {
+            let mut change = false;
+            let entete = egui::CollapsingHeader::new(nom).id_salt(id).show(ui, |ui| {
+                change = crate::champcouleur::srgb_en_ligne(ui, c);
             });
-            let origine = Environnement3d { maillage: env.maillage, ..Environnement3d::default() };
-            if ui.add_enabled(env != origine, egui::Button::new(format!("{}  Aspect d'origine", ph::ARROW_COUNTER_CLOCKWISE))).on_hover_text("Le fond et le maillage d'origine.").clicked() {
-                env = origine;
-            }
+            let r = entete.header_response.rect;
+            let case = egui::Rect::from_center_size(egui::pos2(r.right() - 10.0, r.center().y), egui::vec2(16.0, 12.0));
+            ui.painter().rect_filled(case, 3.0, Color32::from_rgb(c[0], c[1], c[2]));
+            ui.painter().rect_stroke(case, 3.0, Stroke::new(1.0_f32, crate::theme::bord_fort()), egui::StrokeKind::Inside);
+            crate::bulles::bulle(entete.header_response, nom, description, "");
+            change
+        };
+        couleur(ui, "espace3d_fond", "Couleur du fond", "Le fond de la vue Espace 3D. Une façon de regarder : jamais dans l'image du film.", &mut env.fond);
+        let mut c = env.couleur_du_maillage();
+        if couleur(ui, "espace3d_maillage_couleur", "Couleur du maillage", "Ses traits ordinaires ; les axes gardent leur couleur.", &mut c) {
+            env.maillage_couleur = Some(c);
+        }
+        egui::Grid::new("espace3d_environnement_grille").num_columns(2).spacing([6.0, 4.0]).show(ui, |ui| {
+            ui.label("Maillage");
+            ui.horizontal(|ui| {
+                // (Le montrer ou non : « Grille du sol », juste au-dessus dans le même petit panneau.)
+                let mut pct = env.maillage_opacite * 100.0;
+                let r = ui.add(egui::DragValue::new(&mut pct).speed(1.0).range(0.0..=100.0).max_decimals(0).suffix(" %"));
+                if crate::bulles::bulle(r, "Opacité du maillage", "100 % : celle d'origine.", "").changed() {
+                    env.maillage_opacite = pct / 100.0;
+                }
+            });
+            ui.end_row();
+            ui.label("Pas");
+            ui.horizontal(|ui| {
+                let mut auto = env.maillage_pas <= 0.0;
+                let r = ui.checkbox(&mut auto, "auto");
+                if crate::bulles::bulle(r, "Pas automatique", "Le pas suit ce qu'on regarde : de près des cases fines, de loin de grandes cases.", "").changed() {
+                    env.maillage_pas = if auto { 0.0 } else { 1.0 };
+                }
+                let mut pas = if auto { 1.0 } else { env.maillage_pas };
+                let r = ui.add_enabled(!auto, egui::DragValue::new(&mut pas).speed(0.05).range(PAS_MIN..=PAS_MAX).max_decimals(2).suffix(" m"));
+                if crate::bulles::bulle(r, "Taille des cases", "Un trait tous les tant de mètres, un plus marqué tous les cinq.", "").changed() {
+                    env.maillage_pas = pas;
+                }
+            });
+            ui.end_row();
         });
+        let origine = Environnement3d { maillage: env.maillage, ..Environnement3d::default() };
+        if ui.add_enabled(env != origine, egui::Button::new(format!("{}  Aspect d'origine", ph::ARROW_COUNTER_CLOCKWISE))).on_hover_text("Le fond et le maillage d'origine.").clicked() {
+            env = origine;
+        }
         if env != avant {
             self.e3_poser_environnement(env);
         }

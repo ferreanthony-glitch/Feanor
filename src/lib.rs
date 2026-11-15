@@ -1218,6 +1218,10 @@ mod espace3dmath;
 #[cfg(test)]
 mod espace3dmath_tests;
 mod espace3dui;
+// Les graphiques du panneau Espace 3D, qu'on manipule (partie 162).
+mod espace3dgraphes;
+#[cfg(test)]
+mod espace3dgraphes_tests;
 mod espace3dview;
 // Une, deux ou quatre vues de l'Espace 3D (`docs/INTERFACE.md` partie 144).
 mod espace3dvues;
