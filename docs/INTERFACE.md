@@ -12919,3 +12919,166 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
 6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
    en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
+
+## 163. Des panneaux moins dans les chiffres, plus visuels (2026-11-15, branche `panneaux-visuels`)
+
+La règle d'Anthony : « des panneaux moins dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être
+manipulés » ; chaque dessin change directement le projet quand on le manipule. Il a retenu quatre propositions de la maquette sur
+douze (« Ok pour 4, 6, 9, 11 ») : la Fiche du plan, les mouvements de caméra des Vignettes, la planche des Vignettes, les exports.
+Tout est peint au `Painter` d'egui (aucune image), aux couleurs du thème, l'accent pour ce qui est allumé. Aucun format nouveau, aucune
+crate nouvelle, aucune boîte de dialogue de plus. Les dessins et leurs petits calculs : `src/panneauxvisuels.rs` ; ce qu'ils changent
+dans le projet : `src/panneauxvisuelsui.rs` ; les essais : `src/panneauxvisuels_tests.rs`.
+
+Un seul repli partout, **« ▸ Précis »**, fermé d'origine : les mêmes réglages en chiffres, et ceux qui n'ont pas de dessin. Son état
+ouvert ou fermé est retenu pendant la séance.
+
+### 163.1 La Fiche du plan (proposition 4)
+
+- **La durée est une barre qu'on étire** : graduée en secondes (leur nombre dessous quand il a la place), « 1 s 20 i · 44 images »
+  écrit dessus, une poignée au bout. La tirer est **exactement la poignée de fin du plan** de la timeline (`Handle::PlanEnd`) : ce qui
+  sort va en réserve et revient en rallongeant, allonger étire la dernière clé de chaque calque, **Ctrl tenue fait suivre toutes les
+  clés** du même nombre d'images (partie « la durée du plan déplace ses clés »), Échap abandonne, **une étape d'annulation par geste**
+  (« Allonger la fin », « Raccourcir la fin », ou leurs noms avec les clés). Comme dans la timeline, elle ne se prend qu'à sa poignée,
+  et le geste se pose même si on lâche ailleurs. L'échelle de la barre est figée pendant le geste (de quoi
+  allonger de moitié, une seconde au moins) ; pour aller plus loin, on relâche et on reprend. La bulle est celle de la poignée de la
+  timeline.
+- **Les versions sont de petites vignettes** : la miniature de la première image du plan dans cette version (faite sur les fils de fond,
+  comme la pile des versions du montage), « V1 · 2s 13 », la version active allumée, puis « + nouvelle ». Un clic sur une autre version
+  y passe ; « + nouvelle » en crée une en dupliquant. **Clic droit** sur une vignette : passer, comparer à la version d'aujourd'hui,
+  restaurer, supprimer ; sur la version active : nouvelle version (copie), nouvelle version vide, mettre à jour dans les autres versions
+  de séquence, comparer le plan ; sur « + nouvelle » : les deux nouvelles versions.
+- Une durée cible (séquence, film) **dépassée** reste visible, en rouge, sous les versions.
+- Dessous, inchangés : la Caméra (ses champs) et Action, Dialogue, Notes.
+
+### 163.2 Les mouvements de caméra des Vignettes (proposition 6)
+
+Jusqu'ici un mouvement de case ne se réglait qu'à la main dans la case (Ctrl + Maj + glisser, clic droit « Ajouter un cadre »). Le
+panneau Vignettes gagne, sous la planche, une partie **« Mouvement de caméra · A → B »** pour la case courante (la case du plan courant
+où est la tête de lecture). Elle n'apparaît pas quand la caméra du plan ne se dit pas en cadres (partie 159) ; quand la caméra est en
+route sur cette case (un mouvement commencé ailleurs la traverse), une ligne le dit.
+
+- **« Le mouvement »** : cinq pictogrammes, **Travelling, Zoom avant, Zoom arrière, Pano, Rotation**, ceux que la caméra de FEANOR sait
+  faire (position, zoom, rotation du cadre, panoramique). Un clic pose le cadre B à partir de A : Travelling, B à une demi-largeur à côté
+  (comme « Ajouter un cadre ») ; Zoom avant, B 1,6 fois plus serré au centre de A ; Zoom arrière, 1,6 fois plus large autour de A ; Pano,
+  la caméra tournée de 20° vers la droite ; Rotation, B tourné de 15°. Sur une case sans mouvement, A et B sont posés à la première et à
+  la dernière image de la case (et les cases qui suivaient deviennent un plan à part, comme pour tout mouvement neuf) ; sur un mouvement
+  qui a déjà ses cadres, A et les cadres après B restent, seul B change. Une étape nommée (« Mouvement de caméra : Zoom avant »). Les
+  pictogrammes de ce que fait le passage de A à B aujourd'hui sont allumés (plusieurs pour un mouvement composé). Au bout de ce que la
+  caméra sait faire (panoramique déjà au plus loin), rien n'est posé et la barre d'état le dit (ni étape, ni coupe du plan).
+- **« Comment ça démarre et s'arrête »** : trois courbes, **Doux, Constant, Brusque**, dessinées avec la vraie fonction d'avancement de la
+  caméra (`camera::ease`). Elles écrivent les adoucis des clés du mouvement, ceux que montrent les poignées d'adoucis de la piste de
+  caméra (partie 120) : Doux, une demi-durée de départ et d'arrivée ; Constant, aucun ; Brusque, aucun départ et une arrivée sur toute
+  la durée (la caméra part d'un coup et ralentit jusqu'à l'arrêt). Chaque intervalle du mouvement (A → B, B → C…) prend la courbe. Une
+  étape nommée (« Démarrage et arrêt : Doux »). La courbe que jouent les clés est allumée (aucune si les adoucis sont réglés autrement).
+- **L'aperçu** : les cadres A et B sont déjà dessinés sur la case elle-même ; il n'est pas dupliqué dans le panneau.
+- **« Précis »** : chaque cadre et l'image du plan où il est ; pour chaque passage, l'adouci de départ et d'arrivée en images (une étape
+  par saisie) ; « Ajouter un cadre ».
+- **Pas de pictogramme Tremblement** : FEANOR sait trembler (effets de caméra de l'outil Caméra, « Tremblement léger », « Caméra à
+  l'épaule »…), mais ces effets posent une clé par secousse : autant de cadres sur la case, qui la couvriraient. Il n'a pas été inventé.
+
+### 163.3 La planche des Vignettes (proposition 9)
+
+Règle d'Anthony gardée : pas de calques dans les Vignettes, le moins d'infos possible.
+
+- **Sens de lecture** : deux dessins de page, « En lignes » (les cases de gauche à droite, une flèche dessous) et « À la japonaise » (de
+  haut en bas, puis la colonne suivante à droite).
+- **Cases par ligne** : une mini-planche (une rangée de cases, la suivante en pâle) dont on **tire le bord droit** ou qu'on clique où elle
+  doit s'arrêter, de une à six cases ; « 6 cases par ligne » écrit dessous. À la japonaise, la mini-planche est une colonne qu'on tire
+  vers le bas (« cases par colonne »).
+- **Textes sous les cases** (à droite à la japonaise) : un dessin de case, sous laquelle les lignes cochées se voient à leurs couleurs,
+  et Action, Dialogue, Notes cochables à côté, à leurs couleurs d'aujourd'hui.
+- **« Précis »** : les séquences montrées (« + » nouvelle séquence, Toutes, Seulement la courante, Aucune autre, la liste à cocher et à
+  glisser), les numéros de plan, les cases par ligne en chiffres.
+- La ligne « Annotations » reste en haut, telle quelle.
+
+### 163.4 Les exports (proposition 11)
+
+La fenêtre d'export (Fichier > Exporter en vidéo / en image…) reste **la seule fenêtre** : elle devient visuelle pour le storyboard PDF,
+le film et les images ; aucune fenêtre ni confirmation n'est ajoutée.
+
+- **Quatre vignettes de ce qu'on obtient** : « Storyboard PDF » (une page de cases), « Film vidéo » (un écran et sa barre de lecture : MP4,
+  ProRes, DNxHR, et le GIF), « Images une à une » (une pile d'images : une par image du film, ou par plan, par case, par clé), « Pour le
+  montage » (une piste et ses plans). Un clic choisit la famille (son format d'origine) ; « Pour le montage » a déjà sa propre fenêtre
+  (EDL, XML, FCPXML, OpenTimelineIO) : elle s'ouvre **à la place** de celle-ci. Les noms gardés sont ceux de FEANOR quand ils sont plus
+  justes que ceux de la maquette (« Storyboard PDF » plutôt que « Planche PDF » : la planche des Vignettes a son propre export).
+- **Un aperçu** avant d'exporter : la première page du storyboard (ses cases à la mise en page choisie, les premiers plans de l'étendue)
+  ou la première image du film ou des images.
+- **Un gros bouton** « Exporter le storyboard… », « Exporter le film… », « Exporter le GIF… », « Exporter les images… ».
+- **« Précis »** : tous les réglages d'avant, dans le même ordre (format, étendue, taille, cadence, page, textes, en-tête, nomenclature,
+  annotations, transitions…). Le format se choisit là entre les voisins de la famille : le GIF est maintenant à côté du MP4, et « Images
+  PNG (une par image) » à côté de « Images par plan ». L'avertissement de ffmpeg reste visible. Une nomenclature à corriger le dit sous
+  le bouton.
+- Le son, les calques séparés et la caméra gardent leur fenêtre telle quelle (pas de vignettes : leur résultat ne se dessine pas mieux
+  que leurs réglages).
+
+### 163.5 Où est passé chaque ancien réglage
+
+| Ancien réglage | Nouvelle place |
+|---|---|
+| Fiche : Séquence (nom), Plan (nom), Image « k sur n » | Fiche > Précis |
+| Fiche : Durée (champ en images) | la barre de durée ; en chiffres : Fiche > Précis |
+| Fiche : Version, « Nouvelle version, en dupliquant » | la vignette « + nouvelle » ; aussi Fiche > Précis |
+| Fiche : « Nouvelle version, plan vide » | clic droit sur la version active ou sur « + nouvelle » ; Fiche > Précis |
+| Fiche : « Mettre à jour dans les autres versions de séquence » | clic droit sur la version active ; Fiche > Précis |
+| Fiche : « Passer à cette version » | clic sur sa vignette ; clic droit ; Fiche > Précis |
+| Fiche : « Comparer à la version d'aujourd'hui », « Restaurer », « Supprimer » | clic droit sur sa vignette ; Fiche > Précis |
+| Fiche : Cible séquence, Cible film | Fiche > Précis ; dépassée : en rouge sous les versions |
+| Fiche : Caméra, Action, Dialogue, Notes | inchangés, à leur place |
+| Vignettes : mouvement de case (Ctrl + Maj + glisser, « Ajouter un cadre », « Retirer ce cadre ») | inchangés dans la case ; en plus les pictogrammes, les courbes, et « Ajouter un cadre » sous Précis |
+| Adoucis des clés de caméra (poignées de la piste de caméra, timeline et montage) | inchangés ; en plus les trois courbes, et les adoucis en images sous Précis du mouvement |
+| Vignettes : Sens de lecture (deux boutons) | deux dessins de page |
+| Vignettes : Cases par ligne / par colonne (champ) | la mini-planche ; en chiffres : Précis de la planche |
+| Vignettes : Textes sous les cases (Action, Dialogue, Notes) | le dessin de case et ses trois cases à cocher |
+| Vignettes : Séquences (« + », Toutes, Seulement la courante, Aucune autre, la liste) | Précis de la planche |
+| Vignettes : Numéros de plan | Précis de la planche (et toujours la touche N) |
+| Export : Contenu, Format (liste) | les vignettes de famille ; le format exact sous Précis |
+| Export : Étendue, Taille, Cadence, Fichier, Infos gravées, Fond, Son, Page, Cases par page, Textes, Pages, Production, Images, Clés, Nomenclature, Commentaires, Annotations, Transitions | Export > Précis, dans le même ordre |
+| Export : « Exporter… » | le gros bouton « Exporter le … » (le son, les calques, la caméra : « Exporter… » comme avant) |
+| Export : ffmpeg (chemin, avertissements, « Choisir un autre ffmpeg… ») | inchangés, toujours visibles (hors de Précis) |
+| Menu Fichier > Exporter… (les quatre sous-menus) | inchangé |
+
+### 163.6 Les essais
+
+`src/panneauxvisuels_tests.rs`, dans la vraie fenêtre sans écran :
+
+- tirer la barre de durée allonge le plan de ce que dit la barre, en **une** étape (« Allonger la fin »), les clés restent ; Ctrl+Z rend
+  la durée ; Ctrl tenue, la clé de caméra suit du même nombre d'images (« … les clés suivent ») ; tirer vers la gauche raccourcit ;
+- un clic sur la vignette V1 passe à la V1 (une étape) ; « + nouvelle » fait une version de plus ; sous Précis, passer, comparer,
+  restaurer, supprimer, nouvelle version vide ;
+- le pictogramme Zoom avant pose A et B sur la durée de la case, B dans A, une étape nommée ; Travelling ne change que B ; Doux,
+  Brusque, Constant écrivent les adoucis et se relisent ; Ctrl+Z rend la courbe d'avant ; Précis : les adoucis, « Ajouter un cadre »
+  (un cadre C) ;
+- les deux pages du sens de lecture ; la mini-planche cliquée (2 cases), tirée (4), à la japonaise tirée vers le bas (3) ; Action,
+  Dialogue, Notes cochés et décochés ; sous Précis, les séquences et les numéros de plan ;
+- chaque vignette d'export choisit sa famille ; « Pour le montage » ouvre sa fenêtre à la place ; les réglages du film sous Précis ; le
+  son garde sa fenêtre ;
+- les calculs : B dans A (zoom avant), A dans B (zoom arrière), ce que fait chaque pictogramme relu par `mouvements_de`, chaque courbe
+  relue par `courbe_des`, l'échelle et le texte de la barre, la mini-planche ; aucun nom ni aucune bulle ne dit la 3D.
+
+Essais anciens changés, et pourquoi :
+
+- `panneaux_fins_tests::the_board_panel_fits_in_the_column…` lit le panneau Planche dans son nouvel ordre (les dessins, puis sous
+  Précis les séquences et les numéros), Précis ouvert ;
+- trois essais qui lisent les réglages de la fenêtre d'export à l'écran (case « Avec les annotations », réglages du GIF, « Avec les
+  commentaires » du PDF) ouvrent d'abord Précis (`panneauxvisuels::tout_ouvrir`, `ouvrir_precis`) ;
+- `montageonglet_tests::the_montage_space_is_idle_at_rest…` laisse 14 images au lieu de 8 avant de mesurer le repos : la Fiche du plan
+  n'a plus la même hauteur, et la colonne du Montage glisse vers elle (45 % du reste par image) une douzaine d'images ; une fois posée,
+  rien ne repeint. Le message d'échec dit maintenant qui a demandé l'image.
+
+En chemin : le filet d'une tuile allumée fait 1,25 point (pas 1,5 : le filet d'accent de 1,5 est le liseré d'un plan choisi sur la
+planche, que compte un essai) ; les vignettes des versions prennent les largeurs déjà faites ailleurs (bande des plans, pile des
+versions) pour ne pas composer une vignette de plus au repos.
+
+Captures de contrôle (exe de la branche, copie de « retakes brawlydays ») : la colonne des Vignettes, la Fiche du plan, la fenêtre
+d'export du storyboard et du film, comparées aux maquettes 4, 6, 9 et 11.
+
+### 163.7 À tester par Anthony (sur une copie de projet)
+
+1. Fiche du plan : tire la poignée de la barre de durée ; Ctrl tenue, les clés suivent ; Ctrl+Z, une seule étape.
+2. Fais une nouvelle version (« + nouvelle »), clique la vignette V1, puis la V2 ; clic droit sur une vignette : comparer, restaurer,
+   supprimer.
+3. Vignettes, sur une case sans mouvement : clique Zoom avant (B dans A sur la case), puis Doux, Brusque ; lis la piste de caméra
+   (timeline) : ses poignées d'adoucis ont suivi. Dis si 1,6 fois, une demi-largeur, 20° et 15° te vont.
+4. Vignettes : les deux pages du sens de lecture, tire le bord de la mini-planche, coche Action, Dialogue, Notes.
+5. Fichier > Exporter en image > Storyboard en PDF : la première page en aperçu ; clique « Film vidéo », « Images une à une » ;
+   ouvre Précis.
