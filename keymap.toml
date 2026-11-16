@@ -324,6 +324,16 @@ touches = []
 source = "FEANOR (sans touche ; menu Aide)"
 
 [[raccourci]]
+action = "aide.explications"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
+action = "aide.registre"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]
 source = "proposition"
@@ -1708,6 +1718,26 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "calque.nouveau_sol"
+touches = []
+source = "FEANOR (calque 3D Sol, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.nouveau_mur"
+touches = []
+source = "FEANOR (calque 3D Mur, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.nouveau_ciel"
+touches = []
+source = "FEANOR (calque 3D Ciel, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
+action = "calque.grille_3d"
+touches = []
+source = "FEANOR (grille de repère d'un calque 3D, partie 157 ; aucune touche choisie)"
+
+[[raccourci]]
 action = "calque.detacher_couleur"
 touches = []
 source = "FEANOR (calque de couleur sous le trait)"
@@ -1864,6 +1894,36 @@ touches = []
 source = "FEANOR (Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.vues"
+touches = []
+source = "FEANOR (Espace 3D, disposition suivante des vues ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_une"
+touches = []
+source = "FEANOR (Espace 3D, 1 vue ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_cote"
+touches = []
+source = "FEANOR (Espace 3D, 2 vues côte à côte ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_superposees"
+touches = []
+source = "FEANOR (Espace 3D, 2 vues l'une sur l'autre ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vues_quatre"
+touches = []
+source = "FEANOR (Espace 3D, 4 vues ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vue_agrandir"
+touches = []
+source = "FEANOR (Espace 3D, agrandir la vue sous le pointeur ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.a_cote"
 touches = []
 source = "FEANOR (Espace 3D à côté du dessin ; aucune touche choisie)"
@@ -1909,24 +1969,24 @@ touches = []
 source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
-action = "espace3d.plan_en_espace"
+action = "espace3d.ordre_distance"
 touches = []
-source = "FEANOR (mettre le plan courant en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, devant cache derrière pour le plan courant ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_face"
 touches = []
-source = "FEANOR (nouvelle surface face à la caméra, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface face à la caméra ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_sol"
 touches = []
-source = "FEANOR (nouvelle surface au sol, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface au sol ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.surface_mur"
 touches = []
-source = "FEANOR (nouvelle surface en mur, plan en Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, nouvelle surface en mur ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.aimanter"
@@ -1937,6 +1997,17 @@ source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"
 action = "espace3d.grille"
 touches = []
 source = "FEANOR (Espace 3D, grille du sol ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.dessiner"
+touches = []
+source = "FEANOR (Espace 3D, dessiner sur la carte du calque courant ; aucune touche choisie : les touches du pinceau, du crayon et de la gomme l'allument)"
+
+# Panneau Espace 3D : les réglages de la vue (cartes, caméra du plan), en onglet avec les réglages de l'outil ; il passe devant quand la vue s'ouvre, et Réglages revient devant quand elle se ferme (sans touche : à choisir).
+[[raccourci]]
+action = "vue.espace3d_panneau"
+touches = []
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.3d"

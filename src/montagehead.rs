@@ -5,9 +5,9 @@
 //! aux options »).
 //! - Une barre au bord droit de la colonne l'élargit ou la rétrécit ; la largeur est retenue
 //!   dans les réglages. Double-clic : tout montrer, ou revenir à la colonne étroite.
-//! - La rangée d'un calque ne montre que l'œil, la pastille de sa sorte et le nom (`pistes::montage_head`, 2026-10-28) : l'opacité,
-//!   le verrou, le mode de fusion, la pelure d'oignon et le reste sont au clic droit (`montage_layer_menu`) et dans le panneau
-//!   Calques. La largeur sert aux noms longs.
+//! - La rangée d'un calque ne montre que l'œil, la pastille de sa sorte et le nom (`pistes::montage_head`, 2026-10-28) ; celle du
+//!   calque actif porte toutes ses options sur deux rangées (`pistes::piste_active_head`, partie 160). Tout est aussi au clic
+//!   droit (`montage_layer_menu`). La largeur sert aux noms longs, et à la vignette du calque actif.
 //! - Clic droit sur la rangée : tout ce qui touche au calque (`montage_layer_menu`).
 
 

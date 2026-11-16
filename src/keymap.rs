@@ -152,6 +152,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("aide.noter_friction", "Noter une friction : ce qui vient de me freiner, avec une capture de la fenêtre et mes dernières commandes", true, false),
     act("aide.ouvrir_frictions", "Mes frictions notées : ouvrir leur dossier", true, false),
     act("aide.habitudes", "Mes habitudes : les commandes que j'utilise le plus et celles qui ne servent jamais (compteur du poste)", true, false),
+    // L'aide animée (partie 153, `aideanim.rs`).
+    act("aide.explications", "Afficher les explications : l'animation d'un outil rejoue à chaque prise (sinon une seule fois)", true, false),
+    act("aide.registre", "Registre des explications : toutes les animations des outils et les textes des fenêtres", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
     act("outil.gomme", "Outil gomme", true, false),
@@ -515,7 +518,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     // donné continue de servir.)
     act("vue.pinceaux", "Liste des pinceaux, dans les réglages (déplier / replier)", true, false),
     act("vue.couleur", "Panneau Couleur (ouvrir / fermer)", true, false),
-    act("vue.calques", "Panneau Calques (ouvrir / fermer)", true, false),
+    act("vue.calques", "Calques (la colonne de la timeline)", true, false),
     act("vue.fiche", "Panneau Fiche du plan (ouvrir / fermer)", true, false),
     act("vue.barre_panneaux", "Barre des panneaux, sur le bord droit (montrer / cacher)", true, false),
     act("role.cle", "Rôle des images visées : clé", true, false),
@@ -575,6 +578,10 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fx.preset_plume_calligraphique", "Préréglage de la matière : plume calligraphique (changer de plume)", true, false),
     act("calque.nouveau_couleur", "Nouveau calque de couleur (sous le trait du calque courant)", true, false),
     act("calque.nouveau_annotation", "Nouveau calque d'annotation (des notes par-dessus, jamais dans les exports)", true, false),
+    act("calque.nouveau_sol", "Nouveau calque 3D : Sol", true, false),
+    act("calque.nouveau_mur", "Nouveau calque 3D : Mur", true, false),
+    act("calque.nouveau_ciel", "Nouveau calque 3D : Ciel", true, false),
+    act("calque.grille_3d", "Grille de repère du calque Sol, Mur ou Ciel courant (oui / non)", true, false),
     act("calque.detacher_couleur", "Détacher le calque de couleur de son trait", true, false),
     act("calque.griffonner", "Calque de couleur : griffonner (les couleurs posées remplissent les zones fermées par le trait)", true, false),
     act("fichier.importer_video", "Importer une vidéo (calque vidéo)", true, false),
@@ -646,6 +653,13 @@ pub const ACTIONS: &[ActionInfo] = &[
     // (`outil.repere3d`, `fichier.importer_modele3d`) n'existent plus.
     act("espace3d.basculer", "Espace 3D (afficher / quitter)", true, false),
     act("espace3d.a_cote", "Espace 3D à côté du dessin (afficher / masquer)", true, false),
+    // Une, deux ou quatre vues (`espace3dvues.rs`, `docs/INTERFACE.md` partie 144).
+    act("espace3d.vues", "Espace 3D : vues, disposition suivante (1, 2 côte à côte, 2 l'une sur l'autre, 4)", true, false),
+    act("espace3d.vues_une", "Espace 3D : 1 vue", true, false),
+    act("espace3d.vues_cote", "Espace 3D : 2 vues côte à côte", true, false),
+    act("espace3d.vues_superposees", "Espace 3D : 2 vues l'une sur l'autre", true, false),
+    act("espace3d.vues_quatre", "Espace 3D : 4 vues", true, false),
+    act("espace3d.vue_agrandir", "Espace 3D : agrandir la vue sous le pointeur en plein cadre (ou revenir)", true, false),
     act("espace3d.outil_choisir", "Espace 3D : outil choisir", true, false),
     act("espace3d.outil_deplacer", "Espace 3D : outil déplacer", true, false),
     act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),
@@ -654,12 +668,16 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.cadrer", "Espace 3D : recadrer la vue sur tout l'espace", true, false),
     act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),
-    act("espace3d.plan_en_espace", "Espace 3D : mettre le plan courant en Espace 3D (oui / non)", true, false),
-    act("espace3d.surface_face", "Espace 3D : nouvelle surface face à la caméra (plan en Espace 3D)", true, false),
-    act("espace3d.surface_sol", "Espace 3D : nouvelle surface au sol (plan en Espace 3D)", true, false),
-    act("espace3d.surface_mur", "Espace 3D : nouvelle surface en mur (plan en Espace 3D)", true, false),
+    // (Partie 159 : « Plan en Espace 3D » n'existe plus, tous les plans sont dans l'espace ; l'ordre des calques reste un choix.)
+    act("espace3d.ordre_distance", "Espace 3D : devant cache derrière, pour le plan courant (oui / non)", true, false),
+    act("espace3d.surface_face", "Espace 3D : nouvelle surface face à la caméra", true, false),
+    act("espace3d.surface_sol", "Espace 3D : nouvelle surface au sol", true, false),
+    act("espace3d.surface_mur", "Espace 3D : nouvelle surface en mur", true, false),
     act("espace3d.aimanter", "Espace 3D : aimantation à la grille (oui / non)", true, false),
     act("espace3d.grille", "Espace 3D : grille du sol (oui / non)", true, false),
+    act("espace3d.dessiner", "Espace 3D : dessiner sur la carte du calque courant (oui / non)", true, false),
+    // Le panneau « Espace 3D » (`espace3dpanneau.rs`, partie 150) : les réglages de la vue, à côté de la couleur.
+    act("vue.espace3d_panneau", "Panneau Espace 3D (ouvrir / fermer)", true, false),
     act("vue.3d", "Espace 3D (ancien plateau en 3D)", true, false),
     act("scene3d.basculer", "Espace 3D (ancien nom : scène 3D de blocage)", true, false),
     act("vue3d.recadrer", "Espace 3D : recadrer (ancien plateau en 3D)", true, false),
@@ -768,6 +786,17 @@ pub const ACTIONS: &[ActionInfo] = &[
 
 pub fn action_info(id: &str) -> Option<&'static ActionInfo> {
     ACTIONS.iter().find(|a| a.id == id)
+}
+
+/// La porte de la vue de la scène : la seule commande qui parle de la 3D et se montre partout (le petit cube).
+pub const PORTE_DE_LA_SCENE: &str = "espace3d.basculer";
+
+/// Une commande qui parle de la 3D (`docs/INTERFACE.md`, partie 159 : « la 3D ne doit jamais se sentir tant qu'on ne bascule
+/// pas dans la vue de la scène 3D ») : la palette et l'éditeur de raccourcis ne la montrent que vue de la scène ouverte. Sa
+/// porte (`PORTE_DE_LA_SCENE`) et ses doubles se montrent partout.
+pub fn de_la_scene(a: &ActionInfo) -> bool {
+    let porte = a.id == PORTE_DE_LA_SCENE || ALIASES.iter().any(|(alias, original)| *alias == a.id && *original == PORTE_DE_LA_SCENE);
+    !porte && crate::espace3ddirect::dit_la_3d(a.label)
 }
 
 /// Les doubles : (action double, action qu'elle répète). Même effet, autre identifiant, pour

@@ -168,14 +168,24 @@ pub(crate) fn around_screen(rect: Rect, inner: &[Pos2]) -> [Pos2; 4] {
     [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
 }
 
+/// Le petit panneau d'une case s'ouvre vers le dessin : dessous pour une case de la barre du haut, au-dessus pour une case de
+/// la barre du bas (partie 160 : le zoom et la rotation sont montés en haut).
+pub(crate) fn sens_du_panneau(case: Rect, ecran: Rect) -> egui::AboveOrBelow {
+    if case.center().y < ecran.center().y {
+        egui::AboveOrBelow::Below
+    } else {
+        egui::AboveOrBelow::Above
+    }
+}
+
 impl App {
-    /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : le cadrage (format, zones de
-    /// sécurité), les repères de composition (et l'aspect de leurs traits, 2026-10-23), puis ajuster, zoom, rotation, miroir, pelure d'oignon, table lumineuse. Les réglages
-    /// fins (le pourcentage du zoom, l'angle, combien de dessins avant et après, la force de la table lumineuse) sont dans
-    /// de petits panneaux qui s'ouvrent au clic, au-dessus de l'icône. Les vues (plateau, caméra, Espace 3D) et la règle
-    /// des guides sont dans la barre au-dessus du dessin.
+    /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : ce qui se superpose au dessin
+    /// (partie 160, deux familles) : le cadrage (format, zones de sécurité), les repères de composition (et l'aspect de leurs
+    /// traits, 2026-10-23), la pelure d'oignon, la table lumineuse, le passe-partout, puis ce que font les touches de l'outil.
+    /// Les réglages fins (combien de dessins avant et après, la force de la table lumineuse) sont dans de petits panneaux qui
+    /// s'ouvrent au clic, au-dessus de l'icône. Comment on regarde (les vues plateau, caméra, Espace 3D, la règle des guides,
+    /// puis ajuster, zoom, rotation, miroir) est dans la barre au-dessus du dessin.
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
-        use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
         // Dans l'Espace 3D, on ne dessine pas à plat : cette barre n'a rien à offrir.
         let in3d = self.espace3d.on && !self.camera_view;
@@ -190,13 +200,10 @@ impl App {
                 ui.separator();
                 ui.add_space(crate::barres::MARGE_TRAIT);
             };
+            // (Partie 160 : deux familles. Ici, en bas, ce qui se superpose au dessin ; ajuster, zoom, rotation et miroir,
+            // la façon de regarder, sont montés dans la barre au-dessus du dessin, `regarder_reglages`.)
             self.cadrage_reglage(ui);
             self.reperes_reglage(ui);
-            sep(ui);
-            self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
-            self.zoom_reglage(ui);
-            self.rotation_reglage(ui);
-            self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
             sep(ui);
             self.pelure_reglage(ui);
             self.table_lumineuse_reglage(ui);
@@ -223,14 +230,16 @@ impl App {
         });
     }
 
-    /// Un petit panneau de réglages posé au-dessus de la case `resp` de la barre du bas : il s'ouvre et se ferme à son
-    /// clic, se ferme aussi d'un clic ailleurs ou d'Échap. Le contenu reçoit l'application.
+    /// Un petit panneau de réglages posé contre la case `resp` d'une barre de la vue : au-dessus dans la barre du bas, dessous
+    /// dans celle du haut (`sens_du_panneau`). Il s'ouvre et se ferme à son clic, se ferme aussi d'un clic ailleurs ou d'Échap.
+    /// Le contenu reçoit l'application.
     pub(crate) fn panneau_de_case(&mut self, ui: &mut egui::Ui, id: &str, resp: &egui::Response, largeur: f32, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
         let pid = ui.id().with(("panneau_de_case", id));
         if resp.clicked() {
             ui.memory_mut(|m| m.toggle_popup(pid));
         }
-        egui::popup::popup_above_or_below_widget(ui, pid, resp, egui::AboveOrBelow::Above, egui::popup::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        let sens = sens_du_panneau(resp.rect, ui.ctx().screen_rect());
+        egui::popup::popup_above_or_below_widget(ui, pid, resp, sens, egui::popup::PopupCloseBehavior::CloseOnClickOutside, |ui| {
             ui.set_min_width(largeur);
             contenu(self, ui);
         });
@@ -414,9 +423,22 @@ impl App {
         self.status = format!("Vue {}.", if on { "caméra" } else { "du plateau" });
     }
 
-    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et la règle des
-    /// guides de perspective. Le format, les zones de sécurité et les repères de composition sont à gauche de la barre
-    /// sous le dessin (Cadrage et l'icône des repères). En Espace 3D, ses outils.
+    /// Ajuster à la fenêtre, le zoom, la rotation et le miroir de la vue : comment on regarde, dans la barre au-dessus du
+    /// dessin, juste après la règle (partie 160 ; avant, sous le dessin). Le zoom et la rotation ouvrent leur petit panneau
+    /// dessous.
+    pub(crate) fn regarder_reglages(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
+        self.zoom_reglage(ui);
+        self.rotation_reglage(ui);
+        self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
+    }
+
+    /// La barre au-dessus du dessin : comment on regarde. Les trois vues (le plateau, ce que filme la caméra, l'Espace 3D),
+    /// la règle des guides de perspective, puis ajuster, zoom, rotation et miroir (partie 160) ; au bout, les pastilles des
+    /// brosses dédiées. Le format, les zones de sécurité, les repères de composition, la pelure, la table lumineuse et le
+    /// passe-partout sont dans la barre sous le dessin. En Espace 3D, ses options de vue (ses outils sont en tête de la barre
+    /// d'outils, `toolbars.rs`).
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
@@ -434,17 +456,17 @@ impl App {
             if self.case_icone(ui, ph::VIDEO_CAMERA, Some(cam), "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
                 self.set_camera_view(true);
             }
-            if self
-                .case_icone(
-                    ui,
-                    ph::CUBE,
-                    Some(in3d),
-                    "Espace 3D",
-                    "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
-                    "espace3d.basculer",
-                )
-                .clicked()
-            {
+            let cube = self.case_icone(
+                ui,
+                ph::CUBE,
+                Some(in3d),
+                "Espace 3D",
+                "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
+                "espace3d.basculer",
+            );
+            // (La fenêtre de l'aide de l'Espace 3D se pose à côté de cette icône : `aideflottante.rs`.)
+            crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ESPACE3D, cube.rect);
+            if cube.clicked() {
                 self.run_action("espace3d.basculer");
             }
             // La vue 3D à côté de la feuille (`espace3dcote.rs`) ; depuis le plein écran, elle y remet la vue.
@@ -466,10 +488,22 @@ impl App {
             ui.separator();
             ui.add_space(crate::barres::MARGE_TRAIT);
             if in3d {
+                // (Sans barre d'outils à l'écran, les outils de la vue restent ici, devant ses options.)
+                if !self.outils_3d_dans_la_barre() {
+                    self.espace3d_outils(ui);
+                    ui.add_space(crate::barres::MARGE_TRAIT);
+                    ui.separator();
+                    ui.add_space(crate::barres::MARGE_TRAIT);
+                }
                 self.espace3d_tools(ui);
                 return;
             }
             self.guides_button(ui);
+            // Comment on regarde (partie 160) : ajuster, zoom, rotation, miroir, montés de la barre du bas dans le même ordre.
+            ui.add_space(crate::barres::MARGE_TRAIT);
+            ui.separator();
+            ui.add_space(crate::barres::MARGE_TRAIT);
+            self.regarder_reglages(ui);
             // Les pastilles (classique, personnages, couleurs neutres, brosses du décor, « + », panneau Brosses dédiées) : à l'extrémité
             // droite de la barre, rangée de cases de la même hauteur et des mêmes écarts que les icônes ; trop étroite, elle défile.
             self.pastilles_rangee(ui);

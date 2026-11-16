@@ -934,6 +934,28 @@ pub fn densifier_avec(style: &mut egui::Style, plex: bool) {
     .into();
 }
 
+/// Taille du texte dans les panneaux de la colonne (partie 161, la maquette : 11 pixels) ; celle des petits textes.
+pub const TEXTE_PANNEAU: f32 = 11.5;
+pub const PETIT_PANNEAU: f32 = 10.0;
+/// Écart vertical entre deux lignes d'un panneau de la colonne (3 ailleurs).
+pub const LIGNE_PANNEAU: f32 = 2.0;
+
+/// Les panneaux de la colonne, plus denses que le reste de l'interface (partie 161, Anthony : « Amincis comme sur la
+/// maquette ») : texte un peu plus petit, lignes plus serrées. Les couleurs ne changent pas. Le dessin et la bande du bas
+/// gardent la densité de `densifier`.
+pub fn densifier_panneau(style: &mut egui::Style) {
+    style.spacing.item_spacing.y = LIGNE_PANNEAU;
+    style.spacing.button_padding.y = 1.0;
+    for (ts, font) in style.text_styles.iter_mut() {
+        match ts {
+            TextStyle::Body | TextStyle::Button => font.size = TEXTE_PANNEAU,
+            TextStyle::Small => font.size = PETIT_PANNEAU,
+            TextStyle::Monospace => font.size = font.size.min(TEXTE_PANNEAU),
+            _ => {}
+        }
+    }
+}
+
 /// Segoe UI (police de Windows) en tête de la famille proportionnelle, si elle est là : les
 /// polices d'egui restent derrière (caractères manquants, icônes). Vrai si elle a été ajoutée.
 pub fn polices(fonts: &mut FontDefinitions) -> bool {
@@ -943,6 +965,14 @@ pub fn polices(fonts: &mut FontDefinitions) -> bool {
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "segoe-ui".into());
     true
 }
+
+/// Hauteur de la bande des poignées en haut de chaque groupe de panneaux : 26 points à la partie 160 (la hauteur des onglets écrits
+/// d'avant), 8 depuis la partie 161 (« Amincis comme sur la maquette » : plus de bande vide au-dessus des panneaux). Les deux essais
+/// qui la retenaient (la planche à la japonaise, la poignée de la caméra en Espace 3D) visaient trop juste ; ils sont refaits
+/// (`docs/INTERFACE.md`, 161.2).
+pub const POIGNEE_ONGLET: f32 = 8.0;
+/// Largeur de la poignée d'un panneau dans cette bande.
+pub const LARGEUR_POIGNEE: f32 = 30.0;
 
 /// Onglets et séparations des panneaux (egui_dock) : barres d'onglets, onglet actif de la couleur
 /// du panneau, séparations du fond qui prennent l'accent au survol.
@@ -958,7 +988,10 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s.separator.color_dragged = p.accent_texte;
     s.tab_bar.bg_fill = p.entete;
     s.tab_bar.hline_color = p.entete;
-    s.tab_bar.height = 26.0;
+    // Partie 160 : plus de noms écrits en haut des groupes, la barre des panneaux (bord droit) sert d'onglets. Il reste une
+    // poignée par panneau, fine depuis la partie 161, qu'on glisse pour le déplacer ou le faire flotter (clic droit : dans une fenêtre à part).
+    s.tab_bar.height = POIGNEE_ONGLET;
+    s.tab.minimum_width = Some(LARGEUR_POIGNEE);
     // Des onglets qui ne tiennent plus dans un panneau rétréci : une petite barre pour les
     // atteindre (Anthony, 2026-10-17 : « toujours utilisables même lorsqu'ils sont réduits »).
     s.tab_bar.show_scroll_bar_on_overflow = true;
@@ -977,6 +1010,8 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s.tab.active_with_kb_focus = s.tab.active.clone();
     s.tab.focused_with_kb_focus = s.tab.focused.clone();
     s.tab.hline_below_active_tab_name = false;
+    // Marges du corps des panneaux réduites (partie 161) : 5 points sur les côtés, 3 en haut et en bas (6 partout avant).
+    s.tab.tab_body.inner_margin = egui::Margin { left: 5, right: 5, top: 3, bottom: 3 };
     s.tab.tab_body.bg_fill = p.panneau;
     s.tab.tab_body.stroke = Stroke::NONE;
     s.tab.tab_body.corner_radius = CornerRadius::ZERO;

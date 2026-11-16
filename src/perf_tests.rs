@@ -343,6 +343,8 @@ impl Banc {
             input.viewports.entry(ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
         }
         let t0 = Instant::now();
+        // (Ce que cette image pose à l'écran, pour les essais de la partie 160 : `bulles::vus`.)
+        crate::bulles::vus::vider();
         let app = &mut self.app;
         if self.crochet {
             eframe::App::raw_input_hook(app, &self.ctx, &mut input);
@@ -821,7 +823,8 @@ fn a_zoomed_timeline_keeps_its_thumbnails_instead_of_remaking_them() {
     b.attendre_vignettes();
     let made = b.app.layer_thumbs.len();
     let cels = b.app.doc.cels.len();
-    assert!(made > 20, "la timeline zoomée doit montrer des miniatures ({made})");
+    // (Partie 160 : seul le calque courant a sa ligne complète, avec les miniatures de ses blocs ; les autres ont une ligne fine.)
+    assert!(made > 8, "la timeline zoomée doit montrer des miniatures ({made})");
     assert!(made < cels / 2, "{made} miniatures pour {cels} dessins : seulement les blocs visibles");
     let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
     let steady: Vec<Mesure> = (0..12).map(|k| b.image(bouge(k, zone), 1.0 / 60.0)).collect();

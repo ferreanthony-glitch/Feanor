@@ -18,11 +18,15 @@ use crate::theme;
 
 /// Largeur de l'en-tête des calques.
 pub(crate) const HEAD_W: f32 = 312.0;
-/// Hauteur d'une ligne réduite (une ligne de texte).
+/// Hauteur des lignes de la caméra, des notes et du son sous les calques (une ligne de texte ; c'était aussi celle d'une ligne
+/// de calque réduite à la main, avant la partie 160).
 pub(crate) const ROW_SMALL: f32 = 24.0;
-/// Hauteur d'une ligne complète : nom, réglages, opacité et mode.
+/// Hauteur d'une ligne fine (partie 160) : tout calque qui n'est pas le calque courant, et tout dossier qui ne l'est pas
+/// (nom, œil, verrou, effets ; le triangle d'un dossier).
+pub(crate) const ROW_FINE: f32 = 22.0;
+/// Hauteur d'une ligne complète, celle du calque courant : nom, réglages, opacité et mode.
 pub(crate) const ROW_FULL: f32 = 56.0;
-/// Hauteur de la ligne d'un dossier (13b-5) : nom ; afficher, verrouiller, opacité.
+/// Hauteur de la ligne d'un dossier courant (13b-5) : nom ; afficher, verrouiller, opacité.
 pub(crate) const ROW_FOLDER: f32 = 40.0;
 /// Décalage des lignes des calques rangés dans un dossier.
 const INDENT: f32 = 12.0;
@@ -39,8 +43,10 @@ pub(crate) struct Row {
 }
 
 /// Lignes des calques, du plus haut au plus bas ; les calques d'un groupe caché de la timeline
-/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas.
-pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup]) -> Vec<Row> {
+/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas. Le calque courant `cur` a toujours sa ligne complète,
+/// tous les autres une ligne fine (partie 160, automatique : le drapeau « réduit » d'un calque ne compte plus ici ; celui d'un
+/// dossier dit toujours s'il est fermé).
+pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup], cur: usize) -> Vec<Row> {
     let closed: Vec<u64> = layers.iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
     let mut top = 0.0;
     layers
@@ -50,10 +56,10 @@ pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup]) -> Vec<Row> {
         .filter(|(_, l)| groups.get(l.group as usize).is_none_or(|g| g.shown))
         .filter(|(_, l)| l.parent.is_none_or(|p| !closed.contains(&p)))
         .map(|(li, l)| {
-            let h = match (l.folder, l.collapsed) {
-                (true, _) => ROW_FOLDER,
-                (false, true) => ROW_SMALL,
-                (false, false) => ROW_FULL,
+            let h = match (l.folder, li == cur) {
+                (true, true) => ROW_FOLDER,
+                (false, true) => ROW_FULL,
+                (_, false) => ROW_FINE,
             };
             let row = Row { li, top, h };
             top += h;
@@ -212,7 +218,7 @@ impl App {
     /// L'en-tête des calques, à gauche de la grille de la timeline : bande du haut (`header_h`),
     /// une ligne par calque, puis la place des lignes caméra et son (`below`).
     pub(crate) fn timeline_heads(&mut self, ui: &mut Ui, header_h: f32, below: f32) -> Rect {
-        let rows = rows_of(self.layers(), &self.doc.groups);
+        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
         let size = vec2(HEAD_W, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
@@ -266,40 +272,13 @@ impl App {
                 );
             }
         }
-        // Nouveau dossier (13b-5).
-        let r = Rect::from_min_size(pos2(rect.right() - 88.0, rect.top()), vec2(20.0, header_h));
-        let resp = icon_at(ui, r, ph::FOLDER_PLUS, theme::texte_doux());
-        if self.aide(resp, "Nouveau dossier", "Un dossier de calques vide ; glisser des calques dedans, ou menu ☰ > Dossiers.", "dossier.nouveau").clicked() {
-            self.new_folder();
-        }
-        // Groupes de couleur (13b-4).
-        let r = Rect::from_min_size(pos2(rect.right() - 66.0, rect.top()), vec2(20.0, header_h));
-        let resp = icon_at(ui, r, ph::SWATCHES, theme::texte_doux());
-        if self.aide(resp, "Groupes de calques", "Noms, couleurs, et quels groupes la timeline montre.", "groupes.editer").clicked() {
-            self.groups_window = !self.groups_window;
-        }
-        // Menu des opérations sur les calques.
-        let r = Rect::from_min_size(pos2(rect.right() - 44.0, rect.top()), vec2(20.0, header_h));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("menu_calques_timeline"));
-        let button = egui::Button::new(RichText::new(ph::LIST).size(13.0).color(theme::texte_doux())).frame(false);
-        let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_ops_menu(ui)).response;
-        bulle(
-            resp,
-            "Opérations sur les calques",
-            "Nouveau, dupliquer, supprimer, fusionner, choisir, afficher, pochoirs… Ctrl + clic sur une ligne pour choisir plusieurs calques, Maj + clic pour une suite.",
-            "",
-        );
-        // Tout réduire / tout agrandir.
-        let all_small = self.layers().iter().all(|l| l.collapsed);
-        let r = Rect::from_min_size(pos2(rect.right() - 22.0, rect.top()), vec2(20.0, header_h));
-        let icon = if all_small { ph::ARROWS_OUT_LINE_VERTICAL } else { ph::ARROWS_IN_LINE_VERTICAL };
-        let resp = icon_at(ui, r, icon, theme::texte_doux());
-        let what = if all_small { "Agrandir toutes les lignes" } else { "Réduire toutes les lignes" };
-        if bulle(resp, what, "Lignes complètes (réglages, opacité, mode) ou réduites à leur nom.", "").clicked() {
-            for l in self.layers_mut() {
-                l.collapsed = !all_small;
-            }
-            self.modified = true;
+        // (Partie 160 : Nouveau dossier, Groupes de calques et les opérations sur les calques sont dans la barre d'actions, en bas
+        // de la colonne, `barrecalques.rs` ; « Tout réduire / tout agrandir » n'existe plus : le calque courant a toujours sa ligne
+        // complète, les autres une ligne fine.)
+        // Un clic dans la colonne lui donne la main : après une copie d'effets, Ctrl+V les colle sur le calque cliqué (`fxcopie.rs`,
+        // comme le faisait le panneau Calques).
+        if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(rect) {
+            self.take_layers_pane_focus();
         }
 
         let top = rect.top() + header_h;
@@ -370,7 +349,11 @@ impl App {
                 in_folder: l.parent.is_some(),
             }
         };
-        let current = li == self.cur_layer;
+        // (La caméra du plan choisie seule dans la vue Espace 3D : c'est sa rangée que la timeline montre choisie, et plus
+        // aucune rangée de calque, `espace3dui.rs`, partie 152.)
+        let camera_seule = self.e3_camera_seule();
+        let current = self.calque_montre_courant(li);
+        let choisi = self.is_chosen_layer(li) && !camera_seule;
         let visuals = ui.visuals().clone();
         // Calque rangé dans un dossier : la ligne est décalée, un trait la relie à son dossier.
         let rect = if h.in_folder || h.sous_trait {
@@ -383,7 +366,7 @@ impl App {
         let r = rect.shrink2(vec2(0.0, 1.0));
         let painter = ui.painter_at(r);
         // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
-        let bg = match (current, self.is_chosen_layer(li)) {
+        let bg = match (current, choisi) {
             (true, _) => theme::surface_active(crate::theme::accent(), 1.0),
             (false, true) => theme::surface_active(crate::theme::accent(), 0.45),
             (false, false) => theme::etiquette(),
@@ -394,7 +377,7 @@ impl App {
             painter.rect_stroke(r, 2.0, Stroke::new(1.5_f32, crate::theme::accent()), egui::StrokeKind::Inside);
         }
         // Plusieurs calques choisis : un cadre à chacun, plus épais au courant (qui garde le plein).
-        if !self.layer_sel.is_empty() && self.is_chosen_layer(li) {
+        if !self.layer_sel.is_empty() && choisi {
             let width = if current { 2.0_f32 } else { 1.25_f32 };
             painter.rect_stroke(r, 2.0, Stroke::new(width, crate::theme::accent()), egui::StrokeKind::Inside);
         }
@@ -416,12 +399,17 @@ impl App {
         // Le fond de la ligne : choisir, glisser, menu, double-clic sur le nom. Posé avant les
         // boutons, qui restent au-dessus.
         let resp = ui.interact(r, egui::Id::new(("tete_calque", h.id)), Sense::click_and_drag());
-        let x0 = match (h.folder, h.collapsed) {
+        // Partie 160 : la ligne fine (tout calque ou dossier qui n'est pas le courant) ou la ligne complète, celle du courant
+        // (`rows_of`).
+        let fine = li != self.cur_layer;
+        let x0 = match (h.folder, fine) {
             (true, _) => r.left() + 22.0,
             (false, true) => r.left() + 40.0,
             (false, false) => r.left() + 74.0,
         };
-        let name_rect = Rect::from_min_max(pos2(x0 + 14.0, r.top() + 2.0), pos2(r.right() - 22.0, r.top() + 20.0_f32.min(r.height())));
+        // (Sur la ligne fine d'un dossier, l'œil, le cadenas et le nombre de ses calques sont à droite du nom.)
+        let fin_du_nom = if h.folder && fine { r.right() - 72.0 } else { r.right() - 22.0 };
+        let name_rect = Rect::from_min_max(pos2(x0 + 14.0, r.top() + 2.0), pos2(fin_du_nom, r.top() + 20.0_f32.min(r.height())));
         if resp.clicked() {
             let m = ui.input(|i| i.modifiers);
             self.click_layer_head(li, m.command, m.shift);
@@ -438,24 +426,26 @@ impl App {
         }
         resp.context_menu(|ui| self.layer_head_menu(ui, li));
 
-        // Triangle : réduire / agrandir la ligne ; pour un dossier, montrer ou cacher ses calques.
-        let caret = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 2.0), vec2(16.0, 18.0));
-        let resp = icon_at(ui, caret, if h.collapsed { ph::CARET_RIGHT } else { ph::CARET_DOWN }, off.gamma_multiply(2.0));
-        let (what, why) = match (h.folder, h.collapsed) {
-            (true, true) => ("Ouvrir le dossier", "Montrer les lignes de ses calques."),
-            (true, false) => ("Fermer le dossier", "Cacher les lignes de ses calques (ils restent à l'image)."),
-            (false, true) => ("Agrandir la ligne", "Montrer les réglages du calque."),
-            (false, false) => ("Réduire la ligne", "Cacher les réglages du calque."),
-        };
-        if bulle(resp, what, why, "").clicked() {
-            self.layers_mut()[li].collapsed = !h.collapsed;
-            self.modified = true;
+        // Triangle d'un dossier : montrer ou cacher ses calques. (Plus de triangle sur les calques, partie 160 : leur ligne est
+        // complète quand ils sont le calque courant, fine sinon, d'elle-même.)
+        if h.folder {
+            let caret = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 2.0), vec2(16.0, 18.0));
+            let resp = icon_at(ui, caret, if h.collapsed { ph::CARET_RIGHT } else { ph::CARET_DOWN }, off.gamma_multiply(2.0));
+            let (what, why) = if h.collapsed {
+                ("Ouvrir le dossier", "Montrer les lignes de ses calques.")
+            } else {
+                ("Fermer le dossier", "Cacher les lignes de ses calques (ils restent à l'image).")
+            };
+            if bulle(resp, what, why, "").clicked() {
+                self.layers_mut()[li].collapsed = !h.collapsed;
+                self.modified = true;
+            }
         }
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
         let line1 = r.top() + 11.0;
         let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else if h.annotation { theme::palette().dessin_annotation } else if h.unie { theme::palette().dessin_unie } else { theme::couleur_calque(h.kind, h.couleur) };
-        if h.collapsed && !h.folder {
+        if fine && !h.folder {
             let eye = Rect::from_min_size(pos2(r.left() + 20.0, r.top() + 2.0), vec2(ICON_W, 18.0));
             self.eye_button(ui, eye, li, h.visible, fg);
         }
@@ -477,15 +467,25 @@ impl App {
             let done = self.layer_rename_field(&mut child, name_rect.width());
             self.finish_layer_rename(done);
         } else {
-            painter.with_clip_rect(name_rect).text(
+            let nom = painter.with_clip_rect(name_rect).text(
                 pos2(name_rect.left(), line1),
                 Align2::LEFT_CENTER,
                 &h.name,
                 FontId::proportional(13.0),
                 fg,
             );
+            // Le calque courant : ce que sa ligne du panneau Calques disait sous son nom (partie 160) : « sous <trait> » pour un calque
+            // de couleur, le nombre de couleurs d'un calque de trait.
+            if !fine && !h.folder {
+                if let Some(petit) = self.sous_le_nom(li) {
+                    let at = pos2(nom.right() + 8.0, line1);
+                    let resp = ui.interact(Rect::from_min_max(pos2(at.x, r.top() + 2.0), pos2(name_rect.right(), r.top() + 20.0)), egui::Id::new(("sous_le_nom", h.id)), Sense::hover());
+                    painter.with_clip_rect(name_rect).text(at, Align2::LEFT_CENTER, &petit.0, FontId::proportional(10.5), off.gamma_multiply(2.2));
+                    bulle(resp, &petit.0, petit.1, "");
+                }
+            }
         }
-        if h.collapsed && !h.folder {
+        if fine && !h.folder {
             let lock = Rect::from_min_size(pos2(r.right() - 22.0, r.top() + 2.0), vec2(20.0, 18.0));
             self.lock_button(ui, lock, li, h.locked, shade(h.locked));
             let fx = Rect::from_min_size(pos2(r.right() - 42.0, r.top() + 2.0), vec2(20.0, 18.0));
@@ -494,6 +494,17 @@ impl App {
                     self.toggle_layer_fx(li);
                 }
             }
+            return;
+        }
+        // La ligne fine d'un dossier (partie 160) : à droite du nom, le nombre de ses calques, son œil et son cadenas ; son opacité
+        // est sur sa ligne complète, quand il est le calque courant, et au clic droit (Apparence).
+        if h.folder && fine {
+            let lock = Rect::from_min_size(pos2(r.right() - 22.0, r.top() + 2.0), vec2(20.0, 18.0));
+            self.lock_button(ui, lock, li, h.locked, shade(h.locked));
+            let eye = Rect::from_min_size(pos2(r.right() - 42.0, r.top() + 2.0), vec2(20.0, 18.0));
+            self.eye_button(ui, eye, li, h.visible, fg);
+            let n = h.children;
+            painter.text(pos2(r.right() - 46.0, line1), Align2::RIGHT_CENTER, n.to_string(), FontId::monospace(10.5), off.gamma_multiply(2.0));
             return;
         }
         let opts = Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 2.0), vec2(18.0, 18.0));
@@ -520,16 +531,24 @@ impl App {
         let tw = 48.0;
         let th = (tw * fr.height() / fr.width().max(1.0)).clamp(12.0, r.height() - 22.0);
         let thumb = Rect::from_min_size(pos2(r.left() + 20.0, r.top() + 20.0 + (r.height() - 20.0 - th) * 0.5), vec2(tw, th));
-        match h.cel.and_then(|c| self.layer_thumb(ui.ctx(), c)) {
-            Some(t) => {
-                let tint = if h.visible { Color32::WHITE } else { Color32::from_gray(120) };
-                painter.image(t.id(), thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
+        // Un calque Couleur unie : sa couleur à la place de la vignette, qu'un clic change (partie 160 : elle était sous l'opacité du
+        // panneau Calques).
+        if h.unie {
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(thumb).id_salt(("unie_calque", h.id)));
+            child.spacing_mut().interact_size = thumb.size();
+            self.couleur_unie_champ(&mut child, li);
+        } else {
+            match h.cel.and_then(|c| self.layer_thumb(ui.ctx(), c)) {
+                Some(t) => {
+                    let tint = if h.visible { Color32::WHITE } else { Color32::from_gray(120) };
+                    painter.image(t.id(), thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
+                }
+                None => {
+                    painter.rect_filled(thumb, 0.0, theme::controle());
+                }
             }
-            None => {
-                painter.rect_filled(thumb, 0.0, theme::controle());
-            }
+            painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
         }
-        painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
 
         // Réglages en icônes.
         let y2 = r.top() + 20.0;
@@ -584,7 +603,7 @@ impl App {
         let resp = bulle(
             resp,
             "Verrouiller la position",
-            "L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.",
+            "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.",
             "",
         );
         if resp.clicked() {
@@ -608,16 +627,36 @@ impl App {
             }
         }
 
-        // Opacité : une barre qu'on tire.
+        // Ce que le panneau Calques montrait encore du calque courant (partie 160) : l'aplat sous le trait et le maillon de la
+        // planche-mère, au bout des réglages.
+        {
+            let bout = Rect::from_min_max(pos2(slot(10).left(), y2), pos2(r.right() - 2.0, y2 + 17.0));
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bout).id_salt(("bout_calque", h.id)).layout(Layout::left_to_right(Align::Center)));
+            child.spacing_mut().item_spacing.x = 2.0;
+            child.spacing_mut().interact_size.y = 16.0;
+            child.spacing_mut().button_padding = vec2(1.0, 0.0);
+            child.set_clip_rect(bout.intersect(ui.clip_rect()));
+            if let Some(resp) = self.fond_layer_button(&mut child, li, true) {
+                if resp.clicked() {
+                    self.toggle_fond(li);
+                }
+            }
+            self.maillon_partage(&mut child, li);
+        }
+
+        // Opacité : une barre qu'on tire ; à sa droite, le losange des clés d'opacité (partie 160 : il était à côté de l'opacité du
+        // panneau Calques).
         let y3 = r.top() + 38.0;
-        let bar = Rect::from_min_size(pos2(x0, y3 + 2.0), vec2(108.0, 13.0));
+        let bar = Rect::from_min_size(pos2(x0, y3 + 2.0), vec2(92.0, 13.0));
         self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+        let losange = Rect::from_min_size(pos2(bar.right() + 2.0, y3), vec2(16.0, 17.0));
+        self.losange_opacite(ui, losange, fg, off);
 
         // Mode de fusion, avec précédent / suivant.
         let modes = BlendMode::ALL;
         let at = modes.iter().position(|m| *m == h.blend).unwrap_or(0);
         let mut mode = h.blend;
-        let prev = Rect::from_min_size(pos2(bar.right() + 4.0, y3), vec2(14.0, 17.0));
+        let prev = Rect::from_min_size(pos2(losange.right() + 2.0, y3), vec2(14.0, 17.0));
         if bulle(icon_at(ui, prev, ph::CARET_LEFT, fg), "Mode précédent", "", "").clicked() {
             mode = modes[(at + modes.len() - 1) % modes.len()];
         }
@@ -669,11 +708,22 @@ impl App {
         }
         let resp = bulle(resp, name, description, "");
         if self.edited(&resp) {
-            let f = self.cur_frame;
-            self.layers_mut()[li].set_opacity_at(f, value);
+            // (Plusieurs calques choisis : tous prennent cette valeur, comme dans l'ancien panneau Calques, `choixtout.rs`.)
+            self.regler_opacite(li, value);
             // (Un réglage : aucune tuile n'est renvoyée à la carte graphique pendant le geste.)
             self.renderer.invalidate_params();
         }
+    }
+
+    /// Ce que la ligne du calque `li` dit en petit après son nom, quand il est le calque courant (partie 160 : c'était sous son nom
+    /// dans le panneau Calques), et sa bulle : « sous <trait> » pour un calque de couleur lié, le nombre de couleurs d'un trait.
+    pub(crate) fn sous_le_nom(&self, li: usize) -> Option<(String, &'static str)> {
+        let layers = self.layers();
+        if let Some(ti) = crate::calquecouleur::trait_de(layers, li) {
+            return Some((format!("{} sous {}", ph::LINK_SIMPLE, layers[ti].name), "Calque de couleur : ses images suivent celles du calque de trait. On colorie dessous, le trait reste intact."));
+        }
+        let n = crate::calquecouleur::couleurs_de(layers, li).len();
+        (n > 0).then(|| (format!("{} {n}", ph::PALETTE), "Ce calque de trait porte des calques de couleur, rangés juste dessous."))
     }
 
     pub(crate) fn eye_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, visible: bool, color: Color32) {

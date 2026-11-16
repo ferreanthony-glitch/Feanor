@@ -79,7 +79,7 @@ fn a_card_image_redone_by_pieces_is_the_full_image_pixel_for_pixel() {
             fill_rect(&mut r, x0, y0, x1, y1, c);
             match changement(&cliche, &r, LARGEUR_CARTE) {
                 Changement::Zone(z) => {
-                    let morceau = render::cel_image_region(&r, LARGEUR_CARTE, z);
+                    let morceau = render::cel_image_zone(&r, LARGEUR_CARTE, z);
                     assert_eq!(morceau.size, [z[2] - z[0], z[3] - z[1]]);
                     applique(&mut image, z, &morceau);
                     let size = render::cel_image_size(&r, LARGEUR_CARTE);
@@ -226,7 +226,9 @@ fn a_gesture_belongs_to_the_view_where_it_starts() {
     b.app.espace3d.cam = Some(crate::espace3dmath::Orbite { target: [0.0, 0.0, 0.0], azimuth: 0.0, elevation: 0.0, distance: 12.0, focal: 35.0 });
     b.chauffer(2);
     let vue = b.app.espace3d.rect;
-    let centre = vue.center();
+    // (Un peu à droite du centre, toujours sur la carte rouge : au centre même se trouve la caméra du plan, qu'on peut
+    // choisir aussi depuis la partie 159.)
+    let centre = vue.center() + eframe::egui::vec2(vue.width() * 0.06, vue.height() * 0.04);
     b.image(vec![Event::PointerMoved(centre)], 0.02);
     b.image(vec![press(centre, true)], 0.02);
     b.image(vec![press(centre, false)], 0.02);
@@ -399,7 +401,7 @@ fn a_stroke_with_the_side_view_open_stays_within_the_frame_budget() {
     let t = std::time::Instant::now();
     for _ in 0..10 {
         if let Changement::Zone(z) = changement(&cliche, &r, LARGEUR_CARTE) {
-            let _ = render::cel_image_region(&r, LARGEUR_CARTE, z);
+            let _ = render::cel_image_zone(&r, LARGEUR_CARTE, z);
         }
     }
     let morceau = t.elapsed().as_secs_f64() * 100.0;

@@ -185,11 +185,11 @@ fn the_aplat_is_activated_from_the_layer_only() {
     }
     // L'action de bascule du trait / fond n'existe plus.
     assert!(crate::keymap::ACTIONS.iter().all(|a| a.id != "pinceau.strate_fond"));
-    // Le bouton de la ligne du calque : un par calque de dessin (plus de bouton dans les commandes : l'aplat du calque
-    // courant est dans le menu « … », `panneaux_tests.rs`).
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
+    // Le bouton de la ligne du calque (partie 160 : le panneau Calques n'existe plus ; c'est la ligne complète du calque courant
+    // de la timeline qui le porte, les lignes fines des autres calques n'ont que le nom, l'œil, le verrou et les effets).
+    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 3, "{textes:?}");
+    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 1, "{textes:?}");
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn the_layer_menu_adds_and_removes_the_aplat() {
     let mut app = app_abc("menu");
     let mut ecran = Ecran::new();
     // Le clic droit du calque B (qui n'est pas le courant) : « Ajouter un aplat ».
-    let mut menu_b = |a: &mut App, ui: &mut egui::Ui| a.layer_full_menu(ui, 1, false);
+    let mut menu_b = |a: &mut App, ui: &mut egui::Ui| a.layer_head_menu(ui, 1);
     let textes = ecran.chauffer(&mut app, 4, &mut menu_b);
     assert!(exact(&textes, "Retirer l'aplat").is_none(), "{textes:?}");
     let (_, bouton) = exact(&textes, "Ajouter un aplat").expect("l'entrée du menu").clone();
@@ -241,100 +241,48 @@ fn the_old_actions_still_toggle_the_aplat_of_the_layers() {
     }
 }
 
-// ------------------------------------------------------------------------------------ la sous-ligne
+// ------------------------------------------------------------------------------------ la sous-ligne (retirée, partie 160)
 
 #[test]
-fn the_sub_row_is_thin_and_only_in_the_layers_panel() {
+fn the_sub_row_is_gone_and_the_aplat_settings_stay_at_the_layer_menu() {
+    // Anthony, partie 160 : « On enlève dessiner dans l'aplat. » Le panneau Calques n'existe plus, et sa sous-ligne n'est recréée
+    // ni dans la timeline ni dans la bande des plans.
     let mut app = app_abc("souslignes");
     let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
-    let sans = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(exact(&sans, "Aplat").is_none(), "pas d'aplat, pas de sous-ligne : {sans:?}");
-    let y = |t: &[(String, Rect)], nom: &str| exact(t, nom).unwrap_or_else(|| panic!("{nom} : {t:?}")).1.center().y;
-    let ecart_sans = y(&sans, "B") - y(&sans, "C");
-    // Un aplat sur C : sa sous-ligne vient juste sous le rang de C, avant celui de B.
     app.toggle_fond(2);
-    let avec = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, sous) = exact(&avec, "Aplat").expect("la sous-ligne").clone();
-    assert!(sous.center().y > y(&avec, "C") && sous.center().y < y(&avec, "B"), "entre C et B : {avec:?}");
-    let ecart_avec = y(&avec, "B") - y(&avec, "C");
-    let en_plus = ecart_avec - ecart_sans;
-    assert!(en_plus > 8.0 && en_plus <= 24.0, "la sous-ligne est fine : {en_plus} px de plus qu'un rang (qui en fait {ecart_sans})");
-    assert!(en_plus * 2.0 <= ecart_sans + 2.0, "moins de la moitié d'un rang de calque ({en_plus} contre {ecart_sans})");
-    // Ni la timeline ni le montage n'ont de sous-ligne (on y voit pourtant les calques).
+    app.toggle_fond(1);
     let mut ui_timeline = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let timeline = ecran.chauffer(&mut app, 4, &mut ui_timeline);
     assert!(exact(&timeline, "C").is_some() && exact(&timeline, "B").is_some(), "la timeline montre bien les calques : {timeline:?}");
-    assert!(!contient(&timeline, "Aplat"), "{timeline:?}");
+    assert!(exact(&timeline, "Aplat").is_none(), "{timeline:?}");
     app.set_espace(crate::workspace::Espace::Montage);
     let mut ui_montage = |a: &mut App, ui: &mut egui::Ui| a.montage_panel(ui);
     let montage = ecran.chauffer(&mut app, 4, &mut ui_montage);
-    assert!(!contient(&montage, "Aplat"), "{montage:?}");
-    // Une sous-ligne par aplat : B aussi.
-    app.toggle_fond(1);
-    let deux = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(deux.iter().filter(|(t, _)| t.trim() == "Aplat").count(), 2);
-    // Retiré, elle part.
-    app.toggle_fond(1);
-    app.toggle_fond(2);
-    let plus = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(exact(&plus, "Aplat").is_none());
+    assert!(exact(&montage, "Aplat").is_none(), "{montage:?}");
+    // Les réglages de l'aplat (couleur, débord, trous), qui étaient au clic droit de la sous-ligne : au clic droit du calque,
+    // « Réglages de l'aplat », juste sous « Retirer l'aplat ».
+    let mut menu_b = |a: &mut App, ui: &mut egui::Ui| a.layer_head_menu(ui, 1);
+    let textes = ecran.chauffer(&mut app, 4, &mut menu_b);
+    let retirer = exact(&textes, "Retirer l'aplat").expect("« Retirer l'aplat »").1;
+    let reglages = textes.iter().find(|(t, _)| t.contains("Réglages de l'aplat")).unwrap_or_else(|| panic!("« Réglages de l'aplat » : {textes:?}")).1;
+    assert!(reglages.center().y > retirer.center().y, "sous « Retirer l'aplat »");
+    // Sans aplat, pas de réglages.
+    let mut menu_a = |a: &mut App, ui: &mut egui::Ui| a.layer_head_menu(ui, 0);
+    let textes = ecran.chauffer(&mut app, 4, &mut menu_a);
+    assert!(!contient(&textes, "Réglages de l'aplat"), "{textes:?}");
 }
 
 #[test]
-fn a_sub_row_follows_the_visibility_of_its_folder() {
-    let mut doc = Document::with_frame(64, 48, 24);
-    doc.panels[0].layers.clear();
-    doc.panels[0].set_length(6);
-    let folder = Layer::new_folder("Décors");
-    let mut layers = Vec::new();
-    for n in ["C1", "C2"] {
-        let cel = doc.new_cel(LayerKind::Vector);
-        let mut l = Layer::new(n, LayerKind::Vector);
-        l.frames = vec![Some(cel); 6];
-        l.parent = Some(folder.id);
-        layers.push(l);
-    }
-    layers.push(folder);
-    let cel = doc.new_cel(LayerKind::Vector);
-    let mut hors = Layer::new("Hors dossier", LayerKind::Vector);
-    hors.frames = vec![Some(cel); 6];
-    layers.push(hors);
-    crate::folders::normalize(&mut layers);
-    doc.panels[0].layers = layers;
-    let mut app = app_abc("dossier");
-    app.doc = doc;
-    app.cur_layer = 3;
-    app.toggle_fond(0);
-    let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
-    let ouvert = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(exact(&ouvert, "C1").is_some() && exact(&ouvert, "Aplat").is_some(), "{ouvert:?}");
-    // Le dossier fermé cache C1 et sa sous-ligne.
-    let fi = app.layers().iter().position(|l| l.folder).unwrap();
-    app.layers_mut()[fi].collapsed = true;
-    let ferme = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(exact(&ferme, "C1").is_none() && exact(&ferme, "Aplat").is_none(), "{ferme:?}");
-    // Mais le calque courant, lui, reste visible : sa sous-ligne aussi.
-    app.cur_layer = 0;
-    let courant = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert!(exact(&courant, "C1").is_some() && exact(&courant, "Aplat").is_some(), "{courant:?}");
-}
-
-#[test]
-fn clicking_the_sub_row_aims_the_drawing_at_the_aplat_and_the_layer_gives_the_line_back() {
+fn aiming_at_the_aplat_draws_in_it_and_the_layer_gives_the_line_back() {
+    // (La sous-ligne n'existe plus, partie 160 ; le moteur qui dessine dans l'aplat reste, « Peint sur l'aplat » s'en sert.)
     let mut app = app_abc("cible");
     app.toggle_fond(1);
     app.set_tool(Tool::Select);
-    let mut ecran = Ecran::new();
-    let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
-    let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert_eq!(app.cur_layer, 2);
     assert!(!app.aplat_en_cible());
-    // Un clic sur la sous-ligne de B : B devient courant, son aplat la cible, un outil qui dessine est pris.
-    let (_, sous) = exact(&textes, "Aplat").unwrap().clone();
+    // Viser l'aplat de B : B devient courant, son aplat la cible.
     let n0 = noms(&app).len();
-    let textes = ecran.cliquer(&mut app, sous.center(), &mut ui_calques);
+    app.select_aplat(1);
     assert_eq!(app.cur_layer, 1);
     assert!(app.aplat_en_cible(), "{}", app.status);
     assert_eq!(app.tool, Tool::Select, "l'outil Sélection reste : il prend les pixels de l'aplat (2026-10-28)");
@@ -344,10 +292,8 @@ fn clicking_the_sub_row_aims_the_drawing_at_the_aplat_and_the_layer_gives_the_li
     app.select_aplat(1);
     assert_eq!(app.tool, Tool::Brush, "une forme cède la place au pinceau");
     assert_eq!(noms(&app).len(), n0, "choisir la cible n'est pas une étape d'annulation");
-    assert!(contient(&textes, "Aplat"));
-    // Le même clic sur la ligne du calque B ramène au trait.
-    let (_, nom) = exact(&textes, "B").unwrap().clone();
-    ecran.cliquer(&mut app, nom.center(), &mut ui_calques);
+    // Un clic sur la ligne du calque B ramène au trait.
+    app.click_layer_head(1, false, false);
     assert_eq!(app.cur_layer, 1);
     assert!(!app.aplat_en_cible(), "le calque redonne le trait");
     // Cliquer l'aplat puis un autre calque : le trait aussi.

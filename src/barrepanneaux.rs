@@ -51,9 +51,11 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::ToolOptions, "vue.reglages", "Réglages de l'outil", "Taille, opacité et options de l'outil courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Personnages, "vue.personnages", "Brosses dédiées", "Les brosses dédiées : personnages du projet, classiques et décors, chacune avec sa couleur de trait et son aplat. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        // Le panneau « Espace 3D » (`espace3dpanneau.rs`, parties 150 et 152) : un onglet du groupe des réglages de l'outil.
+        entree(Pane::Espace3d, "vue.espace3d_panneau", "Panneau Espace 3D","Les réglages de la vue Espace 3D : les cartes (les calques du plan) et la caméra du plan. Un onglet à côté de Réglages : il passe devant quand la vue s'ouvre, et Réglages revient devant quand elle se ferme. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
-        entree(Pane::Layers, "vue.calques", "Calques", "Les calques du plan, leur mode et leur opacité. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        // (Plus d'icône Calques, partie 160 : les calques sont dans la colonne de la timeline ; l'action ue.calques la montre.)
         entree(Pane::Effects, "fx.panneau", "Effets", "La pile d'effets du calque courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Sheet, "vue.fiche", "Fiche du plan", "Textes, durée et caméra du plan. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::XSheet, "vue.feuille_exposition", "Feuille d'exposition", "Le plan image par image, calque par calque. Un clic l'ouvre ou le met devant, un autre le ferme."),
@@ -80,13 +82,15 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
 /// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
 /// - Storyboard, Animation et Montage : la bibliothèque de fichiers (explorer, aperçu des images, vidéos et sons).
+/// - Storyboard et Animation : le panneau Espace 3D (les réglages de la vue Espace 3D), qui est dans leur disposition
+///   d'origine, à côté de la couleur.
 ///
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
         Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
-        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History, Pane::Bibliotheque],
     }
 }
@@ -172,12 +176,37 @@ pub(crate) fn est_devant(state: &DockState<Pane>, pane: Pane) -> bool {
     }
 }
 
+/// Ce que l'icône d'un panneau montre dans la barre (partie 160 : elle remplace les onglets écrits).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EtatIcone {
+    /// Fermé : l'icône est plate.
+    Ferme,
+    /// Ouvert, caché derrière un autre onglet de son groupe : plate, avec un petit point.
+    Derriere,
+    /// Ouvert et visible : allumée.
+    Devant,
+}
+
 impl App {
+    /// Le panneau `pane` se voit-il (onglet actif de son groupe, ou fenêtre à part) ? Sans disposition encore, rien n'est caché.
+    pub(crate) fn panneau_devant(&self, pane: Pane) -> bool {
+        self.detached.iter().any(|d| d.panneau == pane) || self.dock.as_ref().is_none_or(|s| est_devant(s, pane))
+    }
+
+    /// L'état de l'icône de `pane` dans la barre des panneaux.
+    pub(crate) fn etat_dans_la_barre(&self, pane: Pane) -> EtatIcone {
+        match (self.pane_shown(pane), self.panneau_devant(pane)) {
+            (false, _) => EtatIcone::Ferme,
+            (true, false) => EtatIcone::Derriere,
+            (true, true) => EtatIcone::Devant,
+        }
+    }
+
     /// Ouvre, met devant ou ferme `pane` selon `regle_clic` (clic sur la barre, ou son action).
     pub(crate) fn clic_panneau(&mut self, pane: Pane) {
         let ouvert = self.pane_shown(pane);
         // Une fenêtre à part se voit toujours ; sans disposition encore, rien n'est caché.
-        let devant = self.detached.iter().any(|d| d.panneau == pane) || self.dock.as_ref().is_none_or(|s| est_devant(s, pane));
+        let devant = self.panneau_devant(pane);
         match regle_clic(ouvert, devant) {
             Clic::Ouvrir | Clic::Fermer => self.toggle_pane(pane),
             Clic::Avancer => self.show_pane(pane),
@@ -194,7 +223,14 @@ impl App {
     /// travail.
     pub(crate) fn panel_bar(&mut self, ui: &mut egui::Ui) {
         let animation = self.mode == Mode::Animation;
-        let groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
+        let mut groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
+        // (Le panneau Espace 3D n'a son icône que vue de la scène ouverte, partie 159 : hors d'elle, rien ne dit la 3D.)
+        if !self.espace3d_vue_ouverte() {
+            for g in &mut groupes {
+                g.retain(|e| e.pane != Pane::Espace3d);
+            }
+            groupes.retain(|g| !g.is_empty());
+        }
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
             for (g, groupe) in groupes.iter().enumerate() {
@@ -205,8 +241,14 @@ impl App {
                     ui.add_space(3.0);
                 }
                 for e in groupe {
-                    let on = self.pane_shown(e.pane);
-                    let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(on, RichText::new(e.pane.icon()).size(crate::barres::ICONE)));
+                    // Les onglets écrits ne sont plus là (partie 160) : l'icône allumée dit quel panneau est devant ; un panneau
+                    // ouvert mais caché derrière un autre a un petit point sous son icône.
+                    let etat = self.etat_dans_la_barre(e.pane);
+                    let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(etat == EtatIcone::Devant, RichText::new(e.pane.icon()).size(crate::barres::ICONE)));
+                    if etat == EtatIcone::Derriere {
+                        let c = resp.rect.center_bottom() - vec2(0.0, 3.0);
+                        ui.painter().circle_filled(c, 1.75, crate::theme::texte_doux());
+                    }
                     if self.aide(resp, e.nom, e.description, e.action).clicked() {
                         self.run_action(e.action);
                     }

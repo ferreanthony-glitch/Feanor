@@ -899,8 +899,10 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
     // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près ; sinon l'ordre de la pile.
-    let order = if panel.espace { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
-    let mut portees = crate::calqueffet::Portees::new(panel.espace);
+    // (Partie 159 : `Panel::ordre_distance`, ou un plan venu du format 55 en Espace 3D.)
+    let par_distance = panel.ordre_par_la_distance();
+    let order = if par_distance { crate::espace3d::ordre_par_distance(world, &panel.layers, &order, frame, repere) } else { order };
+    let mut portees = crate::calqueffet::Portees::new(par_distance);
     // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
     for &li in &order {
         let l = &panel.layers[li];
@@ -1208,35 +1210,32 @@ pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, t
 /// pixel) : texture des plans de la vue du plateau en 3D (9e).
 pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
     let [tw, th] = cel_image_size(raster, max_w);
-    cel_image_region(raster, max_w, [0, 0, tw, th])
+    cel_image_zone(raster, max_w, [0, 0, tw, th])
 }
 
-/// La taille de `cel_image(raster, max_w)`.
+/// La taille de l'image que `cel_image` fait de ce dessin, au plus large de `max_w` pixels.
 pub fn cel_image_size(raster: &Raster, max_w: usize) -> [usize; 2] {
     let (w, h) = (raster.width.max(1), raster.height.max(1));
     let tw = w.min(max_w.max(1));
-    let th = ((h as f32 * tw as f32 / w as f32).round() as usize).max(1);
-    [tw, th]
+    [tw, ((h as f32 * tw as f32 / w as f32).round() as usize).max(1)]
 }
 
-/// Le morceau `[x0, y0, x1, y1]` (pixels de l'image réduite, x1 et y1 exclus) de `cel_image(raster, max_w)`, pixel pour
-/// pixel le même : la vue 3D ne refait que la part d'une carte qu'un trait a touchée (`espace3dcote.rs`).
-pub fn cel_image_region(raster: &Raster, max_w: usize, region: [usize; 4]) -> ColorImage {
+/// Un morceau de l'image de `cel_image` : la zone `[x0, y0, x1, y1]` de ses pixels (bornes hautes exclues), mêmes
+/// pixels que l'image entière. Sert à rafraîchir seulement ce qu'un trait vient de changer (`espace3ddessin.rs`).
+pub fn cel_image_zone(raster: &Raster, max_w: usize, zone: [usize; 4]) -> ColorImage {
     let (w, h) = (raster.width.max(1), raster.height.max(1));
     let [tw, th] = cel_image_size(raster, max_w);
     let (sx, sy) = (w as f32 / tw as f32, h as f32 / th as f32);
-    let [x0, y0] = [region[0].min(tw), region[1].min(th)];
-    let [x1, y1] = [region[2].clamp(x0, tw), region[3].clamp(y0, th)];
-    let rw = (x1 - x0).max(1);
-    let rh = (y1 - y0).max(1);
-    let mut pixels = vec![Color32::TRANSPARENT; rw * rh];
-    if x1 == x0 || y1 == y0 {
-        return ColorImage { size: [rw, rh], pixels };
+    let (x0, y0) = (zone[0].min(tw), zone[1].min(th));
+    let (zw, zh) = (zone[2].min(tw).saturating_sub(x0), zone[3].min(th).saturating_sub(y0));
+    let mut pixels = vec![Color32::TRANSPARENT; zw * zh];
+    if pixels.is_empty() {
+        return ColorImage { size: [zw, zh], pixels };
     }
     const ROWS: usize = 16;
-    par_chunks(&mut pixels, rw * ROWS, |chunk, rows| {
+    par_chunks(&mut pixels, zw * ROWS, |chunk, rows| {
         for (k, px) in rows.iter_mut().enumerate() {
-            let (x, y) = (x0 + k % rw, y0 + chunk * ROWS + k / rw);
+            let (x, y) = (x0 + k % zw, y0 + chunk * ROWS + k / zw);
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 let c = sample(raster, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
@@ -1247,7 +1246,7 @@ pub fn cel_image_region(raster: &Raster, max_w: usize, region: [usize; 4]) -> Co
             *px = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
         }
     });
-    ColorImage { size: [rw, rh], pixels }
+    ColorImage { size: [zw, zh], pixels }
 }
 
 fn texture_options() -> TextureOptions {

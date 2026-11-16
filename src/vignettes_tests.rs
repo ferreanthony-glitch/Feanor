@@ -124,10 +124,15 @@ pub(crate) fn deux_sequences() -> Document {
     doc
 }
 
+/// Largeur de la fenêtre des essais de la planche (`ouvert`).
+pub(crate) const LARGEUR_D_ESSAI: u32 = 1282;
+
 /// La vue Vignettes ouverte sur `doc`, `colonnes` vignettes par ligne, une seule page, assez petites pour tenir à l'écran.
 pub(crate) fn ouvert(doc: Document, colonnes: usize) -> Banc {
-    // (940 de haut : la barre du bas de la planche, 30 points, prend sa place sans changer celle des essais d'avant.)
-    let mut b = banc_taille(doc, false, 1600, 940);
+    // (940 de haut : la barre du bas de la planche, 30 points, prend sa place sans changer celle des essais d'avant. 1 282 de large :
+    // depuis la partie 161, la colonne des panneaux garde 290 points et la planche prend le reste ; à cette largeur, la planche a
+    // celle qu'elle avait dans une fenêtre de 1 600 avec les deux colonnes d'avant, et les cases leur taille d'avant.)
+    let mut b = banc_taille(doc, false, LARGEUR_D_ESSAI, 940);
     b.app.board_view = BoardView::Panels;
     b.app.layout.board_columns = colonnes;
     b.app.layout.board_rows = 0;

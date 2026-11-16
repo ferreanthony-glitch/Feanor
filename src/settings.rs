@@ -73,6 +73,18 @@ pub struct Settings {
     /// il reste fermé.
     #[serde(default, rename = "panneau_vignettes_pose", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_vignettes_pose: bool,
+    /// Le panneau « Espace 3D » (2026-11-12, `docs/INTERFACE.md` partie 150) a été posé, une fois, dans les dispositions
+    /// retenues du Storyboard et de l'Animation et dans les espaces de travail enregistrés (`poser_le_panneau_espace3d`) :
+    /// une disposition d'avant lui ne l'avait pas. Fermé ensuite à la main, il reste fermé, jusqu'à ce que la vue
+    /// Espace 3D s'ouvre (elle le remet à sa place).
+    #[serde(default, rename = "panneau_espace3d_pose", skip_serializing_if = "std::ops::Not::not")]
+    pub panneau_espace3d_pose: bool,
+    /// Le panneau « Espace 3D » a quitté, une fois, la place que la partie 150 lui donnait dans les dispositions retenues
+    /// (un onglet du groupe de la couleur) : depuis la partie 152 (2026-11-13, « Onglet de Réglages »), il arrive en onglet
+    /// du groupe de Réglages quand la vue Espace 3D s'ouvre (`poser_le_panneau_espace3d`). (Le nom de la marque vient du
+    /// premier essai de la partie 152 : une colonne à lui, « à côté » de Réglages.)
+    #[serde(default, rename = "panneau_espace3d_a_cote", skip_serializing_if = "std::ops::Not::not")]
+    pub panneau_espace3d_a_cote: bool,
     /// « Avec les annotations » des fenêtres d'export (la planche des Vignettes, les images, la vidéo, le GIF, le storyboard PDF) : coché,
     /// les calques d'annotation (de la planche et des plans) sont dans l'export. Décoché d'origine ; retenu par poste de travail, d'une séance à
     /// l'autre (`calqueannot.rs`).
@@ -250,6 +262,12 @@ pub struct Settings {
     /// restent dans la palette (Ctrl+K). Décochée d'origine.
     #[serde(default, rename = "fonctions_experimentales", skip_serializing_if = "std::ops::Not::not")]
     pub experimental: bool,
+    /// L'aide animée (`aideanim.rs`, partie 153) : les animations déjà vues (leur identifiant), qui ne rejouent plus d'elles-mêmes.
+    #[serde(default, rename = "explications_vues", skip_serializing_if = "Vec::is_empty")]
+    pub explications_vues: Vec<String>,
+    /// Aide > « Afficher les explications » : cochée, une animation rejoue à chaque prise de son outil. Décochée d'origine.
+    #[serde(default, rename = "afficher_explications", skip_serializing_if = "std::ops::Not::not")]
+    pub afficher_explications: bool,
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
@@ -387,6 +405,8 @@ impl Default for Settings {
             montage_layout: None,
             vignettes_layout: None,
             panneau_vignettes_pose: false,
+            panneau_espace3d_pose: false,
+            panneau_espace3d_a_cote: false,
             export_annotations: false,
             exports: Default::default(),
             storyboard_space: Espace::Storyboard,
@@ -434,6 +454,8 @@ impl Default for Settings {
             conseils: Default::default(),
             premier_jour: Default::default(),
             experimental: false,
+            explications_vues: Vec::new(),
+            afficher_explications: false,
             echelle: crate::echelle::ECHELLE_DEFAUT,
             dossier_accueil: String::new(),
             vignettes: Default::default(),
@@ -521,6 +543,7 @@ impl Settings {
         // L'anneau sous le stylet : huit commandes qui existent, toutes différentes, un délai dans ses bornes.
         s.anneau = std::mem::take(&mut s.anneau).nettoyes(crate::monpanneau::commande_connue);
         s.poser_le_panneau_vignettes();
+        s.poser_le_panneau_espace3d();
         s
     }
 
@@ -555,6 +578,47 @@ impl Settings {
                 d.open(crate::dock::Pane::Vignettes);
                 l.panneaux = Some(d);
             }
+        }
+    }
+
+    /// Le panneau « Espace 3D » dans les dispositions retenues (toutes : le Storyboard, l'Animation, le Montage, les
+    /// Vignettes, et les espaces de travail enregistrés).
+    ///
+    /// **Partie 152** (2026-11-13, Anthony : « Place-le à côté de réglages plutôt », puis, entre une colonne à part et un
+    /// onglet : « Onglet de Réglages ») : le panneau n'est plus un onglet du groupe de la couleur. Il arrive en onglet du
+    /// groupe de Réglages quand la vue Espace 3D s'ouvre, et y reste (`espace3dpanneau.rs`) : une disposition n'a donc pas
+    /// besoin de l'avoir d'avance. Une fois (`panneau_espace3d_a_cote`), il quitte la place que la partie 150 lui avait
+    /// donnée dans les dispositions retenues (`DockLayout::retirer_de_la_place_150` : un onglet du groupe de la couleur ou
+    /// des brosses dédiées, ou seul juste sous les réglages de l'outil), sans rien y changer d'autre ; il revient en
+    /// onglet de Réglages à la prochaine ouverture de la vue. Rangé ailleurs à la main (en onglet de Réglages, dans un
+    /// autre groupe, un panneau flottant à lui, sa propre fenêtre), il y reste. Un panneau remis à la main dans le groupe
+    /// de la couleur ne se distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là ;
+    /// remis ensuite, il y reste.
+    ///
+    /// **Partie 150** (2026-11-12) : le panneau était ajouté, une fois, aux dispositions retenues d'avant lui
+    /// (`panneau_espace3d_pose`). Ce n'est plus fait : la marque est seulement posée, pour qu'un fichier de réglages
+    /// garde le même sens d'une version à l'autre.
+    pub fn poser_le_panneau_espace3d(&mut self) {
+        self.panneau_espace3d_pose = true;
+        if std::mem::replace(&mut self.panneau_espace3d_a_cote, true) {
+            return;
+        }
+        use crate::dock::Pane;
+        let ranger = |l: &mut Layout| {
+            // (Une disposition d'avant 6a devient la disposition d'origine du jour, sans le panneau : `Layout::modernisee`.)
+            if l.is_before_6a() {
+                return;
+            }
+            let mut d = l.dock_layout();
+            if d.retirer_de_la_place_150(Pane::Espace3d) {
+                l.panneaux = Some(d);
+            }
+        };
+        for l in [self.layout.as_mut(), self.animation_layout.as_mut(), self.montage_layout.as_mut(), self.vignettes_layout.as_mut()].into_iter().flatten() {
+            ranger(l);
+        }
+        for w in self.workspaces.iter_mut() {
+            ranger(&mut w.layout);
         }
     }
 

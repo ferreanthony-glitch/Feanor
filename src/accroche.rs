@@ -27,8 +27,7 @@
 //!
 //! Le fichier : `accroche_camera` du calque (format 53).
 
-use eframe::egui::{self, pos2, Pos2, RichText, Vec2};
-use egui_phosphor::regular as ph;
+use eframe::egui::{pos2, Pos2, Vec2};
 
 use crate::app::App;
 use crate::camera::{self, Camera};
@@ -88,7 +87,7 @@ impl Layer {
         } else if self.trajectoire.is_some() {
             Some("il a une trajectoire, tracée sur la feuille")
         } else if self.transform.is_tilted() || self.pos_keys.iter().any(|k| k.t.is_tilted()) {
-            Some("carte inclinée de l'Espace 3D")
+            Some("calque incliné")
         } else {
             None
         }
@@ -229,23 +228,6 @@ impl App {
         };
     }
 
-    /// Le petit bouton d'un calque du panneau Calques : allumé s'il est accroché à la caméra ; c'est là qu'on l'accroche d'un clic.
-    /// Rien pour un calque qui ne s'accroche pas (et n'est pas accroché).
-    pub(crate) fn bouton_accroche(&mut self, ui: &mut egui::Ui, li: usize) -> Option<egui::Response> {
-        let l = self.layers().get(li)?;
-        let on = l.accroche;
-        if l.folder || (!on && l.raison_sans_accroche().is_some()) {
-            return None;
-        }
-        let key = self.raccourci(ACTION);
-        let about = if on {
-            "Ce calque est accroché à la caméra : il garde sa place dans l'image, quoi que fasse la caméra (déplacement, zoom, rotation). Clic : le décrocher ; il reste sur la feuille, là où il est à cette image."
-        } else {
-            PHRASE
-        };
-        let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new(ph::VIDEO_CAMERA).size(12.0), on)).selected(on).frame(on).min_size(egui::vec2(18.0, 0.0)));
-        let resp = crate::bulles::bulle(resp, if on { "Accroché à la caméra" } else { NOM }, about, &key);
-        crate::raccourcisui::shortcut_menu(&resp, ACTION, &key);
-        Some(resp)
-    }
+    // (Le petit bouton de la ligne du panneau Calques n'existe plus, partie 160 : la ligne du calque courant de la timeline et la
+    // piste du calque actif de la bande des plans ont le leur.)
 }

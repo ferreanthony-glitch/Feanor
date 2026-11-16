@@ -123,7 +123,7 @@ fn premier_niveau(textes: &[(String, Rect)]) -> Vec<String> {
 #[test]
 fn the_layer_menu_has_a_dozen_entries_at_most_whatever_the_layer_and_the_place() {
     for kinds in [&[LayerKind::Vector][..], &[LayerKind::Bitmap, LayerKind::Vector, LayerKind::Bitmap]] {
-        for origine in [Origine::Panneau, Origine::Timeline, Origine::Montage, Origine::Barre] {
+        for origine in [Origine::Timeline, Origine::Montage, Origine::Barre] {
             let mut app = app_layers("douzaine", kinds);
             let mut ecran = Ecran::new();
             let lignes = premier_niveau(&menu(&mut app, &mut ecran, origine, 0));
@@ -137,7 +137,7 @@ fn the_layer_menu_has_a_dozen_entries_at_most_whatever_the_layer_and_the_place()
 fn the_groups_come_in_this_order_with_separators() {
     let mut app = app_layers("ordre", &[LayerKind::Bitmap, LayerKind::Vector]);
     let mut ecran = Ecran::new();
-    let textes = menu(&mut app, &mut ecran, Origine::Panneau, 1);
+    let textes = menu(&mut app, &mut ecran, Origine::Timeline, 1);
     // (« Réutiliser dans… », la planche-mère, partie 126, est dans le groupe des gestes, après Dupliquer.)
     let ordre = ["Nouveau calque", "Dupliquer", "Réutiliser dans", "Renommer", "Supprimer", "Fusionner vers le bas", "Fusionner les", "Organiser", "Apparence", "Effets", "Ajouter un aplat", "Plus"];
     let mut dernier = f32::NEG_INFINITY;
@@ -158,7 +158,7 @@ fn the_groups_come_in_this_order_with_separators() {
 #[test]
 fn the_menu_is_the_same_wherever_a_layer_menu_opens() {
     let mut vues: Vec<(Origine, Vec<String>)> = Vec::new();
-    for origine in [Origine::Panneau, Origine::Timeline, Origine::Montage, Origine::Barre] {
+    for origine in [Origine::Timeline, Origine::Montage, Origine::Barre] {
         let mut app = app_layers("partout", &[LayerKind::Bitmap, LayerKind::Vector]);
         let mut ecran = Ecran::new();
         vues.push((origine, premier_niveau(&menu(&mut app, &mut ecran, origine, 0))));
@@ -174,14 +174,7 @@ fn the_menu_is_the_same_wherever_a_layer_menu_opens() {
         let mut f: Contenu = &mut |a: &mut App, ui: &mut egui::Ui| a.layer_ops_menu(ui);
         points.push(("menu Calques", premier_niveau(&ecran.chauffer(&mut app, 5, &mut f))));
     }
-    {
-        let mut f: Contenu = &mut |a: &mut App, ui: &mut egui::Ui| a.layer_more_menu(ui);
-        points.push(("« … »", premier_niveau(&ecran.chauffer(&mut app, 5, &mut f))));
-    }
-    {
-        let mut f: Contenu = &mut |a: &mut App, ui: &mut egui::Ui| a.layer_full_menu(ui, 0, false);
-        points.push(("clic droit du panneau", premier_niveau(&ecran.chauffer(&mut app, 5, &mut f))));
-    }
+    // (Le « … » et le clic droit du panneau Calques n'existent plus, partie 160.)
     {
         let mut f: Contenu = &mut |a: &mut App, ui: &mut egui::Ui| a.layer_head_menu(ui, 0);
         points.push(("clic droit de la timeline", premier_niveau(&ecran.chauffer(&mut app, 5, &mut f))));
@@ -200,7 +193,7 @@ fn a_folder_has_no_effects_or_aplat_entry_and_still_fits() {
     let mut app = app_layers("dossier", &[LayerKind::Bitmap]);
     app.layers_mut().push(Layer::new_folder("Rangement"));
     let mut ecran = Ecran::new();
-    let textes = menu(&mut app, &mut ecran, Origine::Panneau, 1);
+    let textes = menu(&mut app, &mut ecran, Origine::Timeline, 1);
     let lignes = premier_niveau(&textes);
     assert!(!contient(&textes, "Effets") && !contient(&textes, "aplat"), "{lignes:?}");
     assert!(lignes.len() <= PREMIER_NIVEAU, "{lignes:?}");
@@ -236,6 +229,7 @@ fn every_command_of_the_old_menus_is_still_reachable() {
         include_str!("montagehead.rs"),
         include_str!("layersui.rs"),
         include_str!("layerheads.rs"),
+        include_str!("barrecalques.rs"),
     ]
     .join("\n");
     for id in ANCIENNES {
@@ -246,8 +240,10 @@ fn every_command_of_the_old_menus_is_still_reachable() {
     let src = include_str!("menucalque.rs");
     for libelle in [
         "Afficher le calque", "Opacité", "Mode de fusion", "Couleur d'étiquette", "Pelure d'oignon du calque", "Préserver la transparence", "Pochoir négatif",
-        "Verrouiller la position", "Animation (avant, après, automatismes)", "Calque vidéo", "Calque de couleur", "Réduire la ligne", "Agrandir la ligne",
+        "Verrouiller la position", "Animation (avant, après, automatismes)", "Calque vidéo", "Calque de couleur",
     ] {
+        // (« Réduire la ligne » et « Agrandir la ligne » n'existent plus, partie 160 : la ligne du calque courant est complète, les
+        // autres fines, d'elles-mêmes.)
         assert!(src.contains(libelle), "« {libelle} » manque");
     }
     // Les menus de réglages que l'ancien montage avait en sous-menu.
@@ -265,7 +261,7 @@ fn the_submenus_hold_what_was_taken_off_the_first_level() {
         ("Plus", &["Copier, coller", "Retourner le calque", "Réglages avancés", "Calque de couleur", "Choisir", "Afficher", "Fusionner plus de calques", "Pochoirs", "Nettoyer", "Aplat sur plusieurs calques"]),
     ] {
         let mut ecran = Ecran::new();
-        let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Panneau);
+        let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Timeline);
         let textes = ecran.chauffer(&mut app, 5, &mut contenu);
         let (_, r) = trouver(&textes, sous).unwrap_or_else(|| panic!("{sous}")).clone();
         // (Posé à plat dans la zone, le sous-menu s'ouvre au clic ; dans un clic droit, au survol.)
@@ -285,7 +281,7 @@ fn the_merge_group_is_visible_and_works_from_the_menu() {
     let mut app = app_layers("fusion", &[LayerKind::Bitmap, LayerKind::Vector]);
     app.cur_layer = 1;
     let mut ecran = Ecran::new();
-    let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Panneau);
+    let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Timeline);
     let textes = ecran.chauffer(&mut app, 5, &mut contenu);
     // Le raccourci est écrit sur la ligne (Ctrl+E) : il est libre dans le fichier de raccourcis.
     let (_, bas) = trouver(&textes, "Fusionner vers le bas").unwrap().clone();
@@ -301,7 +297,7 @@ fn a_refused_merge_is_greyed_with_its_reason_in_the_tooltip() {
     app.layers_mut()[0].visible = false;
     app.cur_layer = 1;
     let mut ecran = Ecran::new();
-    let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Panneau);
+    let mut contenu = |a: &mut App, ui: &mut egui::Ui| a.layer_menu(ui, 1, Origine::Timeline);
     let textes = ecran.chauffer(&mut app, 5, &mut contenu);
     let (_, bas) = trouver(&textes, "Fusionner vers le bas").unwrap().clone();
     // Un clic ne fait rien (l'entrée est grisée)…

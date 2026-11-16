@@ -219,19 +219,21 @@ fn folding_the_active_track_by_hand_keeps_it_folded_until_the_current_layer_chan
 
 #[test]
 fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
-    use crate::layerheads::{rows_of, ROW_FULL, ROW_SMALL};
+    use crate::layerheads::{rows_of, ROW_FINE, ROW_FULL};
     let mut app = app_with("timeline", doc_with(&[&["A", "B", "C"]]));
     app.pistes_follow_current(false);
-    // Les pistes du montage se replient : la timeline de l'animation (tous les calques dépliés) n'en sait rien.
+    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 160 : le calque courant y a sa ligne
+    // complète, les autres une ligne fine).
     app.set_all_tracks_folded(true);
-    let rows = rows_of(app.layers(), &app.doc.groups);
-    assert!(rows.iter().all(|r| r.h == ROW_FULL), "la timeline garde tous ses calques dépliés");
-    // Une ligne réduite de la timeline (`collapsed`) ne change rien aux pistes du montage.
+    let rows = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
+    assert_eq!(rows.iter().filter(|r| r.h == ROW_FULL).count(), 1, "le calque courant");
+    assert!(rows.iter().filter(|r| r.li != app.cur_layer).all(|r| r.h == ROW_FINE));
+    // Le drapeau « réduit » d'un calque (`collapsed`, d'avant) ne change rien aux pistes du montage, ni à la timeline.
     let before = heights(&app);
+    let avant = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
     app.layers_mut()[1].collapsed = true;
     assert_eq!(heights(&app), before);
-    let rows = rows_of(app.layers(), &app.doc.groups);
-    assert_eq!(rows.iter().filter(|r| r.h == ROW_SMALL).count(), 1);
+    assert_eq!(rows_of(app.layers(), &app.doc.groups, app.cur_layer), avant);
 }
 
 // ------------------------------------------------------------------------------------ trois calques
@@ -640,18 +642,23 @@ fn the_gestures_of_the_timeline_work_on_a_thin_band() {
 #[test]
 fn a_double_click_next_to_the_name_folds_the_track_and_on_the_name_renames_it() {
     let mut b = banc_montage();
+    // (Partie 160 : la piste du calque actif porte son cadenas et son ⋮ à droite du nom ; à la largeur d'origine de la colonne,
+    // 104 points, ils touchent un nom de cinq lettres. La colonne élargie laisse de la place à côté du nom.)
+    b.app.montage_head_w = 180.0;
+    b.chauffer(3);
     let nom = textes(&b).iter().filter(|(t, _)| t == "Perso").map(|(_, r)| *r).min_by(|a, c| a.left().total_cmp(&c.left())).expect("le nom");
     // Sur le nom : renommer, comme avant.
     double_clic(&mut b, pos2(nom.left() + 4.0, nom.center().y));
     assert!(b.app.layer_rename.is_some(), "le double-clic sur le nom le renomme");
     b.app.layer_rename = None;
     b.chauffer(3);
-    // À côté du nom (dans la colonne, à droite du texte) : replier la piste du calque actif.
+    // À côté du nom (dans la colonne, à droite du texte, avant le cadenas de la piste active, partie 160) : replier la piste du
+    // calque actif.
     assert!(!b.app.track_is_folded(0));
     b.image(Vec::new(), 0.6); // pas de triple clic avec le précédent
     double_clic(&mut b, pos2(nom.right() + 14.0, nom.center().y));
     assert!(b.app.layer_rename.is_none());
-    assert!(b.app.track_is_folded(0), "le double-clic à côté du nom replie la piste");
+    assert!(b.app.track_is_folded(0), "le double-clic à côté du nom replie la piste ({nom:?}, pile {:?}, {})", b.app.settings.montage_pile, b.app.status);
 }
 
 #[test]

@@ -578,6 +578,11 @@ pub struct App {
     pub(crate) format_custom: bool,
     /// Espace 3D (`espace3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes choisies, vue.
     pub(crate) espace3d: crate::espace3dui::Espace3dState,
+    /// Dessiner dans la vue Espace 3D (`espace3ddessin.rs`, partie 146) : le pointeur dessine ou manipule, le regard de la vue.
+    pub(crate) e3d: crate::espace3ddessin::Dessin3d,
+    /// Le panneau « Espace 3D » suit la vue (`espace3dpanneau.rs`, partie 150) : la vue était-elle montrée à la dernière
+    /// image, et l'onglet que le panneau a remplacé devant son groupe quand elle s'est ouverte.
+    pub(crate) e3_panneau: crate::espace3dpanneau::Suivi,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -1279,6 +1284,8 @@ impl App {
             stage_view: None,
             format_custom: false,
             espace3d: Default::default(),
+            e3d: Default::default(),
+            e3_panneau: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -1631,15 +1638,16 @@ impl App {
     /// Dans un plan en Espace 3D dont la caméra n'est pas la caméra de référence (`Document::repere_du_plan`), toute carte
     /// est dans ce cas, même à plat : sa matrice est passée dans le repère de la caméra, et l'œil est celui de référence
     /// (comme `espace3d::place_dans` la pose dans l'image). Un calque accroché à la caméra reste dans le cadre.
-    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
+    pub(crate) fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
         let l = self.layer();
         let t = l.pose(self.cur_frame);
         let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame).filter(|_| !l.accroche);
         if !t.is_tilted() && repere.is_none() {
             return None;
         }
-        let world = crate::espace3d::Monde::of(&self.doc);
-        let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
+        // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
+        let world = self.e3_world();
+        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
         match repere {
             Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
             None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
@@ -1656,21 +1664,42 @@ impl App {
     }
 
     /// Comme `to_layer`, mais **rien** quand le regard qui passe par ce point de la feuille ne touche pas la carte du
-    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Dans un plan en Espace 3D
-    /// (`docs/ESPACE-LIBRE.md`, étape A5), rien non plus quand le regard touche le plan de la carte à plus d'une feuille de
-    /// ses bords : près de l'horizon d'une carte au sol, un petit geste de la main ferait un trait de plusieurs
-    /// kilomètres. Ce qui peint (pinceau, crayon, gomme, pot, dégradé) passe par ici : pas de trait là où il n'y a pas de
-    /// carte.
+    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Ce qui peint (pinceau, crayon, gomme, pot,
+    /// dégradé) passe par ici : pas de trait là où il n'y a pas de carte.
+    ///
+    /// **Plan en Espace 3D : rien non plus hors des bords de la carte** (`docs/INTERFACE.md`, partie 146.1). Une carte
+    /// posée par un maillage (inclinée, ou vue par une caméra qui n'est pas la caméra de référence) ne montre que sa
+    /// feuille (`Monde::card_warp_m`) : un point au-delà de ses bords serait de l'encre qu'on ne voit pas. La condition
+    /// est celle de la vue Espace 3D, `espace3ddessin::carte_montre`. (Avant le 2026-11-12, l'étape A5 acceptait un point
+    /// jusqu'à une feuille au-delà des bords : caméra dos aux cartes, un trait dans le bas du cadre s'enregistrait hors
+    /// d'une surface au sol, sans rien montrer ni rien dire.) Carte à plat sous la caméra de référence, ou plan
+    /// ordinaire : inchangé, la toile infinie reste peinte et filmée.
     pub(crate) fn to_layer_opt(&self, stage: Pos2) -> Option<Pos2> {
         let Some((world, mx, eye)) = self.tilted_card() else { return Some(self.to_layer_a_plat(stage)) };
         let p = world.sheet_to_card_m(eye, &mx, stage)?;
-        if self.doc.plan_en_espace(self.cur_panel) {
-            let [w, h] = world.stage;
-            if !(p.x.is_finite() && p.y.is_finite() && p.x >= -w && p.x <= 2.0 * w && p.y >= -h && p.y <= 2.0 * h) {
-                return None;
-            }
+        if self.image_par_le_repere() && !crate::espace3ddessin::carte_montre(p, world.stage) {
+            return None;
         }
         Some(p)
+    }
+
+    /// Pourquoi `to_layer_opt` ne rend rien en ce point de la feuille : le mot de la barre d'état. Le regard touche le
+    /// plan de la carte hors de ses bords, ou ne le touche pas du tout (carte derrière la caméra, vue par la tranche).
+    pub(crate) fn rien_a_peindre(&self, stage: Pos2) -> &'static str {
+        let hors_des_bords = self.tilted_card().is_some_and(|(world, mx, eye)| world.sheet_to_card_m(eye, &mx, stage).is_some());
+        if hors_des_bords {
+            crate::espace3ddessin::HORS_CARTE_FEUILLE
+        } else {
+            crate::espace3ddessin::PAS_SOUS_LE_POINTEUR
+        }
+    }
+
+    /// L'image courante du plan courant se compose par le changement de repère de sa caméra (`Document::repere_du_plan`), ou
+    /// le plan vient du format 55 en Espace 3D (`Panel::espace`) : le pinceau ne peint que sur la carte, et sa taille est
+    /// celle qu'un pixel de la carte a sous le pointeur. Partout ailleurs, les outils de dessin font ce qu'ils ont toujours fait
+    /// (partie 159).
+    pub(crate) fn image_par_le_repere(&self) -> bool {
+        self.panel().espace || self.doc.repere_du_plan(self.cur_panel, self.cur_frame).is_some()
     }
 
     /// `to_layer` pour un calque posé par une affinité (ni carte inclinée, ni plan en Espace 3D à la caméra tournée).
@@ -1683,6 +1712,10 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : le point de la carte, vu par cette vue.
+        if let Some(carte) = self.e3_carte_vue() {
+            return carte.vers_ecran(p).unwrap_or(egui::pos2(-1e6, -1e6));
+        }
         if let Some((world, mx, eye)) = self.tilted_card() {
             let stage = world.card_to_sheet_m(eye, &mx, p).unwrap_or(p);
             return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
@@ -1697,10 +1730,15 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : la taille d'un pixel de la carte sous le pointeur, vu
+        // par cette vue.
+        if let Some(z) = self.e3_zoom_du_dessin() {
+            return z;
+        }
         // Plan en Espace 3D : la carte est vue en perspective, un pixel de son dessin n'a pas partout la même taille à
         // l'écran. On prend celle qu'il a sous le pointeur (au centre de la carte s'il n'y est pas) : le curseur du
         // pinceau a la taille du trait qu'il va laisser à cet endroit.
-        if self.doc.plan_en_espace(self.cur_panel) {
+        if self.image_par_le_repere() {
             if let Some((world, mx, eye)) = self.tilted_card() {
                 let [w, h] = world.stage;
                 let ici = self.hover_canvas.and_then(|s| self.to_layer_opt(s)).unwrap_or(egui::pos2(w / 2.0, h / 2.0));
@@ -1875,7 +1913,7 @@ impl App {
         // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
         let order = crate::calqueannot::ordre(layers, annotations);
         // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près, comme les sorties (`render.rs`).
-        let par_distance = self.doc.plan_en_espace(self.cur_panel);
+        let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
         let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
         let mut portees = crate::calqueffet::Portees::new(par_distance);
         for li in order {
@@ -1929,7 +1967,9 @@ impl App {
             if onion && !self.playing && li == cur && self.tool == Tool::Trajectoire {
                 if let Some(t) = layer.trajectoire.as_ref().filter(|t| t.cles == crate::trajectoire::Cles::Interpolation) {
                     for f in t.images_des_jalons(self.frame_count()).into_iter().filter(|&f| f != frame) {
-                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place(&world, layer, f, &camera)) else { continue };
+                        // (Plan en Espace 3D : la silhouette se pose comme le calque lui-même, par le repère de la caméra du plan à
+                        // l'image montrée ; sans lui elle ignorait cette caméra, partie 149.)
+                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place_dans(&world, layer, f, &camera, repere.as_ref())) else { continue };
                         onion_items.push(PlanItem {
                             cel,
                             opacity: crate::trajectoireui::FANTOME_OPACITE,
@@ -2125,6 +2165,9 @@ impl App {
     }
 
     pub(crate) fn select_layer(&mut self, layer: usize) {
+        // Choisir un calque, même celui qui est déjà courant, lâche la caméra du plan choisie dans la vue Espace 3D : la
+        // timeline et le montage lui rendent sa rangée (`espace3dui.rs`, partie 152).
+        self.e3_calque_choisi(layer);
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;
@@ -2671,8 +2714,10 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
-        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé.
+        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé. Dans la vue Espace 3D aussi
+        // (`trajectoire3d.rs`).
         self.trajectoire_lacher();
+        self.e3_traj_lacher();
         self.guides.stroke = None;
         self.shape_drag = None;
         // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un tracé abandonné ; une retouche en cours
@@ -3437,9 +3482,9 @@ impl App {
         let what = if clip.layer.folder { "Dossier" } else { "Calque" };
         let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
         self.status = if n > 1 {
-            format!("{n} calques copiés : Ctrl+V dans le panneau Calques (ou X) pour les coller, ici ou dans un autre plan.")
+            format!("{n} calques copiés : Ctrl+V dans la colonne des calques (ou X) pour les coller, ici ou dans un autre plan.")
         } else {
-            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", clip.layer.name)
+            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans la colonne des calques) pour le coller dans un autre plan.", clip.layer.name)
         };
         // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
         self.layer_clip_recent = true;
@@ -5103,6 +5148,11 @@ impl App {
             // Calque de couleur (`calquecouleurui.rs`) : en ajouter un, le détacher, griffonner.
             "calque.nouveau_couleur" => self.new_colour_layer(),
             "calque.nouveau_annotation" => self.nouveau_calque_d_annotation(),
+            // Calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel ; la grille de repère du calque courant.
+            "calque.nouveau_sol" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Sol),
+            "calque.nouveau_mur" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Mur),
+            "calque.nouveau_ciel" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Ciel),
+            "calque.grille_3d" => self.basculer_grille_3d(self.cur_layer),
             "calque.detacher_couleur" => self.detach_colour_layer(),
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
@@ -5258,6 +5308,9 @@ impl App {
             self.tool_recent.retain(|t| *t != tool);
             self.tool_recent.insert(0, tool);
         }
+        // Vue Espace 3D : l'outil décide. Un outil de dessin y fait dessiner le pointeur, un autre lui rend les cartes
+        // (`espace3ddessin.rs`, partie 146). Même si l'outil était déjà celui-là.
+        self.e3_outil_pris(tool);
     }
 
     /// Zoom de la bande du bas par le facteur `f` : le montage en storyboard, la timeline en
@@ -5667,6 +5720,7 @@ impl App {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
+        // (La même règle que `barre_outils_montree`, qui dit où sont les outils de la vue Espace 3D.)
         if self.layout.tool_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
@@ -5738,6 +5792,13 @@ impl App {
             self.sequence_fenetre(ctx);
             // « Mes habitudes » et la note de friction en cours (`usageui.rs`, `frictionui.rs`).
             self.habitudes_fenetre(ctx);
+            // Le registre des explications (`aideregistre.rs`, partie 153).
+            self.aide_registre_fenetre(ctx);
+            // L'aide animée, dans sa petite fenêtre à côté de l'outil (`aideflottante.rs`, partie 155) : après les barres et les
+            // panneaux, qui ont retenu où sont leurs icônes. Rien sans projet, ni en mode concentration (elle jouera en sortant).
+            if !concentre && !sans_projet && !compact {
+                self.aide_flottante_ui(ctx);
+            }
             self.friction_fenetre(ctx);
             // Le banc du stylet : ce que Windows en dit, à côté de ce que FEANOR reçoit (`styletui.rs`).
             self.stylet_fenetre(ctx);

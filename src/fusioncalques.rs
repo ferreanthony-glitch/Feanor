@@ -100,7 +100,7 @@ fn raison_paire(panel: &Panel, below: &Layer, above: &Layer) -> Option<String> {
         for l in [below, above] {
             let t = l.pose(f);
             if t.is_tilted() || t.dz != 0.0 {
-                return Some(format!("« {} » est incliné ou avancé en 3D : une carte de l'Espace 3D ne se fusionne pas.", l.name));
+                return Some(format!("« {} » est incliné, ou sa profondeur change pendant le plan : il ne se fusionne pas.", l.name));
             }
         }
     }

@@ -1,5 +1,5 @@
-//! Le menu d'un calque, **le même partout** (clic droit dans le panneau Calques, dans la timeline, dans le montage ;
-//! le « … » du panneau, le ⋮ des lignes, le menu Calques de la barre et le ☰ de la timeline) : une dizaine d'entrées au
+//! Le menu d'un calque, **le même partout** (clic droit dans la timeline, dans le montage ;
+//! le ⋮ des lignes, le menu Calques de la barre et le ☰ de la timeline) : une dizaine d'entrées au
 //! premier niveau, en groupes séparés.
 //!
 //! ```text
@@ -31,8 +31,6 @@ use crate::blend::BlendMode;
 /// la taille de la ligne dans la timeline).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Origine {
-    /// Clic droit d'une ligne du panneau Calques, et son « … » (le calque courant).
-    Panneau,
     /// Clic droit ou ⋮ de l'en-tête d'une ligne de la timeline.
     Timeline,
     /// Clic droit ou ⋮ de la colonne des calques du montage, « Calque » d'une piste.
@@ -52,16 +50,8 @@ impl App {
         self.layer_menu(ui, li, Origine::Barre);
     }
 
-    /// Le « … » du panneau Calques : le menu du calque courant.
-    pub(crate) fn layer_more_menu(&mut self, ui: &mut egui::Ui) {
-        let li = self.cur_layer;
-        self.layer_menu(ui, li, Origine::Panneau);
-    }
-
-    /// Clic droit d'un calque du panneau Calques (ou, avec `in_montage`, de la colonne du montage).
-    pub(crate) fn layer_full_menu(&mut self, ui: &mut egui::Ui, li: usize, in_montage: bool) {
-        self.layer_menu(ui, li, if in_montage { Origine::Montage } else { Origine::Panneau });
-    }
+    // (Le panneau Calques, son « … » et le clic droit de ses lignes n'existent plus, partie 160 : c'est le même menu au ⋮ et au
+    // clic droit des lignes de la timeline et des pistes de la bande.)
 
     /// Clic droit ou ⋮ d'une ligne de la timeline.
     pub(crate) fn layer_head_menu(&mut self, ui: &mut egui::Ui, li: usize) {
@@ -299,19 +289,10 @@ impl App {
         });
         // Aplat sous le trait, sur plusieurs calques à la fois (le calque courant a « Ajouter un aplat » au premier niveau).
         ui.menu_button("Aplat sur plusieurs calques", |ui| self.fond_menu(ui, false));
-        // Ce qui dépend de l'endroit : les pistes du montage, la taille de la ligne de la timeline.
-        match origine {
-            Origine::Montage => self.pistes_menu(ui, li),
-            Origine::Timeline => {
-                if let Some(collapsed) = self.layers().get(li).map(|l| l.collapsed) {
-                    if ui.button(if collapsed { "Agrandir la ligne" } else { "Réduire la ligne" }).clicked() {
-                        ui.close_menu();
-                        self.layers_mut()[li].collapsed = !collapsed;
-                        self.modified = true;
-                    }
-                }
-            }
-            _ => {}
+        // Ce qui dépend de l'endroit : les pistes du montage. (« Agrandir / Réduire la ligne » de la timeline n'existe plus,
+        // partie 160 : le calque courant a toujours sa ligne complète, les autres une ligne fine.)
+        if origine == Origine::Montage {
+            self.pistes_menu(ui, li);
         }
     }
 
@@ -334,7 +315,7 @@ impl App {
         }
         if ui
             .checkbox(&mut fixed.clone(), "Verrouiller la position")
-            .on_hover_text("L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.")
+            .on_hover_text("L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.")
             .clicked()
         {
             self.set_layer_flag(li, |l| l.position_locked = !fixed);
@@ -347,5 +328,11 @@ impl App {
             self.basculer_accroche(li);
         }
         self.depth_item(ui, li);
+        // La grille de repère d'un calque Sol, Mur ou Ciel (`espace3ddecor.rs`, partie 157) : jamais dans le dessin.
+        if let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) {
+            if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille de repère sur ce calque, à l'écran. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {
+                self.basculer_grille_3d(li);
+            }
+        }
     }
 }

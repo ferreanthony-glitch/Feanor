@@ -139,8 +139,12 @@ impl App {
         // survol : Ctrl + Maj y est la caméra de la planche, le ressort ne doit jamais s'armer avant qu'on sache si Maj vient. L'outil
         // ne change pas avant l'appui, le curseur et la barre d'outils restent ceux du dessin.
         let ready = !taken && !spoiled && on_canvas && free && !self.board_shown() && (pressed || now - since >= CTRL_DELAY);
+        // Avec l'outil Trajectoire, Ctrl+clic sur le chemin pose ou retire une poignée (partie 154) : le lasso ne se prend
+        // qu'à l'appui, ailleurs que sur le chemin (Ctrl+Maj, le lasso de tous les calques, partout).
+        let maj = ctx.input(|i| i.modifiers.shift);
+        let trajectoire_libre = self.tool != Tool::Trajectoire || (pressed && (maj || !self.hover_canvas.is_some_and(|h| self.trajectoire_sous(h).1)));
         // Avec l'outil Transformer, Ctrl sert à l'enveloppe de Bézier (`envelopetools.rs`).
-        if ready && self.tool != Tool::Select && self.tool != Tool::Transform {
+        if ready && trajectoire_libre && self.tool != Tool::Select && self.tool != Tool::Transform {
             let prev = self.tool;
             self.set_tool(Tool::Select);
             if let Some(c) = &mut self.ctrl_lasso {

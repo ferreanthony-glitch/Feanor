@@ -1,4 +1,4 @@
-//! « Espace 3D à côté » (`docs/ESPACE3D.md`, partie 13 ; `docs/INTERFACE.md`, partie 144) : la vue 3D partage la zone du
+//! « Espace 3D à côté » (`docs/ESPACE3D.md`, partie 13 ; `docs/INTERFACE.md`, partie 163) : la vue 3D partage la zone du
 //! dessin avec la feuille. On dessine, on anime, on lit le plan à gauche ; à droite, les cartes (les calques) suivent.
 //!
 //! - **Partage** : la feuille à gauche, une barre à tirer, la vue 3D à droite avec sa rangée d'outils. La part de la vue
@@ -9,7 +9,7 @@
 //! - **Sans latence** (règle de la maison) : pendant un geste sur la feuille, la vue 3D se refait au plus
 //!   `RYTHME_GESTE` fois par seconde ; entre-temps, elle repeint ce qu'elle a tracé (`VueGardee`). En lecture, elle se
 //!   refait quand l'image du film change. Une carte dont le dessin change n'est refaite que là où ses tuiles ont changé
-//!   (`changement`), pixel pour pixel comme une image refaite en entier (`render::cel_image_region`), et une image
+//!   (`changement`), pixel pour pixel comme une image refaite en entier (`render::cel_image_zone`), et une image
 //!   d'écran ne prépare pas plus de `BUDGET_TEXELS` texels de cartes (au moins une carte) : le reste attend l'image
 //!   suivante, la carte montrant son dessin d'avant.
 
@@ -289,6 +289,10 @@ impl App {
     /// toutes cartes comprises, mais toujours au moins une carte). Une carte qui doit attendre rend son image d'avant (ou
     /// rien si elle n'en a pas encore) et demande une image de plus.
     pub(crate) fn e3_card_texture(&mut self, ctx: &egui::Context, cel: CelId) -> Option<egui::TextureId> {
+        // La carte sur laquelle on dessine dans la vue 3D : sa texture suit le trait, tuile par tuile (`espace3ddessin.rs`).
+        if let Some(id) = self.e3_texture_vive(ctx, cel) {
+            return Some(id);
+        }
         let pass = ctx.cumulative_pass_nr();
         let c = self.doc.cels.get(&cel)?;
         let size = crate::render::cel_image_size(&c.raster, LARGEUR_CARTE);
@@ -321,7 +325,7 @@ impl App {
                 t.cliche = cliche;
             }
             Some(Changement::Zone(z)) => {
-                let image = crate::render::cel_image_region(&c.raster, LARGEUR_CARTE, z);
+                let image = crate::render::cel_image_zone(&c.raster, LARGEUR_CARTE, z);
                 let t = self.espace3d.card_textures.get_mut(&cel).expect("la carte a son image");
                 t.tex.set_partial([z[0], z[1]], image, egui::TextureOptions::LINEAR);
                 t.version = version;

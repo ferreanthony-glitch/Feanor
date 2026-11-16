@@ -8360,7 +8360,15 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin d'origine (ou une copie déplacée, si le point
   d'ancrage n'est pas le départ du trait) : la timeline se scinde comme pour toute clé de dessin, aucune clé de position, et chaque pose
   se redessine. Sans dessin au départ, rien n'est posé et la ligne d'état dit de dessiner d'abord. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
-  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. Vectoriel : les traits sont translatés,
+  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. **Chaque dessin reste à son
+  jalon** (2026-11-13, partie 152, à sa demande : « règle ce qui reste imparfait » ; avant, ils étaient rangés par rang, et une
+  marque posée au milieu du chemin décalait d'une marque les poses redessinées) : une marque posée reçoit une copie du dessin du
+  jalon d'avant, tel qu'on l'a laissé, mise à sa place sur le chemin ; une marque retirée emporte le sien ; « Retirer les
+  marques » garde ceux du départ et de l'arrivée ; seul le départ montre le dessin d'origine lui-même. **Une clé de dessin
+  posée à la main entre deux jalons n'est jamais remplacée** (2026-11-13, partie 152.2, à sa demande, sans boîte de
+  dialogue : « Tout ce qui peut s'en passer s'en passera ») : elle reste à son image avec son dessin, le dessin du jalon
+  d'avant est exposé jusqu'à elle, un jalon qui tomberait sur elle est posé sur l'image libre d'à côté, et la barre
+  d'état le dit une fois ; elle n'est ni déplacée ni tournée avec le chemin. Vectoriel : les traits sont translatés,
   le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
   suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
   le modèle des clés de position, format 49, sans emploi ici.)
@@ -8426,7 +8434,10 @@ Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois p
 feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
 l'autre. `depart` et `fin` : les images du plan où le chemin commence et finit (`fin` absente : la dernière du plan) ; `temps` : le temps de
 chaque marque, en fraction du temps entre départ et fin (absent : parts égales) ; `cles` : interpolées ou par images ; `dessins` : en clés
-d'images, les dessins posés (numéro, déplacement). `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
+d'images, les dessins posés (numéro, déplacement), un par jalon dans l'ordre des jalons, **chacun gardé à son jalon** (2026-11-13) :
+`ajouter_marque` fait prendre place au jalon neuf avec le dessin du jalon d'avant (deux jalons de suite avec le même dessin : le calcul
+suivant fait au second sa copie), `retirer_marque` retire le sien, `retirer_les_marques` garde ceux des deux bouts, `assainie` les
+remet en ordre avec leurs marques. `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
 en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre deux jalons, selon leurs temps), le point du
 chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, aucune (`trajectoireui.rs` pose les dessins). Une
 trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre, temps faux, fin avant le
@@ -10429,7 +10440,2489 @@ Espace 3D… », « Plan en Espace 3D : sa caméra ne se règle pas par des cadr
 14. Un plan ordinaire du même projet : rien n'a changé (caméra bridée, pile, vue de dessus, cadres des Vignettes).
 15. Poignées de rotation d'une carte près de 90° : signaler si elles sautent.
 
-## 144. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, depuis `espace-libre`)
+## 144. Plusieurs vues dans l'Espace 3D (2026-11-12, branche `vues-3d`)
+
+« J'aimerais que tu ajoutes à la vue 3D la possibilité d'afficher plusieurs vues », comme dans les logiciels 3D courants. L'idée est générale ; la façon de faire est la nôtre.
+
+Code : `espace3dvues.rs` (dispositions, points de vue, vues orthographiques, gestes routés, peinture de chaque vue, menus, bordures, mémoire), `espace3dview.rs` (la souris de la vue seule coupée en deux : `e3_nav_camera` et `e3_input_objets`, que les vues multiples reprennent ; une carte vue par la tranche s'attrape), `espace3dui.rs` (bouton « Vues », commandes), `espace3dgizmo.rs` (taille du manipulateur dans une vue orthographique), `document.rs` (`Document::vues_3d`), `project.rs` (champ facultatif `vues_3d`), `keymap.rs`, `keymap.toml`. Essais : `espace3dvues_tests.rs` (12).
+
+### 144.1 Ce qu'on voit
+
+- **Le bouton « Vues »**, dans la barre de la vue 3D, après « Regarder par la caméra » : son icône montre la disposition du moment ; un clic ouvre les quatre choix : **1 vue** (l'Espace 3D d'avant, tel quel), **2 vues côte à côte**, **2 vues l'une sur l'autre**, **4 vues**. Clic droit dessus : lui donner un raccourci (il passe à la disposition suivante). Chaque disposition a aussi sa commande, sans touche par défaut : `espace3d.vues_une`, `espace3d.vues_cote`, `espace3d.vues_superposees`, `espace3d.vues_quatre`.
+- **Chaque vue a son cadre et son menu**, en haut à gauche : Perspective (libre), Dessus, Dessous, Face, Arrière, Gauche, Droite (orthographiques), Caméra du plan (ce que filme le plan, au format du cadre).
+- **D'origine** : 4 vues = Dessus, Face, Droite, Perspective (dans l'ordre de lecture) ; 2 vues = Perspective et Caméra du plan. « Face » regarde l'espace du côté de la caméra du plan.
+- **Repères** : chaque vue a sa grille (en perspective et par la caméra : le sol ; en orthographique : le plan de l'espace qui lui fait face, le sol vu de dessus, la feuille vue de face, le plan de côté vu de gauche ou de droite) et, en bas à gauche, le repère des axes (X rouge, Y vert, Z bleu) tel que la vue le voit. La vue active (la dernière touchée) a un liseré discret.
+- **Les bordures** entre les vues se glissent (le curseur change) ; elles restent entre 15 % et 85 % de la zone.
+
+### 144.2 Les gestes
+
+- **Ils vont à la vue sous le pointeur** (à celle où le glisser a commencé, tant qu'il dure), avec la navigation de la vue seule : molette pour avancer (zoomer en orthographique), bouton du milieu pour glisser, clic droit ou Alt + glisser pour tourner. Par la caméra du plan, comme avant : ces gestes déplacent la caméra (sa clé de l'image courante si elle est animée).
+- **Une vue orthographique se glisse et se zoome, ne tourne pas.** Un geste de rotation la fait passer en perspective, depuis la même direction ; la ligne d'état le dit, son menu la remet. Glisser dans le vide (bouton principal) la fait glisser, au lieu de la tourner.
+- **Choisir, tirer une carte, les poignées** : le même code que la vue seule, dans chaque vue. **Ce qui est choisi ou bougé dans une vue se voit dans toutes** (une seule sélection, un seul plan). Dans une vue orthographique, une carte vue par la tranche (un trait) s'attrape aussi par son trait.
+- **Agrandir** : la commande `espace3d.vue_agrandir` (sans touche par défaut) ou un double-clic sur le menu d'une vue la met en plein cadre ; le même geste ramène la disposition.
+- « Regarder par la caméra », avec plusieurs vues, fait passer la vue active à la caméra du plan, ou la remet en perspective. « Recadrer » recadre toutes les vues.
+- Revenir à 1 vue montre la vue active si c'est une perspective ou la caméra du plan.
+
+### 144.3 La mémoire
+
+La disposition, le point de vue de chaque vue et les bordures sont **retenus avec le projet**, dans un champ facultatif du manifeste (`vues_3d`), **sans changer le numéro de format** : une version d'avant l'ignore et ouvre le projet en une vue (elle perd seulement cette disposition). Un projet d'avant s'ouvre en une vue. Des valeurs inconnues (écrites par une version plus récente) redeviennent celles d'origine, le projet s'ouvre quand même. La navigation de chaque vue (où elle regarde, son zoom) n'est pas retenue : à l'ouverture, les vues se cadrent sur l'espace. Changer de vues n'est pas une étape d'annulation. Un film partagé ne les écrit pas (ce n'est pas une retouche que l'équipe se transmet).
+
+### 144.4 Performance (règle « sans latence »)
+
+Toutes les vues partagent les textures des cartes (une par dessin). Mesuré sur la scène de test (10 cartes, écran 1 280 × 720, carte graphique) : **1 vue 1,44 ms par image (au plus 1,98), 4 vues 2,36 ms (au plus 3,08)**. Pas besoin de ne redessiner que les vues qui changent.
+
+### 144.5 Limites
+
+- (Remplacé par 144.8 : l'orthographique est maintenant une vraie projection parallèle.)
+- Une perspective qui naît d'une vue de dessus ou de dessous penche d'un degré (la vue d'orbite s'arrête à 89°).
+- Les réglages de la vue seule (le menu de coin n'y est pas) restent ceux d'avant : la vue seule n'a pas de point de vue orthographique.
+- Rien n'a été fait à la main dans le vrai logiciel : la règle tient par les essais ; l'écran reste à juger.
+
+### 144.6 À vérifier à l'écran (par Anthony)
+
+1. Ouvrir une copie d'un projet, l'Espace 3D, puis le bouton « Vues » > 4 vues : Dessus, Face, Droite, Perspective, chacune avec sa grille et son repère d'axes.
+2. Molette et bouton du milieu dans chaque vue : seule la vue sous le pointeur bouge.
+3. Clic droit et glisser dans la vue de face : elle passe en perspective, la ligne d'état le dit ; son menu la remet de face.
+4. Choisir une carte dans la vue de face et la tirer : elle bouge dans les quatre vues. Dans la vue de dessus, cliquer son trait : elle est choisie.
+5. Glisser la bordure du milieu ; double-cliquer le menu d'une vue (plein cadre), puis encore (retour).
+6. Menu d'une vue > Caméra du plan : la vue montre ce que filme le plan ; molette et clic droit y déplacent la caméra.
+7. Enregistrer, fermer, rouvrir : les 4 vues reviennent avec leurs points de vue. Un projet d'avant s'ouvre en une vue.
+
+### 144.7 Essais
+
+`espace3dvues_tests.rs` : les rectangles partagent la zone sans se chevaucher ; une vue orthographique ne montre pas la profondeur et regarde d'où elle doit ; ce que retient le projet se relit, même abîmé ; changer de disposition ; point de vue par vue ; le geste va à la vue sous le pointeur ; l'orthographique ne tourne pas (et passe en perspective sur un geste de rotation) ; agrandir puis revenir (raccourci, double-clic) ; la sélection se voit partout, une carte s'attrape par la tranche ; bordure glissée, vues enregistrées puis rouvertes ; un ancien projet s'ouvre en une vue ; 4 vues tiennent 60 images par seconde.
+
+### 144.8 Après la relecture (2026-11-12)
+
+- **Une vraie orthographique.** `View` (`espace3dmath.rs`) a un champ `ortho` : la largeur montrée, en mètres. Les rayons sont parallèles (origine sur le plan de l'image, direction la visée), la projection ne divise plus par la profondeur. Le téléobjectif à 20 km est retiré, et avec lui `FOCALE_ORTHO_MIN` : une vue reste orthographique à tout zoom (jusqu'à 10 km de large).
+- **Un plan de glisse vu de profil** (une carte dressée vue du dessus, la caméra vue de face) : on glisse dans le plan de l'écran, à la profondeur de l'objet (`View::screen_to_plane`). Avant : un saut de centaines de mètres, ou rien.
+- **Un plan vu de face** : le déplacement reste dans son plan, rien ne dérive le long de sa normale (20 allers-retours : la profondeur ne bouge pas).
+- **Un axe vu de bout** (Maj + glisser le long de la visée, ou une poignée d'échelle de bout) : rien ne bouge, et la ligne d'état le dit.
+- **Un anneau Tourner vu de profil** : l'angle est celui de la souris à l'écran autour du centre projeté (fini, et qui suit la main).
+- **Un champ `vues_3d` mal formé** (`partage` trop court ou `null`, `points` qui ne sont pas des noms, un nombre à la place de l'objet) : le projet s'ouvre, en une vue (le champ est lu en souple, `Retenue::lire`).
+- **« Regarder par la caméra » du panneau Réglages** passe par la même fonction que celui de la barre (`App::e3_basculer_par_la_camera`) : avec plusieurs vues, son état et son clic suivent la vue active.
+- **Une vue de moins de 16 pixels** au premier cadrage attend d'avoir sa taille ; un rayon abîmé (vue de taille nulle) ne touche aucune carte (`Monde::pick_card`).
+- **Un seul quadrillage** pour la vue seule et pour chaque vue (`App::e3_quadrillage`, à la hauteur de `App::e3_hauteur_sol`).
+
+Essais : 7 de plus dans `espace3dvues_tests.rs` (rouges sur 16f24d9, verts après) et 2 dans `espace3dvues_suite_tests.rs` (le bouton des Réglages, le quadrillage commun).
+
+## 145. Des boutons de clés dans les Réglages de l'Espace 3D (2026-11-12, branche `espace-libre-cles`)
+
+Demandé par Anthony le 2026-11-12, pendant son essai à l'écran du plan en Espace 3D : « les clés de caméras et de
+transformation des objets ont disparu avec la vue 3D ». À la reformulation « quand la vue Espace 3D est ouverte, le
+panneau Réglages n'a aucun bouton de clés, ni pour la caméra ni pour les cartes », sa réponse : « C'est bien ça et
+j'aimerais qu'un bouton y apparaisse. » (La partie 144 est réservée au chantier `vues-3d`.)
+
+**Le constat.** Vue Espace 3D ouverte, le panneau Réglages est celui de l'Espace 3D : les boutons de clés des outils
+Caméra et Transformer n'y sont pas, sur `main` non plus. Dans un plan en Espace 3D (partie 143) c'est plus gênant : sa
+caméra ne se règle que dans cette vue, où rien ne montrait comment poser une clé.
+
+**Ce qui est ajouté** (`src/espace3dcles.rs`) : les boutons des panneaux 2D, avec leurs icônes, leurs bulles et leurs
+commandes. Aucune commande neuve, rien de plus dans `keymap.toml`.
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Losange « Clé de caméra ici » | ligne « Caméra du plan », après « choisir » | `camera.cle_ici` | pose une clé de caméra à l'image courante, avec la caméra telle qu'elle y est (l'image ne change pas) ; une caméra fixe sans clé devient d'abord la clé du début. **Allumé quand l'image courante porte une clé** ; déjà allumé, un clic ne change rien et la barre d'état le dit |
+| Corbeille « Supprimer la clé de caméra » | à côté du losange | `camera.cle_supprimer` | retire la clé de caméra de l'image courante ; grisée s'il n'y en a pas |
+| Losange « Clé de position » | ligne du nom de la carte choisie ; à plusieurs, ligne « N cartes choisies » | `calque.cle_position` | pose une clé de position à l'image courante sur chaque carte choisie, avec sa pose actuelle. **Allumé quand toutes les cartes choisies ont une clé à cette image** |
+| Corbeille « Supprimer la clé d'ici » | à côté du losange | `calque.cle_position_supprimer` | retire la clé de position de l'image courante des cartes choisies ; grisée si aucune carte libre n'en a |
+
+**La règle** (« la sélection agit sur tout ce qui est choisi ») : tant que la vue Espace 3D est ouverte et qu'au moins
+une carte y est choisie, les commandes de clés de position (poser, lisser, supprimer la clé d'ici, tout supprimer)
+visent **les cartes choisies**, et non le seul calque courant, par le bouton, la palette ou une touche
+(`App::pos_targets`). Une seule étape d'annulation pour toutes les cartes. La caméra seule choisie, ou la vue fermée :
+le calque courant, comme avant.
+
+- Une clé de position garde toute la pose de la carte : place, échelle, étirements, rotation, inclinaisons (une
+  surface au sol reste couchée) et écart de profondeur.
+- Une carte qui a des clés est animée : la déplacer, la tourner ou l'agrandir à une autre image pose la clé de cette
+  image, comme avec l'outil Transformer. La caméra de même, dès qu'elle a deux clés.
+- Une carte verrouillée (elle, son dossier ou sa position) ne reçoit pas de clé et n'en perd pas ; choisie avec des
+  cartes libres, elle est laissée de côté.
+
+**Messages** (barre d'état) : « Clé de position posée à l'image … sur … calque(s) : change d'image et déplace le calque
+pour l'animer. », « Clé de position : la carte choisie est verrouillée (elle, son dossier ou sa position). Rien n'est
+changé. », « … clé(s) de position supprimée(s). », « Clé de caméra à l'image … (… clés dans ce plan)… », « Il y a déjà
+une clé de caméra à cette image : déplace la caméra pour la régler, ou retire la clé avec la corbeille. », « Clé de
+caméra supprimée. ».
+
+**Limites.**
+
+- Ce panneau n'a ni « clé précédente / suivante », ni « lisser », ni les adoucis : ils restent dans les réglages des
+  outils Caméra et Transformer et sur les pistes de la timeline.
+- Le losange de position, recliqué allumé, repose la clé avec la même pose (rien ne change à l'image, une étape
+  d'annulation), comme le bouton de l'outil Transformer.
+- Un calque à trajectoire pose ses clés lui-même : le losange le dit et ne pose rien.
+- Par une touche, « Supprimer la clé de position » sur une carte verrouillée répond « Pas de clé de position ici ».
+- **Rien de cette partie n'a été regardé à l'écran.**
+
+**Essais** : `src/espace3dcles_tests.rs` (6) : les boutons sont sur les bonnes lignes et un vrai clic pose et retire
+les clés ; clé de caméra (caméra fixe, losange allumé, annulation, clé posée en déplaçant la caméra à une autre image) ;
+caméra libre d'un plan en Espace 3D ; cartes choisies ensemble en une étape, caméra seule choisie, vue fermée ; carte
+verrouillée ; surface au sol qui garde son inclinaison et sa profondeur.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Vue Espace 3D, ligne « Caméra du plan » : un losange et une corbeille après « choisir », lisibles, leur bulle à une
+   seconde.
+2. Caméra fixe, tête de lecture au milieu du plan : un clic sur le losange l'allume, la piste Caméra montre deux clés
+   (le début et ici). Changer d'image, déplacer la caméra : une clé de plus. Lire le plan : la caméra bouge.
+3. Sur une clé de caméra : la corbeille la retire, Ctrl+Z la rend.
+4. Choisir une carte : le losange et la corbeille sont à côté de son nom. Un clic : un losange vert sur la piste du
+   calque. Changer d'image, déplacer la carte : elle s'anime.
+5. Deux cartes choisies (Maj + clic) : les boutons sont sur la ligne « 2 cartes choisies » ; un clic pose une clé sur
+   chacune, un seul Ctrl+Z retire les deux.
+6. Une carte verrouillée : rien ne se pose, la barre d'état dit pourquoi.
+7. Plan en Espace 3D : les mêmes gestes avec une surface au sol, et la caméra passée derrière les cartes.
+
+## 146. Dessiner dans la vue Espace 3D (2026-11-12, branche `espace-libre-cles`)
+
+Demandé par Anthony le 2026-11-12, pendant son essai à l'écran du plan en Espace 3D : « il est impossible de dessiner
+dans l'espace 3D pour l'instant. C'est quelque chose qui doit être faisable en permanence, le trait s'appliquant sur la
+carte ». (L'étape A, partie 143, laissait le dessin « depuis la vue d'orbite » de côté et lui posait la question : sa
+réponse est oui, en permanence. Jusque-là on dessinait en quittant la vue.)
+
+**La règle : l'outil décide.** Dans la vue Espace 3D, vue d'orbite ou « Regarder par la caméra », plan ordinaire ou
+plan en Espace 3D :
+
+- prendre le **pinceau, le crayon, la gomme ou le mélangeur** (sa case dans la barre d'outils, sa touche, ou le bouton
+  « Dessiner sur la carte » de la barre de la vue) : le pointeur **dessine** sur la carte du calque courant ;
+- prendre un **outil de la vue** (choisir, déplacer, tourner, taille, caméra) : le pointeur **manipule** les cartes,
+  comme avant ;
+- **tourner et glisser la vue ne changent pas**, y compris pendant qu'on dessine : Alt+glisser ou clic droit (tourner),
+  bouton du milieu (glisser), molette (avancer) ;
+- **Ctrl+clic** sur une carte, pendant qu'on dessine : elle devient le calque courant, le trait suivant y va.
+
+(Modifié par la partie 152 : l'**outil Sélection** prend lui aussi le pointeur dans la vue, pour son lasso sur la carte
+du calque courant ; et Ctrl+glisser, pendant qu'on dessine, trace un lasso : « Ctrl tenu : lasso », comme sur la
+feuille. Ctrl+clic, sans glisser, prend toujours une carte.)
+
+En entrant dans la vue, le pointeur manipule, comme avant (même si le pinceau est l'outil courant) : rien ne change
+pour qui ne dessine pas. Le choix est gardé quand on sort de la vue et qu'on y revient.
+
+**Ce qu'on voit.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Dessiner sur la carte » (plume) | barre au-dessus de la vue, en tête des outils de la vue | `espace3d.dessiner` | allumé : le pointeur dessine, et les outils de la vue (choisir, déplacer…) sont éteints. Un clic allume le dessin avec le dernier outil de dessin pris (le pinceau à défaut) ; allumé, un clic rend la main aux cartes |
+| La carte sur laquelle on dessine | dans la vue | | c'est la carte choisie : contour et nom en couleur de sélection. Les poignées de déplacement ne sont pas tracées pendant qu'on dessine |
+| Le cercle du pinceau | sous le pointeur | | il est **posé sur la carte** : il a la forme et la largeur du trait qu'il va y laisser (un cercle de face, une ellipse sur une carte penchée, plus petit sur une carte loin). Là où l'on ne peut pas peindre, le curseur « interdit » |
+| Légende | en bas à gauche de la vue | | « Pinceau sur la carte « … » · Ctrl+clic : prendre une autre carte · Alt+glisser ou clic droit : tourner la vue · … » |
+
+La commande `espace3d.dessiner` n'a pas de touche par défaut (palette Ctrl+K, `keymap.toml`) : les touches du pinceau,
+du crayon et de la gomme font le même travail.
+
+**Le trait.** Il passe par le moteur de toujours : appui du stylet, lissage, segment droit avec Maj, annulation (une
+étape par trait), enregistrement ; « peindre derrière » et « peint sur l'aplat » suivent le même chemin (non essayés
+dans la vue). Il tombe là où le regard de la vue
+qui passe par la pointe traverse la carte, quelle que soit son inclinaison : de face, penchée, au sol, en mur. Le trait
+se voit pendant qu'on le trace : la texture de la carte sur laquelle on dessine est tenue à jour par morceaux (les
+tuiles que le trait vient de changer), sans rejouer le moteur de brosses ; elle est aussi plus fine que celle des autres
+cartes (2 048 pixels de large au lieu de 1 024). Mesure sur le banc d'essai (sans carte graphique, feuille
+3 840 × 2 160, écran 1 280 × 720) : une image d'écran pendant le trait prend 1,4 ms (médiane), 1,6 ms au plus. Pas
+mesuré dans le vrai logiciel ni au stylet.
+
+**Jamais d'encre qu'on ne voit pas.** Un trait ne commence, et ne reçoit de points, que là où la carte le montrera :
+dans ses bords, vue de face. Une seule règle dans le code, `espace3ddessin::carte_montre` : la vue Espace 3D l'appelle
+par `CarteVue::sur_la_carte`, la feuille d'un plan en Espace 3D par `App::to_layer_opt` (partie 146.1).
+
+**Là où le trait ne commence pas**, la barre d'état dit pourquoi :
+
+- le pointeur n'est pas sur la carte du calque courant (hors de ses bords, même de peu) ;
+- la carte est vue de dos, par la tranche (à moins de deux degrés), ou elle est derrière l'œil de la vue ;
+- les cartes sont cachées dans la vue (« Montrer les cartes ») ;
+- le calque est un dossier, verrouillé, caché, de position verrouillée… : les refus habituels du dessin.
+
+Pendant un trait, les points où le pointeur quitte la carte (hors de ses bords, de dos, par la tranche) sont laissés :
+rien n'est enregistré hors de la carte, le trait reprend quand le pointeur y revient.
+
+**Messages** (barre d'état) : « Espace 3D : Pinceau sur la carte « … » (elle est entourée). Ctrl+clic : prendre une
+autre carte… », « Espace 3D : le pointeur manipule de nouveau les cartes… », « Rien à peindre ici : le pointeur n'est
+pas sur la carte du calque courant (celle qui est entourée)… », « … la carte du calque courant est vue de dos… »,
+« … vue par la tranche… », « … derrière l'œil de la vue… », « Les cartes sont cachées dans cette vue… », « Ce calque
+n'est pas une carte de l'Espace 3D… », « Carte « … » : c'est le calque courant, le trait y va. », « Ctrl+clic : aucune
+carte sous le pointeur. ».
+
+**Limites.**
+
+- Seuls le pinceau, le crayon, la gomme et le mélangeur dessinent dans la vue. Le pot de peinture, le dégradé, les
+  formes, la sélection, Transformer, le texte et coller une image n'y sont pas : avec eux le pointeur manipule les
+  cartes, et il faut quitter la vue pour s'en servir.
+- La gomme sur plusieurs calques choisis ne gomme, dans la vue, que le calque courant. Les guides de perspective n'y
+  sont pas.
+- On peint sur la carte du calque courant même si une autre carte la cache : rien ne le dit à l'écran (comme à
+  l'étape A5).
+- Dessiner sur une carte vue de dos est refusé dans la vue, alors que la feuille d'un plan en Espace 3D le permet quand
+  la caméra du plan est passée derrière la carte.
+- La vue montre toujours le dessin brut des cartes, sans effets ni modes de fusion ; la carte montre la feuille, pas ce
+  qui est dessiné hors d'elle.
+- En entrant dans la vue le pointeur manipule ; la barre d'outils de gauche garde alors son outil allumé (seule la barre
+  de la vue dit si l'on dessine). Après une touche d'outil tenue puis relâchée (outil « à ressort »), le pointeur dessine.
+- Ctrl tenu n'arme plus le lasso dans la vue Espace 3D (il n'y servait à rien) : Ctrl+clic y prend une carte.
+- **Rien de cette partie n'a été regardé à l'écran, ni essayé au stylet** : les essais font de vrais gestes de souris.
+
+**Pour la suite** (`vues-3d`, partie 144, plusieurs vues côte à côte) : la conversion est écrite pour **une** vue
+(`espace3ddessin::Regard3d` : son rectangle et sa prise de vue ; `CarteVue` : la carte vue par elle). Chaque vue passe
+la sienne à `App::e3_dessin_pointeur` et `e3_dessin_peindre`.
+
+**Essais** : `src/espace3ddessin_tests.rs` : de vrais traits de souris dans la vue d'orbite sur une carte de face, une
+carte penchée et une surface au sol d'un plan en Espace 3D (aller-retour écran → carte → écran à 0,05 pixel, encre sur
+le chemin et nulle part ailleurs, une étape d'annulation) ; les mêmes par la caméra, plan ordinaire et plan en Espace
+3D ; les refus (hors de la carte, de dos, par la tranche, cartes cachées, calque verrouillé, calque caché) ; l'outil qui
+décide (outil de la vue : la carte bouge, aucune encre ; crayon, gomme ; le bouton ; sortir et revenir) ; Alt+glisser
+tourne la vue sans tracer, Ctrl+clic prend une autre carte ; la taille du pinceau ; la texture qui suit le trait par
+morceaux sur une feuille 3 840 × 2 160, et le retour au repos ; calque vectoriel et segment droit avec Maj.
+
+À vérifier à l'écran (par Anthony), **au stylet**, sur la copie d'un projet :
+
+1. Vue Espace 3D : la plume « Dessiner sur la carte » est en tête de la barre de la vue, lisible, sa bulle à une
+   seconde. Un clic : elle s'allume, les outils de la vue s'éteignent, la carte du calque courant est entourée.
+2. Dessiner sur une carte de face : le trait suit la pointe sans retard ni décalage, l'appui du stylet joue, le trait
+   se voit pendant le geste et ne change pas d'aspect au relâché.
+3. Tourner la vue (Alt+glisser, clic droit), dessiner sur la même carte vue de trois quarts : le trait tombe sous la
+   pointe ; le cercle du pinceau est une ellipse couchée sur la carte, de la largeur du trait.
+4. Plan en Espace 3D, « Nouvelle surface » au sol : dessiner dessus depuis la vue d'orbite, vers le fond ; le trait
+   s'arrête avant l'horizon, sans à-coup.
+5. « Regarder par la caméra », puis dessiner : même chose, dans le cadre.
+6. Ctrl+clic sur une autre carte : elle est entourée, le trait suivant y va. La touche du crayon, de la gomme : on
+   dessine toujours.
+7. Un outil de la vue (déplacer) : la plume s'éteint, le même geste déplace la carte. La touche du pinceau : on
+   redessine.
+8. Pointe hors de la carte, carte vue de dos, par la tranche : le curseur « interdit », rien ne se trace, la barre
+   d'état dit pourquoi.
+9. Ctrl+Z après un trait : il part. Quitter la vue : le trait est sur la feuille, au même endroit du dessin.
+10. Un calque vectoriel : le trait, puis son rendu exact quelques instants après, sans saut visible.
+11. Sur un gros projet (feuille 3 840 × 2 160, plusieurs cartes) : pas de saccade en dessinant dans la vue.
+
+### 146.1. Sur la feuille d'un plan en Espace 3D : plus de trait que la carte ne montre pas (correction de l'étape A5)
+
+**Le défaut, vu à l'écran le 2026-11-12** (point 9 de la liste de la partie 143, sur la branche `espace-libre`) : plan
+en Espace 3D, caméra tournée dos aux cartes (panoramique 180°), pinceau sur « Surface au sol », hors de la vue Espace
+3D. Rien ne se voyait, mais un trait **était enregistré** hors de la surface (des points à y = 2 541 à 3 153 pour une
+feuille de 2 160 de haut), et la barre d'état ne disait rien. Anthony a répondu « Oui » à « Je corrige le défaut du
+point 9, le trait invisible hors de la carte ? ».
+
+**La cause.** `App::to_layer_opt` (étape A5) acceptait un point jusqu'à **une feuille au-delà des bords** de la carte
+(pour arrêter un trait qui file vers l'horizon). Or une carte posée par un maillage (`Monde::card_warp_m` : une carte
+inclinée, ou toute carte d'un plan en Espace 3D dont la caméra n'est pas la caméra de référence) ne montre que **sa
+feuille**. Entre les deux, le trait était de l'encre qu'on ne voit pas.
+
+**La règle.** Dans un plan en Espace 3D, pour une carte posée par un maillage, un point de trait n'est accepté que là
+où la carte le montrera : dans les bords de sa feuille, sans marge (`espace3ddessin::carte_montre`, la même condition
+que pour le dessin dans la vue Espace 3D). Donc :
+
+- un trait commencé hors des bords de la carte ne commence pas, et la barre d'état le dit : « Rien à peindre ici : le
+  pointeur est hors des bords de la carte du calque courant. Dans un plan en Espace 3D, une carte ne montre que sa
+  feuille : un trait au-delà ne se verrait pas. » (Carte derrière la caméra ou vue par la tranche : le message
+  d'avant, « … n'est pas sous le pointeur… ». `App::rien_a_peindre` choisit.) ;
+- pendant un trait, les points qui sortent de la carte sont laissés, comme avant ; rien n'est enregistré au-delà du
+  bord (à la largeur du pinceau près) ;
+- le pot de peinture, le dégradé, le segment droit (Maj) et l'ancre d'une trajectoire passent par la même fonction ;
+- **rien ne change** quand le plan passe par le chemin de toujours (caméra de référence et carte à plat : la toile
+  infinie reste peinte et filmée), ni dans un plan ordinaire (une carte inclinée d'un plan ordinaire n'est pas bornée,
+  comme avant).
+
+**Limites.** Dans un plan ordinaire, une carte inclinée ne montre que sa feuille elle aussi : un trait au-delà de ses
+bords y est toujours accepté et ne se voit pas (hors de la demande, laissé tel quel). Près de l'horizon, la dernière
+maille d'une carte coupée par l'œil n'est pas posée : un trait tout au bord de cette coupure peut ne pas se voir.
+**Pas regardé à l'écran.**
+
+**Essais** : `src/espace3ddessin_tests.rs`,
+`on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_not_show_it` : le cas vu à l'écran
+(panoramique 180°, surface au sol, trait sous le cadre là où l'étape A5 l'acceptait : aucun élément ajouté au dessin,
+aucune encre, le message, pas d'étape d'annulation) ; caméra tournée, trait commencé quatre pixels au-delà du bord :
+refusé ; trait parti de la carte et qui en sort : rien au-delà du bord ; caméra de référence et carte à plat : un
+trait hors de la feuille s'enregistre comme avant ; plan ordinaire, carte inclinée : inchangé.
+
+À vérifier à l'écran (par Anthony) : refaire le point 9 de la partie 143 (caméra dos aux cartes, pinceau sur la
+surface au sol, sur la feuille) : rien ne se trace, la barre d'état dit pourquoi, et le dessin de la surface n'a pas
+gagné de trait (Ctrl+Z n'a rien à défaire).
+
+## 147. La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard (2026-11-12, branche `espace-libre-cles`)
+
+Anthony, 2026-11-12, après avoir essayé la version portable d'essai : « il y a beaucoup de crash du logiciel quand on se
+balade dans l'espace 3D. c'est devenu très instable. Est-ce que tu as une solution pour optimiser tout ça et éviter les
+crashs et les ralentissements ? »
+
+**Le plantage.** Rapport `plantage-1794439627.txt` (12 novembre, 0 h 27, dernières actions « Tourner dans l'espace 3D ») :
+« Buffer slices can not be empty », dans `egui_wgpu::Renderer::render`. `card_mesh` (`espace3dview.rs`) pose toujours les
+289 sommets d'une carte et n'ajoute un carreau que si ses quatre coins sont devant l'œil. Quand l'œil coupe la carte au
+point qu'il n'en reste pas un carreau entier devant lui, le maillage a des sommets et **aucun triangle**. egui ne retire
+que les maillages qui n'ont ni sommet ni triangle (`Mesh::is_empty`) ; celui-là part à la carte graphique, et wgpu 24
+refuse une tranche de tampon vide : FEANOR s'arrête. Le second rapport de la même seconde (« SurfaceSemaphores… ») n'est
+que la suite du premier.
+
+Le défaut date de la vue Espace 3D : il est aussi dans `main`. Il y était rare, les cartes faisant face à la caméra. Dans
+un plan en Espace 3D, une surface au sol passe sans cesse en partie derrière l'œil dès qu'on marche dessus, un mur dès
+qu'on le longe : il devient fréquent.
+
+**La correction.** `card_mesh` ne rend rien quand il n'a aucun triangle ; la vue ne pose alors ni le voile ni le dessin
+de la carte (son contour et son nom restent tracés, point par point). Même garde dans le canevas (`canvas.rs`,
+composition par le processeur quand la caméra est en perspective), qui construisait son maillage de la même façon. Les
+autres maillages de l'interface ont été relus (planche des Vignettes, dégradé, bandes de `viewbar.rs`) : ils ne posent
+des sommets qu'avec leurs triangles.
+
+**Rien ne change à l'écran** : ce qui n'était pas dessiné ne l'est toujours pas.
+
+**Essais** (`espace3dvue_tests.rs`). Ils regardent ce que la vue enverrait à la carte graphique : jamais un morceau qui a
+des sommets et aucun triangle.
+
+- *Une carte longée comme un mur, l'œil presque au bout* (seule la dernière rangée de sommets reste devant lui), des deux
+  côtés et vers chaque bout. Rouge avant la correction (« un morceau sans triangle part à la carte graphique »), vert
+  après.
+- *Une promenade de 360 images* dans un plan en Espace 3D (huit calques, une surface au sol, un mur, une surface de
+  face), à hauteur d'homme, en tournant la tête. Elle ne mordait pas avant la correction : elle garde la suite et donne
+  la mesure.
+
+- *Chaque geste de la promenade, un par un*, carte graphique comprise, dans le même plan : le pointeur qui passe, tourner
+  la vue (clic droit), la glisser (bouton du milieu), avancer (molette), tirer la caméra du plan par sa poignée, puis
+  « Regarder par la caméra » avec les trois mêmes gestes (c'est alors la caméra du plan qui bouge). Chacun doit tenir
+  60 images par seconde.
+
+**Vitesse.** Sur le PC de l'atelier (carte RTX 2080 Super, écran d'essai 1280 × 720, feuille 3840 × 2160, 11 cartes) :
+
+| Geste | Médiane par image | Pire image |
+|---|---|---|
+| La promenade de 360 images (sans la carte graphique) | 1,14 ms | 2,43 ms |
+| Le pointeur passe sur la vue | 1,50 ms | 2,06 ms |
+| Tourner la vue (clic droit) | 1,47 ms | 1,82 ms |
+| Glisser la vue (bouton du milieu) | 1,47 ms | 1,97 ms |
+| Avancer (molette) | 1,55 ms | 1,98 ms |
+| Tirer la caméra du plan par sa poignée | 2,30 ms | 3,13 ms |
+| Par la caméra : tourner la caméra | 2,19 ms | 3,14 ms |
+| Par la caméra : déplacer la caméra | 2,20 ms | 3,35 ms |
+| Par la caméra : avancer | 2,22 ms | 4,95 ms |
+
+Une image d'écran à 60 par seconde laisse 16,7 ms : sur cette machine la vue en prend moins d'un septième, et le repos
+revient 6 images après la promenade. Le ralentissement dont parle Anthony n'est donc ni dans le calcul de la vue ni dans
+ses gestes tels qu'ils se mesurent ici ; il tient à sa machine (carte graphique, taille d'écran) ou à son projet (nombre
+et poids des calques), qu'il reste à connaître.
+
+**Suite de référence** : 4 552 essais réussis, 0 échec, les dix groupes de fiabilité passent (Espace 3D : 97 essais) ; le
+vérificateur ne signale que l'avertissement de compilation venu de la branche du Mac (`espace3d.rs`).
+
+**Ce qui n'est pas fait.** Les ralentissements dont parle Anthony n'ont pas été retrouvés sur le PC de l'atelier : sans
+savoir sur quelle machine ni pendant quel geste, rien n'a été changé pour eux. Une piste non vérifiée : chaque carte est
+peinte deux fois sur toute sa surface (son voile, puis son dessin), en transparence ; quand on marche au milieu de
+cartes qui couvrent chacune tout l'écran, une petite carte graphique peut ne pas suivre. Aide > Diagnostic des
+performances, lancé sur la machine lente, dira ce qu'elle vaut. Un garde-fou général (retirer tout
+maillage sans triangle juste avant l'envoi à la carte graphique, où qu'il vienne) n'est pas posé : egui ne donne pas de
+passage propre pour cela.
+
+**À vérifier à l'écran (par Anthony)**, sur une copie de projet :
+
+1. Un plan en Espace 3D avec une surface au sol et un mur. Dans la vue Espace 3D, avancer à la molette jusqu'à traverser
+   le sol et le mur, tourner au clic droit dans tous les sens, longtemps : FEANOR ne se ferme plus.
+2. La même promenade avec « Regarder par la caméra ».
+3. Tourner la caméra, puis une carte, par leurs poignées, jusqu'à ce que la carte passe derrière le regard.
+4. S'il se ferme encore : le rapport le plus récent du dossier `plantages` dit où.
+
+**Retour d'Anthony (12 novembre, vers 15 h)**, sur un autre PC (Core i7-9700K, 16 Go, carte RTX 2060 6 Go), avec la
+seconde version portable d'essai (`FEANOR-portable-2026-11-12b-ESSAI-espace-3d`, exe de f223022) : « Non, plus de
+plantage ». Juste avant, sans préciser la version : « Pas de ralentissement ici avec une machine sous cette config ». Il
+n'a pas dit lesquels des points 1 à 3 il a faits. Les ralentissements du matin ne sont donc retrouvés ni sur le PC de
+l'atelier ni sur celui-là : leur cause reste inconnue, et rien n'a été changé pour eux.
+
+## 148. Une carte peut passer derrière la caméra d'origine du plan (2026-11-12, branche `trajectoire-espace`)
+
+Je lui avais écrit : « Une carte ne peut pas passer derrière la caméra d'origine du plan. Un personnage qui vient vers
+nous s'arrêtera donc avant de nous dépasser. » Anthony, 2026-11-12 : « Alors dépassons cette limite absurde. »
+
+**La limite.** Dans un plan en Espace 3D, la caméra va partout, mais les cartes restaient toutes devant la « caméra
+d'origine du plan » : la caméra telle qu'elle est avant qu'on la déplace, au centre de la feuille, de face. Une carte
+poussée vers elle s'arrêtait un peu avant de la toucher (à la profondeur −0,9 ; la caméra est à −1), et une surface
+demandée derrière elle était refusée.
+
+Elle venait de la façon dont un calque garde sa place : comme pour le multiplan, un décalage et une échelle sur la
+feuille, et une profondeur. La taille de la carte dans l'espace vaut « taille dessinée × (1 + profondeur) » : à −1 elle
+vaudrait zéro. D'où la borne à −0,9 (`Layer::MIN_DEPTH`), posée partout où une profondeur se lit ou s'écrit.
+
+**Ce qui change, dans un plan en Espace 3D seulement.**
+
+- Une carte se pousse vers la caméra d'origine, la traverse et continue derrière elle, aussi loin qu'on veut : avec les
+  poignées de la vue Espace 3D, avec les champs « Position » des Réglages, ou avec le champ « Profondeur », qui descend
+  maintenant sous −0,9 (−1 : sur la caméra d'origine ; −2 : aussi loin derrière elle que la feuille est devant ; jusqu'à
+  −1000).
+- Elle garde sa taille dans l'espace. Vue par la caméra d'origine, une carte qui avance grossit, puis disparaît quand
+  elle la dépasse. Une caméra tournée vers elle, ou reculée derrière elle, la filme.
+- « Nouvelle surface » pose aussi sa surface derrière la caméra d'origine (caméra retournée, par exemple) : plus de refus.
+- On dessine sur une carte passée derrière comme sur une autre, dès que la caméra du plan la voit.
+- Supprimer ses clés de position, la déplacer avec l'outil Transformer, annuler sa transformation : elle reste où elle
+  est.
+- **Décocher « Plan en Espace 3D »** : un plan ordinaire ne sait pas tenir une carte là. Les cartes passées derrière la
+  caméra d'origine, ou tout contre elle, reviennent devant elle, à la profondeur −0,9, à la même place en largeur et en
+  hauteur et à la même taille. La barre d'état le dit, et un seul Ctrl+Z rend la case et les cartes. Recocher ensuite ne
+  les renvoie pas derrière.
+
+**Comment.** Rien de neuf n'est gardé dans le projet : toujours un décalage, une échelle et une profondeur. Sous −0,9,
+la règle « taille × (1 + profondeur) » reste à sa valeur de la borne (un dixième), et seule la place le long de l'axe
+continue (`z = −d0 × profondeur`). La place d'une carte dans l'espace ne saute pas à −0,9, elle se retrouve toujours à
+partir de ce qui est gardé (et inversement), et toutes les valeurs d'avant gardent leur sens (`Monde::card_xf`,
+`card_from_xf_libre`).
+
+- `Layer` : les fonctions d'avant (`depth_at`, `set_depth_at`, `fold_dz`, `set_pose`) gardent la borne, pour les plans
+  ordinaires. À côté, pour un plan en Espace 3D : `depth_libre_at`, et `depth_selon`, `set_depth_selon`,
+  `fold_dz_selon`, `set_pose_selon`, à qui l'on dit si le plan est en Espace 3D. Bornes : ±1000 (`MAX_DEPTH_LIBRE`).
+- `Monde` sait de quel plan il est le monde (`Monde::du_plan`, champ `libre`) ; `Monde::carte` et `Monde::profondeur`
+  lisent une carte selon lui. La vue Espace 3D, ses Réglages, le dessin dans la vue et le pinceau passent par là.
+- **L'image.** Sous la caméra d'origine, un plan en Espace 3D se composait par le chemin du multiplan, qui aurait montré
+  ces cartes comme à −0,9. Dès qu'une carte du plan a passé la borne, le plan prend son changement de repère même sous
+  la caméra d'origine (`Document::repere_du_plan` ; c'est alors l'identité) : chaque carte passe par un maillage, qui
+  écarte ce qui est derrière la caméra. Sans carte au-delà de la borne, rien ne change : mêmes pixels qu'avant.
+- `Monde::surface_xf` ne refuse plus une surface derrière la caméra d'origine. Il ne refuse plus que l'absurde : plus
+  loin de la feuille que mille fois la distance de la caméra d'origine.
+- **Les champs de nombre.** Un champ borné écrit la valeur qu'il a dû borner, rien qu'en se montrant. Le champ
+  « Profondeur » des Réglages de l'Espace 3D et celui du menu d'un calque (panneau Calques) auraient ramené à −0,9 une
+  carte passée derrière la caméra dès qu'on les montrait : dans un plan en Espace 3D, tous deux descendent à −1000.
+
+**Ce qui ne change pas.** Un plan ordinaire garde sa borne à −0,9 partout (poignées, champs, vue de dessus, fichier). Un
+projet existant s'ouvre avec les mêmes valeurs et les mêmes images.
+
+**Format 55.** Aucun champ nouveau, mais des valeurs qu'une version d'avant ramènerait à −0,9 en ouvrant le projet : le
+film changerait sans prévenir. Elle doit donc le refuser. **Un projet enregistré par cette version n'est plus ouvert par
+les versions d'avant (« version plus récente »), même s'il n'a aucun plan en Espace 3D : travailler sur des copies.** Avec
+l'enregistrement continu, le premier changement fait dans un projet ouvert avec cette version le réécrit au format 55 (le
+jalon posé à l'ouverture garde l'état d'avant). Les projets des formats 54 et précédents s'ouvrent tels quels. L'outil
+Trajectoire dans l'Espace 3D, étape suivante de ce chantier, ajoutera ses champs sous ce même numéro.
+
+**Messages** (barre d'état). Décocher : « Plan en Espace 3D : décoché, le plan est de nouveau un plan ordinaire. 2 cartes
+étaient tout contre la caméra d'origine du plan, ou derrière elle : elles sont revenues devant elle, un plan ordinaire ne
+peut pas les garder là. Ctrl+Z remet tout comme avant. » Surface très loin derrière la caméra d'origine : « « Surface
+face à la caméra » posée à 400.0 m, mais plus petite que le cadre : près de la caméra d'origine du plan et derrière elle,
+une carte ne dépasse pas dix fois la taille de la feuille. Pose-la moins loin de ta caméra pour qu'elle remplisse le
+cadre. » Le refus d'une surface « elle tomberait derrière la caméra d'origine du plan » (partie 143) n'existe plus ; il
+reste « … elle tomberait trop loin de la feuille pour être une carte… ». La bulle du champ « Profondeur » dit, dans un plan
+en Espace 3D : « Sous −0,9 la carte ne change plus de taille : elle avance jusqu'à cette caméra, la caméra d'origine du
+plan (−1), puis passe derrière elle. »
+
+**Essais** (`espace3d_tests.rs`, 8 de plus ; `espace3dcles_tests.rs`, 1 de plus).
+
+- *Une carte garde sa place derrière la caméra d'origine*, calque fixe et calque animé : posée en z = 2 × la distance de
+  la caméra, relue à la même place, de la même taille, dans le même sens ; poussée plus loin, ramenée sur la caméra, à
+  la borne, devant la feuille : sa taille dans l'espace ne bouge pas. Le placement est continu à −0,9.
+- *Un plan ordinaire s'arrête toujours à −0,9* : par les poignées, par la profondeur, par une pose, à la lecture, à
+  l'image (un calque à −3 y est filmé comme à −0,9, mêmes pixels).
+- *L'image* : sous la caméra d'origine, une carte passée derrière n'est plus filmée (le chemin d'avant la montrait) ;
+  une caméra placée derrière elle la filme, son centre là où le calcul le dit, à sa taille ; caméra décalée, tournée et
+  zoomée de même. L'écran, les sorties et un plan rangé posent pareil ; le pinceau retrouve son point sur la carte, et
+  ne trace rien quand elle est derrière la caméra.
+- *Passé la borne, la carte continue* : à −0,95 elle paraît deux fois plus grande qu'à −0,9 (un plan ordinaire la
+  montre comme à −0,9) ; à −1 et au-delà elle a quitté l'image de la caméra d'origine. Devant la borne, un plan en
+  Espace 3D donne les mêmes pixels qu'un plan ordinaire.
+- *« Nouvelle surface » derrière la caméra d'origine* (caméra retournée) : posée, le cadre en son centre, on y dessine,
+  la vue d'édition la prend là où elle est ; à 400 m, posée plus petite, et la barre d'état le dit.
+- *Le fichier* : un calque fixe à −2,5 et une clé à −2,75 reviennent tels quels dans un plan en Espace 3D ; les mêmes
+  valeurs dans un plan ordinaire reviennent à la borne ; mêmes images avant et après ; le fichier dit son format (55 au
+  moins) ; le même projet écrit sans profondeur sous −0,9 et numéroté 54 s'ouvre avec les mêmes valeurs et les mêmes
+  pixels.
+- *Supprimer les clés de position* d'une carte passée derrière (toutes, ou la dernière) : elle ne bouge pas ; la
+  déplacer avec l'outil Transformer ou annuler sa transformation non plus ; dans un plan ordinaire, la borne.
+- *Décocher* : les deux cartes au-delà de la borne reviennent à −0,9 (place en largeur et en hauteur, taille et sens
+  gardés ; la clé de devant d'une carte animée garde sa profondeur), une seule étape d'annulation, le message ; Ctrl+Z
+  rend tout ; recocher ne les renvoie pas ; sans carte au-delà, rien ne bouge.
+- *Les champs* (`espace3dcles_tests.rs`) : montrer les Réglages de l'Espace 3D et le champ « Profondeur » du menu du
+  calque pour une carte à −2,5 ne la déplace pas et ne laisse aucune étape d'annulation ; dans un plan ordinaire, le
+  même champ ramène à −0,9.
+
+Essais d'avant **réécrits** (ils disaient l'ancienne limite) : `a_surface_facing_a_turned_camera_fills_its_frame_whatever_the_camera_does`
+affirmait « derrière la caméra d'origine du plan : pas de carte possible, pas de surface » ; il affirme maintenant que
+la surface s'y pose (deux caméras de plus, tournées vers l'arrière), et que seul un placement absurde est refusé. Son
+aide `carte_posee` relit la profondeur comme un plan en Espace 3D. Numéro de format épinglé (54 → 55, « plus récent »
+55 → 56) dans `camera_retours_tests`, `corbeille_tests`, `partage_tests`, `petits_livrables_tests`, `pipeline_tests`,
+`planannule_tests`, comme à chaque nouveau format.
+
+**Suite de référence** (PC de l'atelier, 2026-11-12, 20 h 34) : 4 562 essais réussis, 0 échec, les dix groupes de
+fiabilité passent (Espace 3D : 107 essais) ; le vérificateur ne signale que l'avertissement de compilation connu
+(`espace3d.rs`, des fonctions qui ne servent qu'aux essais). L'exe n'a pas été reconstruit.
+
+**Ce qui n'est pas fait.**
+
+- **Entre deux clés de position posées à des profondeurs différentes, la carte ne garde pas sa taille dans l'espace.**
+  Une clé retient une échelle et une profondeur, et chacune va de l'une à l'autre à vitesse constante. Avec une clé sur
+  la feuille et une clé derrière la caméra d'origine (aussi loin derrière elle que la feuille est devant), le calcul
+  donne une carte qui enfle jusqu'à 1,7 fois sa taille vers le cinquième du chemin, tombe à la moitié à la borne, puis
+  regrossit jusqu'à sa taille. Ce défaut date des clés de profondeur (il est aussi dans un plan ordinaire) ; il se verra
+  dès qu'un personnage avance vers la caméra avec deux clés seulement. En attendant l'outil Trajectoire de l'Espace 3D
+  (étape suivante), poser des clés rapprochées. Non mesuré par un essai.
+- **Dès qu'une carte du plan a passé la borne, toutes ses cartes sont posées par un maillage, même sous la caméra
+  d'origine.** Comme quand la caméra a bougé (partie 143) : une carte ne montre alors que sa feuille, le dessin hors de
+  la feuille n'est plus filmé, et le pinceau ne trace pas hors de la feuille de la carte.
+- Tout contre la caméra d'origine et derrière elle, une carte ne dépasse pas dix fois la taille de la feuille (son
+  échelle s'arrête à 100). Une surface demandée plus grande est posée plus petite, et la barre d'état le dit.
+- Un calque **collé d'un plan en Espace 3D dans un plan ordinaire** avec une profondeur sous −0,9 y est montré à −0,9.
+  S'il est animé et que sa profondeur de base est elle-même sous −0,9, ses clés se décalent à la prochaine ouverture du
+  projet (la lecture ramène la base à −0,9 sans recompter les écarts). Un calque de toute la scène partagé entre un plan
+  en Espace 3D et un plan ordinaire est dans le même cas. Non corrigé.
+- Les silhouettes de l'outil Trajectoire (2D) ne suivent pas la caméra d'un plan en Espace 3D : c'est l'étape suivante.
+- Les quatre endroits de l'outil Trajectoire qui rendent un calque fixe gardent maintenant sa profondeur dans un plan en
+  Espace 3D, par la même fonction que la suppression des clés ; ils n'ont pas d'essai à eux.
+- **Rien n'a été regardé à l'écran.**
+
+**Vu en passant, pas corrigé.**
+
+- **La caméra d'un plan en Espace 3D est relue bornée à ±85°** (panoramique et bascule, `project.rs`, lecture des clés
+  de caméra) : une caméra retournée (panoramique de 180°) revient à 85° à la réouverture du projet. C'est le cas pour
+  filmer une carte passée derrière la caméra d'origine. À corriger avant de s'y fier après une réouverture.
+- Le message et la bulle de « Plan en Espace 3D » disent encore « En construction : l'image ne change pas encore », ce
+  qui n'est plus vrai depuis l'étape A3.
+
+**À vérifier à l'écran (par Anthony)**, sur une copie de projet :
+
+1. Un plan en Espace 3D, une carte avec un dessin. Dans la vue Espace 3D, la tirer vers la caméra d'origine par la flèche
+   de la profondeur : elle la traverse et continue derrière, sans s'arrêter et sans changer de taille.
+2. Quitter la vue Espace 3D, caméra du plan non déplacée : la carte passée derrière n'est plus dans l'image. La ramener
+   juste devant la caméra (« Profondeur » −0,95) : elle remplit l'image.
+3. Choisir la caméra, la reculer derrière la carte ou la tourner vers elle : l'image la montre. Dessiner dessus : le
+   trait tombe sous le stylet.
+4. Champ « Profondeur » des Réglages : taper −2, la carte passe derrière la caméra d'origine ; taper 0, elle revient au
+   niveau de la feuille. (Ce champ garde l'échelle du calque : entre 0 et −0,9 sa taille dans l'espace change, ce sont
+   les poignées qui la gardent.) Lire sa bulle.
+5. Caméra retournée (panoramique 180°), « Nouvelle surface face à la caméra » : elle se pose, le cadre tombe en son
+   centre, on dessine dessus.
+6. Animer : une clé de position loin devant, une autre derrière la caméra d'origine, puis lire. Le personnage vient vers
+   nous et nous dépasse. Dire si sa taille « respire » en chemin (premier point de « Ce qui n'est pas fait »).
+7. Supprimer les clés de position d'une carte passée derrière : elle ne bouge pas.
+8. Clic droit sur le calque d'une carte passée derrière (panneau Calques) : le champ « Profondeur » montre sa valeur
+   (−2,00 par exemple) et la carte ne bouge pas.
+9. Décocher « Plan en Espace 3D » : la barre d'état dit combien de cartes sont revenues devant la caméra ; Ctrl+Z les
+   renvoie derrière et recoche la case.
+10. Enregistrer, fermer, rouvrir : la carte est toujours derrière la caméra d'origine. (La caméra, elle, peut être
+    revenue à 85° : défaut noté ci-dessus.) Ouvrir la copie avec le FEANOR d'avant : refus propre.
+11. Un plan ordinaire du même projet : rien n'a changé, « Profondeur » s'arrête à −0,9.
+
+## 149. La Trajectoire dans l'Espace 3D : ce qui est choisi suit un chemin tracé dans l'espace (2026-11-12, branche `trajectoire-espace`)
+
+Anthony, 2026-11-12 : « Je voudrais qu'on essaye d'intégrer l'outil trajectoire dans l'environnement 3D, afin de générer
+des mouvements dans l'espace. » Je lui ai demandé : un calque, ou la caméra ? « Un calque ou la caméra, les deux. Ce qui
+est sélectionné est sujet à la trajectoire. »
+
+**Où.** Dans la **vue Espace 3D** d'un **plan en Espace 3D**, avec l'outil Trajectoire (sa case, sa touche). Prendre
+l'outil dans la vue donne le pointeur à la trajectoire, comme le pinceau le donne au dessin (partie 146) ; prendre un
+outil de la vue (choisir, déplacer, tourner, taille, caméra) le rend aux cartes. Tourner et glisser la vue restent sur
+Alt+glisser, le clic droit, le bouton du milieu et la molette. Sur la feuille, l'outil Trajectoire est celui de toujours
+(partie 119), inchangé.
+
+**Ce qui suit le chemin : ce qui est choisi.** Chaque carte choisie, et la caméra du plan si elle l'est. Rien de choisi :
+la carte du calque courant. Ctrl+clic, avec l'outil, choisit **seule** la carte (ou la caméra) sous le pointeur ;
+Maj+Ctrl+clic l'ajoute à ce qui est choisi, ou la lâche (modifié par la partie 152 : avant, Ctrl+clic ajoutait ou
+lâchait, et la caméra se retrouvait choisie avec la carte du calque courant) ; la liste des cartes des Réglages
+(Maj+clic) et le bouton Caméra servent aussi. La barre d'état dit combien de cartes, et si la caméra en est.
+
+**Le chemin est posé sur une surface.** À l'appui, le regard qui passe sous le pointeur choisit la surface qui porte
+tout le trait :
+
+1. la carte la plus proche qu'il touche et qui n'est pas choisie (un mur, un décor au sol) ;
+2. sinon le sol (le quadrillage, au bas du cadre de la caméra d'origine du plan) ;
+3. sinon, si le regard ne descend pas vers le sol, un plan face à la vue, à la place de ce qui est choisi.
+
+Une carte est plus grande que le cadre et descend sous le sol : là où le sol est devant elle, c'est le sol qui prend le
+trait (on trace sur ce qu'on voit).
+
+**Les gestes**, les mêmes que sur la feuille :
+
+- un trait long : le chemin, depuis la tête de lecture jusqu'à la fin du plan ;
+- un petit trait en travers du chemin : une marque (le temps est le même entre deux marques : serrées, lent ; espacées,
+  vite) ;
+- glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire ;
+- tirer le chemin le tord là où on le prend ; Maj à l'appui, il se déplace en bloc (sur sa surface) ;
+- un second trait long retrace le chemin, sur la surface qu'il touche ; les marques et le temps restent ;
+- Échap abandonne le geste en cours.
+
+Chaque geste vaut pour **tout ce qui est choisi et qui suit un chemin**, en **une seule** étape d'annulation, aux noms de
+la feuille (« Trajectoire », « Marque de trajectoire », « Glisser une marque », « Retirer une marque », « Tirer la
+trajectoire », « Déplacer la trajectoire », « Retracer la trajectoire »). « Près du chemin » et « loin du chemin » se
+mesurent en pixels d'écran, sur le chemin tel que la vue le montre : la prise est la même de près et de loin.
+
+**Ce que ça donne.**
+
+- **Une carte** part de là où elle est à la tête de lecture et se déplace, dans l'espace, comme le chemin se déplace
+  depuis son départ : en largeur, en hauteur et en profondeur. Elle garde son orientation et sa taille dans l'espace :
+  elle rapetisse dans l'image en s'éloignant, grossit en venant vers nous, et passe devant ou derrière les autres selon
+  sa distance, toute seule. Plusieurs cartes choisies : chacune part de sa place et fait le même déplacement.
+  - « Clés d'interpolation » : une clé de position par image ; sur la timeline on ne voit que le départ, les marques et
+    la fin, et les glisser recale le chemin dans le temps, comme sur la feuille.
+  - « Clés d'images » : une clé de position tenue au départ, à chaque marque et à la fin ; la carte saute de l'une à
+    l'autre. Et, comme sur la feuille, une clé de dessin à chacun de ces jalons : une copie du dessin du départ, telle
+    quelle (ni déplacée ni agrandie : c'est la carte qui porte le mouvement), qu'on peut redessiner (modifié par la
+    partie 152 : avant, aucune copie de dessin n'était faite, et la timeline ne montrait pas de clé d'image).
+  - Déplacer, tourner ou agrandir à la main une carte qui suit un chemin (poignées de la vue, champs des Réglages, outil
+    Transformer) change sa place de départ : elle bouge à toutes les images, et son chemin se déplace avec elle.
+- **La caméra** suit le chemin **sans aucune clé de caméra** : le déplacement du chemin s'ajoute, à chaque image, à la
+  caméra de ses clés, comme l'effet de caméra vivant. Panoramique, bascule, rotation et focale restent ceux des clés, et
+  la piste de la caméra n'est pas remplie. On peut toujours la déplacer ou la tourner dans la vue, à n'importe quelle
+  image : la clé écrite tient compte du chemin. « Regarder par la caméra », l'image du plan, les vignettes, les exports,
+  l'export de la caméra (valeurs image par image, et le plan marqué `trajectoire_dans_l_espace`), la fiche du plan, la
+  vue de dessus et la course de la caméra tracée dans la vue la montrent là où le chemin l'a portée. Avec la
+  postérisation temporelle du plan, le chemin avance par paliers, comme les clés.
+- Le montage ne casse rien : raccourcir ou rallonger le plan par la fin ne change pas le mouvement de la caméra (le plan
+  s'arrête en route, la suite revient en le rallongeant) ; rogner son début, insérer ou retirer des images décale le
+  chemin avec les images. Couper le plan, le réunir à un autre, ou rogner son début au-delà du départ du chemin : la
+  trajectoire de la caméra devient d'abord des clés (une par image là où elle la portait), sans changer aucune image.
+  Pour une carte, comme sur la feuille : couper ou réunir détache le chemin, les clés restent.
+
+**Ce que la vue montre**, avec l'outil : le chemin sur sa surface (une barre au départ, une flèche à l'arrivée), les
+marques, le numéro de l'image de chaque jalon, un point là où l'on en est à l'image courante, et la course de la caméra
+quand elle suit un chemin. Sur la **feuille** d'un plan en Espace 3D (ce que filme la caméra du plan), le chemin du
+calque courant est montré de même, sans se laisser prendre : il se retouche dans la vue Espace 3D, la barre d'état le
+dit. Le chemin de la caméra n'est pas montré sur la feuille.
+
+**Réglages** (panneau Réglages de la vue, en tête, quand l'outil a le pointeur) : qui est choisi, combien de marques, de
+quelle image à quelle image ; « Partir de la tête de lecture », « Finir à la tête de lecture », « Temps égaux entre les
+marques », les deux sortes de clés, « Retirer les marques », « Détacher » (le chemin s'en va, le mouvement reste : les
+clés des cartes, et pour la caméra une clé par image) et « Effacer » (le chemin et son mouvement s'en vont : les cartes
+gardent la place du départ, la caméra retrouve celle de ses clés). Tous agissent sur la trajectoire de tout ce qui est
+choisi, caméra comprise, en une étape. Le point d'ancrage et « le dessin tourne avec le chemin » ne sont pas proposés :
+ils ne servent pas dans l'espace.
+
+**Messages.**
+
+- Plan ordinaire : « Trajectoire dans l'espace : ce plan n'est pas un « Plan en Espace 3D ». Coche « Plan en Espace 3D »
+  dans Réglages ; ou trace la trajectoire sur la feuille, hors de cette vue. »
+- Rien à déplacer, pas de surface sous le pointeur, trait trop court, calque verrouillé, accroché à la caméra, lié à son
+  calque de trait, ou qui a déjà une trajectoire tracée sur la feuille : la barre d'état dit pourquoi et rien n'est posé.
+- Sur la feuille : « Cette trajectoire est tracée dans l'espace : elle se retouche dans la vue Espace 3D, avec ce même
+  outil. »
+- Décocher « Plan en Espace 3D » : les trajectoires dans l'espace des calques sont détachées (leurs clés restent) et celle
+  de la caméra devient ses clés, dans la même étape d'annulation que la case.
+
+**Comment.**
+
+- `trajectoire.rs` : la trajectoire de la feuille reçoit un **support** facultatif (`Support` : un point du plan et ses
+  deux axes, en mètres, une unité du chemin valant un pixel de la feuille au plan de référence). Avec lui, ses points se
+  lisent dans ce plan ; marques, temps, tirage, recalage : les mêmes calculs. `deplacement_a_l_image` donne le
+  déplacement dans l'espace à une image.
+- `trajectoire3d.rs` (nouveau) : l'outil dans la vue. `cles_dans_l_espace` pose les clés d'une carte par
+  `Monde::card_xf` et `card_from_xf_libre` (partie 148). La place de départ d'une carte est sa pose fixe
+  (`Layer::transform`, `Layer::depth`), que la trajectoire ne touche jamais.
+- `Panel::trajectoire_camera` : la trajectoire de la caméra. `Document::panel_camera_reelle` l'ajoute à la caméra des
+  clés ; `App::current_camera` aussi, et `App::set_current_camera` la retire avant d'écrire la clé.
+  `Document::cuire_trajectoires_camera` l'écrit en clés sans changer l'image.
+- Fichier : toujours le **format 55**, deux champs facultatifs (`support` dans la `trajectoire` d'un calque,
+  `trajectoire_camera` d'un plan). Un projet sans eux, et un projet du format 54, s'ouvrent comme avant.
+
+**Trois défauts corrigés en chemin** (notés à la partie 148).
+
+- **Caméra retournée relue à 85°.** La lecture d'un projet ramenait la bascule et le panoramique de toute clé de caméra à
+  ±85°. Dans un plan en Espace 3D, la caméra est libre : sa bascule va jusqu'à 90° et son panoramique n'a pas de borne.
+  Une caméra retournée revient maintenant comme elle était. La borne de 85° reste pour les plans ordinaires
+  (`project::bornes_de_camera`). La même borne existait à la lecture du contenu rogné d'un plan (`rognage.rs`, les clés
+  de caméra rangées quand on raccourcit un plan) : même correction, selon le plan.
+- **Message périmé.** La barre d'état et la bulle de « Plan en Espace 3D » disaient « En construction : l'image ne change
+  pas encore ». Elles disent ce que fait la case.
+- **Silhouettes de la trajectoire de la feuille.** Dans un plan en Espace 3D, les silhouettes pâles du calque aux jalons
+  étaient posées sans tenir compte de la caméra du plan. Elles sont posées comme le calque lui-même, par le repère de
+  cette caméra.
+
+**Ce qui n'est pas fait.**
+
+- La trajectoire de la caméra ne se voit pas sur la timeline (elle n'a pas de clé) : son départ et sa fin se recalent par
+  les boutons des Réglages, ses marques par la vue. Celle d'une carte se recale sur la timeline, comme sur la feuille.
+- Le chemin de la caméra reste où il a été tracé quand on déplace la caméra à la main (celui d'une carte la suit).
+- Pas de silhouettes aux jalons dans la vue Espace 3D.
+- Le chemin est à plat sur une seule surface : il ne monte pas un escalier, ne passe pas du sol à un mur.
+- Retourner un calque ou des calques choisis (miroir) ne retourne pas un chemin tracé dans l'espace : le calque est
+  retourné, son chemin reste. Retourner le plan entier retourne aussi les chemins.
+- Un calque qui a une trajectoire tracée sur la feuille ne reçoit pas de chemin dans l'espace tant qu'elle n'est pas
+  effacée.
+- Entre deux clés de position posées à la main à des profondeurs différentes, une carte ne garde toujours pas sa taille
+  dans l'espace (partie 148). Une trajectoire en clés d'interpolation n'a pas ce défaut (une clé par image).
+
+**Essais.** `src/trajectoire3d_tests.rs`, 17 essais : le support (du plan à l'espace et retour, ce qui n'est pas un
+plan), le déplacement dans l'espace et le temps des marques, l'écriture en JSON, les clés d'une carte (place, taille et
+orientation dans l'espace) ; puis de vrais gestes de souris dans la vue : un chemin sur le sol déplace la carte choisie
+en X et en Z (sa profondeur change, pas sa taille dans l'espace) ; deux cartes choisies, une annulation pour les deux ;
+un chemin sur une carte non choisie ; la caméra choisie (`panel_camera_reelle` suit, aucune clé, réglable à toute
+image) ; une carte et la caméra ensemble, « Effacer » et « Détacher » ; marques, recalage sur la timeline, glisser et
+arracher une marque, tirer, Échap, second trait ; déplacer à la main une carte qui suit un chemin ; le refus d'un plan
+ordinaire, la feuille, la case décochée ; enregistrer et relire les deux sortes, un projet du format 54 ; la caméra
+retournée relue ; couper, rogner, insérer des images ; le message de la case ; les silhouettes. Vérificateur : 4 579 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs` ; il n'en nomme plus que cinq, `Monde::to_frame` sert maintenant).
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.** Rien n'a été regardé à l'écran.
+
+1. Un plan en Espace 3D, deux cartes avec un dessin. Vue Espace 3D, outil Trajectoire. La carte du calque courant étant
+   entourée, tracer un trait sur le sol, devant elle : le chemin apparaît sur le quadrillage, avec sa barre, sa flèche et
+   les numéros d'images. Lire le plan : la carte suit le chemin, grossit en venant vers nous, sans se déformer.
+2. Dire si le trait tombe bien là où on le pose sur le sol, de près et de loin, et si le sol est facile à viser (le
+   quadrillage suffit-il à lire la profondeur ?).
+3. Un petit trait en travers du chemin : une marque. En poser deux serrées près du départ : départ lent. Glisser une
+   marque ; la tirer loin du chemin : elle part. Tirer le chemin : il se tord. Maj+glisser : il se déplace. Échap pendant
+   un geste : rien ne change. Ctrl+Z après chaque geste : un seul pas à chaque fois.
+4. Maj+Ctrl+clic sur la seconde carte (modifié par la partie 152 : Ctrl+clic seul la choisit seule) : les deux sont
+   choisies. Un nouveau trait : les deux cartes suivent. Ctrl+Z : les deux chemins partent ensemble.
+5. Choisir la caméra (bouton Caméra, ou Ctrl+clic sur elle). Tracer un chemin au sol : la caméra le suit, sa course est
+   tracée dans la vue. « Regarder par la caméra » et lire : travelling. Vérifier sur la timeline qu'aucune clé de caméra
+   n'a été posée. Quitter la vue Espace 3D : l'image du plan fait le même travelling.
+6. La caméra sur son chemin, à une image du milieu : la tourner (panoramique) ou la déplacer avec ses poignées. Elle
+   reste où on la met, et le reste du mouvement suit.
+7. Une carte et la caméra choisies ensemble (Maj+Ctrl+clic pour ajouter l'une à l'autre : modifié par la partie 152),
+   un seul trait : les deux suivent le même chemin, à la même vitesse (la carte reste à la même place dans l'image).
+8. Tracer sur un mur (une carte debout, non choisie) : le chemin est posé sur le mur, la carte choisie monte et descend
+   sans changer de distance.
+9. Réglages, avec l'outil : « Partir de la tête de lecture », « Finir à la tête de lecture », les deux sortes de clés
+   (en clés d'images, la carte et la caméra sautent de marque en marque), « Détacher », « Effacer ». Dire si ces
+   réglages sont à la bonne place (en tête du panneau de l'Espace 3D).
+10. Une carte qui suit un chemin : la déplacer avec ses poignées. Elle bouge à toutes les images, son chemin avec elle.
+11. Sur la timeline, glisser la clé d'une marque d'une carte : le mouvement est recalé.
+12. Quitter la vue Espace 3D, outil Trajectoire en main : le chemin de la carte se voit sur la feuille, tel que la caméra
+    le filme ; un appui dit qu'il se retouche dans la vue Espace 3D.
+13. Raccourcir le plan par la fin, puis le rallonger : le mouvement de la caméra ne change pas. Couper le plan au
+    milieu : les deux moitiés gardent leur image (la caméra a maintenant des clés).
+14. Un plan ordinaire, vue Espace 3D, outil Trajectoire : la barre d'état dit qu'il faut un plan en Espace 3D.
+15. Tourner la caméra d'un plan en Espace 3D d'un demi-tour (panoramique 180°), enregistrer, fermer, rouvrir : elle est
+    toujours retournée.
+16. Enregistrer, fermer, rouvrir : les chemins sont là, les mouvements sont les mêmes.
+
+## 150. Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi (2026-11-12, branche `trajectoire-espace`)
+
+Anthony, 2026-11-12, après avoir vu l'outil Trajectoire dans la vue Espace 3D : « même dans l'espace 3D, le panneau
+réglages affiche les réglages de l'outil sélectionné. Les réglages de l'espace 3D basculent dans un panneau
+spécifique ». Puis, pour la place de ce panneau : « Sa place par défaut : en dessous de réglages, à la place de la
+couleur. »
+
+**Avant.** Tant que la vue Espace 3D était ouverte, le panneau Réglages ne montrait plus l'outil en main : il montrait
+les réglages de la vue (les cartes, la caméra). On dessinait sur une carte sans voir la taille ni l'opacité du pinceau
+(partie 146), et les réglages de la Trajectoire dans l'espace avaient été glissés en tête de ceux de la vue (partie 149).
+
+**Maintenant : deux panneaux.**
+
+| Panneau | Ce qu'il montre |
+|---|---|
+| **Réglages** | **toujours l'outil en main**, que la vue Espace 3D soit ouverte ou non. Le pinceau, le crayon, la gomme, le mélangeur : leur taille, leur opacité, leur brosse, « Plus de réglages », aussi quand ils dessinent sur une carte dans la vue. L'outil Trajectoire dans la vue : les réglages de la trajectoire dans l'espace (qui est choisi, les marques, « Partir de la tête de lecture », « Finir à la tête de lecture », « Temps égaux entre les marques », les deux sortes de clés, « Retirer les marques », « Détacher », « Effacer », le mode d'emploi). Sur la feuille : les réglages de la trajectoire à plat, comme avant |
+| **Espace 3D** (nouveau, icône cube) | **les réglages de la vue** : le repère des poignées, l'aimantation à la grille et ses pas, la grille du sol, la case « Plan en Espace 3D », « Nouvelle surface » et sa distance, la liste des cartes (montrer les cartes, ordonner selon la profondeur), les champs et les boutons de clés de la carte choisie, la caméra du plan (choisir, clés, position, panoramique, bascule, rotation, focale, « Regarder par la caméra », « Viser la sélection »). Les outils de la vue (choisir, déplacer, tourner, taille, caméra) n'ont pas d'autres réglages que ceux-là |
+
+Rien n'a changé dans ce que font ces réglages : seule leur place a changé. Le panneau « Réglages » garde son nom.
+
+**Sa place : un onglet de Réglages (modifié par la partie 152).** À cette partie, le panneau était un onglet de plus dans
+le groupe de la couleur, sous les réglages de l'outil, et passait devant la couleur quand la vue s'ouvrait. Vu à l'écran
+le 2026-11-13, il n'y avait qu'une centaine de points de haut : Anthony l'a voulu « à côté de réglages plutôt ». Une
+colonne à lui a d'abord été essayée ; après sa réponse du 13 novembre (« Onglet de Réglages », point 152.3), il est un
+onglet du groupe de Réglages, après Réglages et la fiche du plan : il y arrive et passe devant quand la vue s'ouvre,
+Réglages revient devant quand elle se ferme, et l'onglet reste. Il n'est plus dans les dispositions d'origine.
+Ce qui suit dans cette partie sur sa place (les trois onglets du groupe de la couleur, « il passe devant la couleur »,
+sa place quand la disposition n'a pas la couleur, les dispositions enregistrées qui le reçoivent) ne vaut donc plus :
+voir 152.3.
+
+**Ce qui reste vrai de « il suit la vue »** : quand le panneau a été rangé à la main en onglet d'un groupe, la vue, en
+s'ouvrant, le met devant ce groupe, et rend l'onglet d'avant en se fermant ; si un autre onglet a été mis devant à la
+main entre-temps, ou si le panneau a été glissé ailleurs ou fermé, rien n'est défait à la fermeture ; fermé pendant que
+la vue est ouverte, il reste fermé jusqu'à la prochaine ouverture de la vue ; la disposition retenue dans les réglages
+garde l'onglet qu'on avait devant.
+
+**Vue fermée**, le panneau montre une phrase (« La vue Espace 3D est fermée : ouvre-la pour régler ici ses cartes (les
+calques du plan) et la caméra du plan. ») et le bouton « Ouvrir la vue Espace 3D ». Sur la planche des Vignettes, une
+phrase dit que la vue ne s'y montre pas.
+
+**Où le trouver.**
+
+| Élément | Où | Commande |
+|---|---|---|
+| Case « Espace 3D » | menu Affichage > Panneaux | |
+| « Panneau Espace 3D (ouvrir / fermer) » | palette (Ctrl+K), `keymap.toml` | `vue.espace3d_panneau`, sans touche d'origine |
+| Icône cube « Panneau Espace 3D » | barre des panneaux (bord droit), avec Réglages, Couleur et Brosses dédiées ; d'office dans le Storyboard et l'Animation | `vue.espace3d_panneau` : un clic l'ouvre (en onglet de Réglages : modifié par la partie 152) ou le met devant, un autre le ferme |
+
+Le bouton cube de la barre au-dessus du dessin ouvre toujours la **vue** (`espace3d.basculer`) ; le cube de la barre des
+panneaux ouvre le **panneau**.
+
+**Les dispositions enregistrées avant ce panneau (modifié par la partie 152).** À cette partie, au premier lancement,
+le panneau était ajouté une fois en onglet dans le groupe de la couleur des dispositions retenues
+(`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_pose`). Ce n'est plus fait : il arrive avec la vue,
+en onglet de Réglages ; une disposition n'a pas besoin de l'avoir d'avance. Et les dispositions qui l'avaient reçu ainsi
+le perdent, une fois (152.3).
+
+**Les messages qui disaient « dans Réglages »** disent « dans le panneau Espace 3D » : l'ouverture de la vue
+(« Réglages de la vue : le panneau Espace 3D. », « « Nouvelle surface » dans le panneau Espace 3D… »), « Nouvelle
+surface » hors d'un plan en Espace 3D, les cartes cachées quand on veut dessiner, la Trajectoire dans un plan ordinaire
+(barre d'état, légende de la vue, et le texte de ses réglages, qui disait « coche la case plus bas »), « rien n'est
+choisi qui puisse suivre un chemin », et l'outil Caméra sur la feuille d'un plan en Espace 3D (« … ou par ses champs
+dans le panneau Espace 3D »).
+
+**Vocabulaire des parties 143 à 149.** Elles appellent « Réglages de l'Espace 3D », « panneau Réglages de la vue » ou
+« dans Réglages » ce qui est maintenant le **panneau Espace 3D**. Les boutons de clés de la partie 145, la case « Plan en
+Espace 3D » et « Nouvelle surface » de la partie 143, « Montrer les cartes » de la partie 146 y sont. Seuls les réglages
+de la Trajectoire dans l'espace (partie 149, « en tête du panneau de l'Espace 3D ») sont restés dans Réglages : ce sont
+ceux d'un outil.
+
+**Un défaut corrigé en chemin : Ctrl+clic sur la caméra.** Vu à l'écran le 2026-11-12 : avec l'outil Trajectoire dans la
+vue, Ctrl+clic sur la caméra du plan choisissait la surface au sol qui passait dessous. Le dessin de la caméra (son
+corps, sa pyramide) est tracé par-dessus les cartes : quand le pointeur est dessus, c'est la caméra qui est choisie ou
+lâchée. Ailleurs, la carte sous le pointeur, comme avant. « Regarder par la caméra » : son dessin n'est pas tracé, rien
+ne change.
+
+**Ce qui ne change pas.** Ce que fait chaque réglage, chaque commande et chaque touche ; la barre d'outils de la vue
+au-dessus du dessin ; le clic droit dans la vue (il tourne la vue : pas de fenêtre de réglages sous le curseur dans la
+vue Espace 3D) ; le format du projet (55).
+
+**Comment.**
+
+- `dock.rs` : `Pane::Espace3d` (nom enregistré `espace3d`). À cette partie il était dans la famille de la couleur
+  (`COLOR_TABS`) et dans les dispositions standard (`from_legacy`), et `DockLayout::open` le rangeait avec la couleur ;
+  depuis la partie 152 il n'y est plus, et `open` le range en dernier onglet du groupe des réglages de l'outil (modifié
+  par la partie 152). `DockLayout::remettre_devant` rend sa place à l'onglet d'avant.
+- `espace3dpanneau.rs` (nouveau) : le contenu du panneau (`espace3d_panneau`), et le suivi de la vue
+  (`espace3d_panneau_suivre`, une comparaison par image d'écran, avant les panneaux ; il n'agit que quand la vue
+  s'ouvre ou se ferme).
+- `panels.rs` : `tool_options_panel` ne passe plus la main aux réglages de la vue. `espace3dui.rs` :
+  `espace3d_options_panel` n'a plus le bloc de la Trajectoire.
+- `ajuste.rs` : le panneau prend le reste de la colonne sous les réglages de l'outil, comme la couleur (au moins
+  200 points, et sa part selon son contenu quand les deux ne tiennent pas).
+- `workspaceui.rs` : `current_layout` retient l'onglet d'avant. `settings.rs` : la pose dans les dispositions d'avant.
+- `barrepanneaux.rs`, `keymap.rs`, `keymap.toml` : l'icône et la commande.
+- `trajectoire3d.rs` : `e3_traj_choisir`, la caméra d'abord.
+
+**Ce qui n'est pas fait.**
+
+- Un clic simple avec l'outil « choisir » de la vue prend encore la carte avant la caméra quand les deux sont sous le
+  pointeur (`e3_click`) : seul le Ctrl+clic de l'outil Trajectoire a été corrigé.
+- Le panneau ne repasse pas devant tout seul si un autre onglet a été mis devant pendant que la vue est ouverte.
+- Dans les Vignettes et le Montage, le panneau n'est pas dans la disposition d'origine.
+- **Réglages d'une version d'avant.** Un fichier de réglages écrit par cette version nomme le panneau (`espace3d`) dans
+  ses dispositions. Une version de FEANOR d'avant ce chantier ne connaît pas ce nom : elle ne lit pas le fichier et
+  repart des réglages d'origine. Tant que la branche n'est pas fusionnée, son exe se lance donc avec des réglages à part.
+
+**Essais.** `src/espace3dpanneau_tests.rs`, 13 essais : vue ouverte et pinceau en main, Réglages montre le pinceau
+(puis le crayon, la gomme) et pas les cartes, le panneau Espace 3D montre les cartes et la caméra ; avec l'outil
+Trajectoire dans un plan en Espace 3D, Réglages montre toutes les commandes du chemin et le panneau Espace 3D aucune ;
+dans un plan ordinaire, le texte renvoie au panneau Espace 3D ; vue fermée, une phrase et un bouton qui ouvre la vue ;
+ouvrir la vue met le panneau devant la couleur, la fermer rend l'onglet d'avant (la couleur, les brosses dédiées, la
+vue caméra, un onglet mis devant à la main) ; le panneau fermé revient à sa place quand la vue s'ouvre, et sous les
+réglages de l'outil sans la couleur ; la disposition retenue garde la couleur devant, l'Animation et « Rétablir la
+disposition » ont le panneau devant ; les dispositions d'origine l'ont, sous Réglages, avec la couleur (pas les
+Vignettes ni le Montage) ; `open` et `remettre_devant` ; une disposition enregistrée avant le panneau le reçoit une
+fois, sans que ses parts, son panneau flottant ni son onglet de devant bougent ; le nom, le cube, la commande, l'icône ;
+les messages. `src/trajectoire3d_tests.rs`, 1 essai de plus : Ctrl+clic sur la caméra, une carte derrière elle.
+Essais déplacés du panneau Réglages au panneau Espace 3D, pas supprimés : dans `src/espace3dcles_tests.rs`,
+`the_settings_of_the_3d_view_carry_the_key_buttons_and_a_click_poses_and_removes_the_key` et
+`showing_the_settings_of_a_card_behind_the_reference_camera_does_not_bring_it_back` (ils lisent maintenant le panneau
+Espace 3D) ; dans `src/fiabilite_fumee_tests.rs`, l'étape « Espace 3D, réglages d'une carte » (elle ouvre le panneau
+Espace 3D en plus de Réglages). Essais mis à jour pour l'onglet de plus : `dock_tests.rs` (les onglets de la couleur),
+`barrepanneaux_tests.rs` (une icône de plus), `suggestions_tests.rs` (vingt panneaux), `ajuste_tests.rs`,
+`onglets_tests.rs` (le suivi du panneau est rangé avec l'état de l'application, pas avec celui d'un projet).
+Vérificateur : 4 593 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées
+de `espace3d.rs`), aucun nouveau.
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.** Rien n'a été regardé à l'écran. (Modifié par la partie
+152 : les points 1, 2, 4, 5 et 10 à 12, sur la place du panneau avec la couleur, sont remplacés par ceux de la partie
+152 ; au point 7, la barre d'état dit maintenant « La caméra est choisie, seule : le chemin ne déplacera qu'elle. »)
+
+1. Storyboard, vue Espace 3D fermée : sous Réglages, trois onglets, Couleur, Brosses dédiées, Espace 3D ; la couleur
+   devant. Dire si les trois onglets tiennent dans la largeur de la colonne.
+2. Ouvrir la vue Espace 3D (bouton cube au-dessus du dessin) : le panneau Espace 3D passe devant la couleur, avec la
+   liste des cartes et la caméra du plan. Réglages, au-dessus, montre l'outil en main. Dire si la hauteur donnée à
+   chacun des deux panneaux convient.
+3. Prendre le pinceau dans la vue et dessiner sur une carte : Réglages montre la taille, l'opacité, la brosse ; les
+   changer, le trait suit. Pareil avec le crayon et la gomme.
+4. Cliquer l'onglet Couleur pour changer de couleur, la vue ouverte : la couleur passe devant, le panneau Espace 3D
+   reste à un clic. Dire s'il faudrait qu'il repasse devant tout seul, ou si la couleur devrait rester visible
+   autrement pendant qu'on dessine dans la vue.
+5. Fermer la vue, la rouvrir (le panneau repasse devant), puis la refermer sans toucher aux onglets : la couleur
+   revient devant, toute seule.
+6. Plan en Espace 3D, outil Trajectoire dans la vue : Réglages montre « Trajectoire dans l'espace », qui est choisi et
+   ses boutons ; le panneau Espace 3D ne les a plus. Tracer un chemin, puis « Partir de la tête de lecture »,
+   « Détacher », « Effacer » depuis Réglages.
+7. Avec l'outil Trajectoire, Ctrl+clic sur la caméra du plan, une surface au sol passant dessous : c'est la caméra qui
+   est choisie (la barre d'état dit « Le chemin déplacera la caméra. »).
+8. Panneau Espace 3D : cocher « Plan en Espace 3D », poser une « Nouvelle surface », choisir une carte dans la liste,
+   poser une clé (losange), régler la focale de la caméra : tout marche comme avant, depuis ce panneau.
+9. Vue fermée, cliquer l'onglet Espace 3D : une phrase et le bouton « Ouvrir la vue Espace 3D » ; le bouton ouvre la vue.
+10. Fermer le panneau Espace 3D (clic droit sur son onglet, ou son icône cube dans la barre des panneaux), puis ouvrir
+    la vue : il revient à sa place, devant la couleur.
+11. Entrer en animation (double-clic sur un plan), la vue ouverte : le panneau est devant là aussi.
+12. Ta disposition habituelle, celle d'avant ce chantier : le panneau y est arrivé en onglet à côté de la couleur, et
+    rien d'autre n'a bougé (largeurs, hauteurs, panneaux flottants).
+13. Menu Affichage > Panneaux : la case « Espace 3D ». Palette (Ctrl+K) : « Panneau Espace 3D (ouvrir / fermer) ».
+
+## 151. Fusion des vues multiples ; lisser une trajectoire ; continuer un chemin avec Maj (2026-11-12, branche `trajectoire-3d`)
+
+Trois chantiers sur la branche `trajectoire-3d` (partie de `trajectoire-espace`, parties 148 à 150, format 55).
+
+### 151.1 Fusion de `main` (partie 144, les vues multiples de l'Espace 3D)
+
+- **Plantage de la promenade (partie 147).** Une seule `card_mesh`, qui ne rend rien quand le maillage n'a aucun
+  triangle ; la garde `!mesh.indices.is_empty()` du canevas reste. `espace3dvue_tests.rs` et la partie 147 sont ceux de
+  la branche. Les vues multiples peignent leurs cartes par la même `e3_paint_cards` : un essai fait longer une carte aux
+  quatre vues, l'œil presque au bout (la situation du plantage) : aucun morceau sans triangle.
+- **Les gestes.** `main` sépare `e3_input` en `e3_nav_camera` (la caméra du plan) et `e3_input_objets` (choisir, tirer,
+  poignées). Le dessin dans la vue (partie 146) et la Trajectoire dans l'espace (partie 149) passent maintenant par
+  `e3_input_objets` : ils marchent dans la vue seule **et dans chacune des vues**. Chaque vue peint le chemin, le trait en
+  cours et le curseur de l'outil avec son propre regard ; le regard du geste est rendu après la peinture (le trait tombe
+  dans la vue où il a été fait). Pendant qu'on dessine ou trace, les vues ne montrent pas les poignées.
+- **Profondeur libre (partie 148).** Les vues lisaient les cartes par `card_xf(pose, depth_at)` (les bornes de cadrage, la
+  carte vue par la tranche) : elles passent par `Monde::carte`. Une carte derrière la caméra d'origine compte donc à sa
+  vraie place (essai rouge sur l'ancienne lecture, vert après).
+- **Le sol.** `e3_hauteur_sol()` rend `Monde::sol_y` dans un plan en Espace 3D (0 sinon) ; le quadrillage de la vue seule
+  passe par `e3_quadrillage`, comme chaque vue.
+- **Les réglages de la vue.** Le bouton « Vues » est dans la barre de la vue et dans le panneau « Espace 3D » (à côté de la
+  grille), jamais dans « Réglages ». « Regarder par la caméra » du panneau suit la vue active.
+- **Format.** 55, les deux jeux de champs ; `vues_3d` reste facultatif et lu avec indulgence.
+- Essais : `espace3dvues_fusion_tests.rs` (3).
+
+### 151.2 Le lissage d'une trajectoire
+
+Anthony : « de façon générale la courbe tracée pour une trajectoire doit pouvoir être lissée dans les réglages d'outils ».
+
+- Un curseur **« Lissage »** (0 à 100 %) dans les réglages de l'outil Trajectoire, sur la feuille comme dans l'Espace 3D
+  (`trajectoirelisse.rs`).
+- Il agit **en direct sur les trajectoires de ce qui est choisi** : sur la feuille, les calques choisis qui ont une
+  trajectoire sur la feuille ; dans l'Espace 3D, les cartes choisies et la caméra. Un geste sur le curseur = une étape
+  d'annulation. Sa valeur vaut aussi pour les prochains tracés. Sans trajectoire choisie, il ne règle que les prochains
+  tracés (hors de l'annulation, comme la sorte des clés).
+- **Non destructif** : le trait brut est gardé (`Trajectoire::brut`, avec `lissage` ; champs facultatifs, le format reste
+  55). Le chemin est recalculé depuis lui (`Trajectoire::lisser_a`, `lissage_de` : trois passes d'une moyenne glissante,
+  demi-fenêtre jusqu'à 8 % de la longueur, la fenêtre se resserre près des bouts : **les deux bouts restent fixes**). On
+  peut remonter ou redescendre le curseur à tout moment ; 0 rend le trait tel qu'il a été tracé. Tirer, déplacer,
+  retourner le chemin agissent sur le trait brut, puis le chemin est lissé de nouveau.
+- Les marques gardent leur place relative le long du chemin. Les clés suivent comme quand on tire le chemin : à chaque
+  image d'écran en clés d'interpolation et pour les cartes ; en clés d'images, les dessins sont reposés au lâcher du
+  curseur seulement (rien de lourd pendant le geste).
+- Une version de FEANOR qui ne connaît pas ces champs ouvre le projet et lit le chemin lissé ; elle perd le trait brut à
+  l'enregistrement (le lissage ne se défait plus), rien d'autre.
+- Essais : `trajectoirelisse_tests.rs` (5 ; le vrai curseur est tiré à la souris ; 4 rouges quand le lissage ne fait rien).
+
+### 151.3 Continuer un chemin avec Maj
+
+Anthony : « maintenir Maj + tracer une nouvelle trajectoire depuis la fin ou le début d'une trajectoire existante continue
+la trajectoire déjà tracée ».
+
+- **Maj + appui près d'un bout** (début ou fin, à 10 pixels d'écran comme le reste de l'outil), puis un trait : au lâcher,
+  le trait prolonge la même trajectoire (`Trajectoire::prolonger`, `trajectoireprolonge.rs`). Depuis le début il est
+  ajouté devant, depuis la fin derrière. **Maj + appui ailleurs** sur le chemin le déplace toujours en bloc.
+- **Ce qui la suivait continue de la suivre.** Les marques gardent leur place dans l'espace (fractions recalculées sur la
+  nouvelle longueur). Le temps se répartit de nouveau en parts égales entre les jalons, selon la sorte de clés, comme pour
+  un chemin neuf ; le départ et la fin restent sur leurs images. Prolongé par devant, le déplacement se mesure toujours
+  depuis l'ancien départ (`Trajectoire::reference`, champ facultatif) : ce qui suit le chemin passe aux mêmes endroits
+  qu'avant, et commence au bout du nouveau trait.
+- Dans l'Espace 3D, le trait reste sur le plan porteur du chemin, et le prolongement vaut pour tout ce qui est choisi.
+- Le lissage s'applique au morceau ajouté. Un geste = une étape d'annulation (« Prolonger la trajectoire ») ; Échap
+  abandonne. Textes d'aide mis à jour (prise de l'outil, légende de la vue, aides des réglages, barre d'état).
+- Essais : `trajectoireprolonge_tests.rs` (6 : modèle, feuille par la fin et par le début, Échap, Maj au milieu, Espace 3D).
+
+### 151.4 Fusion de `trajectoire-espace` (partie 152)
+
+La partie 152 de l'autre session (la caméra choisie seule, une clé de dessin à chaque jalon des « Clés d'images » dans
+l'espace, la colonne du panneau Espace 3D, le lasso dans la vue) est fusionnée. Le lissage et le prolongement reposent les
+clés par `trajectoire_recalculer` : pendant qu'on tire le curseur « Lissage », les cartes suivent par leurs clés de
+position seulement (`e3_traj_poser_en_direct`), et leurs clés de dessin sont reposées au lâcher ; un prolongement les
+repose au lâcher du trait. Les copies suivies restent les mêmes dessins (essai dans `trajectoireprolonge_tests.rs`).
+### Ce qui reste, ce qui est douteux
+
+- Après une relecture : un prolongement garde toutes les marques (une marque tout près du bout fixe n'est plus jetée :
+  en clés d'images, les dessins sont rangés par jalon) ; « le dessin tourne avec le chemin » garde l'orientation de
+  l'ancien départ ; retracer un chemin garde son lissage ; avec plusieurs sujets choisis, chacun reçoit le trait décalé
+  jusqu'à son propre bout (sur un plan parallèle seulement) ; le curseur laisse les calques et cartes verrouillés.
+- La fenêtre du lissage est une part de la longueur du chemin : après un prolongement (ou un grand tirage) d'un chemin
+  lissé, l'ancienne partie est lissée un peu plus fort qu'avant, pas seulement le morceau ajouté.
+- Rien n'a été regardé à l'écran.
+- Prolonger ne change pas la durée du chemin (départ et fin restent) : un chemin deux fois plus long va deux fois plus
+  vite. À juger par Anthony.
+- Le point de référence d'un chemin prolongé par devant n'est pas connu d'une version d'avant ce chantier : elle
+  décalerait ce qui suit le chemin de la longueur ajoutée devant.
+- Le curseur « Lissage » n'a pas de raccourci.
+- Sur la feuille, le prolongement ne vaut que pour le calque courant (seul son chemin y est montré).
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.**
+
+1. Espace 3D, « Vues » (barre de la vue ou panneau Espace 3D) : 4 vues. Outil Trajectoire, plan en Espace 3D : tracer un
+   chemin au sol dans la vue de dessus, puis dans la perspective ; le chemin se voit dans toutes les vues.
+2. Pinceau dans la vue, en 4 vues : dessiner sur une carte dans une des vues ; le trait tombe sous le pointeur.
+3. Se promener longtemps en 4 vues, une carte traversée : FEANOR ne se ferme pas.
+4. Une carte passée derrière la caméra d'origine : « Recadrer » en 4 vues la montre dans les vues orthographiques.
+5. Feuille : tracer une trajectoire en zigzag, puis tirer « Lissage » dans Réglages : la courbe s'adoucit en direct, ses
+   bouts restent ; redescendre à 0 % : le zigzag revient. Ctrl+Z annule le geste entier.
+6. Deux calques choisis avec chacun un chemin : le curseur lisse les deux.
+7. Clés d'images : pendant qu'on tire le curseur, seul le chemin bouge ; les dessins se reposent au lâcher.
+8. Espace 3D : une carte et la caméra choisies, chacune sur un chemin : le curseur lisse les deux.
+9. Maj + trait depuis la fin d'un chemin : il continue ; depuis le début : il s'allonge devant et le dessin part du bout
+   du nouveau trait. Maj au milieu du chemin : il se déplace en bloc. Échap pendant le trait : rien ne change.
+10. Pareil dans l'Espace 3D, sur un chemin posé au sol ou sur une carte.
+
+## 152. Retours d'Anthony sur la Trajectoire dans l'Espace 3D : la caméra seule, les clés d'images, la place du panneau, le lasso (2026-11-13, branche `trajectoire-espace`)
+
+Anthony, 2026-11-13, après son essai des parties 149 et 150, quatre remarques :
+
+1. « Editer la trajectoire de la caméra ne fonctionne pas puisqu'un calque est toujours sélectionné en même temps. La
+   partie dédiée à la caméra dans la timeline doit être sélectionnée quand la caméra l'est, et plus un calque. »
+2. « Clés d'images ne crée pas de clés d'images dans la timeline. »
+3. « Place-le à côté de réglages plutôt. » (le panneau Espace 3D ; la veille : « en dessous de réglages, à la place de
+   la couleur »)
+4. « L'outil lasso ne fonctionne pas dans l'espace 3D »
+
+### 152.1 La caméra choisie est choisie seule, et sa piste l'est dans la timeline
+
+**Avant.** Avec l'outil Trajectoire, Ctrl+clic *ajoutait* ce qu'on cliquait à ce qui était déjà choisi. Or la carte du
+calque courant est choisie dès qu'on dessine ou qu'on change de calque : Ctrl+clic sur la caméra donnait « 1 carte et
+la caméra », et chaque geste sur le chemin déplaçait aussi le calque. La timeline, elle, montrait toujours le calque
+courant comme la rangée choisie.
+
+**Maintenant : choisir la caméra, c'est la choisir seule.**
+
+| Geste | Ce qui est choisi |
+|---|---|
+| Outil Trajectoire, **Ctrl+clic** sur la caméra ou sur une carte | elle, **seule** : ce qui était choisi est lâché. Une carte choisie ainsi devient le calque courant |
+| Outil Trajectoire, **Maj+Ctrl+clic** | elle rejoint ce qui est choisi, ou le quitte : c'est ainsi qu'on choisit exprès la caméra avec des cartes, ou plusieurs cartes |
+| Outil Trajectoire, Maj seule | rien de neuf : Maj à l'appui déplace le chemin en bloc, comme avant |
+| Outil Trajectoire, **bouton « Caméra » de la barre de la vue** (ou sa commande) | elle, **seule**, et **l'outil Trajectoire garde le pointeur** : le trait suivant trace son chemin. Maj+clic : elle rejoint ce qui est choisi, ou le quitte. La case reste allumée tant que la caméra est choisie (réglé le 13 novembre, à sa demande : « Le bouton « Caméra » de la barre de la vue fait quitter l'outil Trajectoire. On garde l'outil » ; avant, le bouton rendait le pointeur aux cartes, comme un outil de la vue). Avec tout autre outil, le bouton fait ce qu'il faisait ; les autres outils de la vue (choisir, déplacer, tourner, taille) rendent toujours le pointeur aux cartes |
+| Outils de la vue, clic sur la caméra | elle, seule (comme avant) ; Maj+clic ou Ctrl+clic l'ajoute ou la lâche (avant, un second Maj+clic l'inscrivait deux fois). **Même avec une carte derrière son dessin** : la caméra passe d'abord, comme au Ctrl+clic de l'outil Trajectoire, et tirer son dessin la déplace, elle (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, la carte de derrière l'emportait) |
+| Timeline ou montage, clic sur la piste « Caméra » (son nom, le vide de sa rangée, une de ses clés) | elle, seule, la vue Espace 3D montrée (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») |
+| Panneau Espace 3D, « choisir » de la caméra | elle, seule ; **Maj+clic** : avec les cartes déjà choisies, ou lâchée |
+| Panneau Espace 3D, liste des cartes | inchangé : un clic choisit la carte seule, Maj+clic l'ajoute ou la lâche |
+
+Les gestes de la Trajectoire (tracer, marquer, glisser une marque, tirer, déplacer, retracer) n'agissent alors que sur
+le chemin de la caméra : aucun calque ne reçoit de chemin ni de clé. Le repli « rien de choisi : la carte du calque
+courant » ne vaut que quand rien n'est choisi : il n'ajoute jamais un calque à la caméra. La barre d'état le dit :
+« La caméra est choisie, seule : le chemin ne déplacera qu'elle. »
+
+**La timeline et le montage montrent la piste « Caméra » choisie.** Tant que la caméra est choisie seule dans la vue
+Espace 3D (aucune carte avec elle), la rangée « Caméra » a l'aspect de la rangée du calque courant, et plus aucune rangée
+de calque ne l'a :
+
+- timeline : le nom « Caméra » sur le fond d'accent (avec le bord d'accent dans les thèmes de la marque), et sa rangée
+  en surbrillance sur toute la longueur ; les rangées des calques sans surbrillance ni cadre ;
+- montage : le nom « Caméra » en texte fort dans un cadre, et un cadre autour de la case de la caméra sous le plan
+  courant ; les pistes des calques sans cadre ;
+- panneau Calques (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, il montrait toujours le
+  calque courant) : aucun rang n'est montré choisi, ni le calque courant (ni son fond, ni le cadre épais de sa vignette, ni
+  sa sous-ligne d'aplat visée), ni les calques choisis avec lui.
+
+Avec une carte choisie en plus de la caméra (Maj), la rangée reste à son calque. Le calque courant reste le calque
+courant pour tout le reste : c'est sur lui qu'on dessinera.
+
+**Cliquer la piste « Caméra »** (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait » ; avant, rien ne
+se choisissait) : un clic sur son nom, dans le vide de sa rangée, sur une de ses clés ou une poignée de lissage, dans la
+timeline comme au montage, choisit la caméra seule, comme « choisir » du panneau Espace 3D ; la piste devient la rangée
+choisie, plus aucun calque. Ce que la piste faisait au clic reste : la tête de lecture va à l'image cliquée, une clé se
+choisit (Ctrl l'ajoute, Maj prend celles d'entre), les glisser, les poignées de lissage, les menus du clic droit. Au
+montage, un clic sous un autre plan y mène d'abord : c'est la caméra de ce plan qui est choisie. **Seulement la vue Espace
+3D montrée**, dans tout plan (en Espace 3D ou non) : la caméra choisie n'existe que pour la vue. Vue fermée (ou cachée par
+la vue caméra), le clic ne fait que ce qu'il faisait : la rangée reste au calque courant, et rien n'est choisi pour la
+prochaine ouverture de la vue.
+
+**Choisir un calque ou une carte lâche la caméra**, et rend la rangée à ce calque : un clic sur une carte dans la vue,
+la liste des cartes du panneau Espace 3D, un calque dans le panneau Calques, la timeline ou le montage (son nom, sa
+rangée, une de ses clés), « calque du dessus » et « du dessous », même si ce calque était déjà le calque courant. Et
+aussi (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») : la sous-ligne de l'aplat d'un calque ; le
+mode de fusion ou l'opacité changés en haut du panneau Calques ; prendre un outil de dessin dans la vue (pinceau, crayon,
+gomme, mélangeur, outil Sélection), même quand le calque courant n'est pas une carte ou que les cartes sont cachées ;
+commencer un trait ou un lasso dans la vue, la caméra ayant été choisie entre-temps (« choisir », sa piste). L'outil
+Trajectoire, lui, garde la caméra choisie : c'est elle qui suivra le chemin.
+
+**Comment.** `espace3dui.rs` : `App::e3_camera_seule`, `App::calque_montre_courant`, `App::e3_choisir_la_camera`,
+`App::e3_calque_choisi` (appelé par `App::select_layer`), `App::e3_piste_camera_cliquee` (13 novembre),
+`espace3d_pick_camera` et `espace3d_tools` (le bouton « Caméra » qui garde l'outil Trajectoire, 13 novembre).
+`trajectoire3d.rs` : `e3_traj_choisir`, `e3_traj_dire_ce_qui_suivra` (la phrase de la barre d'état, pour le Ctrl+clic et pour le bouton). `espace3dview.rs` : `e3_click`, `e3_press` (la caméra d'abord, 13 novembre).
+`timeline.rs` (`timeline_names`, `timeline_grid`), `layerheads.rs`, `montagerows.rs` (`row_headers`), `storyboard.rs`
+(`montage_strip`) : les rangées et leurs clics. `layersui.rs` (`layer_list`, `layers_panel`), `fondui.rs`
+(`select_aplat`, `aplat_subrow`) : le panneau Calques. `espace3ddessin.rs` (`e3_dessiner`, `e3_debut_du_trait`),
+`espace3dlasso.rs` (`e3_selectionner`, `e3_sel_presser`) : le dessin et le lasso dans la vue.
+
+### 152.2 « Clés d'images » pose des clés de dessin dans la timeline
+
+**Avant** (partie 149). En « Clés d'images », une carte recevait seulement une clé de position tenue à chaque jalon :
+elle sautait de marque en marque, mais la timeline ne montrait aucune clé de dessin, et on ne pouvait pas redessiner
+chaque pose.
+
+**Maintenant**, comme sur la feuille (partie 119) : une carte qui suit un chemin dans l'espace en « Clés d'images » a,
+**à chaque jalon** (le départ, chaque marque, la fin), **une clé de dessin**, exposée jusqu'au jalon suivant (la
+dernière, jusqu'à la fin du plan). Le départ garde son dessin d'origine ; chaque autre jalon reçoit une copie de ce
+dessin. La timeline se scinde aux jalons, et chaque pose se redessine.
+
+**La seule différence avec la feuille : la copie n'est ni déplacée, ni agrandie, ni tournée.** Sur la feuille, c'est
+le dessin copié qui porte le mouvement. Dans l'espace, c'est la carte : elle garde sa clé de position tenue à chaque
+jalon, et le dessin reste à sa place sur la carte.
+
+Les copies sont suivies, comme sur la feuille (`Trajectoire::dessins`, `source`) :
+
+- glisser une marque le long du chemin, tirer ou déplacer le chemin : aucun dessin n'est refait, la clé de position
+  tenue du jalon suit ;
+- glisser sur la timeline la clé d'un jalon (sa clé de dessin au montage, ou sa clé de position) recale le jalon : sa
+  clé de dessin change d'image, avec le même dessin ; ce qu'on y a redessiné reste ;
+- **chaque copie est à son jalon**, quoi qu'il arrive aux autres (réglé le 13 novembre, à sa demande : « règle ce qui
+  reste imparfait » ; avant, les copies étaient rangées par rang de jalon, et une marque posée au milieu du chemin
+  décalait d'une marque les poses déjà redessinées) : une marque de plus reçoit **une copie du dessin du jalon d'avant,
+  tel qu'on l'a laissé** (ce que l'image montrait là jusqu'ici), et tous les autres jalons gardent le leur ; une marque
+  retirée (arrachée, Suppr sur sa clé) emporte sa copie, seule ; « Retirer les marques » garde ceux du départ et de
+  l'arrivée. De même sur la feuille (partie 119), où la copie neuve est en plus mise à sa place sur le chemin ;
+- pendant un geste dans la vue, seules les clés de position suivent ; les dessins se posent au lâcher, et Échap ne
+  laisse rien ;
+- un second trait long (retracer), « Temps égaux entre les marques », Ctrl+Z et Ctrl+Maj+Z, l'enregistrement puis la
+  relecture gardent chaque dessin à son jalon.
+
+| Commande | Ce qu'elle fait des clés de dessin |
+|---|---|
+| « Clés d'interpolation » | les dessins posés aux jalons s'en vont (leurs images reprennent le dessin du départ) ; une clé de position par image |
+| « Clés d'images » | une clé de dessin et une clé de position tenue à chaque jalon |
+| « Détacher » | le chemin s'en va, les clés de dessin et de position restent, à la main |
+| « Effacer » | le chemin et tout ce qu'il a posé s'en vont : le dessin du départ partout, la carte à sa place du départ |
+
+Chacune est une seule étape d'annulation. Sans dessin à l'image du départ, rien n'est copié et la barre d'état le dit
+(« Il manque un dessin au départ : dessine d'abord à l'image N… ») ; la carte, elle, saute quand même de jalon en jalon.
+La caméra n'a pas de dessin : rien ne change pour elle. « Clés d'interpolation » ne change pas.
+
+**Une clé de dessin posée à la main n'est jamais remplacée** (réglé le 13 novembre, à sa demande, sur la feuille comme
+dans l'espace). Anthony : « Une clé de dessin posée à la main entre deux marques est écrasée au recalcul suivant du
+chemin : une boîte de dialogue demande si on écrase le dessin ou non. » Puis, le même jour : « Je préfère qu'on évite au
+maximum la boîte de dialogue. Tout ce qui peut s'en passer s'en passera. » **Ce cas s'en passe : rien n'est demandé,
+parce que rien n'est plus jamais écrasé.**
+
+- **Ce qui est à la trajectoire** : son dessin d'origine et les dessins de ses jalons (`source`, `dessins`). Entre son
+  départ et la fin du plan, toute image où commence un autre dessin est **une clé posée à la main** (la commande
+  « Nouvelle clé », un dessin collé, des images dupliquées…).
+- **Le calcul lit la timeline comme une suite de clés**, dans l'ordre des images : les jalons et les clés posées à la
+  main. Chacune montre son dessin jusqu'à la suivante : un jalon, le sien ; une clé posée à la main, le dessin qu'on y a
+  mis. Le dessin du jalon d'avant est donc exposé jusqu'à elle, et elle tient jusqu'au jalon d'après. Une clé posée à la
+  main n'est jamais retirée, déplacée ni remplacée ; un jalon peut seulement écourter le temps où son dessin est tenu,
+  comme toute clé posée après une autre. Dans l'espace, la carte garde une clé de position tenue par jalon : le dessin
+  posé à la main se voit là où la carte est tenue.
+- **Un jalon qui tomberait exactement sur l'image d'une clé posée à la main** (une marque posée, un recalage sur la
+  timeline, « Temps égaux », « Partir » ou « Finir à la tête de lecture ») est posé sur **l'image libre la plus proche**,
+  celle d'après de préférence, sinon celle d'avant, entre ses deux jalons voisins ; dans l'espace, sa clé de position
+  tenue le suit. Le temps des marques devient alors explicite (« Temps égaux » le rend, et repose le jalon à côté s'il
+  retombe sur elle). Sans image libre entre ses voisins, le jalon reste où il est et c'est la clé posée à la main qui se
+  voit à cette image.
+- **C'est dit une fois, dans la barre d'état, jamais dans une fenêtre**, **devant** ce que le geste y écrit :
+  « Trajectoire : 1 dessin posé à la main gardé à l'image 18, entre les marques. » (« 2 dessins posés à la main gardés
+  aux images 7 et 18, entre les marques. » ; avec plusieurs cartes : « 3 dessins posés à la main gardés entre les
+  marques (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17). »), quand un calcul laisse des clés qu'il n'avait
+  pas encore dites ; pas à chaque calcul, ni à chaque image d'un geste. Et, pour un jalon posé à côté : « Trajectoire :
+  une marque tombait sur un dessin posé à la main, à l'image 9 : elle est posée à l'image 10. » (« le départ… il est
+  posé », « l'arrivée… elle est posée »). Devant, et sans parenthèse pour un seul calque, parce que la barre d'état ne
+  montre que le début d'un message long (`messages::resume` le coupe après sa première phrase ou avant sa première
+  parenthèse) : à la suite du message du geste, la phrase restait cachée derrière « … » (vu à l'écran le 13 novembre
+  au soir, corrigé aussitôt). Le message du geste reste dans la bulle de la barre et dans l'historique des messages.
+- **Retirer soi-même sa clé** : « Supprimer la clé » (menu de la piste) rend tout de suite ses images à la clé d'avant,
+  le dessin du jalon ; « en laissant un vide », le calcul suivant le comble. Suppr sur la clé vide son dessin et laisse
+  la clé : c'est toujours une clé posée à la main, vide. Aucun calcul ne suit une suppression de clé : il n'en faut pas.
+- **Glisser sur la timeline la clé de dessin d'un jalon, seule (Maj),** ne passe pas par-dessus une clé posée à la
+  main : ce geste s'arrête déjà à la clé voisine, qui garde au moins une image. (Le glisser ordinaire, qui pousse ou
+  retire des images avec la clé, reste le geste de la timeline : ce qu'il fait sortir du calque va à la corbeille, et
+  la barre d'état le dit, comme pour tout calque.)
+- **Un calque ou un plan dupliqué** : ses dessins sont des copies, mais sa trajectoire notait encore ceux de l'original
+  (et le premier calcul les exposait dans la copie : les deux calques partageaient alors leurs poses). Maintenant,
+  quand aucun des dessins notés n'est sur le calque, chaque jalon prend pour sien le dessin qui commence à son image :
+  la copie garde ses propres dessins, rien ne bouge.
+- « Clés d'interpolation », « Détacher » et « Effacer » ne touchaient déjà qu'aux dessins de la trajectoire : les clés
+  posées à la main restent.
+
+**Fichier.** Toujours le format 55 : les champs `source` et `dessins` de la trajectoire d'un calque existaient (format
+49). Avant, ils étaient oubliés à la lecture d'une trajectoire dans l'espace ; ils sont maintenant gardés
+(`Trajectoire::assainie`), sans quoi le calcul suivant aurait refait des copies et laissé de côté ce qu'on avait
+redessiné. Un chemin en clés d'images tracé avec la partie 149 n'a pas encore ses clés de dessin : il les reçoit au
+premier geste sur lui (une marque, un recalage), ou en passant par « Clés d'interpolation » puis « Clés d'images ».
+**Rien de neuf dans le fichier pour « chaque copie à son jalon »** (13 novembre) : `dessins` y est, comme avant, un dessin
+par jalon, dans l'ordre des jalons ; c'est le programme qui garde cet ordre quand une marque arrive ou part, et une
+trajectoire relue dont les marques étaient en désordre garde chaque dessin à sa marque. Un fichier d'avant se relit tel
+quel, dans le même ordre ; une liste qui n'a pas un dessin par jalon (fichier abîmé) se relit telle quelle et le calcul
+suivant la range par rang, comme avant.
+**Rien de neuf non plus pour les clés posées à la main** (13 novembre) : aucune liste n'est gardée, le calcul les
+reconnaît à chaque fois dans la timeline (un dessin qui n'est ni `source` ni dans `dessins`). Le programme tient
+seulement, le temps d'un geste et sans jamais l'écrire, la note des dessins des marques qu'on vient de retirer
+(`Trajectoire::retires`), pour que le calcul qui suit les reprenne au lieu de les prendre pour des dessins posés à la
+main.
+
+**Comment.** `trajectoire3d.rs` : `trajectoire_recalculer_dans_l_espace` pose les clés de position
+(`trajectoire_cles_dans_l_espace`, par `cles_dans_l_espace`, inchangée) puis les dessins
+(`trajectoire_poser_les_dessins_dans_l_espace`) ; `e3_traj_poser_en_direct` et `e3_traj_finir` pour les gestes ;
+`e3_traj_sorte` ; `e3_traj_retirer` ; `e3_traj_retirer_les_marques` (13 novembre). `trajectoireui.rs` :
+`trajectoire_defaire_les_dessins` sert aux deux. Chaque copie à son jalon (13 novembre) : `trajectoire.rs`,
+`Trajectoire::ajouter_marque` (le jalon neuf prend place avec le dessin du jalon d'avant), `retirer_marque` (le sien s'en
+va), `retirer_les_marques` (nouvelle), `assainie` (les dessins suivent leurs marques remises en ordre) ; le calcul des
+dessins (`trajectoire_poser_les_dessins` sur la feuille, `trajectoire_poser_les_dessins_dans_l_espace`) fait sa copie au
+jalon qui montre le même dessin que celui d'avant.
+Les clés posées à la main (13 novembre) : la règle est **dans la pose des dessins**, pas dans les gestes, pour que tout
+calcul y passe, d'où qu'il vienne (`trajectoire_recalculer`, `trajectoire_recalculer_dans`). `trajectoireui.rs` :
+`trajectoire_exposer_les_dessins` (nouvelle : le seul endroit où la pose des dessins change la timeline, pour la feuille
+et pour l'espace ; elle lit les clés posées à la main, `cles_a_la_main`, et les laisse) ;
+`trajectoire_ecarter_des_dessins_a_la_main` (nouvelle, appelée en tête des deux poses : le jalon posé à côté, le dessin
+d'un calque dupliqué pris pour le sien) ; `DessinsALaMain` et `trajectoire_dire_les_dessins_a_la_main` (la phrase de la
+barre d'état, dite une fois, à l'image d'écran suivante : `panels.rs`) ; `trajectoire_defaire_les_dessins`.
+`trajectoire3d.rs` : `trajectoire_poser_les_dessins_dans_l_espace` (elle repose les clés de position si un jalon a
+changé d'image). `trajectoire.rs` : `Trajectoire::retires` (jamais écrit), `retirer_marque`, `retirer_les_marques`,
+`assainie`.
+**Qui pose les clés d'une carte à la main doit passer par `App::trajectoire_recalculer` (ou
+`trajectoire_recalculer_dans`)** : `cles_dans_l_espace` seule ne pose que les clés de position.
+
+### 152.3 Le panneau Espace 3D, un onglet de Réglages (modifié après sa réponse du 13 novembre)
+
+**Avant** (partie 150). Le panneau était un onglet du groupe de la couleur, sous Réglages. Vu à l'écran, il n'y avait
+qu'une centaine de points de haut.
+
+**Premier essai (retiré).** Une colonne à lui, à droite de celle des réglages de l'outil, sur toute la hauteur, 340
+points pris au dessin, qui arrivait quand la vue s'ouvrait et repartait quand elle se fermait (commit 6ad1f1f). Dans son
+propre essai, Anthony avait de lui-même glissé le panneau en onglet à côté de « Réglages » et « Fiche ». À la question
+« Colonne à part » (les deux visibles) ou « Onglet de Réglages » (comme il l'avait rangé, l'un ou l'autre devant), il a
+répondu, le 13 novembre : **« Onglet de Réglages »**. La colonne est retirée.
+
+**Maintenant : un onglet du groupe de Réglages**, après Réglages et la fiche du plan (après tous les onglets que ce groupe
+a). Réglages ou le panneau Espace 3D devant, l'un ou l'autre ; les calques ne bougent pas, le dessin garde sa largeur.
+
+**Sa hauteur** (ajouté par Claude le 13 novembre, après l'avoir vu à l'écran : l'onglet devant gardait la hauteur que
+Réglages avait, une centaine de points avec le pinceau, et coupait la liste des cartes). Comme Réglages, le panneau
+Espace 3D prend la hauteur de son contenu (`ajuste.rs`, `fits`) : devant, le groupe grandit jusqu'aux cartes et à la
+caméra du plan, la couleur dessous garde au moins ses 200 points ; Réglages revenu devant, le bord glisse à sa hauteur.
+Un bord tiré à la main entre ces deux groupes n'est pas touché (« Réajuster les panneaux » le rend). Essai :
+`ajuste_tests::the_espace3d_tab_in_front_takes_the_height_of_its_content_and_the_colour_the_rest`.
+
+```
+ dessin │ Calques │ Réglages Fiche [Espace 3D]      dessin │ Calques │ [Réglages] Fiche Espace 3D
+        │         │──────────────────────────              │         │──────────────────────────
+        │ Effets  │ Couleur                                │ Effets  │ Couleur
+ ─────────────────────────────────────────────      ──────────────────────────────────────────
+ montage / timeline                                  montage / timeline
+        vue Espace 3D ouverte                               vue Espace 3D fermée
+                                      [ ] : l'onglet de devant
+```
+
+- **Quand la vue s'ouvre** : si le panneau n'est pas dans la disposition, il y arrive en onglet de Réglages ; dans tous
+  les cas il passe devant les onglets de son groupe, et l'onglet qui était devant (Réglages, d'ordinaire) est retenu.
+- **Quand elle se ferme** (ou quand la vue caméra la cache) : cet onglet repasse devant, si le panneau y est encore
+  devant, dans le même groupe. L'onglet Espace 3D **reste** dans la disposition : vue fermée, il montre sa phrase et le
+  bouton « Ouvrir la vue Espace 3D ».
+- **Un onglet comme les autres.** On peut le fermer, ou le glisser ailleurs (un autre groupe, flottant, sa propre
+  fenêtre) : la vue ne le déplace jamais ; elle le met seulement devant là où il est, et rend l'onglet d'avant en se
+  fermant. Fermé, il revient en onglet de Réglages à la prochaine ouverture de la vue.
+- **Rangé autrement pendant que la vue est ouverte** (Réglages ou la fiche mis devant à la main, le panneau glissé
+  ailleurs ou fermé) : rien n'est défait à la fermeture.
+- **Ouvert à la main** (son icône cube, sa case du menu Affichage > Panneaux, sa commande) : en onglet de Réglages, devant.
+- **La disposition retenue** (celle des réglages, celle que l'espace de travail retrouve) a l'onglet, avec devant celui
+  que l'utilisateur y avait (Réglages, d'ordinaire), pas celui que la vue y a mis pour un moment.
+- **Les dispositions d'origine** ne l'ont pas : il arrive à la première ouverture de la vue. « Rétablir la disposition » :
+  la disposition d'origine, sans lui ; la vue ouverte, il y arrive aussitôt, devant.
+- **Changer d'espace de travail la vue ouverte** (entrer en animation) : l'onglet arrive dans la disposition où l'on
+  arrive, devant.
+- **Sans les réglages de l'outil dans la fenêtre principale** (le Montage ; Réglages fermé, ou flottant) : le panneau
+  arrive en onglet du groupe de sa colonne (avec la fiche du plan, ou la couleur), passe devant, et l'onglet d'avant
+  revient à la fermeture. Sans plus aucun panneau de cette colonne, il en refait une à lui seul (à l'essai de la
+  colonne, rien ne s'ouvrait dans ce cas).
+
+**Les dispositions retenues qui avaient le panneau avec la couleur le perdent, une fois.** Au premier lancement
+(`Settings::poser_le_panneau_espace3d`, retenu par `panneau_espace3d_a_cote`) : dans chaque disposition retenue
+(Storyboard, Animation, Montage, Vignettes, espaces de travail enregistrés), le panneau quitte la place que la partie
+150 lui avait donnée : un onglet du groupe de la couleur ou des brosses dédiées, ou seul juste sous Réglages. Rien
+d'autre ne bouge (parts, onglet de devant, panneaux flottants) ; il revient en onglet de Réglages à la prochaine
+ouverture de la vue. **En onglet de Réglages** (comme Anthony l'avait rangé dans son essai), il reste, même si la couleur
+a été glissée dans ce groupe ; rangé ailleurs, il reste aussi. **Un panneau qu'on aurait remis soi-même dans le groupe
+de la couleur ne se distingue pas de celui que la partie 150 y avait posé : il le quitte aussi, cette fois-là.** Remis
+ensuite, il y reste. Les dispositions d'avant la partie 150 ne reçoivent plus le panneau (la partie 150 l'y ajoutait).
+
+**Comment.** `dock.rs` : `DockLayout::open` range le panneau en dernier onglet du groupe des réglages de l'outil (sinon
+la règle de son groupe ; `left_column` le prend quand il refait la colonne à lui seul) ; `retirer_de_la_place_150`
+laisse un onglet du groupe de Réglages ; il n'est ni dans `COLOR_TABS` ni dans `from_legacy`. Retirés avec la colonne :
+`poser_en_colonne`, `en_colonne`, `retirer_la_colonne`, `part_de_la_colonne_espace3d`, `ESPACE3D_WIDTH` et leurs aides.
+`espace3dpanneau.rs` : `espace3d_panneau_suivre`, `espace3d_panneau_montrer`, `espace3d_panneau_rendre` (le suivi de la
+partie 150, `Suivi::avant`) ; `Suivi::colonne` est retiré. `workspaceui.rs` : `current_layout` remet devant l'onglet
+d'avant (`DockLayout::remettre_devant`). `settings.rs` : la marque `panneau_espace3d_a_cote`.
+
+**Essais de l'onglet.** `src/espace3dpanneau_tests.rs`, 15 essais : 4 récrits (le panneau en dernier onglet du groupe
+de Réglages, rien d'autre ne bouge, aussi dans les Vignettes ; ouvrir la vue le met devant, la fermer rend Réglages,
+l'onglet reste, la vue caméra, Réglages ou la fiche mis devant à la main ; rangé, fermé, glissé ou ouvert à la main,
+respecté ; l'Animation et « Rétablir la disposition », la vue ouverte ou fermée, et sans Réglages), 4 adaptés (sans
+Réglages dans la fenêtre principale, dont le cas où plus rien de sa colonne n'est là ; l'onglet d'avant dans le groupe
+de Réglages ; les dispositions retenues, dont une en onglet de Réglages et une où la couleur est dans ce groupe ; la
+commande, qui le met aussi devant quand il est derrière Réglages), 1 nouveau (sa disposition à lui, enregistrée par la
+partie 150, le panneau à côté de Réglages et Fiche : gardée telle quelle, puis la vue l'y met devant et rend Réglages).
+Filtres `espace3dpanneau`, `dock`, `settings`, `workspace`, `barrepanneaux`, `ajuste` : 15, 24, 120, 24, 12 et 8
+réussis, aucun échec. Vérificateur : 4 607 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des
+fonctions jamais appelées de `espace3d.rs`), aucun nouveau.
+
+### 152.4 Le lasso dans la vue Espace 3D
+
+**Avant** (partie 146). Seuls le pinceau, le crayon, la gomme et le mélangeur prenaient le pointeur dans la vue ;
+l'outil Sélection le rendait aux cartes.
+
+**Maintenant : l'outil Sélection a le pointeur dans la vue, sur la carte du calque courant**, comme les outils de
+dessin. Le prendre (sa case, sa touche) dans la vue entoure la carte du calque courant ; prendre un outil de la vue
+(choisir, déplacer, tourner, taille, caméra) rend le pointeur aux cartes, et pose ce qui était choisi.
+
+| Geste dans la vue, outil Sélection | Ce qu'il fait |
+|---|---|
+| Tracer un lasso (ou un rectangle, selon le réglage de l'outil) | choisit ce qu'il entoure sur la carte : une zone d'un calque bitmap, des traits d'un calque vectoriel |
+| Clic sur un trait ou un objet | le choisit ; clic dans le vide : plus rien n'est choisi |
+| Maj | ajoute au choix |
+| Glisser l'intérieur de la boîte | déplace ce qui est choisi, sur la carte |
+| Poignées de la boîte, extérieur d'un coin, bords, pivot | agrandir, tourner, incliner, déplacer le pivot : comme sur la feuille |
+| Suppr, couper, copier, coller, tout désélectionner, les flèches, Échap, Ctrl+Z | comme sur la feuille |
+| **Ctrl+clic** | prend la carte sous le pointeur (elle devient le calque courant ; ce qui était choisi sur l'autre est posé) |
+| **Ctrl+glisser** | trace un lasso |
+| Alt+glisser, clic droit, bouton du milieu, molette | la vue, comme avant |
+
+**« Ctrl tenu : lasso »** marche aussi depuis un outil de dessin : avec le pinceau, le crayon, la gomme ou le
+mélangeur, Ctrl+glisser trace un lasso sur la carte du calque courant, et l'outil d'avant revient quand Ctrl est
+relâché (une zone bitmap choisie garde l'outil Sélection, comme sur la feuille). Ctrl+clic, sans glisser, prend
+toujours la carte sous le pointeur (partie 146) : c'est au premier mouvement du pointeur, ou au relâché, qu'on sait
+lequel des deux c'était.
+
+**Ce qu'on voit.** Le lasso en cours, le contour de ce qui est choisi, la boîte, ses poignées et son pivot sont posés
+sur la carte, en perspective avec elle. Pendant qu'on déplace, agrandit ou tourne ce qui est choisi, il se voit sur la
+carte à sa nouvelle place (le dessin sans lui, et lui par-dessus), comme sur la feuille.
+
+**Où le lasso prend.** Le pointeur vise le plan de la carte, même au-delà de ses bords (pour entourer ce qui touche
+le bord). Carte vue de dos, par la tranche, ou derrière l'œil de la vue : rien ne commence, la barre d'état dit
+pourquoi. Cartes cachées, calque qui n'est pas une carte : les messages du dessin.
+
+**Comment.** `espace3dlasso.rs` (nouveau) : `e3_selectionne`, `e3_selectionner`, `e3_selection_pointeur`,
+`e3_sel_presser`, `e3_sel_glisser`, `e3_sel_lacher`, `e3_ctrl_glisse`, `e3_ctrl_lache`, `e3_feuille_flottante`,
+`e3_selection_peindre`. Le pointeur passe par `CarteVue::vers_dessin` et va au code de la feuille
+(`select_press`, `select_drag`, `bitmap_drag`, `finish_vdrag`, `finish_bdrag`) ; ce que la feuille peint
+(`paint_vector_overlay`) se pose sur la carte parce que `App::layer_to_screen` et `App::layer_zoom` passent par
+`e3_carte_vue`. `espace3ddessin.rs` : `e3_outil_pris`, `e3_carte_vue`, `e3_texture_vive`, l'appui avec Ctrl.
+`espace3dview.rs` : `e3_input`, `espace3d_panel`, `e3_paint_cards` (la feuille flottante sur la carte).
+
+**Ce qui ne change pas.** Les outils de la vue (choisir, déplacer, tourner, taille, caméra) et leurs poignées ; la
+navigation (Alt+glisser, clic droit, bouton du milieu, molette) ; le dessin dans la vue (partie 146) ; « Clés
+d'interpolation » ; la Trajectoire sur la feuille (partie 119) ; Maj à l'appui de l'outil Trajectoire, qui déplace le
+chemin en bloc ; le contenu du panneau Espace 3D et de Réglages (partie 150) ; le format des fichiers (55).
+
+**Essais.** `src/trajectoire3d_camera_tests.rs`, 4 essais (nouveau) : Ctrl+clic sur la caméra lâche les cartes et ses
+gestes de chemin ne changent aucun calque ; la caméra choisie seule est la rangée choisie du montage et de la timeline,
+et aucune rangée de calque ne l'est ; choisir de nouveau un calque ou une carte (vue, liste, panneau Calques, timeline,
+calque du dessus) lâche la caméra et rend la rangée ; Maj+Ctrl+clic et Maj+clic sur « choisir » ajoutent exprès.
+`src/trajectoire3d_images_tests.rs`, 4 essais (nouveau) : une clé de dessin à chaque jalon, copie intacte du dessin du
+départ, et les clés de position tenues gardées ; glisser une marque ou la recaler sur la timeline garde ce qui a été
+redessiné ; « Clés d'interpolation », « Détacher » et « Effacer » ; sans dessin au départ, la caméra, et
+l'enregistrement puis la relecture. `src/espace3dpanneau_tests.rs` : récrits une première fois pour la colonne, puis
+pour l'onglet de Réglages après sa réponse du 13 novembre (voir « Essais de l'onglet », en 152.3). `src/espace3dlasso_tests.rs`,
+4 essais (nouveau), de vrais gestes de souris dans la vue : lasso sur une carte bitmap et déplacement (la feuille
+flottante posée sur la carte) ; Suppr, copier, couper, coller, Échap, Maj pour ajouter, un outil de la vue qui pose ce
+qui est choisi ; sur une carte vectorielle, lasso, déplacer, agrandir, tourner, trois annulations, Suppr ; Ctrl+glisser
+depuis le pinceau, Alt+glisser, Ctrl+clic qui prend une autre carte. Essais mis à jour : `trajectoire3d_tests.rs`
+(Ctrl+clic sur la caméra : Maj+Ctrl ajoute), `espace3ddessin_tests.rs` (l'outil Sélection prend le pointeur dans la
+vue ; c'est la pipette qui le rend aux cartes), `dock_tests.rs` (le panneau n'est plus dans les onglets de la couleur
+ni dans les dispositions d'origine).
+Vérificateur, deux passages : chaque fois 4 605 réussis et 1 échec, chaque fois un autre, deux essais des Vignettes
+qui ne passent par rien de ce qui a changé ici et réussissent relancés seuls (les essais de repos et de temps
+intermittents notés dans `suivi/ETAT.md`) : au premier,
+`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released` ; au second,
+`vignettes_selection_relecture_tests::the_cost_with_sixty_cases_and_two_thousand_strokes`. Dix groupes OK les deux
+fois ; le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs`), aucun nouveau.
+
+**Essais de ce qui restait imparfait (13 novembre).** De vrais gestes de souris : `src/trajectoire3d_camera_tests.rs`, 3
+essais nouveaux (un clic simple sur le dessin de la caméra, une carte derrière lui, avec les outils de la vue ; Maj, Ctrl ;
+le glisser déplace la caméra et pas la carte, une étape ; des clics sur le nom et le vide de la piste « Caméra » au
+montage et dans la timeline, sur une clé, Ctrl+clic sur une autre, la vue ouverte puis fermée ; le panneau Calques tel
+qu'il est peint, la caméra seule puis rendue par un clic sur le nom du calque courant, par chaque outil de dessin pris,
+cartes cachées comprises, l'outil Trajectoire qui la garde, un trait dans la vue). `src/trajectoireui_tests.rs` (la
+feuille) et `src/trajectoire3d_images_tests.rs` (l'espace), 1 essai nouveau chacun : la pose de la marque 2 sur 3
+redessinée, une marque posée entre les jalons 1 et 2, puis une autre après la pose redessinée ; Ctrl+Z, Ctrl+Maj+Z ;
+glisser une marque ; la recaler sur la timeline ; « Temps égaux » ; enregistrer et relire ; arracher une marque ; Suppr
+sur sa clé (feuille) ; retracer ; « Retirer les marques ». `src/trajectoire_tests.rs`, 1 essai nouveau (le modèle : poser,
+refuser, retirer une marque, toutes les retirer, une trajectoire relue en désordre, une liste qui n'a pas un dessin par
+jalon). Adapté : `espace3d_tests.rs` (`the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer` : le
+clic de l'essai se fait sur la carte loin du dessin de la caméra ; vue de face, la caméra est juste devant le centre des
+cartes, et c'est elle que le clic y prend maintenant). Filtres `trajectoire`, `espace3d`, `calques_timeline`,
+`lissage_camera`, `camkeys`, `aplat`, `pistes` : 61 (dont `trajectoire3d_camera` : 7), 126, 11, 26, 23, 125 et 20
+réussis ; un échec, une fois, à `aplat`
+(`retours_aplat_tests::a_fill_stays_on_screen_while_it_is_recomputed_even_after_many_other_fills_were_shown`, un essai
+de temps du fil de travail, qui ne passe par rien de ce qui a changé ici), réussi relancé seul. Vérificateur, deux
+passages : au premier, 4 611 réussis et 2 échecs, deux essais de rendu et de temps qui ne passent par rien de ce qui a
+changé ici (`camera_traits_tests::the_tremble_on_the_graphics_card_has_no_lighter_column_at_the_edge`,
+`exportrender::tests::application::the_interface_composes_no_export_frame_and_its_frames_stay_short_during_an_export`),
+pendant qu'une autre session construisait et lançait ses essais sur la même machine ; tous deux réussis relancés seuls.
+Au second, 4 613 réussis, 0 échec. Dix groupes OK les deux fois ; le seul avertissement connu (celui des fonctions jamais
+appelées de `espace3d.rs`), aucun nouveau.
+
+**Essais de ses deux décisions du 13 novembre.** `src/trajectoire3d_camera_tests.rs`, 1 essai nouveau, de vrais clics
+sur la case « Caméra » de la barre de la vue : avec l'outil Trajectoire et une carte choisie, la caméra seule, la case
+allumée, l'outil qui garde le pointeur, un trait long au sol qui donne son chemin à la caméra sans changer aucun calque ;
+Maj+clic ; la commande ; « choisir », qui reprend toujours le pointeur ; avec le pinceau, la case comme avant.
+`src/trajectoire_main_tests.rs` (nouveau), 5 essais, la vraie commande « Nouvelle clé », de vrais traits de pinceau et de
+vrais gestes de souris. Sur la feuille : une clé posée à la main entre deux jalons, dessinée, puis une marque glissée,
+une marque posée après elle et une avant, une marque arrachée, un jalon recalé sur la timeline, « Temps égaux », le
+chemin retracé, Ctrl+Z et Ctrl+Maj+Z, clés d'interpolation et retour, l'enregistrement et la relecture : elle est
+toujours à son image, avec son dessin, aucune fenêtre ne s'ouvre, et la barre d'état le dit une fois ; sa suppression
+(les deux commandes), l'annulation. Une marque qui tomberait sur son image (une marque de plus, « Temps égaux », « Finir à
+la tête de lecture ») posée à l'image d'après, avec la phrase de la barre d'état, trois annulations. Un calcul demandé
+directement (`trajectoire_recalculer_dans`, sans geste), refait douze fois : rien ne change, rien n'est redit ; une
+seconde clé se dit, une clé retirée non. Un calque dupliqué, qui garde ses propres dessins à son premier calcul. Dans
+l'espace, deux cartes choisies, trois clés posées à la main dont une dessinée au pinceau dans la vue : la marque glissée
+dans la vue, une seule phrase qui les compte toutes, les clés de position tenues inchangées ; le jalon tiré sur la
+timeline jusque sur l'image d'une clé (posé à l'image d'après avec sa clé de position, une étape, annulée), puis plus
+loin, avant elle et de retour (la clé ne bouge jamais, son exposition revient exactement) ; la marque arrachée, annulée,
+rétablie ; clés d'interpolation et retour ; l'enregistrement et la relecture ; la suppression. Adapté :
+`trajectoire_tests.rs` (le champ de plus dans une trajectoire écrite à la main). Filtre `trajectoire` : 67 réussis, aucun
+échec. Vérificateur complet (13 novembre, 10 h 07) : 4 619 réussis, 1 échec,
+`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released` (un essai de repos
+des Vignettes, que ce chantier ne touche pas et qui a déjà échoué une fois en suite complète quand la machine est
+occupée) ; repassé seul le soir, sur le même code : réussi. Dix groupes OK ; le seul avertissement connu (les cinq
+méthodes jamais appelées de `espace3d.rs`), aucun nouveau.
+
+**Regardé à l'écran le 13 novembre au soir** (Claude, souris simulée, copie du projet `afa`, réglages neufs). Le bouton
+« Caméra » avec l'outil Trajectoire : la caméra seule, la case allumée, l'outil toujours en main, un trait long au sol
+qui trace son chemin. Sur la feuille, un calque qui avait déjà deux dessins : le chemin laisse le second à son image ;
+une marque, « Nouveau dessin », un trait de pinceau, la marque glissée : les dessins restent, aucune fenêtre. **Un
+défaut que les essais ne voyaient pas** : la phrase des dessins gardés, écrite à la suite du message du geste, était
+coupée par la barre d'état (elle ne montre que le début d'un message long). Elle passe devant, sans parenthèse pour un
+seul calque ; relue à l'écran : « Trajectoire : 2 dessins posés à la main gardés aux images 18 et 19, entre les
+marques… ». `trajectoire_main_tests.rs` vérifie maintenant ce que la barre montre (`messages::resume`). Filtre
+`trajectoire` : 67 réussis. Vérificateur complet sur ce code (21 h 11) : 4 620 réussis, 0 échec, dix groupes OK, le
+seul avertissement connu.
+
+**Ce qui n'est pas fait.**
+
+- **Les clés de dessin posées à la main** (réglé le 13 novembre, voir 152.2 ; ce qui reste) : un jalon posé à côté
+  d'une clé posée à la main ne lui laisse qu'une image quand il est posé juste après elle (c'est la règle : l'image
+  libre la plus proche, celle d'après de préférence). Pendant qu'on glisse une marque dans la vue Espace 3D, la carte
+  suit par ses clés de position sans cet écart ; il se fait au lâcher, avec les dessins. Un dessin posé à la main n'est
+  ni déplacé ni tourné avec le chemin : c'est le tien, il reste où tu l'as dessiné. Il en va de même d'un calque qui
+  avait déjà plusieurs dessins avant qu'on y trace un chemin en clés d'images : ils sont tous gardés à leur image (avant
+  ce chantier, le chemin les recouvrait) et ne suivent pas le chemin ; la barre d'état les compte. Un calque ou un plan dupliqué garde
+  ses propres dessins aux jalons ; mais sur la feuille, quand le départ n'est pas le dessin d'origine lui-même (ancrage
+  autre que « là où part le trait »), sa trajectoire note encore le dessin d'origine de l'original, dont elle refait ses
+  copies tournées (« le dessin tourne avec le chemin »). Les copies de calques et de plans ne font toujours pas suivre
+  à la trajectoire les numéros de leurs dessins (`layerops::layer_copy` et les autres) : c'est le calcul qui s'en
+  arrange.
+- **Échap pendant qu'on glisse la clé de position d'un jalon** d'une carte en clés d'images (timeline) rend le chemin et
+  les clés de position, pas les clés de dessin : elles restent où le geste les avait posées jusqu'au calcul suivant
+  (défaut d'avant ce chantier, vu en lisant le code, pas réglé : `cancel_pos_drag` ne rend pas les images).
+- **La caméra choisie seule, vue Espace 3D fermée** : rien ne se choisit, la piste « Caméra » ne se montre pas choisie
+  (la caméra choisie n'existe que pour la vue). Les commandes du haut du panneau Calques et de ses icônes (dupliquer,
+  supprimer, monter, descendre…) agissent toujours sur le calque courant, même quand aucun rang n'est montré choisi ;
+  seuls le mode de fusion et l'opacité, changés là, rendent le calque courant.
+- **Le panneau Espace 3D** n'est pas dans les dispositions d'origine : avant la première ouverture de la vue (ou après
+  « Rétablir la disposition »), il n'a pas d'onglet ; il arrive avec la vue, par son icône cube de la barre des panneaux
+  ou par le menu Affichage > Panneaux, puis reste. Quand son onglet est devant, le bord entre le groupe de Réglages et la
+  couleur ne s'ajuste pas tout seul à son contenu (`ajuste.rs` : les deux prennent « le reste ») : il garde la hauteur
+  que Réglages avait. Dans les Vignettes et le Montage, rien de neuf.
+- **Le lasso dans la vue** : la sélection sur plusieurs calques à la fois (Ctrl+Maj sur la feuille, ou plusieurs
+  calques choisis) et la sélection par couleur ne s'y font pas : le lasso prend sur la carte du calque courant
+  seulement. Coller une zone pendant qu'un outil de la vue a le pointeur la colle bien, mais il faut prendre l'outil
+  Sélection pour la déplacer dans la vue. La carte vue de dos : rien ne se choisit (il faudrait un lasso en miroir).
+  L'outil Transformer, le pot de peinture, le dégradé, les formes, le texte et la déformation ne prennent toujours pas
+  le pointeur dans la vue.
+- **Pendant qu'on déplace une sélection dans la vue**, ce qu'on déplace est montré à la finesse des autres cartes
+  (1 024 pixels de large), pas à celle de la carte sur laquelle on dessine (2 048) : il redevient net au lâcher.
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.** Rien n'a été regardé à l'écran.
+
+La caméra seule (152.1) :
+
+1. Plan en Espace 3D, vue Espace 3D, outil Trajectoire, après avoir dessiné sur une carte (elle est entourée).
+   Ctrl+clic sur la caméra : elle seule est choisie, la carte n'est plus entourée, la barre d'état dit « La caméra est
+   choisie, seule ». Dans la timeline (ou le montage), la rangée « Caméra » est celle qui est choisie, plus aucun
+   calque. Dire si cette rangée se lit assez bien comme « choisie ».
+2. Tracer un chemin au sol, poser une marque, tirer le chemin : seule la caméra suit, aucun calque ne bouge ni ne
+   reçoit de clé.
+3. Cliquer un calque dans la timeline (son nom, ou sa rangée), puis dans le panneau Calques, y compris le calque qui
+   était déjà courant : la rangée lui revient, la caméra est lâchée.
+4. « choisir » dans le panneau Espace 3D : la caméra seule ; Maj+clic sur « choisir » avec une carte choisie : les
+   deux. Maj+Ctrl+clic sur une carte, la caméra étant choisie : la carte s'ajoute, et le chemin déplace les deux.
+
+Les clés d'images (152.2) :
+
+5. Une carte avec un dessin, outil Trajectoire, « Clés d'images » : tracer un chemin, poser deux marques. Dans la
+   timeline, le calque a une clé de dessin au départ, à chaque marque et à la fin. Lire le plan : la carte saute de
+   pose en pose.
+6. Aller sur la clé d'une marque et redessiner la pose. Glisser ensuite la marque le long du chemin, puis glisser sa
+   clé sur la timeline : la pose redessinée est toujours là, à sa nouvelle image.
+7. Passer en « Clés d'interpolation » : les clés de dessin des marques s'en vont, la carte glisse. Revenir en « Clés
+   d'images » : elles reviennent (neuves). Ctrl+Z à chaque fois : un seul pas.
+8. « Détacher » : le chemin part, les clés de dessin et de position restent. Ctrl+Z, puis « Effacer » : tout part, le
+   dessin du départ partout.
+9. Un calque vide, « Clés d'images », un chemin : la barre d'état dit de dessiner d'abord à l'image du départ.
+
+Le panneau Espace 3D (152.3, modifié après sa réponse du 13 novembre) :
+
+10. Storyboard, réglages neufs, vue Espace 3D fermée : pas d'onglet Espace 3D ; Réglages et Fiche au-dessus de la
+    couleur, comme avant la partie 150.
+11. Ouvrir la vue : un onglet « Espace 3D » arrive après Réglages et Fiche, et passe devant ; la couleur et les calques
+    restent visibles, le dessin garde sa largeur. Le groupe grandit jusqu'à la hauteur des cartes et de la caméra du
+    plan (la couleur garde au moins 200 points), puis reprend celle de Réglages à la fermeture. Dire si cette hauteur
+    suffit. (Un bord tiré à la main entre Réglages et la couleur reste où il est : « Réajuster les panneaux » le rend.)
+12. Fermer la vue : Réglages revient devant, l'onglet Espace 3D reste derrière lui. Rouvrir : il repasse devant.
+13. La vue ouverte, cliquer l'onglet Réglages (changer de brosse), puis fermer la vue : Réglages reste devant. Dire s'il
+    faudrait que le panneau Espace 3D repasse devant tout seul.
+14. Glisser l'onglet ailleurs (avec les calques, par exemple), fermer et rouvrir la vue : il reste où tu l'as mis, et
+    passe devant quand la vue s'ouvre. Le fermer (clic droit sur l'onglet) : à la prochaine ouverture de la vue, il
+    revient en onglet de Réglages.
+15. Ta disposition d'essai (le panneau glissé à côté de Réglages et Fiche) : il y est toujours, rien n'a bougé. Une
+    disposition de la partie 150 (le panneau avec la couleur) : au lancement l'onglet a quitté le groupe de la couleur,
+    et il arrive en onglet de Réglages à l'ouverture de la vue.
+
+Le lasso dans la vue (152.4) :
+
+16. Vue Espace 3D, prendre l'outil Sélection : la carte du calque courant est entourée. Tracer un lasso autour d'une
+    partie du dessin : son contour et sa boîte se posent sur la carte, en perspective. Dire si le lasso tombe bien là
+    où on le trace, de face et sur une carte penchée ou au sol.
+17. Glisser l'intérieur de la boîte : ce qui est choisi se déplace sur la carte, et se voit pendant le geste. Une
+    poignée de coin : il grandit. L'extérieur d'un coin : il tourne. Dire si les poignées se prennent bien sur une
+    carte vue en biais.
+18. Suppr, Ctrl+X, Ctrl+C, Ctrl+V, Échap, Ctrl+Z : comme sur la feuille.
+19. Le pinceau en main, Ctrl+glisser : un lasso (l'outil d'avant revient en relâchant Ctrl, sauf avec une zone bitmap
+    choisie). Ctrl+clic sans glisser : la carte sous le pointeur devient le calque courant.
+20. Alt+glisser, clic droit, bouton du milieu, molette, avec l'outil Sélection : la vue tourne, glisse, avance.
+21. Prendre un outil de la vue (déplacer) : ce qui était choisi est posé, le pointeur manipule de nouveau les cartes.
+## 153. L'aide animée : des animations à la place des textes gris, et le registre des explications (2026-11-13, branche `aide-animee`)
+
+Demande d'Anthony, validée sur six essais montrés en boucle : les textes explicatifs gris (petits et pâles) quittent les
+panneaux. Ils sont remplacés par de petites animations schématiques, peintes par egui, qui jouent la première fois qu'on
+se sert d'un outil, en haut de « Réglages ». Les textes ne vivent plus que dans Aide > « Registre des explications ».
+Branche partie de `trajectoire-3d` (78ffda3).
+
+### 153.1 Le moteur et le joueur
+
+- `aideanim.rs` : une animation = un identifiant stable (retenu dans les réglages quand elle a été vue), un titre, sa
+  rubrique du registre, les contextes où elle joue, une durée (4 à 6 s), une fonction de dessin
+  `fn(&Painter, Rect, t, &Teintes)` et le texte du registre. Tout est peint en vecteurs : aucun fichier image, aucune
+  crate nouvelle. La toile 240 × 150 et ses aides : curseur (cercle de rayon 5 cerné de jade, point plein quand le
+  bouton est appuyé), touche de clavier (Plex Mono 11, allumée en jade quand elle est tenue), chemin tracé peu à peu,
+  adoucissement, carte, bonhomme, poignées, losange de clé.
+- Couleurs : celles de la charte, sombre ou clair (`canvas` dans un cadre `ground`, encre, encre douce, ligne forte,
+  jade pour le geste de la main). Aucun rouge, aucun dégradé décoratif, aucune ombre, aucun mot sauf les touches.
+- Le contexte (`App::aide_contexte`) : l'outil en main, précisé par ce qu'il vise (vue Espace 3D, calque bitmap,
+  plusieurs calques), ou l'espace Vignettes (planche, outil Caméra, outil d'annotation).
+- Le joueur, en haut de « Réglages » (sous le titre de l'outil) : à la première prise d'un outil, ses animations jouent
+  l'une après l'autre, puis la vignette se replie en douceur ; un clic sur la vignette la replie tout de suite. Le
+  bouton ▶ du titre les rejoue. Pendant qu'elles jouent, l'écran est repeint ; à l'arrêt, plus aucun repaint.
+- Ce qui a été vu est retenu dans `reglages.toml` : `explications_vues` (liste d'identifiants, écrite seulement si elle
+  n'est pas vide) ; `afficher_explications` (écrit seulement s'il est coché). Un vieux fichier se relit sans erreur.
+- L'état est dans `Confort` (partagé par les onglets). Les essais ne jouent rien d'eux-mêmes (`Joueur::auto` faux).
+
+### 153.2 Le menu Aide et le registre
+
+- Aide > « Afficher les explications » (case, `aide.explications`, sans touche) : cochée, l'animation rejoue à chaque
+  prise de l'outil. Décochée (d'origine) : une seule fois.
+- Aide > « Registre des explications… » (`aide.registre`, sans touche) : la fenêtre range les animations par rubrique
+  (Trajectoire, Sélection, Caméra, Dégradé, Dessin, Déformer, Formes, Sculpter, Autres outils, Espace 3D, Vignettes).
+  Chacune a sa vignette (un clic la rejoue) et son texte, avec les raccourcis lus dans le fichier de raccourcis. Puis
+  les textes des panneaux sans animation, des Préférences et des fenêtres, rangés par fenêtre (`aidetextes.rs`,
+  `aidefenetres.rs`), avec ce que règle chaque catégorie de brosse et ce que fait chaque export (leurs info-bulles).
+
+### 153.3 Les animations
+
+- Validées (`aidecatalogue.rs`) : Trajectoire sur la feuille (tracer, marquer, suivre), Maj depuis un bout, Trajectoire
+  dans l'espace, la boîte de sélection, la caméra (cadrer, poser une clé, jouer), le dégradé (tirer l'axe, valider).
+- Les autres gestes (`aidegestes.rs`) : tordre le chemin et ses marques, le lasso bitmap, la sélection par couleur,
+  plusieurs calques dans une boîte, la pression du stylet, le mélangeur, la gomme vectorielle, le Cutter, paliers et
+  adoucis, effets de caméra sur une plage, enveloppe, perspective, pastilles du dégradé, formes, Grab et Pull, pot de
+  peinture, texte, pipette, main, et l'Espace 3D (tourner la vue, une carte et ses axes, la caméra libre).
+- Les Vignettes (`aidevignettes.rs`, ajout d'Anthony) : coupe ou continuité, un trait à travers les cases, caméras dans
+  les vignettes, annotations, le pont avec le Storyboard. Aux proportions de la planche (`board.rs` : écart 18 dans un
+  plan, 53 à une coupe ; barre au tiers de la case, pâle ou à l'encre ; numéro du plan au-dessus de sa première case).
+  Les annotations sont à l'encre du dessin : c'est leur calque qui les distingue (l'œil le cache, le storyboard n'est
+  pas touché). Elles jouent à la première ouverture des Vignettes, à l'outil Caméra ou à un outil d'annotation.
+
+### 153.4 Ce qui reste dans les panneaux
+
+La barre d'état (et `aplat_indication`), les lignes d'état chiffrées, les conditions du moment (« Sans mouvement (moins
+de deux clés), rien ne change », « Caméra tournée… »), les avertissements (`theme::avertir_petit`), les libellés courts,
+les titres et toutes les info-bulles (`Categorie::help` et les aides des exports restent des info-bulles).
+
+### Essais
+
+`aideanim_tests.rs` : première prise → l'animation joue ; seconde → rien, sauf avec la case ; ▶ la rejoue ; repos sans
+repaint ; une animation d'un autre outil s'arrête ; le registre liste chaque animation et chaque texte ; aucun texte gris
+de plus de 60 caractères dans Réglages, pour chaque outil, sur un calque vectoriel et bitmap, « Plus de réglages »
+déplié ; chaque contexte a son animation ; la première ouverture des Vignettes ; vieux réglages ; chaque animation se
+peint à t = 0, au milieu et à la fin, dans les deux thèmes ; pas de rouge ; pas de nom de logiciel commercial ; les
+textes des fenêtres ont quitté leur fichier.
+
+### 153.5 Après la relecture
+
+- Le ▶ des outils d'annotation est sur sa ligne (il prenait toute la hauteur du panneau et faussait la mesure des panneaux ajustés).
+- Une animation n'est retenue comme vue qu'à son début : une suite repliée, un outil changé ou FEANOR quitté pendant la première laisse
+  les suivantes à voir.
+- Avertissements rendus, courts (`theme::avertir_petit`), seulement quand ils disent vrai : un service de sons en ligne choisi (licences,
+  données envoyées) ; des plans ont déjà leur calque Décor ; des calques ont leur propre tremblement ; des calques cachés, d'effet ou vidéo
+  ne font pas de clé (images à la clé) ; des calques choisis cachés ou verrouillés sont laissés de côté (Transformer, sélection et
+  déformation de plusieurs calques). Ligne d'état « Aucune annotation pour l'instant. » rendue.
+- Transformer joue « Plusieurs calques dans une seule boîte » ; la gomme sur un calque bitmap, « La pression du stylet ».
+- Une touche tenue : le jade de la marque et son encre dans les deux thèmes (plus de 4,5:1).
+- « Afficher les explications » ne rejoue qu'à la prise d'un autre outil ; l'aplat visé et les clés choisies d'un seul calque ne sont
+  plus « plusieurs calques ».
+- Le registre ne peint que les vignettes visibles. Ses textes : le prolongement seul pour « Maj depuis un bout », « Plusieurs cartes
+  choisies ensemble » (titre et dessin) dans l'Espace 3D, plus de préfixes répétés, plus de nom de système, la touche du mode caméra des
+  Vignettes, le choix des cartes de la partie 152 (Ctrl+clic, Maj+Ctrl+clic).
+- Essais : `aideanim_relecture_tests.rs`.
+### Ce qui reste, ce qui est douteux
+
+- Rien n'a été regardé à l'écran : les animations sont écrites d'après les choréographies, pas comparées à la maquette.
+- Des textes gris restent dans d'autres fenêtres (commentaires, fil de décision, suggestions sonores, bibliothèque,
+  cadrage, anneau, palette, nouveau projet…) : à traiter dans un chantier suivant.
+
+**À vérifier à l'écran (par Anthony), sur une copie de projet.**
+
+1. Prendre l'outil Trajectoire : l'animation joue en haut de Réglages, puis se replie. Le reprendre : rien.
+2. Le bouton ▶ à droite du titre de Réglages : elle rejoue.
+3. Aide > « Afficher les explications » cochée : chaque prise d'un outil rejoue son animation.
+4. Aide > « Registre des explications… » : les rubriques, un clic sur une vignette la rejoue, les textes sont là.
+5. Ouvrir l'espace Vignettes (première fois) : coupe ou continuité, le trait à travers les cases, le pont.
+6. Thème clair (Papier) : les animations restent lisibles.
+7. Le rythme et le style des six animations validées : conformes aux essais ?
+
+Ce qui restait imparfait (réglé le 13 novembre, à sa demande : « règle ce qui reste imparfait ») :
+
+22. Vue Espace 3D, outil « choisir » de la vue, la vue tournée pour que la caméra passe devant une carte : un clic simple
+    sur le dessin de la caméra la choisit, seule (plus la carte de derrière). Maj+clic : avec la carte choisie, puis
+    lâchée. Tirer le dessin de la caméra : elle glisse, la carte de derrière reste. Un clic sur la carte, à côté du dessin
+    de la caméra : la carte. Dire si le dessin de la caméra prend le clic d'assez près, ou de trop loin.
+23. La vue ouverte, cliquer « Caméra » dans la timeline (son nom, puis le vide de sa rangée), puis au montage : la caméra
+    est choisie seule, la piste « Caméra » est la rangée choisie, la tête de lecture va où l'on a cliqué. Une clé de
+    caméra cliquée se choisit comme avant (Ctrl+clic en ajoute une), et la caméra aussi. La vue fermée : un clic sur la
+    piste ne change rien d'autre qu'avant. Dire s'il faudrait que la piste se montre choisie aussi vue fermée.
+24. La caméra choisie seule : le panneau Calques ne montre plus aucun calque choisi. Cliquer un calque (même le courant)
+    ou la sous-ligne de son aplat, prendre le pinceau, la gomme ou l'outil Sélection, ou tracer un trait sur une carte :
+    le calque courant revient en surbrillance, la caméra est lâchée. L'outil Trajectoire, lui, la garde choisie.
+25. Clés d'images, sur la feuille puis dans l'espace : un chemin, une marque, redessiner sa pose. Poser une marque entre
+    le départ et elle : la pose redessinée reste à sa marque, la nouvelle marque a une copie du départ (sur la feuille, à
+    sa place sur le chemin). Poser une marque entre elle et la fin : une copie de la pose redessinée. Arracher une marque,
+    ou Suppr sur sa clé : seule sa pose s'en va. Glisser une marque, recaler une clé sur la timeline, « Temps égaux »,
+    retracer le chemin, Ctrl+Z, enregistrer et rouvrir : chaque pose reste à sa marque.
+
+Ses deux décisions du 13 novembre (« On garde l'outil » ; les dessins posés à la main, sans boîte de dialogue) :
+
+26. Vue Espace 3D d'un plan en Espace 3D, outil Trajectoire, une carte choisie. Cliquer le bouton « Caméra » de la barre
+    de la vue : la caméra est choisie, seule, la case reste allumée, et l'outil Trajectoire est toujours en main (sa
+    légende en bas de la vue, son curseur). Un trait long au sol : c'est le chemin de la caméra, aucun calque ne bouge.
+    Maj+clic sur la case : la caméra avec la carte. Avec le pinceau, la même case rend la main aux cartes, comme avant.
+27. Clés d'images, sur la feuille : un chemin, une marque. Entre le départ et la marque, pose une clé de dessin à la
+    main (« Nouvelle clé ») et dessine dessus. Glisse la marque, pose une marque avant et une après, retires-en une,
+    recale un jalon sur la timeline, « Temps égaux », retrace le chemin, passe en clés d'interpolation et reviens : ton
+    dessin est toujours à son image, tel que tu l'as laissé, et aucune fenêtre ne s'ouvre. La barre d'état le dit la
+    première fois : « Trajectoire : 1 dessin posé à la main gardé à l'image N, entre les marques… » Dire si cette phrase
+    suffit, ou s'il faudrait le voir aussi dans la timeline (une teinte sur ces clés, par exemple).
+28. Pose une clé à la main, puis une marque de plus de sorte qu'une marque tombe sur son image (les marques se
+    partagent le temps) : la marque est posée à l'image d'après, la barre d'état le dit, ton dessin n'a pas bougé. Dire
+    si « l'image d'après » te convient (ton dessin ne tient alors qu'une image), ou s'il vaudrait mieux l'image d'avant.
+29. La même chose dans la vue Espace 3D, avec deux cartes choisies qui ont chacune une clé posée à la main : les deux
+    gardent leurs dessins, une seule phrase les compte. Glisse sur la timeline la clé de position d'une marque jusque sur
+    l'image de ta clé : elle se pose à l'image d'après, avec la clé de dessin de la marque.
+30. Supprime ta clé (clic droit sur la piste, « Supprimer la clé ») : le dessin de la marque d'avant reprend ses images.
+31. Duplique un calque qui a une trajectoire en clés d'images, puis glisse une marque dans la copie : la copie garde ses
+    propres dessins, et redessiner une pose de la copie ne change pas l'original.
+
+## 154. Les poignées de la trajectoire : Ctrl+clic sur le chemin, et dans l'espace des flèches x, y, z qui le font sortir de son plan (2026-11-13, branche `trajectoire-poignees`)
+
+Anthony, 2026-11-13 : « avec l'outil trajectoire ctrl+clic sur la trajectoire permet d'ajuster la trajectoire en ajoutant
+une poignée ». C'est aussi la suite de sa demande de la veille : « éditer une trajectoire tracée dans un environnement 3D…
+lui redonner des directions dans tous les axes x, y et z ». Ses choix : des poignées sur le chemin ; quand on en prend
+une, trois flèches x, y, z ; tirer une flèche déplace le point sur cet axe, et le chemin voisin suit en douceur, avec le
+même rayon que le tirage sur la feuille.
+
+### Les gestes
+
+Avec l'outil Trajectoire, **sur la feuille comme dans la vue Espace 3D** (la vue seule et chacune des vues multiples,
+orthographiques comprises) :
+
+| Geste | Ce qu'il fait |
+|---|---|
+| **Ctrl+clic sur le chemin** (à 10 pixels d'écran, la prise du tirage) | pose une poignée là ; elle est choisie. Une étape d'annulation, « Poser une poignée » |
+| **Ctrl+clic sur une poignée** | la retire (« Retirer une poignée ») |
+| Ctrl+clic **ailleurs** | inchangé : sur la feuille, le lasso de Ctrl ; dans la vue, choisir une carte ou la caméra (Maj+Ctrl+clic : ajouter). Maj+Ctrl+clic, même sur le chemin, choisit toujours |
+| **Glisser une poignée** | la poignée suit le pointeur dans le plan du chemin ; le chemin se tord **en douceur** autour d'elle (une cloche en cosinus, le rayon du tirage de toujours : un bon tiers du chemin, 30 pixels au moins). **Les bouts et les autres poignées restent fixes** : ils bornent l'influence. Les marques gardent leurs fractions. « Tirer une poignée » |
+| Dans la vue Espace 3D, **une flèche de la poignée choisie** | la poignée se déplace sur cet axe du monde, **y compris hors du plan où le chemin est posé** ; le chemin voisin suit en douceur. « Tirer une poignée » |
+| Glisser le chemin ailleurs qu'à une poignée | comme avant (partie 119), mais le tirage s'arrête aux poignées voisines, qui restent fixes ; sans poignée, rien ne change |
+| Échap pendant le geste | tout revient comme avant le geste |
+
+Une poignée se dessine comme un petit rond cerné de sombre : **jade quand elle est choisie**, à l'encre sinon. Dans
+l'Espace 3D, la poignée choisie montre ses trois flèches : **x rouge, y vert, z bleu**, les teintes des flèches du
+manipulateur des cartes (`espace3dview::AXIS_COLORS` ; la charte n'a pas de rouge en dehors des alertes, ces trois
+teintes sont celles que la vue utilisait déjà), avec leur lettre au bout. La flèche tenue ou survolée s'éclaire (la
+teinte « chaude » du manipulateur). Une flèche vue de bout (son axe regarde l'œil) ne se montre pas et ne se prend pas ;
+tout près de la poignée, c'est la poignée qu'on prend. Dans une vue qui regarde le plan du chemin par la tranche (une vue
+de face d'un chemin au sol), la poignée se choisit mais ne se glisse pas à plat : la barre d'état dit de tirer ses
+flèches. Dans une vue de face, la flèche y monte à l'écran : la tirer fait monter le chemin.
+
+**Plusieurs sujets choisis** (chaque carte et la caméra ont leur copie de la trajectoire) : chaque geste vaut pour tous,
+en **une** étape d'annulation (la règle d'Anthony « la sélection agit sur tout »). Le déplacement d'une flèche, ou du
+pointeur dans le plan, est lu dans l'espace puis dans le plan de chacun. Les cartes verrouillées (ou de position
+verrouillée, accrochées, liées) sont laissées de côté ; la barre d'état le dit **en tête** : « Poignée posée, un calque
+laissé de côté. » Sur la feuille, comme les autres gestes de l'outil, les poignées sont celles du calque courant.
+
+**Ce qui suit le chemin monte avec lui.** Une carte reçoit ses clés de position d'après le chemin, hauteur comprise ; la
+caméra, sans aucune clé, suit le chemin là où il monte (`Document::panel_camera_reelle`).
+
+Aucune boîte de dialogue. Les messages, dans la barre d'état, disent l'essentiel en premier (« Poignée posée : tire-la
+pour tordre le chemin… »).
+
+### Comment
+
+- **Le modèle** (`trajectoire.rs`) : deux sortes de champs **facultatifs**, le format reste **55**.
+  - `poignees` : les poignées en **fraction du chemin**, comme les marques : c'est ce qui tient le mieux au lissage (les
+    fractions gardent leur place relative), au retracé (les poignées restent à leurs fractions, comme les marques) et au
+    prolongement (leurs fractions sont recalculées pour qu'elles gardent leur place, comme les marques). Après un
+    tirage, leurs fractions sont relues sur le chemin tiré (un sommet est posé à chaque poignée avant le tirage, pour la
+    suivre).
+  - `hauteurs` (une par point de `points`) et `hauteurs_brut` (une par point du chemin brut, quand il est lissé) : **le
+    décalage de chaque point le long de la normale du plan porteur**, en unités du chemin. Le point dans l'espace est
+    `support.monde(p) + h · normale` (`Support::monde3`). Le décalage dans le plan passe par `points`, la composante
+    normale par `hauteurs` (`Support::decomposer`). Rien : 0 partout, le chemin est dans son plan (un vieux fichier, une
+    trajectoire sur la feuille, qui n'en a jamais).
+  - `tirer_poignee` (et `tirer`, borné par les poignées) : `tirer_entre`, sur le chemin brut avec ses hauteurs, puis
+    repris au pas et lissé de nouveau. `lisser_a`, `prolonger`, `echantillonner` portent les hauteurs : **lissées avec
+    le reste**, **reprises** avec leurs points ; le morceau ajouté par un prolongement part à la hauteur du bout, et le
+    trait se pose sur le plan parallèle qui passe par ce bout. Retracer pose le trait neuf à plat. Le miroir (retourner
+    un plan, `Trajectoire::miroir_x`) change le signe des hauteurs avec celui de la normale.
+  - `deplacement_a` ajoute la hauteur gagnée depuis le point de référence : les cartes (`cles_dans_l_espace`), la
+    caméra (`panel_camera_reelle`, `cuire_trajectoires_camera`) et la pose à la main d'une carte qui suit un chemin
+    (`trajectoire_espace_apres_pose`) en tiennent compte sans autre changement.
+  - **Les fractions, le temps des marques et le tirage restent mesurés à plat**, dans le plan du chemin : la logique 2D
+    (marques, temps, recalage, tirage) ne change pas.
+- **L'écran** : `CheminVu`, `peindre_chemin`, `bout_sous` reçoivent chaque point avec sa hauteur ; la peinture du chemin
+  dans la vue et sur la feuille d'un plan en Espace 3D passe par `monde3`. Le chemin se tire (`GesteEspace::Chemin`) et
+  se prolonge sur le plan parallèle qui passe par le point pris, à sa hauteur.
+- **Les gestes** : `trajectoirepoignees.rs` (nouveau) ; `GesteEspace::Poignee`, `GesteEspace::Fleche`
+  (`m::drag_along_axis`, comme les flèches du manipulateur), `Geste::Poignee` sur la feuille. `Etat::poignee` : la poignée
+  choisie (pas enregistrée), avec le numéro de celui à qui est le chemin (`App::poignee_de`) : changer de calque ou de
+  choix ne la fait jamais passer sur un autre chemin. Dans la vue, le chemin de référence (celui qu'on voit, dont on
+  prend les poignées) est le même au dessin et à l'appui : celui du premier sujet libre (`e3_traj_reference_libre`).
+  Avec plusieurs sujets, la poignée de chacun se retrouve par son rang quand ils en ont autant (les fractions de deux
+  chemins de longueurs différentes ne restent pas égales après un tirage). Sur un chemin lissé, les fractions des
+  poignées (lues sur le chemin qu'on voit) sont ramenées au chemin brut pour le tirage, puis relues sur le chemin lissé.
+  Sur la feuille, le lasso de Ctrl (`springtools.rs`) ne se prend plus, avec l'outil Trajectoire, qu'à l'appui et
+  ailleurs que sur le chemin (avant : dès que Ctrl était tenu au-dessus du dessin) ; Ctrl+Maj prend toujours le lasso
+  de tous les calques, même sur le chemin.
+- **Aide** : une animation de plus, « Poignées de trajectoire » (`aidegestes.rs`, rubrique Trajectoire, après « Tordre
+  le chemin » ; sur la feuille et dans l'espace), et son texte dans le registre. La phrase de prise de l'outil dans la
+  vue (`PRISE`) et la légende du bas de la vue disent le Ctrl+clic sur le chemin.
+
+### Essais
+
+`src/trajectoirepoignees_tests.rs`, 9 essais : le modèle (tirer une poignée : la cloche, les bouts et l'autre poignée
+fixes, les marques, le tirage du chemin borné par une poignée ; sur un zigzag lissé fort, les poignées restent où on les
+voit) ; l'écriture et la relecture (poignées et hauteurs, un
+fichier d'avant, des hauteurs abîmées, une trajectoire sur la feuille) ; lissage, prolongement par les deux bouts,
+retracé et miroir avec des hauteurs ; sur la feuille, de vrais gestes de souris (Ctrl+clic pose, Ctrl+clic ailleurs prend
+toujours le lasso, Ctrl+clic sur la poignée la retire, Ctrl+Z ; tirer une poignée, Échap, une étape, les clés suivent) ;
+dans la vue Espace 3D (deux cartes et la caméra choisies, une carte verrouillée laissée de côté et dite en tête de la
+barre d'état, la flèche y qui monte le chemin, la carte et la caméra qui montent avec lui, enregistrer et relire, Échap,
+Ctrl+Z, retirer pour tous) ; Ctrl+clic loin du chemin choisit toujours une carte, et glisser une poignée la déplace sur
+le sol ; dans une vue de face orthographique, la flèche y monte le chemin.
+
+### Ce qui reste, ce qui est douteux
+
+- **Le temps se mesure à plat.** Les fractions (marques, temps, vitesse) sont lues sur le chemin posé dans son plan :
+  sur une pente raide (une poignée montée haut sur un court morceau), ce qui suit le chemin va un peu plus vite que sur
+  le plat. À juger par Anthony ; mesurer la longueur dans l'espace changerait la place des marques des chemins déjà
+  tracés.
+- Un chemin **lissé** : c'est le chemin brut qui est tiré ; le chemin lissé passe près de la poignée, pas exactement
+  dessus, et les autres poignées peuvent bouger un peu avec le lissage.
+- Le rayon du tirage est le même pour une flèche que pour le glisser : un bon tiers du chemin. Un tirage très haut sur
+  un chemin court fait une bosse étroite.
+- Un **retracé** pose le trait neuf à plat : les hauteurs s'en vont, les poignées restent à leurs fractions.
+- Sur la feuille, seules les poignées du calque courant se voient et se prennent (comme le reste de l'outil).
+- **Un exe d'avant ce chantier** (même format 55) ouvre le projet en ignorant les poignées et les hauteurs ; avec
+  l'écriture continue, il le réécrit à plat. Ne tester cette branche que sur une copie de projet.
+- Le texte de l'animation « Trajectoire dans l'espace » (`aidecatalogue.rs`) dit encore « Ctrl+clic choisit une carte
+  ou la caméra » sans préciser « ailleurs que sur le chemin » : les fichiers de l'aide sont retouchés en parallèle sur
+  `aide-flottante`, seule l'animation des poignées a été ajoutée ici.
+- Après Ctrl+Z, la poignée choisie garde son rang : elle peut désigner une voisine de celle qu'on vient de poser.
+- Rien n'a été regardé à l'écran.
+
+### À vérifier à l'écran (par Anthony), sur une copie de projet
+
+1. Feuille, outil Trajectoire : un chemin. Ctrl+clic sur le chemin : un petit rond jade. Ctrl+clic ailleurs sur le
+   dessin : le lasso, comme avant. Ctrl+clic sur le rond : il s'en va.
+2. Deux poignées ; glisser la première : le chemin se tord en douceur, la seconde et les bouts ne bougent pas. Échap au
+   milieu : tout revient. Ctrl+Z après : un seul pas.
+3. Espace 3D, plan en Espace 3D, une carte avec un chemin au sol. Ctrl+clic sur le chemin : la poignée et ses trois
+   flèches x (rouge), y (vert), z (bleu). Tirer la flèche y : le chemin monte en douceur hors du sol ; lire le plan : la
+   carte monte et redescend. Dire si la douceur et la largeur de la bosse conviennent.
+4. Tirer x et z : la poignée glisse sur le sol. Glisser la poignée elle-même : elle suit le pointeur sur le sol.
+5. Choisir la caméra (seule, ou avec la carte), poser une poignée sur son chemin, tirer y : la caméra monte, sans clé.
+6. « Vues », 4 vues, une de face : tirer la flèche y dans la vue de face ; le chemin monte dans les quatre vues.
+7. Curseur « Lissage » sur un chemin qui monte : la bosse s'adoucit, les bouts restent. Maj + un trait depuis un bout :
+   le chemin continue, la poignée reste où elle était.
+8. Enregistrer, fermer, rouvrir : les poignées et la bosse sont là.
+9. Dire si la vitesse sur une pente raide (voir « Le temps se mesure à plat ») gêne.
+
+## 155. L'aide animée dans une petite fenêtre flottante, à côté de l'outil (2026-11-13, branche `aide-flottante`)
+
+Demande d'Anthony : « Les animations n'apparaissent pas dans réglages mais dans des petites fenêtres flottantes à côté de
+l'outil ou la fonction concernée ». Le moteur, le catalogue, la mémoire de ce qui a été vu, la case « Afficher les
+explications » et le registre de la partie 153 ne changent pas ; seul le joueur quitte le panneau Réglages
+(`src/aideflottante.rs`).
+
+### 155.1 La fenêtre
+
+- Une petite fenêtre au-dessus des panneaux et des fenêtres (sous les menus et les bulles, qui s'ouvrent souvent au même
+  endroit), sans barre de titre : la vignette 240 × 150 dans un cadre de la couleur des
+  panneaux, arrondi en `radius-lg` (12), bordé d'un trait fin, sans ombre. Elle suit le thème, sombre ou clair.
+- Elle se pose à côté de ce qui la déclenche :
+  - un outil : à droite de son icône dans la barre d'outils de gauche (un outil caché derrière un autre dans la même case,
+    le Mélangeur derrière le Pinceau par exemple, prend l'icône de la case) ;
+  - les Vignettes : sous l'onglet « Vignettes » ; les annotations : à côté du stylo ou de la gomme d'annotation pris ; la
+    caméra de la planche : à côté de son icône ;
+  - l'Espace 3D : à côté de l'icône cube de la barre sous le dessin, ou du bouton « Ouvrir l'Espace 3D » du panneau ;
+    si la vue ouverte cache le bouton, la fenêtre reste où elle s'est posée (elle ne saute jamais vers une autre ancre) ;
+  - rien de tout cela à l'écran : à côté de la barre d'outils, sinon dans un coin.
+- Chaque icône retient son rectangle à l'image où elle est peinte (`aideflottante::retenir`). La fenêtre se pose à droite de
+  l'icône (tout en bas, elle remonte), sinon à sa gauche ; sous un onglet plus large que haut, dessous (elle glisse vers la
+  gauche au bord de l'écran), sinon dessus. Elle ne couvre jamais la barre d'outils, et ne sort jamais de l'écran.
+- Pas de fonction de panneau à part (le curseur Lissage, le bouton « Vues ») : les animations du catalogue sont rangées
+  par outil et par espace de travail, la fenêtre se pose donc à côté de l'outil.
+
+### 155.2 Elle ne gêne jamais le dessin
+
+- Elle joue une fois, puis s'efface en un fondu court (0,3 s). Une suite, comme celle des Vignettes (coupe ou continuité,
+  le trait à travers les cases, le pont), se joue l'une après l'autre dans la même fenêtre, sans bouger.
+- Un appui dessus la ferme tout de suite.
+- Elle n'a aucune zone de clic : elle est peinte sur une couche du premier plan, pas dans une `egui::Area` (une zone d'egui
+  déclare toujours un rectangle sous le pointeur, qui cache aux outils ce qu'il y a dessous). Un appui du stylet sur la
+  toile, même sous elle, dessine donc normalement ; il la ferme en même temps.
+- Pendant un geste, si le pointeur s'approche d'elle (12 points), elle se ferme : elle ne couvre jamais le trait. Un geste
+  commencé avant qu'elle s'ouvre (un outil pris au clavier pendant un trait) ne la ferme pas, pour ne pas perdre
+  l'animation : elle se cache le temps qu'il passe près d'elle.
+- Pendant qu'elle joue, l'écran est repeint ; ensuite, plus rien n'est demandé. Elle ne joue d'elle-même ni sans projet,
+  ni en mode concentration, ni dans le Montage ou quand la barre d'outils est cachée (comme avant, quand Réglages n'était
+  pas là) : elle jouera quand l'icône reparaîtra.
+- L'appui qui la ferme agit aussi sur ce qu'il y a dessous : avec le Remplissage ou la Caméra, il remplit ou déplace sur
+  la toile (annulable). C'est le prix de « ne jamais voler un clic ».
+
+### 155.3 La revoir
+
+- Clic droit sur une icône d'outil : « Revoir l'explication », dans le menu qui offrait déjà « Assigner un raccourci ». La
+  même entrée est sur l'onglet « Vignettes » et sur le bouton de l'Espace 3D. L'outil en main ne change pas.
+- Le ▶ du titre de Réglages reste : il ouvre la fenêtre à côté de l'icône de l'outil.
+- Aide > « Registre des explications », comme avant.
+- Aide > « Afficher les explications » : l'animation rejoue, dans la fenêtre, à chaque prise d'un outil.
+
+### 155.4 Les essais
+
+`src/aideflottante_tests.rs` : la première prise d'un outil ouvre la fenêtre à droite de son icône (par un vrai clic
+sur l'icône, qui ne la referme pas) et Réglages ne peint plus rien de plus ; l'Espace 3D ouvert par son icône garde sa
+fenêtre à côté d'elle ; rien ne joue dans le Montage ; elle s'efface à la fin et l'application se repose ; un appui la ferme ; un trait qui commence sur
+elle, ou qui passe dessous, dessine ; elle reste dans l'écran près des bords ; « Revoir l'explication » au clic droit et
+le ▶ de Réglages l'ouvrent à côté de l'icône ; la suite des Vignettes s'enchaîne dans une seule fenêtre ; le thème clair.
+Les essais de la partie 153 peignent maintenant Réglages puis la fenêtre flottante.
+
+### 155.5 À tester par Anthony
+
+1. Préférences : aucun réglage à changer. Pour tout revoir comme la première fois, coche Aide > « Afficher les
+   explications ».
+2. Prends la Trajectoire dans la barre de gauche : la petite fenêtre s'ouvre juste à droite de son icône, joue, puis
+   s'efface. Rien ne joue en haut de Réglages.
+3. Prends le Pinceau, et dessine tout de suite sur la toile pendant que la fenêtre joue, même en commençant sur elle : le
+   trait se fait, la fenêtre s'en va.
+4. Clique sur la fenêtre pendant qu'elle joue : elle se ferme aussitôt.
+5. Clic droit sur l'icône de la Caméra : « Revoir l'explication ». La fenêtre s'ouvre à côté de la Caméra, ton outil ne
+   change pas.
+6. Ouvre l'onglet Vignettes : la suite des Vignettes joue sous l'onglet, l'une après l'autre dans la même fenêtre, sans
+   couvrir la case où tu dessines. Dire si la place te va, ou si un coin de la planche serait mieux.
+7. Ouvre l'Espace 3D par l'icône cube sous le dessin : la fenêtre se pose à côté d'elle, et y reste pendant que la vue
+   s'ouvre. Va dans le Montage et change d'outil au clavier : rien ne joue là.
+8. Le ▶ du titre de Réglages : la fenêtre s'ouvre à côté de l'icône de l'outil.
+9. Passe en thème Papier : la fenêtre est claire.
+10. Dire si la taille (240 × 150) et la durée du fondu conviennent.
+
+## 156. Au démarrage sur la page Vignettes, la suite des Vignettes joue d'elle-même (2026-11-14, branche `vignettes-premiere`)
+
+Demande d'Anthony : « ça mérite d'afficher le fonctionnement de Vignettes quand on ouvre le logiciel pour la première fois
+sur cette page. »
+
+### 156.1 Pourquoi elle ne se voyait pas
+
+Le code suivait déjà le démarrage : dès la première image où un projet est ouvert sur la page Vignettes, la suite (coupe ou
+continuité, le trait à travers les cases, le pont) partait, sans attendre un changement d'onglet (un essai le montre). Mais
+FEANOR rouvre les projets de la séance d'avant **l'un après l'autre** : la suite partait dès le premier, pendant que la
+fenêtre « Ouverture… » du suivant occupait l'écran. Et une image qui tardait (un gros projet adopté d'un coup) faisait
+sauter une animation entière, retenue comme vue sans avoir été vue.
+
+### 156.2 Ce qui change (`src/aideflottante.rs`)
+
+- Rien ne commence de soi-même pendant qu'un projet s'ouvre ou que la séance d'avant revient : la suite des Vignettes attend
+  que la page soit prête, puis joue sous l'onglet « Vignettes », du début.
+- Une image en retard ne compte que pour une demi-seconde : l'animation reprend où elle était, elle ne saute plus.
+- Le reste ne change pas : déjà vue (case Aide > « Afficher les explications » décochée), rien ne joue ; cochée, la suite
+  rejoue à chaque démarrage sur la page. Un appui sur la fenêtre la ferme, un trait sur la toile se dessine, même dessous ;
+  aucune boîte de dialogue.
+
+### 156.3 Les essais
+
+`src/aideflottante_tests.rs` : un démarrage sur la page Vignettes (l'accueil sans projet, puis un projet qui s'ouvre) joue
+toute la suite sous l'onglet et la retient comme vue ; déjà vue, rien ; pendant que la séance revient, rien ne commence, puis
+la suite part au début ; une image de dix secondes ne saute rien ; un second onglet, puis le retour au premier, ne
+l'arrêtent pas ; un appui sur la fenêtre la ferme (le trait dessiné sous elle est l'essai de la partie 155).
+
+### 156.4 À tester par Anthony
+
+1. Coche Aide > « Afficher les explications » (tes explications des Vignettes sont déjà vues : sans la case, rien ne
+   rejouerait).
+2. Va sur la page Vignettes, quitte FEANOR, relance-le : quand tes projets sont rouverts, la suite des Vignettes joue
+   sous l'onglet, de la première animation à la dernière, sans que tu changes d'onglet.
+3. Pendant qu'elle joue, dessine dans une case : le trait se fait ; un appui sur la fenêtre la ferme.
+4. Décoche la case et relance : rien ne joue.
+
+## 157. L'environnement de l'Espace 3D, et les calques 3D Sol, Mur, Ciel avec leur grille (2026-11-14, branche `espace3d-decor`)
+
+Demande d'Anthony : « Concernant l'environnement 3D j'aimerais que l'environnement soit paramétrable. La couleur du fond, le
+maillage, la possibilité d'ajouter une grille pour le calque de sol, le mur et le ciel. (ces calques sont disponibles dans la
+création des calques dans un regroupement de calques 3D). Les outils de dessin dans l'environnement 3D et la façon de les
+utiliser doivent rester exactement pareils. Rien ne doit changer des habitudes de dessins habituelles en 2D ». Tout est dans
+`src/espace3ddecor.rs` ; le format reste 55.
+
+### 157.1 L'environnement (panneau Espace 3D)
+
+- Une section **Environnement** (repliée d'origine) sous l'aimantation : **Fond** (la couleur du fond de la vue, une ou
+  plusieurs vues) ; **Maillage** (montré ou non — la même chose que le bouton « Grille du sol » —, sa couleur, son opacité) ;
+  **Pas** (« auto » : comme avant, le pas suit ce qu'on regarde ; sinon un trait tous les tant de mètres, un plus marqué tous
+  les cinq). « Aspect d'origine » remet le fond et le maillage d'avant.
+- Les axes rouge et bleu du maillage gardent leur couleur : ils disent où est l'origine. L'opacité les atténue aussi.
+- **Choix : le projet le retient**, pas les réglages de l'application. Champ facultatif `environnement_3d` du manifeste, comme
+  les vues (`vues_3d`, partie 144) : un film de nuit et un film de jour n'ont pas le même fond, et le projet emporte son aspect
+  sur une autre machine. Hors de l'annulation, comme les vues : c'est une façon de regarder, jamais l'image du film (Ctrl+Z ne
+  défait pas une couleur de fond). D'origine, rien n'est écrit : un projet qui n'y touche pas garde le même manifeste ; un
+  projet d'avant s'ouvre avec l'aspect d'avant, exactement (même gris, mêmes traits au bit près). Un champ abîmé ou écrit par
+  une version plus récente redonne l'aspect d'origine, il n'empêche jamais d'ouvrir le projet.
+- Le maillage caché est maintenant retenu par le projet (avant, il revenait à chaque ouverture).
+- Limite, la même que pour les vues : un **projet partagé** (travail à plusieurs) ne l'écrit pas dans sa structure ; il
+  revient à l'aspect d'origine à la réouverture. Les calques 3D et leur grille, eux, sont dans les plans et restent.
+
+### 157.2 Les calques 3D (menu « Nouveau calque »)
+
+- Le menu du « + » du panneau Calques (et Calques > Nouveau calque, le clic droit dans le vide du panneau) a un regroupement
+  **Calques 3D** avec **Sol**, **Mur**, **Ciel** (commandes `calque.nouveau_sol`, `calque.nouveau_mur`, `calque.nouveau_ciel`,
+  sans touche ; clic droit sur l'entrée pour lui en donner une).
+- Chacun est **un calque de dessin ordinaire** (vectoriel ou bitmap, comme le calque courant), posé dans l'espace par la même
+  règle que « Nouvelle surface » (`Monde::surface_xf`, à la distance du panneau) : le Sol couché au sol devant la caméra, le
+  Mur debout sur le sol face à elle. Il est le calque courant, sa carte est choisie ; une seule étape d'annulation, aucune
+  fenêtre. Nommé « Sol », « Mur », « Ciel » (puis « Sol 2 »…).
+- **Le Ciel** (nouveau, `Surface::Ciel`) : debout face à la caméra à l'horizontale, **vingt fois plus loin** que la distance
+  du panneau (au plus 200 fois la distance de référence), **centré sur l'horizon** (la hauteur de l'œil), à la taille de la
+  feuille à cette distance : il remplit le cadre. Choix : centré plutôt que posé au-dessus de l'horizon, parce que dans un plan
+  en Espace 3D ce qui est devant cache ce qui est derrière — sa moitié basse, derrière le sol, bouche le vide entre le bout du
+  sol et l'horizon ; sa moitié haute est le ciel.
+- **Hors d'un plan en Espace 3D : refusé**, comme « Nouvelle surface » aujourd'hui (une carte au sol n'a de sens que dans un
+  plan dont la caméra est libre). La barre d'état commence par « Sol refusé : ce plan n'est pas en Espace 3D », et dit de
+  cocher « Plan en Espace 3D ». Le sous-menu le rappelle en petit dessous.
+- Enregistré : `calque_3d` du calque (sorte, grille, pas), facultatif, sans changer le format ; une version d'avant ouvre ces
+  calques comme des calques ordinaires, à la même place.
+
+### 157.3 La grille de repère
+
+- Chaque calque Sol, Mur ou Ciel a une option **Grille** (éteinte d'origine) et son **pas** en mètres de la carte (1 m au sol
+  et au mur, 10 m au ciel). Où : dans le panneau Espace 3D sous les réglages de la carte choisie (bouton grille + pas), dans
+  Plus > Réglages avancés du menu du calque (« Grille de repère »), et la commande `calque.grille_3d` (calque courant).
+  Allumer ou éteindre, changer le pas : une étape d'annulation. Plusieurs calques choisis : la grille s'allume ou s'éteint
+  sur tous les calques 3D du choix (règle « la sélection agit sur tout », partie 136), les autres n'en ont pas.
+- Elle ne se peint ni pendant la lecture, ni sur un calque caché ou rangé dans un dossier caché.
+- Des traits bleus (le bleu du crayon de repère), un plus marqué tous les cinq depuis le milieu de la feuille, peints **par
+  dessus** la carte dans la vue Espace 3D (toutes les cartes qui l'ont allumée) et par-dessus l'image du dessin quand ce
+  calque est le calque courant (vue fermée). Au plus 200 traits dans chaque sens (sinon le pas montré est multiplié par cinq).
+- Elle **n'est pas un dessin** : jamais dans le dessin du calque, ni sous la gomme, ni dans les exports, les vignettes ou la
+  lecture. Rien dans le moteur de dessin ni dans le rendu ne la lit.
+
+### 157.4 Le dessin ne change pas
+
+Aucun outil de dessin n'a été touché. Un calque 3D se dessine exactement comme la surface au sol de toujours : mêmes
+outils, mêmes gestes, mêmes raccourcis, même rendu, dans la vue Espace 3D comme à plat. L'essai le prouve pixel pour pixel.
+
+Pas d'animation d'aide : le sous-menu dit en une phrase ce que fait chaque entrée, la grille est un bouton à bascule, et le
+refus hors d'un plan en Espace 3D est dit dans la barre d'état. Rien qui demande une explication animée (et la branche
+`vignettes-premiere` touche l'aide en même temps).
+
+### 157.5 Les essais
+
+`src/espace3ddecor_tests.rs` : l'environnement d'origine est l'aspect d'avant au bit près ; couleur, opacité et pas du
+maillage, sans étape d'annulation, le maillage caché retenu ; un ancien projet sans ces champs (et des champs abîmés) s'ouvre
+à l'aspect d'origine avec des calques ordinaires ; l'aller-retour JSON et projet des deux champs, format 55 ; le menu pose
+Sol, Mur et Ciel en une étape chacun (couché, posé sur le sol, au fond centré sur l'horizon et remplissant le cadre), refus
+hors d'un plan en Espace 3D dit en tête de la barre d'état ; un trait au pinceau sur un Sol du menu, grille allumée, donne le
+même dessin pixel pour pixel qu'une surface au sol ordinaire ; les traits de la grille suivent le pas et restent bornés ; la
+grille n'est jamais dans le dessin, ni sous la gomme, ni dans l'image exportée.
+
+### 157.6 À tester par Anthony
+
+1. Ouvre une **copie** d'un projet, un plan, la vue Espace 3D. Panneau Espace 3D > « Environnement » : change le fond (par
+   exemple un bleu nuit), la couleur et l'opacité du maillage, décoche « auto » et mets 0,5 m. La vue suit tout de suite, en
+   une vue comme en quatre. « Aspect d'origine » remet tout.
+2. Enregistre, ferme, rouvre : le fond et le maillage sont restés. Un autre projet garde le gris d'origine.
+3. Coche « Plan en Espace 3D ». « + » du panneau Calques > Calques 3D > **Sol** : un calque « Sol » couché devant la caméra,
+   déjà calque courant. Puis **Mur** et **Ciel** : le ciel est tout au fond, il remplit le cadre. Ctrl+Z enlève chacun d'un
+   coup.
+4. Sur un plan qui n'est pas en Espace 3D, Calques 3D > Sol : la barre d'état dit pourquoi ça ne se fait pas.
+5. Choisis la carte du Sol : sous ses réglages, le bouton **Grille** et son pas. Allume-la : des traits bleus sur la carte.
+   Dessine dessus au pinceau, au crayon, gomme : tout se fait comme d'habitude, la gomme n'efface jamais la grille.
+6. Ferme la vue : la grille reste visible sur le dessin tant que le Sol est le calque courant. Exporte une image : pas de
+   grille dedans.
+7. Dire si le bleu de la grille se voit bien sur ton papier, et si le ciel est à la bonne place (centré sur l'horizon).
+
+## 158. Le maillage tout près de la scène, et la vue Espace 3D qui suffit (2026-11-14, branche `espace3d-direct`)
+
+Deux retours d'Anthony après la partie 157 : « Il y a un bug sur le maillage, quand la caméra est trop proche il
+disparait. » et « Je constate qu'il faut cliquer sur le bouton environnement 3D pour pouvoir vraiment utiliser la 3D,
+c'est une friction. On a pas besoin d'appuyer sur ce bouton, le petit cube à côté de la caméra suffit à nous faire
+basculer dans un environnement 3D immédiatement. » Format inchangé (55).
+
+### 158.1 Le maillage qui disparaît de près : la cause
+
+Les traits du maillage traversent tout le sol autour de ce que la vue regarde (de 15 pas automatiques de chaque côté, ou
+plus au pas fixe). Chaque trait était projeté par ses deux bouts, et **un trait dont un bout passait derrière l'œil
+n'était pas dessiné du tout** (`e3_peindre_quadrillage` demandait les deux bouts à `View::project`, qui ne rend rien
+derrière l'œil). De loin, l'œil est au-dessus du sol et presque tous les bouts sont devant lui : le sol est quadrillé.
+Tout près de la scène, l'œil est au milieu du quadrillage : presque tous les traits ont un bout derrière lui, il ne
+restait que ceux du lointain, en bande vers l'horizon — exactement la capture d'Anthony (pas 0,60 m, 9 traits montrés,
+aucun dans le bas de l'image). Les autres pistes ont été vérifiées et écartées : la borne du nombre de traits (300 de chaque
+côté) ne recentre rien, le quadrillage reste centré sur ce que la vue regarde ; l'étendue tirée de la distance de la vue
+garde l'œil dans le quadrillage ; pas automatique et pas fixe avaient le même défaut (l'essai rouge le montre dans les
+deux cas).
+
+**Correction** (`espace3dview.rs`, `devant_l_oeil`, `traits_a_l_ecran`) : un trait est **coupé** là où il passe le plan
+proche de l'œil (5 cm), puis au bord de la vue (le bout coupé tout près de l'œil part très loin hors de l'écran). Les
+traits tout entiers devant l'œil sont montrés exactement comme avant. Même fonction pour la vue seule et pour chacune des
+vues multiples (perspective, caméra, orthographiques). Au pas fixe, le maillage couvre aussi au moins 60 pas de chaque
+côté : tout près de la scène, le sol reste quadrillé loin vers l'horizon (au plus 2 × 601 traits, comme avant la borne).
+
+### 158.2 La vue Espace 3D met le plan en Espace 3D d'elle-même
+
+**Ce que le passage en Espace 3D change à un plan** (relevé avant de coder, `espace3ddirect.rs`) :
+
+- caméra du plan différente de la caméra d'origine à l'une de ses images : l'image passe par le changement de repère
+  (partie 148, A3) — même géométrie, mais pas les mêmes pixels au bord des formes, et l'encre hors de la feuille n'est
+  plus filmée ;
+- une carte plus près que la borne des plans ordinaires (`Layer::MIN_DEPTH`) à l'une des images (une clé de profondeur
+  par exemple) : dans un plan ordinaire elle est montrée à la borne, en Espace 3D à sa vraie place ;
+- une carte penchée : en Espace 3D, le pinceau n'y peint plus hors de ses bords (`App::to_layer_opt`) ;
+- la pile dans un autre ordre que les profondeurs : en Espace 3D, ce qui est devant passe devant
+  (`espace3d::ordre_par_distance`) ;
+- et, pour l'interface seulement, l'outil Caméra de la feuille, la vue de dessus et les mouvements de caméra des Vignettes
+  sont réservés aux plans ordinaires (A8).
+
+Hors des quatre premiers cas, un plan en Espace 3D se compose par le chemin de toujours (`repere_du_plan` ne rend rien,
+la profondeur libre égale la profondeur bornée, l'ordre des distances est celui de la pile) : **les mêmes pixels**.
+
+**Ce qui change pour Anthony :**
+
+- Ouvrir la vue Espace 3D (le cube) sur un plan le met en Espace 3D **tout de suite**, sans bouton, quand rien de cela
+  n'arrive. La barre d'état commence par « Plan passé en Espace 3D tout seul : son image filmée ne change pas. » Aucune
+  fenêtre.
+- Dans l'un des quatre cas, le plan reste ordinaire et la barre d'état dit pourquoi en tête (« Plan gardé ordinaire : sa
+  caméra a bougé, l'Espace 3D changerait l'image. »…).
+- **Sol, Mur, Ciel** (menu Nouveau calque) et **Nouvelle surface** ne refusent plus pour « pas en Espace 3D » : ils
+  mettent le plan en Espace 3D dans leur propre étape d'annulation, même vue fermée. Ils ne refusent que dans les quatre
+  cas, et disent pourquoi (« Sol refusé : sa caméra a bougé… »). Le sous-menu Calques 3D ne montre plus la note que dans
+  ces cas.
+- **Le retour** : un plan que la vue a mis en Espace 3D porte une marque (`Panel::espace_tout_seul`) qui suit
+  l'annulation, les versions et la duplication, et **n'est jamais enregistrée** : le fichier garde ce plan ordinaire. Il
+  redevient ordinaire quand on le quitte (autre plan, vue fermée, planche des Vignettes, Ctrl+Z, rétablir), si rien en
+  lui n'a besoin de l'Espace 3D (`Document::garde_du_retour` : un calque 3D, une carte penchée ou derrière la borne, une
+  caméra du plan lui-même déplacée, une trajectoire dans l'espace, la pile réordonnée par la profondeur). Regarder un
+  plan dans la vue ne lui laisse donc rien : l'outil Caméra, la vue de dessus et les mouvements de caméra des Vignettes le
+  retrouvent comme avant. Dès qu'il s'en sert, la marque tombe : c'est un vrai plan en Espace 3D, enregistré comme tel.
+- Sol, Mur, Ciel ou Nouvelle surface sur un plan ordinaire, à une distance de surface si courte que la carte neuve serait
+  plus près que la feuille : refusé (sinon tout le plan passerait par le changement de repère et l'image des autres
+  cartes changerait) ; la barre d'état dit d'éloigner la distance.
+- **Le bouton « Plan en Espace 3D » reste**, pour deux raisons qu'on ne peut pas faire sans lui : rendre un plan ordinaire
+  (la vue respecte alors ce choix, elle ne l'y remet plus de la séance), et mettre en Espace 3D un plan des quatre cas en
+  connaissance de cause. Sa bulle le dit.
+
+**Annulation (choix)** : le passage tout seul n'est pas une étape — il ne change ni l'image ni les dessins, comme les vues
+et l'environnement. Les calques 3D et les surfaces font le passage dans leur étape (un Ctrl+Z enlève le calque et rend le
+plan ordinaire). Le bouton reste une étape, comme avant. Si Ctrl+Z ramène ordinaire un plan encore montré par la vue, il
+y repasse (même règle).
+
+Aucun outil de dessin n'a changé. Aucun calcul de profondeur n'a changé (lecture par `Monde::du_plan`,
+`Monde::profondeur`, `depth_selon`).
+
+### 158.3 Les essais
+
+`src/espace3ddirect_tests.rs` : la vue tout près (1,5 m au pas de 0,60 m, 0,6 m au pas de 0,15 m, et pas automatique à 1,5 m et 0,3 m)
+quadrille le bas de l'image, et chaque point montré tombe sur une ligne du pas (rouge avant la correction : 0 trait dans
+le bas de l'image) ; de loin, les traits sont exactement ceux d'avant. Ouvrir la vue sur un plan ordinaire de trois cartes à
+des profondeurs différentes, l'une animée, ne change **aucun pixel de l'image filmée à aucune image**, ni une pose ; pas
+d'étape d'annulation ; Sol posé sans refus ; vue fermée, le plan redevient ordinaire, image identique. Caméra déplacée :
+plan gardé ordinaire, image identique, Sol et Nouvelle surface refusés en disant pourquoi, le bouton l'y met quand même et
+ça reste. Pile dans le désordre, carte penchée, carte au-delà de la borne par une clé : chacun reconnu. Un Mur sans ouvrir
+la vue : une étape, Ctrl+Z rend l'image d'avant. Un Sol garde le plan en Espace 3D à la fermeture ; Ctrl+Z hors de la vue le
+rend ordinaire ; une étape prise vue ouverte puis Ctrl+Z et rétablir, vue fermée, ne laissent pas le plan en Espace 3D ;
+un plan mis tout seul s'enregistre ordinaire ; décocher à la main est respecté. Sept essais anciens qui ouvraient la vue puis cochaient le bouton ont été
+ajustés (le bouton aurait décoché).
+
+### 158.4 Pour la suite (previz 2D/3D) : un seul genre de plan
+
+Anthony veut aller plus loin : tous les plans en Espace 3D, neufs et anciens, plus de bouton. Ce n'est **pas** fait ici,
+parce qu'avec le moteur d'aujourd'hui ce passage change l'image de plans existants dans trois cas relevés ci-dessus : une
+caméra qui bouge (le cas courant du storyboard : pixels du bord, encre hors feuille), une pile dans un autre ordre que
+les profondeurs, une clé de profondeur au-delà de la borne. Pour l'unifier sans bouger un pixel, il faudra :
+
+1. que le chemin de rendu d'un plan en Espace 3D garde le chemin multiplan d'aujourd'hui tant que la caméra reste dans les
+   limites d'avant et que rien ne demande l'Espace 3D (ou bien que le chemin par repère filme aussi l'encre hors feuille
+   et rééchantillonne une seule fois de la même façon) ;
+2. un choix « ordre de la pile » par plan, retenu pour les plans d'un ancien projet dont la pile et les profondeurs ne
+   s'accordent pas — un champ nouveau, donc **un format 56** (une version 55 montrerait sinon une autre image) ;
+3. ramener à l'ouverture les clés de profondeur au-delà de la borne (`Layer::ramener_a_la_borne`, à vérifier image par
+   image entre deux clés) ;
+4. rendre aux plans en Espace 3D l'outil Caméra de la feuille, la vue de dessus et les mouvements de caméra des Vignettes,
+   pour une caméra libre.
+
+Ce que la partie 158 prépare : la règle `Document::garde_de_l_espace` dit déjà, plan par plan, ce qui empêche l'unification
+— c'est la liste des cas à traiter, et l'essai de l'image identique s'y réutilise tel quel. Rien n'a été ajouté qui
+ferme la porte : aucun champ enregistré nouveau (la marque `espace_tout_seul` ne vit qu'en mémoire), pas de second genre de
+plan de plus. Une fois les quatre points faits, la marque, la règle et le bouton disparaissent ensemble.
+
+Limites connues : un plan mis tout seul dont la caméra est tenue d'un plan voisin, si ce voisin change pendant qu'il est
+montré (montage), peut montrer une image d'Espace 3D jusqu'à ce qu'on le quitte, où il redevient ordinaire ; annuler un
+« Plan en Espace 3D » coché à la main, vue ouverte, le remet aussitôt en Espace 3D tout seul (sans changement d'image) ;
+le passage tout seul ne regarde pas le verrou du storyboard ni le film partagé (il ne touche ni l'image ni le fichier).
+
+### 158.5 À tester par Anthony
+
+1. Sur une **copie** d'un projet : un plan neuf, ou un plan sans mouvement de caméra. Clique le cube : la barre d'état dit
+   « Plan passé en Espace 3D tout seul ». Tourne autour, pose un Sol (« + » > Calques 3D > Sol) : pas de refus.
+2. Approche la vue tout près du sol (molette), maillage au pas 0,60 m : le sol reste quadrillé jusque sous la vue, en une
+   vue comme en quatre. Puis recule : rien ne saute.
+3. Un plan dont la caméra bouge : le cube dit « Plan gardé ordinaire : sa caméra a bougé… ». Dire si tu préfères qu'il y
+   passe quand même (l'image changerait un peu, voir 158.4).
+4. Ferme la vue sur un plan où tu n'as rien fait : l'outil Caméra de la feuille marche comme avant sur ce plan.
+5. Exporte l'image d'un plan avant et après avoir ouvert la vue : la même.
+
+## 159. Tous les plans dans l'espace, et la 3D qui ne se sent jamais à plat (2026-11-14, branche `tout-en-3d`)
+
+Décision d'Anthony, mot pour mot : « On va au bout. Attention la 3D ne doit jamais se sentir tant qu'on ne bascule pas dans
+la vue de la "scène 3D". N'importe quelle personne qui prend le logiciel en main doit se dire que c'est de la 2D. » Avant
+cela il avait choisi que tous les plans soient en Espace 3D dès leur création (anciens projets aussi à l'ouverture), qu'il
+n'y ait plus deux sortes de plans, plus de bouton « Plan en Espace 3D », le cube ne servant qu'à regarder la scène. Les quatre
+conditions de 158.4 sont tenues. **Format 56.**
+
+### 159.1 Ce qui change pour Anthony
+
+- **Il n'y a plus de « Plan en Espace 3D »** : ni bouton, ni refus « Plan gardé ordinaire », ni « Sol refusé : sa caméra a
+  bougé… », ni message « Plan passé en Espace 3D tout seul ». Le cube ouvre la vue de la scène sur **n'importe quel plan**,
+  sans rien y changer (aucun pixel, aucune étape d'annulation). Sol, Mur, Ciel, Nouvelle surface, la Trajectoire dans
+  l'espace, la caméra libre (se retourner, basculer à la verticale, passer la feuille) marchent sur tout plan, sans refus.
+- **À plat, rien ne dit la 3D** (le critère principal de ce chantier). Hors de la vue de la scène : pas de sous-menu
+  « Calques 3D » dans « Nouveau calque » (il n'y paraît que vue ouverte), pas d'icône « Espace 3D » dans la barre des
+  panneaux, pas d'onglet dans le groupe de Réglages (le panneau y revient avec la vue et en repart avec elle, même dans une disposition
+  enregistrée qui l'y gardait, comme celle d'Anthony depuis la partie 150 ; ouvert à la main la vue fermée, rangé ailleurs ou
+  dans sa propre fenêtre, il reste où l'utilisateur l'a mis), aucune
+  commande de la 3D dans la palette Ctrl+K ni dans l'éditeur de raccourcis, aucune explication de la 3D dans le registre des
+  explications, aucune phrase de la barre d'état. La seule porte : le cube (et Affichage > Plateau > Espace 3D, et la ligne
+  « Espace 3D (afficher / quitter) » de la palette).
+- **Ce qui existait déjà à plat garde ses mots et son aspect** : la profondeur des calques (multiplan) et son champ, borné
+  comme avant à −0,9 (il ne s'ouvre plus loin que pour un calque que la vue de la scène a déjà posé au-delà), la vue de
+  dessus, l'outil Caméra et ses champs (±85°, comme avant), les mouvements de caméra des Vignettes.
+- **Dans la vue de la scène**, le vocabulaire 3D reste. Le bouton « Plan en Espace 3D » du panneau Espace 3D est remplacé par
+  **« Devant cache derrière »** (commande `espace3d.ordre_distance`) : allumé, les calques du plan se posent du plus loin au
+  plus près de la caméra ; éteint (d'origine), dans l'ordre de la pile, comme dans tout logiciel de dessin. Sol, Mur, Ciel et
+  Nouvelle surface l'allument d'eux-mêmes, dans leur étape, si la pile est déjà dans l'ordre des distances (rien de l'image
+  ne change) ; sinon la pile garde son ordre et la barre d'état le dit (« La pile garde son ordre : « Devant cache derrière »
+  (panneau Espace 3D) pour ordonner par la distance. »).
+- Les calques 3D demandés d'ailleurs que la vue (un raccourci posé à la main) ouvrent d'abord la vue de la scène.
+
+### 159.2 Comment l'image reste la même : le chemin de toujours tant qu'il sait filmer (condition a)
+
+Un plan se compose par **le chemin de toujours** (le multiplan, puis le cadre sur la feuille) partout où il sait filmer ; le
+changement de repère de la partie 148 ne sert qu'aux images où il ne le sait pas (`Document::repere_du_plan`) :
+
+- une carte au-delà de la borne d'autrefois (tout contre la caméra de référence, ou derrière elle) ;
+- pour un plan dont **la vue de la scène a libéré la caméra** (`Panel::camera_libre`, posé par `App::set_current_camera_libre`
+  quand elle sort des anciennes limites, ou par une trajectoire de caméra), **aux seules images** où elle est hors des
+  anciennes limites (`Document::camera_dans_les_anciennes_limites` : le cadre voit la feuille par ses quatre coins, bascule et
+  panoramique d'au plus 85°, la caméra n'a pas avancé jusqu'à la feuille). Aux autres images de ce plan, le chemin de toujours ;
+- pour un plan venu du format 55 en Espace 3D (`Panel::espace`, gardé tel quel), dès que sa caméra quitte la caméra
+  d'origine, comme alors.
+
+Un plan neuf, dessiné à plat, ne passe donc par **aucune ligne nouvelle** tant que la vue de la scène n'y a pas posé une
+caméra libre ou une carte derrière la feuille. Une caméra libérée reste libre (le champ ne retombe pas) : ses images dans les
+limites passent quand même par le chemin de toujours.
+
+### 159.3 La migration (conditions b et c) : un projet 55 s'ouvre et devient 56 sans question
+
+`project::VERSION` 55 → 56. Trois champs facultatifs, écrits seulement vrais : `camera_libre` et `ordre_distance` d'un plan,
+`profondeur_bornee` d'un calque. Une version 55 refuse un projet 56 (« créé par une version plus récente ») : attendu, elle
+montrerait l'ordre de la pile et une caméra bridée. À l'ouverture d'un projet 55 ou plus ancien (`document::migrer_vers_56`,
+plan par plan, aucune fenêtre, aucun avertissement) :
+
+- **un plan ordinaire** garde l'ordre de sa pile (`ordre_distance` faux : c'est le choix « ordre de la pile » de 158.4, point
+  2, pris d'office pour tout plan d'avant) et sa caméra d'avant (`camera_libre` faux : jamais de repère pour sa caméra, même
+  si une interpolation ancienne la mettait hors des limites) ;
+- **ses calques dont une clé de profondeur passe la borne** (−0,9), que le format 55 montrait à la borne : ramenés à la borne
+  (`Layer::ramener_a_la_borne`) **si et seulement si** la pose et la profondeur lue sont les mêmes, au bit près, à chaque
+  image du plan (`Layer::ramener_si_rien_ne_change`, vérifié image par image entre deux clés). Sinon (deux clés entre
+  lesquelles la borne était atteinte en route, par exemple) le calque garde ses valeurs et est **tenu à la borne**
+  (`profondeur_bornee`) : sa profondeur se lit bornée pour toujours, la même image ;
+- **un plan en Espace 3D du format 55** garde `espace` : son chemin d'image et l'ordre par la distance ;
+- **un projet partagé** : chaque fichier de plan (`plans/<n°>.json`) porte son propre numéro, `VERSION_PLAN` 1 → 2 ; un plan
+  écrit en 1 se lit comme un plan d'un projet 55 et passe par la même migration (`PanelEntry::format_ancien`, jamais écrit),
+  un plan écrit en 2 se lit tel quel ; une version d'avant refuse un plan écrit en 2 au lieu de perdre ses champs.
+
+Trouvé en chemin : les champs Bascule et Panoramique de l'outil Caméra (±85°) ramenaient à 85° une caméra tournée plus loin,
+rien qu'en se montrant (le défaut d'egui, `clamp_existing_to_range`) ; ils la laissent maintenant telle quelle.
+
+### 159.4 Les outils de la feuille avec la caméra libre (condition d)
+
+Les trois commandes qui posent un calque de la scène (Sol, Mur, Ciel, et les Nouvelles surfaces) ouvrent la vue de la scène si on les
+demande d'ailleurs (un raccourci posé à la main). La vue « par la caméra » du plan pose elle aussi la caméra telle quelle.
+
+
+- **L'outil Caméra** : sur une image composée par le chemin de toujours, exactement les mêmes gestes et le même résultat
+  (`cam0.shifted`, `limited`). Sur une image composée par le changement de repère (caméra libre, plan venu du format 55
+  en Espace 3D), la feuille montre ce que la caméra filme, le cadre est au centre : on le tire de même, la caméra se déplace
+  dans son propre plan (`camera_glissee`, le dessin suit la main), un coin zoome, la poignée tourne ; plus de refus.
+- **La vue de dessus** : sur tout plan, la même vue qu'avant (caméra réelle, panoramique compris ; une carte au sol y est un
+  trait à sa profondeur, comme tout calque). Un calque que la vue de la scène a posé plus près que la borne ne s'y tire pas
+  (il sauterait à la borne) : la barre d'état le dit.
+- **Les mouvements de caméra des Vignettes** : sur tout plan dont la caméra se dit en cadres sur la feuille
+  (`Document::camera_en_cadres` : toutes ses clés dans les anciennes limites, sans chemin dans l'espace, pas un plan venu du
+  format 55 en Espace 3D), exactement comme avant ; ailleurs la vignette montre ce que la caméra filme, sans cadre, et la barre
+  d'état le dit (« Pas de cadre sur cette vignette : elle montre ce que la caméra filme. Règle la caméra avec l'outil Caméra. »).
+
+### 159.5 Les textes 3D retirés du mode à plat
+
+Relevé fait par recherche dans les sources (« 3D », « Espace 3D », « carte », « dans l'espace », « mètres », « scène 3D »),
+puis vérifié par l'essai `en_2d_aucun_texte_de_l_interface_ne_dit_la_3d` :
+
+| Où | Avant | Maintenant |
+|---|---|---|
+| Barre d'état, accrocher un calque penché | « … carte inclinée de l'Espace 3D » | « … calque incliné » |
+| Barre d'état, fusionner | « … incliné ou avancé en 3D : une carte de l'Espace 3D ne se fusionne pas » | « … incliné, ou sa profondeur change pendant le plan : il ne se fusionne pas » |
+| Bulle « Position verrouillée » (en-tête de calque, menu du calque) | « L'outil Transformer et le déplacement en 3D ne bougent plus… » | « L'outil Transformer ne bouge plus… » |
+| Bulle « Grille de repère » d'un Sol, Mur, Ciel (menu du calque) | « Une grille sur la carte, dans la vue Espace 3D… » | « Une grille de repère sur ce calque, à l'écran… » |
+| Barre d'état de la grille, à plat | « … un trait tous les 1 m sur la carte… », « (Nouveau calque > Calques 3D) », « … calques 3D » | sans mètres ni carte ; « calques Sol, Mur ou Ciel » |
+| Préférences > Exports, Caméra | « … pour un script de compositing ou de 3D » | « … pour un script de compositing » |
+| Bulle « Nouveau calque » | « …, dossier, calques 3D » | « …, dossier » (vue ouverte : comme avant) |
+| Menu « Nouveau calque » | sous-menu « Calques 3D » et sa note « Plan gardé ordinaire… » | sous-menu vue ouverte seulement, note partie |
+| Barre d'état en quittant la vue | « Espace 3D quitté. » | « Retour au dessin. » |
+| Onglet et icône « Panneau Espace 3D » | restaient après la première ouverture | l'icône n'est montrée que vue ouverte ; l'onglet du groupe de Réglages part avec la vue |
+| Palette Ctrl+K, éditeur de raccourcis | toutes les commandes « Espace 3D : … », « Nouveau calque 3D : … » | vue ouverte seulement (`keymap::de_la_scene`) ; la porte reste |
+| Registre des explications | rubrique « Espace 3D », « Trajectoire dans l'espace »… | vue ouverte seulement |
+| Aide animée des poignées de trajectoire (jouée à plat) | « Dans la vue Espace 3D, la poignée choisie montre trois flèches… carte… » | ces phrases passées dans « Trajectoire dans l'espace », jouée dans la vue |
+| Messages de la partie 158 | « Plan passé en Espace 3D tout seul… », « Plan gardé ordinaire : … », « Sol refusé : … » | partis |
+| Outil Caméra sur la feuille d'un plan en Espace 3D | « Plan en Espace 3D : la caméra se règle dans la vue Espace 3D… » | parti : l'outil marche |
+| Vignettes d'un plan en Espace 3D | « Plan en Espace 3D : sa caméra ne se règle pas par des cadres… » | « Pas de cadre sur cette vignette : elle montre ce que la caméra filme… » |
+| Vue de dessus d'un plan en Espace 3D | « Ce plan est en Espace 3D : … » | partie : la vue marche |
+| Libellés de commandes | « … (plan en Espace 3D) » | sans la parenthèse |
+| Barre d'état, pinceau hors du calque sur la feuille | « … la carte du calque courant… Dans un plan en Espace 3D, une carte… » | « … hors des bords du calque courant… », « le calque courant n'est pas sous le pointeur… » |
+| Noms d'étapes d'annulation des gestes de la vue (lus dans l'Historique, aussi à plat) | « Déplacer dans l'espace 3D », « Placer la carte dans l'espace 3D », « Échelle de la carte », « Déplacer la caméra 3D »… | « Déplacer le calque », « Placer le calque », « Échelle du calque », « Déplacer la caméra »… |
+
+Laissés exprès : la porte (le cube, son nom « Espace 3D » et sa bulle ; Affichage > Plateau > Espace 3D), les noms des calques
+qu'on a créés soi-même dans la vue (« Sol », « Mur », « Ciel ») et leur grille de repère, qui reste visible sur la feuille.
+Le détecteur (`espace3ddirect::dit_la_3d`) ne prend pas « carte graphique », « carte dédiée » ni « espace de travail ».
+
+### 159.6 Les essais
+
+`src/espace3ddirect_tests.rs` (les deux du maillage de la partie 158 restent tels quels) :
+
+- un projet fabriqué du format 55 (trois plans : caméra animée dans les anciennes limites avec zoom, rotation, avancée,
+  bascule et panoramique ; pile dans le désordre des profondeurs ; calque penché ; clé de profondeur au-delà de la borne qu'on
+  ne peut ramener ; plan sans clé de caméra, deux clés au-delà de la borne qu'on ramène, calque posé juste à la borne ; mouvement de caméra des Vignettes sur deux cases) s'ouvre sans avertissement et donne **les mêmes images, au
+  pixel près, à toutes les images de tous les plans, à l'écran et à l'export**, que ce que montrait le format 55 ; rouge sans
+  la migration (le calque à la clé au-delà de la borne irait à sa vraie place) ; enregistré, il est au format 56 et l'aller-
+  retour garde les images ;
+- le projet d'essai complet du dépôt (`fiabilite_fixture::projet_complet`), renuméroté 55 : les mêmes images ;
+- un plan en Espace 3D du format 55 : `espace` gardé, ordre des distances, les mêmes images ;
+- un projet partagé dont les fichiers de plan sont du format d'avant : migré plan par plan, les mêmes images ; repartagé et relu,
+  rien n'est migré deux fois ;
+- un projet 56 neuf : `ordre_distance`, `camera_libre`, `profondeur_bornee`, une caméra retournée et une profondeur au-delà
+  de la borne font l'aller-retour ; un format 57 est refusé ;
+- la caméra libre ne passe par le repère qu'aux images hors des limites, les autres images gardent leurs pixels ;
+- le cube sur le plan d'avant le plus difficile ne change aucun pixel ni n'ajoute d'étape ; Sol, Mur, Ciel, surface s'y
+  posent sans refus (la pile garde son ordre, la barre d'état le dit) ; sur un plan dont la pile est dans l'ordre des
+  distances, le Sol allume « Devant cache derrière » dans sa seule étape, Ctrl+Z rend tout ;
+- la caméra posée retournée dans la vue de la scène, puis l'outil Caméra de la feuille la fait glisser sans refus ; sur un plan
+  à plat, le même geste donne exactement `cam0.shifted(…)` borné, comme toujours ;
+- les Vignettes : un cadre de plus sur un plan neuf comme avant ; une caméra retournée : pas de cadre, la phrase dite ;
+- **la 3D ne se sent jamais à plat** : après l'ouverture et douze gestes courants (images, plans, vue de dessus, clé de
+  caméra, calque neuf, annuler, rétablir, accrocher et fusionner un calque penché), l'outil Caméra, l'outil Trajectoire, et
+  après avoir ouvert et fermé la vue de la scène, ni la barre d'état ni aucun texte peint à l'écran ne dit la 3D ; la palette
+  n'en propose que la porte ; aucune aide animée jouée à plat, aucune bulle des barres de commandes, de la barre des panneaux
+  ni de la barre d'outils n'en parle ; le détecteur lui-même est essayé.
+
+Essais anciens changés, et pourquoi : ceux qui cochaient « Plan en Espace 3D » (la commande n'existe plus) posent
+`Panel::espace` (le plan du format 55 sur lequel ils ont été écrits) ou rien quand la fonction marche maintenant sur tout plan ;
+ceux qui vérifiaient un refus sur un plan ordinaire (Trajectoire dans l'espace, Sol sur une carte penchée, Nouvelle surface)
+vérifient qu'il n'y a plus de refus ; « Décocher ramène les cartes à la borne » et « refusé quand le cadre dépasse la feuille »
+sont partis avec la case ; « dans un plan ordinaire, Transformer ramène la carte à la borne » vérifie qu'elle reste où la vue de
+la scène l'a posée ; « le panneau Espace 3D reste dans la disposition après la vue » vérifie que celui que la vue a ouvert en
+part, même venu d'une disposition enregistrée (rangé ailleurs ou ouvert à la main, il reste, comme avant) ; le numéro de
+format épinglé (55 → 56, « plus récent » 56 → 57), comme à chaque format. Les essais de l'outil Caméra, de la vue de dessus et
+des Vignettes sur des plans ordinaires passent sans changement.
+
+### 159.7 Ce que l'unification rend possible pour la previz
+
+Un seul genre de plan : tout plan du storyboard est déjà une scène. Le storyboarder dessine à plat comme toujours ; le jour
+où il ouvre le cube, il trouve ses calques posés en profondeur, pose un sol, un mur, un ciel, déplace la caméra où il veut, et
+revient à la feuille sans avoir rien converti. Prochaines marches possibles : un décor partagé entre les plans d'une séquence
+(étape B de `docs/ESPACE-LIBRE.md`), des mouvements de caméra dessinés dans la scène et relus dans les Vignettes, une vue de
+dessus qui sache dire les cartes couchées, l'export de la caméra libre vers un logiciel de compositing ou de mise en scène.
+
+Limites connues : une caméra libérée reste libre ; éteindre « Devant cache derrière » sur un plan venu du format 55 en
+Espace 3D en fait un plan du format 56 à caméra libre (ses images dont la caméra est dans les anciennes limites repassent par le
+chemin de toujours, Ctrl+Z le rend) ; le contenu rogné d'un ancien plan (réserve du rognage) n'est pas migré : un calque ramené
+à la borne qui retrouve, en rallongeant le plan, une clé coupée au-delà de la borne la montrerait à sa vraie place ; une image passée par le changement de repère ne filme pas l'encre hors de
+la feuille (limite de la partie 148), donc un plan dont la caméra sort des limites en cours de route peut voir cette encre
+apparaître et disparaître à la frontière ; un calque tenu à la borne (`profondeur_bornee`) ne passe plus derrière la caméra,
+même dans la vue de la scène ; un cadre de projet plus grand que la feuille n'est plus refusé pour la scène (il n'y en a pas
+dans un projet créé par FEANOR).
+
+### 159.8 À tester par Anthony
+
+**Toujours sur une copie**, jamais sur un projet de `Projets` (l'exe de cette branche les réécrirait au format 56, qu'une
+version d'avant refuse).
+
+1. Ouvre la copie d'un projet d'avant : aucune fenêtre ; exporte une image d'un plan à caméra animée et compare avec l'export
+   fait avant par l'exe de `main` : la même.
+2. À plat, sans ouvrir le cube : parcours les menus, la palette Ctrl+K, « + » des calques, les bulles des barres : nulle part
+   « 3D », « Espace 3D », « carte », « scène 3D ».
+3. Clique le cube sur un plan dont la caméra bouge : rien ne change, aucun message de refus. Pose un Sol (« + » > Calques 3D) :
+   il se pose. Ferme le cube : l'onglet Espace 3D s'en va, la barre d'état dit « Retour au dessin. ».
+4. Dans le cube, retourne la caméra (panoramique 150°), ferme : la feuille montre ce qu'elle filme ; l'outil Caméra la fait
+   encore glisser, zoomer, tourner.
+5. Sur un plan neuf : outil Caméra, vue de dessus, cadres des Vignettes, comme avant.
+6. Dans le panneau Espace 3D, « Devant cache derrière » : allume-le sur un plan dont la pile est dans le désordre, puis
+   Ctrl+Z.
+
+
+## 160. L'interface à panneaux fins : plus de panneau Calques, les calques portent leurs options dans la timeline (2026-11-14, branche `panneaux-fins`)
+
+La règle d'Anthony : « ce doit être simple, en plus de ce que nous avons changé pour les calques, rien ne doit bouger pour le
+reste. Tout doit rester à sa place actuelle et trouver sa place dans cette nouvelle interface ». Liste de travail :
+`Chantiers\inventaire-interface-panneaux-fins.md` (233 éléments) et ses six réponses. Les couleurs et le thème ne changent pas :
+seules la place de quelques éléments et la densité changent. Pas de format nouveau (rien n'est écrit autrement dans les projets).
+
+### 160.1 Ce qui a bougé
+
+1. **Barres de la vue, deux familles.** En haut, comment on regarde : vue du plateau, vue caméra, Espace 3D, règle, puis
+   **Ajuster à la fenêtre, Zoom, Rotation, Miroir** (montés de la barre du bas, dans le même ordre ; leurs petits panneaux
+   s'ouvrent dessous) ; les pastilles des brosses dédiées restent au bout à droite. En bas, ce qui se superpose au dessin :
+   Cadrage, Repères, Pelure d'oignon, Table lumineuse, Passe-partout, et le texte des touches de l'outil.
+2. **Outils de l'Espace 3D** : vue ouverte, Dessiner sur la carte, Choisir, Déplacer, Tourner, Mettre à l'échelle et Caméra
+   sont **en tête de la barre d'outils de gauche** ; la barre du haut garde Recadrer, Regarder par la caméra et 1/2/4 vues.
+   Vue fermée, la barre d'outils est celle d'avant.
+3. **Plus de noms d'onglets en haut des groupes.** Chaque panneau garde une poignée sans texte, à la hauteur de la bande d'avant (26 points : le dessin et les panneaux ne bougent pas) ; sa bulle dit son nom.
+   La barre des panneaux (bord droit) sert d'onglets : icône allumée = panneau devant ; petit point sous l'icône = ouvert,
+   caché derrière un autre. **Déplacer ou faire flotter un panneau : glisser sa poignée** ; clic droit sur la poignée : dans
+   une fenêtre à part. Plus de croix sur les poignées : la barre des panneaux et Affichage > Panneaux ferment.
+4. **Timeline d'animation** : le calque courant a toujours sa ligne complète (toutes ses options, comme avant), les autres
+   des lignes fines de 22 points d'elles-mêmes ; les dossiers des lignes fines repliables (complètes quand ils sont le
+   courant). Plus de triangle sur les calques, plus de « Tout réduire / tout agrandir », plus de « Agrandir / Réduire la
+   ligne » au menu. La ligne complète reçoit aussi ce que montrait le panneau Calques : le losange des clés d'opacité (clic
+   droit : supprimer la clé d'ici, toutes les clés), la couleur d'un calque Couleur unie (à la place de la vignette), l'aplat
+   sous le trait, le maillon de la planche-mère, « sous <trait> » et le nombre de couleurs.
+5. **Bande des plans** : la piste du calque actif porte toutes ses options sur deux rangées de 22 (œil, pastille, nom,
+   cadenas, ⋮ ; pelure, effets, accroche à la caméra, mode de fusion, losange, opacité ; la vignette quand la colonne est
+   élargie à 150 points ou plus). La fenêtre des trois calques passe de 130 à 134 points.
+6. **Barre d'actions des calques**, sous la colonne des calques, dans la barre du bas (timeline : à gauche des onglets Notes,
+   Son… ; bande des plans : à gauche du zoom) : « + » Nouveau calque · Nouveau dossier · Nouveau calque d'effet · Dupliquer ·
+   Supprimer · « ⋯ » (Groupes de calques, Opérations sur les calques). Clic droit dans la barre : nouveau calque, coller le
+   calque.
+7. **Le panneau Calques n'existe plus** : ni d'office, ni dans la barre des panneaux, ni dans Affichage > Panneaux (une
+   disposition enregistrée qui l'avait le perd, comme Guides). Sa commande `vue.calques` (raccourci, palette) montre la bande
+   du bas si elle est cachée et donne la main à la colonne des calques. Un clic dans la colonne lui donne la main comme au
+   panneau d'avant : Ctrl+C / Ctrl+V copient et collent le calque, ou collent des effets copiés sur le calque cliqué. Monter /
+   Descendre : menu ⋮ > Organiser, et le glisser. Le « … » du panneau est supprimé (c'était le menu ⋮). Dans le Storyboard, le
+   Scénario prend la place de l'onglet Calques, au-dessus des Effets.
+8. **Vignettes** : le bloc « Calques d'annotation » devient une ligne **« Annotations »** (œil : montrer, cacher ; clic :
+   le stylo d'annotation) avec « Dessin de la case ». Les couches d'annotation d'un projet qui en a plusieurs : **clic droit
+   sur la ligne** (viser, montrer ou cacher, renommer, monter, descendre, supprimer, nouvelle couche). Plus « calque
+   vectoriel / bitmap » sous le titre de Réglages dans les Vignettes, plus le nom du calque dans la bulle de « Dessin de la
+   case ».
+9. **Aplat** : la sous-ligne « dessiner dans l'aplat » n'est pas recréée (« On enlève dessiner dans l'aplat »). Pour ne rien
+   perdre, ses réglages (couleur, débord, trous, aplat intelligent) sont au clic droit du calque, **« Réglages de l'aplat »**,
+   juste sous « Retirer l'aplat ». Le bouton Aplat sous le trait et « Peint sur l'aplat » ne bougent pas.
+
+### 160.2 Ce qui reste
+
+- La densité « libellé à gauche, valeur à droite » n'est pas refaite panneau par panneau : les lignes y font déjà 21 points
+  (18 + 3). La bande des poignées garde ses 26 points : à 10, le dessin grandissait de 16 points et deux essais de géométrie
+  (le trait sur la planche à la japonaise, la poignée de la caméra en Espace 3D à 1280 × 720) échouaient ; à regarder à part
+  avant d'amincir cette bande.
+- Le glissé d'une couche d'annotation dans la liste du panneau Planche n'existe plus (il n'y a plus de liste) : Monter et
+  Descendre au clic droit le remplacent.
+- Des messages de la barre d'état des Vignettes disent encore « calque d'annotation » ; les menus de la ligne disent
+  « couche ».
+- Avec la colonne de la bande à sa largeur d'origine (104 points), la vignette du calque actif n'a pas de place : elle vient
+  quand on élargit la colonne.
+
+### 160.3 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard : en haut de l'image, après la règle, Ajuster, Zoom, Rotation, Miroir ; le zoom et la rotation s'ouvrent
+   dessous. En bas : Cadrage, Repères, Pelure, Table lumineuse, Passe-partout.
+2. Ouvre la vue Espace 3D (le cube) : ses outils en tête de la barre d'outils de gauche ; Recadrer, Regarder par la caméra
+   et les vues restent en haut. Referme : la barre d'outils d'avant.
+3. Plus de noms en haut des panneaux : survole la poignée (son nom), glisse-la pour déplacer ou faire flotter un
+   panneau ; clic droit : fenêtre à part. L'icône allumée de la barre des panneaux dit qui est devant.
+4. Double-clic sur un plan (Animation) : le calque courant en entier, les autres fins ; clique un autre calque, il
+   s'ouvre. Les dossiers se replient par leur triangle.
+5. Sur la ligne du calque courant : le losange à droite de l'opacité (clic droit : supprimer des clés), l'aplat, le mode.
+6. La barre d'actions sous la colonne : +, dossier, effet, dupliquer, supprimer, ⋯ (Groupes, Opérations).
+7. Storyboard : la piste du calque actif sur deux rangées (pelure, effets, caméra, fusion, losange, opacité, ⋮) ;
+   double-clic sur le bord de la colonne pour voir aussi la vignette.
+8. Le raccourci ou la commande « Calques » : la bande revient si elle était cachée. Ctrl+C / Ctrl+V après un clic dans la
+   colonne copient et collent un calque.
+9. Vignettes : la ligne « Annotations » (œil, clic : stylo) et « Dessin de la case » ; clic droit : les couches.
+10. Clic droit sur un calque qui a un aplat : « Réglages de l'aplat » est sous « Retirer l'aplat ». Dis si cela te va, ou si
+    l'aplat doit encore changer.
+
+## 161. Amincir comme sur la maquette : une seule colonne étroite, des panneaux plus denses (2026-11-14, branche `panneaux-fins`)
+
+Anthony, devant les captures de la partie 160 : « En gros tu as juste viré les noms sur les panneaux », puis « Amincis comme sur la
+maquette ». Les couleurs ne changent pas (thème Gris sombre et ses dérivés) ; chaque outil et chaque réglage reste dans son panneau,
+dans le même ordre ; aucun format nouveau dans les projets (seule la disposition retenue dans les réglages passe à la version 9).
+
+### 161.1 Ce qui a changé
+
+1. **Une seule colonne de panneaux à droite, de 290 points** (avant : deux colonnes côte à côte, Effets et Scénario d'un côté,
+   Réglages et Couleur de l'autre, environ 40 % de la largeur : 990 pixels dans une fenêtre de 2 576). En haut, les Réglages de
+   l'outil, et derrière eux, en onglets, la Fiche du plan, les Effets et, au Storyboard, le Scénario ; dessous, la Couleur et les
+   Brosses dédiées. La barre des panneaux (bord droit) met devant celui qu'on veut, comme avant.
+2. **La colonne garde sa largeur quelle que soit la fenêtre** : l'image prend toute la place gagnée (dans la fenêtre de 2 576 : la
+   vue passe d'environ 1 470 à environ 2 180 pixels de large). Tirer le bord à la main le fixe où on l'a mis ; « Réajuster les
+   panneaux » (Affichage > Panneaux) le rend à sa largeur. Même règle dans les Vignettes et le Montage (la Fiche et les panneaux du
+   son, 290 points au lieu de 30 % de la largeur).
+3. **Les dispositions retenues** qui avaient deux colonnes côte à côte n'en ont plus qu'une : les onglets de la colonne de gauche
+   rejoignent le groupe du haut de celle de droite, derrière ceux qui y sont. Aucun panneau ne se perd ; les panneaux flottants et
+   ceux dans leur fenêtre ne bougent pas. Un panneau de l'ancienne colonne de droite (Historique, Commentaires, Bruitages,
+   Feuille d'exposition, Bibliothèque…) ouvert à la demande devient un onglet de ce groupe, jamais une deuxième colonne.
+4. **Une liste devant** (Scénario, Bibliothèque, Historique…) prend la hauteur au-dessus de la Couleur, qui garde celle de son
+   contenu ; les Réglages devant reprennent la hauteur de leur contenu.
+5. **Plus de bandes vides au-dessus des panneaux** : la bande des poignées passe de 26 à 8 points (au-dessus de chaque panneau, du
+   dessin et de la bande du bas). La poignée se glisse toujours pour déplacer ou faire flotter un panneau ; clic droit : dans une
+   fenêtre à part.
+6. **Densité** : dans les panneaux de la colonne, texte de 11,5 points (12,5 avant), lignes à 2 points d'écart (3 avant), marges
+   du corps de 5 points sur les côtés et 3 en haut et en bas (6 avant). Le dessin, la bande et les menus gardent leur densité.
+7. **La barre d'actions des calques** : cases de 18 points, au moins 5 points d'écart (1 avant, des icônes qui se touchaient),
+   icônes de 14 points. Sous une colonne plus étroite que ses six cases (la colonne des pistes du Storyboard, 104 points
+   d'origine), elle la déborde de ce qu'il faut ; plus large, ses cases s'écartent.
+
+### 161.2 Les deux essais qui retenaient la bande de 26 points
+
+- `traits_continus` (le trait vertical sur la planche à la japonaise) : à la japonaise, la page entière tient dans la hauteur de
+  la vue, les cases n'ont qu'une centaine de pixels de large et le pinceau de 14 pixels du dessin y faisait moins d'un pixel
+  d'écran ; le filet, trop pâle, n'était plus relevé. Ce n'était pas une coupure du trait : l'essai garde maintenant un pinceau d'au
+  moins deux pixels d'écran.
+- `espace3dvue` (la poignée de la caméra à 1280 × 720) : l'essai visait la poignée juste après les coups de molette, avant que la
+  vue se pose ; il attend maintenant que la vue soit posée.
+- En passant : l'essai du passe-partout balayé comptait un triangle sans aire (trois sommets confondus) comme couvrant ; il les
+  ignore. Les essais de la planche (`vignettes_tests::ouvert`) ont une fenêtre de 1 282 de large, où la planche a la largeur d'avant.
+
+### 161.3 Ce qui reste
+
+- Le panneau Planche des Vignettes (frise des séquences, « Toutes ») est un peu à l'étroit à 290 points : sa frise déborde à droite. (Corrigé en 161.4.)
+- Le panneau Espace 3D devant, avec la Couleur dessous, ne montre pas tout d'un coup (il défile) : sa caméra va jusqu'à la focale. (Corrigé en 161.4.)
+- La colonne des pistes du Storyboard reste à 104 points d'origine (sa largeur est un réglage d'Anthony).
+- La largeur de la colonne est tenue même si « les panneaux s'ajustent » est décoché (cette case parle des hauteurs), et aussi pour
+  un panneau large (Feuille d'exposition, Références) qu'on aurait posé seul à côté du dessin : tirer le bord le libère.
+- `vignettecam::dans_polygone` répond « dedans » pour un polygone sans aire (sommets confondus ou alignés) ; il sert au repérage de
+  la planche (`board.rs`, `debord.rs`, `horschamp.rs`). Défaut d'avant, à corriger à part.
+
+### 161.4 Les deux débords corrigés (Anthony a validé les 290 points)
+
+- **Vignettes, en haut à droite** : la boîte sombre aux petites cases « 1 2 + » qui passait par-dessus le panneau Planche et la
+  barre des panneaux est la fenêtre de l'aide animée (la suite des Vignettes, sous l'onglet « Vignettes »). Elle se pose maintenant
+  à gauche de la colonne des panneaux, toujours sous l'onglet (`App::aide_ecran`). Dans le panneau lui-même, seule la ligne d'une
+  séquence au long nom débordait : le nom est coupé par « … » (le nombre de plans garde sa place, le nom entier est dans la bulle).
+  Rien d'autre ne bouge : mêmes boutons, même ordre.
+- **Espace 3D** : la caméra entière se voit sans faire défiler (fenêtre de 2 576 × 1 048, Couleur dessous). Une ligne de moins en
+  haut (le titre, puis sur la même ligne le repère, l'aimantation, la grille, les vues, le plan en Espace 3D ; « cartes et caméra »
+  passe dans la bulle du titre, en texte gras comme « Cartes (calques) » et « Caméra du plan ») ; panoramique, bascule et rotation
+  sur une seule ligne « Angles (°) » (`pan`, `basc.`, `rot.`, chacun avec sa bulle) ; filets de 2 points au lieu de 6. Aucun réglage
+  retiré, même ordre. La focale a sa bulle.
+- Essais : `panneaux_fins_tests::the_board_panel_fits_in_the_column_and_the_vignettes_suite_does_not_cover_it` et
+  `the_whole_camera_of_the_3d_space_panel_shows_without_scrolling` (rouges avant : 34,5 points de débord, 52 points sous le bas).
+
+### 161.5 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard : une seule colonne étroite à droite (Réglages, Couleur dessous) ; l'image va presque jusqu'au bord. Les icônes de
+   la barre des panneaux mettent devant la Fiche, les Effets, le Scénario.
+2. Agrandis ou rétrécis la fenêtre : la colonne ne change pas de largeur. Tire son bord : elle reste où tu l'as mise ;
+   Affichage > Panneaux > Réajuster les panneaux la remet.
+3. Plus de bandes grises vides au-dessus des panneaux ; glisse la fine poignée d'un panneau pour le déplacer.
+4. Sous la colonne des calques, la barre + · dossier · effet · dupliquer · supprimer · ⋯ : des icônes qui ne se touchent plus.
+5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
+6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
+   en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
+
+## 163. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2)
+
+(Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
 
 Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
 calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
@@ -10454,7 +12947,9 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
   droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
   Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
 - Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran.
-- Panneau Réglages : ceux de la dernière vue cliquée (l'outil de dessin, ou la carte et la caméra).
+- Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
+  caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
+  devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
 - Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
 
 **Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
@@ -10470,8 +12965,8 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
 4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
    trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
 5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
-6. Dans la vue 3D, cliquer une carte : son calque devient courant, Réglages montre la carte ; cliquer la feuille :
-   Réglages montre de nouveau l'outil.
+6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
+   garde l'outil.
 7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
    feuille : seule la feuille zoome.
 8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de

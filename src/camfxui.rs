@@ -161,8 +161,8 @@ impl App {
         if let Some(choice) = picked {
             self.pick_camera_effect(choice);
         }
+        // (Sans effet : son mode d'emploi est dans l'animation « Effets de caméra sur une plage d'images », partie 153.)
         let Some(v) = self.effet_vivant() else {
-            ui.label(RichText::new("Choisir un effet : il se voit tout de suite, sans clé. Choisir des images dans la timeline avant pour viser une plage.").small().weak());
             return;
         };
         let mut p = v.params;

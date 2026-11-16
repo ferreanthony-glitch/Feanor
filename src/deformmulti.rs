@@ -599,14 +599,7 @@ impl App {
                 self.deform_multi_fermer();
             }
         });
-        ui.label(
-            egui::RichText::new(
-                "Clic sur le dessin : un seul cadre entoure ce que contiennent les calques choisis. Tire un coin (ou une poignée \
-                 ronde de l'enveloppe), l'intérieur pour déplacer. Les calques cachés ou verrouillés sont laissés de côté. Ctrl+Z \
-                 annule chaque geste.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation « L'enveloppe » et le registre des explications, partie 153.)
+        self.avertir_laisses_de_cote(ui);
     }
 }

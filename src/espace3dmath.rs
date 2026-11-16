@@ -300,12 +300,19 @@ pub struct View {
     pub focal: f32,
     /// Largeur de l'image (pixels) qui représente la pellicule de 36 mm.
     pub ref_width: f32,
+    /// Projection orthographique (les vues Dessus, Face… de l'Espace 3D, `espace3dvues.rs`) : la largeur, en unités du monde,
+    /// que montrent les `ref_width` pixels. Les rayons sont alors parallèles (direction `forward`, origine sur le plan de
+    /// l'image qui passe par `eye`) et la focale ne sert pas. Rien : la perspective.
+    pub ortho: Option<f32>,
 }
 
 impl View {
-    /// Pixels de l'image par unité de x/z.
+    /// Pixels de l'image par unité de x/z (en perspective) ; en orthographique, pixels par unité du monde.
     pub fn px_per_unit(&self) -> f32 {
-        self.ref_width / 2.0 * self.focal.max(1.0) / 18.0
+        match self.ortho {
+            Some(w) => self.ref_width.max(1.0) / w.max(1e-6),
+            None => self.ref_width / 2.0 * self.focal.max(1.0) / 18.0,
+        }
     }
 
     /// Point dans le repère de l'œil : (droite, haut, profondeur devant l'œil).
@@ -318,18 +325,39 @@ impl View {
     /// regarde) ; rien s'il est derrière l'œil.
     pub fn project(&self, p: V3, center: [f32; 2]) -> Option<[f32; 2]> {
         let c = self.to_view(p);
-        (c[2] > 1e-6).then(|| {
-            let s = self.px_per_unit();
-            [center[0] + c[0] / c[2] * s, center[1] - c[1] / c[2] * s]
-        })
+        let s = self.px_per_unit();
+        if self.ortho.is_some() {
+            return (c[2] > 1e-6).then(|| [center[0] + c[0] * s, center[1] - c[1] * s]);
+        }
+        (c[2] > 1e-6).then(|| [center[0] + c[0] / c[2] * s, center[1] - c[1] / c[2] * s])
     }
 
-    /// Rayon de l'œil à travers le pixel `px`.
+    /// Rayon de l'œil à travers le pixel `px` (en orthographique : parallèle à `forward`, depuis le plan de l'image).
     pub fn ray(&self, px: [f32; 2], center: [f32; 2]) -> Ray {
         let s = self.px_per_unit();
         let (x, y) = ((px[0] - center[0]) / s, -(px[1] - center[1]) / s);
+        if self.ortho.is_some() {
+            return Ray::new(add(self.eye, add(scale(self.right, x), scale(self.up, y))), self.forward);
+        }
         let d = [0, 1, 2].map(|k| self.right[k] * x + self.up[k] * y + self.forward[k]);
         Ray::new(self.eye, d)
+    }
+
+    /// La vue regarde en orthographique.
+    pub fn is_ortho(&self) -> bool {
+        self.ortho.is_some()
+    }
+
+    /// Le point du monde sous le pixel `px`, dans le plan face à la vue qui passe par `at` (glisser « dans le plan de
+    /// l'écran », à la profondeur de l'objet).
+    pub fn screen_to_plane(&self, px: [f32; 2], center: [f32; 2], at: V3) -> Option<V3> {
+        let ray = self.ray(px, center);
+        let den = dot(ray.d, self.forward);
+        if den.abs() < 1e-7 {
+            return None;
+        }
+        let t = dot(sub(at, ray.o), self.forward) / den;
+        t.is_finite().then(|| ray.at(t))
     }
 }
 
@@ -377,7 +405,7 @@ impl Orbite {
     /// La prise de vue de cette caméra, pour une zone de `width` pixels.
     pub fn view(&self, width: f32) -> View {
         let (right, up, forward) = self.basis();
-        View { eye: self.eye(), right, up, forward, focal: self.focal, ref_width: width }
+        View { eye: self.eye(), right, up, forward, focal: self.focal, ref_width: width, ortho: None }
     }
 
     /// Cadre toute la boîte `bounds`, vue sous l'angle donné (degrés : `azimuth` autour, `elevation` au-dessus) : la

@@ -57,7 +57,9 @@ la seule source. La pose 3D est *calculée* à partir d'eux (`Monde::card_xf`), 
 dessus, propagation) lit les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu
 passe par **le même code** qu'avant.
 
-Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels :
+Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels. (Dans un plan
+en Espace 3D, depuis le 2026-11-12, `d` descend sous −0,9 : `s` reste alors 0,1 et seule la position Z continue,
+`docs/INTERFACE.md`, partie 148.)
 
 | Carte (monde) | depuis le calque |
 |---|---|
@@ -223,8 +225,8 @@ sol ou en mur. Les points 11.1 (tri par profondeur) et 11.5 (inclinaison limité
 
 Demandé par Anthony : garder la vue 3D ouverte à côté de la feuille pendant qu'on dessine. Plan validé par lui le
 2026-11-16 (partage de la zone du dessin plutôt qu'un panneau ; un geste va à la vue où il commence ; Réglages de la
-dernière vue cliquée ; branche partie d'`espace-libre`). Code : `espace3dcote.rs` ; essais : `espace3dcote_tests.rs` ;
-interface et liste de contrôle : `docs/INTERFACE.md`, partie 144. **Rien n'a été regardé à l'écran.**
+dernière vue cliquée ; branche partie d'`espace-libre`, puis remise sur `main` e1f18b2 le même jour). Code : `espace3dcote.rs` ; essais : `espace3dcote_tests.rs` ;
+interface et liste de contrôle : `docs/INTERFACE.md`, partie 163. **Rien n'a été regardé à l'écran.**
 
 - **Le partage** (`espace3dcote::partage`) : la feuille à gauche, une barre de 6 points à tirer, la vue 3D à droite
   (20 à 80 % de la largeur, 50 % par défaut, `Layout::part_espace3d`, retenue d'une séance et d'un espace de travail à
@@ -238,7 +240,9 @@ interface et liste de contrôle : `docs/INTERFACE.md`, partie 144. **Rien n'a é
 - **`espace3d_fit`** cadre dans la zone de la vue (`Espace3dState::rect`, posée par `espace3d_panel`), plus dans
   `canvas_rect`, qui reste la feuille.
 - **Gestes** : chaque vue a sa propre zone egui ; `canvas_input` ne prend que les appuis sur la feuille ; un geste
-  commencé dans une vue y reste jusqu'au relâché. `clic_3d` (dernier appui dans la vue 3D) décide du panneau Réglages.
+  commencé dans une vue y reste jusqu'au relâché. `clic_3d` (dernier appui dans la vue 3D) décidait du panneau Réglages ; depuis la remise sur `main` (e1f18b2), Réglages
+  montre toujours l'outil (partie 150) et les réglages de la vue d'à côté sont dans l'onglet « Espace 3D » (`espace3dpanneau.rs`),
+  qui ne passe pas devant quand on ouvre le côte à côte.
 
 **Sans latence.** Trois mécanismes :
 

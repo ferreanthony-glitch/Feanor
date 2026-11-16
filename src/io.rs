@@ -247,6 +247,9 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             cues: Default::default(),
             color: None,
             espace: false,
+            camera_libre: false,
+            ordre_distance: false,
+            trajectoire_camera: None,
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

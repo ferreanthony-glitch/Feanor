@@ -55,7 +55,7 @@ fn bouton_avec(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
 }
 
 /// Un glisser sur les points `pts` de la feuille, une image d'écran par point.
-fn glisser(b: &mut Banc, pts: &[(f32, f32)]) {
+pub(crate) fn glisser(b: &mut Banc, pts: &[(f32, f32)]) {
     glisser_avec(b, pts, Modifiers::NONE);
 }
 
@@ -86,7 +86,7 @@ pub(crate) fn marquer_le_milieu(b: &mut Banc) {
     glisser(b, &[(200.0, 135.0), (200.0, 150.0), (200.0, 165.0)]);
 }
 
-fn derniere_etape(b: &Banc) -> String {
+pub(crate) fn derniere_etape(b: &Banc) -> String {
     b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default()
 }
 
@@ -94,7 +94,7 @@ fn cles(b: &Banc) -> Vec<(usize, f32, f32)> {
     b.app.layers()[0].pos_keys.iter().map(|k| (k.frame, k.t.x, k.t.y)).collect()
 }
 
-fn jalons(b: &Banc) -> Vec<usize> {
+pub(crate) fn jalons(b: &Banc) -> Vec<usize> {
     b.app.layers()[0].trajectoire.as_ref().map(|t| t.images_des_jalons(b.app.frame_count())).unwrap_or_default()
 }
 
@@ -720,4 +720,136 @@ fn the_tool_is_refused_in_the_vignettes_and_has_its_action_its_slot_and_its_hint
     b.app.run_action("outil.trajectoire");
     assert_eq!(b.app.tool, Tool::Trajectoire);
     assert!(!b.app.modified);
+}
+
+/// Le nombre de traits du dessin vectoriel `cel` : un dessin retouché en a de plus.
+pub(crate) fn traits(b: &Banc, cel: u64) -> usize {
+    b.app.doc.cels[&cel].vector.as_ref().map_or(0, |v| v.elements.len())
+}
+
+/// Le dessin `cel` retouché : `n` traits de plus (des copies de son premier, plus bas), comme si on les y avait dessinés.
+fn retoucher(b: &mut Banc, cel: u64, n: usize) {
+    let c = b.app.doc.cels.get_mut(&cel).expect("le dessin");
+    let v = c.vector.as_mut().expect("un dessin vectoriel");
+    let premier = v.elements[0].clone();
+    for k in 0..n {
+        v.elements.push(premier.transformed(&crate::vector::Affine::translate(eframe::egui::vec2(0.0, 50.0 + 10.0 * k as f32))));
+    }
+    c.version += 1;
+}
+
+/// Les dessins de la trajectoire du calque 0, jalon par jalon.
+fn dessins_des_jalons(b: &Banc) -> Vec<u64> {
+    b.app.layers()[0].trajectoire.as_ref().map(|t| t.dessins.iter().map(|d| d.dessin).collect()).unwrap_or_default()
+}
+
+/// Anthony, 2026-11-13 (« règle ce qui reste imparfait ») : « si tu ajoutes une marque au milieu d'un chemin en clés
+/// d'images, les dessins que tu as déjà retouchés peuvent se décaler d'une marque ». Chaque copie appartient maintenant à son
+/// jalon : une marque posée reçoit une copie du dessin du jalon d'avant, tel qu'on l'a laissé ; une marque retirée emporte la
+/// sienne ; glisser, recaler, retracer, annuler ou enregistrer ne change rien à qui a quel dessin.
+#[test]
+fn each_redrawn_pose_stays_with_its_milestone_when_marks_are_added_removed_or_slid_and_through_retiming_retracing_undo_and_saving() {
+    let mut b = banc();
+    b.app.traj.cles_propose = Cles::Images;
+    let source = dessiner_le_depart(&mut b);
+    let c0 = centre_du_dessin(&b, source);
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    let d = dessins_des_jalons(&b);
+    let (dm, da) = (d[1], d[2]);
+    // La pose de la marque retouchée (un trait de plus), celle de l'arrivée aussi (deux de plus).
+    retoucher(&mut b, dm, 1);
+    retoucher(&mut b, da, 2);
+    let tous = b.app.doc.cels.len();
+    // Une marque entre le départ et la marque retouchée, à 20 % du chemin.
+    glisser(&mut b, &[(110.0, 135.0), (110.0, 165.0)]);
+    assert_eq!(derniere_etape(&b), "Marque de trajectoire");
+    assert_eq!(jalons(&b), [0, 8, 15, 23]);
+    let d = dessins_des_jalons(&b);
+    assert_eq!((d[0], d[2], d[3]), (source, dm, da), "chaque pose retouchée reste à son jalon");
+    assert_eq!((traits(&b, dm), traits(&b, da)), (2, 3));
+    let n1 = d[1];
+    assert!(n1 != source && n1 != dm && n1 != da, "la nouvelle marque a sa copie à elle");
+    assert_eq!(traits(&b, n1), 1, "une copie du dessin du jalon d'avant, le départ");
+    let c1 = centre_du_dessin(&b, n1);
+    assert!((c1.x - c0.x - 60.0).abs() < 4.0 && (c1.y - c0.y).abs() < 1.0, "mise à sa place, à 20 % du chemin : {c1:?} contre {c0:?}");
+    assert_eq!(b.app.doc.cels.len(), tous + 1, "une seule copie de plus");
+    let l = &b.app.layers()[0];
+    assert_eq!((l.cel_at(7), l.cel_at(8), l.cel_at(14), l.cel_at(15), l.cel_at(22), l.cel_at(23)), (Some(source), Some(n1), Some(n1), Some(dm), Some(dm), Some(da)));
+    // Une marque entre la marque retouchée et l'arrivée, à 80 % : une copie de la pose retouchée, telle qu'on l'a laissée.
+    glisser(&mut b, &[(290.0, 135.0), (290.0, 165.0)]);
+    assert_eq!(jalons(&b), [0, 6, 12, 17, 23]);
+    let d = dessins_des_jalons(&b);
+    assert_eq!((d[0], d[1], d[2], d[4]), (source, n1, dm, da));
+    let n2 = d[3];
+    assert!(![source, n1, dm, da].contains(&n2));
+    assert_eq!(traits(&b, n2), 2, "la copie a ce qu'on a retouché sur le jalon d'avant");
+    assert!((centre_du_dessin(&b, n2).x - c0.x - 240.0).abs() < 4.0, "{:?}", centre_du_dessin(&b, n2));
+    // Ctrl+Z retire la seconde marque et sa copie ; les autres jalons gardent les leurs. Rétablir la rend.
+    b.app.undo();
+    assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, da]);
+    b.app.redo();
+    assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, n2, da]);
+    // Glisser la première marque le long du chemin (de 20 à 30 %) : sa pose la suit, les autres ne changent pas.
+    glisser(&mut b, &[(110.0, 150.0), (125.0, 151.0), (140.0, 150.0)]);
+    assert_eq!(derniere_etape(&b), "Glisser une marque");
+    let d = dessins_des_jalons(&b);
+    assert_eq!((d[0], d[2], d[3], d[4]), (source, dm, n2, da), "glisser une marque ne touche qu'à sa pose");
+    assert_eq!((traits(&b, d[1]), traits(&b, dm), traits(&b, n2), traits(&b, da)), (1, 2, 2, 3));
+    assert!((centre_du_dessin(&b, d[1]).x - c0.x - 90.0).abs() < 4.0, "{:?}", centre_du_dessin(&b, d[1]));
+    let n1 = d[1];
+    // Recaler la marque retouchée sur la timeline (sa clé de dessin, de l'image 12 à l'image 10).
+    let (plan, calque) = (b.app.doc.panels[0].id, b.app.layers()[0].id);
+    b.app.key_sel = vec![crate::montagekeys::KeyRef { panel: plan, layer: calque, start: 12 }];
+    assert!(b.app.begin_keys_drag(12));
+    b.app.drag_keys_mode(10, crate::handles::KeyMove::Single);
+    b.app.end_keys_drag();
+    assert_eq!(jalons(&b), [0, 6, 10, 17, 23], "{}", b.app.status);
+    assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, n2, da], "recaler ne change pas qui a quel dessin");
+    assert_eq!(b.app.layers()[0].cel_at(10), Some(dm));
+    // « Temps égaux entre les marques » (ce que fait le bouton des réglages) : de même.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().temps_egaux();
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Temps égaux entre les marques");
+    assert_eq!(jalons(&b), [0, 6, 12, 17, 23]);
+    assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, n2, da]);
+    // Enregistré, relu : chaque jalon a toujours son dessin.
+    let dir = std::env::temp_dir().join(format!("feanor-trajectoire-jalons-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).expect("dossier d'essai");
+    let manifest = dir.join("J.shot");
+    crate::project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
+    let relu = crate::project::load(&manifest).expect("relu").doc;
+    assert_eq!(relu.panels[0].layers[0].trajectoire, b.app.layers()[0].trajectoire, "la trajectoire revient avec ses dessins, à leurs jalons");
+    assert_eq!(relu.panels[0].layers[0].frames, b.app.layers()[0].frames);
+    std::fs::remove_dir_all(&dir).ok();
+    // Arracher la seconde marque (à 80 %) : sa copie s'en va avec elle, l'arrivée garde sa pose retouchée.
+    glisser(&mut b, &[(290.0, 150.0), (290.0, 200.0), (290.0, 270.0)]);
+    assert_eq!(derniere_etape(&b), "Retirer une marque");
+    assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, da], "seule la copie de la marque arrachée s'en va");
+    assert_eq!(traits(&b, da), 3);
+    assert_eq!(b.app.layers()[0].cel_at(23), Some(da));
+    // Suppr sur la clé de la première marque (timeline) : de même.
+    let premiere = jalons(&b)[1];
+    assert!(b.app.trajectoire_supprimer_jalon(0, premiere));
+    assert_eq!(dessins_des_jalons(&b), vec![source, dm, da]);
+    // Un second trait long retrace le chemin, vers le bas : chaque pose est déplacée avec ce qu'on y a retouché.
+    glisser(&mut b, &[(50.0, 50.0), (50.0, 100.0), (50.0, 150.0), (50.0, 200.0), (50.0, 250.0)]);
+    assert_eq!(derniere_etape(&b), "Retracer la trajectoire");
+    let d = dessins_des_jalons(&b);
+    assert_eq!(d.len(), 3);
+    assert_eq!((d[0], traits(&b, d[1]), traits(&b, d[2])), (source, 2, 3), "les poses retouchées ont suivi le nouveau chemin");
+    let (cm, ca) = (centre_du_dessin(&b, d[1]), centre_du_dessin(&b, d[2]));
+    assert!((cm.x - c0.x).abs() < 4.0 && (cm.y - c0.y - 100.0).abs() < 4.0, "la marque, à mi-chemin vers le bas : {cm:?} contre {c0:?}");
+    assert!((ca.x - c0.x).abs() < 4.0 && (ca.y - c0.y - 200.0).abs() < 4.0, "l'arrivée, au bout : {ca:?} contre {c0:?}");
+    // « Retirer les marques » (ce que fait le bouton des réglages) : le départ et l'arrivée gardent les leurs.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().retirer_les_marques();
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Retirer les marques");
+    let fin = dessins_des_jalons(&b);
+    assert_eq!((fin.len(), fin[0], fin[1]), (2, source, d[2]), "l'arrivée garde sa pose retouchée");
+    assert_eq!(b.app.layers()[0].cel_at(23), Some(d[2]));
 }

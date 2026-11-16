@@ -129,8 +129,6 @@ pub(crate) struct Etat {
     pub calque: u64,
     /// Les traits choisis au lasso (par identifiant : `Trace::id`).
     pub selection: Vec<u64>,
-    /// Le calque qu'on tient pour le ranger, dans la liste du panneau Planche (`vignettespanneau.rs`).
-    pub glisse: Option<u64>,
     /// Le calque qu'on est en train de renommer, et le texte.
     pub renomme: Option<(u64, String)>,
     /// Le point d'écran de l'appui qui commence un geste (pris par la planche, tracé à l'image d'écran même).
@@ -162,7 +160,6 @@ impl Default for Etat {
             confirmer: false,
             calque: 0,
             selection: Vec::new(),
-            glisse: None,
             renomme: None,
             debut: None,
             en_cours: None,
@@ -192,16 +189,8 @@ impl Etat {
 }
 
 
-/// Où tombe un calque glissé dans la liste du panneau : `centres` sont les centres (y) des lignes, du haut (le calque du dessus) vers le bas,
-/// `d` la ligne tenue, `y` le pointeur. Rend la ligne devant laquelle il s'insère (de 0 à `centres.len()` : la dernière, sous tout) et sa
-/// place dans `Annotations::calques` (0 : tout en bas).
-pub(crate) fn depot_du_calque(centres: &[f32], d: usize, y: f32) -> (usize, usize) {
-    let n = centres.len();
-    let ligne = centres.iter().filter(|c| **c < y).count();
-    // (La ligne tenue ne compte plus une fois levée : après elle, les rangs reculent d'un.)
-    let rang = if ligne > d { ligne - 1 } else { ligne };
-    (ligne, n.saturating_sub(1 + rang))
-}
+// (Le glissé d'une couche dans la liste du panneau Planche n'existe plus, partie 160 : la liste est devenue la ligne « Annotations »,
+// ses couches sont au clic droit, avec Monter et Descendre.)
 
 fn couleur32(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
@@ -277,7 +266,7 @@ impl App {
             Some(_) => self.annot_montrer_le_calque_vise(),
         }
         if let Some(c) = self.doc.annotations.calque(id) {
-            self.status = format!("Calque d'annotation « {} » visé : le stylo, la gomme et le lasso y agissent.", c.nom);
+            self.status = format!("Couche d'annotation « {} » visée : le stylo, la gomme et le lasso y agissent.", c.nom);
         }
     }
 
@@ -298,18 +287,18 @@ impl App {
     /// Un calque d'annotation de plus, au-dessus des autres, visé (une étape d'annulation).
     pub(crate) fn annot_calque_nouveau(&mut self) {
         if !self.board_shown() {
-            self.status = "Les calques d'annotation sont ceux de la planche : passe à la vue Vignettes.".into();
+            self.status = "Les couches d'annotation sont celles de la planche : passe à la vue Vignettes.".into();
             return;
         }
         if self.doc.annotations.calques.len() >= ann::MAX_CALQUES {
-            self.status = "Trop de calques d'annotation.".into();
+            self.status = "Trop de couches d'annotation.".into();
             return;
         }
         self.avec_etape("Ajouter un calque d'annotation", |a| a.record_step());
         let Some(id) = self.doc.annotations.ajouter_calque() else { return };
         self.annot_viser_le_calque(id);
         if let Some(c) = self.doc.annotations.calque(id) {
-            self.status = format!("Calque d'annotation « {} » ajouté.", c.nom);
+            self.status = format!("Couche d'annotation « {} » ajoutée.", c.nom);
         }
     }
 
@@ -321,7 +310,7 @@ impl App {
         }
         self.avec_etape("Renommer un calque d'annotation", |a| a.record_step());
         self.doc.annotations.renommer_calque(id, nom);
-        self.status = format!("Calque d'annotation renommé « {nom} ».");
+        self.status = format!("Couche d'annotation renommée « {nom} ».");
     }
 
     /// Supprime un calque d'annotation et ses traits (une étape d'annulation les rend).
@@ -332,7 +321,7 @@ impl App {
         self.avec_etape("Supprimer un calque d'annotation", |a| a.record_step());
         let n = self.doc.annotations.supprimer_calque(id).unwrap_or(0);
         self.vignettes.annot.tout_lacher();
-        self.status = format!("Calque d'annotation supprimé ({n} annotation{} ; Ctrl+Z le rend).", if n > 1 { "s" } else { "" });
+        self.status = format!("Couche d'annotation supprimée ({n} annotation{} ; Ctrl+Z la rend).", if n > 1 { "s" } else { "" });
     }
 
     /// Monte ou descend un calque d'annotation d'un cran (une étape d'annulation).
@@ -346,19 +335,6 @@ impl App {
         }
         self.avec_etape(if vers_le_haut { "Monter un calque d'annotation" } else { "Descendre un calque d'annotation" }, |a| a.record_step());
         self.doc.annotations.deplacer_calque(id, vers_le_haut);
-    }
-
-    /// Pose le calque `id` à la place `vers` de la liste (0 : tout en bas, le dernier : tout en haut) : le glissé du panneau Planche, **une
-    /// seule étape d'annulation par dépôt**, aucune si le calque ne change pas de place.
-    pub(crate) fn annot_calque_placer(&mut self, id: u64, vers: usize) {
-        let a = &self.doc.annotations;
-        let Some(k) = a.calques.iter().position(|c| c.id == id) else { return };
-        if vers.min(a.calques.len() - 1) == k {
-            return;
-        }
-        self.avec_etape("Ranger un calque d'annotation", |a| a.record_step());
-        self.doc.annotations.placer_calque(id, vers);
-        self.status = "Calque d'annotation rangé (Ctrl+Z le remet).".into();
     }
 
     /// Suppr : efface les traits choisis au lasso d'annotation, **une seule étape d'annulation** (« Supprimer des annotations »). Faux, sans
@@ -390,7 +366,7 @@ impl App {
             self.vignettes.annot.tout_lacher();
         }
         if let Some(c) = self.doc.annotations.calque(id) {
-            self.status = if visible { format!("Calque « {} » caché (rien n'est effacé).", c.nom) } else { format!("Calque « {} » montré.", c.nom) };
+            self.status = if visible { format!("Couche « {} » cachée (rien n'est effacé).", c.nom) } else { format!("Couche « {} » montrée.", c.nom) };
         }
     }
 
@@ -928,6 +904,10 @@ impl App {
                 texte = texte.color(couleur32(self.vignettes.annot.couleur));
             }
             let resp = ui.add_sized(taille, egui::SelectableLabel::new(on, texte));
+            if on {
+                // (La fenêtre de l'aide des annotations se pose à côté de l'outil pris : `aideflottante.rs`.)
+                crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ANNOTATION, resp.rect);
+            }
             if self.aide(resp, outil.nom(), outil.description(), outil.action()).clicked() {
                 self.annot_choisir(outil);
             }
@@ -942,7 +922,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", outil.icone(), outil.nom()));
         });
-        ui.label(RichText::new("Par-dessus la planche, sans effet sur le storyboard.").small().weak());
+        // (Ce que sont les annotations, et le geste du lasso : l'animation « Annotations », `aidevignettes.rs`, partie 153.)
         ui.add_space(4.0);
         match outil {
             Outil::Stylo => {
@@ -969,7 +949,6 @@ impl App {
             Outil::Lasso => {
                 let n = self.vignettes.annot.selection.len();
                 ui.label(RichText::new(if n == 0 { "Rien de choisi.".to_string() } else { format!("{n} annotation{} choisie{}.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }) }).small());
-                ui.label(RichText::new("Glisser dans le vide : lasso (Maj : ajouter). Clic : un trait. Dans la boîte : déplacer ; un coin : agrandir ; hors d'un coin : tourner. Échap : abandonner.").small().weak());
             }
         }
         ui.add_space(4.0);

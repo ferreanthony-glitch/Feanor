@@ -33,8 +33,41 @@ pub(crate) fn contenu(ui: &mut Ui, nom: &str, description: &str, raccourci: &str
     }
 }
 
+/// Ce que les essais voient à l'écran (partie 160) : le nom de chaque bulle posée à l'image, avec le rectangle de son élément
+/// (là où il est, pas où il était). Vidé à chaque image du banc d'essai (`perf_tests::Banc::image`).
+#[cfg(test)]
+pub(crate) mod vus {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static VUS: RefCell<Vec<(String, eframe::egui::Rect)>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(crate) fn noter(nom: &str, r: eframe::egui::Rect) {
+        VUS.with(|v| v.borrow_mut().push((nom.to_string(), r)));
+    }
+
+    pub(crate) fn vider() {
+        VUS.with(|v| v.borrow_mut().clear());
+    }
+
+    /// Les rectangles des éléments dont la bulle s'appelle `nom`, posés depuis le dernier `vider`.
+    pub(crate) fn ou(nom: &str) -> Vec<eframe::egui::Rect> {
+        VUS.with(|v| v.borrow().iter().filter(|(n, _)| n == nom).map(|(_, r)| *r).collect())
+    }
+
+    /// Tous les noms vus (pour le message d'un essai qui échoue).
+    pub(crate) fn noms() -> Vec<String> {
+        VUS.with(|v| v.borrow().iter().map(|(n, _)| n.clone()).collect())
+    }
+}
+
 /// Ajoute la bulle à un bouton (aussi quand il est grisé).
 pub(crate) fn bulle(resp: Response, nom: &str, description: &str, raccourci: &str) -> Response {
+    #[cfg(test)]
+    if resp.rect.is_positive() && resp.ctx.viewport_id() == egui::ViewportId::ROOT {
+        vus::noter(nom, resp.rect.intersect(resp.ctx.screen_rect()));
+    }
     resp.on_hover_ui(|ui| contenu(ui, nom, description, raccourci))
         .on_disabled_hover_ui(|ui| contenu(ui, nom, description, raccourci))
 }
