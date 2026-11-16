@@ -409,3 +409,26 @@ fn a_stroke_with_the_side_view_open_stays_within_the_frame_budget() {
     assert!(morceau * 10.0 < entiere, "le morceau coûte bien moins que l'image entière");
     assert!(m1 < 8.0, "{m1:.2} ms par image pendant un trait, vue 3D ouverte");
 }
+
+#[test]
+fn the_zoom_keys_zoom_the_side_view_under_the_mouse_and_the_sheet_elsewhere() {
+    let mut b = a_cote(&[(RED, [100, 50, 220, 130])]);
+    let taper = |b: &mut Banc, key: eframe::egui::Key| {
+        b.image(vec![Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+        b.image(vec![Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+        b.chauffer(1);
+    };
+    let distance = |b: &Banc| b.app.espace3d.cam.expect("vue d'édition").distance;
+    // La souris sur la vue 3D : 2 la rapproche (× 1,25, comme la feuille), la feuille ne bouge pas.
+    b.image(vec![Event::PointerMoved(b.app.espace3d.rect.center())], 1.0 / 60.0);
+    let (feuille, d0) = (b.app.view.zoom, distance(&b));
+    taper(&mut b, eframe::egui::Key::Num2);
+    assert!((distance(&b) - d0 / 1.25).abs() < d0 * 0.01, "la vue d'à côté zoome : {d0} → {}", distance(&b));
+    assert_eq!(b.app.view.zoom, feuille, "la feuille ne bouge pas");
+    // La souris sur la feuille : 2 zoome la feuille, la vue 3D ne bouge pas.
+    b.image(vec![Event::PointerMoved(b.app.canvas_rect.center())], 1.0 / 60.0);
+    let d1 = distance(&b);
+    taper(&mut b, eframe::egui::Key::Num2);
+    assert!(b.app.view.zoom > feuille * 1.1, "la feuille zoome");
+    assert_eq!(distance(&b), d1, "la vue 3D ne bouge pas");
+}

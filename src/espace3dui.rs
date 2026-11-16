@@ -44,6 +44,9 @@ pub(crate) enum Drag {
 /// État de l'Espace 3D dans l'application.
 pub(crate) struct Espace3dState {
     pub on: bool,
+    /// Le zoom au clavier (1 et 2, `vue.zoom_avant` / `vue.zoom_arriere`), en crans de molette, pris par la vue 3D à sa prochaine
+    /// image : la vue sous la souris, sinon la dernière vue active (Anthony, 2026-11-16 : le zoom au clavier « manque »).
+    pub molette_clavier: f32,
     pub mode: GizmoMode,
     /// Manipulateur dans le repère de la carte (une seule carte choisie).
     pub local: bool,
@@ -96,6 +99,7 @@ impl Default for Espace3dState {
     fn default() -> Espace3dState {
         Espace3dState {
             on: false,
+            molette_clavier: 0.0,
             mode: GizmoMode::Move,
             local: false,
             sel: Vec::new(),

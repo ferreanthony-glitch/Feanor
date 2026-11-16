@@ -170,6 +170,11 @@ impl App {
         self.espace3d.a_cote && !self.espace3d_plein() && !self.in_card && !self.doc.film_vide()
     }
 
+    /// La souris est sur la vue 3D d'à côté (montrée) : les touches du zoom (1 et 2) sont pour elle, pas pour la feuille.
+    pub(crate) fn souris_sur_la_vue_a_cote(&self) -> bool {
+        self.espace3d_a_cote_visible() && self.ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.espace3d.rect.contains(p))
+    }
+
     /// Une commande de l'Espace 3D (un outil, Recadrer, Regarder par la caméra) : à côté, elle règle la vue d'à côté ;
     /// sinon elle ouvre le plein écran, comme avant.
     pub(crate) fn montrer_espace3d(&mut self) {
@@ -259,6 +264,7 @@ impl App {
         // par seconde), et en lecture tant que l'image du film ne change pas.
         let reprise = self.espace3d.drag.is_none()
             && !response.hovered()
+            && self.espace3d.molette_clavier == 0.0
             && self.espace3d.gardee.as_ref().is_some_and(|g| {
                 let meme = g.rect == zone && g.panel == self.cur_panel && g.frame == self.cur_frame;
                 meme && ((self.espace3d.geste_feuille && now - g.temps < 1.0 / RYTHME_GESTE) || self.playing)

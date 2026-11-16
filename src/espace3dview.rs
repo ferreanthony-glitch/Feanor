@@ -117,6 +117,10 @@ pub(crate) fn traits_a_l_ecran(view: &View, center: [f32; 2], origine: Pos2, zon
     out
 }
 
+/// Un appui sur 1 ou 2 dans l'Espace 3D vaut ce nombre de points de molette : le même pas que la feuille (× 1,25), puisque la
+/// molette zoome de `exp(0,002 × points)`.
+pub(crate) const CRAN_CLAVIER: f32 = 111.571_77; // ln(1,25) / 0,002
+
 impl App {
     /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
     /// chaque vue (`espace3dvues.rs`).
@@ -272,8 +276,13 @@ impl App {
         if through {
             self.e3_nav_camera(draw, response, scroll.y, delta);
         } else {
+            // (Le zoom au clavier vaut des crans de molette, la souris sur la vue ou non.)
+            let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
             if response.hovered() && scroll.y != 0.0 {
                 cam.dolly((-scroll.y * 0.002).exp());
+            }
+            if clavier != 0.0 {
+                cam.dolly((-clavier * 0.002).exp());
             }
             if response.dragged_by(PointerButton::Middle) {
                 cam.pan(delta.x, delta.y, draw.width());
@@ -295,7 +304,10 @@ impl App {
     /// Par la caméra du plan : la molette l'avance, le bouton du milieu la déplace, le clic droit la tourne (sa clé de
     /// l'image courante si elle est animée), en une étape d'annulation par geste.
     pub(crate) fn e3_nav_camera(&mut self, draw: Rect, response: &egui::Response, scroll_y: f32, delta: egui::Vec2) {
-        let moving_camera = response.hovered() && (scroll_y != 0.0 || response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary));
+        // Le zoom au clavier (`molette_clavier`) avance la caméra comme la molette, la souris sur la vue ou non.
+        let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
+        let scroll_y = if response.hovered() { scroll_y } else { 0.0 } + clavier;
+        let moving_camera = scroll_y != 0.0 || (response.hovered() && (response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary)));
         if moving_camera {
             self.gesture_change(GESTURE_CAMERA, |s| {
                 let snap = s.snapshot();

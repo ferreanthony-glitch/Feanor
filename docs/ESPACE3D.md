@@ -263,6 +263,9 @@ interface et liste de contrôle : `docs/INTERFACE.md`, partie 163. **Rien n'a é
 **Mesures sur le Mac** (Apple Silicon, 2026-11-16, essai `a_stroke_with_the_side_view_open_stays_within_the_frame_budget`,
 feuille 1920 × 1080, 10 calques, trait de 120 images à 240 images par seconde, carte graphique) : vue fermée 2,07 ms par
 image en médiane, ouverte 2,25 ms (interface 0,53 → 0,51 ms, découpage 0,15 → 0,21 ms, carte graphique 1,84 → 2,11 ms).
+Remesuré après la remise sur `main` (e1f18b2, interface des parties 145 à 161, plus lourde dans les deux cas) : fermée
+5,6 à 5,75 ms en médiane, ouverte 5,9 à 6,3 ms (trois passages, essai lancé seul ; lancé en même temps que d'autres essais,
+il peut dépasser son seuil de 8 ms).
 L'image d'une carte 1920 × 1080 refaite en entier : 3,2 ms ; le morceau d'un bout de trait : 0,11 ms. À refaire sur le
 poste Windows, la référence : `cargo test --lib side_view_open_stays -- --nocapture`, et noter ici les lignes `PERF`.
 

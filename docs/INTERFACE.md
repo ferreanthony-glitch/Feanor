@@ -12920,6 +12920,56 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
    en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
 
+## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
+
+Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
+reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
+de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
+
+### 162.1 Ce qui change
+
+- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
+  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
+  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
+  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
+  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
+  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
+- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
+  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
+  où l'on écrit le garde, comme avant.
+- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
+  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
+  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
+  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
+  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
+- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
+  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
+  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
+  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
+  de la vue (sur un panneau).
+- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
+  du 2026-11-11).
+
+### 162.2 Essais
+
+`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
+(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
+où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
+la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
+sous la souris zoome, et la souris hors des vues, la vue active.
+
+### 162.3 Comment Anthony teste (sur une copie de projet)
+
+1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
+   Note la phrase (ou fais une capture) et ce que tu venais de faire.
+2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
+   venais de faire juste avant.
+3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
+4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
+   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).
+
 ## 163. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2)
 
 (Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
@@ -12946,7 +12996,9 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
 - Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
   droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
   Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
-- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran.
+- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran. Le zoom 1 et 2
+  suit la souris : sur la vue 3D, il la rapproche ou l'éloigne (même pas que la feuille, × 1,25) ; ailleurs, la feuille zoome
+  (`App::souris_sur_la_vue_a_cote`, après la fusion de `raccourcis-muets` dans la branche, partie 162).
 - Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
   caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
   devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
@@ -12968,7 +13020,8 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
 6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
    garde l'outil.
 7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
-   feuille : seule la feuille zoome.
+   feuille : seule la feuille zoome. Touches 1 et 2, souris
+   sur la vue 3D : elle zoome seule ; souris sur la feuille : la feuille seule.
 8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
    place avec le film.
 9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :

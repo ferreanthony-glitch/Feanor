@@ -5,6 +5,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-16
 
+- **Zoom 1 et 2 dans la vue 3D à côté** (à sa demande) : `raccourcis-muets` fusionnée dans `espace-a-cote` (le zoom 3D au
+  clavier y est), puis la souris sur la vue d'à côté, 1 et 2 la zooment ; sur la feuille, la feuille. Essai
+  `the_zoom_keys_zoom_the_side_view_under_the_mouse_and_the_sheet_elsewhere`. Fusionner `espace-a-cote` dans `main`
+  y apportera aussi la partie 162. Mesure après remise sur `main` : trait 5,6 à 5,75 ms par image vue fermée, 5,9 à 6,3 ms
+  ouverte (médianes, essai seul ; l'interface du `main` à jour coûte plus que celle d'`espace-libre`, 2,07 ms).
 - **`espace-a-cote` remise sur le `main` à jour** (e1f18b2, parties 145 à 161), à sa demande : fusion du `main` dans la branche,
   neuf fichiers en conflit réglés à la main. La partie 144 d'INTERFACE devient la **163** (le `main` avait déjà sa partie
   144, les vues multiples). Le `main` refait déjà par morceaux la carte sur laquelle on dessine dans la 3D
@@ -27,6 +32,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Rien regardé à l'écran (FEANOR ne se lance pas sur ce Mac comme sur le PC) : liste de 12 points dans la partie 163.
 - À savoir pour la page de vente : Storyboard Pro montre déjà ensemble une vue caméra et des vues de dessus et de côté de
   son espace 3D (non revérifié) ; la vue côte à côte n'est donc sans doute pas une exclusivité.
+- **Les raccourcis qui manquaient parfois** (branche `raccourcis-muets`, partie 162, depuis `main` e1f18b2) : à sa remarque « les
+  raccourcis manquent parfois, notamment le zoom », sur la feuille aussi. Pas reproduit ; trois causes trouvées en lisant le code :
+  un glisser de la bande de montage dont le lâcher n'était pas vu restait en cours et mettait toutes les touches de côté (corrigé :
+  fini comme au lâcher dès qu'aucun bouton n'est appuyé) ; un bouton qui avait le clavier ne le rendait jamais (le code prévu ne
+  jouait pas, corrigé) ; et la barre d'état dit maintenant pourquoi une touche de raccourci n'a rien fait (glisser en cours, case où
+  l'on écrit, fenêtre ouverte). Et dans l'Espace 3D, 1 et 2 zooment la vue 3D (avant : la feuille cachée). 7 essais, rouges
+  avant pour les corrections ; suite complète sur le Mac : les mêmes 89 échecs que `main` (propres au Mac), aucun nouveau. Fait et essayé sur le Mac (bibliothèque seule,
+  sans le vrai exe) : pas regardé à l'écran, pas de version portable de cette branche. Non fusionné : attend son essai.
+
 ## 2026-11-13
 
 - **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la
