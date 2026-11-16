@@ -4078,10 +4078,37 @@ impl App {
 
     // ------------------------------------------------------------------ clavier
 
+    /// Le raccourci de la première touche appuyée à cette image (pas une répétition), s'il y en a un : son action et son nom
+    /// (« Zoom avant »). Pour dire dans la barre d'état pourquoi il n'a rien fait (`handle_shortcuts`).
+    pub(crate) fn raccourci_tape(&self, ctx: &egui::Context) -> Option<(String, String)> {
+        let mode = self.key_mode();
+        let montage = self.espace == crate::workspace::Espace::Montage;
+        ctx.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                // (Échap, Entrée et Tab ferment ou valident une fenêtre ou une case : jamais un raccourci « manqué ».)
+                Event::Key { key, physical_key, pressed: true, repeat: false, modifiers, .. } if !matches!(key, Key::Escape | Key::Enter | Key::Tab) => {
+                    let action = self.keymap.find_in(*key, *physical_key, *modifiers, mode, montage)?;
+                    let nom = keymap::action_info(action).map_or(action, |a| a.label);
+                    Some((action.to_string(), nom.to_string()))
+                }
+                _ => None,
+            })
+        })
+    }
+
+    /// La souris est ailleurs que sur la case qui a le clavier : une touche tapée alors visait sans doute un raccourci.
+    fn souris_hors_de_la_saisie(&self, ctx: &egui::Context) -> bool {
+        let Some(id) = ctx.memory(|m| m.focused()) else { return false };
+        let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return false };
+        ctx.read_response(id).is_some_and(|r| !r.rect.contains(p))
+    }
+
     pub(crate) fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        // Un bouton cliqué garde le focus clavier : Entrée ou Espace le « recliqueraient ».
-        if !ctx.wants_keyboard_input() {
-            if let Some(id) = ctx.memory(|m| m.focused()) {
+        // Un bouton (tout ce qui a pris le clavier sans être une case où l'on écrit) le rend : Entrée ou Espace le
+        // « recliqueraient », et les raccourcis seraient muets tant qu'il le garde. (Avant le 2026-11-16, ce test demandait
+        // `!wants_keyboard_input()`, qui est faux dès que quelque chose a le clavier : il ne rendait jamais rien.)
+        if let Some(id) = ctx.memory(|m| m.focused()) {
+            if egui::text_edit::TextEditState::load(ctx, id).is_none() {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
         }
@@ -4094,12 +4121,25 @@ impl App {
         // Ctrl+N, Ctrl+W, F1, F11…, passent quand même ; `accueilfenetre::raccourci_hors_saisie`.)
         let saisie = ctx.wants_keyboard_input() && !(self.accueil_visible() && crate::accueilfenetre::raccourci_hors_saisie(ctx));
         if saisie || self.modal_open() {
+            // La barre d'état dit pourquoi la touche n'a rien fait (Anthony, 2026-11-16 : « les raccourcis manquent parfois,
+            // notamment le zoom »). Pendant une saisie, seulement quand la souris n'est pas sur la case : on y écrit, ce n'est
+            // pas un raccourci manqué.
+            if let Some((_, nom)) = self.raccourci_tape(ctx) {
+                if !saisie {
+                    self.status = format!("« {nom} » n'a pas été fait : une fenêtre attend une réponse.");
+                } else if self.souris_hors_de_la_saisie(ctx) {
+                    self.status = format!("« {nom} » n'a pas été fait : une case où l'on écrit a le clavier. Échap ou un clic sur la feuille le rend.");
+                }
+            }
             self.pending_keys.clear();
             return;
         }
         // Pendant un glisser (chantier 2) : Échap ou Ctrl+Z l'abandonnent, tout revient comme
         // avant ; les autres touches attendent la fin du geste.
         if self.dragging() {
+            if let Some((_, nom)) = self.raccourci_tape(ctx).filter(|(a, _)| a != "edition.annuler") {
+                self.status = format!("« {nom} » n'a pas été fait : un glisser est en cours. Lâche-le, ou Échap l'abandonne.");
+            }
             let mode = self.key_mode();
             let cancel = ctx.input(|i| {
                 i.events.iter().any(|e| match e {

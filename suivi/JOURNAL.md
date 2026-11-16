@@ -3,6 +3,16 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-16
+
+- **Les raccourcis qui manquaient parfois** (branche `raccourcis-muets`, partie 162, depuis `main` e1f18b2) : à sa remarque « les
+  raccourcis manquent parfois, notamment le zoom », sur la feuille aussi. Pas reproduit ; trois causes trouvées en lisant le code :
+  un glisser de la bande de montage dont le lâcher n'était pas vu restait en cours et mettait toutes les touches de côté (corrigé :
+  fini comme au lâcher dès qu'aucun bouton n'est appuyé) ; un bouton qui avait le clavier ne le rendait jamais (le code prévu ne
+  jouait pas, corrigé) ; et la barre d'état dit maintenant pourquoi une touche de raccourci n'a rien fait (glisser en cours, case où
+  l'on écrit, fenêtre ouverte). 5 essais, rouges avant pour les deux corrections. Fait et essayé sur le Mac (bibliothèque seule,
+  sans le vrai exe) : pas regardé à l'écran, pas de version portable de cette branche. Non fusionné : attend son essai.
+
 ## 2026-11-13
 
 - **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la

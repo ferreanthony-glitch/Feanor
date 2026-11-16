@@ -424,6 +424,26 @@ impl App {
         }
     }
 
+    /// Le lâcher d'un glisser de la bande de montage (bord, plan déplacé ou fusionné, extrait de son) : ce que le geste montrait
+    /// est fait. Appelé par la bande quand elle voit le lâcher, et par `drop_stale_drags` quand elle ne l'a pas vu (la bande cachée
+    /// ou refaite pendant le geste) : sinon le glisser resterait en cours et tous les raccourcis seraient mis de côté.
+    pub(crate) fn end_montage_drag(&mut self) {
+        match self.montage_drag.take() {
+            Some(MontageDrag::Edge(d)) => self.finish_edge_drag(d),
+            Some(MontageDrag::Move { panel, merge: Some(onto), .. }) => self.fusionner_en_glissant(panel, onto),
+            Some(MontageDrag::Move { panel, target, merge: None }) => {
+                let ids = self.board_selection();
+                if ids.len() > 1 {
+                    self.move_chosen_panels(&ids, target);
+                } else {
+                    self.move_chosen_panels(&[panel], target);
+                }
+            }
+            Some(MontageDrag::Clip(d)) => self.finish_clip_drag(d),
+            _ => {}
+        }
+    }
+
     /// Abandonne un glissé en cours dans la bande de montage (la durée revient à l'original).
     pub(crate) fn cancel_montage_drag(&mut self) {
         self.cancel_cam_keys_drag();
@@ -1447,20 +1467,7 @@ impl App {
         }
 
         if resp.drag_stopped() {
-            match self.montage_drag.take() {
-                Some(MontageDrag::Edge(d)) => self.finish_edge_drag(d),
-                Some(MontageDrag::Move { panel, merge: Some(onto), .. }) => self.fusionner_en_glissant(panel, onto),
-                Some(MontageDrag::Move { panel, target, merge: None }) => {
-                    let ids = self.board_selection();
-                    if ids.len() > 1 {
-                        self.move_chosen_panels(&ids, target);
-                    } else {
-                        self.move_chosen_panels(&[panel], target);
-                    }
-                }
-                Some(MontageDrag::Clip(d)) => self.finish_clip_drag(d),
-                _ => {}
-            }
+            self.end_montage_drag();
         }
 
         let trans_clicked = resp.clicked() && !comment_ptr.busy && resp.interact_pointer_pos().is_some_and(|p| self.trans_click(p, &badges));

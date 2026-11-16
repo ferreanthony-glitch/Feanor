@@ -12919,3 +12919,45 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 5. Vignettes, Animation, Montage, Espace 3D : même colonne. Dis si 290 points te vont, ou s'il faut plus étroit ou plus large.
 6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
    en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
+
+## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
+
+Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
+reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
+de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
+
+### 162.1 Ce qui change
+
+- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
+  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
+  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
+  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
+  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
+  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
+- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
+  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
+  où l'on écrit le garde, comme avant.
+- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
+  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
+  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
+  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
+  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
+- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
+  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
+  du 2026-11-11). Dans l'Espace 3D, 1 et 2 zooment encore la feuille cachée : à corriger sur la branche `espace-a-cote`.
+
+### 162.2 Essais
+
+`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
+(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
+où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant).
+
+### 162.3 Comment Anthony teste (sur une copie de projet)
+
+1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
+   Note la phrase (ou fais une capture) et ce que tu venais de faire.
+2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
+   venais de faire juste avant.
+3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
