@@ -10428,3 +10428,57 @@ Espace 3D… », « Plan en Espace 3D : sa caméra ne se règle pas par des cadr
 13. Enregistrer, fermer, rouvrir : tout est là. Ouvrir la copie avec le FEANOR d'avant : refus propre (« version plus récente »).
 14. Un plan ordinaire du même projet : rien n'a changé (caméra bridée, pile, vue de dessus, cadres des Vignettes).
 15. Poignées de rotation d'une carte près de 90° : signaler si elles sautent.
+
+## 144. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, depuis `espace-libre`)
+
+Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
+calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
+Conception, mesures, essais et limites : `docs/ESPACE3D.md`, partie 13. **Rien de cette partie n'a été regardé à l'écran.**
+
+**Où ça se trouve.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Espace 3D à côté » (carré coupé en deux) | barre au-dessus du dessin, juste après le cube | `espace3d.a_cote` | ouvre ou ferme la vue 3D à droite de la feuille ; depuis le plein écran, y remet la vue |
+| Entrée « Espace 3D à côté du dessin » | menu Affichage > Plateau | `espace3d.a_cote` | la même chose |
+| Barre verticale entre la feuille et la vue | entre les deux | | la tirer règle la largeur de la vue (20 à 80 %) ; double-clic : moitié-moitié ; retenue |
+| Rangée d'outils de la vue | en haut de la vue 3D | `espace3d.outil_*`, `espace3d.cadrer`, `espace3d.vue_camera` | Choisir, Déplacer, Tourner, Échelle, Caméra · Recadrer, Regarder par la caméra · **Agrandir** (le plein écran d'avant ; le refermer rend le côte à côte) · **Fermer** |
+
+Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et `keymap.toml`.
+
+**Les gestes.** Un geste va à la vue où il commence, jusqu'au relâché.
+
+- Sur la feuille : tout comme d'habitude (stylet, outils, molette, bouton du milieu, clic droit). Un trait qui file dans
+  la vue 3D continue sur la feuille.
+- Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
+  droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
+  Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
+- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran.
+- Panneau Réglages : ceux de la dernière vue cliquée (l'outil de dessin, ou la carte et la caméra).
+- Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
+
+**Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
+à côté : masqué. ».
+
+À vérifier à l'écran (par Anthony), dans les trois thèmes :
+
+1. Le bouton « Espace 3D à côté » après le cube : icône lisible, bulle à une seconde, couleur d'accent quand il est ouvert.
+2. Ouvert : feuille à gauche, vue 3D à droite, barre entre les deux ; la feuille est cadrée dans sa moitié. La rangée
+   d'outils de la vue tient sur une ligne ; trop étroite, elle est coupée (le dire si c'est gênant).
+3. Tirer la barre : la largeur suit, s'arrête à 20 % et 80 % ; double-clic : moitié-moitié ; fermer et rouvrir FEANOR :
+   la largeur est retenue.
+4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
+   trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
+5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
+6. Dans la vue 3D, cliquer une carte : son calque devient courant, Réglages montre la carte ; cliquer la feuille :
+   Réglages montre de nouveau l'outil.
+7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
+   feuille : seule la feuille zoome.
+8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
+   place avec le film.
+9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :
+   la feuille reprend toute la zone.
+10. Un pot de peinture ou une gomme sur toute une grande feuille, vue ouverte : signaler un à-coup.
+11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
+    sur la feuille par la caméra : la carte suit.
+12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).

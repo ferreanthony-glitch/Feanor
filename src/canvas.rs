@@ -25,21 +25,40 @@ impl App {
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
             // Espace 3D : à la place du dessin à plat, avec ses commandes dans les Réglages.
-            if self.espace3d.on && !self.camera_view {
+            if self.espace3d_plein() {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;
                 self.espace3d_panel(ui, rect, &response);
                 return;
             }
+            // Espace 3D à côté (`espace3dcote.rs`) : la feuille à gauche, la vue 3D à droite. La feuille passe d'abord : ce
+            // qu'un trait change à cette image est déjà dans les cartes.
+            if self.espace3d_a_cote_visible() {
+                if let Some((feuille, barre, vue)) = crate::espace3dcote::partage(rect, self.layout.part_espace3d) {
+                    self.canvas_feuille(ui, feuille);
+                    self.espace3d_a_cote_panel(ui, barre, vue, rect);
+                    return;
+                }
+            }
         }
+        self.canvas_feuille(ui, rect);
+    }
+
+    /// La feuille (le dessin à plat) dans `rect`.
+    fn canvas_feuille(&mut self, ui: &mut egui::Ui, rect: Rect) {
+        self.espace3d.geste_feuille = false;
         // Tout le film est annulé : un état vide clair, rien à dessiner (`planannule.rs`).
         if !self.in_card && self.doc.film_vide() {
             self.etat_film_vide(ui, rect);
             return;
         }
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        // Un geste sur la feuille : la vue 3D d'à côté se refait moins souvent (`espace3dcote.rs`).
+        self.espace3d.geste_feuille = response.is_pointer_button_down_on() || response.dragged();
         // Un clic dans le dessin reprend la main au montage : l'édition vise de nouveau le dessin.
         if response.is_pointer_button_down_on() {
+            // (À côté de l'Espace 3D : le panneau Réglages montre de nouveau ceux de l'outil.)
+            self.espace3d.clic_3d = false;
             self.panel_focus = false;
             self.images_focus = false;
             self.key_focus = false;

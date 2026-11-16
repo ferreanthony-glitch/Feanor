@@ -473,6 +473,8 @@ impl App {
 
     /// La zone du dessin, en mode Espace 3D.
     pub(crate) fn espace3d_panel(&mut self, ui: &mut egui::Ui, rect: Rect, response: &egui::Response) {
+        // (Plein écran ou à côté de la feuille : `espace3d_fit` cadre dans cette zone.)
+        self.espace3d.rect = rect;
         if self.espace3d.cam.is_none() {
             self.espace3d_fit();
         }
@@ -568,7 +570,15 @@ impl App {
             let mx = xf.matrix();
             let at = |u: f32, v: f32| m::point(&mx, [u - 0.5, 0.5 - v, 0.0]);
             painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 }))));
-            if let Some(tex) = cel.and_then(|c| self.e3_card_texture(ctx, c)) {
+            // (Un nouveau dessin qui attend son image, `espace3dcote.rs` : la carte montre le dessin d'avant.)
+            let tex = cel.and_then(|c| self.e3_card_texture(ctx, c)).or_else(|| {
+                let avant = self.espace3d.vu_par_calque.get(&id)?;
+                Some(self.espace3d.card_textures.get(avant)?.tex.id())
+            });
+            if let Some(c) = cel.filter(|c| self.espace3d.card_textures.get(c).is_some_and(|t| t.version == self.doc.cels.get(c).map_or(0, |d| d.version))) {
+                self.espace3d.vu_par_calque.insert(id, c);
+            }
+            if let Some(tex) = tex {
                 painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))));
             }
             let corners = world.card_corners(&xf);
@@ -587,24 +597,7 @@ impl App {
                 painter.galley(pos, galley, Color32::WHITE);
             }
         }
-    }
-
-    /// Texture du dessin `cel` (refaite quand il change).
-    fn e3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
-        let c = self.doc.cels.get(&cel)?;
-        if let Some((v, t)) = self.espace3d.card_textures.get(&cel) {
-            if *v == c.version {
-                return Some(t.id());
-            }
-        }
-        let image = crate::render::cel_image(&c.raster, 1024);
-        let tex = ctx.load_texture(format!("espace 3d {cel}"), image, egui::TextureOptions::LINEAR);
-        if self.espace3d.card_textures.len() > 256 {
-            self.espace3d.card_textures.clear();
-        }
-        let id = tex.id();
-        self.espace3d.card_textures.insert(cel, (c.version, tex));
-        Some(id)
+        self.e3_lacher_les_cliches(ctx.cumulative_pass_nr());
     }
 
     /// La caméra du plan : pyramide de vision, cadre, haut de l'image, et sa course pendant le plan si elle est animée.

@@ -1864,6 +1864,11 @@ touches = []
 source = "FEANOR (Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.a_cote"
+touches = []
+source = "FEANOR (Espace 3D à côté du dessin ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.outil_choisir"
 touches = []
 source = "FEANOR (Espace 3D, outil choisir ; aucune touche choisie)"

@@ -3,6 +3,22 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-16
+
+- Vue 3D à côté du dessin (INTERFACE partie 144, ESPACE3D partie 13), demandée depuis la session de la page de vente :
+  aujourd'hui la vue Espace 3D remplace la feuille, la page de vente n'en parle donc pas tant que ce n'est pas fait et
+  essayé. Plan écrit et validé par Anthony le jour même : partage de la zone du dessin (feuille à gauche, 3D à droite, barre
+  à tirer) plutôt qu'un panneau ; un geste va à la vue où il commence ; Réglages de la dernière vue cliquée ; carte refaite
+  par morceaux pendant un trait, vue 3D refaite au plus 30 fois par seconde. Branche `espace-a-cote` partie d'`espace-libre`
+  (choix d'Anthony : elle se fusionne après elle), dans le dossier de travail `Feanor-a-cote` sur le Mac.
+- Fait : commande `espace3d.a_cote` (bouton après le cube, menu Affichage > Plateau, palette, sans touche), plein écran
+  inchangé (« Agrandir », et le refermer rend le côte à côte), lecture et trait non interrompus. Mesure sur le Mac
+  (1920 × 1080, 10 calques, trait à 240 images/s) : 2,07 ms par image vue fermée, 2,25 ms ouverte (médianes) ; une carte
+  refaite en entier 3,2 ms, un bout de trait 0,11 ms. À mesurer sur le PC Windows.
+- Rien regardé à l'écran (FEANOR ne se lance pas sur ce Mac comme sur le PC) : liste de 12 points dans la partie 144.
+- À savoir pour la page de vente : Storyboard Pro montre déjà ensemble une vue caméra et des vues de dessus et de côté de
+  son espace 3D (non revérifié) ; la vue côte à côte n'est donc sans doute pas une exclusivité.
+
 ## 2026-11-11
 
 - Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on

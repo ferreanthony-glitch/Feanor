@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use eframe::egui::{self, RichText, TextureHandle};
+use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -50,8 +50,8 @@ pub(crate) struct Espace3dState {
     pub through_camera: bool,
     /// Les cartes (les calques du plan) sont montrées dans la vue.
     pub show_cards: bool,
-    /// Textures des dessins des cartes, par dessin et version (refaites quand le dessin change).
-    pub card_textures: HashMap<CelId, (u64, TextureHandle)>,
+    /// Textures des dessins des cartes, par dessin (refaites par morceaux quand le dessin change, `espace3dcote.rs`).
+    pub card_textures: HashMap<CelId, crate::espace3dcote::CarteTexture>,
     /// Le calque courant à la dernière image : le choix des cartes suit le panneau Calques quand il change.
     pub last_layer: u64,
     pub show_grid: bool,
@@ -65,6 +65,24 @@ pub(crate) struct Espace3dState {
     pub hover: Option<Handle>,
     /// Plan de la dernière image (la sélection ne passe pas d'un plan à l'autre).
     pub last_panel: u64,
+    /// « Espace 3D à côté » (`docs/ESPACE3D.md`, partie 13) : la vue 3D partage la zone du dessin avec la feuille. Le
+    /// plein écran (`on`) l'emporte tant qu'il est ouvert ; le refermer rend le côte à côte.
+    pub a_cote: bool,
+    /// La zone de la vue 3D à la dernière image (plein écran ou à côté) : `espace3d_fit` y cadre l'espace.
+    pub rect: egui::Rect,
+    /// Côte à côte : le dernier clic était dans la vue 3D (le panneau Réglages montre alors les siens).
+    pub clic_3d: bool,
+    /// Côte à côte : ce que la vue a tracé à la dernière image refaite, repris tel quel pendant un geste sur la feuille
+    /// (`espace3dcote.rs`, au plus `cote::RYTHME_GESTE` fois par seconde).
+    pub gardee: Option<crate::espace3dcote::VueGardee>,
+    /// Un geste est en cours sur la feuille (posé par la feuille à chaque image).
+    pub geste_feuille: bool,
+    /// Texels de cartes préparés à cette image d'écran : (numéro de l'image, texels).
+    pub budget: (u64, usize),
+    /// Une carte a dû attendre à cette image (la vue sera refaite à la suivante).
+    pub reportee: bool,
+    /// Le dernier dessin tracé de chaque carte (par calque) : une carte dont le nouveau dessin attend montre celui-là.
+    pub vu_par_calque: HashMap<u64, CelId>,
 }
 
 impl Default for Espace3dState {
@@ -88,6 +106,14 @@ impl Default for Espace3dState {
             drag: None,
             hover: None,
             last_panel: 0,
+            a_cote: false,
+            rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
+            clic_3d: false,
+            gardee: None,
+            geste_feuille: false,
+            budget: (0, 0),
+            reportee: false,
+            vu_par_calque: HashMap::new(),
         }
     }
 }
@@ -120,6 +146,8 @@ impl App {
         s.last_panel = 0;
         s.last_layer = 0;
         s.card_textures.clear();
+        s.gardee = None;
+        s.vu_par_calque.clear();
     }
 
     /// Entre dans l'Espace 3D, ou en sort.
@@ -223,7 +251,7 @@ impl App {
         }
         points.push(world.eye(&self.current_camera()));
         let bounds = crate::espace3dmath::bounds_of(points).filter(|b| crate::espace3dmath::length(crate::espace3dmath::sub(b.1, b.0)) > 0.1).unwrap_or(([-3.0, 0.0, -3.0], [3.0, 2.0, 3.0]));
-        let rect = self.canvas_rect;
+        let rect = self.espace3d.rect;
         let mut cam = Orbite::fit_at(bounds, [rect.width().max(1.0), rect.height().max(1.0)], 30.0, 22.0);
         cam.distance = cam.distance.max(2.0);
         self.espace3d.cam = Some(cam);
@@ -332,18 +360,19 @@ impl App {
             return false;
         }
         match action {
-            "espace3d.basculer" => self.set_espace3d(!(self.espace3d.on && !self.camera_view)),
+            "espace3d.basculer" => self.set_espace3d(!self.espace3d_plein()),
+            "espace3d.a_cote" => self.basculer_espace3d_a_cote(),
             "espace3d.outil_choisir" => self.espace3d_mode(GizmoMode::Select),
             "espace3d.outil_deplacer" => self.espace3d_mode(GizmoMode::Move),
             "espace3d.outil_tourner" => self.espace3d_mode(GizmoMode::Rotate),
             "espace3d.outil_echelle" => self.espace3d_mode(GizmoMode::Scale),
             "espace3d.outil_camera" => self.espace3d_pick_camera(),
             "espace3d.vue_camera" => {
-                self.set_espace3d(true);
+                self.montrer_espace3d();
                 self.espace3d.through_camera = !self.espace3d.through_camera;
             }
             "espace3d.cadrer" => {
-                self.set_espace3d(true);
+                self.montrer_espace3d();
                 self.espace3d_fit();
             }
             "espace3d.ordonner_profondeur" => self.espace3d_order_by_depth(),
@@ -362,18 +391,14 @@ impl App {
     }
 
     fn espace3d_mode(&mut self, mode: GizmoMode) {
-        if !self.espace3d.on {
-            self.set_espace3d(true);
-        }
+        self.montrer_espace3d();
         self.espace3d.mode = mode;
     }
 
     /// Choisit la caméra du plan (pour la déplacer ou la tourner), avec l'outil Déplacer si aucun outil de manipulation
     /// n'est actif.
     fn espace3d_pick_camera(&mut self) {
-        if !self.espace3d.on {
-            self.set_espace3d(true);
-        }
+        self.montrer_espace3d();
         self.espace3d.sel = vec![CAMERA_ID];
         if self.espace3d.mode == GizmoMode::Select {
             self.espace3d.mode = GizmoMode::Move;

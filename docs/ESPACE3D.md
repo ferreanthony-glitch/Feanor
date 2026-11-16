@@ -129,6 +129,8 @@ Aucun changement de format (`project::VERSION` reste 35) : les objets et le rep�
 
 - Un seul bouton « Espace 3D » (icône cube) dans la barre sous le dessin, une seule entrée du menu Affichage, une seule
   commande `espace3d.basculer`.
+- Depuis le 2026-11-16, un second bouton à côté du cube, « Espace 3D à côté » (`espace3d.a_cote`) : la vue 3D à droite de
+  la feuille, pendant qu'on dessine (partie 13).
 - **Une seule rangée d'outils** (barre au-dessus de la vue) : Choisir · Déplacer · Tourner · Mettre à l'échelle · Caméra ·
   Recadrer · Regarder par la caméra. Chacun : icône, bulle d'une seconde (nom, raccourci, description) par `bulles.rs` ; l'outil
   actif en `bouton_etat`.
@@ -216,3 +218,63 @@ sol ou en mur. Les points 11.1 (tri par profondeur) et 11.5 (inclinaison limité
 
 `SceneCam::view` tire maintenant la droite de la caméra de son panoramique (mêmes axes qu'avant sous 90° de bascule) et
 `espace3d::MAX_TILT` vaut 90° : la caméra d'un plan ordinaire reste bridée par `Camera::limited`.
+
+## 13. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, depuis `espace-libre`)
+
+Demandé par Anthony : garder la vue 3D ouverte à côté de la feuille pendant qu'on dessine. Plan validé par lui le
+2026-11-16 (partage de la zone du dessin plutôt qu'un panneau ; un geste va à la vue où il commence ; Réglages de la
+dernière vue cliquée ; branche partie d'`espace-libre`). Code : `espace3dcote.rs` ; essais : `espace3dcote_tests.rs` ;
+interface et liste de contrôle : `docs/INTERFACE.md`, partie 144. **Rien n'a été regardé à l'écran.**
+
+- **Le partage** (`espace3dcote::partage`) : la feuille à gauche, une barre de 6 points à tirer, la vue 3D à droite
+  (20 à 80 % de la largeur, 50 % par défaut, `Layout::part_espace3d`, retenue d'une séance et d'un espace de travail à
+  l'autre). Chaque vue garde au moins 160 points ; plus étroit, la feuille garde toute la zone. Pas dans les vignettes.
+- **L'ordre dans l'image d'écran** : la feuille d'abord (`canvas_feuille`, l'ancien corps de `canvas_panel`), la vue 3D
+  ensuite : ce qu'un trait change à cette image est déjà dans les cartes.
+- **Le plein écran d'avant** (`espace3d.basculer`, `espace3d_plein()`) est inchangé et l'emporte tant qu'il est ouvert ;
+  le refermer rend le côte à côte (`a_cote` reste vrai). Les outils (`espace3d.outil_*`, Recadrer, Regarder par la
+  caméra) règlent la vue d'à côté sans passer en plein écran (`montrer_espace3d`). Le côte à côte n'arrête ni le trait ni
+  la lecture.
+- **`espace3d_fit`** cadre dans la zone de la vue (`Espace3dState::rect`, posée par `espace3d_panel`), plus dans
+  `canvas_rect`, qui reste la feuille.
+- **Gestes** : chaque vue a sa propre zone egui ; `canvas_input` ne prend que les appuis sur la feuille ; un geste
+  commencé dans une vue y reste jusqu'au relâché. `clic_3d` (dernier appui dans la vue 3D) décide du panneau Réglages.
+
+**Sans latence.** Trois mécanismes :
+
+1. *L'image d'une carte par morceaux* (`changement`, `render::cel_image_region`). On garde les tuiles du dessin au moment
+   où l'image a été faite (copies partagées, `Cliche`) ; une écriture copie la tuile, donc une tuile qui n'est plus la
+   même (`Tile::same_as`) a changé. On ne refait que le morceau d'image qu'elle touche, avec un texel de marge pour les
+   4 échantillons bilinéaires, et on l'envoie seul (`TextureHandle::set_partial`). Un changement hors de la feuille, de
+   taille, ou de plus de la moitié de l'image refait tout. Les clichés ne sont gardés que pour les cartes tracées à la
+   dernière image (`e3_lacher_les_cliches`) : sinon ils retiendraient de vieilles tuiles et empêcheraient les dessins
+   qu'on ne regarde plus de se ranger (`tuilepack.rs`). Vaut aussi pour le plein écran.
+2. *Un budget par image d'écran* : au plus 600 000 texels de cartes (une carte de 1024 × 576), toujours au moins une
+   carte. Une carte qui attend montre son dessin d'avant (`vu_par_calque`) et demande une image de plus ; la vue n'est
+   alors pas gardée.
+3. *Le rythme* (`VueGardee`) : pendant un geste sur la feuille, la vue 3D se refait au plus 30 fois par seconde ; entre
+   deux, elle repeint ce qu'elle a tracé (les formes d'egui de sa couche, recopiées). En lecture, elle se refait quand
+   l'image du film change. Au repos, rien ne se redessine.
+
+**Mesures sur le Mac** (Apple Silicon, 2026-11-16, essai `a_stroke_with_the_side_view_open_stays_within_the_frame_budget`,
+feuille 1920 × 1080, 10 calques, trait de 120 images à 240 images par seconde, carte graphique) : vue fermée 2,07 ms par
+image en médiane, ouverte 2,25 ms (interface 0,53 → 0,51 ms, découpage 0,15 → 0,21 ms, carte graphique 1,84 → 2,11 ms).
+L'image d'une carte 1920 × 1080 refaite en entier : 3,2 ms ; le morceau d'un bout de trait : 0,11 ms. À refaire sur le
+poste Windows, la référence : `cargo test --lib side_view_open_stays -- --nocapture`, et noter ici les lignes `PERF`.
+
+**Essais** (`espace3dcote_tests.rs`) : image refaite par morceaux = image entière, pixel pour pixel (quatre tailles de
+feuille, bords de tuiles et de feuille) ; hors feuille ou plus de la moitié : tout ; partage et bornes ; ouvrir, fermer,
+agrandir, revenir à côté ; les outils restent à côté ; la part retenue et bornée (réglages d'avant sans le champ) ; un
+appui dans la vue 3D choisit la carte et son calque sans dessiner, un trait commencé sur la feuille qui file dans la vue
+dessine et ne choisit rien ; un trait d'un quart de seconde refait la vue 4 à 10 fois, chaque fois avec le trait du
+moment ; la lecture continue et la carte suit les images ; 8 dessins neufs d'un coup se répartissent sur plusieurs images
+sans qu'aucun ne se perde ; l'application se repose vue ouverte ; la mesure ci-dessus (seuil 8 ms par image).
+
+**Limites.**
+
+1. Le partage est seulement gauche / droite ; une seule vue 3D (pas de vues de dessus et de côté en plus, comme Storyboard
+   Pro en montre : ce n'est donc pas une exclusivité).
+2. Pendant un trait, la carte suit avec au plus 1/30 s de retard ; un pot de peinture ou une gomme sur toute la feuille
+   refait la carte entière (3 ms environ pour une feuille 1920 × 1080) à cette image-là.
+3. La vue 3D montre les dessins bruts (sans effets, modes de fusion), comme en plein écran (point 11.3).
+4. Le côte à côte n'est pas retenu d'une séance à l'autre (seule sa largeur l'est).

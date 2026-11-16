@@ -447,6 +447,21 @@ impl App {
             {
                 self.run_action("espace3d.basculer");
             }
+            // La vue 3D à côté de la feuille (`espace3dcote.rs`) ; depuis le plein écran, elle y remet la vue.
+            let a_cote = self.espace3d_a_cote_visible();
+            if self
+                .case_icone(
+                    ui,
+                    ph::SQUARE_SPLIT_HORIZONTAL,
+                    Some(a_cote),
+                    "Espace 3D à côté",
+                    "La vue 3D à droite de la feuille, pendant qu'on dessine : les cartes (les calques) suivent le trait et l'animation. Un geste va à la vue où il commence.",
+                    "espace3d.a_cote",
+                )
+                .clicked()
+            {
+                self.run_action("espace3d.a_cote");
+            }
             ui.add_space(crate::barres::MARGE_TRAIT);
             ui.separator();
             ui.add_space(crate::barres::MARGE_TRAIT);

@@ -1152,6 +1152,10 @@ mod stencil;
 mod tabs_tests;
 // Espace 3D (`docs/ESPACE3D.md`) : les calques (cartes) et la caméra du plan dans un seul espace, sans objets 3D.
 mod espace3d;
+// La vue 3D à côté de la feuille (`docs/ESPACE3D.md`, partie 13).
+mod espace3dcote;
+#[cfg(test)]
+mod espace3dcote_tests;
 mod espace3dgizmo;
 mod espace3dmath;
 #[cfg(test)]

@@ -1207,15 +1207,36 @@ pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, t
 /// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par
 /// pixel) : texture des plans de la vue du plateau en 3D (9e).
 pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
+    let [tw, th] = cel_image_size(raster, max_w);
+    cel_image_region(raster, max_w, [0, 0, tw, th])
+}
+
+/// La taille de `cel_image(raster, max_w)`.
+pub fn cel_image_size(raster: &Raster, max_w: usize) -> [usize; 2] {
     let (w, h) = (raster.width.max(1), raster.height.max(1));
     let tw = w.min(max_w.max(1));
     let th = ((h as f32 * tw as f32 / w as f32).round() as usize).max(1);
+    [tw, th]
+}
+
+/// Le morceau `[x0, y0, x1, y1]` (pixels de l'image réduite, x1 et y1 exclus) de `cel_image(raster, max_w)`, pixel pour
+/// pixel le même : la vue 3D ne refait que la part d'une carte qu'un trait a touchée (`espace3dcote.rs`).
+pub fn cel_image_region(raster: &Raster, max_w: usize, region: [usize; 4]) -> ColorImage {
+    let (w, h) = (raster.width.max(1), raster.height.max(1));
+    let [tw, th] = cel_image_size(raster, max_w);
     let (sx, sy) = (w as f32 / tw as f32, h as f32 / th as f32);
-    let mut pixels = vec![Color32::TRANSPARENT; tw * th];
+    let [x0, y0] = [region[0].min(tw), region[1].min(th)];
+    let [x1, y1] = [region[2].clamp(x0, tw), region[3].clamp(y0, th)];
+    let rw = (x1 - x0).max(1);
+    let rh = (y1 - y0).max(1);
+    let mut pixels = vec![Color32::TRANSPARENT; rw * rh];
+    if x1 == x0 || y1 == y0 {
+        return ColorImage { size: [rw, rh], pixels };
+    }
     const ROWS: usize = 16;
-    par_chunks(&mut pixels, tw * ROWS, |chunk, rows| {
+    par_chunks(&mut pixels, rw * ROWS, |chunk, rows| {
         for (k, px) in rows.iter_mut().enumerate() {
-            let (x, y) = (k % tw, chunk * ROWS + k / tw);
+            let (x, y) = (x0 + k % rw, y0 + chunk * ROWS + k / rw);
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 let c = sample(raster, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
@@ -1226,7 +1247,7 @@ pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
             *px = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
         }
     });
-    ColorImage { size: [tw, th], pixels }
+    ColorImage { size: [rw, rh], pixels }
 }
 
 fn texture_options() -> TextureOptions {

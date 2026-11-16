@@ -267,6 +267,7 @@ impl App {
                 });
                 ui.menu_button("Plateau", |ui| {
                     self.action_item(ui, "Espace 3D", "espace3d.basculer");
+                    self.action_item(ui, "Espace 3D à côté du dessin", "espace3d.a_cote");
                     self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 });
                 ui.menu_button("Guides", |ui| {
@@ -469,8 +470,9 @@ impl App {
         if self.panneau_film_vide(ui) {
             return;
         }
-        // L'Espace 3D a ses propres réglages (`espace3dui.rs`).
-        if self.espace3d.on && !self.camera_view {
+        // L'Espace 3D a ses propres réglages (`espace3dui.rs`) : en plein écran, et à côté de la feuille quand le dernier
+        // clic était dans la vue 3D (`espace3dcote.rs`).
+        if self.espace3d_plein() || (self.espace3d_a_cote_visible() && self.espace3d.clic_3d) {
             self.espace3d_options_panel(ui);
             return;
         }

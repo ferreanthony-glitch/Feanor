@@ -80,6 +80,9 @@ pub struct Layout {
     /// le choix de l'espace (`Espace::barre_personnages_par_defaut`) ; sinon ce que l'utilisateur y a réglé.
     #[serde(rename = "barre_personnages", skip_serializing_if = "Option::is_none")]
     pub character_bar: Option<bool>,
+    /// Part de la largeur de la zone du dessin donnée à la vue 3D d'à côté (`espace3dcote.rs`).
+    #[serde(rename = "part_espace3d")]
+    pub part_espace3d: f32,
 }
 
 impl Default for Layout {
@@ -109,6 +112,7 @@ impl Default for Layout {
             safe_frames: false,
             frame_format: None,
             character_bar: None,
+            part_espace3d: crate::espace3dcote::PART_DEFAUT,
         }
     }
 }
@@ -131,6 +135,11 @@ impl Layout {
             if self.board_spacing.is_finite() { self.board_spacing.clamp(0.0, crate::board::MAX_SPACING) } else { 18.0 };
         self.panneaux = self.panneaux.map(DockLayout::sanitized);
         self.frame_format = self.frame_format.and_then(crate::frames::sanitized);
+        self.part_espace3d = if self.part_espace3d.is_finite() {
+            self.part_espace3d.clamp(crate::espace3dcote::PART_MIN, crate::espace3dcote::PART_MAX)
+        } else {
+            crate::espace3dcote::PART_DEFAUT
+        };
         self
     }
 
@@ -175,6 +184,7 @@ impl Layout {
             board_textes: vue.board_textes,
             safe_frames: vue.safe_frames,
             frame_format: vue.frame_format,
+            part_espace3d: vue.part_espace3d,
             ..self
         }
     }

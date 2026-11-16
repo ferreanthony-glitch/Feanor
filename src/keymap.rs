@@ -645,6 +645,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     // commandes d'objets (`scene3d.ajouter_*`, `importer_modele`, `dupliquer`, `grouper`, `envoyer`…), du repère 3D
     // (`outil.repere3d`, `fichier.importer_modele3d`) n'existent plus.
     act("espace3d.basculer", "Espace 3D (afficher / quitter)", true, false),
+    act("espace3d.a_cote", "Espace 3D à côté du dessin (afficher / masquer)", true, false),
     act("espace3d.outil_choisir", "Espace 3D : outil choisir", true, false),
     act("espace3d.outil_deplacer", "Espace 3D : outil déplacer", true, false),
     act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),
