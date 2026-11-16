@@ -726,7 +726,9 @@ pub(crate) fn taille_dossier(d: &Path) -> (u64, usize) {
 }
 
 pub(crate) fn dossier_lourd() -> PathBuf {
-    std::env::var_os("LOURD_DIR").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join("shot-lourd"))
+    // (Le dossier temporaire du système, pas celui du passage d'essai, effacé avec son processus : le film fabriqué une
+    // fois sert aux bancs suivants, chacun dans son processus.)
+    std::env::var_os("LOURD_DIR").map(PathBuf::from).unwrap_or_else(|| crate::essais_temp::dossier_systeme().join("shot-lourd"))
 }
 
 /// Fabrique et enregistre le projet lourd (`LOURD_PLANS` plans, 300 d'office) dans `LOURD_DIR\<LOURD_NOM>\<LOURD_NOM>.pelure`.
