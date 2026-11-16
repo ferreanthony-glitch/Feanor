@@ -10,7 +10,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   un glisser de la bande de montage dont le lâcher n'était pas vu restait en cours et mettait toutes les touches de côté (corrigé :
   fini comme au lâcher dès qu'aucun bouton n'est appuyé) ; un bouton qui avait le clavier ne le rendait jamais (le code prévu ne
   jouait pas, corrigé) ; et la barre d'état dit maintenant pourquoi une touche de raccourci n'a rien fait (glisser en cours, case où
-  l'on écrit, fenêtre ouverte). 5 essais, rouges avant pour les deux corrections. Fait et essayé sur le Mac (bibliothèque seule,
+  l'on écrit, fenêtre ouverte). Et dans l'Espace 3D, 1 et 2 zooment la vue 3D (avant : la feuille cachée). 7 essais, rouges
+  avant pour les corrections ; suite complète sur le Mac : les mêmes 89 échecs que `main` (propres au Mac), aucun nouveau. Fait et essayé sur le Mac (bibliothèque seule,
   sans le vrai exe) : pas regardé à l'écran, pas de version portable de cette branche. Non fusionné : attend son essai.
 
 ## 2026-11-13

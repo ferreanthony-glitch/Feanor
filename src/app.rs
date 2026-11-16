@@ -4799,6 +4799,9 @@ impl App {
             // la bande. `bande.zoom_avant` / `bande.zoom_arriere` gardent leurs touches à elles, où que soit le pointeur.
             "vue.zoom_avant" if self.bande_survolee => self.zoom_strip(1.25),
             "vue.zoom_arriere" if self.bande_survolee => self.zoom_strip(1.0 / 1.25),
+            // Dans l'Espace 3D, le zoom est celui de la vue 3D, comme la molette (avant : la feuille cachée zoomait).
+            "vue.zoom_avant" if self.espace3d.on && !self.camera_view => self.espace3d.molette_clavier += crate::espace3dview::CRAN_CLAVIER,
+            "vue.zoom_arriere" if self.espace3d.on && !self.camera_view => self.espace3d.molette_clavier -= crate::espace3dview::CRAN_CLAVIER,
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
             "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),

@@ -12944,15 +12944,21 @@ de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'étai
   « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
 - Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
   les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
+  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
+  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
+  de la vue (sur un panneau).
 - Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
-  du 2026-11-11). Dans l'Espace 3D, 1 et 2 zooment encore la feuille cachée : à corriger sur la branche `espace-a-cote`.
+  du 2026-11-11).
 
 ### 162.2 Essais
 
 `raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
 (rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
 où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
-bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant).
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
+la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
+sous la souris zoome, et la souris hors des vues, la vue active.
 
 ### 162.3 Comment Anthony teste (sur une copie de projet)
 
@@ -12961,3 +12967,5 @@ bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant)
 2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
    venais de faire juste avant.
 3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
+4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
+   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).

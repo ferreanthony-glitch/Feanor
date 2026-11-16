@@ -133,3 +133,58 @@ fn a_button_that_took_the_keyboard_gives_it_back_but_a_text_field_keeps_it() {
     assert!(!run(&mut b, false), "le bouton a rendu le clavier");
     assert!(run(&mut b, true), "la case où l'on écrit le garde");
 }
+
+/// L'Espace 3D ouvert (une seule vue), la souris en `p`.
+fn espace3d_ouvert() -> Banc {
+    let mut b = banc();
+    b.app.run_action("espace3d.basculer");
+    b.chauffer(4);
+    assert!(b.app.espace3d.on && !b.app.camera_view);
+    b
+}
+
+#[test]
+fn in_the_3d_space_the_zoom_keys_zoom_the_3d_view_not_the_hidden_sheet() {
+    let mut b = espace3d_ouvert();
+    let centre = b.app.canvas_rect.center();
+    b.image(vec![Event::PointerMoved(centre)], 1.0 / 60.0);
+    let (feuille, d0) = (zoom(&b), b.app.espace3d.cam.expect("vue d'édition").distance);
+    taper(&mut b, Key::Num2);
+    let d1 = b.app.espace3d.cam.unwrap().distance;
+    assert!((d1 - d0 / 1.25).abs() < d0 * 0.01, "2 rapproche la vue du même pas que la feuille : {d0} → {d1}");
+    assert_eq!(zoom(&b), feuille, "la feuille cachée ne bouge pas");
+    // La souris ailleurs (en haut à gauche, sur la barre de menus) : la vue 3D zoome quand même.
+    b.image(vec![Event::PointerMoved(pos2(4.0, 4.0))], 1.0 / 60.0);
+    taper(&mut b, Key::Num1);
+    let d2 = b.app.espace3d.cam.unwrap().distance;
+    assert!((d2 - d0).abs() < d0 * 0.01, "1 la ramène : {d1} → {d2}");
+}
+
+#[test]
+fn with_several_3d_views_the_zoom_keys_zoom_the_view_under_the_mouse_or_else_the_last_active_one() {
+    use crate::espace3dvues::Disposition;
+    let mut b = espace3d_ouvert();
+    b.app.e3_vues_poser(Disposition::Quatre);
+    b.chauffer(3);
+    let rects = b.app.espace3d.vues.rects.clone();
+    assert!(rects.len() >= 2, "plusieurs vues : {rects:?}");
+    let mesure = |b: &Banc, i: usize| {
+        let c = b.app.espace3d.vues.cadres[i];
+        if c.point.est_ortho() { c.ortho.span } else { c.orbite.distance }
+    };
+    let (i, r) = rects[0];
+    let autres: Vec<(usize, f32)> = rects[1..].iter().map(|&(j, _)| (j, mesure(&b, j))).collect();
+    b.image(vec![Event::PointerMoved(r.center())], 1.0 / 60.0);
+    let avant = mesure(&b, i);
+    taper(&mut b, Key::Num2);
+    assert!(mesure(&b, i) < avant * 0.9, "la vue sous la souris zoome : {avant} → {}", mesure(&b, i));
+    for (j, m) in &autres {
+        assert_eq!(mesure(&b, *j), *m, "la vue {j} ne bouge pas");
+    }
+    // La souris hors des vues : la dernière vue active zoome.
+    let active = b.app.espace3d.vues.active;
+    let avant = mesure(&b, active);
+    b.image(vec![Event::PointerMoved(pos2(4.0, 4.0))], 1.0 / 60.0);
+    taper(&mut b, Key::Num1);
+    assert!(mesure(&b, active) > avant * 1.1, "la vue active ({active}) dézoome : {avant} → {}", mesure(&b, active));
+}
