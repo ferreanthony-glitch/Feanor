@@ -13215,3 +13215,155 @@ d'export du storyboard et du film, comparées aux maquettes 4, 6, 9 et 11.
 4. Vignettes : les deux pages du sens de lecture, tire le bord de la mini-planche, coche Action, Dialogue, Notes.
 5. Fichier > Exporter en image > Storyboard en PDF : la première page en aperçu ; clique « Film vidéo », « Images une à une » ;
    ouvre Précis.
+
+## 164. La Couleur, les Effets et la ligne du calque, plus visuels (2026-11-15, branche `panneaux-visuels-2`)
+
+La règle d'Anthony : « des panneaux moins dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être
+manipulés », et sur la maquette : « si l'on doit interagir avec les graphiques pour modifier directement la scène c'est super ». Il a
+retenu les propositions 2 (Couleur), 7 (Effets) et 8 (ligne du calque). Chaque dessin est une commande : on le manipule, le projet
+change, par le même chemin que le réglage qu'il remplace (une étape d'annulation par geste). Tout est peint au `Painter` d'egui, aux
+couleurs du thème ; aucune image, aucune crate, aucune fenêtre, aucun format nouveau. Les dessins : `src/visuels164.rs` ; ce qu'ils
+changent : `src/colorui.rs`, `src/fxui.rs`, `src/layerheads.rs` ; les essais : `src/visuels164_tests.rs`.
+
+### 164.1 La Couleur (proposition 2)
+
+- **En tête, la roue des teintes** et son triangle clair / foncé (le carré, si on l'a choisi), qu'on clique ou qu'on glisse : l'anneau
+  change la teinte, le dedans la clarté et la saturation. C'est la roue d'avant, qui était repliée sous « Plus de couleurs » ; elle
+  fait au plus 112 points (la Couleur, sous le panneau Espace 3D, lui laisse sa caméra entière). Une sélection prend la couleur, une
+  étape par geste (comme avant).
+- **« Avant · maintenant »**, à droite de la roue : deux taches. La première est la couleur d'avant le dernier choix (retenue une fois le
+  geste fini : glisser la roue ne compte qu'une fois) ; **un clic sur elle y revient**, et celle d'aujourd'hui devient l'ancienne (deux
+  clics : aller et retour). Pas encore d'ancienne : sa place en pointillés. Retenue pendant la séance seulement.
+- Dessous, **les deux carrés d'avant-plan et d'arrière-plan**, comme avant (clic sur celui de derrière : les échanger ; clic droit :
+  intervertir, couleurs par défaut, copier le code, ajouter au nuancier), en 22 points au lieu de 30.
+- Puis **les neutres et les couleurs du nuancier montré**, toujours visibles.
+- **« Précis »** (l'ancien « Plus de couleurs », toujours retenu dans les réglages de l'application) : les commandes du nuancier (+, −,
+  …, le nuancier montré, la confirmation de suppression), le choix roue ou curseurs et carré ou triangle, les valeurs en chiffres (les
+  curseurs TSV, RVB ou TSL), le code et sa copie, les couleurs récentes, la palette de mélange.
+- Les curseurs choisis à la place de la roue (comme avant, l'un ou l'autre) se mettent en tête, « avant · maintenant » dessous.
+- Sous Précis, avec la roue en tête, le choix TSV / RVB / TSL de ses curseurs (relecture : il n'était joignable qu'en quittant la roue).
+- Un nouveau réglage d'origine : le triangle (au lieu du carré). Un réglage déjà enregistré garde son choix.
+
+### 164.2 Les Effets (proposition 7)
+
+- **« Ajouter » en vignettes** : chaque vignette montre ce que produit l'effet (un trait sur un papier, peint) ; un clic l'ajoute au
+  calque, avec ses réglages d'origine, une étape (« Ctrl+Z pour le retirer » dans la barre d'état). Une vignette allumée : l'effet est
+  déjà là, le clic le choisit. Neuf effets : **Lueur, Flou (gaussien), Grain (de film), Flash, Vignettage, Ombre (portée), Noir et blanc,
+  Lueur diffuse, Tremblement (du trait)** ; le tremblement n'a pas de vignette sur un calque bitmap. Les 31 autres effets restent dans
+  « Ajouter un effet » (par familles), sous Précis.
+- **Sur le calque** : les effets posés, une ligne chacun (allumer, choisir, retirer ; clic droit sur le nom : copier, coller).
+- **Avant | après** de l'effet choisi (aucun choisi : du dernier posé qui a une force ; un effet choisi sans force n'en a pas, pour ne pas en régler un autre sans le voir) : à gauche de la barre, l'avant ; à droite, l'après.
+  **Tirer la barre** (ou cliquer dans l'image) règle sa force : plus l'après est large, plus l'effet est fort. C'est le curseur de ce
+  réglage (lueur : intensité ; flou : rayon, jusqu'à 40 px sur la barre ; grain, flash, vignettage, noir et blanc : quantité ou
+  intensité ; ombre : opacité ; tremblement : intensité, jusqu'à 10 px), avec ses clés : une clé à l'image courante si l'effet en a, une
+  étape par geste (même si l'appui reste immobile avant de glisser). Une valeur réglée plus loin sous Précis (un flou de 80 px) élargit la barre au lieu d'être ramenée. Pendant le geste, l'image passe en aperçu comme avec le curseur (`fx::note_interaction`) : le cache des effets
+  recalcule, jamais le moteur de pinceau sur le fil de l'interface.
+  **L'image de l'avant | après est un schéma, pas le vrai calque** : montrer le calque lui-même avec et sans l'effet demanderait un
+  rendu de plus du calque à chaque geste, hors du cache des effets. C'est la vue de dessin qui montre le vrai résultat, en direct.
+  Les effets sans force (onde, négatif, tourbillon…) n'ont pas d'avant | après.
+- **« Précis »** : « Ajouter un effet » (tous, par familles), les préréglages, Tout réinitialiser, Tout supprimer, les menus Trait et
+  Matière, la création automatique des clés, les clés dans la timeline, puis chaque effet posé avec sa flèche, ses réglages en chiffres,
+  ses clés (créer, supprimer, précédente, suivante) et sa place dans la pile (monter, descendre), « Appliquer pour de bon » de la plume.
+  Replié d'origine, retenu pendant la séance.
+- **Ce qui manque de la maquette** : « Nuit » n'existe pas comme effet dans FEANOR (le plus proche : Teinte / saturation ou Luminosité /
+  contraste, sous Précis). Il n'a pas été inventé.
+
+### 164.3 La ligne du calque dans la timeline (proposition 8)
+
+- **L'opacité se règle en glissant sur la miniature** du calque courant : vers la droite, plus opaque ; vers la gauche, plus transparent
+  (120 points pour tout l'écart, d'où que parte le geste). La miniature se voile d'autant, une barre fine de l'accent, en bas de la
+  miniature, montre la valeur ; le chiffre ne s'écrit que pendant le geste (et dans la bulle). Une étape par geste ; plusieurs calques
+  choisis prennent tous la valeur, comme avant. Un glissé surtout vertical depuis la miniature range le calque, comme avant (elle reste une prise pour le déplacer) ; un clic seul\n  choisit le calque ; clic droit : le menu du calque. Plus de « 100 % » écrit.
+- **Le mode de fusion se choisit par des pastilles** : la ligne montre la pastille du mode (deux ronds, le dessous bleu et le calque
+  orange, leur intersection peinte par la vraie formule du mode, celle du rendu) et son nom ; un clic ouvre toutes les pastilles des
+  27 modes, par familles (normal, assombrir, éclaircir, contraste, écarts, couleur), quatre par rangée. Un clic sur une pastille pose le
+  mode, une étape, et les referme ; elles se referment aussi quand un autre calque devient le courant. Les flèches précédent / suivant restent de part et d'autre.
+- L'œil, le cadenas, la pelure, la transparence, le pochoir et son sens, la position, le groupe, fx, la caméra, l'aplat et le maillon
+  restent à leur place, sur la deuxième rangée ; le losange des clés d'opacité passe en tête de la troisième.
+- La ligne garde sa finesse : 56 points pour le calque courant, 22 pour les autres (partie 160), qui n'ont ni miniature ni mode.
+- Un calque Couleur unie (sa miniature est sa couleur, qu'un clic change) et un dossier gardent leur barre d'opacité.
+- La bande des plans du Storyboard (piste du calque actif) n'a pas changé.
+
+### 164.4 Un seul « Précis »
+
+Le titre de tous les replis « Précis » (Espace 3D de la partie 162, Fiche, Vignettes et export de la partie 163, Couleur et Effets de
+la partie 164) est le même : un petit triangle peint (▸ fermé, ▾ ouvert), puis « Précis » en petit gris, qui s'éclaire au survol. Peint
+plutôt qu'écrit : aucune police ne peut le changer en carré vide (`visuels164::titre_precis`).
+
+### 164.5 Où est passé chaque ancien réglage
+
+| Ancien réglage | Nouvelle place |
+|---|---|
+| Couleur : les deux carrés (30 points, ligne du haut) | à droite de la roue, sous « avant · maintenant » (22 points) ; même clic, même menu |
+| Couleur : « + » Ajouter au nuancier, « − » Retirer, « … » Commandes, Nuancier montré (ligne du haut) | Couleur > Précis, première ligne |
+| Couleur : confirmation « Supprimer le nuancier ? » | Couleur > Précis, sous cette ligne |
+| Couleur : les neutres, les pastilles du nuancier | inchangés, toujours visibles |
+| Couleur : « Plus de couleurs » (repli) | « Précis » (le même réglage retenu) |
+| Couleur : la roue (sous « Plus de couleurs ») | en tête du panneau, toujours visible |
+| Couleur : roue ou curseurs, carré ou triangle, TSV / RVB / TSL | Couleur > Précis ; les curseurs choisis à la place de la roue vont en tête |
+| Couleur : les curseurs avec leurs chiffres | Couleur > Précis (avec la roue) ; en tête (sans la roue) |
+| Couleur : code hexadécimal, sa copie | Couleur > Précis |
+| Couleur : couleurs récentes (et « Effacer ») | Couleur > Précis |
+| Couleur : palette de mélange | Couleur > Précis (toujours son propre repli) |
+| Effets : « Ajouter un effet » (menu par familles) | les vignettes pour neuf effets ; tous : Effets > Précis |
+| Effets : Préréglages, Tout réinitialiser, Tout supprimer | Effets > Précis |
+| Effets : menus Trait et Matière (et la ligne « sur un calque vectoriel ») | Effets > Précis |
+| Effets : Création automatique des clés, Clés d'effets dans la timeline | Effets > Précis |
+| Effets : chaque effet, case « actif », nom (choisir, copier), corbeille | « Sur le calque », toujours visible |
+| Effets : flèche de l'effet, réglages en chiffres, clés, monter / descendre, « Appliquer pour de bon » | Effets > Précis, effet par effet |
+| Effets : le curseur de force (intensité, rayon, quantité…) | aussi la barre de l'avant | après |
+| Effets : « Rallumer » (effets éteints par fx) | inchangé, en tête |
+| Ligne du calque : barre d'opacité « 100 % » | glisser sur la miniature (voile et barre fine) ; Couleur unie et dossier : la barre |
+| Ligne du calque : losange des clés d'opacité | en tête de la troisième rangée |
+| Ligne du calque : liste « Normal ▾ » | la pastille du mode et son nom ; un clic : toutes les pastilles |
+| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la pastille |
+| Ligne du calque : œil, cadenas, pelure, transparence, pochoir, position, groupe, fx, caméra, aplat, maillon, ⋮ | inchangés, à leur place |
+| Clic droit du calque > Apparence > Mode de fusion, opacité | inchangés |
+
+### 164.6 Les essais
+
+`src/visuels164_tests.rs`, dans la vraie fenêtre sans écran, à la souris :
+
+- un clic dans l'anneau de la roue donne sa teinte, le trait choisi la prend, **une** étape ; un glissé dans le triangle, une étape ;
+  Ctrl+Z rend la couleur du trait ; la tache ancienne revient d'un clic, et l'autre devient l'ancienne ; avec une sélection, elle la
+  recolore en une étape que Ctrl+Z défait ;
+- la vignette Lueur ajoute la lueur (une étape) ; recliquée, elle la choisit sans l'ajouter deux fois ; tirer la barre de l'avant | après
+  règle l'intensité (une étape) ; Ctrl+Z rend la force, puis retire l'effet ;
+- glisser de 60 points vers la gauche sur la miniature met l'opacité à 50 % (une étape), un clic seul ne change rien, Ctrl+Z la rend ;
+- la pastille du mode ouvre les 27 pastilles ; « Produit » pose le mode (une étape) et les referme ; Ctrl+Z le rend ;
+- chaque ancien réglage reste joignable : la Couleur (14 noms sous Précis, les curseurs à la place de la roue), les Effets (10 noms
+  sous Précis, pas de tremblement sur un bitmap), la ligne du calque (13 noms ; l'œil, le cadenas, le pochoir à droite de la miniature ;
+  précédent / suivant) ;
+- les calculs : la pastille de chaque mode prend la vraie formule (Normal : le calque, Produit assombrit, Superposition éclaircit), la
+  lentille est dans les deux ronds ; la force de chaque effet et la barre ; « avant · maintenant » ne retient qu'un geste fini ;
+- un seul titre « Précis » dans les sources des parties 162, 163 et 164.
+
+Essais anciens changés, et pourquoi :
+
+- `panneaux_tests` : la Couleur a la roue en tête et « Précis » au lieu de « Plus de couleurs » ; les commandes du nuancier sont sous
+  Précis ; avec la roue, Précis montre les curseurs ; la ligne du calque n'écrit plus « 100 % » ; les deux essais du panneau Effets
+  ouvrent Précis ;
+- `fxclavier_tests` (3), `notes_calques_tests` (4) : les menus et les réglages des effets sont sous Précis (`tout_ouvrir`) ;
+- `multicalques_tests`, `optim_rendu_tests` : l'opacité se prend à la miniature (sa bulle) au lieu du texte « 37 % » / « 100 % » ;
+- `passe_partout_balayage_tests` : seuls les maillages noirs de la vue comptent (la roue de la Couleur, visible maintenant, part du noir).
+
+### 164.7 À tester par Anthony (sur une copie de projet)
+
+1. Couleur : clique et glisse dans la roue ; choisis une autre couleur, puis clique la tache de gauche : tu reviens ; reclique : tu
+   repars. Ouvre Précis : le nuancier, les curseurs, le code, les récentes, le mélange.
+2. Effets : clique Lueur ; tire la barre de l'avant | après ; Ctrl+Z. Dis si les neuf vignettes sont les bonnes, et si un avant | après
+   schématique te suffit ou s'il faut le vrai calque (plus lourd).
+3. Animation : glisse sur la miniature du calque courant, vers la gauche puis la droite ; clique la pastille du mode, choisis Produit.
+4. Dis si « Nuit » doit devenir un effet (un préréglage d'éclairage nocturne, par exemple), et si le triangle de la roue te va.
+
+### 164.8 Relecture indépendante (sous-agent), et ce qui a été corrigé
+
+- l'avant | après : un appui immobile puis un glissé faisaient deux étapes (corrigé : le geste part de l'appui ; essai ajouté) ; une
+  valeur au-delà de la barre était ramenée au premier geste (corrigé) ; le pincement (−100 à 100) avait sa barre à l'envers (corrigé :
+  de zéro) ; un effet choisi sans force faisait régler un autre effet (corrigé) ;
+- la miniature volait la prise pour ranger un calque (corrigé : un glissé vertical range ; essai ajouté) ;
+- les pastilles pouvaient rester ouvertes en mémoire après un changement de calque (corrigé) ;
+- le choix TSV / RVB / TSL manquait sous Précis avec la roue (corrigé) ;
+- les essais : des restes morts retirés, deux contrôles resserrés (la roue absente avec les curseurs, l'opacité de 37 % à 87 %).
+- Gardé tel quel : les couleurs fixes des schémas (papier, encre, les deux ronds bleu et orange des pastilles) : ce sont des images,
+  pas l'interface ; et le contrôle « un seul titre Précis » reste une lecture des sources.
