@@ -262,6 +262,11 @@ mod panneauxvisuels;
 mod panneauxvisuelsui;
 #[cfg(test)]
 mod panneauxvisuels_tests;
+// La Couleur, les Effets et la ligne du calque plus visuels (partie 164) : le titre « Précis », les taches, les pastilles des modes,
+// les vignettes des effets (`visuels164`) ; ce qu'ils changent est dans `colorui`, `fxui` et `layerheads`.
+mod visuels164;
+#[cfg(test)]
+mod visuels164_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

@@ -61,22 +61,26 @@ pub(crate) fn largeur_tuiles(ui: &Ui, n: usize, ecart: f32) -> f32 {
 /// Le repli « Précis » : ce qui se règle en chiffres, fermé d'origine. `id` le distingue des autres replis (son état ouvert ou fermé
 /// est retenu pendant la séance).
 pub(crate) fn precis<R>(ui: &mut Ui, id: &str, contenu: impl FnOnce(&mut Ui) -> R) -> Option<R> {
+    if !precis_entete(ui, id, "Précis") {
+        return None;
+    }
+    Some(ui.indent(cle_precis(id), contenu).inner)
+}
+
+/// Le titre du repli « Précis » `id` seul (son contenu est posé par l'appelant, quand il est ouvert) : `texte` après le triangle
+/// (`visuels164::titre_precis`, la même apparence partout, partie 164.4). Vrai s'il est ouvert, après un clic éventuel.
+pub(crate) fn precis_entete(ui: &mut Ui, id: &str, texte: &str) -> bool {
     let cle = cle_precis(id);
     let ouvert = ui.ctx().data(|d| d.get_temp::<bool>(cle)).unwrap_or(false);
     #[cfg(test)]
     let ouvert = ouvert || TOUT_OUVERT.with(std::cell::Cell::get);
-    // (Les flèches de la police des icônes : celles du texte n'ont pas de glyphe dans la police de l'interface.)
-    let fleche = if ouvert { egui_phosphor::regular::CARET_DOWN } else { egui_phosphor::regular::CARET_RIGHT };
-    let texte = egui::RichText::new(format!("{fleche} Précis")).small().color(theme::texte_doux());
-    let resp = ui.add(egui::Button::new(texte).frame(false));
+    let resp = crate::visuels164::titre_precis(ui, ouvert, texte);
     let resp = crate::bulles::bulle(resp, &format!("Précis : {id}"), if ouvert { "Replier les réglages en chiffres." } else { "Les mêmes réglages, en chiffres (et ceux qui n'ont pas de dessin)." }, "");
     if resp.clicked() {
         ui.ctx().data_mut(|d| d.insert_temp(cle, !ouvert));
+        return !ouvert;
     }
-    if !ouvert {
-        return None;
-    }
-    Some(ui.indent(cle, contenu).inner)
+    ouvert
 }
 
 fn cle_precis(id: &str) -> egui::Id {

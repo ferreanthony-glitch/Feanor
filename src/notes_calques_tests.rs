@@ -101,6 +101,8 @@ fn contient(textes: &[(String, Rect)], morceau: &str) -> bool {
 
 #[test]
 fn the_effects_panel_has_two_dropdowns_not_two_icon_rows() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("menus", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
@@ -128,6 +130,8 @@ fn the_effects_panel_has_two_dropdowns_not_two_icon_rows() {
 
 #[test]
 fn a_dropdown_entry_toggles_the_effect_in_one_undo_step_and_the_title_counts_them() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("entree", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
@@ -149,6 +153,8 @@ fn a_dropdown_entry_toggles_the_effect_in_one_undo_step_and_the_title_counts_the
 
 #[test]
 fn on_a_bitmap_layer_the_vector_only_entries_are_hidden_not_greyed() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     // Passe de simplicité du 2026-10-21 : un effet que le calque ne prend pas ne se montre pas (le menu d'un calque,
     // lui, garde la raison en grisé : `fxui::offer`).
     let mut app = app_one_layer("bitmap", LayerKind::Bitmap);
@@ -170,6 +176,8 @@ fn on_a_bitmap_layer_the_vector_only_entries_are_hidden_not_greyed() {
 
 #[test]
 fn the_matter_menu_lists_its_effects_and_presets_and_applies_a_preset() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("matiere", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);

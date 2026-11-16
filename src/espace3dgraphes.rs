@@ -1067,8 +1067,8 @@ impl App {
 
     /// « ▸ Précis » : un titre qu'on clique pour déplier ou replier ce qui suit ; vrai s'il est déplié.
     pub(crate) fn e3_precis(ui: &mut egui::Ui, ouvert: &mut bool, quoi: &str) -> bool {
-        let fleche = if *ouvert { ph::CARET_DOWN } else { ph::CARET_RIGHT };
-        let r = ui.add(egui::Label::new(RichText::new(format!("{fleche} Précis : {quoi}")).small().color(encre_douce())).sense(Sense::click()));
+        // (Partie 164.4 : le même titre que les panneaux des parties 163 et 164, un triangle peint.)
+        let r = crate::visuels164::titre_precis(ui, *ouvert, &format!("Précis : {quoi}"));
         if crate::bulles::bulle(r, "Précis", "Les mêmes réglages en chiffres, à taper ou à glisser.", "").clicked() {
             *ouvert = !*ouvert;
         }

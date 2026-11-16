@@ -137,6 +137,8 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
     let xf = b.app.vignettes.xf;
     let vue = b.app.vignettes.view;
     let (rects, tris) = noirs(&b);
+    // (La roue du panneau Couleur, hors de la vue, n'en est pas.)
+    let tris: Vec<_> = tris.into_iter().filter(|t| t.iter().any(|q| vue.contains(*q))).collect();
     assert!(!tris.is_empty(), "un plan à mouvement : le passe-partout est un maillage découpé autour de la zone balayée");
     let couvert = |p: Pos2| rects.iter().any(|r| r.contains(p)) || tris.iter().any(|t| dans_triangle(t, p));
     // Les trous : les cases et les polygones balayés, à l'écran.
@@ -174,6 +176,8 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
     b.app.run_action("vignettes.marie_louise");
     b.chauffer(3);
     let (r2, t2) = noirs(&b);
+    // (Dans la vue seulement : la roue du panneau Couleur, visible depuis la partie 164.1, est un maillage qui part du noir.)
+    let t2: Vec<_> = t2.into_iter().filter(|t| t.iter().any(|q| vue.contains(*q))).collect();
     assert!(t2.is_empty() && r2.len() <= rects.len(), "éteint : plus de passe-partout");
 }
 

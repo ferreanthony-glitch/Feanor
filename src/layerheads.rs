@@ -154,29 +154,7 @@ pub(crate) fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> eg
     ui.put(rect, egui::Button::new(RichText::new(icon).size(13.0).color(color)).frame(false))
 }
 
-/// Liste des modes de fusion posée dans `rect`, aussi basse que la barre d'opacité (en-têtes de
-/// la timeline et du montage) : le mode choisi, s'il a changé.
-pub(crate) fn blend_combo(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: BlendMode) -> Option<BlendMode> {
-    let mut mode = blend;
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(salt.with("cadre")).layout(Layout::left_to_right(Align::Center)));
-    // Aussi bas que la barre d'opacité, pour tenir dans la ligne.
-    child.spacing_mut().interact_size.y = 16.0;
-    child.spacing_mut().button_padding = vec2(4.0, 0.0);
-    let resp = egui::ComboBox::from_id_salt(salt)
-        .selected_text(RichText::new(blend.label()).size(11.0))
-        .width(rect.width() - 4.0)
-        .show_ui(&mut child, |ui| {
-            for m in BlendMode::ALL {
-                if BlendMode::FAMILY_STARTS.contains(&m) {
-                    ui.separator();
-                }
-                ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
-            }
-        })
-        .response;
-    bulle(resp, "Mode de fusion", blend.hint(), "");
-    (mode != blend).then_some(mode)
-}
+// (La liste « Normal ▾ » des modes de fusion, `blend_combo`, est remplacée par leurs pastilles, `App::pastille_du_mode`, partie 164.3.)
 
 /// Ce que la ligne d'un calque montre (copié pour ne pas garder le calque emprunté).
 struct Head {
@@ -279,6 +257,16 @@ impl App {
         // comme le faisait le panneau Calques).
         if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(rect) {
             self.take_layers_pane_focus();
+        }
+
+        // Les pastilles des modes d'un calque qui n'est plus le courant (changé au clavier, par exemple) : refermées, sinon elles
+        // resteraient ouvertes en mémoire sans se dessiner (partie 164.3).
+        let cur = self.cur_layer;
+        for (li, l) in self.layers().iter().enumerate() {
+            let id = egui::Id::new(("fusion_tete", l.id)).with("pastilles");
+            if li != cur && ui.memory(|m| m.is_popup_open(id)) {
+                ui.memory_mut(|m| m.close_popup());
+            }
         }
 
         let top = rect.top() + header_h;
@@ -548,6 +536,8 @@ impl App {
                 }
             }
             painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
+            // Partie 164.3 : l'opacité se règle en glissant sur la miniature (elle se voile, une barre fine montre la valeur).
+            self.opacite_miniature(ui, &painter, thumb, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, bg);
         }
 
         // Réglages en icônes.
@@ -644,15 +634,21 @@ impl App {
             self.maillon_partage(&mut child, li);
         }
 
-        // Opacité : une barre qu'on tire ; à sa droite, le losange des clés d'opacité (partie 160 : il était à côté de l'opacité du
+        // Partie 164.3 : l'opacité est sur la miniature (on y glisse) ; un calque Couleur unie, dont la miniature est sa couleur
+        // (qu'un clic change), garde sa barre. Puis le losange des clés d'opacité (partie 160 : il était à côté de l'opacité du
         // panneau Calques).
         let y3 = r.top() + 38.0;
-        let bar = Rect::from_min_size(pos2(x0, y3 + 2.0), vec2(92.0, 13.0));
-        self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
-        let losange = Rect::from_min_size(pos2(bar.right() + 2.0, y3), vec2(16.0, 17.0));
+        let mut x = x0;
+        if h.unie {
+            let bar = Rect::from_min_size(pos2(x0, y3 + 2.0), vec2(92.0, 13.0));
+            self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+            x = bar.right() + 2.0;
+        }
+        let losange = Rect::from_min_size(pos2(x, y3), vec2(16.0, 17.0));
         self.losange_opacite(ui, losange, fg, off);
 
-        // Mode de fusion, avec précédent / suivant.
+        // Mode de fusion : la pastille du mode (ce qu'il fait, deux ronds qui se chevauchent) et son nom ; un clic ouvre toutes les
+        // pastilles (partie 164.3 : elles remplacent la liste « Normal ▾ ») ; précédent / suivant de part et d'autre.
         let modes = BlendMode::ALL;
         let at = modes.iter().position(|m| *m == h.blend).unwrap_or(0);
         let mut mode = h.blend;
@@ -660,8 +656,8 @@ impl App {
         if bulle(icon_at(ui, prev, ph::CARET_LEFT, fg), "Mode précédent", "", "").clicked() {
             mode = modes[(at + modes.len() - 1) % modes.len()];
         }
-        let combo = Rect::from_min_max(pos2(prev.right(), y3), pos2(r.right() - 18.0, y3 + 17.0));
-        mode = blend_combo(ui, combo, egui::Id::new(("fusion_tete", h.id)), h.blend).unwrap_or(mode);
+        let combo = Rect::from_min_max(pos2(prev.right(), y3), pos2((r.right() - 18.0).min(prev.right() + 140.0), y3 + 17.0));
+        mode = self.pastille_du_mode(ui, combo, egui::Id::new(("fusion_tete", h.id)), h.blend, fg).unwrap_or(mode);
         let next = Rect::from_min_size(pos2(combo.right(), y3), vec2(14.0, 17.0));
         if bulle(icon_at(ui, next, ph::CARET_RIGHT, fg), "Mode suivant", "", "").clicked() {
             mode = modes[(at + 1) % modes.len()];
@@ -670,6 +666,131 @@ impl App {
             // (Plusieurs calques choisis : tous prennent ce mode, partie 136.)
             self.regler_mode_calques(li, mode);
         }
+    }
+
+    /// L'opacité du calque `li` sur sa miniature `thumb` (partie 164.3) : on glisse horizontalement dessus (vers la droite, plus
+    /// opaque ; 120 points pour tout l'écart), la miniature se voile d'autant, une barre fine de l'accent dit la valeur ; le chiffre ne
+    /// se montre que pendant le geste, et dans la bulle. Une étape d'annulation par geste (`edited`), comme la barre d'avant ; plusieurs
+    /// calques choisis prennent tous la valeur (`regler_opacite`). Un clic seul choisit le calque comme le reste de la ligne ; clic
+    /// droit : le menu du calque.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn opacite_miniature(&mut self, ui: &mut Ui, painter: &egui::Painter, thumb: Rect, li: usize, key: egui::Id, opacity: f32, fond: Color32) {
+        let mut resp = ui.interact(thumb, key, Sense::click_and_drag());
+        let o = opacity.clamp(0.0, 1.0);
+        // Le voile : la couleur de la ligne, d'autant plus couvrante que le calque est transparent.
+        painter.rect_filled(thumb, 0.0, fond.gamma_multiply((1.0 - o) * 0.85));
+        let barre = Rect::from_min_max(pos2(thumb.left(), thumb.bottom() - 3.0), thumb.max);
+        painter.rect_filled(barre, 0.0, Color32::from_black_alpha(140));
+        painter.rect_filled(Rect::from_min_size(barre.min, vec2(barre.width() * o, barre.height())), 0.0, theme::accent());
+        let depart = key.with("depart");
+        let mut value = opacity;
+        if resp.drag_started() {
+            // (Depuis l'appui : le glissé ne commence qu'après quelques points de mouvement, qui comptent aussi.)
+            if let Some(p) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()) {
+                ui.data_mut(|d| d.insert_temp(depart, (p.x, opacity)));
+            }
+        }
+        // Un glissé surtout vertical range le calque, comme depuis le reste de la ligne (la miniature reste une prise pour le déplacer).
+        if resp.drag_started() {
+            let d = ui.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(egui::Vec2::ZERO, |(a, b)| b - a));
+            if d.y.abs() > d.x.abs() {
+                self.select_layer(li);
+                self.head_drag = Some(li);
+                ui.data_mut(|d| d.remove::<(f32, f32)>(depart));
+            }
+        }
+        if resp.dragged() && self.head_drag.is_none() {
+            if let (Some(p), Some((x0, o0))) = (resp.interact_pointer_pos(), ui.data(|d| d.get_temp::<(f32, f32)>(depart))) {
+                value = ((o0 + (p.x - x0) / 120.0).clamp(0.0, 1.0) * 100.0).round() / 100.0;
+                if value != opacity {
+                    resp.mark_changed();
+                }
+            }
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            let texte = format!("{:.0} %", value * 100.0);
+            painter.text(thumb.center() + vec2(1.0, 1.0), Align2::CENTER_CENTER, &texte, FontId::proportional(11.0), Color32::BLACK);
+            painter.text(thumb.center(), Align2::CENTER_CENTER, &texte, FontId::proportional(11.0), Color32::WHITE);
+        } else if resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        let resp = bulle(
+            resp,
+            "Opacité du calque",
+            &format!("{:.0} % · glisse sur la miniature : vers la droite, plus opaque ; vers la gauche, plus transparent. Elle se voile d'autant.", opacity * 100.0),
+            "",
+        );
+        if resp.clicked() {
+            let m = ui.input(|i| i.modifiers);
+            self.click_layer_head(li, m.command, m.shift);
+        }
+        resp.context_menu(|ui| self.layer_head_menu(ui, li));
+        if self.edited(&resp) {
+            // (Plusieurs calques choisis : tous prennent cette valeur, comme dans l'ancien panneau Calques, `choixtout.rs`.)
+            self.regler_opacite(li, value);
+            // (Un réglage : aucune tuile n'est renvoyée à la carte graphique pendant le geste.)
+            self.renderer.invalidate_params();
+        }
+    }
+
+    /// Le mode de fusion dans `rect` (partie 164.3) : sa pastille et son nom ; un clic ouvre toutes les pastilles, par familles (deux
+    /// ronds, le dessous bleu et le calque orange, leur intersection peinte par la formule du mode). Le mode choisi, s'il a changé.
+    pub(crate) fn pastille_du_mode(&mut self, ui: &mut Ui, rect: Rect, id: egui::Id, blend: BlendMode, encre: Color32) -> Option<BlendMode> {
+        let resp = ui.interact(rect, id, Sense::click());
+        let p = ui.painter_at(rect);
+        if resp.hovered() {
+            p.rect_filled(rect, 3.0, theme::controle_survol().gamma_multiply(0.6));
+        }
+        let pastille = Rect::from_min_size(pos2(rect.left() + 2.0, rect.center().y - 7.5), vec2(24.0, 15.0));
+        crate::visuels164::pastille_fusion(&p, pastille, blend);
+        p.text(pos2(pastille.right() + 5.0, rect.center().y), Align2::LEFT_CENTER, blend.label(), FontId::proportional(11.0), encre);
+        let resp = bulle(resp, "Mode de fusion", &format!("{} : {} Clic : toutes les pastilles des modes.", blend.label(), blend.hint()), "");
+        let popup = id.with("pastilles");
+        if resp.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(popup));
+        }
+        let mut choisi = None;
+        egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+            ui.set_width(4.0 * 66.0 + 3.0 * 3.0);
+            let mut familles: Vec<Vec<BlendMode>> = Vec::new();
+            for m in BlendMode::ALL {
+                if familles.is_empty() || BlendMode::FAMILY_STARTS.contains(&m) {
+                    familles.push(Vec::new());
+                }
+                if let Some(f) = familles.last_mut() {
+                    f.push(m);
+                }
+            }
+            for (k, famille) in familles.iter().enumerate() {
+                if k > 0 {
+                    ui.add_space(2.0);
+                }
+                for rangee in famille.chunks(4) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        for &m in rangee {
+                            let on = m == blend;
+                            let (r, resp) = ui.allocate_exact_size(vec2(66.0, 38.0), Sense::click());
+                            let p = ui.painter_at(r);
+                            let fond = if on { theme::selection() } else if resp.hovered() { theme::controle_survol() } else { theme::controle() };
+                            p.rect_filled(r, 4.0, fond);
+                            if on {
+                                p.rect_stroke(r, 4.0, Stroke::new(1.25_f32, theme::accent()), StrokeKind::Inside);
+                            }
+                            crate::visuels164::pastille_fusion(&p, Rect::from_min_size(pos2(r.center().x - 16.0, r.top() + 3.0), vec2(32.0, 20.0)), m);
+                            let ink = crate::panneauxvisuels::encre(on);
+                            p.text(pos2(r.center().x, r.bottom() - 2.0), Align2::CENTER_BOTTOM, m.label(), FontId::proportional(9.5), ink);
+                            if bulle(resp, &format!("Mode : {}", m.label()), m.hint(), "").clicked() {
+                                choisi = Some(m);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+        if choisi.is_some() {
+            ui.memory_mut(|m| m.close_popup());
+        }
+        choisi.filter(|m| *m != blend)
     }
 
     /// Barre d'opacité du calque `li` (identifiée par `key`) qu'on clique ou qu'on tire ; une
