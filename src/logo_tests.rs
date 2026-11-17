@@ -1,4 +1,4 @@
-//! Logo et icône de FEANOR : le Joyau (formes du livre de marque, quatre variantes), l'icône de l'application, le fichier
+//! Logo et icône de FEANOR : le joyau (formes de la charte du 17/11/2026, couleur et mono), l'icône de l'application, le fichier
 //! `.ico` et l'animation d'ouverture (la fonction des images clés).
 
 use crate::logo::{self, EtatAnim, Joyau};
@@ -11,96 +11,68 @@ fn pixel_au(px: &[u8], cote: u32, x: f32, y: f32) -> [u8; 4] {
     [px[i], px[i + 1], px[i + 2], px[i + 3]]
 }
 
-fn points(liste: &[(f32, f32)]) -> String {
-    liste.iter().map(|(x, y)| format!("{},{}", x, y)).collect::<Vec<_>>().join(" ")
+/// Pixel du joyau rasterisé sur `cote` pixels, pour un point du dessin (sur 100).
+fn pixel_d(px: &[u8], cote: u32, x: f32, y: f32) -> [u8; 4] {
+    pixel_au(px, cote, x * logo::GRILLE / logo::DESSIN, y * logo::GRILLE / logo::DESSIN)
 }
 
 #[test]
-fn the_svg_files_in_the_repository_have_the_shapes_of_the_drawing() {
-    let (pierre, facette, etoile) = (points(&logo::PIERRE), points(&logo::FACETTE), points(&logo::ETOILE));
-    for (nom, svg) in [
-        ("jade", include_str!("../assets/feanor-viseur-jade.svg")),
-        ("iris", include_str!("../assets/feanor-viseur-irise.svg")),
-        ("icone", include_str!("../assets/feanor-viseur-jade-icone-app.svg")),
-    ] {
-        assert!(svg.contains(r#"viewBox="0 0 64 64""#), "{nom}");
-        for forme in [&pierre, &facette, &etoile] {
-            assert!(svg.contains(&format!("points=\"{forme}\"")), "{nom} : {forme}");
-        }
+fn the_svg_files_in_the_repository_have_the_shapes_and_colours_of_the_drawing() {
+    let couleur = include_str!("../assets/feanor-logo.svg");
+    assert!(couleur.contains(r#"viewBox="0 0 100 100""#));
+    let etoile = logo::ETOILE.iter().map(|(x, y)| format!("{x} {y}")).collect::<Vec<_>>().join(" L");
+    assert!(couleur.contains(&format!("M{etoile} Z")), "l'étoile du dessin : M{etoile} Z");
+    for c in logo::DEGRADE.iter().map(|(_, c)| format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])) {
+        assert!(couleur.contains(&c), "le dégradé : {c}");
     }
-    let iris = include_str!("../assets/feanor-viseur-irise.svg");
-    assert!(iris.contains("spreadMethod=\"reflect\"") && iris.contains("#C7B5FF") && iris.contains("#FFB3D1") && iris.contains("#FFF1A8"));
-    assert!(iris.contains("opacity=\".42\""));
-    for (nom, svg, encre) in [("clair", include_str!("../assets/feanor-viseur-mono-clair.svg"), "#EDEDEF"), ("fonce", include_str!("../assets/feanor-viseur-mono-fonce.svg"), "#121214")] {
-        assert!(svg.contains("mask") && svg.contains(encre), "mono {nom} (pierre et étoile masquées l'une par l'autre)");
-        assert!(!svg.contains(&facette), "le mono n'a pas de facette basse");
+    for (o, _) in logo::QUARTS.iter().filter(|(o, _)| *o < 1.0) {
+        assert!(couleur.contains(&format!("opacity=\"{o}\"")), "transparence d'un quart : {o}");
     }
-    let icone = include_str!("../assets/feanor-viseur-jade-icone-app.svg");
-    assert!(icone.contains("rx=\"14\"") && icone.contains("translate(6.4 6.4) scale(.8)") && icone.contains("#2C2C2E"));
+    assert!(couleur.contains("mix-blend-mode:multiply") && couleur.contains("#6A6FD6") && couleur.contains("#2E9FBF"), "les ombres des facettes");
+    assert_eq!(couleur.matches("fill=\"url(#ir)\"").count(), 8, "huit facettes");
+    let encre = include_str!("../assets/feanor-logo-encre.svg");
+    assert!(encre.contains("evenodd") && encre.contains("#121214") && !encre.contains("url(#ir)"), "le mono : un aplat, l'étoile découpée");
+    let blanc = include_str!("../assets/feanor-logo-blanc.svg");
+    assert!(blanc.contains("evenodd") && blanc.contains("#FFFFFF"));
 }
 
 #[test]
-fn the_jade_joyau_has_the_three_brand_colours_and_a_transparent_background() {
+fn the_colour_joyau_has_a_white_star_a_vertical_gradient_eight_facets_and_a_transparent_background() {
     let px = logo::image(256, Joyau::Jade, None);
     assert_eq!(px.len(), 256 * 256 * 4);
-    let jade = |c: [u8; 3]| [c[0], c[1], c[2], 255];
-    assert_eq!(pixel_au(&px, 256, 22.0, 22.0), jade(logo::JADE), "la pierre");
-    assert_eq!(pixel_au(&px, 256, 42.0, 42.0), jade(logo::JADE_PROFOND), "la facette basse");
-    assert_eq!(pixel_au(&px, 256, 32.0, 8.0), jade(logo::ETOILE_BLANCHE), "la pointe de l'étoile, hors de la pierre");
-    assert_eq!(pixel_au(&px, 256, 2.0, 2.0)[3], 0, "le coin est transparent");
-    // L'étoile ne déborde pas de la grille : la bordure de l'image reste vide.
+    assert_eq!(pixel_d(&px, 256, 50.0, 50.0), [255, 255, 255, 255], "le cœur de l'étoile est blanc");
+    assert_eq!(pixel_d(&px, 256, 50.0, 33.0), [255, 255, 255, 255], "la branche haute de l'étoile");
+    assert_eq!(pixel_d(&px, 256, 3.0, 3.0)[3], 0, "le coin est transparent");
+    assert_eq!(pixel_d(&px, 256, 50.0, 1.0)[3], 0, "la pointe du haut est arrondie : rien au-dessus de 4");
+    // Le haut est jade (vert plus fort que rouge), le bas tire vers le bleu et le lilas (bleu plus fort que vert).
+    let haut = pixel_d(&px, 256, 50.0, 14.0);
+    assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut jade : {haut:?}");
+    let bas = pixel_d(&px, 256, 50.0, 86.0);
+    assert!(bas[3] == 255 && bas[2] > bas[1], "bas bleu lilas : {bas:?}");
+    // Les facettes : de part et d'autre d'une arête, la lumière change.
+    assert_ne!(pixel_d(&px, 256, 40.0, 30.0), pixel_d(&px, 256, 60.0, 30.0), "haut gauche et haut droite");
+    assert_ne!(pixel_d(&px, 256, 60.0, 25.0), pixel_d(&px, 256, 72.0, 42.0), "les deux moitiés du quart haut droit");
+    // Rien ne déborde : la bordure de l'image reste vide.
     let cote = 256usize;
     for k in 0..cote {
         for (x, y) in [(k, 0), (k, cote - 1), (0, k), (cote - 1, k)] {
-            let a = px[(y * cote + x) * 4 + 3];
-            assert!(a < 255, "bord plein en ({x}, {y})");
+            assert!(px[(y * cote + x) * 4 + 3] < 255, "bord plein en ({x}, {y})");
         }
     }
+    // Les autres variantes en couleur dessinent le même joyau.
+    assert_eq!(logo::image(64, Joyau::JadePetit, None), logo::image(64, Joyau::Jade, None));
+    assert_eq!(logo::image(64, Joyau::Iris, None), logo::image(64, Joyau::Jade, None));
 }
 
 #[test]
-fn the_small_joyau_has_thicker_arms_and_is_used_under_24_pixels_and_for_the_16_pixel_icon() {
-    // Mêmes pierre et facette, étoile différente.
-    assert_eq!(logo::ETOILE[6], (4.0, 32.0), "les bras gauche et droit sont égaux (4 et 60 sur l'axe)");
-    assert_eq!(logo::ETOILE_PETITE, [(32.0, 2.0), (36.0, 28.0), (60.0, 32.0), (36.0, 36.0), (32.0, 62.0), (28.0, 36.0), (4.0, 32.0), (28.0, 28.0)]);
-    let petit = include_str!("../assets/feanor-viseur-jade-petit.svg");
-    assert!(petit.contains(&format!("points=\"{}\"", points(&logo::ETOILE_PETITE))) && petit.contains(&format!("points=\"{}\"", points(&logo::PIERRE))));
-    // 16 px : le petit Joyau ; 32 px : le grand.
-    assert_eq!(logo::image(16, Joyau::Jade, None), logo::image(16, Joyau::JadePetit, None));
-    assert_ne!(logo::image(32, Joyau::Jade, None), logo::image(32, Joyau::JadePetit, None));
-    // L'icône de 16 px utilise le petit Joyau, celle de 32 px le grand.
-    assert_ne!(logo::icone(16), logo::icone(32)[..16 * 16 * 4].to_vec());
-    // Un point que seul le gros bras épaissi couvre : (34.4, 20) du petit Joyau (la pointe du grand est plus fine).
-    let px = logo::image(256, Joyau::JadePetit, None);
-    let grand = logo::image(256, Joyau::Jade, None);
-    assert_eq!(pixel_au(&px, 256, 34.4, 20.0), [0xF6, 0xFF, 0xFD, 255]);
-    assert_ne!(pixel_au(&grand, 256, 34.4, 20.0), [0xF6, 0xFF, 0xFD, 255]);
-}
-
-#[test]
-fn the_iridescent_joyau_has_a_gradient_stone_and_a_light_lower_facet() {
-    let px = logo::image(256, Joyau::Iris, None);
-    let jade = logo::image(256, Joyau::Jade, None);
-    let (a, b) = (pixel_au(&px, 256, 20.0, 20.0), pixel_au(&px, 256, 47.0, 22.0));
-    assert_eq!((a[3], b[3]), (255, 255));
-    assert_ne!(a, b, "la pierre change de couleur d'un bout à l'autre");
-    assert_ne!(pixel_au(&px, 256, 20.0, 20.0), pixel_au(&jade, 256, 20.0, 20.0), "ce n'est pas le jade");
-    assert_ne!(pixel_au(&px, 256, 42.0, 42.0), pixel_au(&jade, 256, 42.0, 42.0), "la facette basse est à 42 %");
-    assert_eq!(pixel_au(&px, 256, 32.0, 8.0), [0xF6, 0xFF, 0xFD, 255], "l'étoile reste blanche");
-    // Le début du dégradé est le jade (coin haut gauche de la pierre).
-    let debut = pixel_au(&px, 256, 19.0, 18.0);
-    assert!(debut[0] < 0x80 && debut[1] > 0xA0, "début jade : {debut:?}");
-}
-
-#[test]
-fn the_mono_joyau_swaps_full_and_empty_where_stone_and_star_overlap() {
+fn the_mono_joyau_is_one_flat_ink_with_the_star_cut_out() {
     for encre in [logo::ENCRE_SOMBRE, logo::ENCRE_CLAIRE] {
         let px = logo::image(256, Joyau::Mono(encre), None);
         let plein = [encre[0], encre[1], encre[2], 255];
-        assert_eq!(pixel_au(&px, 256, 22.0, 22.0), plein, "la pierre seule");
-        assert_eq!(pixel_au(&px, 256, 32.0, 8.0), plein, "l'étoile seule");
-        assert_eq!(pixel_au(&px, 256, 32.0, 25.0)[3], 0, "là où elles se recouvrent, c'est vide");
-        assert_eq!(pixel_au(&px, 256, 42.0, 42.0), plein, "pas de facette basse : la pierre est pleine");
+        assert_eq!(pixel_d(&px, 256, 25.0, 50.0), plein, "la pierre");
+        assert_eq!(pixel_d(&px, 256, 50.0, 85.0), plein, "la pierre, en bas : pas de facettes");
+        assert_eq!(pixel_d(&px, 256, 50.0, 50.0)[3], 0, "l'étoile est découpée");
+        assert_eq!(pixel_d(&px, 256, 5.0, 5.0)[3], 0, "hors de la pierre");
     }
 }
 
@@ -147,15 +119,16 @@ fn the_rest_pose_of_the_animation_draws_the_joyau_at_rest_and_the_end_has_no_sec
     let fin = logo::image(128, Joyau::Jade, Some(&repos));
     let diff = fixe.iter().zip(&fin).filter(|(a, b)| a.abs_diff(**b) > 3).count();
     assert!(diff < 40, "l'image finale de l'animation est le repos : {diff} octets diffèrent");
-    // Au début, l'étoile n'existe pas encore : le centre de la pierre est la couleur de la pierre, pas du blanc.
+    // Au début, l'étoile blanche n'existe pas encore : sa place est vide (la pierre est taillée autour), la pierre est là.
     let debut = logo::image(128, Joyau::Jade, Some(&logo::etat_animation(0.0)));
-    assert_ne!(pixel_au(&debut, 128, 32.0, 8.0)[3], 255, "pas d'étoile au début");
+    assert_eq!(pixel_d(&debut, 128, 50.0, 50.0)[3], 0, "pas d'étoile au début : le cœur est vide");
+    assert_eq!(pixel_d(&debut, 128, 50.0, 14.0)[3], 255, "la pierre est déjà là");
     // Au pic, l'étoile dépasse de la grille ou presque (échelle 1,25) : elle est coupée, rien ne plante.
     let _ = logo::image(64, Joyau::Iris, Some(&logo::etat_animation(0.34 * logo::DUREE_ANIMATION)));
 }
 
 #[test]
-fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_jade_joyau() {
+fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_joyau() {
     for taille in [16u32, 32, 64, 256] {
         let px = logo::icone(taille);
         assert_eq!(px.len(), (taille * taille * 4) as usize);
@@ -167,18 +140,19 @@ fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_jade_jo
             let (x, y) = (taille * 12 / 100, taille / 2);
             assert_eq!(&at(x, y)[..3], &logo::SOL, "fond à {taille} px");
         }
-        // Le centre est l'étoile blanche, plus loin vers le haut la pierre jade.
-        if taille >= 24 {
+        // Le centre est l'étoile blanche.
+        if taille >= 32 {
             assert_eq!(&at(taille / 2, taille / 2)[..3], &logo::ETOILE_BLANCHE, "centre à {taille} px");
         } else {
-            assert!(at(taille / 2, taille / 2)[0] > 150, "centre clair (petit Joyau, pixels mêlés) à {taille} px");
+            assert!(at(taille / 2, taille / 2)[0] > 150, "centre clair (pixels mêlés) à {taille} px");
         }
     }
     let t = 256u32;
     let px = logo::icone(t);
     let at = |x: u32, y: u32| px[((y * t + x) * 4) as usize..][..4].to_vec();
-    // La pierre jade, à (22, 22) de la grille du Joyau réduit : 9,6 + 22 × 0,7 = 25 → 100 px sur 256.
-    assert_eq!(&at(100, 100)[..3], &logo::JADE);
+    // Le haut de la pierre est jade : à 6,4 + 0,8 × 14 × 0,64 de la grille, soit 13,6 / 64 → 54 px sur 256.
+    let haut = at(t / 2, 54);
+    assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut de la pierre jade : {haut:?}");
     assert_eq!(at(12, 12)[3], 0, "rayon d'environ 22 % du côté");
 }
 
@@ -221,8 +195,8 @@ fn logo_planches() {
         rgb
     };
     for (nom, v, fond) in [
-        ("jade", Joyau::Jade, logo::SOL),
-        ("iris", Joyau::Iris, logo::SOL),
+        ("couleur-sombre", Joyau::Jade, logo::SOL),
+        ("couleur-clair", Joyau::Jade, [0xF5, 0xF1, 0xE8]),
         ("mono-fonce", Joyau::Mono(logo::ENCRE_SOMBRE), logo::SOL),
         ("mono-clair", Joyau::Mono(logo::ENCRE_CLAIRE), [0xF5, 0xF1, 0xE8]),
     ] {

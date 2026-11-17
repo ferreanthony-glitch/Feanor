@@ -355,9 +355,10 @@ fn the_brand_fonts_are_embedded_and_the_joyau_is_sized_on_the_real_cap_height() 
     // Pour 50 points de capitales : une taille de police où les capitales font bien 50 points.
     let taille = marque::taille_pour_capitales(&m, 50.0);
     assert!((taille * m.hauteur_capitales / m.unites_par_em - 50.0).abs() < 1e-3);
-    // Le Joyau : la pierre (39 unités sur 64) a la hauteur des capitales.
-    let cote = marque::cote_joyau(50.0);
-    assert!((cote * 39.0 / 64.0 - 50.0).abs() < 1e-3);
+    // Le joyau : la pierre (de 4 à 96 sur 100) fait 1,18 fois les capitales à la place du O, 1,67 fois devant le mot.
+    let part = (logo::PIERRE_BAS - logo::PIERRE_HAUT) / logo::DESSIN;
+    assert!((marque::cote_joyau(50.0) * part - 50.0 * 1.18).abs() < 1e-3);
+    assert!((marque::cote_devant(50.0) * part - 50.0 * 1.67).abs() < 1e-3);
     // Les licences sont livrées avec les polices.
     for f in ["OFL-BigShoulders.txt", "OFL-IBMPlexSans.txt", "OFL-IBMPlexMono.txt"] {
         let chemin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join("polices").join(f);
@@ -366,7 +367,7 @@ fn the_brand_fonts_are_embedded_and_the_joyau_is_sized_on_the_real_cap_height() 
 }
 
 #[test]
-fn the_lockup_puts_the_joyau_over_the_o_sunk_and_overlapping_its_neighbours() {
+fn the_lockup_puts_the_joyau_in_place_of_the_o_centred_on_the_capitals_and_in_front_of_the_word() {
     let ctx = egui::Context::default();
     let mut fonts = egui::FontDefinitions::default();
     marque::polices(&mut fonts);
@@ -377,13 +378,13 @@ fn the_lockup_puts_the_joyau_over_the_o_sunk_and_overlapping_its_neighbours() {
     let l = marque::disposer(&ctx, egui::pos2(100.0, 100.0), capitales, true, Mise::RemplaceLeO);
     let cote = marque::cote_joyau(capitales);
     assert!((l.joyau.width() - cote).abs() < 1e-3 && (l.joyau.height() - cote).abs() < 1e-3);
-    // Enfoncé de cote × 12/64 sous la ligne de base ; la pierre (13/64 depuis le haut) touche le haut des capitales.
+    // Centré sur la hauteur des capitales (de 100 à 160).
     assert!((l.base - 160.0).abs() < 1e-3);
-    assert!((l.joyau.bottom() - (l.base + cote * 12.0 / 64.0)).abs() < 1e-3);
-    assert!((l.joyau.top() + cote * 13.0 / 64.0 - 100.0).abs() < 1e-3, "le haut de la pierre est le haut des capitales");
-    // Il mord de cote × 7/64 sur la lettre de gauche.
+    assert!((l.joyau.center().y - 130.0).abs() < 1e-3, "centré sur les capitales : {l:?}");
+    // La pierre commence un petit écart (0,06 capitale) après le N.
     let gauche = marque::mot(&ctx, "FEAN", capitales, Color32::WHITE);
-    assert!((l.joyau.left() - (100.0 + gauche.size().x - cote * 7.0 / 64.0)).abs() < 1e-3);
+    let bord_pierre = l.joyau.left() + cote * logo::PIERRE_GAUCHE / logo::DESSIN;
+    assert!((bord_pierre - (100.0 + gauche.size().x + capitales * 0.06)).abs() < 1e-3);
     // Sous 24 points de capitales : le Joyau seul.
     let petit = marque::disposer(&ctx, egui::pos2(0.0, 0.0), 20.0, true, Mise::RemplaceLeO);
     assert_eq!(petit.rect, petit.joyau);
@@ -393,9 +394,11 @@ fn the_lockup_puts_the_joyau_over_the_o_sunk_and_overlapping_its_neighbours() {
     // Le lockup principal : le Joyau devant le mot entier, la devise alignée à droite sur le R.
     let devant = marque::disposer(&ctx, egui::pos2(100.0, 100.0), capitales, true, Mise::Devant);
     let entier = marque::mot(&ctx, "FEANOR", capitales, Color32::WHITE);
-    assert!(devant.joyau.right() <= devant.mot_gauche + cote * 0.1 && devant.joyau.left() == 100.0, "le Joyau est devant : {devant:?}");
-    assert!((devant.mot_droite - devant.mot_gauche - entier.size().x).abs() < 1e-3, "le mot entier suit le Joyau");
-    assert!((devant.joyau.bottom() - (devant.base + cote * 12.0 / 64.0)).abs() < 1e-3 && (devant.joyau.top() + cote * 13.0 / 64.0 - 100.0).abs() < 1e-3);
+    let cote_d = marque::cote_devant(capitales);
+    assert!((devant.joyau.width() - cote_d).abs() < 1e-3 && devant.joyau.left() == 100.0, "le joyau est devant : {devant:?}");
+    assert!(devant.joyau.left() + cote_d * logo::PIERRE_DROITE / logo::DESSIN < devant.mot_gauche, "la pierre ne touche pas le mot");
+    assert!((devant.mot_droite - devant.mot_gauche - entier.size().x).abs() < 1e-3, "le mot entier suit le joyau");
+    assert!((devant.joyau.center().y - 130.0).abs() < 1e-3, "centré sur les capitales");
     // Jamais coupé dans une fenêtre étroite : il rétrécit pour tenir, puis il ne reste que le Joyau.
     let large = marque::disposer(&ctx, egui::pos2(0.0, 0.0), capitales, false, Mise::Devant).rect.width();
     assert_eq!(marque::ajuster(&ctx, large + 50.0, capitales, Mise::Devant), capitales, "assez de place : inchangé");

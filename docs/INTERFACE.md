@@ -9035,3 +9035,32 @@ La grande fenêtre « Exporter » n'a plus d'entrée dans le menu Fichier. Elle 
 ### Essais
 
 `exportmenu_tests.rs` : le menu reprend toutes les actions de la fenêtre, une seule fois ; les cas douteux sont là où dit ci-dessus ; chaque entrée ouvre sa boîte sans la grande fenêtre ; Aide, Affichage, Labo, palette et F1 ; les Préférences. `selbox_pointfixe_tests.rs` : le panneau Transformer court. Captures à regarder : essai ignoré `menus_exports_captures` (`FEANOR_CAPTURE_DIR`).
+
+## 131. Le nouveau logo : le joyau de la charte du 17/11/2026 (branche `logo-joyau`)
+
+**Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place au joyau de la charte du
+17/11/2026 : une pierre en losange aux coins adoucis, taillée en huit facettes autour d'une étoile blanche à quatre
+branches, au dégradé vertical jade `#2FD4C0` → turquoise `#2FCCDB` → bleu ciel `#86C7EF` → bleu `#B4C1F4` et lilas pâles
+`#D6C3EC`. La lumière vient d'en haut à gauche : les facettes tournées vers elle s'éclairent de blanc, les autres
+s'ombrent dans leur propre couleur (en « produit » : turquoise profond à droite, bleu violet en bas). En une couleur
+(encre, blanc), la pierre est un aplat et l'étoile est découpée. La charte complète (couleurs, polices, règles d'usage) est
+dans la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-site/logo/silmaril/` (`fabrique.mjs`).
+
+**Dans le code.** `logo.rs` dessine le joyau sur 100 unités (`DESSIN`) puis le ramène sur la grille de 64 de l'animation
+et de l'icône ; ses fonctions (`image`, `icone`, `ico`, `dessiner`, l'animation d'ouverture) ne changent pas de forme,
+donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. Les variantes
+`Jade`, `JadePetit` et `Iris` dessinent le même joyau en couleur (il tient à 16 px) ; `Mono` reste l'aplat. L'animation
+d'ouverture est la même (l'étoile blanche s'ouvre en tourbillon, la seconde étoile s'efface), la pierre ne bouge pas.
+`marque.rs` : la pierre fait 1,18 fois la hauteur des capitales à la place du O (accueil, centrée sur les capitales,
+petit écart de chaque côté) et 1,67 fois devant le mot (À propos ; `cote_devant`). `assets/feanor-viseur-*.svg` sont
+remplacés par `assets/feanor-logo*.svg`, `feanor-icone*.svg`, `feanor-mot-*.svg` (noms publics, sans le nom de travail du
+joyau). Les barres de chargement gardent l'irisé (`barre.rs`), comme le veut la charte.
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : l'accueil montre FEAN, le joyau à la place du O (un peu plus haut que les lettres, centré sur
+   elles), R, et la devise dessous ; l'étoile blanche s'ouvre une fois puis le joyau reste figé.
+2. Aide > À propos de FEANOR… : le joyau devant le mot, la devise alignée à droite sur le R.
+3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : le joyau sur le carré sombre arrondi.
+4. Thème Papier : l'accueil et À propos restent lisibles (le joyau en couleur sur fond clair).
+
