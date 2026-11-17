@@ -47,6 +47,9 @@ pub const DEGRADE: [(f32, [u8; 3]); 6] = [(0.0, JADE), (0.1, JADE), (0.38, TURQU
 /// L'étoile : les quatre pointes (haut, droite, bas, gauche) et, entre elles, les points de contrôle des flancs creusés
 /// (courbes quadratiques) : pointe, contrôle, pointe, contrôle…
 pub const ETOILE: [(f32, f32); 8] = [(50.0, 2.0), (59.0, 41.0), (82.0, 50.0), (59.0, 59.0), (50.0, 98.0), (41.0, 59.0), (18.0, 50.0), (41.0, 41.0)];
+/// Les pointes sont très légèrement arrondies : chaque flanc est raccourci de cette part de sa longueur (en paramètre de
+/// courbe) à chaque bout, et les deux bouts se rejoignent par une petite courbe dont la pointe est le point de contrôle.
+pub const ARRONDI_POINTES: f32 = 0.035;
 /// Ce que l'étoile occupe, sur 100 : haut, bas, gauche, droite.
 pub const PIERRE_HAUT: f32 = 2.0;
 pub const PIERRE_BAS: f32 = 98.0;
@@ -66,14 +69,33 @@ pub enum Joyau {
     Mono([u8; 3]),
 }
 
-/// Le contour de l'étoile (sur 100).
+/// Le contour de l'étoile (sur 100), pointes arrondies.
 pub fn etoile() -> Path {
+    let q = |p0: (f32, f32), c: (f32, f32), p2: (f32, f32), t: f32| {
+        let u = 1.0 - t;
+        (u * u * p0.0 + 2.0 * t * u * c.0 + t * t * p2.0, u * u * p0.1 + 2.0 * t * u * c.1 + t * t * p2.1)
+    };
+    // Le point de contrôle du morceau de courbe entre t0 et t1.
+    let sous = |p0: (f32, f32), c: (f32, f32), p2: (f32, f32), t0: f32, t1: f32| {
+        let (a, b, d) = ((1.0 - t0) * (1.0 - t1), t0 * (1.0 - t1) + t1 * (1.0 - t0), t0 * t1);
+        (a * p0.0 + b * c.0 + d * p2.0, a * p0.1 + b * c.1 + d * p2.1)
+    };
+    let r = ARRONDI_POINTES;
+    let flanc = |k: usize| (ETOILE[2 * k], ETOILE[2 * k + 1], ETOILE[(2 * k + 2) % 8]);
     let mut pb = PathBuilder::new();
-    pb.move_to(ETOILE[0].0, ETOILE[0].1);
     for k in 0..4 {
-        let (c, p) = (ETOILE[2 * k + 1], ETOILE[(2 * k + 2) % 8]);
-        pb.quad_to(c.0, c.1, p.0, p.1);
+        let (p0, c, p2) = flanc(k);
+        let (a, b, m) = (q(p0, c, p2, r), q(p0, c, p2, 1.0 - r), sous(p0, c, p2, r, 1.0 - r));
+        if k == 0 {
+            pb.move_to(a.0, a.1);
+        } else {
+            pb.quad_to(p0.0, p0.1, a.0, a.1);
+        }
+        pb.quad_to(m.0, m.1, b.0, b.1);
     }
+    let (p0, c, p2) = flanc(0);
+    let debut = q(p0, c, p2, r);
+    pb.quad_to(p0.0, p0.1, debut.0, debut.1);
     pb.close();
     pb.finish().expect("étoile du logo")
 }

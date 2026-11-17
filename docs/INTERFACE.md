@@ -9039,7 +9039,8 @@ La grande fenêtre « Exporter » n'a plus d'entrée dans le menu Fichier. Elle 
 ## 131. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 
 **Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
-charte du 17/11/2026 : une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, sans facettes,
+charte du 17/11/2026 : une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, pointes très
+légèrement arrondies (`ARRONDI_POINTES`), sans facettes,
 au dégradé vertical jade `#2FD4C0` → turquoise `#2FCCDB` → bleu ciel `#86C7EF` → bleu `#B4C1F4` et lilas pâles
 `#D6C3EC`. En une couleur (encre, blanc), c'est un aplat. La charte complète (couleurs, polices, règles d'usage) est dans
 la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-site/logo/silmaril/` (`fabrique.mjs`).

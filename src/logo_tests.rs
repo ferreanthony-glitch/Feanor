@@ -20,9 +20,13 @@ fn pixel_d(px: &[u8], cote: u32, x: f32, y: f32) -> [u8; 4] {
 fn the_svg_files_in_the_repository_have_the_shape_and_colours_of_the_drawing() {
     let couleur = include_str!("../assets/feanor-logo.svg");
     assert!(couleur.contains(r#"viewBox="0 0 100 100""#));
-    let e = logo::ETOILE;
-    let forme = format!("M{} {} Q{} {} {} {} Q{} {} {} {} Q{} {} {} {} Q{} {} {} {} Z", e[0].0, e[0].1, e[1].0, e[1].1, e[2].0, e[2].1, e[3].0, e[3].1, e[4].0, e[4].1, e[5].0, e[5].1, e[6].0, e[6].1, e[7].0, e[7].1, e[0].0, e[0].1);
-    assert!(couleur.contains(&forme), "la forme de l'étoile : {forme}");
+    // Les pointes (arrondies) sont les points de contrôle des petites courbes qui les rejoignent.
+    let pointes = [0usize, 2, 4, 6].map(|k| format!("Q{} {} ", logo::ETOILE[k].0, logo::ETOILE[k].1));
+    let forme = couleur.split("<path d=\"").map(|p| p.split('"').next().unwrap_or_default()).find(|d| d.contains("Q50 2 ")).unwrap_or_default().to_string();
+    for p in &pointes {
+        assert!(forme.contains(p.as_str()), "pointe arrondie {p} dans {forme}");
+    }
+    assert!(!forme.contains("M50 2 "), "la pointe du haut n'est plus un angle");
     for c in logo::DEGRADE.iter().map(|(_, c)| format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])) {
         assert!(couleur.contains(&c), "le dégradé : {c}");
     }
