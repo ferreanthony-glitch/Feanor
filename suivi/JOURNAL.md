@@ -5,6 +5,20 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
+- **Lissé pendant que la vue bouge, et l'image nette refaite en route** (branche `vue-nette-lissage`, section 166.8). Son premier
+  retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la vue.
+  Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? ». La cause : l'image nette ne se refaisait qu'à
+  l'arrêt ; en attendant, on voyait l'image de toujours, en marches. **Ce qui est fait** : tant qu'une image nette est montrée ou
+  attendue, la carte graphique pose l'image de toujours lissée quand la vue la grossit (adoucie au lieu d'être en marches : la bande
+  que la vue découvre, tout le dessin pendant un zoom, la zone d'un trait en cours) ; l'image nette se refait pendant le mouvement,
+  une à la fois, sans attendre le repos ; déplacée seulement, elle est recalée sur les pixels de l'écran et reste nette. Un plan
+  tout en bitmap et une zone sans rien de vectoriel gardent leurs pixels nets. La règle « sans latence » est précisée : rien ne se
+  calcule pendant un geste de dessin (trait en cours, ou bouton tenu sans que la vue bouge) ; un geste de vue n'arrête rien.
+  **Les essais** : onze dans `vuenette_tests.rs`, dont un sur la carte graphique qui lit l'écran peint à 400 % (en marches sans la
+  vue nette, lissée quand une image nette est attendue, bord fin une fois arrivée). Vérificateur complet (15 h 24) : compilation
+  sans avertissement, 4 787 réussis, 0 échec, dix groupes OK. **Pas regardé à
+  l'écran** : aucune capture cette fois (il travaillait à son poste). Le dossier de travail `vectoriel-net` et le dossier d'essai
+  avaient été retirés juste avant, à sa demande (« Oui, retire-les », branche gardée, 2,1 Go rendus).
 - **Son FEANOR habituel reconstruit depuis main** (567c90c, exe de 14 h 39), sur son « Oui, reconstruis-le » : prévenu qu'il y
   perdait la timeline plus claire et la vue 3D à côté qu'il essayait (branche `timeline-claire`, non fusionnée, intacte), il a
   choisi d'avoir le trait vectoriel net tout de suite. Le dossier `Source` est repassé de `timeline-claire` à `main` (il était

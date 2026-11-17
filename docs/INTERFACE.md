@@ -13398,10 +13398,11 @@ l'écran quand la vue grossit : « Oui, construis-le ». Le code : `src/vuenette
 - **Le dessin lui-même ne change pas** : ni son image à la taille de la feuille, ni le fichier, ni l'export, ni les vignettes, ni la
   lecture. La vue nette n'est qu'un affichage.
 - **Pendant qu'on trace** : rien ne se calcule (règle « sans latence »). Les carrés de 64 pixels de la feuille que le trait touche
-  montrent l'image de toujours (en pixels, avec le trait en cours) ; le reste de la vue reste net. Au lâcher, après 70 millièmes de
-  seconde de repos, la vue redevient nette partout, avec le trait neuf.
+  montrent l'image de toujours (en pixels, avec le trait en cours ; adoucie depuis 166.8) ; le reste de la vue reste net. Au lâcher,
+  après 70 millièmes de seconde de repos, la vue redevient nette partout, avec le trait neuf.
 - **Quand la vue bouge** (déplacer, zoomer, tourner) : l'image nette reste collée au dessin pendant le geste ; ce qu'elle ne couvre
-  pas se voit en pixels, et la nouvelle image la remplace au repos.
+  pas se voit en pixels, et la nouvelle image la remplace au repos. (Revu le même jour, à son premier retour : adouci au lieu d'être
+  en pixels, et l'image nette refaite pendant le mouvement, voir 166.8.)
 - **Quand tout a pu changer** (autre image, autre calque, annulation, réglage d'un calque) : l'image nette est retirée tout de suite
   (on voit l'image de toujours), puis revient.
 
@@ -13495,8 +13496,8 @@ ont été rouvertes). Le tracé, l'annulation et le retour à 100 % sont couvert
 
 ### 166.7 À vérifier à l'écran (par Anthony)
 
-Le dossier d'essai : `Documents\SHOT\Tests\essai vectoriel-net` (« Ouvrir l'essai.cmd » : l'exe de la branche sur une copie de « dd »,
-réglages à part).
+Le dossier d'essai `Documents\SHOT\Tests\essai vectoriel-net` et le dossier de travail de la branche ont été retirés le même jour, à
+sa demande (« Oui, retire-les ») : son FEANOR habituel, reconstruit depuis main, a la même chose. La branche `vectoriel-net` est gardée.
 
 1. Plan 2 de « dd », zoom à 225 % ou plus : les traits sont nets, sans marches.
 2. Tracer un trait au stylet en gros plan : aucun ralentissement ; la zone du trait est en pixels pendant le geste, puis nette au
@@ -13507,3 +13508,43 @@ réglages à part).
 6. Un plan chargé (beaucoup de traits) à fort zoom : le temps que met l'image nette à arriver.
 7. Un calque bitmap dans le même plan : toujours en pixels, à sa place dans la pile.
 8. Ctrl+Z, changer d'image, changer de calque : l'image nette revient.
+
+### 166.8 Lissé pendant que la vue bouge, et refait en route (le même jour, branche `vue-nette-lissage`)
+
+Son premier retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la
+vue. Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? » Ce qu'il voyait : pendant qu'il zoomait ou
+déplaçait la vue, l'image nette n'était refaite qu'à l'arrêt (70 millièmes de seconde de repos, puis le calcul) ; en attendant, ce
+qu'elle ne couvrait pas montrait l'image de toujours, en marches, et l'image nette grossie par le zoom montrait ses propres pixels.
+
+Ce qui change :
+
+- **L'image de toujours se pose lissée** tant qu'une image nette est montrée ou attendue (`VueNette::lisse`, `GpuCanvas::lisser`) : la
+  carte graphique la lit lissée aussi en grossissant (en lumière linéaire, comme elle la lit déjà en réduisant). Ce qu'on en voit, la
+  bande que la vue découvre en se déplaçant, tout le dessin pendant un zoom, la zone d'un trait en cours, est **adouci au lieu d'être
+  en marches**. Un plan tout en bitmap, et une zone qui n'a rien de vectoriel, gardent leurs pixels nets, à l'arrêt comme en
+  mouvement (un trait qu'on y trace sur un calque bitmap ne la lisse pas non plus).
+- **L'image nette se refait pendant le mouvement** : dès que la vue bouge (déplacer, zoomer, tourner, bouton tenu ou non), l'image
+  suivante se calcule sans attendre le repos, une à la fois, chacune partant à l'arrivée de la précédente. Le retard se compte en
+  dixièmes de seconde, pas jusqu'à l'arrêt.
+- **Déplacée seulement, l'image nette reste nette** : elle est recalée sur les pixels entiers de l'écran (`coins_a_l_ecran`). Zoomée
+  ou tournée, elle se lit lissée le temps que la suivante arrive (`options` : lissée dans les deux sens).
+- **La règle « sans latence » est précisée** : rien ne se calcule pendant un geste de dessin (un trait en cours, ou un bouton tenu
+  pendant que la vue ne bouge pas : une sélection qu'on tire, une poignée) ; un geste de vue n'arrête rien. La vue « bouge » tant
+  qu'elle a changé depuis moins d'un quart de seconde.
+
+Ce qui ne change pas : sans carte graphique (composition par le processeur), l'image de toujours reste en pixels nets pendant le
+mouvement, et ce qui est dessiné hors de la feuille aussi (`monde.rs`) ; l'image nette, elle, se refait de la même façon.
+
+À juger par lui : pendant un zoom ou un déplacement rapide, le dessin est-il assez propre (adouci, puis net) ? La zone du trait en
+cours, adoucie au lieu d'être en pixels, lui convient-elle ? La vue reste-t-elle fluide pendant que l'image nette se refait en route
+(les calculs prennent des cœurs du processeur pendant le déplacement) ?
+
+Les essais (`src/vuenette_tests.rs`, trois de plus, onze en tout) : un bouton tenu sans que la vue bouge ne laisse partir aucun
+calcul ; la vue déplacée bouton tenu, sans s'arrêter, refait l'image nette en route ; un plan sans vectoriel, et une zone sans trait
+vectoriel, ne sont jamais lissés ; l'image nette déplacée tombe sur des pixels entiers de l'écran, à 1 et 1,5 pixel par point ; et
+sur la carte graphique, la vue à 400 %, les trois états lus sur l'écran peint : l'image de toujours seule est en marches, l'image
+attendue est lissée (la couleur change de pixel à pixel dans tout le bord), l'image nette arrivée a un bord fin (moins de la moitié
+des pixels intermédiaires des deux autres).
+Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte graphique a bien tourné, il n'a pas été sauté) ;
+vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
+l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
