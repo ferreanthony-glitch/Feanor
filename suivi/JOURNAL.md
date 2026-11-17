@@ -5,7 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
-- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; non fusionnée). Anthony, avec une capture de son projet
+- **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
+  Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
+  sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
+  lui-même ce matin depuis `timeline-claire` (c8fdfd5, le dossier `Source` est sur cette branche) et il est en train de l'essayer
+  (liste 164.3) ; le reconstruire depuis main lui retirerait la timeline plus claire et la vue 3D à côté. La session de la timeline,
+  consultée, fusionnera main dans sa branche après son retour : il aura alors les deux. En attendant, la vue nette s'essaie par le
+  dossier `Documents\SHOT\Tests\essai vectoriel-net` (l'exe de 14 h 06, lancé une fois sur la copie : il s'ouvre, aucun plantage).
+- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; fusionnée ensuite, voir au-dessus). Anthony, avec une capture de son projet
   « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer pourquoi et comment résoudre ce
   problème ? ». **La cause**, mesurée sur sa capture : la vue était à 225 % (un pixel du dessin = 2,25 pixels d'écran), et FEANOR
   montre un dessin vectoriel à travers une image en pixels à la taille de la feuille, grossie sans lissage. Rien n'était abîmé dans
