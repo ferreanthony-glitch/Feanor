@@ -760,7 +760,9 @@ impl App {
         // (Des cases de 13 points : à la largeur d'origine de la colonne, il reste une vingtaine de points à la barre d'opacité.)
         const PAS: f32 = 13.0;
         let case = |x: f32| Rect::from_center_size(pos2(x + PAS * 0.5, y), vec2(PAS, bas.height() - 4.0));
-        // La vignette (ou la couleur unie) : seulement si la colonne est assez large pour tout le reste.
+        // La vignette (ou la couleur unie) : seulement si la colonne est assez large pour tout le reste. Partie 165.2 (comme la ligne de
+        // la timeline, 164.3) : l'opacité est sur la miniature, on y glisse ; sans miniature (colonne étroite, couleur unie), la barre.
+        let mut miniature = None;
         if large {
             let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, bas.height() - 6.0));
             if unie {
@@ -777,6 +779,7 @@ impl App {
                     }
                 }
                 ui.painter().rect_stroke(v, 0.0, Stroke::new(1.0_f32, theme::bord()), egui::StrokeKind::Inside);
+                miniature = Some(v);
             }
             x = v.right() + 3.0;
         }
@@ -802,31 +805,60 @@ impl App {
             }
             x += PAS;
         }
-        // Le mode de fusion : une icône, la liste au clic (le nom du mode dans la bulle).
-        let mut f = ui.new_child(egui::UiBuilder::new().max_rect(case(x)).id_salt(("fusion_piste", id)));
-        let button = egui::Button::new(RichText::new(ph::CIRCLE_HALF).size(12.0).color(shade(blend != crate::blend::BlendMode::ALL[0]))).frame(false);
-        let resp = egui::menu::menu_custom_button(&mut f, button, |ui| {
-            for m in crate::blend::BlendMode::ALL {
-                if crate::blend::BlendMode::FAMILY_STARTS.contains(&m) {
-                    ui.separator();
-                }
-                if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
-                    ui.close_menu();
-                    self.regler_mode_calques(li, m);
-                }
-            }
-        })
-        .response;
-        crate::bulles::bulle(resp, "Mode de fusion", &format!("{} : {}", blend.label(), blend.hint()), "");
-        x += PAS;
         // (Le losange vise le calque courant : sur la piste du trait d'un calque de couleur courant, il n'y est pas.)
         if li == self.cur_layer {
             self.losange_opacite(ui, case(x), fg, off);
             x += PAS;
         }
-        let barre = Rect::from_min_max(pos2(x + 1.0, y - 6.5), pos2((bas.right() - 2.0).max(x + 8.0), y + 6.5));
+        // Le mode de fusion (partie 165.2, comme la timeline, 164.3) : sa pastille (deux ronds qui se chevauchent, leur intersection
+        // peinte par la formule du mode) et son nom ; un clic ouvre toutes les pastilles. Avec la barre d'opacité, la pastille seule.
         let painter = ui.painter().clone();
-        self.opacity_bar(ui, &painter, barre, r, li, egui::Id::new(("opacite_piste", id)), opacity, true, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+        let cle = egui::Id::new(("opacite_piste", id));
+        let fin = (bas.right() - 2.0).max(x + 8.0);
+        let mode = match miniature {
+            Some(v) => {
+                self.opacite_miniature(ui, &painter, v, li, cle, opacity, theme::etiquette(), true);
+                let place = Rect::from_min_max(pos2(x, y - 8.5), pos2(fin.max(x + 30.0), y + 8.5));
+                self.pastille_du_mode(ui, place, egui::Id::new(("fusion_piste", id)), blend, fg)
+            }
+            // Colonne étroite : la pastille seule, puis une petite miniature dans la place de l'ancienne barre (on y glisse de même) ;
+            // un calque Couleur unie garde sa barre (comme dans la timeline).
+            None => {
+                let place = Rect::from_min_max(pos2(x, y - 8.5), pos2(x + 29.0, y + 8.5));
+                let mode = self.pastille_du_mode(ui, place, egui::Id::new(("fusion_piste", id)), blend, fg);
+                let reste = Rect::from_min_max(pos2(place.right() + 2.0, bas.top() + 3.0), pos2(fin.max(place.right() + 14.0), bas.bottom() - 3.0));
+                if unie {
+                    let barre = Rect::from_min_max(pos2(reste.left(), y - 6.5), pos2(reste.right(), y + 6.5));
+                    self.opacity_bar(ui, &painter, barre, r, li, cle, opacity, true, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+                } else {
+                    match cel.and_then(|c| self.layer_thumb(ui.ctx(), c)) {
+                        Some(t) => {
+                            // (Le milieu de la vignette, à la forme de la place : pas d'image écrasée.)
+                            let s = t.size_vec2();
+                            let (forme, place_forme) = (s.x / s.y.max(1.0), reste.width() / reste.height().max(1.0));
+                            let uv = if place_forme < forme {
+                                let w = place_forme / forme;
+                                Rect::from_min_max(pos2(0.5 - w * 0.5, 0.0), pos2(0.5 + w * 0.5, 1.0))
+                            } else {
+                                let h = forme / place_forme;
+                                Rect::from_min_max(pos2(0.0, 0.5 - h * 0.5), pos2(1.0, 0.5 + h * 0.5))
+                            };
+                            painter.image(t.id(), reste, uv, if visible { Color32::WHITE } else { Color32::from_gray(120) });
+                        }
+                        None => {
+                            painter.rect_filled(reste, 0.0, theme::controle());
+                        }
+                    }
+                    painter.rect_stroke(reste, 0.0, Stroke::new(1.0_f32, theme::bord()), egui::StrokeKind::Inside);
+                    self.opacite_miniature(ui, &painter, reste, li, cle, opacity, theme::etiquette(), true);
+                }
+                mode
+            }
+        };
+        if let Some(m) = mode {
+            // (Plusieurs calques choisis : tous prennent ce mode, partie 136.)
+            self.regler_mode_calques(li, m);
+        }
     }
 
     /// La ligne fine du dossier `li`, dans `r` : son triangle (couché : fermé ; droit : ouvert ; de biais : fermé, ouvert le temps du

@@ -267,6 +267,10 @@ mod panneauxvisuels_tests;
 mod visuels164;
 #[cfg(test)]
 mod visuels164_tests;
+// L'avant | après des Effets montre le vrai calque (partie 165), calculé en petit au fil de fond du cache des effets.
+mod avantapres165;
+#[cfg(test)]
+mod avantapres165_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

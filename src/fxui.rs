@@ -707,8 +707,24 @@ impl App {
         if resp.hovered() || resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         }
+        // Partie 165 : le vrai calque, sans puis avec l'effet, calculé en petit au fil de fond (rien ici) ; le schéma en repli.
         if ui.is_rect_visible(r) {
-            crate::visuels164::avant_apres(ui.painter(), r, e.kind, f, crate::visuels164::nom_court(e.kind));
+            let ppp = ui.ctx().pixels_per_point();
+            let mut apercu = std::mem::take(&mut self.effets_ui.apercu);
+            let demande = crate::avantapres165::Demande {
+                doc: &self.doc,
+                layer: &self.layers()[li],
+                effet: i,
+                frame: self.cur_frame,
+                taille_px: r.size() * ppp,
+                permis: !self.playing && self.stroke.is_none(),
+            };
+            let vue = apercu.preparer(ui.ctx(), &demande);
+            self.effets_ui.apercu = apercu;
+            match vue {
+                Some(vue) => crate::visuels164::avant_apres_reel(ui.painter(), r, &vue, self.doc.paper, f, crate::visuels164::nom_court(e.kind)),
+                None => crate::visuels164::avant_apres(ui.painter(), r, e.kind, f, crate::visuels164::nom_court(e.kind)),
+            }
         }
         let nom = self.layers()[li].fx[i].kind.params()[k].name;
         let resp = crate::bulles::bulle(resp, "Force de l'effet", &format!("{} : {nom} {v:.0}{} · tire la barre (ou clique) : à droite de la barre, l'effet ; plus il y a de place, plus il est fort. En chiffres : Précis.", e.kind.label(), e.kind.params()[k].unit), "");

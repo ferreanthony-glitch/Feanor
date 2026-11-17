@@ -28,6 +28,8 @@ pub(crate) struct EffetsUi {
     /// Les effets dépliés du panneau Effets : un booléen par effet de la pile de chaque calque (par son numéro).
     /// La séance seulement : ni le projet ni les réglages ne le gardent (`fxui::plis_apres`).
     pub open: std::collections::HashMap<u64, Vec<bool>>,
+    /// L'avant | après du vrai calque (partie 165) : ses deux images arrivées du fil de fond. La séance seulement.
+    pub apercu: crate::avantapres165::Apercu,
 }
 
 pub(crate) struct EffetDialog {

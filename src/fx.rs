@@ -1080,6 +1080,8 @@ pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
 /// réduit, `level` > 0 : ils ne le supportent pas, `fxproxy::proxyable`), les effets du trait sont
 /// laissés.
 pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>, steps: &[FxStep], level: u8) -> Raster {
+    #[cfg(test)]
+    compter_un_calcul();
     let mut cur: Option<Raster> = None;
     let on_vector = vector.is_some() && level == 0;
     if let (Some(v), 0) = (vector, level) {
@@ -1107,6 +1109,23 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
         crate::fxmonde::effets_hors_de_la_feuille(&mut out, source_monde.as_ref().unwrap_or(raster), &sur_les_pixels);
     }
     out
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais (partie 165) : le nombre d'effets et de réductions calculés sur ce fil (`apply_with`, `fxproxy::downscale`).
+    static CALCULS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn compter_un_calcul() {
+    CALCULS.with(|c| c.set(c.get() + 1));
+}
+
+/// Essais : le nombre d'effets et de réductions calculés sur ce fil jusqu'ici.
+#[cfg(test)]
+pub(crate) fn calculs_sur_ce_fil() -> u64 {
+    CALCULS.with(std::cell::Cell::get)
 }
 
 /// Où se trouve une image dans le monde : la place de son pixel (0, 0), et la feuille d'après laquelle se règlent les effets (centres, pourcentages).

@@ -6,8 +6,9 @@
 //! `BlendMode::mix`), les vignettes des effets (ce qu'ils produisent, peint au `Painter`), et la « force » d'un effet (le réglage que
 //! tire la barre de l'avant | après). Les méthodes qui écrivent dans le projet sont dans `colorui.rs`, `fxui.rs` et `layerheads.rs`.
 //!
-//! Aucune image : tout est peint. Les vignettes des effets sont des schémas (un trait sur un papier) : montrer le vrai calque avec et
-//! sans l'effet demanderait un rendu de plus du calque, hors du cache des effets.
+//! Aucune image : tout est peint. Les vignettes des effets sont des schémas (un trait sur un papier). L'avant | après, lui, montre le
+//! vrai calque depuis la partie 165 (`avantapres165.rs`, calculé en petit au fil de fond du cache des effets) ; le schéma reste son
+//! repli (calque vide, aperçu pas encore arrivé).
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui};
 
@@ -370,6 +371,33 @@ pub(crate) fn avant_apres(p: &Painter, r: Rect, kind: EffectKind, f: f32, nom: &
     if droite.width() > 0.5 {
         dessin_effet(&p.with_clip_rect(droite.intersect(p.clip_rect())), r, kind, f);
     }
+    barre_avant_apres(p, r, f, nom);
+}
+
+/// Partie 165 : l'avant | après du vrai calque. `vue` : les deux images (le calque sans l'effet, avec lui), de l'aperçu calculé en
+/// arrière-plan (`avantapres165`), posées à `vue.place` (relative) sur le papier du projet `papier` ; la barre et les textes par-dessus,
+/// comme pour le schéma.
+pub(crate) fn avant_apres_reel(p: &Painter, r: Rect, vue: &crate::avantapres165::Vue, papier: [u8; 3], f: f32, nom: &str) {
+    let x = r.left() + r.width() * (1.0 - f.clamp(0.0, 1.0));
+    let p = p.with_clip_rect(r.intersect(p.clip_rect()));
+    p.rect_filled(r, 0.0, Color32::from_rgb(papier[0], papier[1], papier[2]));
+    let place = Rect::from_min_max(r.lerp_inside(vue.place.min.to_vec2()), r.lerp_inside(vue.place.max.to_vec2()));
+    let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    let gauche = Rect::from_min_max(r.min, pos2(x, r.bottom()));
+    let droite = Rect::from_min_max(pos2(x, r.top()), r.max);
+    if gauche.width() > 0.5 {
+        p.with_clip_rect(gauche.intersect(p.clip_rect())).image(vue.avant, place, uv, Color32::WHITE);
+    }
+    if droite.width() > 0.5 {
+        p.with_clip_rect(droite.intersect(p.clip_rect())).image(vue.apres, place, uv, Color32::WHITE);
+    }
+    barre_avant_apres(&p, r, f, nom);
+}
+
+/// Le cadre, la barre (de l'accent) et sa poignée à la force `f`, et « avant » / « nom · n % » écrits en bas : le même pour le schéma
+/// et pour le vrai calque.
+fn barre_avant_apres(p: &Painter, r: Rect, f: f32, nom: &str) {
+    let x = r.left() + r.width() * (1.0 - f.clamp(0.0, 1.0));
     p.rect_stroke(r, 3.0, Stroke::new(1.0_f32, theme::bord_fort()), StrokeKind::Inside);
     let barre = Rect::from_center_size(pos2(x, r.center().y), vec2(3.0, r.height()));
     p.rect_filled(barre, 0.0, theme::accent());

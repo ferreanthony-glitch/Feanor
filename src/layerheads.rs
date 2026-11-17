@@ -537,7 +537,7 @@ impl App {
             }
             painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
             // Partie 164.3 : l'opacité se règle en glissant sur la miniature (elle se voile, une barre fine montre la valeur).
-            self.opacite_miniature(ui, &painter, thumb, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, bg);
+            self.opacite_miniature(ui, &painter, thumb, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, bg, false);
         }
 
         // Réglages en icônes.
@@ -672,9 +672,10 @@ impl App {
     /// opaque ; 120 points pour tout l'écart), la miniature se voile d'autant, une barre fine de l'accent dit la valeur ; le chiffre ne
     /// se montre que pendant le geste, et dans la bulle. Une étape d'annulation par geste (`edited`), comme la barre d'avant ; plusieurs
     /// calques choisis prennent tous la valeur (`regler_opacite`). Un clic seul choisit le calque comme le reste de la ligne ; clic
-    /// droit : le menu du calque.
+    /// droit : le menu du calque. `piste` : la miniature de la piste du calque actif, dans la bande (partie 165.2) : un glissé vertical
+    /// y range les pistes, et le clic droit ouvre le menu des pistes.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn opacite_miniature(&mut self, ui: &mut Ui, painter: &egui::Painter, thumb: Rect, li: usize, key: egui::Id, opacity: f32, fond: Color32) {
+    pub(crate) fn opacite_miniature(&mut self, ui: &mut Ui, painter: &egui::Painter, thumb: Rect, li: usize, key: egui::Id, opacity: f32, fond: Color32, piste: bool) {
         let mut resp = ui.interact(thumb, key, Sense::click_and_drag());
         let o = opacity.clamp(0.0, 1.0);
         // Le voile : la couleur de la ligne, d'autant plus couvrante que le calque est transparent.
@@ -695,11 +696,17 @@ impl App {
             let d = ui.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(egui::Vec2::ZERO, |(a, b)| b - a));
             if d.y.abs() > d.x.abs() {
                 self.select_layer(li);
-                self.head_drag = Some(li);
+                // (Sur la piste de la bande, partie 165.2 : le glissé des pistes.)
+                if piste {
+                    self.montage_layer_drag = Some(li);
+                } else {
+                    self.head_drag = Some(li);
+                }
                 ui.data_mut(|d| d.remove::<(f32, f32)>(depart));
             }
         }
-        if resp.dragged() && self.head_drag.is_none() {
+        let range = if piste { self.montage_layer_drag.is_some() } else { self.head_drag.is_some() };
+        if resp.dragged() && !range {
             if let (Some(p), Some((x0, o0))) = (resp.interact_pointer_pos(), ui.data(|d| d.get_temp::<(f32, f32)>(depart))) {
                 value = ((o0 + (p.x - x0) / 120.0).clamp(0.0, 1.0) * 100.0).round() / 100.0;
                 if value != opacity {
@@ -723,7 +730,11 @@ impl App {
             let m = ui.input(|i| i.modifiers);
             self.click_layer_head(li, m.command, m.shift);
         }
-        resp.context_menu(|ui| self.layer_head_menu(ui, li));
+        if piste {
+            resp.context_menu(|ui| self.montage_layer_menu(ui, li));
+        } else {
+            resp.context_menu(|ui| self.layer_head_menu(ui, li));
+        }
         if self.edited(&resp) {
             // (Plusieurs calques choisis : tous prennent cette valeur, comme dans l'ancien panneau Calques, `choixtout.rs`.)
             self.regler_opacite(li, value);
