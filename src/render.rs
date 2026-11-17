@@ -574,7 +574,7 @@ pub(crate) fn paper_of(paper: Option<[u8; 3]>) -> Color32 {
 /// La position d'un pixel du monde pour les motifs qui en dépendent (le tramage du mode « Dissoudre ») :
 /// sur la feuille, la même que toujours ; hors d'elle, le reste de la division par 4 096 (les
 /// motifs se répètent, ils n'ont pas besoin d'un entier signé).
-fn world_dither(v: i64) -> usize {
+pub(crate) fn world_dither(v: i64) -> usize {
     v.rem_euclid(1 << 20) as usize
 }
 
@@ -1275,6 +1275,9 @@ pub struct Renderer {
     /// ou ces tuiles (numéros de la fenêtre et du hors-feuille).
     world_all: bool,
     world_tiles: Vec<usize>,
+    /// Ce qui a changé depuis la dernière image pour la vue nette (`vuenette.rs`) : tout, ou ces tuiles.
+    net_all: bool,
+    net_tiles: Vec<usize>,
 }
 
 impl Renderer {
@@ -1293,6 +1296,8 @@ impl Renderer {
             gpu_tiles: Vec::new(),
             world_all: true,
             world_tiles: Vec::new(),
+            net_all: true,
+            net_tiles: Vec::new(),
         }
     }
 
@@ -1312,6 +1317,7 @@ impl Renderer {
         self.dirty_all = true;
         self.gpu_all = true;
         self.world_all = true;
+        self.net_all = true;
     }
 
     /// Seul un réglage a changé, aucun pixel d'aucun dessin : opacité, mode de fusion, clé de position ou d'effet, exposition,
@@ -1331,9 +1337,18 @@ impl Renderer {
     pub fn invalidate_composed(&mut self) {
         self.dirty_all = true;
         self.world_all = true;
+        self.net_all = true;
     }
 
     pub fn invalidate_tiles(&mut self, tiles: &[usize]) {
+        if !self.net_all {
+            self.net_tiles.extend_from_slice(tiles);
+            // (Comme le hors-feuille : au-delà de quelques milliers de tuiles, tout refaire coûte moins que les suivre.)
+            if self.net_tiles.len() > 8192 {
+                self.net_all = true;
+                self.net_tiles.clear();
+            }
+        }
         if !self.world_all {
             self.world_tiles.extend_from_slice(tiles);
             // (Au-delà de quelques milliers de tuiles, tout refaire coûte moins que les suivre.)
@@ -1360,6 +1375,14 @@ impl Renderer {
         tiles.sort_unstable();
         tiles.dedup();
         (std::mem::take(&mut self.world_all), tiles)
+    }
+
+    /// Changements à montrer dans la vue nette depuis la dernière fois : tout, ou ces tuiles.
+    pub fn take_net_dirty(&mut self) -> (bool, Vec<usize>) {
+        let mut tiles = std::mem::take(&mut self.net_tiles);
+        tiles.sort_unstable();
+        tiles.dedup();
+        (std::mem::take(&mut self.net_all), tiles)
     }
 
     pub fn take_gpu_dirty(&mut self) -> (bool, Vec<usize>) {

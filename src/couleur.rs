@@ -187,8 +187,8 @@ pub struct ColorSettings {
     /// Curseurs montrés : TSV, RVB ou TSL.
     #[serde(rename = "curseurs")]
     pub sliders: SliderMode,
-    /// « Plus de couleurs » (la roue ou les curseurs, le code, les couleurs récentes) est
-    /// dépliée dans le panneau Couleur. Replié d'office : le nuancier passe en premier. Un réglage de
+    /// « Précis » (partie 164.1 ; « Plus de couleurs » avant : les commandes du nuancier, les valeurs en chiffres, le code, les
+    /// couleurs récentes, la palette de mélange) est déplié dans le panneau Couleur. Replié d'office. Un réglage de
     /// l'application, pas du projet.
     #[serde(rename = "plus_ouvert")]
     pub more_open: bool,
@@ -209,7 +209,8 @@ impl Default for ColorSettings {
             front: ENCRE,
             back: BLANC,
             wheel_shown: true,
-            wheel: WheelShape::Square,
+            // (Partie 164.1 : le triangle clair / foncé de la maquette ; un réglage déjà enregistré garde son choix.)
+            wheel: WheelShape::Triangle,
             sliders: SliderMode::Hsv,
             more_open: false,
             recent: Vec::new(),

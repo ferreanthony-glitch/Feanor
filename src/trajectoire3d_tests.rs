@@ -759,7 +759,7 @@ fn the_order_toggle_that_replaced_the_plan_in_space_toggle_says_what_it_does() {
     b.app.run_action("espace3d.basculer");
     b.app.run_action("espace3d.ordre_distance");
     assert!(b.app.doc.ordre_par_la_distance(0));
-    assert!(b.app.status.starts_with("Devant cache derrière : allumé"), "{}", b.app.status);
+    assert!(b.app.status.starts_with("Le plus proche passe devant : allumé"), "{}", b.app.status);
 }
 
 #[test]

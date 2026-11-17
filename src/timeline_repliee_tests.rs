@@ -227,7 +227,7 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
         assert_eq!(hs, [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "{espace:?}");
     }
-    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 164 : toutes ses lignes ont la même hauteur).
+    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 167 : toutes ses lignes ont la même hauteur).
     let mut b = banc_montage();
     b.app.set_espace(Espace::Animation);
     b.chauffer(8);

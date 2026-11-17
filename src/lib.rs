@@ -259,9 +259,19 @@ mod barrepanneaux_tests;
 mod barrecalques;
 #[cfg(test)]
 mod panneaux_fins_tests;
-// La timeline plus claire (partie 164).
+// La timeline plus claire (partie 167).
 #[cfg(test)]
 mod timeline_claire_tests;
+// Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
+mod panneauxvisuels;
+mod panneauxvisuelsui;
+#[cfg(test)]
+mod panneauxvisuels_tests;
+// La Couleur, les Effets et la ligne du calque plus visuels (partie 164) : le titre « Précis », les taches, les pastilles des modes,
+// les vignettes des effets (`visuels164`) ; ce qu'ils changent est dans `colorui`, `fxui` et `layerheads`.
+mod visuels164;
+#[cfg(test)]
+mod visuels164_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;
@@ -682,6 +692,10 @@ pub mod demarrage;
 // qui l'enregistrent, le rouvrent, le font tourner dans l'application et lui jettent des fichiers abîmés.
 #[cfg(test)]
 mod fiabilite_fixture;
+// Les essais écrivent dans un dossier temporaire propre à leur processus, effacé quand il finit (2026-11-17) : plus rien
+// ne reste dans le %TEMP% de Windows.
+#[cfg(test)]
+mod essais_temp;
 // Essais au hasard des gestes dans l'application (passe de débogage du 2026-10-22).
 #[cfg(test)]
 mod hasard_tests;
@@ -1222,6 +1236,10 @@ mod espace3dmath;
 #[cfg(test)]
 mod espace3dmath_tests;
 mod espace3dui;
+// Les graphiques du panneau Espace 3D, qu'on manipule (partie 162).
+mod espace3dgraphes;
+#[cfg(test)]
+mod espace3dgraphes_tests;
 mod espace3dview;
 // Une, deux ou quatre vues de l'Espace 3D (`docs/INTERFACE.md` partie 144).
 mod espace3dvues;
@@ -1278,6 +1296,9 @@ pub mod video;
 mod video_tests;
 mod videoui;
 mod view;
+mod vuenette;
+#[cfg(test)]
+mod vuenette_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;

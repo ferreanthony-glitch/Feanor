@@ -284,7 +284,7 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     assert!(include_str!("menucalque.rs").contains("fx_switch_item") && include_str!("menucalque.rs").contains("aplat_item"));
 }
 
-/// Ouvre le menu ⋮ du calque courant (dans la barre du calque, partie 164 ; avant, sur sa ligne de la timeline : le même menu que
+/// Ouvre le menu ⋮ du calque courant (dans la barre du calque, partie 167 ; avant, sur sa ligne de la timeline : le même menu que
 /// l'ancien « … » du panneau Calques, qui n'existe plus depuis la partie 160) et rend tous les textes que ses sous-menus montrent au
 /// survol.
 fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
@@ -324,7 +324,7 @@ fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
 
 #[test]
 fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer() {
-    // (Partie 164 : la barre du calque courant les porte, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les lignes
+    // (Partie 167 : la barre du calque courant les porte, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les lignes
     // des calques ne les ont pas : un calque normal ne montre rien à droite de son nom.)
     let mut app = app_layers("fusion", &[LayerKind::Bitmap, LayerKind::Vector, LayerKind::Vector]);
     let mut ecran = Ecran::new();
@@ -334,14 +334,8 @@ fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer()
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 1, "un seul mode de fusion : {textes:?}");
-    // (La barre d'opacité écrit sa valeur deux fois au même endroit : sur sa partie pleine et sur le reste.)
-    let mut places: Vec<Rect> = Vec::new();
-    for (_, r) in textes.iter().filter(|(t, _)| t.contains("100 %")) {
-        if !places.iter().any(|p| p.center().distance(r.center()) < 1.0) {
-            places.push(*r);
-        }
-    }
-    assert_eq!(places.len(), 1, "une seule opacité : {textes:?}");
+    // (Partie 164.3 : l'opacité est sur la miniature du calque courant, qu'on glisse ; son chiffre ne s'écrit que pendant le geste.)
+    assert!(!textes.iter().any(|(t, _)| t.contains("100 %")), "plus de « 100 % » écrit au repos : {textes:?}");
 }
 
 // ============================================================================================= 2. Couleur
@@ -369,7 +363,9 @@ fn app_couleur(name: &str) -> App {
 }
 
 #[test]
-fn the_colour_panel_shows_the_swatches_first_from_top_to_bottom() {
+fn the_colour_panel_shows_the_wheel_then_the_swatches_from_top_to_bottom() {
+    // (Partie 164.1 : la roue en tête, « avant · maintenant » et les deux carrés à sa droite ; puis les neutres et le nuancier ; le
+    // reste sous « Précis », l'ancien « Plus de couleurs ».)
     let mut app = app_couleur("couleur-ordre");
     let mut ecran = Ecran::new();
     let mut ui_couleur = |a: &mut App, ui: &mut egui::Ui| a.color_panel(ui);
@@ -385,19 +381,19 @@ fn the_colour_panel_shows_the_swatches_first_from_top_to_bottom() {
         .collect();
     assert!(neutres.windows(2).all(|w| w[0].1.right() <= w[1].1.left() + 0.1 && (w[0].1.center().y - w[1].1.center().y).abs() < 0.5), "une rangée, dans l'ordre : {neutres:?}");
     // Les deux couleurs (avant-plan et arrière-plan) sont au-dessus des neutres, et les couleurs du nuancier en dessous.
-    let avant = cases.iter().find(|(f, r)| *f == egui::Color32::from_rgb(24, 24, 28) && r.width() > 25.0).expect("le carré d'avant-plan");
+    let avant = cases.iter().find(|(f, r)| *f == egui::Color32::from_rgb(24, 24, 28) && r.width() > 18.0).expect("le carré d'avant-plan");
     assert!(avant.1.center().y < neutres[0].1.top(), "les deux couleurs d'abord");
     let rouge = cases.iter().find(|(f, _)| *f == egui::Color32::from_rgb(205, 45, 45)).expect("une couleur du nuancier");
     assert!(rouge.1.top() > neutres[0].1.bottom(), "le nuancier sous les neutres : {rouge:?} / {:?}", neutres[0]);
-    // Le reste est replié : ni curseurs, ni code, ni couleurs récentes.
-    assert!(contient(&textes, "Plus de couleurs"), "{textes:?}");
-    assert!(contient(&textes, ph::CARET_RIGHT));
-    assert!(!contient(&textes, "#18181C") && !contient(&textes, "TSV") && !contient(&textes, "pour l'instant"), "replié : {textes:?}");
+    // Le reste est replié : ni curseurs, ni code, ni couleurs récentes, ni commandes du nuancier.
+    assert!(contient(&textes, "Précis : valeurs, nuanciers, mélange") && contient(&textes, "Avant · maintenant"), "{textes:?}");
+    assert!(!contient(&textes, "#18181C") && !contient(&textes, "TSV") && !contient(&textes, "pour l'instant") && !contient(&textes, ph::DOTS_THREE), "replié : {textes:?}");
 }
 
 #[test]
-fn the_colour_panel_top_row_has_the_palette_buttons_and_the_chooser_on_the_right() {
+fn under_precis_the_palette_buttons_come_first_with_the_chooser_on_the_right() {
     let mut app = app_couleur("couleur-haut");
+    app.couleurs.prefs.more_open = true;
     let nuancier = app.shown_palette().name.clone();
     let mut ecran = Ecran::new();
     let mut ui_couleur = |a: &mut App, ui: &mut egui::Ui| a.color_panel(ui);
@@ -405,20 +401,20 @@ fn the_colour_panel_top_row_has_the_palette_buttons_and_the_chooser_on_the_right
     let textes = ecran.chauffer(&mut app, 2, &mut ui_couleur);
     // Intervertir et les couleurs par défaut n'ont plus de bouton dans le panneau.
     assert!(!contient(&textes, ph::SWAP) && !contient(&textes, ph::SQUARE_HALF), "{textes:?}");
-    // « + », « − », « … » sur la ligne des carrés, à droite d'eux, dans cet ordre ; le nuancier montré tout à droite.
-    let avant = cases.iter().find(|(f, r)| *f == egui::Color32::from_rgb(24, 24, 28) && r.width() > 25.0).expect("le carré d'avant-plan").1;
+    // « + », « − », « … » sur une ligne, sous le nuancier, dans cet ordre ; le nuancier montré tout à droite.
     let (plus, moins, dots) = (
         trouver(&textes, ph::PLUS).expect("le + du nuancier").1,
         trouver(&textes, ph::MINUS).expect("le − du nuancier").1,
         trouver(&textes, ph::DOTS_THREE).expect("le … du nuancier").1,
     );
     let (_, nom) = trouver(&textes, &nuancier).expect("le nuancier montré");
-    for b in [plus, moins, dots] {
-        assert!(b.center().y > avant.top() && b.center().y < avant.bottom(), "sur la ligne des carrés : {b:?} / {avant:?}");
+    for b in [moins, dots, *nom] {
+        assert!((b.center().y - plus.center().y).abs() < 6.0, "sur une ligne : {b:?} / {plus:?}");
     }
-    assert!(plus.left() > avant.right() && plus.left() < moins.left() && moins.left() < dots.left(), "+ − … dans cet ordre");
+    assert!(plus.left() < moins.left() && moins.left() < dots.left(), "+ − … dans cet ordre");
     assert!(nom.left() > dots.right(), "le nuancier à droite des commandes : {nom:?} / {dots:?}");
     let blanc = cases.iter().filter(|(f, _)| *f == egui::Color32::WHITE).map(|c| c.1).max_by(|a, b| a.top().total_cmp(&b.top())).expect("le blanc des neutres");
+    assert!(plus.top() > blanc.bottom(), "sous les neutres, dans Précis : {plus:?} / {blanc:?}");
     assert!(blanc.right() - nom.right() < 40.0, "le nuancier calé au bord droit : {nom:?} / {blanc:?}");
 }
 
@@ -427,15 +423,14 @@ fn the_colour_panel_unfolds_with_one_picker_at_a_time() {
     let mut app = app_couleur("couleur-plus");
     let mut ecran = Ecran::new();
     let mut ui_couleur = |a: &mut App, ui: &mut egui::Ui| a.color_panel(ui);
-    // Un clic sur « Plus de couleurs » le déplie.
+    // Un clic sur « Précis » le déplie.
     let textes = ecran.chauffer(&mut app, 3, &mut ui_couleur);
-    let (_, titre) = trouver(&textes, "Plus de couleurs").unwrap().clone();
+    let (_, titre) = trouver(&textes, "Précis : valeurs, nuanciers, mélange").unwrap().clone();
     let textes = ecran.cliquer(&mut app, titre.center(), &mut ui_couleur);
     assert!(app.couleurs.prefs.more_open, "{textes:?}");
-    // La roue (réglage d'origine) : le code, les récentes et les nuanciers, mais pas les curseurs.
-    assert!(contient(&textes, "#18181C") && contient(&textes, "FEANOR") && contient(&textes, ph::CARET_DOWN), "{textes:?}");
-    assert!(!contient(&textes, "RVB") && !contient(&textes, "TSL"), "pas les curseurs avec la roue : {textes:?}");
-    // Les curseurs à la place : plus de carré ni de triangle de la roue.
+    // La roue en haut : sous Précis, ses valeurs en chiffres (les curseurs), le code, les récentes et les nuanciers.
+    assert!(contient(&textes, "#18181C") && contient(&textes, "FEANOR") && contient(&textes, ph::TRIANGLE) && contient(&textes, "T") && contient(&textes, "V"), "{textes:?}");
+    // Les curseurs à la place de la roue : plus de carré ni de triangle de la roue.
     app.couleurs.prefs.wheel_shown = false;
     let textes = ecran.chauffer(&mut app, 3, &mut ui_couleur);
     assert!(contient(&textes, "RVB") && contient(&textes, "TSV") && contient(&textes, "TSL"), "{textes:?}");
@@ -526,6 +521,8 @@ fn app_avec_effets(name: &str, kind: LayerKind, kinds: &[crate::fx::EffectKind])
 
 #[test]
 fn each_effect_folds_and_unfolds_with_its_chevron_and_a_new_one_opens() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     use crate::fx::EffectKind::{Glow, GaussianBlur, Invert};
     let mut app = app_avec_effets("effets-plis", LayerKind::Vector, &[GaussianBlur, Glow, Invert]);
     let mut ecran = Ecran::new();
@@ -564,6 +561,8 @@ fn the_fold_of_the_effects_is_not_kept_in_the_project_nor_the_settings() {
 
 #[test]
 fn what_cannot_apply_is_hidden_not_greyed_in_the_effects_panel() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     // Calque bitmap sans effet : pas de « Tout supprimer » ni de « Tout réinitialiser », pas de menu « Trait ».
     let mut app = app_one_layer("effets-cache", LayerKind::Bitmap);
     let mut ecran = Ecran::new();

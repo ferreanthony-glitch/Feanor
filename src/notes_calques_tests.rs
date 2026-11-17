@@ -101,6 +101,8 @@ fn contient(textes: &[(String, Rect)], morceau: &str) -> bool {
 
 #[test]
 fn the_effects_panel_has_two_dropdowns_not_two_icon_rows() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("menus", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
@@ -128,6 +130,8 @@ fn the_effects_panel_has_two_dropdowns_not_two_icon_rows() {
 
 #[test]
 fn a_dropdown_entry_toggles_the_effect_in_one_undo_step_and_the_title_counts_them() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("entree", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
@@ -149,6 +153,8 @@ fn a_dropdown_entry_toggles_the_effect_in_one_undo_step_and_the_title_counts_the
 
 #[test]
 fn on_a_bitmap_layer_the_vector_only_entries_are_hidden_not_greyed() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     // Passe de simplicité du 2026-10-21 : un effet que le calque ne prend pas ne se montre pas (le menu d'un calque,
     // lui, garde la raison en grisé : `fxui::offer`).
     let mut app = app_one_layer("bitmap", LayerKind::Bitmap);
@@ -170,6 +176,8 @@ fn on_a_bitmap_layer_the_vector_only_entries_are_hidden_not_greyed() {
 
 #[test]
 fn the_matter_menu_lists_its_effects_and_presets_and_applies_a_preset() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("matiere", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
@@ -396,7 +404,7 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
-    // (Partie 164 : la barre du calque courant porte le bouton, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les
+    // (Partie 167 : la barre du calque courant porte le bouton, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les
     // lignes des calques ne l'ont pas.) « C1 » est le calque courant.
     app.cur_layer = 0;
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
@@ -792,7 +800,8 @@ fn the_gif_is_in_the_export_menus_the_command_palette_and_the_keymap() {
     app.run_action("fichier.exporter_gif");
     let s = app.export_dialog.as_ref().expect("la fenêtre d'export s'ouvre");
     assert_eq!(s.format, crate::export::Format::Gif);
-    // La fenêtre : le choix du GIF, sa taille, sa cadence, la boucle et le tramage.
+    // La fenêtre : le choix du GIF, sa taille, sa cadence, la boucle et le tramage (sous « Précis », partie 163.4).
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut ecran = Ecran::new();
     let mut ui_export = |a: &mut App, ui: &mut egui::Ui| {
         let ctx = ui.ctx().clone();

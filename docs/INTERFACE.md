@@ -12920,6 +12920,593 @@ dans le même ordre ; aucun format nouveau dans les projets (seule la dispositio
 6. Vignettes à la première ouverture : la petite fenêtre animée se pose à gauche de la colonne, le panneau Planche reste visible
    en entier. Espace 3D (Storyboard, Couleur dessous) : la caméra se voit jusqu'à la focale et « Viser la sélection » sans défiler.
 
+## 162. Un panneau Espace 3D qu'on manipule : la scène, le calque, la caméra en graphiques (2026-11-15, branche `panneau-3d-visuel`)
+
+Anthony, devant le panneau de la partie 161 : « très austère, très chargé et surtout peu intuitif ». Sa règle : « des panneaux moins
+dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être manipulés ». Il a validé une maquette (trois
+états du panneau, la caméra choisie en situation) à une condition : « si l'on doit interagir avec les graphiques pour modifier
+directement la scène c'est super ». Les couleurs restent celles du thème (gris, l'accent de la sélection, la couleur de la caméra
+du thème) ; tout est peint (egui `Painter`, `src/espace3dgraphes.rs`), aucune image. Pas de format nouveau, aucune fenêtre.
+
+### 162.1 Ce qui change pour Anthony
+
+Le panneau Espace 3D (la colonne de 290 points) montre **ce qui va avec ce qui est choisi** :
+
+1. **Rien n'est choisi : la scène.**
+   - « Ajouter à la scène » : quatre vignettes dessinées, **Surface** (face à la caméra), **Sol**, **Mur** (les surfaces du menu « + »
+     d'avant) et **Ciel** (le calque 3D Ciel de « Nouveau calque »). Dessous, « posés à … m de la caméra » (la distance d'avant).
+   - « Le plateau, vu de dessus » : la caméra (le triangle de la couleur de la caméra), son cône (ce qu'elle voit, selon la focale
+     et le panoramique), chaque calque en trait à sa place, son nom à droite. **On glisse un trait** vers le haut pour reculer le
+     calque, vers le bas pour l'avancer : c'est le chemin du champ Profondeur (`Layer::set_depth_selon`, il garde sa taille dans
+     le cadre), au pas de l'aimant s'il est allumé, **une étape d'annulation par geste** (« Distance du calque »). **Un clic** sur
+     un trait choisit son calque (il devient le calque courant) ; sur la caméra, choisit la caméra. Les calques au même endroit
+     (d'ordinaire tous à la feuille) font un seul trait, « Dessin +5 » : le geste prend le calque courant, un deuxième clic le
+     suivant (après « Revenir à la scène ») ; un calque verrouillé ne masque pas, pour le glissé, un calque libre au même endroit ;
+     le survol écrit tous leurs noms en bas. Le ciel, loin derrière tout, ne compte pas pour cadrer : il se montre au bord.
+   - « Le plus proche passe devant » : la case de l'ancien « Devant cache derrière » (même commande `espace3d.ordre_distance`,
+     même étape d'annulation, renommée), et à côté « Ordonner la pile selon la profondeur ».
+2. **Un calque choisi** (dans la vue, le plateau ou la timeline).
+   - En-tête : son nom, la clé de position (◆, corbeille), et × « Revenir à la scène ».
+   - « Comment il est posé » : **Face, Au sol, Mur g., Mur d.** Un clic tourne le calque, à sa place et à sa distance (Face :
+     parallèle à la caméra ; Au sol : couché, son haut vers le fond ; Mur g. : debout, tourné vers la droite de la caméra ; Mur
+     d. : vers sa gauche). Allumé : la pose qu'il a déjà (à 3° près). Une étape chacun (aucune si la pose est déjà la bonne).
+   - « Distance à la caméra » : une réglette, la caméra à gauche, le calque en trait qu'on glisse (la même profondeur que le
+     plateau), la distance en mètres au-dessus, discrète (« derrière, … m » s'il est passé derrière la caméra).
+   - « Taille dans le cadre » : un curseur entre un petit et un grand carré (l'échelle, de 10 à 1 000 %, logarithmique).
+   - « ▸ Précis » (replié d'origine, retenu pour la séance) : tous les champs d'avant.
+3. **La caméra choisie.**
+   - En-tête « Caméra du plan », la clé de caméra (◆, corbeille), ×.
+   - « Objectif » : cinq vignettes 18, 35, 50, 85, 135 (un personnage plus ou moins gros dans le cadre) ; un clic pose la focale.
+     Légende « grand-angle · large · normal · portrait · télé ». Dessous, le cône vu de dessus, « 35 mm · champ 54° » : **glisser
+     vers la droite resserre** (focale plus longue), vers la gauche élargit, pour une focale libre.
+   - « Hauteur et plongée » : la caméra de côté, à côté d'un personnage de 1,70 m. **Glisser la caméra** la monte ou la descend
+     (au pas de l'aimant) ; **glisser ailleurs** tire sa ligne de visée (la bascule). Texte : « Hauteur 1,7 m · à plat » (légère
+     plongée, plongée, forte plongée, légère contre-plongée…).
+   - « Panoramique et horizon » : **un cadran qu'on tourne** (le panoramique, plus d'un tour compris, au pas de rotation de
+     l'aimant) et **un horizon qu'on penche** (la rotation de la caméra ; l'horizon est montré tel que l'image le verra, donc
+     dans l'autre sens que le cadre).
+   - « Regarder par elle » et « Viser la sélection » en gros boutons. Viser, la caméra choisie seule, la tourne vers le calque
+     courant (avant, le bouton était grisé dans ce cas).
+   - « ▸ Précis » (replié) : position, angles, focale, objectifs, champ.
+   Chaque geste passe par `set_current_camera_libre` (sa clé de l'image courante si elle est animée) : une étape par geste
+   (« Objectif de la caméra », « Focale de la caméra », « Hauteur de la caméra », « Bascule de la caméra », « Panoramique de la
+   caméra », « Rotation de la caméra »).
+4. **Plusieurs calques choisis** : « N calques choisis » et leur clé de position en tête, puis la scène.
+5. **La barre au-dessus de la vue 3D** (qui n'existe que vue ouverte) gagne, après Recadrer, Regarder par la caméra et Vues, deux
+   icônes qui ouvrent leur petit panneau dessous : **Affichage** (grille du sol, montrer les calques, poignées dans le repère du
+   calque, et l'environnement : couleur du fond, couleur du maillage, qu'on déplie sur place, son opacité, son pas, aspect
+   d'origine ; « montrer le maillage » de l'environnement d'avant est la même chose que « Grille du sol », qui le remplace) et **Aimant** (allumé quand l'aimantation l'est : aimanter à la grille, pas de déplacement, de
+   rotation, de taille).
+6. **La liste des cartes disparaît** du panneau : on choisit dans la vue, dans le plateau ou dans la timeline.
+
+### 162.2 Où est passé chaque réglage d'avant
+
+| Avant (panneau Espace 3D, partie 161) | Maintenant |
+|---|---|
+| Titre « Espace 3D » et sa bulle | parti (le panneau dit ce qui est choisi) |
+| Manipulateur dans le repère de la carte | barre de la vue > Affichage > « Poignées dans le repère du calque » |
+| Aimanter à la grille ; pas de la grille, de rotation, de taille | barre de la vue > Aimant (l'icône est allumée quand l'aimant l'est) |
+| Grille du sol | barre de la vue > Affichage > « Grille du sol » (commande `espace3d.grille` inchangée) |
+| 1, 2 ou 4 vues | barre de la vue > Vues (il y était déjà ; parti du panneau) |
+| Devant cache derrière | état Scène > « Le plus proche passe devant » (même commande, renommée partout : bulle, barre d'état, étape, palette) |
+| Environnement (fond, maillage : couleur, opacité, pas, aspect d'origine) | barre de la vue > Affichage, section Environnement (les couleurs se déplient dans le petit panneau) |
+| Cartes (calques) : montrer les cartes | barre de la vue > Affichage > « Montrer les calques » |
+| Ordonner la pile selon la profondeur | état Scène, à droite de « Le plus proche passe devant » |
+| « + » Nouvelle surface : face, sol, mur | état Scène > « Ajouter à la scène » : Surface, Sol, Mur (+ Ciel) |
+| « + » Distance de la surface | état Scène, sous les vignettes : « posés à … m de la caméra » |
+| Liste des cartes (clic : choisir, Maj : ajouter) et leur profondeur | le plateau (clic : choisir ; la profondeur se voit et se glisse) ; Maj+clic dans la vue pour en choisir plusieurs |
+| Carte : clé de position (◆, corbeille) | état Calque, en-tête |
+| Carte : position, rotation, échelle, étirement, profondeur, remettre à plat | état Calque > Précis (et, en graphiques : Comment il est posé, Distance, Taille) |
+| Carte : « verrouillée », « animée : on règle la clé de cette image » | en-tête (« verrouillé ») ; Précis (« Animé : … ») |
+| Calque Sol, Mur, Ciel : grille de repère, son pas | état Calque > Précis |
+| N cartes choisies : clés de position | « N calques choisis », en tête de l'état Scène |
+| Caméra : « choisir » (Maj : ajouter) | un clic sur la caméra du plateau ; la case Caméra de la barre d'outils ; la piste Caméra de la timeline ; Maj+clic dans la vue |
+| Caméra : clé (◆, corbeille) | état Caméra, en-tête |
+| Caméra : position, angles (pan, basc., rot.), focale et objectifs, champ horizontal | état Caméra > Précis (et, en graphiques : Objectif, Hauteur et plongée, Panoramique et horizon) |
+| Regarder par la caméra, Viser la sélection | état Caméra, en gros boutons (Regarder par la caméra reste aussi dans la barre de la vue) |
+
+Trouvé en chemin : « Remettre à plat » (Précis du calque) ne faisait pas d'étape d'annulation ; il en fait une.
+
+### 162.3 Les essais
+
+`src/espace3dgraphes_tests.rs` (le panneau dessiné dans un contexte à part, à la souris) :
+
+- le plateau : glisser le trait recule le calque courant, les autres ne bougent pas, **une** étape « Distance du calque », Ctrl+Z
+  la rend ; un clic choisit le calque et le panneau passe au calque ; × revient à la scène ; un calque verrouillé ne bouge pas ;
+- les quatre vignettes d'ajout posent une surface, un sol, un mur (surfaces) et un ciel (calque 3D Ciel) ;
+- Face, Au sol, Mur g., Mur d. posent l'orientation (allumée ensuite), une étape chacun, l'autre calque ne bouge pas ; au sol, la
+  normale est la verticale et le calque garde sa place ;
+- la réglette éloigne le calque, le curseur l'agrandit, une étape chacun ; « Précis » déplie les champs d'avant ;
+- la vignette 85 met la focale à 85 (une étape « Objectif de la caméra »), le cône glissé à droite l'allonge ;
+- la vue de côté : glisser la caméra change sa position Y (pas sa bascule), glisser ailleurs change sa bascule (pas sa hauteur) ;
+- le cadran : un quart de tour donne un panoramique de 90° ; l'horizon penché de 45° donne une rotation de −45° ; Viser, la
+  caméra seule, la tourne vers le calque courant ;
+- au repos, dans les trois états, « Précis » déplié, avec une carte derrière la caméra et une caméra retournée : aucune étape,
+  rien ne bouge ;
+- vue fermée : ni le plateau, ni les vignettes, ni Affichage, ni Aimant ne se montrent ;
+- chaque réglage d'avant (33 noms de bulles) est joignable : dans un état du panneau, dans Affichage ou Aimant, ou dans la barre.
+
+Essais anciens changés, et pourquoi : ceux du panneau (`espace3dpanneau_tests`) attendent les mots de l'état montré (scène, calque
+ou caméra) au lieu de « Cartes (calques) », « Position (m) », « Focale » ; celui des boutons de clés (`espace3dcles_tests`) les
+trouve sur la ligne du calque choisi, puis, la caméra choisie, sur la ligne « Caméra du plan », puis sur « 2 calques choisis » ;
+celui de la carte derrière la caméra lit sa profondeur dans « Précis » (la liste n'existe plus) ; celui de la hauteur
+(`panneaux_fins_tests::the_whole_camera_of_the_3d_space_panel_shows_without_scrolling`) choisit la caméra et vérifie que tout
+l'état Caméra, de l'objectif à « Précis », tient dans la colonne de 290 points sans défiler, la Couleur dessous ; la barre d'état
+de « Le plus proche passe devant » (`trajectoire3d_tests`).
+
+### 162.4 Ce qui reste
+
+- Au sol et Mur tournent le calque sur place : un sol posé ainsi flotte à la hauteur où il était (le Sol d'« Ajouter à la scène »,
+  lui, se pose au sol). Le poser aussi au sol d'un clic serait une suite possible.
+- La distance de la réglette se mesure le long de la profondeur de la scène : pour une caméra très tournée (panoramique proche de
+  90°), elle n'est plus la distance à la caméra.
+- Le plateau ne tire pas la caméra elle-même (on la choisit d'un clic, puis on la règle dans son état ou dans la vue).
+- « Précis » déplié est retenu pour la séance, pas d'une séance à l'autre.
+
+### 162.5 Comment Anthony teste (sur une copie de projet)
+
+1. Ouvre le cube : le panneau montre la scène. Clique Sol : un sol se pose. Glisse un trait du plateau vers le haut : le calque
+   recule dans la vue ; Ctrl+Z le remet.
+2. Clique un trait : le calque est choisi. Clique Au sol, puis Face ; glisse la réglette ; tire la taille.
+3. Clique la caméra du plateau (le triangle) : clique 85, glisse le cône ; monte la caméra à côté du personnage ; tire sa visée ;
+   tourne le cadran ; penche l'horizon. Chaque fois, un seul Ctrl+Z défait le geste.
+4. Dans la barre au-dessus de la vue : Affichage (grille, calques, fond) et Aimant.
+5. Dis si le panneau donne envie d'être manipulé, ce qui manque, et ce qui est encore trop chargé.
+
+## 163. Des panneaux moins dans les chiffres, plus visuels (2026-11-15, branche `panneaux-visuels`)
+
+La règle d'Anthony : « des panneaux moins dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être
+manipulés » ; chaque dessin change directement le projet quand on le manipule. Il a retenu quatre propositions de la maquette sur
+douze (« Ok pour 4, 6, 9, 11 ») : la Fiche du plan, les mouvements de caméra des Vignettes, la planche des Vignettes, les exports.
+Tout est peint au `Painter` d'egui (aucune image), aux couleurs du thème, l'accent pour ce qui est allumé. Aucun format nouveau, aucune
+crate nouvelle, aucune boîte de dialogue de plus. Les dessins et leurs petits calculs : `src/panneauxvisuels.rs` ; ce qu'ils changent
+dans le projet : `src/panneauxvisuelsui.rs` ; les essais : `src/panneauxvisuels_tests.rs`.
+
+Un seul repli partout, **« ▸ Précis »**, fermé d'origine : les mêmes réglages en chiffres, et ceux qui n'ont pas de dessin. Son état
+ouvert ou fermé est retenu pendant la séance.
+
+### 163.1 La Fiche du plan (proposition 4)
+
+- **La durée est une barre qu'on étire** : graduée en secondes (leur nombre dessous quand il a la place), « 1 s 20 i · 44 images »
+  écrit dessus, une poignée au bout. La tirer est **exactement la poignée de fin du plan** de la timeline (`Handle::PlanEnd`) : ce qui
+  sort va en réserve et revient en rallongeant, allonger étire la dernière clé de chaque calque, **Ctrl tenue fait suivre toutes les
+  clés** du même nombre d'images (partie « la durée du plan déplace ses clés »), Échap abandonne, **une étape d'annulation par geste**
+  (« Allonger la fin », « Raccourcir la fin », ou leurs noms avec les clés). Comme dans la timeline, elle ne se prend qu'à sa poignée,
+  et le geste se pose même si on lâche ailleurs. L'échelle de la barre est figée pendant le geste (de quoi
+  allonger de moitié, une seconde au moins) ; pour aller plus loin, on relâche et on reprend. La bulle est celle de la poignée de la
+  timeline.
+- **Les versions sont de petites vignettes** : la miniature de la première image du plan dans cette version (faite sur les fils de fond,
+  comme la pile des versions du montage), « V1 · 2s 13 », la version active allumée, puis « + nouvelle ». Un clic sur une autre version
+  y passe ; « + nouvelle » en crée une en dupliquant. **Clic droit** sur une vignette : passer, comparer à la version d'aujourd'hui,
+  restaurer, supprimer ; sur la version active : nouvelle version (copie), nouvelle version vide, mettre à jour dans les autres versions
+  de séquence, comparer le plan ; sur « + nouvelle » : les deux nouvelles versions.
+- Une durée cible (séquence, film) **dépassée** reste visible, en rouge, sous les versions.
+- Dessous, inchangés : la Caméra (ses champs) et Action, Dialogue, Notes.
+
+### 163.2 Les mouvements de caméra des Vignettes (proposition 6)
+
+Jusqu'ici un mouvement de case ne se réglait qu'à la main dans la case (Ctrl + Maj + glisser, clic droit « Ajouter un cadre »). Le
+panneau Vignettes gagne, sous la planche, une partie **« Mouvement de caméra · A → B »** pour la case courante (la case du plan courant
+où est la tête de lecture). Elle n'apparaît pas quand la caméra du plan ne se dit pas en cadres (partie 159) ; quand la caméra est en
+route sur cette case (un mouvement commencé ailleurs la traverse), une ligne le dit.
+
+- **« Le mouvement »** : cinq pictogrammes, **Travelling, Zoom avant, Zoom arrière, Pano, Rotation**, ceux que la caméra de FEANOR sait
+  faire (position, zoom, rotation du cadre, panoramique). Un clic pose le cadre B à partir de A : Travelling, B à une demi-largeur à côté
+  (comme « Ajouter un cadre ») ; Zoom avant, B 1,6 fois plus serré au centre de A ; Zoom arrière, 1,6 fois plus large autour de A ; Pano,
+  la caméra tournée de 20° vers la droite ; Rotation, B tourné de 15°. Sur une case sans mouvement, A et B sont posés à la première et à
+  la dernière image de la case (et les cases qui suivaient deviennent un plan à part, comme pour tout mouvement neuf) ; sur un mouvement
+  qui a déjà ses cadres, A et les cadres après B restent, seul B change. Une étape nommée (« Mouvement de caméra : Zoom avant »). Les
+  pictogrammes de ce que fait le passage de A à B aujourd'hui sont allumés (plusieurs pour un mouvement composé). Au bout de ce que la
+  caméra sait faire (panoramique déjà au plus loin), rien n'est posé et la barre d'état le dit (ni étape, ni coupe du plan).
+- **« Comment ça démarre et s'arrête »** : trois courbes, **Doux, Constant, Brusque**, dessinées avec la vraie fonction d'avancement de la
+  caméra (`camera::ease`). Elles écrivent les adoucis des clés du mouvement, ceux que montrent les poignées d'adoucis de la piste de
+  caméra (partie 120) : Doux, une demi-durée de départ et d'arrivée ; Constant, aucun ; Brusque, aucun départ et une arrivée sur toute
+  la durée (la caméra part d'un coup et ralentit jusqu'à l'arrêt). Chaque intervalle du mouvement (A → B, B → C…) prend la courbe. Une
+  étape nommée (« Démarrage et arrêt : Doux »). La courbe que jouent les clés est allumée (aucune si les adoucis sont réglés autrement).
+- **L'aperçu** : les cadres A et B sont déjà dessinés sur la case elle-même ; il n'est pas dupliqué dans le panneau.
+- **« Précis »** : chaque cadre et l'image du plan où il est ; pour chaque passage, l'adouci de départ et d'arrivée en images (une étape
+  par saisie) ; « Ajouter un cadre ».
+- **Pas de pictogramme Tremblement** : FEANOR sait trembler (effets de caméra de l'outil Caméra, « Tremblement léger », « Caméra à
+  l'épaule »…), mais ces effets posent une clé par secousse : autant de cadres sur la case, qui la couvriraient. Il n'a pas été inventé.
+
+### 163.3 La planche des Vignettes (proposition 9)
+
+Règle d'Anthony gardée : pas de calques dans les Vignettes, le moins d'infos possible.
+
+- **Sens de lecture** : deux dessins de page, « En lignes » (les cases de gauche à droite, une flèche dessous) et « À la japonaise » (de
+  haut en bas, puis la colonne suivante à droite).
+- **Cases par ligne** : une mini-planche (une rangée de cases, la suivante en pâle) dont on **tire le bord droit** ou qu'on clique où elle
+  doit s'arrêter, de une à six cases ; « 6 cases par ligne » écrit dessous. À la japonaise, la mini-planche est une colonne qu'on tire
+  vers le bas (« cases par colonne »).
+- **Textes sous les cases** (à droite à la japonaise) : un dessin de case, sous laquelle les lignes cochées se voient à leurs couleurs,
+  et Action, Dialogue, Notes cochables à côté, à leurs couleurs d'aujourd'hui.
+- **« Précis »** : les séquences montrées (« + » nouvelle séquence, Toutes, Seulement la courante, Aucune autre, la liste à cocher et à
+  glisser), les numéros de plan, les cases par ligne en chiffres.
+- La ligne « Annotations » reste en haut, telle quelle.
+
+### 163.4 Les exports (proposition 11)
+
+La fenêtre d'export (Fichier > Exporter en vidéo / en image…) reste **la seule fenêtre** : elle devient visuelle pour le storyboard PDF,
+le film et les images ; aucune fenêtre ni confirmation n'est ajoutée.
+
+- **Quatre vignettes de ce qu'on obtient** : « Storyboard PDF » (une page de cases), « Film vidéo » (un écran et sa barre de lecture : MP4,
+  ProRes, DNxHR, et le GIF), « Images une à une » (une pile d'images : une par image du film, ou par plan, par case, par clé), « Pour le
+  montage » (une piste et ses plans). Un clic choisit la famille (son format d'origine) ; « Pour le montage » a déjà sa propre fenêtre
+  (EDL, XML, FCPXML, OpenTimelineIO) : elle s'ouvre **à la place** de celle-ci. Les noms gardés sont ceux de FEANOR quand ils sont plus
+  justes que ceux de la maquette (« Storyboard PDF » plutôt que « Planche PDF » : la planche des Vignettes a son propre export).
+- **Un aperçu** avant d'exporter : la première page du storyboard (ses cases à la mise en page choisie, les premiers plans de l'étendue)
+  ou la première image du film ou des images.
+- **Un gros bouton** « Exporter le storyboard… », « Exporter le film… », « Exporter le GIF… », « Exporter les images… ».
+- **« Précis »** : tous les réglages d'avant, dans le même ordre (format, étendue, taille, cadence, page, textes, en-tête, nomenclature,
+  annotations, transitions…). Le format se choisit là entre les voisins de la famille : le GIF est maintenant à côté du MP4, et « Images
+  PNG (une par image) » à côté de « Images par plan ». L'avertissement de ffmpeg reste visible. Une nomenclature à corriger le dit sous
+  le bouton.
+- Le son, les calques séparés et la caméra gardent leur fenêtre telle quelle (pas de vignettes : leur résultat ne se dessine pas mieux
+  que leurs réglages).
+
+### 163.5 Où est passé chaque ancien réglage
+
+| Ancien réglage | Nouvelle place |
+|---|---|
+| Fiche : Séquence (nom), Plan (nom), Image « k sur n » | Fiche > Précis |
+| Fiche : Durée (champ en images) | la barre de durée ; en chiffres : Fiche > Précis |
+| Fiche : Version, « Nouvelle version, en dupliquant » | la vignette « + nouvelle » ; aussi Fiche > Précis |
+| Fiche : « Nouvelle version, plan vide » | clic droit sur la version active ou sur « + nouvelle » ; Fiche > Précis |
+| Fiche : « Mettre à jour dans les autres versions de séquence » | clic droit sur la version active ; Fiche > Précis |
+| Fiche : « Passer à cette version » | clic sur sa vignette ; clic droit ; Fiche > Précis |
+| Fiche : « Comparer à la version d'aujourd'hui », « Restaurer », « Supprimer » | clic droit sur sa vignette ; Fiche > Précis |
+| Fiche : Cible séquence, Cible film | Fiche > Précis ; dépassée : en rouge sous les versions |
+| Fiche : Caméra, Action, Dialogue, Notes | inchangés, à leur place |
+| Vignettes : mouvement de case (Ctrl + Maj + glisser, « Ajouter un cadre », « Retirer ce cadre ») | inchangés dans la case ; en plus les pictogrammes, les courbes, et « Ajouter un cadre » sous Précis |
+| Adoucis des clés de caméra (poignées de la piste de caméra, timeline et montage) | inchangés ; en plus les trois courbes, et les adoucis en images sous Précis du mouvement |
+| Vignettes : Sens de lecture (deux boutons) | deux dessins de page |
+| Vignettes : Cases par ligne / par colonne (champ) | la mini-planche ; en chiffres : Précis de la planche |
+| Vignettes : Textes sous les cases (Action, Dialogue, Notes) | le dessin de case et ses trois cases à cocher |
+| Vignettes : Séquences (« + », Toutes, Seulement la courante, Aucune autre, la liste) | Précis de la planche |
+| Vignettes : Numéros de plan | Précis de la planche (et toujours la touche N) |
+| Export : Contenu, Format (liste) | les vignettes de famille ; le format exact sous Précis |
+| Export : Étendue, Taille, Cadence, Fichier, Infos gravées, Fond, Son, Page, Cases par page, Textes, Pages, Production, Images, Clés, Nomenclature, Commentaires, Annotations, Transitions | Export > Précis, dans le même ordre |
+| Export : « Exporter… » | le gros bouton « Exporter le … » (le son, les calques, la caméra : « Exporter… » comme avant) |
+| Export : ffmpeg (chemin, avertissements, « Choisir un autre ffmpeg… ») | inchangés, toujours visibles (hors de Précis) |
+| Menu Fichier > Exporter… (les quatre sous-menus) | inchangé |
+
+### 163.6 Les essais
+
+`src/panneauxvisuels_tests.rs`, dans la vraie fenêtre sans écran :
+
+- tirer la barre de durée allonge le plan de ce que dit la barre, en **une** étape (« Allonger la fin »), les clés restent ; Ctrl+Z rend
+  la durée ; Ctrl tenue, la clé de caméra suit du même nombre d'images (« … les clés suivent ») ; tirer vers la gauche raccourcit ;
+- un clic sur la vignette V1 passe à la V1 (une étape) ; « + nouvelle » fait une version de plus ; sous Précis, passer, comparer,
+  restaurer, supprimer, nouvelle version vide ;
+- le pictogramme Zoom avant pose A et B sur la durée de la case, B dans A, une étape nommée ; Travelling ne change que B ; Doux,
+  Brusque, Constant écrivent les adoucis et se relisent ; Ctrl+Z rend la courbe d'avant ; Précis : les adoucis, « Ajouter un cadre »
+  (un cadre C) ;
+- les deux pages du sens de lecture ; la mini-planche cliquée (2 cases), tirée (4), à la japonaise tirée vers le bas (3) ; Action,
+  Dialogue, Notes cochés et décochés ; sous Précis, les séquences et les numéros de plan ;
+- chaque vignette d'export choisit sa famille ; « Pour le montage » ouvre sa fenêtre à la place ; les réglages du film sous Précis ; le
+  son garde sa fenêtre ;
+- les calculs : B dans A (zoom avant), A dans B (zoom arrière), ce que fait chaque pictogramme relu par `mouvements_de`, chaque courbe
+  relue par `courbe_des`, l'échelle et le texte de la barre, la mini-planche ; aucun nom ni aucune bulle ne dit la 3D.
+
+Essais anciens changés, et pourquoi :
+
+- `panneaux_fins_tests::the_board_panel_fits_in_the_column…` lit le panneau Planche dans son nouvel ordre (les dessins, puis sous
+  Précis les séquences et les numéros), Précis ouvert ;
+- trois essais qui lisent les réglages de la fenêtre d'export à l'écran (case « Avec les annotations », réglages du GIF, « Avec les
+  commentaires » du PDF) ouvrent d'abord Précis (`panneauxvisuels::tout_ouvrir`, `ouvrir_precis`) ;
+- `montageonglet_tests::the_montage_space_is_idle_at_rest…` laisse 14 images au lieu de 8 avant de mesurer le repos : la Fiche du plan
+  n'a plus la même hauteur, et la colonne du Montage glisse vers elle (45 % du reste par image) une douzaine d'images ; une fois posée,
+  rien ne repeint. Le message d'échec dit maintenant qui a demandé l'image.
+
+En chemin : le filet d'une tuile allumée fait 1,25 point (pas 1,5 : le filet d'accent de 1,5 est le liseré d'un plan choisi sur la
+planche, que compte un essai) ; les vignettes des versions prennent les largeurs déjà faites ailleurs (bande des plans, pile des
+versions) pour ne pas composer une vignette de plus au repos.
+
+Captures de contrôle (exe de la branche, copie de « retakes brawlydays ») : la colonne des Vignettes, la Fiche du plan, la fenêtre
+d'export du storyboard et du film, comparées aux maquettes 4, 6, 9 et 11.
+
+### 163.7 À tester par Anthony (sur une copie de projet)
+
+1. Fiche du plan : tire la poignée de la barre de durée ; Ctrl tenue, les clés suivent ; Ctrl+Z, une seule étape.
+2. Fais une nouvelle version (« + nouvelle »), clique la vignette V1, puis la V2 ; clic droit sur une vignette : comparer, restaurer,
+   supprimer.
+3. Vignettes, sur une case sans mouvement : clique Zoom avant (B dans A sur la case), puis Doux, Brusque ; lis la piste de caméra
+   (timeline) : ses poignées d'adoucis ont suivi. Dis si 1,6 fois, une demi-largeur, 20° et 15° te vont.
+4. Vignettes : les deux pages du sens de lecture, tire le bord de la mini-planche, coche Action, Dialogue, Notes.
+5. Fichier > Exporter en image > Storyboard en PDF : la première page en aperçu ; clique « Film vidéo », « Images une à une » ;
+   ouvre Précis.
+
+## 164. La Couleur, les Effets et la ligne du calque, plus visuels (2026-11-15, branche `panneaux-visuels-2`)
+
+La règle d'Anthony : « des panneaux moins dans les chiffres, plus visuels, plus facilement compréhensibles, qui donnent envie d'être
+manipulés », et sur la maquette : « si l'on doit interagir avec les graphiques pour modifier directement la scène c'est super ». Il a
+retenu les propositions 2 (Couleur), 7 (Effets) et 8 (ligne du calque). Chaque dessin est une commande : on le manipule, le projet
+change, par le même chemin que le réglage qu'il remplace (une étape d'annulation par geste). Tout est peint au `Painter` d'egui, aux
+couleurs du thème ; aucune image, aucune crate, aucune fenêtre, aucun format nouveau. Les dessins : `src/visuels164.rs` ; ce qu'ils
+changent : `src/colorui.rs`, `src/fxui.rs`, `src/layerheads.rs` ; les essais : `src/visuels164_tests.rs`.
+
+### 164.1 La Couleur (proposition 2)
+
+- **En tête, la roue des teintes** et son triangle clair / foncé (le carré, si on l'a choisi), qu'on clique ou qu'on glisse : l'anneau
+  change la teinte, le dedans la clarté et la saturation. C'est la roue d'avant, qui était repliée sous « Plus de couleurs » ; elle
+  fait au plus 112 points (la Couleur, sous le panneau Espace 3D, lui laisse sa caméra entière). Une sélection prend la couleur, une
+  étape par geste (comme avant).
+- **« Avant · maintenant »**, à droite de la roue : deux taches. La première est la couleur d'avant le dernier choix (retenue une fois le
+  geste fini : glisser la roue ne compte qu'une fois) ; **un clic sur elle y revient**, et celle d'aujourd'hui devient l'ancienne (deux
+  clics : aller et retour). Pas encore d'ancienne : sa place en pointillés. Retenue pendant la séance seulement.
+- Dessous, **les deux carrés d'avant-plan et d'arrière-plan**, comme avant (clic sur celui de derrière : les échanger ; clic droit :
+  intervertir, couleurs par défaut, copier le code, ajouter au nuancier), en 22 points au lieu de 30.
+- Puis **les neutres et les couleurs du nuancier montré**, toujours visibles.
+- **« Précis »** (l'ancien « Plus de couleurs », toujours retenu dans les réglages de l'application) : les commandes du nuancier (+, −,
+  …, le nuancier montré, la confirmation de suppression), le choix roue ou curseurs et carré ou triangle, les valeurs en chiffres (les
+  curseurs TSV, RVB ou TSL), le code et sa copie, les couleurs récentes, la palette de mélange.
+- Les curseurs choisis à la place de la roue (comme avant, l'un ou l'autre) se mettent en tête, « avant · maintenant » dessous.
+- Sous Précis, avec la roue en tête, le choix TSV / RVB / TSL de ses curseurs (relecture : il n'était joignable qu'en quittant la roue).
+- Un nouveau réglage d'origine : le triangle (au lieu du carré). Un réglage déjà enregistré garde son choix.
+
+### 164.2 Les Effets (proposition 7)
+
+- **« Ajouter » en vignettes** : chaque vignette montre ce que produit l'effet (un trait sur un papier, peint) ; un clic l'ajoute au
+  calque, avec ses réglages d'origine, une étape (« Ctrl+Z pour le retirer » dans la barre d'état). Une vignette allumée : l'effet est
+  déjà là, le clic le choisit. Neuf effets : **Lueur, Flou (gaussien), Grain (de film), Flash, Vignettage, Ombre (portée), Noir et blanc,
+  Lueur diffuse, Tremblement (du trait)** ; le tremblement n'a pas de vignette sur un calque bitmap. Les 31 autres effets restent dans
+  « Ajouter un effet » (par familles), sous Précis.
+- **Sur le calque** : les effets posés, une ligne chacun (allumer, choisir, retirer ; clic droit sur le nom : copier, coller).
+- **Avant | après** de l'effet choisi (aucun choisi : du dernier posé qui a une force ; un effet choisi sans force n'en a pas, pour ne pas en régler un autre sans le voir) : à gauche de la barre, l'avant ; à droite, l'après.
+  **Tirer la barre** (ou cliquer dans l'image) règle sa force : plus l'après est large, plus l'effet est fort. C'est le curseur de ce
+  réglage (lueur : intensité ; flou : rayon, jusqu'à 40 px sur la barre ; grain, flash, vignettage, noir et blanc : quantité ou
+  intensité ; ombre : opacité ; tremblement : intensité, jusqu'à 10 px), avec ses clés : une clé à l'image courante si l'effet en a, une
+  étape par geste (même si l'appui reste immobile avant de glisser). Une valeur réglée plus loin sous Précis (un flou de 80 px) élargit la barre au lieu d'être ramenée. Pendant le geste, l'image passe en aperçu comme avec le curseur (`fx::note_interaction`) : le cache des effets
+  recalcule, jamais le moteur de pinceau sur le fil de l'interface.
+  **L'image de l'avant | après est un schéma, pas le vrai calque** : montrer le calque lui-même avec et sans l'effet demanderait un
+  rendu de plus du calque à chaque geste, hors du cache des effets. C'est la vue de dessin qui montre le vrai résultat, en direct.
+  Les effets sans force (onde, négatif, tourbillon…) n'ont pas d'avant | après.
+- **« Précis »** : « Ajouter un effet » (tous, par familles), les préréglages, Tout réinitialiser, Tout supprimer, les menus Trait et
+  Matière, la création automatique des clés, les clés dans la timeline, puis chaque effet posé avec sa flèche, ses réglages en chiffres,
+  ses clés (créer, supprimer, précédente, suivante) et sa place dans la pile (monter, descendre), « Appliquer pour de bon » de la plume.
+  Replié d'origine, retenu pendant la séance.
+- **Ce qui manque de la maquette** : « Nuit » n'existe pas comme effet dans FEANOR (le plus proche : Teinte / saturation ou Luminosité /
+  contraste, sous Précis). Il n'a pas été inventé.
+
+### 164.3 La ligne du calque dans la timeline (proposition 8)
+
+- **L'opacité se règle en glissant sur la miniature** du calque courant : vers la droite, plus opaque ; vers la gauche, plus transparent
+  (120 points pour tout l'écart, d'où que parte le geste). La miniature se voile d'autant, une barre fine de l'accent, en bas de la
+  miniature, montre la valeur ; le chiffre ne s'écrit que pendant le geste (et dans la bulle). Une étape par geste ; plusieurs calques
+  choisis prennent tous la valeur, comme avant. Un glissé surtout vertical depuis la miniature range le calque, comme avant (elle reste une prise pour le déplacer) ; un clic seul\n  choisit le calque ; clic droit : le menu du calque. Plus de « 100 % » écrit.
+- **Le mode de fusion se choisit par des pastilles** : la ligne montre la pastille du mode (deux ronds, le dessous bleu et le calque
+  orange, leur intersection peinte par la vraie formule du mode, celle du rendu) et son nom ; un clic ouvre toutes les pastilles des
+  27 modes, par familles (normal, assombrir, éclaircir, contraste, écarts, couleur), quatre par rangée. Un clic sur une pastille pose le
+  mode, une étape, et les referme ; elles se referment aussi quand un autre calque devient le courant. Les flèches précédent / suivant restent de part et d'autre.
+- L'œil, le cadenas, la pelure, la transparence, le pochoir et son sens, la position, le groupe, fx, la caméra, l'aplat et le maillon
+  restent à leur place, sur la deuxième rangée ; le losange des clés d'opacité passe en tête de la troisième.
+- La ligne garde sa finesse : 56 points pour le calque courant, 22 pour les autres (partie 160), qui n'ont ni miniature ni mode.
+- Un calque Couleur unie (sa miniature est sa couleur, qu'un clic change) et un dossier gardent leur barre d'opacité.
+- La bande des plans du Storyboard (piste du calque actif) n'a pas changé.
+
+### 164.4 Un seul « Précis »
+
+Le titre de tous les replis « Précis » (Espace 3D de la partie 162, Fiche, Vignettes et export de la partie 163, Couleur et Effets de
+la partie 164) est le même : un petit triangle peint (▸ fermé, ▾ ouvert), puis « Précis » en petit gris, qui s'éclaire au survol. Peint
+plutôt qu'écrit : aucune police ne peut le changer en carré vide (`visuels164::titre_precis`).
+
+### 164.5 Où est passé chaque ancien réglage
+
+| Ancien réglage | Nouvelle place |
+|---|---|
+| Couleur : les deux carrés (30 points, ligne du haut) | à droite de la roue, sous « avant · maintenant » (22 points) ; même clic, même menu |
+| Couleur : « + » Ajouter au nuancier, « − » Retirer, « … » Commandes, Nuancier montré (ligne du haut) | Couleur > Précis, première ligne |
+| Couleur : confirmation « Supprimer le nuancier ? » | Couleur > Précis, sous cette ligne |
+| Couleur : les neutres, les pastilles du nuancier | inchangés, toujours visibles |
+| Couleur : « Plus de couleurs » (repli) | « Précis » (le même réglage retenu) |
+| Couleur : la roue (sous « Plus de couleurs ») | en tête du panneau, toujours visible |
+| Couleur : roue ou curseurs, carré ou triangle, TSV / RVB / TSL | Couleur > Précis ; les curseurs choisis à la place de la roue vont en tête |
+| Couleur : les curseurs avec leurs chiffres | Couleur > Précis (avec la roue) ; en tête (sans la roue) |
+| Couleur : code hexadécimal, sa copie | Couleur > Précis |
+| Couleur : couleurs récentes (et « Effacer ») | Couleur > Précis |
+| Couleur : palette de mélange | Couleur > Précis (toujours son propre repli) |
+| Effets : « Ajouter un effet » (menu par familles) | les vignettes pour neuf effets ; tous : Effets > Précis |
+| Effets : Préréglages, Tout réinitialiser, Tout supprimer | Effets > Précis |
+| Effets : menus Trait et Matière (et la ligne « sur un calque vectoriel ») | Effets > Précis |
+| Effets : Création automatique des clés, Clés d'effets dans la timeline | Effets > Précis |
+| Effets : chaque effet, case « actif », nom (choisir, copier), corbeille | « Sur le calque », toujours visible |
+| Effets : flèche de l'effet, réglages en chiffres, clés, monter / descendre, « Appliquer pour de bon » | Effets > Précis, effet par effet |
+| Effets : le curseur de force (intensité, rayon, quantité…) | aussi la barre de l'avant | après |
+| Effets : « Rallumer » (effets éteints par fx) | inchangé, en tête |
+| Ligne du calque : barre d'opacité « 100 % » | glisser sur la miniature (voile et barre fine) ; Couleur unie et dossier : la barre |
+| Ligne du calque : losange des clés d'opacité | en tête de la troisième rangée |
+| Ligne du calque : liste « Normal ▾ » | la pastille du mode et son nom ; un clic : toutes les pastilles |
+| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la pastille |
+| Ligne du calque : œil, cadenas, pelure, transparence, pochoir, position, groupe, fx, caméra, aplat, maillon, ⋮ | inchangés, à leur place |
+| Clic droit du calque > Apparence > Mode de fusion, opacité | inchangés |
+
+### 164.6 Les essais
+
+`src/visuels164_tests.rs`, dans la vraie fenêtre sans écran, à la souris :
+
+- un clic dans l'anneau de la roue donne sa teinte, le trait choisi la prend, **une** étape ; un glissé dans le triangle, une étape ;
+  Ctrl+Z rend la couleur du trait ; la tache ancienne revient d'un clic, et l'autre devient l'ancienne ; avec une sélection, elle la
+  recolore en une étape que Ctrl+Z défait ;
+- la vignette Lueur ajoute la lueur (une étape) ; recliquée, elle la choisit sans l'ajouter deux fois ; tirer la barre de l'avant | après
+  règle l'intensité (une étape) ; Ctrl+Z rend la force, puis retire l'effet ;
+- glisser de 60 points vers la gauche sur la miniature met l'opacité à 50 % (une étape), un clic seul ne change rien, Ctrl+Z la rend ;
+- la pastille du mode ouvre les 27 pastilles ; « Produit » pose le mode (une étape) et les referme ; Ctrl+Z le rend ;
+- chaque ancien réglage reste joignable : la Couleur (14 noms sous Précis, les curseurs à la place de la roue), les Effets (10 noms
+  sous Précis, pas de tremblement sur un bitmap), la ligne du calque (13 noms ; l'œil, le cadenas, le pochoir à droite de la miniature ;
+  précédent / suivant) ;
+- les calculs : la pastille de chaque mode prend la vraie formule (Normal : le calque, Produit assombrit, Superposition éclaircit), la
+  lentille est dans les deux ronds ; la force de chaque effet et la barre ; « avant · maintenant » ne retient qu'un geste fini ;
+- un seul titre « Précis » dans les sources des parties 162, 163 et 164.
+
+Essais anciens changés, et pourquoi :
+
+- `panneaux_tests` : la Couleur a la roue en tête et « Précis » au lieu de « Plus de couleurs » ; les commandes du nuancier sont sous
+  Précis ; avec la roue, Précis montre les curseurs ; la ligne du calque n'écrit plus « 100 % » ; les deux essais du panneau Effets
+  ouvrent Précis ;
+- `fxclavier_tests` (3), `notes_calques_tests` (4) : les menus et les réglages des effets sont sous Précis (`tout_ouvrir`) ;
+- `multicalques_tests`, `optim_rendu_tests` : l'opacité se prend à la miniature (sa bulle) au lieu du texte « 37 % » / « 100 % » ;
+- `passe_partout_balayage_tests` : seuls les maillages noirs de la vue comptent (la roue de la Couleur, visible maintenant, part du noir).
+
+### 164.7 À tester par Anthony (sur une copie de projet)
+
+1. Couleur : clique et glisse dans la roue ; choisis une autre couleur, puis clique la tache de gauche : tu reviens ; reclique : tu
+   repars. Ouvre Précis : le nuancier, les curseurs, le code, les récentes, le mélange.
+2. Effets : clique Lueur ; tire la barre de l'avant | après ; Ctrl+Z. Dis si les neuf vignettes sont les bonnes, et si un avant | après
+   schématique te suffit ou s'il faut le vrai calque (plus lourd).
+3. Animation : glisse sur la miniature du calque courant, vers la gauche puis la droite ; clique la pastille du mode, choisis Produit.
+4. Dis si « Nuit » doit devenir un effet (un préréglage d'éclairage nocturne, par exemple), et si le triangle de la roue te va.
+
+### 164.8 Relecture indépendante (sous-agent), et ce qui a été corrigé
+
+- l'avant | après : un appui immobile puis un glissé faisaient deux étapes (corrigé : le geste part de l'appui ; essai ajouté) ; une
+  valeur au-delà de la barre était ramenée au premier geste (corrigé) ; le pincement (−100 à 100) avait sa barre à l'envers (corrigé :
+  de zéro) ; un effet choisi sans force faisait régler un autre effet (corrigé) ;
+- la miniature volait la prise pour ranger un calque (corrigé : un glissé vertical range ; essai ajouté) ;
+- les pastilles pouvaient rester ouvertes en mémoire après un changement de calque (corrigé) ;
+- le choix TSV / RVB / TSL manquait sous Précis avec la roue (corrigé) ;
+- les essais : des restes morts retirés, deux contrôles resserrés (la roue absente avec les curseurs, l'opacité de 37 % à 87 %).
+- Gardé tel quel : les couleurs fixes des schémas (papier, encre, les deux ronds bleu et orange des pastilles) : ce sont des images,
+  pas l'interface ; et le contrôle « un seul titre Précis » reste une lecture des sources.
+
+## 166. La vue nette : au-delà de 100 %, le vectoriel à la taille de l'écran (2026-11-17, branche `vectoriel-net`)
+
+Anthony, avec une capture de son projet « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer
+pourquoi et comment résoudre ce problème ? », puis, à la proposition de redessiner les traits vectoriels visibles à la taille de
+l'écran quand la vue grossit : « Oui, construis-le ». Le code : `src/vuenette.rs` ; ce qu'il a fallu ailleurs : `src/vector.rs`
+(`rendre_net`, `stamp_path_net`), `src/render.rs` (`Renderer::take_net_dirty`), `src/canvas.rs` (deux appels), `src/app.rs` (le champ
+`nette`) ; les essais : `src/vuenette_tests.rs`. Aucun texte d'interface, aucun réglage, aucun format nouveau (56).
+
+### 166.1 Le défaut, mesuré sur sa capture
+
+- Sur la capture, un pixel du dessin occupe 2,25 pixels d'écran (des marches de 2, 2, 2, 3 pixels) : la vue était à 225 %. Recoupé
+  avec le dessin : son zigzag fait 280 pixels de large dans la feuille (3840 × 2160) et 630 à l'écran.
+- La cause : un dessin vectoriel garde ses chemins, mais tout ce qui le montre passe par son image (`Cel::raster`, « la composition,
+  la pelure d'oignon et l'export ne voient que des pixels »), faite à la taille de la feuille ; et la vue grossit cette image sans la
+  lisser (`render::texture_options`, l'échantillonneur « afficher » de `gpu.rs`). C'est voulu pour le bitmap ; le vectoriel passait
+  par le même chemin.
+- Ses traits gardent tous le réglage complet du pinceau (`pinceau`, dans le fichier du dessin) : ils sont rejoués par le moteur des
+  pinceaux, empreinte par empreinte. Les montrer nets, c'est donc **rejouer ce moteur à la taille de l'écran**, pas agrandir une image.
+
+### 166.2 Ce qui change à l'écran
+
+- **Au-delà de 100 %** (dès qu'un pixel de la feuille vaut plus de 1,02 pixel d'écran, l'échelle de Windows comprise), la zone que la
+  vue regarde est composée à la taille de l'écran : **les dessins vectoriels y sont nets**, à n'importe quel zoom, vue tournée ou
+  retournée comprise. À 100 % ou moins, rien ne change (la vue réduit déjà l'image en la lissant).
+- **Le reste ne change pas** : un calque bitmap, une vidéo, un aplat sous le trait, une couleur unie, un remplissage au griffonnage
+  gardent les pixels de la feuille, grossis sans lissage comme avant (on y lit les vrais pixels). L'ordre des calques, les opacités, la
+  pelure d'oignon, la table lumineuse, les modes de fusion, les calques déplacés sont ceux de l'image de toujours.
+- **Le dessin lui-même ne change pas** : ni son image à la taille de la feuille, ni le fichier, ni l'export, ni les vignettes, ni la
+  lecture. La vue nette n'est qu'un affichage.
+- **Pendant qu'on trace** : rien ne se calcule (règle « sans latence »). Les carrés de 64 pixels de la feuille que le trait touche
+  montrent l'image de toujours (en pixels, avec le trait en cours) ; le reste de la vue reste net. Au lâcher, après 70 millièmes de
+  seconde de repos, la vue redevient nette partout, avec le trait neuf.
+- **Quand la vue bouge** (déplacer, zoomer, tourner) : l'image nette reste collée au dessin pendant le geste ; ce qu'elle ne couvre
+  pas se voit en pixels, et la nouvelle image la remplace au repos.
+- **Quand tout a pu changer** (autre image, autre calque, annulation, réglage d'un calque) : l'image nette est retirée tout de suite
+  (on voit l'image de toujours), puis revient.
+
+### 166.3 Comment c'est fait
+
+- `Cadrage::de` : la zone du dessin à l'écran en pixels réels, et la transformation de ces pixels vers la feuille (zoom, rotation,
+  miroir, décalage de la vue).
+- `Instantane::de`, sur le fil de l'interface : le plan figé. Pour un dessin vectoriel montré tel quel, ses éléments visibles ; pour
+  tout le reste, les tuiles de l'image montrée (partagées, rien n'est copié). Rien ne s'y calcule (`fxcache::soft_scope`).
+- `composer`, sur un autre fil : chaque dessin vectoriel est redessiné sur une image de la taille de l'écran (`vector::rendre_net` :
+  une zone, un texte, un trait lisse d'après leur géométrie ; un trait au pinceau rejoué par le moteur, ses points, ses rayons et son
+  diamètre agrandis comme une sélection qu'on agrandit, le papier, la vitesse et la longueur du fondu à la même échelle), un dessin par
+  cœur ; puis chaque pixel d'écran reçoit le papier et les couches dans l'ordre, les couches en pixels lues comme `render::pixel_of`
+  au pixel de la feuille qui est dessous. Le cache des traits du dessin n'est ni lu ni écrit ; ce rejeu ne compte pas dans
+  `vector::replay_count`.
+- `VueNette::update`, à chaque image d'écran : perce les tuiles changées (`Renderer::take_net_dirty`), reçoit l'image qui arrive,
+  lance la suivante au repos. Un geste qui commence arrête le calcul en cours.
+- `canvas.rs` : l'image nette est peinte juste après l'image composée (carte graphique ou processeur), avant la grille, le cadre de
+  la caméra et le passe-partout.
+- `onglets.rs` : l'image nette est un état du projet (`etat_projet!`), rangée avec son onglet comme le hors-feuille.
+- Une panique du calcul (le rejeu d'un trait) est rattrapée sur son fil : l'image de toujours reste, et le calcul n'est pas relancé
+  pour ce plan et ce cadrage tant que rien ne change.
+
+### 166.4 Ce qui n'est pas net, et ce qui reste à juger
+
+La vue de toujours reste seule (comme avant) dans ces cas :
+
+- un plan sans papier (arrière-plan « aucun » ou « damier ») ;
+- un plan dont un calque a une pile d'effets, ou qu'un calque d'effet couvre et que la carte graphique compose (tremblement compris) ;
+- un calque posé par un maillage : carte inclinée de l'Espace 3D, plan dont la caméra est libre, enveloppe ou perspective en cours ;
+- la vue en perspective (caméra tournée), la lecture, une transition du montage sous la tête de lecture ;
+- les cases des Vignettes ;
+- la zone d'un geste en cours (voir 166.2), et une sélection qu'on déplace, en pixels le temps du geste (d'après le code : pas essayé).
+
+Et ce qui n'a pas changé du tout : une caméra qui cadre plus serré que 100 %, l'export et les vignettes montrent toujours les pixels
+de la feuille (lissés par l'interpolation). Les rendre nets serait une étape de plus, pas faite.
+
+À juger à l'œil par Anthony :
+
+- **les traits très fins** : le moteur a ses planchers en pixels (rayon minimal, trait fin estompé). À 100 %, un trait d'un demi-pixel
+  de rayon se montre plus large et plus pâle ; au zoom, il est rejoué à sa vraie épaisseur, donc plus fin et plus franc qu'à 100 % ;
+- **les brosses à grain et les pointes en image** : le grain est rejoué à l'échelle du zoom, pas agrandi : son dessin exact n'est pas
+  celui de la feuille (et il ne suit pas une vue tournée) ;
+- **les dessins très chargés à fort zoom** : chaque image nette rejoue les traits visibles ; elle arrive plus tard (l'image de toujours
+  en attendant). Pas mesuré sur un vrai dessin lourd.
+
+### 166.5 Les essais
+
+Dans les essais, la vue nette de l'application est **éteinte d'origine** (`vuenette::activer_pour_essai` l'allume pour le fil d'un
+essai) : les bancs tournent sur de petites feuilles, souvent au-delà de 100 %, avec une horloge simulée, et beaucoup contrôlent qu'au
+repos rien ne demande à être repeint ; son fil de fond les réveillait (sept échecs à la première suite complète, dont le champ `nette`
+à déclarer dans `etat_projet!`). Dans le vrai FEANOR elle sert toujours.
+
+`src/vuenette_tests.rs` :
+
+- le cadrage suit la vue droite, tournée, retournée, à 1, 1,25 et 1,5 pixel par point ; rien à 100 % et en dessous ;
+- le bitmap garde les pixels de la feuille : loin d'un trait vectoriel, chaque pixel d'écran est exactement le pixel de la feuille
+  qui est dessous (un calque en mode Produit et déplacé compris) ;
+- un trait lisse à 400 %, vue droite puis tournée et retournée : son bord est tenu à 0,3 pixel de la feuille de son contour exact ;
+  l'image de la feuille grossie échoue au même contrôle (c'est le défaut) ;
+- un trait au pinceau à 400 % : rejoué par le moteur, bord tenu à un demi-pixel de la feuille, du détail plus fin que le pixel de la
+  feuille, le cache du trait d'origine intact, aucun rendu compté ;
+- un calque déplacé montre son trait à sa place ;
+- rien de net sans dessin vectoriel dans la zone ; un plan sans papier n'est pas admis ;
+- la vue nette suit ce qui change : elle arrive au repos, reste quand rien ne change, ne calcule rien pendant un geste (trente images
+  bouton tenu), se refait après, reste collée quand la vue bouge, est retirée quand tout change ;
+- dans la vraie fenêtre sans écran (`perf_tests::Banc`), au pointeur : la vue à 300 %, un trait de pinceau sur un calque vectoriel ;
+  aucun calcul pendant le trait, l'image nette refaite après, rien au repos (et rien ne demande plus à être repeint), refaite après
+  Ctrl+Z, plus rien à 100 %.
+
+Résultats (17 novembre, 14 h 05, sur le code final) : `vuenette` 8 réussis ; vérificateur complet : **4 784 réussis, 0 échec**, les
+dix groupes de fiabilité OK ; le seul avertissement de compilation est celui d'avant (les cinq méthodes inutilisées de
+`src\espace3d.rs`), qui fait écrire ÉCHEC au vérificateur. Puis, le main du jour (633c450) fusionné dans la branche, à 14 h 23 :
+compilation sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK ». Fusionnée dans main (7742e31) et
+poussée sur son « Fusionne directement ». Son FEANOR habituel n'est pas reconstruit : il essaie `timeline-claire` (voir le journal).
+
+### 166.6 Regardé à l'écran (par Claude, le 17 novembre vers 12 h 53)
+
+Le FEANOR de la branche (construit à 12 h 51, avant les dernières corrections : la panique rattrapée, le rangement par onglet, le
+réveil au repos ; le calcul de l'image n'a pas changé depuis), sur une copie du projet « dd », réglages neufs. L'exe final (14 h 06)
+a seulement été lancé sur la copie, fenêtre réduite : il s'ouvre, aucun rapport de plantage.
+
+Plan 2, la vue grossie à la molette jusqu'à environ 350 % :
+les traits du zigzag se voient nets. Mesuré sur les pixels réels de l'écran (une zone de 480 × 300 pixels dans la vue) : la couleur
+change à chaque colonne (479 sur 480), les bords montent d'un pixel d'écran à la fois, sans marche de plusieurs pixels.
+
+**Pas regardé à l'écran** : tracer un trait, déplacer et tourner la vue, annuler, un plan à plusieurs calques, la pelure d'oignon, un
+calque bitmap. Le contrôle a été arrêté : Anthony travaillait dans Photoshop, et les captures d'écran réduisaient ses fenêtres (elles
+ont été rouvertes). Le tracé, l'annulation et le retour à 100 % sont couverts par l'essai dans la vraie fenêtre sans écran.
+
+### 166.7 À vérifier à l'écran (par Anthony)
+
+Le dossier d'essai : `Documents\SHOT\Tests\essai vectoriel-net` (« Ouvrir l'essai.cmd » : l'exe de la branche sur une copie de « dd »,
+réglages à part).
+
+1. Plan 2 de « dd », zoom à 225 % ou plus : les traits sont nets, sans marches.
+2. Tracer un trait au stylet en gros plan : aucun ralentissement ; la zone du trait est en pixels pendant le geste, puis nette au
+   lâcher. Est-ce gênant à l'œil ?
+3. Déplacer, zoomer, tourner la vue : l'image suit, puis redevient nette.
+4. Un trait très fin : au zoom, il est plus fin et plus franc qu'à 100 %. Est-ce ce qu'il attend ?
+5. Une brosse à grain (crayon, brosse importée) en gros plan : l'aspect du grain.
+6. Un plan chargé (beaucoup de traits) à fort zoom : le temps que met l'image nette à arriver.
+7. Un calque bitmap dans le même plan : toujours en pixels, à sa place dans la pile.
+8. Ctrl+Z, changer d'image, changer de calque : l'image nette revient.
+
 ## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
 
 Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
@@ -13031,7 +13618,7 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
     sur la feuille par la caméra : la carte suit.
 12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
 
-## 164. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+## 167. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
 
 Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
 quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
@@ -13039,7 +13626,7 @@ reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout s
 « Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
 se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
 
-### 164.1 Ce qui a changé
+### 167.1 Ce qui a changé
 
 1. **Toutes les lignes ont la même hauteur, 22 points** (`layerheads::ROW_FINE`), calque courant et dossiers compris. Avant
    (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
@@ -13048,7 +13635,8 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
    les calques) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
    pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets, accroche à la caméra, aplat
    et planche-mère, la couleur d'un calque Couleur unie, l'opacité et son losange de clés, le mode de fusion (précédent, liste,
-   suivant). Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
+   suivant). Depuis la fusion du `main` (partie 164 du `main` : la ligne du calque plus visuelle), l'opacité d'un calque s'y règle
+   en glissant sur sa miniature, et le mode par ses pastilles ; un dossier et un calque Couleur unie gardent la barre d'opacité. Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
    Mêmes bulles, mêmes gestes qu'avant ; seule la place change.
 3. **Une ligne ne montre que l'exception** (`App::exceptions_du_calque`). L'œil n'apparaît que si le calque est caché, le cadenas
    que s'il est verrouillé ; sous la souris, leur case montre l'icône en pâle et un clic agit comme avant. À droite du nom, en
@@ -13063,7 +13651,7 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
    en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
    caché, plus pâle). Avant : une rangée sombre et vide.
 
-### 164.2 Choix faits sans Anthony (à confirmer)
+### 167.2 Choix faits sans Anthony (à confirmer)
 
 - Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
   que disent les données ; la question est restée ouverte sur la page des pistes).
@@ -13071,7 +13659,7 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
   moins 40 points. Les clés elles-mêmes ne changent pas.
 - La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
 
-### 164.3 Comment Anthony teste (sur une copie de projet)
+### 167.3 Comment Anthony teste (sur une copie de projet)
 
 1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
    calques, rien ne bouge.

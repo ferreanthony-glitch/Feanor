@@ -5,12 +5,49 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
-- **Timeline plus claire** (INTERFACE partie 164, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
+- **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
+  Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
+  sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
+  lui-même ce matin depuis `timeline-claire` (c8fdfd5, le dossier `Source` est sur cette branche) et il est en train de l'essayer
+  (liste 164.3) ; le reconstruire depuis main lui retirerait la timeline plus claire et la vue 3D à côté. La session de la timeline,
+  consultée, fusionnera main dans sa branche après son retour : il aura alors les deux. En attendant, la vue nette s'essaie par le
+  dossier `Documents\SHOT\Tests\essai vectoriel-net` (l'exe de 14 h 06, lancé une fois sur la copie : il s'ouvre, aucun plantage).
+- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; fusionnée ensuite, voir au-dessus). Anthony, avec une capture de son projet
+  « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer pourquoi et comment résoudre ce
+  problème ? ». **La cause**, mesurée sur sa capture : la vue était à 225 % (un pixel du dessin = 2,25 pixels d'écran), et FEANOR
+  montre un dessin vectoriel à travers une image en pixels à la taille de la feuille, grossie sans lissage. Rien n'était abîmé dans
+  le dessin. Trois remèdes proposés ; il a choisi le premier : « Oui, construis-le ». **Ce qui est fait** : au-delà de 100 %, la zone
+  que la vue regarde est composée à la taille de l'écran sur un autre fil, les dessins vectoriels rejoués à cette échelle par le moteur
+  des pinceaux (ses traits gardent tous le réglage complet du pinceau), le bitmap laissé en pixels ; l'image est posée par-dessus
+  celle de toujours. Rien ne se calcule pendant un trait ; la zone du trait est en pixels le temps du geste, puis redevient nette.
+  Le dessin, le fichier, l'export ne changent pas ; aucun texte, aucun réglage, aucun format. **Les essais** : huit dans
+  `vuenette_tests.rs` (le bord d'un trait tenu à 0,3 pixel de la feuille à 400 %, là où l'image grossie échoue ; le bitmap au pixel
+  près ; aucun calcul pendant un geste ; un trait tracé au pointeur dans la vraie fenêtre sans écran, à 300 %, puis Ctrl+Z).
+  Vérificateur complet sur le code final (14 h 05) : 4 784 réussis, 0 échec, dix groupes OK, le seul avertissement connu ; la
+  première suite avait sept échecs, tous de mon ajout (le champ `nette` à déclarer dans `etat_projet!`, et la vue nette qui
+  réveillait l'écran dans les essais de repos : elle est éteinte d'origine dans les essais, allumée dans les siens).
+  **Regardé à l'écran par Claude** (12 h 53, exe de la branche, copie de « dd », réglages neufs) : plan 2
+  grossi à environ 350 %, les traits nets, les bords au pixel d'écran (mesuré sur les pixels réels). **Pas regardé à l'écran** :
+  tracer, déplacer et tourner la vue, annuler, plusieurs calques, la pelure, un calque bitmap : le contrôle a été arrêté parce
+  qu'Anthony travaillait dans Photoshop et que les captures d'écran réduisaient ses fenêtres (rouvertes, Photoshop remis devant).
+  **Ce qui n'est pas net** (l'image de toujours reste seule) : plan sans papier, calque à effets, carte inclinée de l'Espace 3D et
+  caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
+  pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
+  très chargés à fort zoom, la zone en pixels pendant le trait.
+- **Timeline plus claire** (INTERFACE partie 167, d'abord numérotée 164, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
   l'interface autour des clés pour 15 calques. Deux séries de dix pistes en maquettes (page « Timeline de Feanor, dix pistes ») ;
   la première écartée (« à côté du vrai problème », « trop compliquées »). Ses gênes : retrouver un calque, lire le timing, la
   place, les en-têtes chargés ; ses règles : ordre de la pile, temps horizontal, rien d'automatique. Gardées : l'exception seule
   sur les lignes, une barre de réglages du calque courant, la couleur du rangement sur toute la ligne, des dossiers-titres qui se
   replient en montrant les clés de leurs calques. Toutes les lignes à 22 points (fin de la ligne complète de la partie 160).
+- **`main` (567c90c, parties 162 à 166 du `main`) fusionné dans `timeline-claire`**, à sa demande (« fusionne »). La partie 164 de
+  la branche devient la **167** (le `main` avait déjà sa 164 : la Couleur, les Effets et la ligne du calque plus visuels). Conflit
+  principal dans `layerheads.rs` : le `main` avait refait la ligne complète du calque courant, que cette branche supprime ; ses deux
+  apports passent dans la barre du calque : l'opacité en glissant sur la miniature (un dossier et un calque Couleur unie gardent la
+  barre) et le mode par ses pastilles. Deux essais de `visuels164_tests` adaptés : la miniature est dans la barre, à droite des
+  icônes ; le pointeur se pose un instant avant d'appuyer (à sa première image, egui pose la bulle par-dessus son élément, et un
+  appui immédiat allait à la bulle). Suite sur le Mac : les mêmes 89 échecs propres au Mac qu'avant, plus un essai de temps de la
+  vue 3D qui passe seul (trois fois sur trois). Pas regardé à l'écran.
 - Essais sur le Mac : `RUSTUP_TOOLCHAIN=stable`, `RUSTFLAGS="-Awarnings -L native=<remplaçants>"` ; les remplaçants vides de
   kernel32 et psapi (six fonctions de mesure) sont hors du dépôt, dans le dossier de travail de la session.
 

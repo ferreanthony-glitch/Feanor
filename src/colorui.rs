@@ -12,6 +12,10 @@
 //!   (`wheel_ui`, géométrie dans `roue.rs`) ou les curseurs TSV, RVB, TSL (un seul à la fois, retenu ; l'opacité
 //!   du pinceau est dans le panneau Réglages), le code et les couleurs récentes.
 //!
+//! Partie 164.1 : la roue en tête, qu'on manipule, avec « avant · maintenant » et les deux carrés à sa droite ; les neutres et le
+//! nuancier ; « Précis » (l'ancien « Plus de couleurs ») porte les commandes du nuancier, les valeurs en chiffres, le code, les
+//! couleurs récentes et la palette de mélange (`color_panel`).
+//!
 //! Le même choix de couleur s'ouvre au pied de la barre d'outils. Conversions : `couleur.rs`.
 
 use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2};
@@ -75,6 +79,8 @@ pub(crate) struct ColorState {
     pub rename: Option<Rename>,
     /// Nuancier dont on demande la suppression (confirmation sous son nom).
     pub confirm_delete: Option<usize>,
+    /// « Avant · maintenant » (partie 164.1) : la couleur d'avant-plan d'avant le dernier choix.
+    pub avant_maintenant: crate::visuels164::AvantMaintenant,
 }
 
 impl ColorState {
@@ -91,6 +97,7 @@ impl ColorState {
             drag: None,
             rename: None,
             confirm_delete: None,
+            avant_maintenant: Default::default(),
         }
     }
 }
@@ -426,17 +433,6 @@ impl App {
         });
     }
 
-    /// La ligne du haut du panneau Couleur : les deux carrés, puis les commandes du nuancier et le nuancier montré
-    /// à droite (`nuancierui.rs`). Intervertir et les couleurs par défaut n'y ont plus de bouton : leurs raccourcis
-    /// et le clic droit sur les carrés restent.
-    fn panel_top_row(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            self.front_back(ui, 30.0, "");
-            self.palette_top(ui);
-        });
-        self.delete_confirmation(ui);
-    }
-
     /// Le code hexadécimal de la couleur d'avant-plan et sa copie, sur une ligne (sous « Plus de couleurs »).
     fn hex_row(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
@@ -702,27 +698,96 @@ impl App {
     /// montré à droite ; les neutres (noir, cinq gris, blanc) ; les couleurs du nuancier montré ; puis, en dépliant
     /// « Plus de couleurs » (retenu dans les réglages de l'application) : la roue ou les curseurs, le code et les
     /// couleurs récentes.
+    ///
+    /// Partie 164.1 (« des panneaux moins dans les chiffres, plus visuels ») : en haut, la roue des teintes qu'on manipule (ou les
+    /// curseurs, si on les a choisis à sa place) et, à sa droite, « avant · maintenant » (deux taches : un clic sur l'ancienne y
+    /// revient) et les deux carrés d'avant-plan et d'arrière-plan ; puis les neutres et les couleurs du nuancier montré, toujours
+    /// visibles. Sous « Précis » (l'ancien « Plus de couleurs », toujours retenu dans les réglages de l'application) : les commandes
+    /// et le choix du nuancier, le choix roue ou curseurs, les valeurs en chiffres (curseurs TSV, RVB, TSL), le code, les couleurs
+    /// récentes et la palette de mélange.
     pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
-        self.panel_top_row(ui);
+        let wheel = self.couleurs.prefs.wheel_shown;
+        if wheel {
+            ui.horizontal_top(|ui| {
+                // (112 points au plus : la Couleur, sous le panneau Espace 3D, lui laisse toute sa caméra sans défiler.)
+                let side = (ui.available_width() * 0.45).clamp(80.0, 112.0);
+                self.color_wheel(ui, side);
+                ui.add_space(4.0);
+                ui.vertical(|ui| self.avant_maintenant_ui(ui));
+            });
+        } else {
+            self.color_sliders(ui);
+            ui.add_space(2.0);
+            ui.horizontal_top(|ui| self.avant_maintenant_ui(ui));
+        }
         ui.add_space(4.0);
         self.neutral_row(ui);
         ui.add_space(4.0);
         // Les couleurs du nuancier montré.
         self.palette_swatches(ui);
         ui.add_space(4.0);
-        let mut open = self.couleurs.prefs.more_open;
-        crate::repli::entete(ui, &mut open, "Plus de couleurs", "La roue chromatique ou les curseurs (TSV, RVB, TSL), le code hexadécimal et les couleurs récentes.");
-        self.couleurs.prefs.more_open = open;
-        if open {
+        let open = self.couleurs.prefs.more_open;
+        let resp = crate::visuels164::titre_precis(ui, open, "Précis : valeurs, nuanciers, mélange");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Précis : Couleur",
+            "Les commandes du nuancier, la roue ou les curseurs, les valeurs en chiffres (TSV, RVB, TSL), le code, les couleurs récentes, la palette de mélange.",
+            "",
+        );
+        if resp.clicked() {
+            self.couleurs.prefs.more_open = !open;
+        }
+        if !self.couleurs.prefs.more_open {
+            return;
+        }
+        ui.indent("precis_couleur", |ui| {
+            // Les commandes du nuancier et le nuancier montré (la ligne du haut d'avant la partie 164, sans les deux carrés).
+            ui.horizontal(|ui| self.palette_top(ui));
+            self.delete_confirmation(ui);
             ui.add_space(2.0);
-            self.color_picker(ui, 240.0);
+            ui.horizontal_wrapped(|ui| self.picker_choice(ui));
+            // (La roue est en haut : ses valeurs, en chiffres, ici. Les curseurs choisis à sa place sont déjà en haut.)
+            if self.couleurs.prefs.wheel_shown {
+                // (Le choix TSV, RVB ou TSL de ces curseurs : sans lui, on ne le changeait qu'en quittant la roue.)
+                ui.horizontal_wrapped(|ui| self.slider_modes(ui, false));
+                self.color_sliders(ui);
+            }
             self.hex_row(ui);
             ui.add_space(2.0);
             self.recent_row(ui);
-        }
-        // La palette de mélange (`melangeur.rs`), repliée d'office, sous « Plus de couleurs ».
-        ui.add_space(4.0);
-        self.palette_melange_ui(ui);
+            // La palette de mélange (`melangeur.rs`), repliée d'office.
+            ui.add_space(4.0);
+            self.palette_melange_ui(ui);
+        });
+    }
+
+    /// « Avant · maintenant » (partie 164.1) : deux taches, la couleur d'avant le dernier choix et celle d'aujourd'hui ; un clic sur
+    /// l'ancienne y revient (et celle d'aujourd'hui devient l'ancienne : deux clics, aller et retour). Dessous, les deux carrés
+    /// d'avant-plan et d'arrière-plan, comme avant (clic sur celui de derrière : les échanger ; clic droit : leur menu).
+    fn avant_maintenant_ui(&mut self, ui: &mut egui::Ui) {
+        crate::panneauxvisuels::titre(ui, "Avant · maintenant");
+        let avant = self.couleurs.avant_maintenant.avant;
+        let w = ((ui.available_width() - 6.0) / 2.0).clamp(30.0, 60.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), if avant.is_some() { Sense::click() } else { Sense::hover() });
+            crate::visuels164::tache(ui.painter(), r, avant, 3, false);
+            let texte = match avant {
+                Some(c) => format!("{} · clic : revenir à elle.", couleur::hex(c)),
+                None => "Pas encore : choisis une autre couleur, l'ancienne viendra ici.".to_string(),
+            };
+            let resp = crate::bulles::bulle(resp, "Couleur d'avant", &texte, "");
+            if let (true, Some(c)) = (resp.clicked(), avant) {
+                self.choose_front(c);
+                self.status = format!("Retour à la couleur d'avant, {}.", couleur::hex(c));
+            }
+            let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
+            crate::visuels164::tache(ui.painter(), r, Some(self.color), 7, true);
+            crate::bulles::bulle(resp, "Couleur de maintenant", &format!("{} · la couleur d'avant-plan, celle des outils.", couleur::hex(self.color)), "");
+        });
+        ui.label(egui::RichText::new("clic sur l'ancienne pour revenir").small().color(crate::theme::texte_doux()));
+        ui.add_space(2.0);
+        self.front_back(ui, 22.0, "");
     }
 
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas
@@ -732,6 +797,9 @@ impl App {
         self.couleurs.menu = self.couleurs.menu_now.take();
         self.couleurs.hovered = self.couleurs.hovered_now.take();
         self.couleurs.prefs.front = self.color;
+        // « Avant · maintenant » : la couleur d'avant le dernier choix, une fois le geste fini (partie 164.1).
+        let calme = !ctx.input(|i| i.pointer.any_down()) && !ctx.wants_keyboard_input();
+        self.couleurs.avant_maintenant.suivre(self.color, calme);
         // Un curseur ou la roue tenus, un code qu'on tape : le choix de couleur est un seul geste, une seule étape d'annulation.
         self.recolor_geste_tick(ctx);
         if self.couleurs.prefs != self.settings.colors && !ctx.input(|i| i.pointer.any_down()) && !ctx.wants_keyboard_input() {

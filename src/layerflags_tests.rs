@@ -141,7 +141,7 @@ fn a_position_locked_layer_cannot_be_drawn_on() {
 
 #[test]
 fn header_rows_all_have_the_same_height() {
-    // Partie 164 : toutes les lignes ont la même hauteur, calque courant et dossiers compris (avant, partie 160 : le calque courant
+    // Partie 167 : toutes les lignes ont la même hauteur, calque courant et dossiers compris (avant, partie 160 : le calque courant
     // avait sa ligne complète, un dossier courant une ligne de 40 points) ; ses réglages sont dans la barre du calque. Le drapeau
     // « réduit » d'un calque (`collapsed`, d'avant) n'y change rien.
     use crate::layerheads::{row_at, rows_height, rows_of, ROW_FINE};

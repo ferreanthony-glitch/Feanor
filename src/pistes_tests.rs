@@ -222,7 +222,7 @@ fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
     use crate::layerheads::{rows_of, ROW_FINE};
     let mut app = app_with("timeline", doc_with(&[&["A", "B", "C"]]));
     app.pistes_follow_current(false);
-    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 164 : toutes ses lignes ont la même
+    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 167 : toutes ses lignes ont la même
     // hauteur).
     app.set_all_tracks_folded(true);
     let rows = rows_of(app.layers(), &app.doc.groups);

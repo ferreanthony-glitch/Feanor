@@ -123,6 +123,8 @@ fn the_export_check_box_is_off_by_default_and_the_choice_is_kept_by_the_workstat
     assert!(!toml::to_string(&crate::settings::Settings::default()).unwrap().contains("export_avec_annotations"), "rien d'écrit tant qu'elle est décochée");
     // La fenêtre d'export : la case est là (images, film, GIF, PDF), pas pour le son seul ; cocher la retient ; une nouvelle fenêtre s'ouvre cochée.
     let mut b = plan_annote();
+    // (Partie 163.4 : les réglages de la fenêtre d'export sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut ecran = Fenetre::new();
     for format in [Format::Png, Format::Pdf, Format::Mp4, Format::Gif] {
         b.app.open_export(format);

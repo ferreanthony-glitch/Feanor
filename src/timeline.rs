@@ -81,7 +81,7 @@ impl App {
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
         ui.separator();
-        // La barre du calque courant (partie 164) : tous ses réglages, sur une ligne qui ne défile pas avec les calques.
+        // La barre du calque courant (partie 167) : tous ses réglages, sur une ligne qui ne défile pas avec les calques.
         self.barre_du_calque(ui);
         ui.add_space(2.0);
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
@@ -352,7 +352,7 @@ impl App {
                 theme::surface_active(crate::theme::accent(), 0.18)
             } else {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre. Toute la ligne prend la couleur du rangement du calque, celle
-                // de son dossier ou de son groupe (partie 164).
+                // de son dossier ou de son groupe (partie 167).
                 let dossier = self.layers()[li].folder;
                 let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
                 crate::layerheads::fond_teinte(if dossier { theme::rangee_sombre() } else { theme::rangee() }, rangement, dossier)
@@ -569,7 +569,7 @@ impl App {
                 f = end;
             }
         }
-        // Un dossier fermé (partie 164) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
+        // Un dossier fermé (partie 167) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
         // un petit écart au début de chaque dessin. On voit encore où ça bouge sans rouvrir le dossier.
         for row in &rows {
             let layers = self.layers();

@@ -349,6 +349,8 @@ fn an_effect_pasted_from_a_project_of_another_sheet_size_is_scaled() {
 
 #[test]
 fn the_copy_paste_button_is_gone_from_the_effects_panel() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("bouton", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let textes = ecran.chauffer(&mut app, 4);
@@ -359,6 +361,8 @@ fn the_copy_paste_button_is_gone_from_the_effects_panel() {
 
 #[test]
 fn the_boil_leads_the_trait_menu_and_is_not_a_general_entry_of_the_add_menu() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut app = app_one_layer("menus", LayerKind::Vector);
     let mut ecran = Ecran::new();
     let textes = ecran.chauffer(&mut app, 4);
@@ -386,6 +390,8 @@ fn the_boil_leads_the_trait_menu_and_is_not_a_general_entry_of_the_add_menu() {
 
 #[test]
 fn on_a_bitmap_layer_the_trait_menu_is_hidden_and_a_line_says_where_the_boil_is() {
+    // (Partie 164.2 : les menus, les réglages et les clés des effets sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     // Passe de simplicité du 2026-10-21 : ce qui ne peut pas servir se cache au lieu de se griser. Anthony avait pourtant
     // cherché le tremblement le 2026-10-19 (il se cachait sans rien dire) : une ligne dit où il est.
     let mut app = app_one_layer("bitmap", LayerKind::Bitmap);

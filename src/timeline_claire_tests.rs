@@ -1,4 +1,4 @@
-//! La timeline plus claire (partie 164) : des lignes toutes pareilles, seulement l'exception à droite du nom, la couleur du
+//! La timeline plus claire (partie 167) : des lignes toutes pareilles, seulement l'exception à droite du nom, la couleur du
 //! rangement sur toute la ligne, et la barre du calque courant au-dessus des lignes.
 
 use eframe::egui::Color32;

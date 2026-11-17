@@ -1066,32 +1066,14 @@ fn a_new_key_with_a_single_chosen_layer_is_unchanged() {
     assert!(b.app.status.contains("Nouvelle clé sur « Calque 1 »"), "{}", b.app.status);
 }
 
-/// Le champ d'opacité du calque courant (partie 160 : la barre de la piste du calque actif de la bande, à la place du champ du
-/// panneau Calques) : le calque courant est mis à 37 % (une valeur que rien d'autre n'affiche) ; la barre peint « 37 % » deux fois au
-/// même endroit (sur sa partie pleine et sur le reste) : une seule place à l'écran.
+/// Le champ d'opacité du calque courant (partie 164.3 : la miniature de sa ligne complète dans la timeline, sur laquelle on glisse ; avant,
+/// la barre qui écrivait « 37 % ») : le calque courant est mis à 37 % ; une seule miniature d'opacité à l'écran.
 fn champ_opacite(b: &mut Banc) -> Pos2 {
     b.app.doc.panels[0].layers[0].opacity = 0.37;
-    b.garder_formes = true;
     b.chauffer(2);
-    let mut trouves: Vec<Pos2> = Vec::new();
-    for s in &b.formes {
-        if let eframe::egui::epaint::Shape::Text(t) = &s.shape {
-            if t.galley.job.text == "37 %" {
-                trouves.push(t.pos + t.galley.size() * 0.5);
-            }
-        }
-    }
-    b.garder_formes = false;
-    // (Partie 164 : la ligne du calque dans la timeline dit aussi « 37 % » en petit, à droite de son nom, sans champ : on garde les
-    // textes posés deux fois au même endroit, ceux d'une barre.)
-    let mut seuls: Vec<Pos2> = Vec::new();
-    for p in trouves.iter().copied() {
-        if trouves.iter().filter(|q| q.distance(p) < 1.0).count() >= 2 && !seuls.iter().any(|q| q.distance(p) < 1.0) {
-            seuls.push(p);
-        }
-    }
-    assert_eq!(seuls.len(), 1, "un seul champ « 37 % » à l'écran : {trouves:?}");
-    seuls[0]
+    let seuls = crate::bulles::vus::ou("Opacité du calque");
+    assert_eq!(seuls.len(), 1, "une seule miniature d'opacité à l'écran : {seuls:?}");
+    seuls[0].center()
 }
 
 #[test]
@@ -1101,7 +1083,7 @@ fn the_opacity_field_sets_every_chosen_layer_in_one_step() {
     b.chauffer(1);
     let c = champ_opacite(&mut b);
     let n0 = etapes(&b);
-    // Glisser le champ de 60 px vers la droite (0,5 % par pixel).
+    // Glisser la miniature de 60 px vers la droite (1/120 par point, partie 164.3 : de 37 % à 87 %).
     b.image(vec![Event::PointerMoved(c)], 1.0 / 60.0);
     b.image(vec![bouton(c, true, Modifiers::NONE)], 1.0 / 60.0);
     for k in 1..=12 {
@@ -1110,7 +1092,7 @@ fn the_opacity_field_sets_every_chosen_layer_in_one_step() {
     b.image(vec![bouton(c + eframe::egui::vec2(60.0, 0.0), false, Modifiers::NONE)], 1.0 / 60.0);
     b.chauffer(2);
     let v0 = b.app.doc.panels[0].layers[0].opacity_at(2);
-    assert!(v0 > 0.45, "le calque courant a changé ({v0})");
+    assert!((v0 - 0.87).abs() < 0.03, "le calque courant a changé ({v0})");
     for li in 0..4 {
         let v = b.app.doc.panels[0].layers[li].opacity_at(2);
         assert!((v - v0).abs() < 1e-4, "calque {li} : la même opacité que le courant ({v} et {v0}), verrouillé compris");

@@ -174,7 +174,7 @@ fn la_colonne_porte_tout(debut: f32, colonne: f32, ligne_du_calque: Rect) {
 
 #[test]
 fn in_the_animation_the_bar_of_the_current_layer_carries_everything_and_the_rows_are_all_alike() {
-    // Partie 164 : les réglages du calque courant sont dans la barre du calque, au-dessus des lignes ; toutes les lignes ont la même
+    // Partie 167 : les réglages du calque courant sont dans la barre du calque, au-dessus des lignes ; toutes les lignes ont la même
     // hauteur (avant, partie 160 : la ligne complète du calque courant).
     let mut b = banc_dans(Espace::Animation);
     b.chauffer(2);
@@ -424,21 +424,22 @@ fn only_the_side_columns_next_to_the_drawing_are_merged() {
 }
 // ------------------------------------------------------------------------------------ partie 161.4 : ce qui débordait
 
-/// Les éléments du panneau Planche des Vignettes, dans l'ordre où il les montre.
+/// Les éléments du panneau Planche des Vignettes, dans l'ordre où il les montre (partie 163.3 : les dessins de la planche, puis sous
+/// « Précis » les séquences et les numéros).
 const DE_LA_PLANCHE: &[&str] = &[
     "Annotations",
     "Dessin de la case",
-    "Nouvelle séquence",
-    "Toutes",
-    "Seulement la courante",
-    "Aucune autre",
-    "Cacher la séquence",
     "En lignes",
     "À la japonaise",
     "Cases par ligne",
     "Action",
     "Dialogue",
     "Notes",
+    "Nouvelle séquence",
+    "Toutes",
+    "Seulement la courante",
+    "Aucune autre",
+    "Cacher la séquence",
     "Numéros de plan",
 ];
 
@@ -449,6 +450,7 @@ fn the_board_panel_fits_in_the_column_and_the_vignettes_suite_does_not_cover_it(
     // Une séquence au long nom (jusqu'à 200 signes) : sa ligne tient dans la colonne.
     assert!(!b.app.doc.sequences.is_empty(), "le film a une séquence");
     b.app.doc.sequences[0].name = "Une séquence au nom très long, comme un intitulé de scénario : INT. CUISINE DE LA FERME, NUIT, ORAGE".into();
+    crate::panneauxvisuels::ouvrir_precis(&b.ctx, "Planche", true);
     b.chauffer(4);
     let (col, _) = partie_de(&b, Pane::Vignettes).expect("le panneau Planche est dans la colonne");
     assert!((col.width() - crate::dock::COLONNE).abs() <= 3.0, "{col:?}");
@@ -489,6 +491,9 @@ fn the_whole_camera_of_the_3d_space_panel_shows_without_scrolling() {
     b.app.run_action("espace3d.basculer");
     b.chauffer(6);
     assert!(b.app.espace3d.snap, "l'aimantation d'origine");
+    // (Partie 162 : le panneau est contextuel ; la caméra choisie, il montre ses graphiques.)
+    b.app.espace3d.sel = vec![crate::espace3dgizmo::CAMERA_ID];
+    b.chauffer(4);
     let state = b.app.dock.as_ref().expect("le dock");
     let (s, n, _) = state.find_tab(&Pane::Espace3d).expect("le panneau Espace 3D");
     let vue = match &state[s][n] {
@@ -496,8 +501,11 @@ fn the_whole_camera_of_the_3d_space_panel_shows_without_scrolling() {
         _ => panic!("une feuille"),
     };
     assert!(b.app.pane_shown(Pane::Color), "la Couleur dessous");
-    // Le bas de la caméra : la focale (« Viser la sélection » est sur la dernière ligne de la caméra).
-    let bas = *vus::ou("Viser la sélection").iter().find(|r| vue.contains(r.center()) || (r.center().x > vue.left() && r.center().x < vue.right())).unwrap_or_else(|| panic!("{:?}", vus::noms()));
-    let focale = *vus::ou("Focale de la caméra").first().unwrap_or_else(|| panic!("la focale : {:?}", vus::noms()));
-    assert!(focale.bottom() <= vue.bottom() + 0.5 && bas.bottom() <= vue.bottom() + 0.5, "la caméra dépasse le bas du panneau de {} points : {bas:?} / {vue:?} ({:?} {:?} {:?})", bas.bottom() - vue.bottom(), vus::ou("Aimanter à la grille"), vus::ou("Pas de taille"), vus::ou("Rotation"));
+    assert!((vue.width() - crate::dock::COLONNE).abs() <= 3.0, "la colonne de 290 points : {vue:?}");
+    // Toute la caméra, du haut (l'objectif) au bas (« Précis ») : rien sous le bas du panneau, rien hors de la colonne.
+    for nom in ["Objectif 18 mm", "Objectif 135 mm", "Champ de la caméra", "Hauteur et plongée", "Panoramique", "Horizon", "Regarder par la caméra", "Viser la sélection", "Précis"] {
+        let r = *vus::ou(nom).iter().find(|r| r.center().x > vue.left() && r.center().x < vue.right()).unwrap_or_else(|| panic!("« {nom} » n'est pas dans le panneau : {:?}", vus::noms()));
+        assert!(r.bottom() <= vue.bottom() + 0.5, "« {nom} » dépasse le bas du panneau de {} points : {r:?} / {vue:?}", r.bottom() - vue.bottom());
+        assert!(r.left() >= vue.left() - 0.5 && r.right() <= vue.right() + 0.5, "« {nom} » déborde de la colonne : {r:?} / {vue:?}");
+    }
 }
