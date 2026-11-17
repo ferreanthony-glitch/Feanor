@@ -5,11 +5,11 @@
 //! ExtraBold pour le mot, IBM Plex Sans Medium pour la devise. Elles sont embarquées dans l'exécutable. Pour changer de
 //! police de marque, on ne touche qu'aux trois constantes `MOT_*` / `DEVISE_*` de ce fichier.
 //!
-//! **Le lockup** (charte du 17/11/2026) : le mot « FEANOR » en capitales. Le lockup principal met le joyau devant le mot
-//! (la pierre fait 1,67 fois la hauteur des capitales, centrée sur elles ; devise alignée à droite sur le R) ; le moment
-//! fort (l'accueil) met le joyau à la place du O (la pierre fait 1,18 fois la hauteur des capitales, centrée sur elles,
+//! **Le lockup** (charte du 17/11/2026) : le mot « FEANOR » en capitales. Le lockup principal met l'étoile devant le mot
+//! (l'étoile fait 1,87 fois la hauteur des capitales, centrée sur elles ; devise alignée à droite sur le R) ; le moment
+//! fort (l'accueil) met l'étoile à la place du O (elle fait 1,18 fois la hauteur des capitales, centrée sur elles,
 //! avec un petit écart de chaque côté ; devise à partir du F). Les tailles viennent de la hauteur réelle des capitales de
-//! la police (lue dans la table `OS/2`) et de la place réelle de la pierre dans son carré (`logo::PIERRE_*`). Sous
+//! la police (lue dans la table `OS/2`) et de la place réelle de l'étoile dans son carré (`logo::PIERRE_*`). Sous
 //! 24 pixels de capitales, le joyau est seul ; la devise « FORGE YOUR STORY » disparaît sous 24 pixels de hauteur de logo.
 //!
 //! **L'animation d'ouverture** (`logo::etat_animation`) n'est jouée qu'une fois par lancement, sur l'accueil, sans
@@ -129,14 +129,14 @@ pub fn taille_pour_capitales(m: &Metriques, capitales: f32) -> f32 {
     capitales * m.unites_par_em / m.hauteur_capitales
 }
 
-/// La hauteur de la pierre dans son carré (0,92 : coins arrondis compris).
+/// La hauteur de l'étoile dans son carré (0,96).
 fn part_pierre() -> f32 {
     (logo::PIERRE_BAS - logo::PIERRE_HAUT) / logo::DESSIN
 }
 /// La pierre à la place du O : 1,18 fois la hauteur des capitales.
 pub const PIERRE_SUR_CAPITALES_O: f32 = 1.18;
-/// La pierre devant le mot : 1,67 fois la hauteur des capitales.
-pub const PIERRE_SUR_CAPITALES_DEVANT: f32 = 1.67;
+/// L'étoile devant le mot : 1,87 fois la hauteur des capitales.
+pub const PIERRE_SUR_CAPITALES_DEVANT: f32 = 1.87;
 
 /// Côté du joyau à la place du O (accueil) pour des capitales de `capitales` points.
 pub fn cote_joyau(capitales: f32) -> f32 {

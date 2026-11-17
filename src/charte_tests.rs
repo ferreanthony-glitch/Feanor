@@ -355,10 +355,10 @@ fn the_brand_fonts_are_embedded_and_the_joyau_is_sized_on_the_real_cap_height() 
     // Pour 50 points de capitales : une taille de police où les capitales font bien 50 points.
     let taille = marque::taille_pour_capitales(&m, 50.0);
     assert!((taille * m.hauteur_capitales / m.unites_par_em - 50.0).abs() < 1e-3);
-    // Le joyau : la pierre (de 4 à 96 sur 100) fait 1,18 fois les capitales à la place du O, 1,67 fois devant le mot.
+    // L'étoile (de 2 à 98 sur 100) fait 1,18 fois les capitales à la place du O, 1,87 fois devant le mot.
     let part = (logo::PIERRE_BAS - logo::PIERRE_HAUT) / logo::DESSIN;
     assert!((marque::cote_joyau(50.0) * part - 50.0 * 1.18).abs() < 1e-3);
-    assert!((marque::cote_devant(50.0) * part - 50.0 * 1.67).abs() < 1e-3);
+    assert!((marque::cote_devant(50.0) * part - 50.0 * 1.87).abs() < 1e-3);
     // Les licences sont livrées avec les polices.
     for f in ["OFL-BigShoulders.txt", "OFL-IBMPlexSans.txt", "OFL-IBMPlexMono.txt"] {
         let chemin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join("polices").join(f);

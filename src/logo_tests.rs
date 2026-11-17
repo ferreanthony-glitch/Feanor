@@ -1,4 +1,4 @@
-//! Logo et icône de FEANOR : le joyau (formes de la charte du 17/11/2026, couleur et mono), l'icône de l'application, le fichier
+//! Logo et icône de FEANOR : l'étoile (forme de la charte du 17/11/2026, couleur et mono), l'icône de l'application, le fichier
 //! `.ico` et l'animation d'ouverture (la fonction des images clés).
 
 use crate::logo::{self, EtatAnim, Joyau};
@@ -17,41 +17,39 @@ fn pixel_d(px: &[u8], cote: u32, x: f32, y: f32) -> [u8; 4] {
 }
 
 #[test]
-fn the_svg_files_in_the_repository_have_the_shapes_and_colours_of_the_drawing() {
+fn the_svg_files_in_the_repository_have_the_shape_and_colours_of_the_drawing() {
     let couleur = include_str!("../assets/feanor-logo.svg");
     assert!(couleur.contains(r#"viewBox="0 0 100 100""#));
-    let etoile = logo::ETOILE.iter().map(|(x, y)| format!("{x} {y}")).collect::<Vec<_>>().join(" L");
-    assert!(couleur.contains(&format!("M{etoile} Z")), "l'étoile du dessin : M{etoile} Z");
+    let e = logo::ETOILE;
+    let forme = format!("M{} {} Q{} {} {} {} Q{} {} {} {} Q{} {} {} {} Q{} {} {} {} Z", e[0].0, e[0].1, e[1].0, e[1].1, e[2].0, e[2].1, e[3].0, e[3].1, e[4].0, e[4].1, e[5].0, e[5].1, e[6].0, e[6].1, e[7].0, e[7].1, e[0].0, e[0].1);
+    assert!(couleur.contains(&forme), "la forme de l'étoile : {forme}");
     for c in logo::DEGRADE.iter().map(|(_, c)| format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])) {
         assert!(couleur.contains(&c), "le dégradé : {c}");
     }
-    for (o, _) in logo::QUARTS.iter().filter(|(o, _)| *o < 1.0) {
-        assert!(couleur.contains(&format!("opacity=\"{o}\"")), "transparence d'un quart : {o}");
-    }
-    assert!(couleur.contains("mix-blend-mode:multiply") && couleur.contains("#6A6FD6") && couleur.contains("#2E9FBF"), "les ombres des facettes");
-    assert_eq!(couleur.matches("fill=\"url(#ir)\"").count(), 8, "huit facettes");
+    assert!(couleur.contains("fill=\"url(#ir)\""));
     let encre = include_str!("../assets/feanor-logo-encre.svg");
-    assert!(encre.contains("evenodd") && encre.contains("#121214") && !encre.contains("url(#ir)"), "le mono : un aplat, l'étoile découpée");
+    assert!(encre.contains(&forme) && encre.contains("#121214") && !encre.contains("url(#ir)"), "le mono : un aplat");
     let blanc = include_str!("../assets/feanor-logo-blanc.svg");
-    assert!(blanc.contains("evenodd") && blanc.contains("#FFFFFF"));
+    assert!(blanc.contains(&forme) && blanc.contains("#FFFFFF"));
 }
 
 #[test]
-fn the_colour_joyau_has_a_white_star_a_vertical_gradient_eight_facets_and_a_transparent_background() {
+fn the_colour_star_has_a_vertical_gradient_hollow_flanks_and_a_transparent_background() {
     let px = logo::image(256, Joyau::Jade, None);
     assert_eq!(px.len(), 256 * 256 * 4);
-    assert_eq!(pixel_d(&px, 256, 50.0, 50.0), [255, 255, 255, 255], "le cœur de l'étoile est blanc");
-    assert_eq!(pixel_d(&px, 256, 50.0, 33.0), [255, 255, 255, 255], "la branche haute de l'étoile");
-    assert_eq!(pixel_d(&px, 256, 3.0, 3.0)[3], 0, "le coin est transparent");
-    assert_eq!(pixel_d(&px, 256, 50.0, 1.0)[3], 0, "la pointe du haut est arrondie : rien au-dessus de 4");
     // Le haut est jade (vert plus fort que rouge), le bas tire vers le bleu et le lilas (bleu plus fort que vert).
-    let haut = pixel_d(&px, 256, 50.0, 14.0);
+    let haut = pixel_d(&px, 256, 50.0, 12.0);
     assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut jade : {haut:?}");
-    let bas = pixel_d(&px, 256, 50.0, 86.0);
+    let bas = pixel_d(&px, 256, 50.0, 88.0);
     assert!(bas[3] == 255 && bas[2] > bas[1], "bas bleu lilas : {bas:?}");
-    // Les facettes : de part et d'autre d'une arête, la lumière change.
-    assert_ne!(pixel_d(&px, 256, 40.0, 30.0), pixel_d(&px, 256, 60.0, 30.0), "haut gauche et haut droite");
-    assert_ne!(pixel_d(&px, 256, 60.0, 25.0), pixel_d(&px, 256, 72.0, 42.0), "les deux moitiés du quart haut droit");
+    assert_eq!(pixel_d(&px, 256, 50.0, 50.0)[3], 255, "le cœur est plein");
+    // Les flancs sont creusés : entre deux branches, c'est vide.
+    for (x, y) in [(30.0, 30.0), (70.0, 30.0), (30.0, 70.0), (70.0, 70.0)] {
+        assert_eq!(pixel_d(&px, 256, x, y)[3], 0, "creux en ({x}, {y})");
+    }
+    // La branche verticale est plus longue que l'horizontale.
+    assert_eq!(pixel_d(&px, 256, 50.0, 6.0)[3], 255, "pointe du haut");
+    assert_eq!(pixel_d(&px, 256, 14.0, 50.0)[3], 0, "la pointe gauche s'arrête à 18");
     // Rien ne déborde : la bordure de l'image reste vide.
     let cote = 256usize;
     for k in 0..cote {
@@ -59,20 +57,19 @@ fn the_colour_joyau_has_a_white_star_a_vertical_gradient_eight_facets_and_a_tran
             assert!(px[(y * cote + x) * 4 + 3] < 255, "bord plein en ({x}, {y})");
         }
     }
-    // Les autres variantes en couleur dessinent le même joyau.
+    // Les autres variantes en couleur dessinent la même étoile.
     assert_eq!(logo::image(64, Joyau::JadePetit, None), logo::image(64, Joyau::Jade, None));
     assert_eq!(logo::image(64, Joyau::Iris, None), logo::image(64, Joyau::Jade, None));
 }
 
 #[test]
-fn the_mono_joyau_is_one_flat_ink_with_the_star_cut_out() {
+fn the_mono_star_is_one_flat_ink() {
     for encre in [logo::ENCRE_SOMBRE, logo::ENCRE_CLAIRE] {
         let px = logo::image(256, Joyau::Mono(encre), None);
         let plein = [encre[0], encre[1], encre[2], 255];
-        assert_eq!(pixel_d(&px, 256, 25.0, 50.0), plein, "la pierre");
-        assert_eq!(pixel_d(&px, 256, 50.0, 85.0), plein, "la pierre, en bas : pas de facettes");
-        assert_eq!(pixel_d(&px, 256, 50.0, 50.0)[3], 0, "l'étoile est découpée");
-        assert_eq!(pixel_d(&px, 256, 5.0, 5.0)[3], 0, "hors de la pierre");
+        assert_eq!(pixel_d(&px, 256, 50.0, 50.0), plein, "le cœur");
+        assert_eq!(pixel_d(&px, 256, 50.0, 85.0), plein, "la branche du bas, même encre");
+        assert_eq!(pixel_d(&px, 256, 30.0, 30.0)[3], 0, "entre deux branches");
     }
 }
 
@@ -119,16 +116,15 @@ fn the_rest_pose_of_the_animation_draws_the_joyau_at_rest_and_the_end_has_no_sec
     let fin = logo::image(128, Joyau::Jade, Some(&repos));
     let diff = fixe.iter().zip(&fin).filter(|(a, b)| a.abs_diff(**b) > 3).count();
     assert!(diff < 40, "l'image finale de l'animation est le repos : {diff} octets diffèrent");
-    // Au début, l'étoile blanche n'existe pas encore : sa place est vide (la pierre est taillée autour), la pierre est là.
+    // Au début, l'étoile n'a pas de taille : l'image est vide (la seconde étoile non plus).
     let debut = logo::image(128, Joyau::Jade, Some(&logo::etat_animation(0.0)));
-    assert_eq!(pixel_d(&debut, 128, 50.0, 50.0)[3], 0, "pas d'étoile au début : le cœur est vide");
-    assert_eq!(pixel_d(&debut, 128, 50.0, 14.0)[3], 255, "la pierre est déjà là");
+    assert!(debut.chunks_exact(4).all(|p| p[3] == 0), "rien au début");
     // Au pic, l'étoile dépasse de la grille ou presque (échelle 1,25) : elle est coupée, rien ne plante.
     let _ = logo::image(64, Joyau::Iris, Some(&logo::etat_animation(0.34 * logo::DUREE_ANIMATION)));
 }
 
 #[test]
-fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_joyau() {
+fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_star() {
     for taille in [16u32, 32, 64, 256] {
         let px = logo::icone(taille);
         assert_eq!(px.len(), (taille * taille * 4) as usize);
@@ -140,19 +136,17 @@ fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_joyau()
             let (x, y) = (taille * 12 / 100, taille / 2);
             assert_eq!(&at(x, y)[..3], &logo::SOL, "fond à {taille} px");
         }
-        // Le centre est l'étoile blanche.
-        if taille >= 32 {
-            assert_eq!(&at(taille / 2, taille / 2)[..3], &logo::ETOILE_BLANCHE, "centre à {taille} px");
-        } else {
-            assert!(at(taille / 2, taille / 2)[0] > 150, "centre clair (pixels mêlés) à {taille} px");
-        }
+        // Le centre est l'étoile.
+        assert_eq!(at(taille / 2, taille / 2)[3], 255, "centre à {taille} px");
     }
     let t = 256u32;
     let px = logo::icone(t);
     let at = |x: u32, y: u32| px[((y * t + x) * 4) as usize..][..4].to_vec();
-    // Le haut de la pierre est jade : à 6,4 + 0,8 × 14 × 0,64 de la grille, soit 13,6 / 64 → 54 px sur 256.
-    let haut = at(t / 2, 54);
-    assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut de la pierre jade : {haut:?}");
+    // Le haut de l'étoile est jade : à 6,4 + 0,8 × 12 × 0,64 de la grille, soit 12,5 / 64 → 50 px sur 256.
+    let haut = at(t / 2, 50);
+    assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut de l'étoile jade : {haut:?}");
+    // Entre deux branches, le fond sombre.
+    assert_eq!(&at(t * 30 / 100, t * 30 / 100)[..3], &logo::SOL);
     assert_eq!(at(12, 12)[3], 0, "rayon d'environ 22 % du côté");
 }
 

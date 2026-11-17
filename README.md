@@ -1,7 +1,7 @@
 # FEANOR — Forge your story
 
 *Anciennement Pelure.* Le logiciel s'appelle FEANOR depuis le 2026-10-18 ; son logo est dans
-`assets/feanor-logo*.svg` (le joyau de la charte du 17/11/2026 : `docs/INTERFACE.md`, partie 131). « SHOT » dans les commentaires du code et dans les anciens documents (`docs/`, `suivi/`) veut dire FEANOR : voir `docs/INTERFACE.md`, partie 96.
+`assets/feanor-logo*.svg` (l'étoile de la charte du 17/11/2026 : `docs/INTERFACE.md`, partie 131). « SHOT » dans les commentaires du code et dans les anciens documents (`docs/`, `suivi/`) veut dire FEANOR : voir `docs/INTERFACE.md`, partie 96.
 
 Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et plans (chaque plan,
 une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
