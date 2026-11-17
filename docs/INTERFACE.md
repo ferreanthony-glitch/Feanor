@@ -13869,3 +13869,8 @@ plans suivants glissent, la barre de la séquence reste entière ; un clic dans 
 seule ». Premier essai : la vue restait sombre (l'image était rangée dans la file des vignettes sous un numéro que son élagage ne
 connaît pas, et lâchée aussitôt) ; corrigé en la rangeant sous le numéro du plan rangé de la version. Le clic droit sur « V1 » ouvre
 la palette ; l'orange colore l'étiquette du nom, celle du bloc déplié, son bord et le cadre de la vue.
+
+Vérificateur (17 novembre, vers 22 h 50, `-Repetitions 2`) : compilation sans avertissement ; passage 2 : **4 807 réussis, 0 échec** ;
+passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`
+(intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
+passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
