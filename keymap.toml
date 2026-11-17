@@ -2581,11 +2581,6 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
-action = "piste.toute_la_pile"
-touches = []
-source = "FEANOR (sans touche : toute la pile des calques ou trois calques, barre du bas de la timeline)"
-
-[[raccourci]]
 action = "bande.plans_en_bandeau"
 touches = []
 source = "FEANOR (sans touche : les plans en bandeau ou de hauteur moyenne, barre du bas de la timeline)"

@@ -9945,7 +9945,7 @@ Demande d'Anthony, sur deux jours. Le 10 novembre : « comment s'organisent les 
 
 Fichiers : `src/pistes.rs` (les lignes de la timeline, les réglages, la colonne de gauche), `src/montagerows.rs` (rangées, fines bandes, lignes de dossier, colonne des plans), `src/storyboard.rs` (bloc d'un plan en bandeau, barre du bas, pointeur sur la bande), `src/folders.rs` (`couleur_du_rangement`), `src/layerheads.rs` (le même filet dans la timeline de l'animation), `src/settings.rs`, `src/app.rs` (actions, zoom), `src/keymap.rs` + `keymap.toml`, `src/dockui.rs`, `src/timeline.rs` ; essais dans `calques_timeline_tests.rs` (neuf), `pistes_tests.rs` et `timeline_repliee_tests.rs` (adaptés). Remplace le mode « cachés » et la ligne « N autres calques » de la § 68.2 ; le reste de la § 68 (clés sur le bloc du plan, liseré de l'aplat, noms des blocs) ne change pas.
 
-### 137.1 Trois calques à la fois
+### 137.1 Trois calques à la fois — retiré à la demande d'Anthony (partie 165.7 : toute la pile seule)
 
 Dans les onglets **Storyboard** et **Montage**, la pile ne montre plus que **trois calques** : le **calque actif** au milieu (40 points, ses losanges, sa barre), **son voisin du dessus et celui du dessous** (19 points : leurs dessins, leurs clés en petits traits, leur nom en 11 points). Le calque actif est **toujours à la même place** ; la fenêtre fait **toujours 130 points de haut**, quel que soit le nombre de calques.
 
@@ -9971,7 +9971,7 @@ Les deux sens ne sont jamais au même endroit. **La bande d'un calque garde la c
 
 La rangée des plans ne prend plus la place que les pistes laissent (jusqu'à 170 points) : elle a **la hauteur du réglage**, **moyenne** (56 points : la vignette, le nom et la durée dessous) ou **en bandeau** (28 points : une petite vignette, le nom et la durée sur une ligne). Dans sa colonne de gauche, sur une ligne : **« Nouveau plan »**, **« ⋯ »** (nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard ; un cadenas à sa place quand le storyboard est verrouillé), les **réglages du projet** et son nom. Les commandes rangées restent au clic droit sur un plan et dans le menu « Plans » de la barre.
 
-### 137.5 Les réglages : en bas de la timeline, et dans les Préférences
+### 137.5 Les réglages : en bas de la timeline, et dans les Préférences — « trois calques / toute la pile » retiré à la demande d'Anthony (partie 165.7) ; « Hauteur des plans » reste
 
 **Barre du bas de la bande**, à droite du zoom : deux paires de petites icônes, avec leur bulle — **trois calques / toute la pile**, **plans moyens / en bandeau**. Les mêmes dans **Fichier > Préférences… > Montage** (« Calques dans la timeline », « Hauteur des plans ») et au clic droit sur une piste. Deux actions à qui donner une touche : `piste.toute_la_pile`, `bande.plans_en_bandeau` (sans touche d'office). Réglages du poste (`reglages.toml` : `calques_timeline`, `hauteur_plans` ; les valeurs d'office ne s'écrivent pas) ; l'ancien réglage « Calques non actifs : repliés / cachés » n'existe plus (une vieille clé est ignorée).
 
@@ -13544,3 +13544,33 @@ aussi large que la plus longue ligne et au plus 420 points ; « Image suivante �
 répondent. Avec 25 calques, dans les trois dispositions, chaque ligne de calque de la colonne a le même haut et le même bas que sa
 piste dans la grille (`timeline::LIGNES_PEINTES`, relevé à chaque image dans les essais). L'essai 165.5 « sur une ligne » de
 l'Animation devient celui-ci.
+
+### 165.7 Le mode « Trois calques » retiré : toute la pile, toujours
+
+Anthony : « supprime l'option et le bouton 3 calques ».
+
+- **Retiré** : le mode « Trois calques » des pistes du Storyboard et du Montage (`pistes.rs` : `Pile`, la fenêtre des trois calques,
+  les voisins à 19 points, les fines bandes « N au-dessus / au-dessous », « Haut / Bas de la pile » et leur clic qui sautait de trois
+  calques ; `montagerows.rs` : leur dessin) ; les deux icônes « Trois calques / Toute la pile » de la barre du bas de la bande ; la
+  ligne « Calques dans la timeline » de Préférences > Montage (et sa place dans la recherche des Préférences) ; le choix dans le menu
+  « Calques dans la timeline » du clic droit sur une piste (il garde déplier / replier cette piste, tout replier, tout déplier et
+  « Déplier le calque courant tout seul ») ; l'action `piste.toute_la_pile` (`keymap.rs`, son bloc de `keymap.toml`) ; les bulles et
+  les textes qui en parlaient (`PILE_TROIS`, `PILE_TOUTE`).
+- **Reste** : toute la pile — le calque actif déplié, les autres en bandes de 17 points, les dossiers en lignes fines ; « Déplier le
+  calque courant tout seul » ; « Agrandir les calques proches quand il y a de la place » ; « Hauteur des plans » (barre du bas et
+  Préférences) ; la règle 165.4 (la ligne du calque actif n'est jamais repliée dans la timeline de l'Animation).
+- **Réglages enregistrés** : la clé `calques_timeline` (« trois », la valeur d'office d'avant, ou « toute ») est ignorée à
+  l'ouverture, sans erreur ni question ; les autres réglages du fichier sont gardés et elle n'est plus réécrite. Un fichier de
+  raccourcis personnel qui donnait une touche à `piste.toute_la_pile` s'ouvre aussi : l'action inconnue est ignorée, avec la remarque
+  habituelle du gestionnaire de raccourcis. **Les projets ne changent pas** : le format reste 56.
+
+Essais : `pistes_tests.rs` — `a_saved_three_layers_setting_opens_as_the_whole_stack` (des réglages « trois » et « toute » se lisent,
+gardent leurs autres valeurs, ne réécrivent pas la clé, et la timeline montre toute la pile, le calque actif déplié jusqu'au bout de la
+pile ; format 56) ; l'essai des réglages ne garde que la hauteur des plans. `calques_timeline_tests.rs` — les essais de la fenêtre des
+trois calques et de ses fines bandes sont retirés ou réécrits pour toute la pile : un dossier est une ligne fine et jamais le calque
+actif ; la traversée d'un dossier fermé ; le clic sur la ligne d'un dossier ; à l'écran, toute la pile sans fine bande ; la barre du bas
+sans icône « Trois calques » (ni bulle, ni action), la hauteur des plans qui se règle toujours. Retirés aussi :
+`three_layers_mode_shows_the_active_layer_between_its_neighbours_and_two_thin_strips` (`pistes_tests.rs`),
+`in_the_three_layers_window_the_two_neighbours_grow_and_the_strips_stay` (`calquesplace_tests.rs`),
+`the_three_layers_mode_shows_a_strip_that_a_click_jumps_into` (`timeline_repliee_tests.rs`). Adaptés : `calquesplace_tests.rs`,
+`dossierglisser_tests.rs`, `panneaux_fins_tests.rs`, `decor_tests.rs`, `prefsui_tests.rs` (plus de « Calques dans la timeline »).

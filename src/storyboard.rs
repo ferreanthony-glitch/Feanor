@@ -580,11 +580,9 @@ impl App {
             }
             // La hauteur des pistes son : petite, moyenne, grande (`montagehauteur.rs`).
             self.hauteur_pistes_bouton(ui);
-            // L'affichage des calques (trois, ou toute la pile) et la hauteur des plans (moyenne ou bandeau), à portée de main
-            // (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi dans Préférences > Montage, `pistes.rs`).
+            // La hauteur des plans (moyenne ou bandeau), à portée de main (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi
+            // dans Préférences > Montage, `pistes.rs`). (Le choix « trois calques / toute la pile » est retiré, partie 165.7.)
             ui.add_space(8.0);
-            self.pile_choix_ui(ui, true);
-            ui.add_space(6.0);
             self.plans_choix_ui(ui, true);
         });
     }

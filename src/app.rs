@@ -5063,8 +5063,7 @@ impl App {
                 self.set_all_tracks_folded(false);
             }
             "piste.auto_deplier" => self.toggle_auto_open(),
-            // Trois calques ou toute la pile ; les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
-            "piste.toute_la_pile" => self.basculer_pile(),
+            // Les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
             "bande.plans_en_bandeau" => self.basculer_hauteur_plans(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),

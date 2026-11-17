@@ -114,11 +114,8 @@ pub struct Settings {
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
-    /// Les calques dans la timeline du Storyboard et du Montage (`pistes.rs`, barre du bas de la bande et Préférences > Montage) : trois
-    /// à la fois, le calque actif entre ses deux voisins (d'office), ou toute la pile. Un réglage du poste : rien n'est écrit dans le
-    /// projet. (Les anciens réglages « calques_non_actifs » et « repliage_pistes » n'existent plus : une vieille clé est ignorée.)
-    #[serde(default = "default_pile", rename = "calques_timeline", skip_serializing_if = "crate::pistes::Pile::est_trois")]
-    pub montage_pile: crate::pistes::Pile,
+    // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
+    // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
     #[serde(default, rename = "hauteur_plans", skip_serializing_if = "crate::pistes::HauteurPlans::est_moyenne")]
     pub montage_plans: crate::pistes::HauteurPlans,
@@ -356,15 +353,6 @@ fn default_continu() -> bool {
     !cfg!(test)
 }
 
-/// Trois calques à la fois dans l'application ; « Toute la pile » dans les essais : ceux d'avant visent les pistes par leur rangée et
-/// toutes doivent y être (les essais de la fenêtre des trois calques l'allument eux-mêmes, `calques_timeline_tests.rs`).
-fn default_pile() -> crate::pistes::Pile {
-    if cfg!(test) {
-        crate::pistes::Pile::Toute
-    } else {
-        crate::pistes::Pile::Trois
-    }
-}
 
 /// Les calques proches du calque actif grandissent quand la bande a de la place : dans l'application. Pas dans les essais : ceux
 /// d'avant comptent sur les hauteurs fixes des pistes (les essais de cette règle l'allument eux-mêmes, `calquesplace_tests.rs`).
@@ -415,7 +403,6 @@ impl Default for Settings {
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             montage_auto_open: true,
-            montage_pile: default_pile(),
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

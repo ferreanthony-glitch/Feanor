@@ -264,7 +264,6 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Anneau, G::AnneauCommandes, "anneau.commandes", "Commande de chaque direction", "huit directions haut bas gauche droite outil crayon gomme plan pastilles choisir"),
     r(O::Anneau, G::AnneauCommandes, "anneau.origine", "Rétablir les commandes d'origine", "défaut remettre départ"),
     // ---- Montage
-    r(O::Montage, G::Pistes, "montage.repliage", "Calques dans la timeline", "trois toute pile calques actif fenêtre voisins bande replier cacher dossiers autres"),
     r(O::Montage, G::Pistes, "montage.hauteur_plans", "Hauteur des plans", "plans moyenne bandeau vignette épaisseur hauteur rangée"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique toute pile"),
     r(O::Montage, G::Pistes, "montage.calques_grands", "Agrandir les calques proches quand il y a de la place", "hauteur taille timeline panneau voisins confortable grand remplir"),

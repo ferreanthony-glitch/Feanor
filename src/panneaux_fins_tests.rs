@@ -200,9 +200,8 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
 fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    // La fenêtre des trois calques grandit de deux rangées de 22 : 134 points.
+    // La piste du calque actif : deux rangées de 22.
     assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
-    assert_eq!(crate::pistes::MARGE_H * 2.0 + crate::montagerows::LAYER_H, 134.0);
     let fusion = vus::ou("Mode de fusion");
     assert_eq!(fusion.len(), 1, "seule la piste du calque actif : {fusion:?}");
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)

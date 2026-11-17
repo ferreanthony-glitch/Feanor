@@ -112,7 +112,8 @@ const D_AVANT: &[&str] = &[
     "Dire dans la barre d'état ce que font les autres",
     "Croix du système sur le pinceau",
     "Opacité du passe-partout",
-    "Calques dans la timeline",
+
+
     "Hauteur des plans",
     "Déplier le calque courant tout seul",
     "Agrandir les calques proches quand il y a de la place",
@@ -326,7 +327,8 @@ fn the_search_ignores_case_and_accents_and_needs_every_word() {
     // Le titre d'un groupe répond pour tous ses réglages.
     let r = chercher("pistes du montage");
     let g = r.iter().find(|t| t.groupe == Groupe::Pistes).expect("le groupe Pistes");
-    assert_eq!(g.libelles.len(), 5);
+    // (Quatre depuis la partie 165.7 : « Calques dans la timeline », trois calques ou toute la pile, est retiré.)
+    assert_eq!(g.libelles.len(), 4);
     // Chaque étiquette se retrouve en la cherchant.
     for reg in REGLAGES {
         let r = chercher(reg.libelle);

@@ -2,16 +2,13 @@
 //! tout en gardant cela lisible » ; 2026-10-28, branche `timeline-repliee` : « seul le calque actif est déplié » ; 2026-11-11, branche
 //! `calques-timeline` : « trois calques maximum affichés sur la timeline », les dossiers « jamais traités comme des calques »).
 //!
-//! Dans le Storyboard et le Montage (l'onglet Animation garde sa timeline, tous calques dépliés), deux façons de montrer la pile, au
-//! choix dans la barre du bas de la bande et dans Préférences > Montage (`Pile`, réglage du poste) :
-//! - **trois calques** (d'office) : le calque **actif** au milieu, toujours à la même place (`LAYER_H`, 44 depuis la partie 160 : deux rangées d'options), entre son voisin du dessus
-//!   et celui du dessous (`VOISIN_H`, 19). Au-dessus et au-dessous, une **fine bande** compte les autres calques (« 4 au-dessus ») et les
-//!   montre en traits ; un clic y saute de trois calques. La fenêtre fait toujours la même hauteur (`MARGE_H` + `LAYER_H` + `MARGE_H`) ;
-//! - **toute la pile** : le calque actif déplié, tous les autres en bandes (`FOLDED_H`, 17).
+//! Dans le Storyboard et le Montage (l'onglet Animation garde sa timeline, tous calques dépliés), toute la pile est montrée : le calque
+//! actif déplié (`LAYER_H`, 44 depuis la partie 160 : deux rangées d'options), tous les autres en bandes (`FOLDED_H`, 17). (Le mode
+//! « Trois calques », sa fenêtre et ses fines bandes « N au-dessus / au-dessous » sont retirés à la demande d'Anthony, partie 165.7 :
+//! « supprime l'option et le bouton 3 calques ».)
 //!
 //! **Un dossier n'est jamais un calque** : c'est une ligne fine (`DOSSIER_H`, 13), plus petite que toute piste, qu'un clic ferme ou
-//! ouvre. Elle ne compte pas dans les trois et n'est jamais le calque actif. Quand elle tombe entre deux calques de la fenêtre, c'est la
-//! fine bande du haut ou du bas qui lui cède sa place : le calque actif ne bouge pas. **Un dossier fermé se traverse** : « calque du
+//! ouvre. Elle n'est jamais le calque actif. **Un dossier fermé se traverse** : « calque du
 //! dessus / du dessous » entre dedans, il se montre ouvert tant que le calque courant est l'un des siens (`dossier_de_passage`) et se
 //! referme quand on en sort ; rien n'est écrit pour cela.
 //!
@@ -39,22 +36,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::App;
 use crate::document::{Layer, Panel};
-use crate::montagerows::{layer_in_row, row_count, row_of_layer, LAYER_H};
+use crate::montagerows::{layer_in_row, row_of_layer, LAYER_H};
 use crate::theme;
 
-/// Hauteur d'une piste repliée (« Toute la pile ») : une bande de 15 points, le nom en 11.
+/// Hauteur d'une piste repliée : une bande de 15 points, le nom en 11.
 pub(crate) const FOLDED_H: f32 = 17.0;
 /// Hauteur de la ligne d'un dossier : jamais un calque, toujours plus petite qu'une piste.
 pub(crate) const DOSSIER_H: f32 = 13.0;
-/// « Trois calques » : la piste d'un voisin du calque actif.
-pub(crate) const VOISIN_H: f32 = 19.0;
-/// « Trois calques » : la place au-dessus (et au-dessous) du calque actif — la fine bande, le voisin, et la ligne d'un dossier quand
-/// il y en a une entre les deux. Toujours la même : le calque actif ne bouge pas.
-pub(crate) const MARGE_H: f32 = 45.0;
-/// La « rangée » d'une fine bande (« N au-dessus », « N au-dessous ») : aucun calque n'y répond.
-pub(crate) const MORE_ROW: usize = usize::MAX;
-/// De combien de calques un clic sur une fine bande fait avancer.
-pub(crate) const SAUT: usize = 3;
 /// Place de l'œil à gauche d'une piste.
 const EYE_W: f32 = 15.0;
 /// Place de la pastille de couleur, après l'œil.
@@ -72,15 +60,11 @@ pub(crate) const LARGEUR_VIGNETTE: f32 = 150.0;
 /// Ce qu'une ligne des pistes est.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Sorte {
-    /// La piste d'un calque (dépliée, repliée, ou voisine du calque actif).
+    /// La piste d'un calque (dépliée ou repliée).
     #[default]
     Calque,
     /// La ligne fine d'un dossier.
     Dossier,
-    /// « Trois calques » : la fine bande des calques au-dessus de la fenêtre.
-    Dessus,
-    /// « Trois calques » : la fine bande des calques au-dessous de la fenêtre.
-    Dessous,
 }
 
 /// Une ligne visible des pistes : la rangée de calques (0 : en haut de la pile), son haut (depuis le haut des pistes de calques) et sa
@@ -92,31 +76,17 @@ pub(crate) struct Lane {
     pub h: f32,
     pub folded: bool,
     pub sorte: Sorte,
-    /// Une fine bande : les rangées qu'elle résume (de la première à la dernière, exclue). Les autres lignes : rien.
-    pub rangees: (usize, usize),
-    /// Une fine bande : combien de calques du plan courant elle compte (jamais les dossiers ; ceux d'un dossier fermé compris).
-    pub compte: usize,
 }
 
 impl Lane {
     /// La piste d'un calque.
     pub(crate) fn calque(row: usize, top: f32, h: f32, folded: bool) -> Lane {
-        Lane { row, top, h, folded, sorte: Sorte::Calque, rangees: (0, 0), compte: 0 }
+        Lane { row, top, h, folded, sorte: Sorte::Calque }
     }
 
     /// La ligne fine d'un dossier.
     pub(crate) fn dossier(row: usize, top: f32) -> Lane {
-        Lane { row, top, h: DOSSIER_H, folded: true, sorte: Sorte::Dossier, rangees: (0, 0), compte: 0 }
-    }
-
-    /// Une fine bande (« N au-dessus », « N au-dessous »).
-    pub(crate) fn bande(sorte: Sorte, top: f32, h: f32, rangees: (usize, usize), compte: usize) -> Lane {
-        Lane { row: MORE_ROW, top, h, folded: true, sorte, rangees, compte }
-    }
-
-    /// Une fine bande de la fenêtre des trois calques (pas une piste de calque).
-    pub fn is_more(&self) -> bool {
-        matches!(self.sorte, Sorte::Dessus | Sorte::Dessous)
+        Lane { row, top, h: DOSSIER_H, folded: true, sorte: Sorte::Dossier }
     }
 
     /// La ligne fine d'un dossier (pas une piste de calque).
@@ -173,31 +143,6 @@ pub(crate) fn full_lane() -> Lane {
 /// Le calque `(plan, calque)` — ids — qui est actif : celui qui était courant au dernier relâchement de la souris.
 pub(crate) type AutoOpen = Option<(u64, u64)>;
 
-/// Comment la pile des calques se montre dans la timeline du Storyboard et du Montage (réglage du poste, `reglages.toml` :
-/// `calques_timeline`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Pile {
-    /// Trois calques à la fois : le calque actif au milieu, ses deux voisins, et deux fines bandes qui comptent les autres (d'office).
-    #[default]
-    Trois,
-    /// Toute la pile : le calque actif déplié, les autres en bandes.
-    Toute,
-}
-
-impl Pile {
-    pub fn est_trois(&self) -> bool {
-        *self == Pile::Trois
-    }
-
-    pub fn nom(self) -> &'static str {
-        match self {
-            Pile::Trois => "Trois calques",
-            Pile::Toute => "Toute la pile",
-        }
-    }
-}
-
 /// La hauteur de la rangée des plans dans le Storyboard et le Montage (réglage du poste, `reglages.toml` : `hauteur_plans`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -233,10 +178,9 @@ impl HauteurPlans {
 /// Ce que le montage retient pour dire quelles pistes sont dépliées : le réglage et ce que l'utilisateur a fait à la main.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Replis {
-    pub mode: Pile,
-    /// « Toute la pile » : les rangées dépliées à la main (en plus du calque actif).
+    /// Les rangées dépliées à la main (en plus du calque actif).
     pub ouvertes: BTreeSet<usize>,
-    /// « Toute la pile » : la rangée du calque actif est repliée à la main, jusqu'au prochain changement de calque.
+    /// La rangée du calque actif est repliée à la main, jusqu'au prochain changement de calque.
     pub active_fermee: bool,
 }
 
@@ -279,7 +223,7 @@ pub(crate) fn active_row(panels: &[Panel], auto: AutoOpen) -> Option<usize> {
     row_of_layer(&p.layers, k)
 }
 
-/// « Toute la pile » : la rangée `row` est repliée — elle ne l'est pas si c'est celle du calque actif (sauf repliée à la main) ou si
+/// La rangée `row` est repliée — elle ne l'est pas si c'est celle du calque actif (sauf repliée à la main) ou si
 /// on l'a dépliée à la main.
 pub(crate) fn row_folded_in(panels: &[Panel], row: usize, auto: AutoOpen, replis: &Replis) -> bool {
     let active = active_row(panels, auto) == Some(row) && !replis.active_fermee;
@@ -292,14 +236,8 @@ pub(crate) fn sorte_de_rangee(layers: &[Layer], row: usize) -> Option<Sorte> {
     layer_in_row(layers, row).map(|k| if layers[k].folder { Sorte::Dossier } else { Sorte::Calque })
 }
 
-/// Les lignes visibles de haut en bas, pour `count` rangées au plus : la fenêtre des trois calques, ou toute la pile (les pistes d'un
-/// dossier fermé en moins).
+/// Les lignes visibles de haut en bas, pour `count` rangées au plus : toute la pile (les pistes d'un dossier fermé en moins).
 pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen, replis: &Replis) -> Vec<Lane> {
-    if replis.mode == Pile::Trois {
-        if let Some(lanes) = fenetre(panels, cur, cur_layer, count, auto) {
-            return lanes;
-        }
-    }
     let vide: &[Layer] = &[];
     let layers = panels.get(cur).map_or(vide, |p| p.layers.as_slice());
     let mut top = 0.0;
@@ -324,8 +262,7 @@ pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: us
 /// hauteur (`LAYER_H`, qui reste la plus grande) : celui du dessus, celui du dessous, puis les suivants, tant qu'il reste de la place
 /// (Anthony, 2026-11-11 : « quand il y a plus de place pour afficher les calques, les calques les plus proches du calque sélectionné
 /// prennent aussi la taille la plus grande », « il faut que ce soit toujours le plus confortable possible »). `place` : la hauteur
-/// offerte aux pistes de calques. Les lignes de dossier et les fines bandes gardent leur hauteur ; dans « Trois calques », ce sont
-/// donc les deux voisins qui grandissent. Sans calque actif déplié (replié à la main), rien ne grandit. Les hauts sont recalculés.
+/// offerte aux pistes de calques. Les lignes de dossier gardent leur hauteur. Sans calque actif déplié (replié à la main), rien ne grandit. Les hauts sont recalculés.
 pub(crate) fn agrandir(lanes: &mut [Lane], place: f32) {
     let calques: Vec<usize> = (0..lanes.len()).filter(|&i| lanes[i].sorte == Sorte::Calque).collect();
     let Some(centre) = calques.iter().position(|&i| !lanes[i].folded) else { return };
@@ -351,54 +288,6 @@ pub(crate) fn agrandir(lanes: &mut [Lane], place: f32) {
         l.top = top;
         top += l.h;
     }
-}
-
-/// « Trois calques » : la fine bande du dessus, le voisin du dessus, la ligne d'un dossier s'il y en a une entre lui et le calque
-/// actif, le calque actif, puis la même chose en miroir. Rien si le plan courant n'a aucun calque à montrer.
-fn fenetre(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen) -> Option<Vec<Lane>> {
-    let plan = panels.get(cur)?;
-    let layers = &plan.layers;
-    let n = row_count(layers);
-    let calque = |row: usize| sorte_de_rangee(layers, row) == Some(Sorte::Calque);
-    let dossier = |row: usize| sorte_de_rangee(layers, row) == Some(Sorte::Dossier);
-    let visibles: Vec<usize> = (0..n).filter(|&r| calque(r) && !row_hidden(panels, cur, cur_layer, r)).collect();
-    // Le centre : la rangée du calque actif s'il est de ce plan, sinon celle du calque courant. Un dossier courant (choisi dans le
-    // panneau Calques) : le premier calque visible à partir de sa ligne, sinon le dernier.
-    let voulu = auto.filter(|(p, _)| *p == plan.id).and_then(|a| active_row(panels, Some(a))).or_else(|| row_of_layer(layers, cur_layer))?;
-    let centre = visibles.iter().copied().find(|&r| r >= voulu).or_else(|| visibles.last().copied())?;
-    let ic = visibles.iter().position(|&r| r == centre)?;
-    let haut = ic.checked_sub(1).map(|i| visibles[i]);
-    let bas = visibles.get(ic + 1).copied();
-    // La ligne de dossier la plus proche du calque actif, entre lui et chaque voisin (ou le bout de la pile).
-    let dossier_haut = (haut.map_or(0, |h| h + 1)..centre).rev().find(|&r| dossier(r));
-    let dossier_bas = (centre + 1..bas.unwrap_or(n)).find(|&r| dossier(r));
-    let (borne_haut, borne_bas) = (haut.unwrap_or(centre), bas.unwrap_or(centre) + 1);
-    let compte = |a: usize, b: usize| (a..b.min(n)).filter(|&r| calque(r)).count();
-    // La fine bande cède sa place au voisin et à la ligne de dossier.
-    let h_bande = |voisin: bool, dos: bool| MARGE_H - if voisin { VOISIN_H } else { 0.0 } - if dos { DOSSIER_H } else { 0.0 };
-    let mut out: Vec<Lane> = Vec::with_capacity(7);
-    let mut top = 0.0;
-    let mut pose = |mut l: Lane| {
-        l.top = top;
-        top += l.h;
-        out.push(l);
-    };
-    pose(Lane::bande(Sorte::Dessus, 0.0, h_bande(haut.is_some(), dossier_haut.is_some()), (0, borne_haut), compte(0, borne_haut)));
-    if let Some(r) = haut {
-        pose(Lane::calque(r, 0.0, VOISIN_H, true));
-    }
-    if let Some(r) = dossier_haut {
-        pose(Lane::dossier(r, 0.0));
-    }
-    pose(Lane::calque(centre, 0.0, LAYER_H, false));
-    if let Some(r) = dossier_bas {
-        pose(Lane::dossier(r, 0.0));
-    }
-    if let Some(r) = bas {
-        pose(Lane::calque(r, 0.0, VOISIN_H, true));
-    }
-    pose(Lane::bande(Sorte::Dessous, 0.0, h_bande(bas.is_some(), dossier_bas.is_some()), (borne_bas, count.max(n)), compte(borne_bas, n)));
-    Some(out)
 }
 
 /// Icône sans cadre, qui s'éclaire sous la souris.
@@ -474,12 +363,8 @@ impl App {
         self.pistes.active_fermee = false;
     }
 
-    /// Le calque actif : toujours dans la fenêtre des trois calques ; dans « Toute la pile », si le réglage « Déplier le calque
-    /// courant » est allumé.
+    /// Le calque actif, si le réglage « Déplier le calque courant » est allumé.
     pub(crate) fn pistes_auto_open(&self) -> AutoOpen {
-        if self.settings.montage_pile == Pile::Trois {
-            return self.pistes.auto_open;
-        }
         self.settings.montage_auto_open.then_some(self.pistes.auto_open).flatten()
     }
 
@@ -490,7 +375,7 @@ impl App {
 
     /// Comment les rangées se montrent maintenant : le réglage du poste et ce qu'on a déplié ou replié à la main.
     pub(crate) fn pistes_replis(&self) -> Replis {
-        Replis { mode: self.settings.montage_pile, ouvertes: self.pistes.ouvertes.clone(), active_fermee: self.pistes.active_fermee }
+        Replis { ouvertes: self.pistes.ouvertes.clone(), active_fermee: self.pistes.active_fermee }
     }
 
     /// La rangée `row` est repliée à l'écran.
@@ -541,33 +426,8 @@ impl App {
             self.pistes.active_fermee = false;
         }
         let changed = before.iter().enumerate().filter(|(r, b)| **b != self.track_is_folded(*r)).count();
-        self.status = if self.settings.montage_pile == Pile::Trois {
-            "La timeline montre trois calques : « Toute la pile », dans la barre du bas, pour replier ou déplier des pistes.".into()
-        } else {
-            format!("Toutes les pistes sont {}.", if folded { "repliées" } else { "dépliées" })
-        };
+        self.status = format!("Toutes les pistes sont {}.", if folded { "repliées" } else { "dépliées" });
         changed
-    }
-
-    /// Trois calques, ou toute la pile (réglage du poste, enregistré avec les réglages ; rien dans le projet).
-    pub(crate) fn set_pile(&mut self, mode: Pile) {
-        if self.settings.montage_pile == mode {
-            return;
-        }
-        self.settings.montage_pile = mode;
-        if let Err(e) = self.settings.save() {
-            self.status = format!("Réglages non enregistrés : {e}");
-            return;
-        }
-        self.status = match mode {
-            Pile::Trois => "Timeline : trois calques à la fois, le calque actif au milieu.".into(),
-            Pile::Toute => "Timeline : toute la pile.".into(),
-        };
-    }
-
-    /// « Toute la pile » : allumée, éteinte (`piste.toute_la_pile`).
-    pub(crate) fn basculer_pile(&mut self) {
-        self.set_pile(if self.settings.montage_pile == Pile::Trois { Pile::Toute } else { Pile::Trois });
     }
 
     /// La hauteur de la rangée des plans : moyenne ou en bandeau (réglage du poste).
@@ -620,7 +480,7 @@ impl App {
         None
     }
 
-    /// « Calque du dessus » (`pas` = +1) ou « du dessous » (−1), `fois` fois de suite (un clic sur une fine bande : trois).
+    /// « Calque du dessus » (`pas` = +1) ou « du dessous » (−1), `fois` fois de suite.
     pub(crate) fn aller_au_calque(&mut self, pas: isize, fois: usize) {
         for _ in 0..fois {
             let Some(k) = self.calque_voisin(pas.signum()) else { break };
@@ -879,30 +739,6 @@ impl App {
         };
     }
 
-    /// Une fine bande de la fenêtre des trois calques, dans `r` : « N au-dessus », « N au-dessous » (un clic saute de `SAUT` calques),
-    /// ou le bout de la pile.
-    pub(crate) fn bande_head(&mut self, ui: &mut Ui, r: Rect, lane: &Lane) {
-        let dessus = lane.sorte == Sorte::Dessus;
-        let resp = (lane.compte > 0).then(|| ui.interact(r, ui.id().with(("bande_pile", dessus)), Sense::click()));
-        let survol = resp.as_ref().is_some_and(Response::hovered);
-        let ink = if survol { theme::texte_fort() } else { ui.visuals().weak_text_color() };
-        let texte = match (lane.compte, dessus) {
-            (0, true) => "Haut de la pile".to_string(),
-            (0, false) => "Bas de la pile".to_string(),
-            (n, true) => format!("{} {n} au-dessus", ph::CARET_UP),
-            (n, false) => format!("{} {n} au-dessous", ph::CARET_DOWN),
-        };
-        let p = ui.painter().with_clip_rect(r);
-        p.rect_filled(r, 3.0, theme::etiquette());
-        p.text(pos2(r.left() + 8.0, r.center().y), Align2::LEFT_CENTER, texte, FontId::proportional(10.5), ink);
-        let Some(resp) = resp else { return };
-        let aide = if dessus { "Les calques au-dessus de la fenêtre des trois." } else { "Les calques au-dessous de la fenêtre des trois." };
-        let resp = crate::bulles::bulle(resp, if dessus { "Au-dessus" } else { "Au-dessous" }, &format!("{aide} Un clic saute de trois calques ; « Toute la pile », dans la barre du bas, les montre tous."), "");
-        if resp.clicked() {
-            self.aller_au_calque(if dessus { 1 } else { -1 }, SAUT);
-        }
-    }
-
     /// Un double-clic sur la colonne d'une piste hors du nom la plie ou la déplie (sur le nom : le
     /// renommer, comme avant). `pos` : le point cliqué ; `name_rect` : où est le nom ; `size` : sa taille.
     pub(crate) fn double_click_is_on_name(&self, ui: &Ui, pos: egui::Pos2, name_rect: Rect, name: &str, size: f32) -> bool {
@@ -920,40 +756,17 @@ impl App {
         let row = self.track_row_of(li);
         let folded = self.track_is_folded(row);
         ui.menu_button("Calques dans la timeline", |ui| {
-            for (mode, aide) in [(Pile::Trois, PILE_TROIS), (Pile::Toute, PILE_TOUTE)] {
-                let on = self.settings.montage_pile == mode;
-                let resp = ui.selectable_label(on, mode.nom());
-                if crate::bulles::bulle(resp, mode.nom(), aide, "").clicked() {
-                    ui.close_menu();
-                    self.set_pile(mode);
-                }
+            if ui.button(if folded { "Déplier cette piste" } else { "Replier cette piste" }).clicked() {
+                ui.close_menu();
+                self.set_track_folded(row, !folded);
             }
-            if self.settings.montage_pile == Pile::Toute {
-                ui.separator();
-                if ui.button(if folded { "Déplier cette piste" } else { "Replier cette piste" }).clicked() {
-                    ui.close_menu();
-                    self.set_track_folded(row, !folded);
-                }
-                self.action_item(ui, "Replier toutes les pistes", "piste.replier_tout");
-                self.action_item(ui, "Déplier toutes les pistes", "piste.deplier_tout");
-                let mut auto = self.settings.montage_auto_open;
-                if ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Seul le calque actif est déplié ; les autres sont en bandes.").clicked() {
-                    self.run_action("piste.auto_deplier");
-                }
+            self.action_item(ui, "Replier toutes les pistes", "piste.replier_tout");
+            self.action_item(ui, "Déplier toutes les pistes", "piste.deplier_tout");
+            let mut auto = self.settings.montage_auto_open;
+            if ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Seul le calque actif est déplié ; les autres sont en bandes.").clicked() {
+                self.run_action("piste.auto_deplier");
             }
         });
-    }
-
-    /// Les deux façons de montrer la pile, en deux icônes à choisir : petites dans la barre du bas de la bande (`petit`), comme les
-    /// autres choix dans les Préférences.
-    pub(crate) fn pile_choix_ui(&mut self, ui: &mut Ui, petit: bool) {
-        let touche = self.raccourci("piste.toute_la_pile");
-        let mut mode = self.settings.montage_pile;
-        let a = choix_en_icone(ui, petit, &mut mode, Pile::Trois, ph::ROWS, Pile::Trois.nom(), PILE_TROIS, &touche);
-        let b = choix_en_icone(ui, petit, &mut mode, Pile::Toute, ph::STACK, Pile::Toute.nom(), PILE_TOUTE, &touche);
-        if a || b {
-            self.set_pile(mode);
-        }
     }
 
     /// Les deux hauteurs de la rangée des plans, en deux icônes à choisir (barre du bas de la bande, Préférences).
@@ -967,15 +780,10 @@ impl App {
         }
     }
 
-    /// La section « Montage » de Fichier > Préférences… : « Calques dans la timeline : trois calques / toute la pile », « Hauteur des
-    /// plans : moyenne / bandeau » (deux icônes à choisir, une phrase de bulle pour chacune) et « Déplier le calque courant ».
+    /// La section « Montage » de Fichier > Préférences… : « Hauteur des plans : moyenne / bandeau » (deux icônes à choisir, une phrase
+    /// de bulle pour chacune) et « Déplier le calque courant ». (« Calques dans la timeline : trois calques / toute la pile » est retiré,
+    /// partie 165.7 : toute la pile est toujours montrée.)
     pub(crate) fn montage_prefs_ui(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            let label = ui.label("Calques dans la timeline");
-            crate::bulles::bulle(label, "Calques dans la timeline", &format!("{PILE_TROIS} {PILE_TOUTE}"), "");
-            self.pile_choix_ui(ui, false);
-            ui.label(RichText::new(self.settings.montage_pile.nom().to_lowercase()).small().weak());
-        });
         ui.horizontal(|ui| {
             let label = ui.label("Hauteur des plans");
             crate::bulles::bulle(label, "Hauteur des plans", &format!("{PLANS_MOYENS} {PLANS_BANDEAU}"), "");
@@ -983,7 +791,7 @@ impl App {
             ui.label(RichText::new(self.settings.montage_plans.nom().to_lowercase()).small().weak());
         });
         let mut auto = self.settings.montage_auto_open;
-        let resp = ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Dans « Toute la pile », seul le calque actif est déplié ; les autres sont en bandes. « Trois calques » montre toujours le calque actif au milieu.");
+        let resp = ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("Seul le calque actif est déplié ; les autres sont en bandes. Éteint, tous les calques restent en bandes tant qu'on ne les déplie pas.");
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
         }
@@ -1004,9 +812,6 @@ impl App {
     }
 }
 
-/// Une phrase pour chaque façon de montrer la pile (bulles, Préférences, menu).
-pub(crate) const PILE_TROIS: &str = "Trois calques : le calque actif au milieu, toujours à la même place, entre son voisin du dessus et celui du dessous ; deux fines bandes comptent les autres.";
-pub(crate) const PILE_TOUTE: &str = "Toute la pile : le calque actif déplié, tous les autres en bandes. Pour comparer deux calques éloignés ou en choisir plusieurs.";
 /// Une phrase pour chaque hauteur de la rangée des plans.
 pub(crate) const PLANS_MOYENS: &str = "Moyenne : une vignette, le nom et la durée du plan dessous.";
 pub(crate) const PLANS_BANDEAU: &str = "Bandeau : une petite vignette, le nom et la durée sur une ligne.";
