@@ -1686,6 +1686,64 @@ pub fn render_isole(points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f
     Some((sheet, (x0 as i64, y0 as i64)))
 }
 
+/// La vue nette (`vuenette.rs`) : l'élément `e` d'un dessin, transformé par `a` (du dessin vers l'image `raster` : la zone que la vue
+/// regarde, à la taille de l'écran), dessiné **à neuf** par-dessus ce que `raster` porte déjà, borné à l'image.
+///
+/// Rien n'est agrandi : une zone, un texte et un trait lisse sont refaits d'après leur géométrie ; un trait au réglage complet est
+/// **rejoué par le moteur des pinceaux** à cette échelle (ses points, ses rayons et son diamètre agrandis par `Element::transformed`,
+/// comme une sélection qu'on agrandit ; le papier, la vitesse et la longueur du fondu suivent l'échelle, pour que le trait garde son
+/// aspect). Le cache du trait d'origine n'est ni lu ni écrit, et ce rejeu ne compte pas dans `replays` : le dessin lui-même ne change pas.
+/// Une image collée reste faite de ses pixels.
+pub(crate) fn rendre_net(raster: &mut Raster, e: &Element, a: &Affine) {
+    let (w, h) = (raster.width, raster.height);
+    let image = Rect::from_min_max(pos2(0.0, 0.0), pos2(w as f32, h as f32));
+    let t = e.transformed(a);
+    let reach = t.bounds().expand(1.5);
+    if !reach.is_finite() || !reach.intersects(image) {
+        return;
+    }
+    let Element::Stroke { points, color, opacity, hardness, brush, trace } = &t else {
+        render_element_in(raster, &t, image, Place { shift: (0, 0), sheet: (w, h), open: false });
+        return;
+    };
+    // Le trait seul d'abord (un pinceau humide lit ce qui est sous lui : il ne doit voir que lui-même), puis posé sur les autres.
+    let mut seul = Raster::new(w, h);
+    match brush {
+        None => {
+            if let Some(mut mask) = Mask::new(path_bounds(points), w, h) {
+                stamp_path_net(&mut mask, points, *hardness);
+                mask.composite(&mut seul, *color, *opacity);
+            }
+        }
+        Some(b) => {
+            let k = a.width_factor();
+            let dynamics = crate::brush::Dynamics { speed_max: b.dynamics.speed_max * k, fade_length: b.dynamics.fade_length * k, ..b.dynamics };
+            let b = BrushSettings { paper_scale: b.paper_scale * k, dynamics, ..**b };
+            rejouer_trait(&mut seul, points, *color, *opacity, &b, trace, (0, 0));
+        }
+    }
+    blit_sheet(raster, &seul, image, (0, 0), false);
+}
+
+/// Comme `stamp_path`, pour un trait lisse agrandi (`rendre_net`) : au-delà de 12 pixels de rayon, le pas entre deux disques grandit
+/// comme la racine du rayon (le bord reste à moins d'un dixième de pixel de l'enveloppe), au lieu de rester à 3 pixels : un trait
+/// de 600 pixels de rayon ne pose plus des centaines de disques de la taille de l'écran.
+fn stamp_path_net(mask: &mut Mask, points: &[VPoint], hardness: f32) {
+    let Some(first) = points.first() else { return };
+    mask.stamp(first.x, first.y, first.r, hardness);
+    for s in points.windows(2) {
+        let (a, b) = (s[0], s[1]);
+        let len = a.pos().distance(b.pos());
+        let r = a.r.min(b.r);
+        let step = if r > 12.0 { (0.8 * r).sqrt().max(3.0) } else { (r * 0.25).clamp(0.3, 3.0) };
+        let n = (len / step).ceil().max(1.0) as usize;
+        for k in 1..=n {
+            let p = VPoint::lerp(a, b, k as f32 / n as f32);
+            mask.stamp(p.x, p.y, p.r, hardness);
+        }
+    }
+}
+
 /// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien. `open` : l'image
 /// reçoit aussi ce qui sort de ses bornes (toile infinie), seulement bornée au monde.
 fn clip_bounds(clip: Rect, w: usize, h: usize, open: bool) -> (i64, i64, i64, i64) {

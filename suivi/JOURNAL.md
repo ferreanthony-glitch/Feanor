@@ -3,6 +3,31 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-17
+
+- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; non fusionnée). Anthony, avec une capture de son projet
+  « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer pourquoi et comment résoudre ce
+  problème ? ». **La cause**, mesurée sur sa capture : la vue était à 225 % (un pixel du dessin = 2,25 pixels d'écran), et FEANOR
+  montre un dessin vectoriel à travers une image en pixels à la taille de la feuille, grossie sans lissage. Rien n'était abîmé dans
+  le dessin. Trois remèdes proposés ; il a choisi le premier : « Oui, construis-le ». **Ce qui est fait** : au-delà de 100 %, la zone
+  que la vue regarde est composée à la taille de l'écran sur un autre fil, les dessins vectoriels rejoués à cette échelle par le moteur
+  des pinceaux (ses traits gardent tous le réglage complet du pinceau), le bitmap laissé en pixels ; l'image est posée par-dessus
+  celle de toujours. Rien ne se calcule pendant un trait ; la zone du trait est en pixels le temps du geste, puis redevient nette.
+  Le dessin, le fichier, l'export ne changent pas ; aucun texte, aucun réglage, aucun format. **Les essais** : huit dans
+  `vuenette_tests.rs` (le bord d'un trait tenu à 0,3 pixel de la feuille à 400 %, là où l'image grossie échoue ; le bitmap au pixel
+  près ; aucun calcul pendant un geste ; un trait tracé au pointeur dans la vraie fenêtre sans écran, à 300 %, puis Ctrl+Z).
+  Vérificateur complet sur le code final (14 h 05) : 4 784 réussis, 0 échec, dix groupes OK, le seul avertissement connu ; la
+  première suite avait sept échecs, tous de mon ajout (le champ `nette` à déclarer dans `etat_projet!`, et la vue nette qui
+  réveillait l'écran dans les essais de repos : elle est éteinte d'origine dans les essais, allumée dans les siens).
+  **Regardé à l'écran par Claude** (12 h 53, exe de la branche, copie de « dd », réglages neufs) : plan 2
+  grossi à environ 350 %, les traits nets, les bords au pixel d'écran (mesuré sur les pixels réels). **Pas regardé à l'écran** :
+  tracer, déplacer et tourner la vue, annuler, plusieurs calques, la pelure, un calque bitmap : le contrôle a été arrêté parce
+  qu'Anthony travaillait dans Photoshop et que les captures d'écran réduisaient ses fenêtres (rouvertes, Photoshop remis devant).
+  **Ce qui n'est pas net** (l'image de toujours reste seule) : plan sans papier, calque à effets, carte inclinée de l'Espace 3D et
+  caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
+  pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
+  très chargés à fort zoom, la zone en pixels pendant le trait.
+
 ## 2026-11-13
 
 - **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la
