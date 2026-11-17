@@ -13474,7 +13474,9 @@ repos rien ne demande à être repeint ; son fil de fond les réveillait (sept �
 
 Résultats (17 novembre, 14 h 05, sur le code final) : `vuenette` 8 réussis ; vérificateur complet : **4 784 réussis, 0 échec**, les
 dix groupes de fiabilité OK ; le seul avertissement de compilation est celui d'avant (les cinq méthodes inutilisées de
-`src\espace3d.rs`), qui fait écrire ÉCHEC au vérificateur.
+`src\espace3d.rs`), qui fait écrire ÉCHEC au vérificateur. Puis, le main du jour (633c450) fusionné dans la branche, à 14 h 23 :
+compilation sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK ». Fusionnée dans main (7742e31) et
+poussée sur son « Fusionne directement ». Son FEANOR habituel n'est pas reconstruit : il essaie `timeline-claire` (voir le journal).
 
 ### 166.6 Regardé à l'écran (par Claude, le 17 novembre vers 12 h 53)
 
