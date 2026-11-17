@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
+- **Son FEANOR habituel reconstruit depuis main** (567c90c, exe de 14 h 39), sur son « Oui, reconstruis-le » : prévenu qu'il y
+  perdait la timeline plus claire et la vue 3D à côté qu'il essayait (branche `timeline-claire`, non fusionnée, intacte), il a
+  choisi d'avoir le trait vectoriel net tout de suite. Le dossier `Source` est repassé de `timeline-claire` à `main` (il était
+  propre). Il avait fermé son FEANOR lui-même : rien n'a été arrêté. Ses réglages : `timeline-claire` n'y ajoute qu'un champ
+  (`part_espace3d`), que main ignore ; une copie est dans `Documents\SHOT\Tests\reglages avant reconstruction 2026-11-17`.
+  Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ; son FEANOR
+  n'a pas été rouvert à sa place (il travaillait dans Photoshop). La session de la timeline est prévenue : pour reprendre son
+  essai, elle fusionnera main dans sa branche.
 - **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
   Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
   sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
