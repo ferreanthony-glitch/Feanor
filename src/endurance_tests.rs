@@ -82,7 +82,9 @@ fn env_usize(nom: &str, defaut: usize) -> usize {
 }
 
 pub(crate) fn dossier_endurance() -> PathBuf {
-    std::env::var_os("ENDU_DIR").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join("shot-endurance"))
+    // (Le dossier temporaire du système, pas celui du passage d'essai, effacé avec son processus : l'épisode fabriqué une
+    // fois sert aux bancs suivants, chacun dans son processus.)
+    std::env::var_os("ENDU_DIR").map(PathBuf::from).unwrap_or_else(|| crate::essais_temp::dossier_systeme().join("shot-endurance"))
 }
 
 fn manifeste_de(dir: &Path) -> PathBuf {

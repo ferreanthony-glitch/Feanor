@@ -237,6 +237,13 @@ Get-ChildItem $env:TEMP -Directory -Filter 'shot-perf-bac-*' -ErrorAction Silent
         Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+# Le dossier temporaire d'un processus d'essai (feanor-essais-<processus>, src/essais_temp.rs) part a la fin de ce
+# processus ; celui d'un passage arrete ici a son delai reste : on l'efface, une fois son processus fini.
+Get-ChildItem $env:TEMP -Directory -Filter 'feanor-essais-*' -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.Name -match '^feanor-essais-(\d+)$' -and -not $vivants.ContainsKey($Matches[1])) {
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 Write-Host ''
 if ($tout_ok) {
     Write-Host ('RESULTAT : OK (' + $total + ' s)') -ForegroundColor Green

@@ -687,6 +687,10 @@ pub mod demarrage;
 // qui l'enregistrent, le rouvrent, le font tourner dans l'application et lui jettent des fichiers abîmés.
 #[cfg(test)]
 mod fiabilite_fixture;
+// Les essais écrivent dans un dossier temporaire propre à leur processus, effacé quand il finit (2026-11-17) : plus rien
+// ne reste dans le %TEMP% de Windows.
+#[cfg(test)]
+mod essais_temp;
 // Essais au hasard des gestes dans l'application (passe de débogage du 2026-10-22).
 #[cfg(test)]
 mod hasard_tests;
