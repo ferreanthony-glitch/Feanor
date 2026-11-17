@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
+- **La vue réduite : tous les pixels du dessin comptent** (branche `vue-reduite`, section 166.9). Son retour : « Est-ce qu'on peut
+  rajouter une passe d'antialiasing dans le logiciel ? Je vois toujours de la pixelisation de l'image, même avec le vecto propre. »
+  Sa fenêtre lue telle quelle : la vue à 37 %, sa vue ordinaire (le cadre ne tient pas dans la zone du dessin de son écran), où la
+  vue nette ne fait rien. **La cause** : réduite, l'image était lue par points (le filtre de grossissement de l'affichage, qui ne
+  lisse pas) : 4 points pour plus de 7 pixels couverts à 37 %, un seul de 67 à 100 %. Les traits fins se cassaient en pointillés.
+  **Ce qui est fait** : réduite, chaque pixel d'écran est la moyenne exacte de tout ce qu'il couvre du dessin (vue droite), ou de
+  n × n lectures lissées (vue tournée, perspective) ; tournée à 100 %, l'image est lissée ; à 100 % vue droite et au-delà, rien ne
+  change. Tout sur la carte graphique, rien à attendre. **Pas fait** : les cases des Vignettes qu'on ne dessine pas et les
+  vignettes de plans (calcul du processeur, même faiblesse, chantier à part) ; le hors-feuille ; l'affichage sans carte graphique.
+  Mesuré par un essai écrit avant la correction et vu échouer (à 80 %, l'encre d'un trait fin de 0 à 1,25 fois la normale ; après,
+  de 0,94 à 1,04 à tous les zooms). Image de contrôle faite sur une copie de « dd » (plan 10 à 37 %), regardée agrandie : traits
+  continus. Pas regardé sur son écran.
 - **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
   fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a

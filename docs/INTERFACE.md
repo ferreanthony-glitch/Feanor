@@ -13781,3 +13781,56 @@ des pixels intermédiaires des deux autres).
 Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte graphique a bien tourné, il n'a pas été sauté) ;
 vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
 l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
+
+### 166.9 La vue réduite : tous les pixels du dessin comptent (le même jour, branche `vue-reduite`)
+
+Son retour, le soir, le lissage dans son FEANOR habituel : « Est-ce qu'on peut rajouter une passe d'antialiasing dans le logiciel ?
+Je vois toujours de la pixelisation de l'image, même avec le vecto propre. » Sa fenêtre, lue telle quelle (une copie de l'image de
+la fenêtre, sans y toucher) : l'onglet Storyboard, le plan 10 de « dd », **la vue à 37 %**. C'est la vue ordinaire : sur son écran, un
+cadre de 1920 × 1080 ne tient pas dans la zone du dessin, la vue cadrée d'origine est toujours en dessous de 100 %. Les traits y sont
+en pointillés, d'épaisseur inégale, avec des trous blancs dans les hachures. La vue nette (166.2) n'y fait rien : elle ne travaille
+qu'au-dessus de 100 %.
+
+**La cause.** Réduite, l'image composée est posée par `fs_display` (`gpu.rs`), qui moyenne plusieurs lectures par pixel d'écran. Mais
+ces lectures se font au niveau 0 demandé (`textureSampleLevel`), et la carte y applique le filtre de **grossissement** de
+l'échantillonneur de l'affichage, qui ne lisse pas : chaque lecture ne prenait qu'**un point** de l'image. À 37 %, un pixel d'écran
+couvre 2,7 × 2,7 pixels du dessin (plus de 7) et n'en lisait que 4 ; de 67 à 100 %, un seul. Les pixels sautés sont des morceaux de
+trait qui manquent. Mesuré avant de corriger (l'essai ci-dessous, sur le code d'avant) : à 80 %, l'encre d'un trait d'un pixel va, d'une
+ligne d'écran à l'autre, **de 0 à 1,25 fois** ce qu'elle doit être ; tournée à 37 %, de 0,56 à 1,35 fois.
+
+**Ce qui change** (`fs_display`, `pose_nette`) :
+
+- **Réduite, vue droite** : chaque pixel d'écran est la **moyenne exacte** de tout ce qu'il couvre du dessin, en lumière linéaire.
+  L'image est lue lissée (l'échantillonneur bilinéaire) ; chaque lecture, posée entre deux pixels du dessin, plus près de celui qui
+  compte le plus, les pèse tous les deux comme il faut : (e + 1) / 2 lectures par axe pour e pixels couverts (4 lectures à 37 %,
+  qui en pèsent 16). Exact jusqu'à 23 pixels couverts par axe (la vue à 4,3 %), 12 lectures par axe au plus.
+- **Réduite, vue tournée ou en perspective** : n × n lectures lissées réparties sur ce que couvre le pixel d'écran, n = le nombre de
+  pixels couverts (12 au plus).
+- **À 100 %, vue tournée** (jusqu'à 102 %), **et en perspective** : l'image se pose lissée au lieu de marches.
+- **Rien d'autre ne change** : à 100 % vue droite (retournée ou tournée d'un quart de tour aussi), les pixels de la feuille tels
+  quels ; au-delà, la vue nette et son lissage (166.2, 166.8), ou les pixels nets d'un dessin bitmap grossi.
+
+Aucun calcul de plus sur le processeur, rien à attendre : c'est la carte graphique qui lit, à chaque image d'écran, pendant le trait
+comme pendant un déplacement. La case vivante des Vignettes passe par le même affichage : elle en profite.
+
+**Ce qui ne change pas, et reste à faire si Anthony le veut** :
+
+- **Les cases des Vignettes qu'on ne dessine pas, et les vignettes de plans** (timeline, comparaison, export de la planche) : elles
+  sont calculées par le processeur (`render::thumbnail_marges_until`), avec 4 à 16 points lus par pixel, là où un pixel de vignette
+  en couvre souvent 20 à 40. Même faiblesse, autre calcul : un chantier à part (il touche aussi l'export de la planche). En
+  attendant, la case qu'on dessine est plus lisse que ses voisines.
+- Ce qui est dessiné **hors de la feuille** (`monde.rs`) et l'affichage **sans carte graphique** : une lecture lissée par pixel
+  d'écran, comme avant.
+- Un calque **réduit dans la composition** (un calque rétréci par sa transformation, ou éloigné dans l'Espace 3D) : une lecture
+  lissée par pixel du cadre, à l'écran comme à l'export.
+
+À juger par lui : la vue ordinaire (cadrée, vers 35 à 50 %) est-elle propre, traits continus, sans pointillés ? Les traits fins y
+paraissent-ils trop pâles (ils ont maintenant leur vraie valeur : un trait d'un pixel réduit à 37 % est un gris à 37 %, plus
+jamais un point plein sur deux) ? La vue tournée ?
+
+Les essais (`src/vuereduite_tests.rs`, quatre, plus un qui écrit des images à regarder) : sur la carte graphique, une feuille de
+traits d'un pixel, l'écran peint relu. Vue droite à 80, 50, 37, 20 et 11 % : l'encre de chaque trait, à chaque ligne d'écran, vaut
+le zoom (de 0,94 à 1,04 fois, 1,00 en moyenne ; avant : de 0 à 1,25 fois à 80 %). Vue tournée à 37, 60 et 25 % : l'encre le long
+d'un trait reste régulière (de 0,83 à 1,10 fois sa moyenne ; avant : de 0,56 à 1,35 à 37 %) ; tournée à 100 % : lissée (2 818
+pixels intermédiaires pour 29 noirs). À 100 % vue droite : un pixel noir par ligne entre des blancs, comme avant. Et la règle
+`pose_nette`, cas par cas (droite, retournée, quart de tour, tournée, perspective, 1,5 pixel par point).
