@@ -1,7 +1,7 @@
 //! Partie 165 : l'avant | après des Effets montre le vrai calque, calculé en petit au fil de fond, jamais sur celui de l'interface ;
 //! le schéma de la partie 164 reste le repli d'un calque vide.
 
-use eframe::egui::{pos2, vec2, Event, Modifiers, Rect};
+use eframe::egui::{pos2, Event, Modifiers, Rect};
 
 use crate::avantapres165 as a;
 use crate::bulles::vus;
@@ -122,69 +122,74 @@ fn an_empty_layer_keeps_the_drawing_of_the_effect() {
     assert!(!vus::ou("Force de l'effet").is_empty(), "et la barre se tire toujours");
 }
 
-// ------------------------------------------------------------------------------------ 165.2 : la piste du calque, vue Storyboard
+// ------------------------------------------------------------------------------------ 165.3 : la ligne du calque en texte, de retour
 
-fn present(nom: &str) -> bool {
-    !vus::ou(nom).is_empty()
+/// Les textes peints à la dernière image.
+fn textes(b: &Banc) -> Vec<(String, eframe::egui::Rect)> {
+    fn rec(s: &eframe::egui::epaint::Shape, out: &mut Vec<(String, eframe::egui::Rect)>) {
+        match s {
+            eframe::egui::epaint::Shape::Text(t) => out.push((t.galley.job.text.clone(), eframe::egui::Rect::from_min_size(t.pos, t.galley.size()))),
+            eframe::egui::epaint::Shape::Vec(v) => v.iter().for_each(|s| rec(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for s in &b.formes {
+        rec(&s.shape, &mut out);
+    }
+    out
 }
 
-fn annuler(b: &mut Banc) {
+/// Partie 165.3 (Anthony : « Je préfère la version texte classique. Reviens en arrière. ») : la ligne du calque courant de la timeline
+/// écrit de nouveau « 100 % » (la barre d'opacité) et « Normal » (la liste « Normal ▾ » avec ses flèches) ; la piste du calque actif du
+/// Storyboard, sa barre « 100 % » et son menu des modes, en texte. Plus aucune pastille de mode, nulle part.
+#[test]
+fn the_layer_rows_show_100_and_normal_again() {
+    // Timeline (vue Animation).
+    let mut b = banc_165(true);
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(4);
+    b.garder_formes = true;
+    b.chauffer(2);
+    let t = textes(&b);
+    b.garder_formes = false;
+    let haut = b.app.canvas_rect.bottom();
+    assert!(t.iter().any(|(s, r)| s == "100 %" && r.top() > haut), "« 100 % » dans la ligne du calque : {:?}", t.iter().map(|x| &x.0).collect::<Vec<_>>());
+    assert!(t.iter().any(|(s, r)| s.contains("Normal") && r.top() > haut), "« Normal ▾ » dans la ligne du calque");
+    for nom in ["Mode précédent", "Mode suivant", "Mode de fusion", "Opacité du calque"] {
+        assert!(!vus::ou(nom).is_empty(), "« {nom} » : {:?}", vus::noms());
+    }
+    // La liste est en texte : on l'ouvre, aucune pastille « Mode : … ».
+    clic(&mut b, ou("Mode de fusion").center(), Modifiers::NONE);
+    assert!(vus::noms().iter().all(|n| !n.starts_with("Mode : ")), "plus de pastilles : {:?}", vus::noms());
+    // Glisser sur la barre « 100 % » règle l'opacité, une étape ; Ctrl+Z la rend.
+    b.app.run_action("edition.annuler");
+    b.chauffer(2);
+    let r = ou("Opacité du calque");
+    assert!(r.width() > 60.0, "la barre, pas la miniature : {r:?}");
+    let avant = etapes(&b);
+    glisser(&mut b, r.center(), pos2(r.left() + r.width() * 0.25, r.center().y));
+    let o = b.app.layers()[0].opacity_at(b.app.cur_frame);
+    assert!((o - 0.25).abs() < 0.05, "la barre suit le pointeur : {o}");
+    assert_eq!(etapes(&b), avant + 1, "un geste, une étape");
     b.app.run_action("edition.annuler");
     b.chauffer(3);
-}
+    assert_eq!(b.app.layers()[0].opacity_at(b.app.cur_frame), 1.0);
 
-#[test]
-fn in_the_storyboard_sliding_on_the_track_thumbnail_sets_the_opacity_in_one_step() {
+    // Piste du calque actif (vue Storyboard) : la barre « 100 % » et le menu des modes, en texte.
     let mut b = banc_165(true);
-    let r = ou("Opacité du calque");
-    assert!(r.width() > 15.0 && r.width() < 40.0, "la miniature de la piste, plus la barre : {r:?}");
-    let avant = etapes(&b);
-    glisser(&mut b, r.center(), r.center() - vec2(60.0, 0.0));
-    let o = b.app.layers()[0].opacity_at(b.app.cur_frame);
-    assert!((o - 0.5).abs() < 0.02, "60 points à gauche : la moitié de l'opacité ({o})");
-    assert_eq!(etapes(&b), avant + 1, "un geste, une étape");
-    clic(&mut b, ou("Opacité du calque").center(), Modifiers::NONE);
-    assert_eq!(etapes(&b), avant + 1, "un simple clic ne change rien");
-    annuler(&mut b);
-    assert_eq!(b.app.layers()[0].opacity_at(b.app.cur_frame), 1.0, "Ctrl+Z rend l'opacité");
-}
-
-#[test]
-fn in_the_storyboard_a_blend_pastille_of_the_track_sets_the_mode_in_one_step() {
-    let mut b = banc_165(true);
-    assert_eq!(vus::ou("Mode de fusion").len(), 1, "la pastille de la piste active seule");
-    assert!(!present("Mode : Produit"), "les pastilles s'ouvrent au clic");
+    b.garder_formes = true;
+    b.chauffer(2);
+    let t = textes(&b);
+    b.garder_formes = false;
+    assert!(t.iter().any(|(s, _)| s == "100 %"), "« 100 % » sur la piste : {:?}", t.iter().map(|x| &x.0).collect::<Vec<_>>());
     clic(&mut b, ou("Mode de fusion").center(), Modifiers::NONE);
-    for m in crate::blend::BlendMode::ALL {
-        assert!(present(&format!("Mode : {}", m.label())), "{} : {:?}", m.label(), vus::noms());
-    }
-    let avant = etapes(&b);
-    clic(&mut b, ou("Mode : Produit").center(), Modifiers::NONE);
-    assert_eq!(b.app.layers()[0].blend, crate::blend::BlendMode::Multiply);
-    assert_eq!(etapes(&b), avant + 1, "une étape");
-    assert!(!present("Mode : Produit"), "les pastilles se referment");
-    annuler(&mut b);
-    assert_eq!(b.app.layers()[0].blend, crate::blend::BlendMode::Normal, "Ctrl+Z rend le mode");
-}
-
-#[test]
-fn in_a_narrow_track_column_the_thumbnail_and_the_pastille_stay_reachable() {
-    let mut b = banc_165(true);
-    // La colonne la plus étroite : une petite miniature à la place de l'ancienne barre, on y glisse de même ; et la pastille du mode.
-    b.app.montage_head_w = crate::montagehead::HEAD_MIN;
-    b.chauffer(4);
-    let r = ou("Opacité du calque");
-    assert!(r.width() >= 10.0, "{r:?}");
-    let avant = etapes(&b);
-    glisser(&mut b, r.center(), r.center() - vec2(60.0, 0.0));
-    let o = b.app.layers()[0].opacity_at(b.app.cur_frame);
-    assert!((o - 0.5).abs() < 0.02, "60 points à gauche : la moitié ({o})");
-    assert_eq!(etapes(&b), avant + 1);
-    annuler(&mut b);
-    clic(&mut b, ou("Mode de fusion").center(), Modifiers::NONE);
-    assert!(present("Mode : Écran") || present("Mode : Produit"), "les pastilles, même dans la colonne étroite : {:?}", vus::noms());
-    // Et toujours le menu du calque (clic droit ou ⋮) : « Apparence » y garde l'opacité et le mode en chiffres (`menucalque_tests`).
-    assert!(present("Commandes du calque"));
+    b.garder_formes = true;
+    b.chauffer(2);
+    let t = textes(&b);
+    b.garder_formes = false;
+    assert!(t.iter().any(|(s, _)| s.contains("Normal")) && t.iter().any(|(s, _)| s.contains("Produit")), "le menu des modes en texte : {:?}", t.iter().map(|x| &x.0).collect::<Vec<_>>());
+    assert!(vus::noms().iter().all(|n| !n.starts_with("Mode : ")), "plus de pastilles");
 }
 
 #[test]

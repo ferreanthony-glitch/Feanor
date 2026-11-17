@@ -69,10 +69,10 @@ fn dragging_a_layer_opacity_bar_sends_no_tile_to_the_gpu() {
     for s in &b.formes {
         textes(&s.shape, &mut vus);
     }
-    // L'opacité d'un calque, dans les en-têtes des calques, sous le dessin (partie 164.3 : sa miniature, sur laquelle on glisse ; avant, une
-    // barre qui écrivait « 100 % »).
+    // La barre d'opacité d'un calque, dans les en-têtes des calques (sous le dessin : le curseur du passe-partout, dans la barre sous
+    // l'image, écrit aussi « 100 % ») : « 100 % ».
     let bas_du_dessin = b.app.canvas_rect.bottom() + crate::viewbar::TOOLS_BAR_H;
-    let Some(centre) = crate::bulles::vus::ou("Opacité du calque").into_iter().map(|r| r.center()).find(|c| c.y > bas_du_dessin) else { panic!("aucune miniature d'opacité à l'écran : {:?}", vus.iter().map(|v| &v.0).take(60).collect::<Vec<_>>()) };
+    let Some(&(_, centre)) = vus.iter().find(|(t, c)| t == "100 %" && c.y > bas_du_dessin) else { panic!("aucune barre d'opacité à l'écran : {:?}", vus.iter().map(|v| &v.0).take(60).collect::<Vec<_>>()) };
     b.garder_formes = false;
     let (copies, composes) = carte(&b);
     let avant: Vec<f32> = b.app.layers().iter().map(|l| l.opacity).collect();

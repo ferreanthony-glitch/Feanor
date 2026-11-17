@@ -2,9 +2,10 @@
 //! visuels, plus facilement compréhensibles, qui donnent envie d'être manipulés » ; sur la maquette : « si l'on doit interagir avec
 //! les graphiques pour modifier directement la scène c'est super »). Ce module tient ce qui ne dépend pas de l'application : le titre
 //! du repli « Précis » (une seule apparence partout, parties 162, 163 et 164), les taches de couleur « avant · maintenant », les
-//! pastilles des modes de fusion (deux ronds qui se chevauchent, leur intersection calculée par la vraie formule du mode,
-//! `BlendMode::mix`), les vignettes des effets (ce qu'ils produisent, peint au `Painter`), et la « force » d'un effet (le réglage que
-//! tire la barre de l'avant | après). Les méthodes qui écrivent dans le projet sont dans `colorui.rs`, `fxui.rs` et `layerheads.rs`.
+//! vignettes des effets (ce qu'ils produisent, peint au `Painter`), et la « force » d'un effet (le réglage que tire la barre de
+//! l'avant | après). Les méthodes qui écrivent dans le projet sont dans `colorui.rs` et `fxui.rs`. (Les pastilles des modes de fusion
+//! et l'opacité sur la miniature de la ligne du calque, partie 164.3, sont retirées à la demande d'Anthony, partie 165.3 : la ligne a
+//! retrouvé « 100 % » et « Normal ▾ ».)
 //!
 //! Aucune image : tout est peint. Les vignettes des effets sont des schémas (un trait sur un papier). L'avant | après, lui, montre le
 //! vrai calque depuis la partie 165 (`avantapres165.rs`, calculé en petit au fil de fond du cache des effets) ; le schéma reste son
@@ -12,7 +13,6 @@
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui};
 
-use crate::blend::BlendMode;
 use crate::fx::EffectKind;
 use crate::theme;
 
@@ -100,57 +100,6 @@ impl AvantMaintenant {
             None => self.vue = Some(couleur),
             _ => {}
         }
-    }
-}
-
-// ------------------------------------------------------------------ 164.3 : les pastilles des modes de fusion
-
-/// Les deux couleurs d'une pastille : le dessous (bleu) et le calque (orange), comme sur la maquette.
-pub(crate) const DESSOUS: [u8; 3] = [51, 102, 204];
-pub(crate) const DESSUS: [u8; 3] = [238, 153, 0];
-
-/// La couleur de l'intersection des deux ronds pour le mode `mode` : la vraie formule du mode (`BlendMode::mix`, celle du rendu).
-pub(crate) fn couleur_melee(mode: BlendMode) -> Color32 {
-    let f = |c: [u8; 3]| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0];
-    let m = mode.mix(f(DESSOUS), f(DESSUS));
-    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color32::from_rgb(b(m[0]), b(m[1]), b(m[2]))
-}
-
-/// L'intersection de deux disques de même rayon `r` (centres `a` et `b`, plus proches que 2 `r`) : un polygone convexe.
-pub(crate) fn lentille(a: Pos2, b: Pos2, r: f32) -> Vec<Pos2> {
-    let d = (b - a).length();
-    if d <= 1e-3 || d >= 2.0 * r {
-        return Vec::new();
-    }
-    let dir = (b - a) / d;
-    let base = dir.y.atan2(dir.x);
-    let alpha = (d / (2.0 * r)).clamp(-1.0, 1.0).acos();
-    let n = 10;
-    let mut pts = Vec::with_capacity(2 * n + 2);
-    for k in 0..=n {
-        let t = base - alpha + 2.0 * alpha * k as f32 / n as f32;
-        pts.push(a + vec2(t.cos(), t.sin()) * r);
-    }
-    for k in 0..=n {
-        let t = base + std::f32::consts::PI - alpha + 2.0 * alpha * k as f32 / n as f32;
-        pts.push(b + vec2(t.cos(), t.sin()) * r);
-    }
-    pts
-}
-
-/// Peint la pastille du mode `mode` dans `r` : deux ronds qui se chevauchent, leur intersection de la couleur que donne le mode.
-pub(crate) fn pastille_fusion(p: &Painter, r: Rect, mode: BlendMode) {
-    let rayon = (r.height() * 0.5 - 1.0).min(r.width() * 0.32).max(2.0);
-    let ecart = rayon * 1.0;
-    let a = pos2(r.center().x - ecart * 0.5, r.center().y);
-    let b = pos2(r.center().x + ecart * 0.5, r.center().y);
-    let col = |c: [u8; 3]| Color32::from_rgb(c[0], c[1], c[2]);
-    p.circle_filled(a, rayon, col(DESSOUS));
-    p.circle_filled(b, rayon, col(DESSUS));
-    let l = lentille(a, b, rayon);
-    if !l.is_empty() {
-        p.add(Shape::convex_polygon(l, couleur_melee(mode), Stroke::NONE));
     }
 }
 

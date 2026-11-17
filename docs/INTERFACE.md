@@ -13268,7 +13268,9 @@ changent : `src/colorui.rs`, `src/fxui.rs`, `src/layerheads.rs` ; les essais : `
 - **Ce qui manque de la maquette** : « Nuit » n'existe pas comme effet dans FEANOR (le plus proche : Teinte / saturation ou Luminosité /
   contraste, sous Précis). Il n'a pas été inventé.
 
-### 164.3 La ligne du calque dans la timeline (proposition 8)
+### 164.3 La ligne du calque dans la timeline (proposition 8) — retirée à la demande d'Anthony (partie 165.3)
+
+> Anthony : « Je préfère la version texte classique. Reviens en arrière. » La ligne a retrouvé « 100 % » et « Normal ▾ » (165.3).
 
 - **L'opacité se règle en glissant sur la miniature** du calque courant : vers la droite, plus opaque ; vers la gauche, plus transparent
   (120 points pour tout l'écart, d'où que parte le geste). La miniature se voile d'autant, une barre fine de l'accent, en bas de la
@@ -13313,10 +13315,10 @@ plutôt qu'écrit : aucune police ne peut le changer en carré vide (`visuels164
 | Effets : flèche de l'effet, réglages en chiffres, clés, monter / descendre, « Appliquer pour de bon » | Effets > Précis, effet par effet |
 | Effets : le curseur de force (intensité, rayon, quantité…) | aussi la barre de l'avant | après |
 | Effets : « Rallumer » (effets éteints par fx) | inchangé, en tête |
-| Ligne du calque : barre d'opacité « 100 % » | glisser sur la miniature (voile et barre fine) ; Couleur unie et dossier : la barre |
-| Ligne du calque : losange des clés d'opacité | en tête de la troisième rangée |
-| Ligne du calque : liste « Normal ▾ » | la pastille du mode et son nom ; un clic : toutes les pastilles |
-| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la pastille |
+| Ligne du calque : barre d'opacité « 100 % » | retiré à la demande d'Anthony (165.3) : la barre « 100 % » est revenue |
+| Ligne du calque : losange des clés d'opacité | retiré à la demande d'Anthony (165.3) : de nouveau à droite de la barre |
+| Ligne du calque : liste « Normal ▾ » | retiré à la demande d'Anthony (165.3) : la liste « Normal ▾ » est revenue |
+| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la liste |
 | Ligne du calque : œil, cadenas, pelure, transparence, pochoir, position, groupe, fx, caméra, aplat, maillon, ⋮ | inchangés, à leur place |
 | Clic droit du calque > Apparence > Mode de fusion, opacité | inchangés |
 
@@ -13400,35 +13402,46 @@ Storyboard doit fonctionner comme la ligne du calque de la timeline (164.3). Cod
 - Les deux images sont gardées le temps de la séance, en textures (quelques centaines de pixels de large), par onglet ; un autre
   calque, un autre effet ou un autre dessin (une autre image de l'animation) repart du schéma, puis de l'image.
 
-### 165.2 La piste du calque actif, vue Storyboard
+### 165.2 La piste du calque actif, vue Storyboard — annulée à la demande d'Anthony (165.3)
 
-| Ancien réglage (piste du calque actif, bande du Storyboard) | Nouvelle place |
-|---|---|
-| Barre d'opacité « 100 % » | glisser sur la miniature de la piste (vers la droite, plus opaque ; 120 points pour tout l'écart) : elle se voile d'autant, une barre fine de l'accent dit la valeur, le chiffre pendant le geste ; une étape par geste ; plusieurs calques choisis prennent tous la valeur. Colonne étroite (sans vignette) : une petite miniature à la place de l'ancienne barre, même geste. Couleur unie : la barre, comme dans la timeline |
-| Icône ◐ du mode de fusion et sa liste | la pastille du mode (deux ronds, l'intersection par la vraie formule) et son nom ; un clic ouvre les 27 pastilles, par familles ; une étape |
-| Losange des clés d'opacité | inchangé, avant la pastille |
-| Glissé vertical sur la piste (ranger le calque), clic droit (menu du calque) | inchangés, aussi depuis la miniature |
-| Clic droit > Apparence > Opacité, Mode de fusion | inchangés |
+La piste avait reçu le glissé sur la miniature pour l'opacité et les pastilles du mode, comme la ligne de la timeline (164.3). Annulé
+avant toute fusion : voir 165.3.
 
-Le code est celui de la timeline (`layerheads::opacite_miniature`, `pastille_du_mode`), avec un drapeau pour la piste : son glissé
-vertical range les pistes, son clic droit ouvre le menu des pistes.
+### 165.3 Retour à la ligne du calque en texte (annule 164.3 et 165.2)
 
-### 165.3 Les essais
+Anthony : « Je préfère la version texte classique. Reviens en arrière. »
+
+- **Timeline** (ligne du calque courant) : la barre d'opacité « 100 % » qu'on clique ou qu'on tire est revenue, avec le losange des
+  clés d'opacité à sa droite ; le mode est de nouveau la liste texte « Normal ▾ », avec ses flèches ‹ › de part et d'autre. La
+  miniature ne règle plus l'opacité : comme avant 164, un glissé vertical depuis la ligne range le calque.
+- **Storyboard** (piste du calque actif) : la barre d'opacité « 100 % » et l'icône du mode avec sa liste des modes en texte, comme
+  avant 165.
+- **Le menu des 27 pastilles disparaît partout**, et le code qui le peignait aussi (`opacite_miniature`, `pastille_du_mode`,
+  `visuels164::pastille_fusion`, `couleur_melee`, `lentille`).
+- Repris de l'état d'avant 164 (58b8aec) : `src/layerheads.rs`, et les essais que 164.3 avait adaptés (`multicalques_tests`,
+  `optim_rendu_tests`, le contrôle « 100 % » de `panneaux_tests`) ; `src/pistes.rs` d'avant 165 (d04a23c). Les essais des pastilles et
+  de la miniature (`visuels164_tests`, `avantapres165_tests`) sont retirés.
+- Un essai ancien, `fx_tests::the_export_composites_the_blurred_drawing`, a échoué dans la suite complète (le cache commun des
+  dessins dérivés est partagé par les essais qui tournent ensemble) : il calcule maintenant avec sa réserve privée, comme l'export.
+- **Gardé** : la roue Couleur (164.1), les vignettes d'effets et l'avant | après sur le vrai calque (164.2, 165.1), le titre
+  « Précis » partout (164.4).
+
+### 165.4 Les essais
 
 `src/avantapres165_tests.rs`, dans la vraie fenêtre sans écran :
 
 - avec un gros trait rouge et une Lueur : l'aperçu arrive du fil de fond, l'avant a les pixels rouges du trait (pas le schéma),
   l'après a plus d'encre (la lueur) ; la lueur poussée à 200 : l'après gagne encore par rapport à l'avant ;
-- tirer la barre : aucun effet ni aucune réduction calculés sur le fil de l'interface pendant le geste (un compteur des essais dans
-  `fx::apply_with` et `fxproxy::downscale`), la dernière image reste montrée à chaque image du geste, une seule étape ; la nouvelle
-  image arrive après ;
-- un calque vide : le schéma, et la barre se tire toujours ;
+- tirer la barre : aucun effet ni aucune réduction calculés par l'aperçu sur le fil de l'interface pendant le geste (un compteur des
+  essais dans `fx::apply_with` et `fxproxy::downscale`), la dernière image reste montrée à chaque image du geste, une seule étape ;
+  la nouvelle image arrive après ;
+- un calque vide : le schéma, et la barre se tire toujours ; un effet du trait : le schéma ;
 - le cadrage (autour du dessin, à la forme de l'aperçu, dans la feuille) et la taille de calcul ;
-- 165.2 : glisser de 60 points à gauche sur la miniature de la piste met 50 % (une étape), un clic ne change rien, Ctrl+Z la rend ; la
-  pastille ouvre les 27 modes, « Produit » le pose (une étape) et les referme, Ctrl+Z le rend ; dans la colonne la plus étroite, la
-  petite miniature et la pastille marchent, le menu du calque reste là.
+- 165.3 : dans la timeline, « 100 % » et « Normal » sont écrits dans la ligne du calque, les flèches sont là, la liste s'ouvre sans
+  aucune pastille, tirer la barre règle l'opacité en une étape que Ctrl+Z rend ; sur la piste du Storyboard, « 100 % » est écrit et
+  le menu des modes est en texte (« Normal », « Produit »…), sans pastille.
 
-### 165.4 Relecture indépendante (sous-agent), et ce qui a été corrigé
+### 165.5 Relecture indépendante (sous-agent), et ce qui a été corrigé
 
 - un effet du trait choisi montrait deux moitiés pareilles (corrigé : le schéma ; essai ajouté) ;
 - sur une grande feuille, l'aperçu pouvait se calculer en pleine résolution sur le fil de fond qui sert aussi la vue (corrigé : au
@@ -13440,11 +13453,10 @@ vertical range les pistes, son clic droit ouvre le menu des pistes.
   gardée hors des essais ;
 - l'essai « aucun calcul sur le fil de l'interface » ne mesure que la préparation de l'aperçu : la vue de dessin du banc d'essai, sans
   carte graphique, compose encore la lueur du calque sur ce fil (dans FEANOR, la vue passe par la carte, `gpu.rs`, sans attendre).
-- Gardé tel quel : sur la miniature de la piste, un double-clic ne replie pas la piste (il le fait à côté), comme sur la miniature de
-  la timeline.
+- Les remarques sur la miniature de la piste sont sans objet depuis 165.3.
 
-### 165.5 À tester par Anthony (sur une copie de projet)
+### 165.6 À tester par Anthony (sur une copie de projet)
 
 1. Effets : sur un calque dessiné, pose une Lueur ; regarde l'avant | après, tire la barre. Dis si le temps d'arrivée de l'image te
    va, et si le cadrage (autour du dessin) est le bon.
-2. Storyboard : sur la piste du calque actif, glisse sur la miniature ; clique la pastille du mode, choisis Produit ; Ctrl+Z.
+2. Animation et Storyboard : la ligne du calque montre de nouveau « 100 % » et « Normal ▾ » ; tire la barre, change le mode.

@@ -110,7 +110,9 @@ fn the_export_composites_the_blurred_drawing() {
     layer.fx.push(Effect::new(EffectKind::GaussianBlur));
     let plan = crate::render::panel_plan_at(&doc, 0, 0, None);
     assert_eq!(plan.items[0].fx.len(), 1);
-    let at = |x, y| crate::render::composite_pixel(&doc, &plan, x, y).a();
+    // (Avec sa réserve privée de dessins dérivés, comme l'export : le cache commun de l'écran est partagé par les essais qui tournent
+    // ensemble, et un dessin d'un autre essai, de même numéro et de même version, y prenait parfois la place de celui-ci, partie 165.3.)
+    let at = |x, y| crate::fxcache::avec_privee(64 << 20, || crate::render::composite_pixel(&doc, &plan, x, y).a());
     assert!(at(35, 32) > 0, "le flou se voit à l'export");
 }
 

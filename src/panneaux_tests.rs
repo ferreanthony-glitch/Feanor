@@ -331,8 +331,14 @@ fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer()
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 1, "un seul mode de fusion : {textes:?}");
-    // (Partie 164.3 : l'opacité est sur la miniature du calque courant, qu'on glisse ; son chiffre ne s'écrit que pendant le geste.)
-    assert!(!textes.iter().any(|(t, _)| t.contains("100 %")), "plus de « 100 % » écrit au repos : {textes:?}");
+    // (La barre d'opacité écrit sa valeur deux fois au même endroit : sur sa partie pleine et sur le reste.)
+    let mut places: Vec<Rect> = Vec::new();
+    for (_, r) in textes.iter().filter(|(t, _)| t.contains("100 %")) {
+        if !places.iter().any(|p| p.center().distance(r.center()) < 1.0) {
+            places.push(*r);
+        }
+    }
+    assert_eq!(places.len(), 1, "une seule opacité : {textes:?}");
 }
 
 // ============================================================================================= 2. Couleur
