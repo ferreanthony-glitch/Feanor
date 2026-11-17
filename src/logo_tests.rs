@@ -52,7 +52,7 @@ fn the_colour_star_has_a_vertical_gradient_hollow_flanks_and_a_transparent_backg
         assert_eq!(pixel_d(&px, 256, x, y)[3], 0, "creux en ({x}, {y})");
     }
     // La branche verticale est plus longue que l'horizontale.
-    assert_eq!(pixel_d(&px, 256, 50.0, 6.0)[3], 255, "pointe du haut");
+    assert_eq!(pixel_d(&px, 256, 50.0, 8.0)[3], 255, "pointe du haut");
     assert_eq!(pixel_d(&px, 256, 14.0, 50.0)[3], 0, "la pointe gauche s'arrête à 18");
     // Rien ne déborde : la bordure de l'image reste vide.
     let cote = 256usize;

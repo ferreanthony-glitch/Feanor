@@ -49,7 +49,7 @@ pub const DEGRADE: [(f32, [u8; 3]); 6] = [(0.0, JADE), (0.1, JADE), (0.38, TURQU
 pub const ETOILE: [(f32, f32); 8] = [(50.0, 2.0), (59.0, 41.0), (82.0, 50.0), (59.0, 59.0), (50.0, 98.0), (41.0, 59.0), (18.0, 50.0), (41.0, 41.0)];
 /// Les pointes sont très légèrement arrondies : chaque flanc est raccourci de cette part de sa longueur (en paramètre de
 /// courbe) à chaque bout, et les deux bouts se rejoignent par une petite courbe dont la pointe est le point de contrôle.
-pub const ARRONDI_POINTES: f32 = 0.035;
+pub const ARRONDI_POINTES: f32 = 0.09;
 /// Ce que l'étoile occupe, sur 100 : haut, bas, gauche, droite.
 pub const PIERRE_HAUT: f32 = 2.0;
 pub const PIERRE_BAS: f32 = 98.0;
