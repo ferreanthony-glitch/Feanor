@@ -13574,3 +13574,29 @@ sans icône « Trois calques » (ni bulle, ni action), la hauteur des plans qui 
 `in_the_three_layers_window_the_two_neighbours_grow_and_the_strips_stay` (`calquesplace_tests.rs`),
 `the_three_layers_mode_shows_a_strip_that_a_click_jumps_into` (`timeline_repliee_tests.rs`). Adaptés : `calquesplace_tests.rs`,
 `dossierglisser_tests.rs`, `panneaux_fins_tests.rs`, `decor_tests.rs`, `prefsui_tests.rs` (plus de « Calques dans la timeline »).
+
+### 165.8 Alt + clic choisit le calque cliqué (ce n'est plus la pipette)
+
+Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ».
+
+- **Dans la vue de dessin**, Alt + clic rend **actif le calque du plan courant dont l'encre est sous le curseur**, à l'image
+  courante. Plusieurs calques y ont de l'encre : **le plus haut qu'on voit** gagne (l'ordre de pose de l'image, Espace 3D compris).
+  Un calque caché (lui ou son dossier) ou à l'opacité 0 est ignoré ; un calque rangé dans un **dossier fermé** devient actif quand
+  même. Barre d'état : « Calque actif : <nom> ». **Dans le vide**, rien ne change ; la barre d'état dit « Aucun dessin sous le
+  curseur ». Le geste ne modifie pas le projet : **aucune étape d'annulation**, la couleur ne change pas. Valable avec tous les outils
+  de la feuille (pinceau, crayon, gomme, mélangeur, pot de peinture, formes, sélections…), dans une case des Vignettes aussi
+  (`App::alt_clic_calque`, `App::calque_sous_le_point`, `render::couverture_pixel_i`).
+- **Ne change pas** : l'outil **Pipette** reste la pipette ; l'Alt + clic du **mélangeur de couleurs** (son panneau, `melangeur.rs`)
+  reste une pipette ; l'Alt + clic de la fenêtre des références (`referencesui.rs`) prend toujours la couleur de la référence.
+- **Alt garde son sens là où il en avait un autre** : avec le **Dégradé**, Alt = « tout le calque » (inchangé, pas de choix de
+  calque) ; dans la **vue Espace 3D**, Alt + glisser fait tourner la vue (`espace3ddessin.rs`, `espace3dlasso.rs`, inchangé) ; Alt
+  tenu pendant un trait commencé (segment droit à angle aimanté, `tracedroit.rs`) ne change pas. Le lasso et la transformation ne
+  prenaient pas Alt à l'appui (la pipette passait avant eux) : rien n'y change.
+- **Textes mis à jour** : l'aide de la barre sous le dessin (pinceau, crayon, gomme, mélangeur, pot de peinture), l'aide des touches de
+  l'outil, la liste des gestes de la souris (Aide), l'animation d'aide de la pipette (plus de touche Alt), des commentaires. Le
+  gestionnaire de raccourcis n'avait pas ce geste (ce n'est pas une touche).
+
+Essais (`src/altclic_calque_tests.rs`), rouges d'abord (Alt + clic était encore la pipette), puis verts : deux calques superposés,
+on touche celui du dessus, et à côté celui du dessous, sans étape d'annulation ni couleur changée ; un calque caché et un calque à
+l'opacité 0 sont ignorés (l'œil rouvert, le caché répond) ; un clic dans le vide ne change pas le calque actif et le dit ; un calque
+d'un dossier fermé devient actif ; l'outil Pipette prend toujours la couleur. `aidetouches_tests` adapté.

@@ -271,6 +271,8 @@ mod visuels164_tests;
 mod avantapres165;
 #[cfg(test)]
 mod avantapres165_tests;
+#[cfg(test)]
+mod altclic_calque_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

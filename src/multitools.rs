@@ -54,7 +54,7 @@ pub(crate) fn compte_tout(sel: &MultiSel) -> String {
 
 /// Les touches tenues font-elles le geste « tous les calques » (Ctrl+Maj avec
 /// l'outil Sélection) ? Ctrl seul garde le lasso temporaire et la boîte autour du pivot, Maj seul
-/// ajoute ou retire ; Alt est la pipette.
+/// ajoute ou retire ; Alt + clic choisit le calque du dessin cliqué (partie 165.8).
 pub(crate) fn is_all_layers_gesture(m: &egui::Modifiers) -> bool {
     (m.command || m.ctrl) && m.shift && !m.alt
 }

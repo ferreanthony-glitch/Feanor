@@ -6,7 +6,7 @@ use crate::document::LayerKind;
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
 pub(crate) const MOUSE_GESTURES: [(&str, &str); 27] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
-    ("Alt + clic", "prélever une couleur"),
+    ("Alt + clic sur le dessin", "rendre actif le calque dont le dessin est sous le curseur (le plus haut qu'on voit)"),
     ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir"),
     ("Vignettes : Ctrl + glisser dans une case", "le lasso dans son dessin"),
     ("Vignettes : Ctrl + Maj + glisser dans une case", "le mouvement de caméra : déplacer un cadre, tirer un coin pour le zoom (Alt : un cadre de plus ; T tenue : pareil)"),

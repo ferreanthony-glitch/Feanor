@@ -470,10 +470,16 @@ impl App {
                         self.guides.drag = Some(k);
                         continue;
                     }
-                    // (Avec le Dégradé, Alt dit « tout le calque » : la pipette reste à l'outil Pipette.)
-                    if (modifiers.alt && self.tool != Tool::Gradient) || self.tool == Tool::Picker {
+                    // La pipette : l'outil Pipette seul.
+                    if self.tool == Tool::Picker {
                         self.picking = true;
                         self.pick_color(stage);
+                        continue;
+                    }
+                    // Partie 165.8 (Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ») : le
+                    // calque dont l'encre est sous le curseur devient actif. (Avec le Dégradé, Alt dit toujours « tout le calque ».)
+                    if modifiers.alt && self.tool != Tool::Gradient {
+                        self.alt_clic_calque(stage);
                         continue;
                     }
                     // Une brosse du décor choisie, sur le dessin du Storyboard : le trait part dans le calque Décor du plan

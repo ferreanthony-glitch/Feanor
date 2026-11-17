@@ -135,7 +135,7 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
 /// Des gestes à la souris ou au stylet, qui ne passent pas par le fichier de raccourcis : (ce qu'ils font, le geste).
 pub fn gestes_de_l_outil(tool: Tool) -> &'static [(&'static str, &'static str)] {
     match tool {
-        Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => &[("Pipette", "Alt + clic")],
+        Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => &[("Choisir le calque du dessin cliqué", "Alt + clic")],
         Tool::Text => &[("Valider le texte", "Ctrl + Entrée")],
         Tool::SelectColor => &[("Ajouter à la sélection", "Maj + clic")],
         Tool::Trajectoire => &[

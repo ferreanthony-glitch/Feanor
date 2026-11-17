@@ -24,7 +24,7 @@
 //!
 //! Si la capture n'est pas disponible (affichage OpenGL de secours), le clic demande à l'application la couleur
 //! du dessin sous le curseur (`surveiller` rend la position, `fournir_repli` reçoit la couleur) : c'est celle
-//! de la pipette de l'outil (Alt + clic), lue sans toucher à la couleur de dessin.
+//! de l'outil Pipette, lue sans toucher à la couleur de dessin.
 //!
 //! Rien n'est gardé dans le projet : le geste vit dans la mémoire d'egui. Le champ qui reçoit la couleur est
 //! celui d'où la pipette est partie ; la pipette de l'outil et la couleur de dessin ne changent pas.

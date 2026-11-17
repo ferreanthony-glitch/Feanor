@@ -167,7 +167,7 @@ fn shift_pressed_in_the_middle_of_a_stroke_goes_straight_from_the_last_point() {
 fn shift_alt_snaps_the_straight_line_to_15_degrees() {
     let mut b = banc_dessin(LayerKind::Bitmap);
     // Du départ (60, 100) vers (300, 142) : environ 10° ; aligné par 15°, la ligne monte à 15°.
-    // Alt est pris à l'appui (pipette) : on ne le tient que pendant le trait.
+    // Alt est pris à l'appui (le calque du dessin cliqué, partie 165.8) : on ne le tient que pendant le trait.
     glisser_avec(&mut b, &[(60.0, 100.0), (180.0, 120.0), (300.0, 142.0)], Modifiers::SHIFT, SHIFT_ALT);
     let d = (300.0f32 - 60.0, 142.0f32 - 100.0);
     let len = (d.0 * d.0 + d.1 * d.1).sqrt();

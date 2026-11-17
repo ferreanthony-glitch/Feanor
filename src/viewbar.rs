@@ -15,9 +15,9 @@ pub(crate) const VIEW_BAR_H: f32 = 28.0;
 pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
     use crate::app::Tool;
     match tool {
-        Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : pipette · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
-        Tool::Mixer => "Glisser : étaler et mêler ce qui est peint (bitmap) · Alt + clic : pipette · ^ $ : taille",
-        Tool::Fill => "Clic : remplir · Alt + clic : pipette",
+        Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : choisir le calque du dessin cliqué · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
+        Tool::Mixer => "Glisser : étaler et mêler ce qui est peint (bitmap) · Alt + clic : choisir le calque du dessin cliqué · ^ $ : taille",
+        Tool::Fill => "Clic : remplir · Alt + clic : choisir le calque du dessin cliqué",
         Tool::Gradient => "Glisser : tracer l'axe (Maj : par 15°) · dans la sélection, sinon dans la zone fermée · Alt : tout le calque",
         Tool::Cutter => "Glisser en travers des bouts à enlever · clic : un bout",
         Tool::Select => "Lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
