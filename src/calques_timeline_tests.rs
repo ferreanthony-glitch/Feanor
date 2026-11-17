@@ -11,7 +11,7 @@
 //! une référence tout en bas. Les premiers essais sont purs ; les derniers passent par la vraie fenêtre sans écran (`Banc`). Le dernier,
 //! ignoré, écrit des captures à regarder (`FEANOR_CAPTURE_DIR` ; `FEANOR_PROJET_ESSAI` : le manifeste d'une COPIE de projet).
 
-use eframe::egui::{pos2, vec2, Color32, Event, Key, Modifiers, Rect, Shape};
+use eframe::egui::{pos2, vec2, Event, Key, Modifiers, Rect};
 
 use crate::app::App;
 use crate::document::{Document, Layer, LayerKind};
