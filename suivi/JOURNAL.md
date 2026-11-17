@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-17
 
+- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
+  fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
+  été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;
+  ses vrais réglages n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place. La session de la timeline a le numéro du commit
+  pour refaire sa fusion de main dans `timeline-claire`.
 - **Lissé pendant que la vue bouge, et l'image nette refaite en route** (branche `vue-nette-lissage`, section 166.8). Son premier
   retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la vue.
   Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? ». La cause : l'image nette ne se refaisait qu'à
