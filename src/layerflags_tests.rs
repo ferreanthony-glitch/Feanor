@@ -205,8 +205,11 @@ fn hiding_a_group_hides_its_rows_only() {
     layers[2].group = 2;
     let mut g = groups::defaults();
     g[2].shown = false;
-    let shown: Vec<usize> = rows_of(&layers, &g, 0).iter().map(|r| r.li).collect();
+    let shown: Vec<usize> = rows_of(&layers, &g, 1).iter().map(|r| r.li).collect();
     assert_eq!(shown, [3, 1]);
+    // (Partie 165.4 : le calque courant garde sa ligne, même dans un groupe caché.)
+    let shown: Vec<usize> = rows_of(&layers, &g, 0).iter().map(|r| r.li).collect();
+    assert_eq!(shown, [3, 1, 0]);
     assert!(layers.iter().all(|l| l.visible), "le filtre ne cache rien à l'image");
 }
 

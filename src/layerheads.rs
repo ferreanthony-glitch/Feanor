@@ -43,7 +43,8 @@ pub(crate) struct Row {
 }
 
 /// Lignes des calques, du plus haut au plus bas ; les calques d'un groupe caché de la timeline
-/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas. Le calque courant `cur` a toujours sa ligne complète,
+/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas, sauf le calque courant (partie 165.4). Le calque courant
+/// `cur` a toujours sa ligne complète,
 /// tous les autres une ligne fine (partie 160, automatique : le drapeau « réduit » d'un calque ne compte plus ici ; celui d'un
 /// dossier dit toujours s'il est fermé).
 pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup], cur: usize) -> Vec<Row> {
@@ -53,8 +54,9 @@ pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup], cur: usize) -> Ve
         .iter()
         .enumerate()
         .rev()
-        .filter(|(_, l)| groups.get(l.group as usize).is_none_or(|g| g.shown))
-        .filter(|(_, l)| l.parent.is_none_or(|p| !closed.contains(&p)))
+        // (Partie 165.4 : le calque courant garde toujours sa ligne complète, même dans un groupe caché ou un dossier fermé.)
+        .filter(|(li, l)| *li == cur || groups.get(l.group as usize).is_none_or(|g| g.shown))
+        .filter(|(li, l)| *li == cur || l.parent.is_none_or(|p| !closed.contains(&p)))
         .map(|(li, l)| {
             let h = match (l.folder, li == cur) {
                 (true, true) => ROW_FOLDER,
@@ -66,6 +68,22 @@ pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup], cur: usize) -> Ve
             row
         })
         .collect()
+}
+
+/// Partie 165.4 : où se dessine la ligne `r` du calque courant quand on ne voit que `vue` de la colonne : à sa place si elle y
+/// tient entière ; sinon collée au bord de `vue` qu'elle dépasse (en haut d'abord, si la vue est plus basse qu'elle).
+pub(crate) fn ligne_toujours_visible(r: Rect, vue: Rect) -> Rect {
+    if !vue.is_positive() {
+        return r;
+    }
+    let mut y = r.top();
+    if r.bottom() > vue.bottom() {
+        y = vue.bottom() - r.height();
+    }
+    if y < vue.top() {
+        y = vue.top();
+    }
+    Rect::from_min_size(pos2(r.left(), y), r.size())
 }
 
 /// Hauteur de toutes les lignes.
@@ -287,13 +305,34 @@ impl App {
         // dès que les calques ont changé ; l'image suivante les refait.
         let avant = self.empreinte_calques();
         let mut tient = true;
-        for row in &rows {
+        let cur = self.cur_layer;
+        for row in rows.iter().filter(|r| r.li != cur) {
             if !self.calques_tiennent(&avant, row.li) {
                 tient = false;
                 break;
             }
             let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
             self.layer_head(ui, r, row.li);
+        }
+        // Partie 165.4 (Anthony : « je veux que cette version toujours visible », « jamais repliée ») : la ligne complète du calque
+        // courant se dessine en dernier, par-dessus les autres, et ne sort jamais de la partie visible de la colonne. Quand la
+        // timeline est trop basse pour tous les calques et qu'on la fait défiler, elle reste collée en haut ou en bas de ce qu'on voit
+        // (comme une ligne figée d'un tableur) ; sa rangée dans la grille, elle, défile.
+        if tient {
+            if let Some(row) = rows.iter().find(|r| r.li == cur) {
+                if self.calques_tiennent(&avant, row.li) {
+                    let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
+                    let r = ligne_toujours_visible(r, ui.clip_rect());
+                    if (r.top() - (top + row.top)).abs() > 0.5 {
+                        // (Détachée de sa place : une ombre sous elle et le fond de la colonne derrière, pour qu'on voie qu'elle flotte.)
+                        ui.painter().rect_filled(r.expand2(vec2(0.0, 2.0)), 0.0, theme::regle());
+                        ui.painter().rect_filled(Rect::from_min_size(pos2(r.left(), r.bottom() + 1.0), vec2(r.width(), 2.0)), 0.0, Color32::from_black_alpha(90));
+                    }
+                    self.layer_head(ui, r, row.li);
+                } else {
+                    tient = false;
+                }
+            }
         }
         tient &= self.calques_tiennent(&avant, 0);
         if !tient {

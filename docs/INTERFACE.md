@@ -13426,7 +13426,7 @@ Anthony : « Je préfère la version texte classique. Reviens en arrière. »
 - **Gardé** : la roue Couleur (164.1), les vignettes d'effets et l'avant | après sur le vrai calque (164.2, 165.1), le titre
   « Précis » partout (164.4).
 
-### 165.4 Les essais
+### 165, les essais (165.1 à 165.3)
 
 `src/avantapres165_tests.rs`, dans la vraie fenêtre sans écran :
 
@@ -13441,7 +13441,7 @@ Anthony : « Je préfère la version texte classique. Reviens en arrière. »
   aucune pastille, tirer la barre règle l'opacité en une étape que Ctrl+Z rend ; sur la piste du Storyboard, « 100 % » est écrit et
   le menu des modes est en texte (« Normal », « Produit »…), sans pastille.
 
-### 165.5 Relecture indépendante (sous-agent), et ce qui a été corrigé
+### 165, relecture indépendante (sous-agent), et ce qui a été corrigé
 
 - un effet du trait choisi montrait deux moitiés pareilles (corrigé : le schéma ; essai ajouté) ;
 - sur une grande feuille, l'aperçu pouvait se calculer en pleine résolution sur le fil de fond qui sert aussi la vue (corrigé : au
@@ -13455,8 +13455,30 @@ Anthony : « Je préfère la version texte classique. Reviens en arrière. »
   carte graphique, compose encore la lueur du calque sur ce fil (dans FEANOR, la vue passe par la carte, `gpu.rs`, sans attendre).
 - Les remarques sur la miniature de la piste sont sans objet depuis 165.3.
 
-### 165.6 À tester par Anthony (sur une copie de projet)
+### 165, à tester par Anthony (sur une copie de projet)
 
 1. Effets : sur un calque dessiné, pose une Lueur ; regarde l'avant | après, tire la barre. Dis si le temps d'arrivée de l'image te
    va, et si le cadrage (autour du dessin) est le bon.
 2. Animation et Storyboard : la ligne du calque montre de nouveau « 100 % » et « Normal ▾ » ; tire la barre, change le mode.
+
+### 165.4 La ligne du calque courant, toujours entière dans la timeline
+
+Anthony, sur la capture de la ligne en texte : « je veux que cette version toujours visible » ; « Jamais repliée ».
+
+Où elle pouvait ne pas se voir en entier, et ce qui change :
+
+- **Timeline trop basse pour tous les calques** (elle défile) : la ligne du calque courant pouvait être hors de ce qu'on voit, ou
+  coupée par le bord. Elle se dessine maintenant en dernier, par-dessus les autres, et reste collée en haut ou en bas de ce qu'on voit
+  (comme une ligne figée d'un tableur), avec une ombre ; sa rangée dans la grille, elle, défile (`layerheads::ligne_toujours_visible`).
+- **Calque courant dans un groupe caché de la timeline, ou dans un dossier fermé** : il n'avait plus de ligne du tout (seul un
+  message en tête de colonne). Il garde maintenant sa ligne complète ; le message reste.
+- **Bande détachée dans sa fenêtre** : sa taille minimale contient la colonne entière (312 points) et un peu de grille.
+- Ce qui ne la repliait déjà pas : la colonne des calques de la timeline a une largeur fixe de 312 points (la ligne complète y tient
+  entière) ; la hauteur des lignes ne dépend d'aucun réglage (56 points pour le calque courant, 22 pour les autres, partie 160) ; la
+  bande garde 200 points au moins (`montagehauteur::BANDE_MIN`) et la fenêtre 960 × 600.
+- Les autres calques ne changent pas. La piste du Storyboard (icône ◐) non plus.
+
+Essais (`src/avantapres165_tests.rs`) : la fenêtre la plus petite permise (960 × 600), les trois dispositions de l'espace Animation
+(Standard, Dessin, Timeline), vingt-cinq calques, le calque courant tout en bas de la pile, hors de la vue : « 100 % », « Normal » et
+son nom sont entiers à l'écran, la flèche « Mode suivant » change le mode en une étape que Ctrl+Z rend ; le calque courant dans un
+groupe caché garde sa ligne complète ; le calcul de la place de la ligne (à sa place, collée en bas, collée en haut).

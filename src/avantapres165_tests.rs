@@ -220,3 +220,82 @@ fn an_effect_that_cannot_be_shown_small_keeps_the_drawing() {
     let (sans, avec) = a::piles(&l, 0, 0).unwrap();
     assert!(sans.is_empty() && avec.len() == 1 && avec[0].kind == EffectKind::Glow);
 }
+
+// ------------------------------------------------------------------------------------ 165.4 : la ligne du calque courant, toujours entière
+
+/// Les textes peints à la dernière image qui se voient en entier : dans leur découpe et dans la fenêtre.
+fn textes_entiers(b: &Banc) -> Vec<(String, Rect)> {
+    fn rec(s: &eframe::egui::epaint::Shape, clip: Rect, ecran: Rect, out: &mut Vec<(String, Rect)>) {
+        match s {
+            eframe::egui::epaint::Shape::Text(t) => {
+                let r = Rect::from_min_size(t.pos, t.galley.size());
+                if clip.expand(0.5).contains_rect(r) && ecran.contains_rect(r) {
+                    out.push((t.galley.job.text.clone(), r));
+                }
+            }
+            eframe::egui::epaint::Shape::Vec(v) => v.iter().for_each(|s| rec(s, clip, ecran, out)),
+            _ => {}
+        }
+    }
+    let ecran = Rect::from_min_size(pos2(0.0, 0.0), b.taille);
+    let mut out = Vec::new();
+    for s in &b.formes {
+        rec(&s.shape, s.clip_rect, ecran, &mut out);
+    }
+    out
+}
+
+/// Partie 165.4 (Anthony : « je veux que cette version toujours visible », « jamais repliée ») : la fenêtre la plus petite permise
+/// (960 × 600), chaque disposition de l'espace Animation (Standard, Dessin, Timeline), vingt-cinq calques et le calque courant tout
+/// en bas de la pile, hors de ce que la timeline montre : sa ligne complète reste entière à l'écran, « 100 % », « Normal » et les
+/// flèches lisibles et cliquables. Puis le calque courant dans un groupe caché, puis dans un dossier fermé : sa ligne aussi.
+#[test]
+fn the_current_layer_row_stays_whole_in_the_smallest_timeline() {
+    let mut doc = Document::with_frame(960, 540, 24);
+    doc.panels[0].layers = (0..25).map(|k| Layer::new(&format!("Calque {k}"), LayerKind::Vector)).collect();
+    doc.panels[0].set_length(24);
+    let [lmin, hmin] = crate::accueilfenetre::TAILLE_MIN_TRAVAIL;
+    let mut b = crate::perf_tests::banc_taille(doc, false, lmin as u32, hmin as u32);
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(6);
+    for disposition in ["espace.standard", "espace.dessin", "espace.timeline"] {
+        b.app.run_action(disposition);
+        // (Le calque du bas de la pile : sa place est sous ce que la timeline montre.)
+        b.app.select_layer(0);
+        b.chauffer(6);
+        b.garder_formes = true;
+        b.chauffer(2);
+        let t = textes_entiers(&b);
+        b.garder_formes = false;
+        let bas = b.app.canvas_rect.bottom();
+        let entier = |mot: &str| t.iter().any(|(s, r)| s.contains(mot) && r.top() > bas);
+        assert!(entier("100 %") && entier("Normal") && entier("Calque 0"), "{disposition} : la ligne du calque courant entière : {:?}", t.iter().filter(|x| x.1.top() > bas).map(|x| &x.0).collect::<Vec<_>>());
+        // Les flèches, cliquables : « Mode suivant » change le mode, une étape ; Ctrl+Z le rend.
+        let fleche = ou("Mode suivant");
+        assert!(fleche.top() > bas && fleche.bottom() <= b.taille.y, "{disposition} : {fleche:?}");
+        let avant = etapes(&b);
+        clic(&mut b, fleche.center(), Modifiers::NONE);
+        assert_ne!(b.app.layers()[0].blend, crate::blend::BlendMode::Normal, "{disposition} : la flèche a changé le mode");
+        assert_eq!(etapes(&b), avant + 1);
+        b.app.run_action("edition.annuler");
+        b.chauffer(3);
+        assert_eq!(b.app.layers()[0].blend, crate::blend::BlendMode::Normal);
+    }
+    // Dans un groupe caché de la timeline, puis dans un dossier fermé : la ligne du calque courant reste.
+    let g = 3;
+    b.app.layers_mut()[0].group = g as _;
+    b.app.set_group_shown(g, false);
+    b.chauffer(4);
+    assert!(crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, 0).iter().any(|r| r.li == 0 && r.h == crate::layerheads::ROW_FULL), "groupe caché");
+    assert!(!vus::ou("Mode suivant").is_empty());
+}
+
+#[test]
+fn the_current_row_is_pulled_back_into_view() {
+    use crate::layerheads::ligne_toujours_visible as v;
+    let vue = Rect::from_min_max(pos2(0.0, 100.0), pos2(300.0, 300.0));
+    let r = |y: f32| Rect::from_min_size(pos2(0.0, y), eframe::egui::vec2(300.0, 56.0));
+    assert_eq!(v(r(150.0), vue), r(150.0), "à sa place quand elle tient");
+    assert_eq!(v(r(400.0), vue), r(244.0), "sous la vue : collée en bas");
+    assert_eq!(v(r(20.0), vue), r(100.0), "au-dessus : collée en haut");
+}

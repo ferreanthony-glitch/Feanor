@@ -256,7 +256,9 @@ impl App {
         for i in 0..self.detached.len() {
             let d = self.detached[i].clone();
             let title = format!("FEANOR — {}", d.panneau.name());
-            let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([180.0, 120.0]);
+            // (La bande détachée garde la place de la ligne complète du calque courant, partie 165.4 : la colonne entière et un peu de grille.)
+            let min = if matches!(d.panneau, Pane::Montage | Pane::Timeline) { [crate::layerheads::HEAD_W + 120.0, 240.0] } else { [180.0, 120.0] };
+            let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size(min);
             if d.largeur > 0.0 && d.hauteur > 0.0 {
                 builder = builder.with_inner_size([d.largeur, d.hauteur]).with_position([d.x, d.y]);
             } else {
