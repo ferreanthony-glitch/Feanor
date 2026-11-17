@@ -13834,3 +13834,7 @@ le zoom (de 0,94 à 1,04 fois, 1,00 en moyenne ; avant : de 0 à 1,25 fois à 80
 d'un trait reste régulière (de 0,83 à 1,10 fois sa moyenne ; avant : de 0,56 à 1,35 à 37 %) ; tournée à 100 % : lissée (2 818
 pixels intermédiaires pour 29 noirs). À 100 % vue droite : un pixel noir par ligne entre des blancs, comme avant. Et la règle
 `pose_nette`, cas par cas (droite, retournée, quart de tour, tournée, perspective, 1,5 pixel par point).
+Résultats (17 novembre, 20 h 49) : `vuereduite` 4 réussis (les essais sur la carte graphique ont bien tourné) ; vérificateur complet :
+compilation sans avertissement, **4 800 réussis, 0 échec**, les dix groupes de fiabilité OK. Image de contrôle (l'essai ignoré
+`vue_reduite_captures` sur une copie de « dd », plan 10 à 37 %), regardée agrandie neuf fois à côté de la copie de sa fenêtre : les
+traits sont continus, à bords gradués, plus de pointillés ni de trous blancs dans les hachures. Pas regardé sur son écran.

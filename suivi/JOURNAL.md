@@ -16,8 +16,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   vignettes de plans (calcul du processeur, même faiblesse, chantier à part) ; le hors-feuille ; l'affichage sans carte graphique.
   Mesuré par un essai écrit avant la correction et vu échouer (à 80 %, l'encre d'un trait fin de 0 à 1,25 fois la normale ; après,
   de 0,94 à 1,04 à tous les zooms). Image de contrôle faite sur une copie de « dd » (plan 10 à 37 %), regardée agrandie : traits
-  continus. Pas regardé sur son écran.
+  continus. Pas regardé sur son écran. Vérificateur complet (20 h 49) : compilation sans avertissement, **4 800 réussis, 0 échec**,
+  les dix groupes de fiabilité OK. Pas fusionnée : sa décision.
 - **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+- **`avant-apres-reel` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (0073f65, exe de 20 h 15), sur son
+  « vas y ». Contenu : partie 165.6 (deux lignes de boutons en tête de la colonne des calques de l'Animation, colonne à 410 points
+  au lieu de 757, règle et en-tête à 58 points), 165.7 (le mode « Trois calques » retiré : toute la pile, toujours ; un réglage
+  « trois » enregistré s'ouvre en toute la pile, format 56 inchangé), 165.8 (Alt + clic dans la vue de dessin choisit le calque du
+  dessin cliqué ; ce n'est plus la pipette). Fusion de main dans la branche (conflits INTERFACE.md et calques_timeline_tests.rs
+  résolus), puis avance rapide de main. L'avertissement des méthodes inutilisées d'`espace3d.rs` était déjà corrigé par main.
+  Vérificateur complet : compilation sans avertissement, 4 796 réussis aux deux passages, 0 échec, aucun intermittent, dix groupes
+  OK. Son FEANOR (lancé par la jonction Work\tvpaint-rs) a été arrêté sans enregistrer avant la reconstruction. Contrôle de
+  lancement : l'exe ouvert sur une copie de « retakes brawlydays » (Tests\lancement main 0073f65) avec de faux réglages, vivant
+  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
   fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
   été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;
