@@ -13367,3 +13367,84 @@ Essais anciens changés, et pourquoi :
 - les essais : des restes morts retirés, deux contrôles resserrés (la roue absente avec les curseurs, l'opacité de 37 % à 87 %).
 - Gardé tel quel : les couleurs fixes des schémas (papier, encre, les deux ronds bleu et orange des pastilles) : ce sont des images,
   pas l'interface ; et le contrôle « un seul titre Précis » reste une lecture des sources.
+
+## 165. L'avant | après montre le vrai calque ; la piste du Storyboard comme la ligne de la timeline (2026-11-16, branche `avant-apres-reel`)
+
+Deux demandes d'Anthony après la partie 164 : l'avant | après des Effets doit montrer **le vrai calque** (à gauche de la barre, le
+calque sans l'effet ; à droite, avec l'effet, à la force courante), et, « pareil partout », la piste du calque actif de la vue
+Storyboard doit fonctionner comme la ligne du calque de la timeline (164.3). Code : `src/avantapres165.rs` (l'aperçu),
+`src/visuels164.rs` (la peinture, partagée avec le schéma), `src/fxui.rs`, `src/pistes.rs`, `src/layerheads.rs` ; essais :
+`src/avantapres165_tests.rs`. Aucune crate, aucun format, aucune fenêtre.
+
+### 165.1 L'avant | après du vrai calque
+
+- L'image de l'avant | après est **le dessin du calque à l'image courante**, recadré sur ce qui est dessiné (avec une marge pour ce
+  que l'effet étend autour, au moins un bon tiers de la feuille), sur le papier du projet. À gauche de la barre : le calque passé par
+  les autres effets de sa pile, sans celui-ci ; à droite : avec lui, allumé, à ses réglages de l'image courante. La barre, sa poignée
+  et les mots « avant » / « Lueur · 50 % » sont ceux de la partie 164.
+- **Règle « sans latence »** : rien n'est calculé sur le fil de l'interface. Les deux moitiés sont des dessins dérivés comme ceux de
+  l'écran, demandés au fil de fond du cache des effets (`fxcache::request`), **en petit** : le dessin réduit 2, 4, 8… fois, à peu près
+  à la largeur du panneau, et une feuille de 1 024 px ou plus toujours au moins de moitié (les rayons et décalages des effets mis à
+  l'échelle, comme l'aperçu de la vue en lecture, `fxproxy`). Le dessin d'origine est la copie que le cache garde déjà pour l'écran
+  (des tuiles partagées : rien n'est recopié). La demande passe après l'image affichée ; aucune n'est faite pendant la lecture ni
+  pendant un trait, et alors l'aperçu montré reste tel quel (rien n'est relu, converti ni envoyé à la carte). Le moteur de pinceau
+  n'est jamais rejoué.
+- **Pendant qu'on tire la barre**, l'image d'avant reste (la dernière prête). Une seule demande à la fois par moitié : la force
+  demandée il y a quelques images se finit et se montre, puis la dernière est demandée (pas de file de forces périmées) ; au lâcher,
+  la dernière force arrive et l'écran se redessine. Le geste reste une seule étape d'annulation, par le chemin de la partie 164 (le
+  curseur du réglage).
+- **Repli sur le schéma de la partie 164** : calque vide (rien de dessiné dans la feuille), calque sans dessin (calque d'effet, vidéo),
+  effet qui ne se calcule pas en petit (une déformation, le liseré, l'encre qui bave, les effets du trait, qui lisent les traits en
+  pleine résolution ; un effet du trait choisi donne le schéma, pas deux moitiés pareilles), et le tout premier instant, avant que la
+  première image arrive.
+- Les deux images sont gardées le temps de la séance, en textures (quelques centaines de pixels de large), par onglet ; un autre
+  calque, un autre effet ou un autre dessin (une autre image de l'animation) repart du schéma, puis de l'image.
+
+### 165.2 La piste du calque actif, vue Storyboard
+
+| Ancien réglage (piste du calque actif, bande du Storyboard) | Nouvelle place |
+|---|---|
+| Barre d'opacité « 100 % » | glisser sur la miniature de la piste (vers la droite, plus opaque ; 120 points pour tout l'écart) : elle se voile d'autant, une barre fine de l'accent dit la valeur, le chiffre pendant le geste ; une étape par geste ; plusieurs calques choisis prennent tous la valeur. Colonne étroite (sans vignette) : une petite miniature à la place de l'ancienne barre, même geste. Couleur unie : la barre, comme dans la timeline |
+| Icône ◐ du mode de fusion et sa liste | la pastille du mode (deux ronds, l'intersection par la vraie formule) et son nom ; un clic ouvre les 27 pastilles, par familles ; une étape |
+| Losange des clés d'opacité | inchangé, avant la pastille |
+| Glissé vertical sur la piste (ranger le calque), clic droit (menu du calque) | inchangés, aussi depuis la miniature |
+| Clic droit > Apparence > Opacité, Mode de fusion | inchangés |
+
+Le code est celui de la timeline (`layerheads::opacite_miniature`, `pastille_du_mode`), avec un drapeau pour la piste : son glissé
+vertical range les pistes, son clic droit ouvre le menu des pistes.
+
+### 165.3 Les essais
+
+`src/avantapres165_tests.rs`, dans la vraie fenêtre sans écran :
+
+- avec un gros trait rouge et une Lueur : l'aperçu arrive du fil de fond, l'avant a les pixels rouges du trait (pas le schéma),
+  l'après a plus d'encre (la lueur) ; la lueur poussée à 200 : l'après gagne encore par rapport à l'avant ;
+- tirer la barre : aucun effet ni aucune réduction calculés sur le fil de l'interface pendant le geste (un compteur des essais dans
+  `fx::apply_with` et `fxproxy::downscale`), la dernière image reste montrée à chaque image du geste, une seule étape ; la nouvelle
+  image arrive après ;
+- un calque vide : le schéma, et la barre se tire toujours ;
+- le cadrage (autour du dessin, à la forme de l'aperçu, dans la feuille) et la taille de calcul ;
+- 165.2 : glisser de 60 points à gauche sur la miniature de la piste met 50 % (une étape), un clic ne change rien, Ctrl+Z la rend ; la
+  pastille ouvre les 27 modes, « Produit » le pose (une étape) et les referme, Ctrl+Z le rend ; dans la colonne la plus étroite, la
+  petite miniature et la pastille marchent, le menu du calque reste là.
+
+### 165.4 Relecture indépendante (sous-agent), et ce qui a été corrigé
+
+- un effet du trait choisi montrait deux moitiés pareilles (corrigé : le schéma ; essai ajouté) ;
+- sur une grande feuille, l'aperçu pouvait se calculer en pleine résolution sur le fil de fond qui sert aussi la vue (corrigé : au
+  moins de moitié au-delà de 1 024 px) ;
+- pendant le glissé, une demande neuve partait à chaque image, et les forces périmées passaient d'abord (corrigé : une demande à la
+  fois par moitié, renouvelée sans rien recopier ; la force arrivée entre-temps se montre) ;
+- pendant la lecture ou un trait, une image arrivée était encore convertie et envoyée à la carte (corrigé : l'aperçu reste tel quel) ;
+- une image d'un autre dessin pouvait rester montrée (corrigé : un autre dessin repart du schéma) ; l'image en mémoire n'est plus
+  gardée hors des essais ;
+- l'essai « aucun calcul sur le fil de l'interface » ne mesure que la préparation de l'aperçu : la vue de dessin du banc d'essai, sans
+  carte graphique, compose encore la lueur du calque sur ce fil (dans FEANOR, la vue passe par la carte, `gpu.rs`, sans attendre).
+- Gardé tel quel : sur la miniature de la piste, un double-clic ne replie pas la piste (il le fait à côté), comme sur la miniature de
+  la timeline.
+
+### 165.5 À tester par Anthony (sur une copie de projet)
+
+1. Effets : sur un calque dessiné, pose une Lueur ; regarde l'avant | après, tire la barre. Dis si le temps d'arrivée de l'image te
+   va, et si le cadrage (autour du dessin) est le bon.
+2. Storyboard : sur la piste du calque actif, glisse sur la miniature ; clique la pastille du mode, choisis Produit ; Ctrl+Z.
