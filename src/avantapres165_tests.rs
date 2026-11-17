@@ -299,3 +299,109 @@ fn the_current_row_is_pulled_back_into_view() {
     assert_eq!(v(r(400.0), vue), r(244.0), "sous la vue : collée en bas");
     assert_eq!(v(r(20.0), vue), r(100.0), "au-dessus : collée en haut");
 }
+
+// ------------------------------------------------------------------------------------ 165.5 : les boutons montés dans la colonne
+
+/// Les noms (bulles) des commandes de `barre` montrées dans la ligne : boutons et états qui répondent, menus.
+fn noms_de_la_barre(b: &Banc, barre: crate::barres::Barre) -> Vec<String> {
+    use crate::barres::Genre;
+    let reglage = crate::barres::ReglageBarre::default();
+    crate::barres::dans_la_barre(barre, &reglage)
+        .into_iter()
+        .filter_map(|c| match c.genre {
+            Genre::Menu => Some(c.nom.to_string()),
+            Genre::Bouton | Genre::Etat => {
+                let v = b.app.vue_de(barre, c);
+                v.actif.then_some(v.nom)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Chaque commande de la ligne est à l'écran, entière, dans la colonne (`colonne` : ses bords gauche et droit) et au-dessus de
+/// `sous` (le haut de ce qui suit les boutons dans la colonne) ; rend le rectangle de chacune.
+fn boutons_dans_la_colonne(b: &Banc, barre: crate::barres::Barre, colonne: (f32, f32), sous: f32) -> Vec<(String, Rect)> {
+    let ecran = Rect::from_min_size(pos2(0.0, 0.0), b.taille);
+    noms_de_la_barre(b, barre)
+        .into_iter()
+        .map(|nom| {
+            let r = *vus::ou(&nom).iter().filter(|r| r.left() >= colonne.0 - 1.0 && r.right() <= colonne.1 + 1.0).min_by(|a, c| a.top().total_cmp(&c.top())).unwrap_or_else(|| panic!("« {nom} » pas dans la colonne {colonne:?} : {:?}", vus::ou(&nom)));
+            assert!(ecran.contains_rect(r), "« {nom} » entier à l'écran : {r:?}");
+            assert!(r.bottom() <= sous + 1.0, "« {nom} » en haut de la colonne, au-dessus de {sous} : {r:?}");
+            (nom, r)
+        })
+        .collect()
+}
+
+/// Partie 165.5 (Anthony : « Monter les boutons » ; « mettre les boutons sur la même ligne que la timeline » ; « toujours garder
+/// cette colonne avec un maximum d'information. On peut verrouiller la taille minimale de la colonne s'il faut. ») : vue
+/// Storyboard, fenêtre la plus petite. Plus de barre au-dessus de la bande : ses boutons sont sur une ligne en haut de la colonne,
+/// au-dessus de « Caméra », tous entiers et cliquables ; la colonne ne se rétrécit pas sous leur largeur, même tirée.
+#[test]
+fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_column_keeps_its_width() {
+    use crate::barres::Barre;
+    let [lmin, hmin] = crate::accueilfenetre::TAILLE_MIN_TRAVAIL;
+    let mut doc = Document::with_frame(960, 540, 24);
+    doc.panels[0].layers = vec![Layer::new("Dessin", LayerKind::Vector)];
+    doc.panels[0].set_length(24);
+    let mut b = crate::perf_tests::banc_taille(doc, false, lmin as u32, hmin as u32);
+    b.app.set_espace(Espace::Storyboard);
+    b.chauffer(8);
+    // Une colonne réglée trop étroite (réglage d'avant) : elle est élargie à la ligne des boutons.
+    b.app.montage_head_w = crate::montagehead::HEAD_MIN;
+    b.chauffer(6);
+    let grip = ou("Largeur de la colonne");
+    let camera = vus::ou("Caméra").into_iter().filter(|r| r.right() <= grip.right() + 1.0).min_by(|a, c| a.top().total_cmp(&c.top()));
+    let haut_des_pistes = camera.map_or(grip.top() + 40.0, |c| c.top());
+    let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes);
+    assert!(boutons.len() >= 7, "{boutons:?}");
+    // Une seule ligne, en haut de la colonne, en face de la règle : la barre du haut n'existe plus.
+    let y = boutons[0].1.center().y;
+    assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {boutons:?}");
+    assert!(boutons.iter().all(|(_, r)| r.top() >= grip.top() - 1.0), "aucun bouton au-dessus de la colonne (plus de barre en haut) : {boutons:?} / {grip:?}");
+    let min = crate::montagehead::largeur_min_colonne(Barre::Montage);
+    assert!(b.app.montage_head_w >= min - 0.5 && min >= crate::barres::largeur_mesuree(Barre::Montage) - 0.5, "{} / {min}", b.app.montage_head_w);
+    // Tirer la poignée vers la gauche : la colonne s'arrête au minimum.
+    crate::pistes_tests::glisser(&mut b, grip.center(), grip.center() - eframe::egui::vec2(300.0, 0.0));
+    b.chauffer(3);
+    assert!((b.app.montage_head_w - min).abs() < 1.0, "arrêtée au minimum : {} / {min}", b.app.montage_head_w);
+    eprintln!("165.5 : largeur minimale de la colonne du Storyboard : {min:.0} points");
+    let grip = ou("Largeur de la colonne");
+    boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes);
+    // Cliquable : la boucle s'allume et s'éteint.
+    let boucle = b.app.looping;
+    clic(&mut b, ou("Lecture en boucle").center(), Modifiers::NONE);
+    assert_ne!(b.app.looping, boucle, "la boucle répond au clic");
+}
+
+/// Partie 165.5, vue Animation, fenêtre la plus petite, les trois dispositions : les boutons de la timeline sont sur une ligne en
+/// haut de la colonne des calques, au-dessus de la ligne du calque courant (qui reste entière, 165.4) ; la colonne est au moins
+/// aussi large que cette ligne ; les boutons répondent.
+#[test]
+fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_one_line() {
+    use crate::barres::Barre;
+    let [lmin, hmin] = crate::accueilfenetre::TAILLE_MIN_TRAVAIL;
+    let mut doc = Document::with_frame(960, 540, 24);
+    doc.panels[0].layers = (0..6).map(|k| Layer::new(&format!("Calque {k}"), LayerKind::Vector)).collect();
+    doc.panels[0].set_length(24);
+    let mut b = crate::perf_tests::banc_taille(doc, false, lmin as u32, hmin as u32);
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(6);
+    for disposition in ["espace.standard", "espace.dessin", "espace.timeline"] {
+        b.app.run_action(disposition);
+        b.chauffer(8);
+        let ligne = ou("Mode suivant");
+        let w = crate::layerheads::largeur_colonne_timeline();
+        assert!(w >= crate::barres::largeur_mesuree(Barre::Timeline) - 0.5 && w >= crate::layerheads::HEAD_W, "{disposition} : {w}");
+        let gauche = vus::ou("Opacité du calque").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 80.0;
+        let boutons = boutons_dans_la_colonne(&b, Barre::Timeline, (gauche, gauche + w + 90.0), ligne.top() - 30.0);
+        let y = boutons[0].1.center().y;
+        assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "{disposition} : une seule ligne : {boutons:?}");
+        assert!(boutons.len() >= 10, "{disposition} : {boutons:?}");
+    }
+    eprintln!("165.5 : largeur de la colonne des calques de la timeline : {:.0} points", crate::layerheads::largeur_colonne_timeline());
+    let avant = b.app.cur_frame;
+    clic(&mut b, ou("Image suivante").center(), Modifiers::NONE);
+    assert_eq!(b.app.cur_frame, avant + 1, "le bouton répond");
+}

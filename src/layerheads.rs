@@ -86,6 +86,16 @@ pub(crate) fn ligne_toujours_visible(r: Rect, vue: Rect) -> Rect {
     Rect::from_min_size(pos2(r.left(), y), r.size())
 }
 
+/// Partie 165.5 : largeur de la colonne des calques de la timeline : celle d'une ligne complète (HEAD_W), ou plus, celle de la ligne
+/// des boutons de la timeline mesurée à son dessin (une estimation avant).
+pub(crate) fn largeur_colonne_timeline() -> f32 {
+    let mesure = crate::barres::largeur_mesuree(crate::barres::Barre::Timeline);
+    HEAD_W.max(if mesure > 0.0 { mesure } else { LARGEUR_BARRE_TIMELINE_AVANT_MESURE })
+}
+
+/// Partie 165.5 : la largeur de la ligne des boutons de la timeline avant sa première mesure.
+const LARGEUR_BARRE_TIMELINE_AVANT_MESURE: f32 = 760.0;
+
 /// Hauteur de toutes les lignes.
 pub(crate) fn rows_height(rows: &[Row]) -> f32 {
     rows.iter().map(|r| r.h).sum()
@@ -237,59 +247,19 @@ impl App {
     /// une ligne par calque, puis la place des lignes caméra et son (`below`).
     pub(crate) fn timeline_heads(&mut self, ui: &mut Ui, header_h: f32, below: f32) -> Rect {
         let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
-        let size = vec2(HEAD_W, header_h + rows_height(&rows) + below);
+        // Partie 165.5 : la colonne est au moins aussi large que la ligne des boutons de la timeline (Anthony : « toujours garder
+        // cette colonne avec un maximum d'information »), qui est en haut de la colonne, en face de la règle des images.
+        // (Jamais plus large que la place : dans la fenêtre la plus petite, la bande en a toujours assez ; un écran d'essai plus étroit
+        // garde la ligne complète du calque, `HEAD_W`.)
+        let w = largeur_colonne_timeline().min(ui.available_width().max(HEAD_W));
+        let size = vec2(w, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(Rect::from_min_size(rect.min, vec2(HEAD_W, header_h)), 0.0, theme::regle());
-        // Le calque courant est dans un groupe caché de la timeline : on le dit, et un clic sur
-        // la couleur de son groupe le remontre.
-        let hidden_group = self.layers().get(self.cur_layer).map(|l| l.group as usize).filter(|&g| !self.doc.groups[g].shown);
-        // Ou dans un dossier fermé (13b-5) : un clic sur le dossier le rouvre.
-        let closed_folder = crate::folders::parent_index(self.layers(), self.cur_layer).filter(|&fi| self.layers()[fi].collapsed);
-        match (hidden_group, closed_folder) {
-            (None, Some(fi)) => {
-                let name = self.layers()[fi].name.clone();
-                let r = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top()), vec2(HEAD_W - 100.0, header_h));
-                let resp = ui.interact(r, egui::Id::new("dossier_ferme_courant"), Sense::click());
-                painter.text(
-                    pos2(r.left() + 2.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    format!("{} Calque courant dans « {name} »", ph::FOLDER),
-                    FontId::proportional(11.0),
-                    theme::marque(),
-                );
-                if bulle(resp, "Le calque courant est dans un dossier fermé", "Clic : ouvrir le dossier.", "").clicked() {
-                    self.layers_mut()[fi].collapsed = false;
-                    self.modified = true;
-                }
-            }
-            (Some(g), _) => {
-                let group = self.doc.groups[g].clone();
-                let swatch = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top() + 3.0), vec2(14.0, header_h - 6.0));
-                let resp = ui.interact(swatch, egui::Id::new("groupe_cache_courant"), Sense::click());
-                painter.rect_filled(swatch, 2.0, group_color(group.color));
-                painter.text(
-                    pos2(swatch.right() + 6.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    "Calque courant caché",
-                    FontId::proportional(11.0),
-                    theme::marque(),
-                );
-                let tip = format!("Il est dans le groupe « {} », caché de la timeline. Clic sur la couleur pour montrer ce groupe.", group.name);
-                if bulle(resp, "Le calque est caché", &tip, "").clicked() {
-                    self.set_group_shown(g, true);
-                }
-            }
-            (None, None) => {
-                painter.text(
-                    pos2(rect.left() + 6.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    "Calques",
-                    FontId::proportional(11.0),
-                    ui.visuals().weak_text_color(),
-                );
-            }
-        }
+        let tete = Rect::from_min_size(rect.min, vec2(w, header_h));
+        painter.rect_filled(tete, 0.0, theme::regle());
+        // (Les messages « calque courant caché » et « dans un dossier fermé » qui étaient là ne servent plus : le calque courant garde sa
+        // ligne complète dans tous les cas, partie 165.4 ; son groupe se remontre par son menu, son dossier par son triangle.)
+        self.barre_dans_la_colonne(ui, tete, crate::barres::Barre::Timeline);
         // (Partie 160 : Nouveau dossier, Groupes de calques et les opérations sur les calques sont dans la barre d'actions, en bas
         // de la colonne, `barrecalques.rs` ; « Tout réduire / tout agrandir » n'existe plus : le calque courant a toujours sa ligne
         // complète, les autres une ligne fine.)
@@ -311,7 +281,7 @@ impl App {
                 tient = false;
                 break;
             }
-            let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
+            let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(w, row.h));
             self.layer_head(ui, r, row.li);
         }
         // Partie 165.4 (Anthony : « je veux que cette version toujours visible », « jamais repliée ») : la ligne complète du calque
@@ -321,7 +291,7 @@ impl App {
         if tient {
             if let Some(row) = rows.iter().find(|r| r.li == cur) {
                 if self.calques_tiennent(&avant, row.li) {
-                    let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
+                    let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(w, row.h));
                     let r = ligne_toujours_visible(r, ui.clip_rect());
                     if (r.top() - (top + row.top)).abs() > 0.5 {
                         // (Détachée de sa place : une ombre sous elle et le fond de la colonne derrière, pour qu'on voie qu'elle flotte.)

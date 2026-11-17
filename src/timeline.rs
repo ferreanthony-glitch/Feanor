@@ -2,7 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::App;
 use crate::handles::{GridMenu, GridSelect, Handle};
-use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
+use crate::layerheads::{row_at, rows_height, rows_of, Row};
 use crate::storyboard::duration_label;
 use crate::theme;
 
@@ -11,9 +11,9 @@ pub(crate) const CELL_W: f32 = 16.0;
 pub(crate) const CELL_MIN: f32 = 3.0;
 pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
-const HEADER_H: f32 = 20.0;
-/// Largeur de l'en-tête des calques (13b).
-const NAMES_W: f32 = HEAD_W;
+/// Hauteur de la règle des images, et de la ligne des boutons en face d'elle dans la colonne (partie 165.5 : une case de bouton,
+/// 26 points, y tient).
+pub(crate) const HEADER_H: f32 = 30.0;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
@@ -78,9 +78,9 @@ impl App {
         }
         // Le pointeur sur la bande : les touches du zoom de l'image zooment la timeline (`run_action`).
         self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
-        ui.add_space(2.0);
-        self.timeline_toolbar(ui);
-        ui.separator();
+        // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre au-dessus de la timeline ; ses commandes sont sur une ligne
+        // en haut de la colonne des calques, en face de la règle des images (`layerheads::timeline_heads`). La timeline gagne la
+        // hauteur de l'ancienne barre.
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
         egui::TopBottomPanel::bottom("onglets_timeline")
             .resizable(false)
@@ -103,17 +103,6 @@ impl App {
                             .show(ui, |ui| self.timeline_grid(ui));
                     });
                 });
-        });
-    }
-
-    /// Barre de la timeline, sur une seule ligne qui ne défile pas (`barres.rs`) : le plan, le
-    /// transport, les dessins, la caméra et la pelure ; le reste sous « Plus… ». Les commandes en
-    /// icônes ont leur nom, leur raccourci et une description dans une bulle (12d).
-    fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            self.barre_ui(ui, crate::barres::Barre::Timeline);
-            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
         });
     }
 
@@ -162,14 +151,14 @@ impl App {
             resp.context_menu(|ui| app.grid_menu_ui(ui, m));
         };
         if notes_h > 0.0 {
-            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(r.width(), notes_h)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
             menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
         }
         {
             let y = r.top() + HEADER_H + rows_h;
-            let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), CAM_H)).shrink2(vec2(0.0, 1.0));
             // La caméra du plan choisie seule dans la vue Espace 3D : sa rangée est montrée comme celle d'un calque courant, et
             // plus aucune rangée de calque ne l'est (`espace3dui.rs`, partie 152).
             let choisie = self.e3_camera_seule();

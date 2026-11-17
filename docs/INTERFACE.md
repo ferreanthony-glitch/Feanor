@@ -13482,3 +13482,35 @@ Essais (`src/avantapres165_tests.rs`) : la fenêtre la plus petite permise (960 
 (Standard, Dessin, Timeline), vingt-cinq calques, le calque courant tout en bas de la pile, hors de la vue : « 100 % », « Normal » et
 son nom sont entiers à l'écran, la flèche « Mode suivant » change le mode en une étape que Ctrl+Z rend ; le calque courant dans un
 groupe caché garde sa ligne complète ; le calcul de la place de la ligne (à sa place, collée en bas, collée en haut).
+
+### 165.5 Les boutons montés dans la colonne de gauche ; la colonne ne rétrécit plus sous eux
+
+Anthony, sur une capture de la bande en vue Storyboard : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre
+les boutons sur la même ligne que la timeline » ; puis « toujours garder cette colonne avec un maximum d'information. On peut
+verrouiller la taille minimale de la colonne s'il faut. »
+
+- **Storyboard (la bande du montage)** : la barre au-dessus de la bande n'existe plus. Ses boutons (la lecture et le temps ; plans et
+  calques ; liste, aimant, son…, puis « Plus… ») et la légende des clés sont sur **une seule ligne**, dans la place vide en haut de
+  la colonne de gauche, en face de la règle des temps et de la ligne « Séquence 1 », au-dessus de « Caméra ». Même ordre, mêmes
+  bulles, mêmes raccourcis, même « Plus… ». La bande gagne la hauteur de l'ancienne barre.
+- **Animation (la timeline, dispositions Standard, Dessin, Timeline)** : de même, la barre de la timeline est sur une ligne en haut de
+  la colonne des calques, en face de la règle des images (qui passe de 20 à 30 points pour qu'une case de bouton, 26 points, y
+  tienne) ; l'avis « Calque courant caché / dans un dossier fermé » qui était là n'a plus d'objet (165.4 : le calque courant garde
+  sa ligne ; son groupe se remontre par son menu, son dossier par son triangle).
+- **La largeur minimale de la colonne** est celle de la ligne des boutons, mesurée à son dessin (la plus grande vue dans la séance :
+  la colonne ne bouge pas quand un time code raccourcit), et au moins celle où la piste du calque actif montre sa vignette. Une
+  colonne réglée plus étroite (réglage enregistré d'avant, double-clic, glissé de la poignée) est élargie ; la poignée s'arrête à ce
+  minimum. Avec les barres d'origine, mesurées dans les essais : la colonne du Storyboard fait au moins **474 points** ; la colonne
+  des calques de la timeline, **757 points** (sa barre est plus longue que la ligne complète d'un calque, 312 points : la ligne du
+  calque s'étire). Épingler d'autres commandes dans une barre élargit sa colonne d'autant.
+- **Pas dans l'espace Montage** : sa barre du travail de montage (coupes, rognage, transitions, son, relecture, exports) a trois fois
+  plus de commandes ; sur une ligne dans la colonne, elle prendrait presque toute la largeur de la bande. Elle reste au-dessus de la
+  bande, et la colonne y garde ses bornes d'avant.
+
+Essais (`src/avantapres165_tests.rs`) : Storyboard, fenêtre la plus petite, colonne réglée trop étroite : elle est élargie ; chaque
+bouton de la barre du montage est entier à l'écran, dans la colonne, au-dessus de « Caméra », tous sur une ligne, aucun au-dessus de
+la colonne (plus de barre en haut) ; la poignée tirée de 300 points vers la gauche s'arrête au minimum, tout reste visible ; la boucle
+répond au clic. Animation, fenêtre la plus petite, trois dispositions : chaque bouton de la timeline sur une ligne en haut de la
+colonne, au-dessus de la ligne du calque courant ; la colonne au moins aussi large que la ligne ; « Image suivante » répond.
+Essai ancien changé : `notes_calques_tests` (le calque courant d'un dossier fermé garde sa ligne, le triangle rouvre le dossier ; il
+n'y a plus d'avis en tête de colonne).

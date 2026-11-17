@@ -561,7 +561,47 @@ pub(crate) struct Vue {
     pub actif: bool,
 }
 
+/// Partie 165.5 : la largeur qu'il faut à chaque barre pour tenir sur une seule ligne, mesurée à son dessin dans la colonne de gauche
+/// de la bande (la plus grande vue pendant la séance : la colonne ne rétrécit pas quand un time code ou un nom de plan raccourcit).
+static MESURES: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
+
+fn rang(b: Barre) -> usize {
+    match b {
+        Barre::Commandes => 0,
+        Barre::Montage => 1,
+        Barre::MontageEdition => 2,
+        Barre::Timeline => 3,
+    }
+}
+
+/// La largeur mesurée de la barre `b` sur une ligne, légende des clés comprise (0 tant qu'elle n'a pas été dessinée).
+pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
+    MESURES.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
+}
+
 impl App {
+    /// Partie 165.5 (Anthony : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre les boutons sur la même
+    /// ligne que la timeline ») : la barre `barre` et la légende des clés, sur une seule ligne, dans `ligne`, la place vide de la
+    /// colonne de gauche en face de la règle des temps. Rien ne passe sous « Plus… » faute de place : la ligne est dessinée à sa
+    /// largeur entière, et cette largeur est retenue (`largeur_mesuree`) pour que la colonne la contienne.
+    pub(crate) fn barre_dans_la_colonne(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
+        let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        child.set_clip_rect(ligne.intersect(ui.clip_rect()));
+        child.add_space(4.0);
+        self.barre_ui(&mut child, barre);
+        self.legende_cles_ui(&mut child);
+        let w = child.min_rect().width() + 8.0;
+        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        if w > m[rang(barre)] + 0.5 {
+            m[rang(barre)] = w;
+        }
+        // (Une image de plus seulement si la colonne doit s'élargir pour la contenir : au repos, rien ne repeint.)
+        if w > ligne.width() + 6.5 {
+            ui.ctx().request_repaint();
+        }
+    }
+
     /// Une barre, sur une seule ligne, sans défilement : ses commandes, puis « Plus… ».
     pub(crate) fn barre_ui(&mut self, ui: &mut Ui, barre: Barre) {
         ui.spacing_mut().item_spacing.x = ECART;
