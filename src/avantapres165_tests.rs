@@ -375,11 +375,17 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     assert_ne!(b.app.looping, boucle, "la boucle répond au clic");
 }
 
-/// Partie 165.5, vue Animation, fenêtre la plus petite, les trois dispositions : les boutons de la timeline sont sur une ligne en
-/// haut de la colonne des calques, au-dessus de la ligne du calque courant (qui reste entière, 165.4) ; la colonne est au moins
-/// aussi large que cette ligne ; les boutons répondent.
+/// Le haut de la première ligne de calque dans la colonne de la timeline, à la dernière image.
+fn haut_des_calques() -> f32 {
+    crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().0.iter().map(|x| x.1).fold(f32::MAX, f32::min))
+}
+
+/// Partie 165.5 puis 165.6 (Anthony : « Deux lignes de boutons »), vue Animation, fenêtre la plus petite, les trois dispositions :
+/// les boutons de la timeline sont sur deux lignes en haut de la colonne des calques, au-dessus de la première ligne de calque ; la
+/// colonne est au moins aussi large que la plus longue des deux, et ne dépasse pas 420 points ; aucun groupe n'est coupé (le plan et
+/// le transport sur la première ligne, les dessins, la caméra et « Plus… » sur la seconde) ; les boutons répondent.
 #[test]
-fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_one_line() {
+fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_two_lines() {
     use crate::barres::Barre;
     let [lmin, hmin] = crate::accueilfenetre::TAILLE_MIN_TRAVAIL;
     let mut doc = Document::with_frame(960, 540, 24);
@@ -388,20 +394,69 @@ fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_one_line() {
     let mut b = crate::perf_tests::banc_taille(doc, false, lmin as u32, hmin as u32);
     b.app.set_espace(Espace::Animation);
     b.chauffer(6);
+    let reglage = crate::barres::ReglageBarre::default();
+    let mut ici = Rect::NOTHING;
     for disposition in ["espace.standard", "espace.dessin", "espace.timeline"] {
         b.app.run_action(disposition);
         b.chauffer(8);
-        let ligne = ou("Mode suivant");
         let w = crate::layerheads::largeur_colonne_timeline();
-        assert!(w >= crate::barres::largeur_mesuree(Barre::Timeline) - 0.5 && w >= crate::layerheads::HEAD_W, "{disposition} : {w}");
+        let mesure = crate::barres::largeur_mesuree(Barre::Timeline);
+        assert!(w >= mesure - 0.5 && w >= crate::layerheads::HEAD_W, "{disposition} : {w} / {mesure}");
+        assert!(w <= 420.0, "{disposition} : la colonne des calques ne fait plus qu'environ 400 points : {w}");
         let gauche = vus::ou("Opacité du calque").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 80.0;
-        let boutons = boutons_dans_la_colonne(&b, Barre::Timeline, (gauche, gauche + w + 90.0), ligne.top() - 30.0);
-        let y = boutons[0].1.center().y;
-        assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "{disposition} : une seule ligne : {boutons:?}");
-        assert!(boutons.len() >= 10, "{disposition} : {boutons:?}");
+        let sous = haut_des_calques();
+        let boutons = boutons_dans_la_colonne(&b, Barre::Timeline, (gauche, gauche + w + 90.0), sous);
+        assert!(boutons.len() >= 15, "{disposition} : tous les boutons : {boutons:?}");
+        ici = boutons.iter().find(|(n, _)| n == "Clé de caméra ici").map(|x| x.1).expect("« Clé de caméra ici » dans la colonne");
+        // Deux lignes, pas plus, et pas un groupe à cheval.
+        let mut ys: Vec<f32> = boutons.iter().map(|(_, r)| r.center().y).collect();
+        ys.sort_by(f32::total_cmp);
+        let (y1, y2) = (ys[0], ys[ys.len() - 1]);
+        assert!(y2 - y1 > 20.0, "{disposition} : deux lignes : {boutons:?}");
+        assert!(ys.iter().all(|y| (y - y1).abs() < 2.0 || (y - y2).abs() < 2.0), "{disposition} : deux lignes, pas plus : {boutons:?}");
+        let groupe_de = |nom: &str| crate::barres::dans_la_barre(Barre::Timeline, &reglage).into_iter().find(|c| c.nom == nom || b.app.vue_de(Barre::Timeline, c).nom == nom).map(|c| c.groupe);
+        for (nom, r) in &boutons {
+            let premiere = (r.center().y - y1).abs() < 2.0;
+            let g = groupe_de(nom).unwrap_or_else(|| panic!("groupe de « {nom} »"));
+            assert_eq!(premiere, g <= crate::timeline::DERNIER_GROUPE_LIGNE1, "{disposition} : « {nom} » (groupe {g}) sur la bonne ligne : {r:?}");
+        }
+        let plus = vus::ou("Plus…").into_iter().find(|r| r.left() >= gauche - 1.0 && r.right() <= gauche + w + 91.0 && r.bottom() <= sous + 1.0 && r.top() >= y1 - 20.0);
+        assert!(plus.is_some_and(|p| (p.center().y - y2).abs() < (p.center().y - y1).abs() && p.top() > y1), "{disposition} : « Plus… » au bout de la seconde ligne : {plus:?} / {y1} {y2}");
     }
-    eprintln!("165.5 : largeur de la colonne des calques de la timeline : {:.0} points", crate::layerheads::largeur_colonne_timeline());
+    eprintln!("165.6 : largeur de la colonne des calques de la timeline : {:.0} points", crate::layerheads::largeur_colonne_timeline());
     let avant = b.app.cur_frame;
     clic(&mut b, ou("Image suivante").center(), Modifiers::NONE);
-    assert_eq!(b.app.cur_frame, avant + 1, "le bouton répond");
+    assert_eq!(b.app.cur_frame, avant + 1, "le bouton de la première ligne répond");
+    // Et un bouton de la seconde ligne : la clé de caméra ici.
+    let cles = b.app.panel().camera.len();
+    clic(&mut b, ici.center(), Modifiers::NONE);
+    assert!(b.app.panel().camera.len() > cles, "le bouton de la seconde ligne répond : {cles} clés avant");
+}
+
+/// Partie 165.6 : avec deux lignes de boutons, l'en-tête de la colonne et la règle de la grille ont la même hauteur : chaque ligne de
+/// calque commence et finit à la même hauteur que sa piste, dans les trois dispositions, avec 25 calques et après un défilement.
+#[test]
+fn with_two_button_lines_the_layer_rows_stay_aligned_with_their_tracks() {
+    let [lmin, hmin] = crate::accueilfenetre::TAILLE_MIN_TRAVAIL;
+    let mut doc = Document::with_frame(960, 540, 24);
+    doc.panels[0].layers = (0..25).map(|k| Layer::new(&format!("Calque {k}"), LayerKind::Vector)).collect();
+    doc.panels[0].set_length(24);
+    let mut b = crate::perf_tests::banc_taille(doc, false, lmin as u32, hmin as u32);
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(6);
+    for disposition in ["espace.standard", "espace.dessin", "espace.timeline"] {
+        b.app.run_action(disposition);
+        b.chauffer(8);
+        let (colonne, grille) = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().clone());
+        assert_eq!(colonne.len(), 25, "{disposition} : {colonne:?}");
+        assert_eq!(colonne.len(), grille.len(), "{disposition}");
+        for (c, g) in colonne.iter().zip(&grille) {
+            assert_eq!(c.0, g.0, "{disposition} : même calque");
+            assert!((c.1 - g.1).abs() < 0.5 && (c.2 - g.2).abs() < 0.5, "{disposition} : calque {} aligné sur sa piste : {c:?} / {g:?}", c.0);
+        }
+        // La première ligne de calque commence sous les deux lignes de boutons.
+        let haut = colonne.iter().map(|x| x.1).fold(f32::MAX, f32::min);
+        let mode = vus::ou("Lecture / pause");
+        assert!(mode.iter().any(|r| r.bottom() <= haut + 1.0), "{disposition} : boutons au-dessus des calques");
+    }
 }

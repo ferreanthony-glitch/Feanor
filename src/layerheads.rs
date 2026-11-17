@@ -93,8 +93,9 @@ pub(crate) fn largeur_colonne_timeline() -> f32 {
     HEAD_W.max(if mesure > 0.0 { mesure } else { LARGEUR_BARRE_TIMELINE_AVANT_MESURE })
 }
 
-/// Partie 165.5 : la largeur de la ligne des boutons de la timeline avant sa première mesure.
-const LARGEUR_BARRE_TIMELINE_AVANT_MESURE: f32 = 760.0;
+/// Partie 165.5 : la largeur de la ligne des boutons de la timeline avant sa première mesure (partie 165.6 : la plus longue des deux
+/// lignes).
+const LARGEUR_BARRE_TIMELINE_AVANT_MESURE: f32 = 400.0;
 
 /// Hauteur de toutes les lignes.
 pub(crate) fn rows_height(rows: &[Row]) -> f32 {
@@ -259,7 +260,14 @@ impl App {
         painter.rect_filled(tete, 0.0, theme::regle());
         // (Les messages « calque courant caché » et « dans un dossier fermé » qui étaient là ne servent plus : le calque courant garde sa
         // ligne complète dans tous les cas, partie 165.4 ; son groupe se remontre par son menu, son dossier par son triangle.)
-        self.barre_dans_la_colonne(ui, tete, crate::barres::Barre::Timeline);
+        // Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre sur deux lignes, la première en face des numéros de la règle,
+        // la seconde juste dessous ; la colonne ne prend plus que la largeur de la plus longue des deux.
+        let h1 = crate::timeline::LIGNE1_H.min(header_h);
+        let ligne1 = Rect::from_min_size(tete.min, vec2(w, h1));
+        let ligne2 = Rect::from_min_max(pos2(tete.left(), tete.top() + h1), tete.max);
+        self.barre_dans_la_colonne_deux_lignes(ui, ligne1, ligne2, crate::barres::Barre::Timeline, crate::timeline::DERNIER_GROUPE_LIGNE1);
+        #[cfg(test)]
+        crate::timeline::LIGNES_PEINTES.with(|l| l.borrow_mut().0 = rows.iter().map(|row| (row.li, rect.top() + header_h + row.top, rect.top() + header_h + row.top + row.h)).collect());
         // (Partie 160 : Nouveau dossier, Groupes de calques et les opérations sur les calques sont dans la barre d'actions, en bas
         // de la colonne, `barrecalques.rs` ; « Tout réduire / tout agrandir » n'existe plus : le calque courant a toujours sa ligne
         // complète, les autres une ligne fine.)

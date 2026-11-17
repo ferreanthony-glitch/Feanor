@@ -13514,3 +13514,33 @@ répond au clic. Animation, fenêtre la plus petite, trois dispositions : chaque
 colonne, au-dessus de la ligne du calque courant ; la colonne au moins aussi large que la ligne ; « Image suivante » répond.
 Essai ancien changé : `notes_calques_tests` (le calque courant d'un dossier fermé garde sa ligne, le triangle rouvre le dossier ; il
 n'y a plus d'avis en tête de colonne).
+
+### 165.6 Animation : deux lignes de boutons en tête de la colonne des calques
+
+Anthony, sur la colonne des calques à 757 points (un tiers de la timeline, la ligne du calque étirée) : « Deux lignes de boutons, et
+laisse le Montage. »
+
+- **Animation (la timeline, les trois dispositions)** : la barre de la timeline est répartie sur **deux lignes** en haut de la colonne
+  des calques, par groupes entiers (aucun groupe n'est coupé) :
+  - **première ligne**, en face des numéros de la règle des images : le plan (son titre, sa durée ; « Animer ce plan » s'il est
+    épinglé), puis le transport (première, précédente, lecture, suivante, dernière image, boucle), l'image courante, les menus
+    Repères et Affichage ;
+  - **seconde ligne**, juste dessous : les dessins (nouveau, allonger, raccourcir, exposition des nouveaux dessins, menu Images), la
+    caméra (clés au début, ici, à la fin, supprimer), puis ce qu'on a épinglé des groupes suivants (marque, commentaire, pelure, flips,
+    son), « Plus… » et la légende des clés.
+- **L'en-tête gagne une ligne** : la règle des images passe de 30 à **58 points** (30 + 28), dans la grille comme dans la colonne : les
+  calques et leurs pistes commencent à la même hauteur et restent alignés au point près. Les numéros des images et celui de la tête de
+  lecture restent dans la bande du haut, en face de la première ligne ; crochets d'entrée et de sortie, marques, signets, fanions des
+  commentaires et la prise de la fin du plan occupent toute la hauteur de la règle, qui se prend aussi pour glisser la tête de lecture.
+- **La largeur minimale de la colonne** est celle de la plus longue des deux lignes, mesurée à son dessin (même mécanisme qu'en 165.5 :
+  la plus grande vue dans la séance ; une colonne plus étroite est élargie) : avec les barres d'origine, mesurée dans les essais,
+  **410 points** au lieu de 757. Épingler d'autres commandes allonge la seconde ligne.
+- **Storyboard** : rien ne change (une ligne, 474 points). **Montage** : rien ne change (sa barre reste au-dessus de la bande).
+
+Essais (`src/avantapres165_tests.rs`) : rouges d'abord (toute la barre sur la première ligne : la colonne dépasse 420 points), puis
+verts : Animation, fenêtre la plus petite, trois dispositions : tous les boutons entiers dans la colonne, au-dessus de la première
+ligne de calque, sur deux lignes et pas plus, chacun sur la ligne de son groupe, « Plus… » au bout de la seconde ; la colonne au moins
+aussi large que la plus longue ligne et au plus 420 points ; « Image suivante » (première ligne) et « Clé de caméra ici » (seconde)
+répondent. Avec 25 calques, dans les trois dispositions, chaque ligne de calque de la colonne a le même haut et le même bas que sa
+piste dans la grille (`timeline::LIGNES_PEINTES`, relevé à chaque image dans les essais). L'essai 165.5 « sur une ligne » de
+l'Animation devient celui-ci.

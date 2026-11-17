@@ -11,9 +11,17 @@ pub(crate) const CELL_W: f32 = 16.0;
 pub(crate) const CELL_MIN: f32 = 3.0;
 pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
-/// Hauteur de la règle des images, et de la ligne des boutons en face d'elle dans la colonne (partie 165.5 : une case de bouton,
-/// 26 points, y tient).
-pub(crate) const HEADER_H: f32 = 30.0;
+/// Hauteur de la première ligne des boutons dans la colonne des calques, en face des numéros de la règle des images (partie 165.5 :
+/// une case de bouton, 26 points, y tient).
+pub(crate) const LIGNE1_H: f32 = 30.0;
+/// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la seconde ligne des boutons, juste sous la première.
+pub(crate) const LIGNE2_H: f32 = 28.0;
+/// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
+/// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
+pub(crate) const HEADER_H: f32 = LIGNE1_H + LIGNE2_H;
+/// Partie 165.6 : les groupes de la barre de la timeline sur la première ligne (le plan, puis le transport, l'image courante, les
+/// repères et l'affichage) ; les dessins, la caméra et le reste sur la seconde, avec « Plus… » et la légende des clés.
+pub(crate) const DERNIER_GROUPE_LIGNE1: u8 = 1;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
@@ -32,6 +40,9 @@ const PLAN_END_W: f32 = 9.0;
 #[cfg(test)]
 thread_local! {
     pub(crate) static PRISE_FIN_DU_PLAN: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+    /// Partie 165.6 : le haut et le bas de chaque ligne de calque (rang du calque, haut, bas) dans la colonne (`.0`) et dans la grille
+    /// (`.1`), à la dernière image : les essais vérifient que calques et pistes sont alignés.
+    pub(crate) static LIGNES_PEINTES: std::cell::RefCell<(Vec<(usize, f32, f32)>, Vec<(usize, f32, f32)>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) };
 }
 
 /// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
@@ -329,6 +340,8 @@ impl App {
         // Fond des lignes, calque courant en surbrillance (aucun quand la caméra du plan est choisie seule dans la vue
         // Espace 3D : c'est sa rangée qui l'est, partie 152).
         let camera_seule = self.e3_camera_seule();
+        #[cfg(test)]
+        LIGNES_PEINTES.with(|l| l.borrow_mut().1 = rows.iter().map(|row| (row.li, grid_top + row.top, grid_top + row.top + row.h)).collect());
         for row in &rows {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
@@ -363,7 +376,7 @@ impl App {
             let shown = if time_code { c % (fps * seconds) == 0 } else { c == 0 || (c + 1) % step == 0 };
             if c < cols && shown {
                 painter.text(
-                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + HEADER_H * 0.5),
+                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + LIGNE1_H * 0.5),
                     if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
                     self.frame_label(c),
                     FontId::monospace(9.0),
@@ -824,7 +837,7 @@ impl App {
             cur_frame(),
         );
         painter.text(
-            pos2(cx + cell * 0.5, r.top() + HEADER_H * 0.5),
+            pos2(cx + cell * 0.5, r.top() + LIGNE1_H * 0.5),
             Align2::CENTER_CENTER,
             // En time code, seule l'image dans la seconde tient dans la case.
             match self.time_display {
