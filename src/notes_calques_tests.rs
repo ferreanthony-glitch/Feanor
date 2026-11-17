@@ -396,22 +396,23 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
-    // (Partie 160 : le panneau Calques n'existe plus ; la ligne complète du calque courant de la timeline porte le bouton, les
-    // lignes fines des autres calques ne l'ont pas.) « C1 » est le calque courant.
+    // (Partie 164 : la barre du calque courant porte le bouton, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les
+    // lignes des calques ne l'ont pas.) « C1 » est le calque courant.
     app.cur_layer = 0;
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
+        a.barre_du_calque(ui);
         a.timeline_heads(ui, 24.0, 0.0);
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     let n = textes.iter().filter(|(t, _)| t.contains(ph_fond)).count();
     assert_eq!(n, 1, "{textes:?}");
-    // Un clic sur celui de la ligne « C1 » lui donne un fond.
-    let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
+    // Un clic sur celui de la barre (celle de « C1 », le calque courant, dont le nom ouvre la barre) lui donne un fond.
+    let (_, nom) = trouver(&textes, "C1").unwrap().clone();
     let (_, bouton) = textes
         .iter()
-        .filter(|(t, r)| t.contains(ph_fond) && r.center().y > ligne.center().y && r.center().y - ligne.center().y < 30.0 && r.left() > ligne.left() - 5.0)
-        .min_by(|a, b| a.1.top().total_cmp(&b.1.top()))
-        .expect("le bouton de la ligne C1")
+        .filter(|(t, r)| t.contains(ph_fond) && (r.center().y - nom.center().y).abs() < 6.0 && r.left() > nom.right())
+        .min_by(|a, b| a.1.left().total_cmp(&b.1.left()))
+        .expect("le bouton de la barre de C1")
         .clone();
     let textes = ecran.cliquer(&mut app, bouton.center(), &mut ui_calques);
     assert!(app.layers()[0].fond.is_some(), "{} / {textes:?}", app.status);

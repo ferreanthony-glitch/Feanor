@@ -3,6 +3,17 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-17
+
+- **Timeline plus claire** (INTERFACE partie 164, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
+  l'interface autour des clés pour 15 calques. Deux séries de dix pistes en maquettes (page « Timeline de Feanor, dix pistes ») ;
+  la première écartée (« à côté du vrai problème », « trop compliquées »). Ses gênes : retrouver un calque, lire le timing, la
+  place, les en-têtes chargés ; ses règles : ordre de la pile, temps horizontal, rien d'automatique. Gardées : l'exception seule
+  sur les lignes, une barre de réglages du calque courant, la couleur du rangement sur toute la ligne, des dossiers-titres qui se
+  replient en montrant les clés de leurs calques. Toutes les lignes à 22 points (fin de la ligne complète de la partie 160).
+- Essais sur le Mac : `RUSTUP_TOOLCHAIN=stable`, `RUSTFLAGS="-Awarnings -L native=<remplaçants>"` ; les remplaçants vides de
+  kernel32 et psapi (six fonctions de mesure) sont hors du dépôt, dans le dossier de travail de la session.
+
 ## 2026-11-16
 
 - **Zoom 1 et 2 dans la vue 3D à côté** (à sa demande) : `raccourcis-muets` fusionnée dans `espace-a-cote` (le zoom 3D au

@@ -259,6 +259,9 @@ mod barrepanneaux_tests;
 mod barrecalques;
 #[cfg(test)]
 mod panneaux_fins_tests;
+// La timeline plus claire (partie 164).
+#[cfg(test)]
+mod timeline_claire_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;

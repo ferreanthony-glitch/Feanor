@@ -13030,3 +13030,56 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
 11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
     sur la feuille par la caméra : la carte suit.
 12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
+
+## 164. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+
+Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
+quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
+reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout seul. Sur deux séries de pistes en maquettes (page
+« Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
+se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
+
+### 164.1 Ce qui a changé
+
+1. **Toutes les lignes ont la même hauteur, 22 points** (`layerheads::ROW_FINE`), calque courant et dossiers compris. Avant
+   (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
+   fait plus bouger la timeline. Le calque courant garde son fond d'accent.
+2. **La barre du calque**, entre la barre de la timeline et les lignes (`App::barre_du_calque`, 24 points, elle ne défile pas avec
+   les calques) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
+   pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets, accroche à la caméra, aplat
+   et planche-mère, la couleur d'un calque Couleur unie, l'opacité et son losange de clés, le mode de fusion (précédent, liste,
+   suivant). Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
+   Mêmes bulles, mêmes gestes qu'avant ; seule la place change.
+3. **Une ligne ne montre que l'exception** (`App::exceptions_du_calque`). L'œil n'apparaît que si le calque est caché, le cadenas
+   que s'il est verrouillé ; sous la souris, leur case montre l'icône en pâle et un clic agit comme avant. À droite du nom, en
+   petit : l'opacité si elle est sous 100 %, le mode s'il n'est pas Normal, et une icône pour le pochoir, la transparence préservée,
+   la pelure d'oignon du calque, la position verrouillée, l'accroche à la caméra (la bulle dit ce que c'est ; on le change dans la
+   barre du calque). L'interrupteur des effets reste là quand le calque en a.
+4. **La couleur du rangement sur toute la ligne** (`layerheads::fond_teinte`) : la couleur du dossier du calque, sinon celle de
+   son groupe (la règle de `folders::couleur_du_rangement`, déjà celle du filet de gauche), teinte légèrement la ligne, dans
+   l'en-tête et dans la grille. Un calque sans dossier ni groupe garde le gris.
+5. **Les dossiers servent de titres** : leur ligne est plus teintée, l'icône du dossier prend sa couleur, le nom est en demi-gras
+   suivi du nombre de ses calques ; triangle pour ouvrir ou fermer (inchangé). **Un dossier fermé montre les clés de ses calques**
+   en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
+   caché, plus pâle). Avant : une rangée sombre et vide.
+
+### 164.2 Choix faits sans Anthony (à confirmer)
+
+- Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
+  que disent les données ; la question est restée ouverte sur la page des pistes).
+- La miniature dans les clés du calque courant (13d, « dans une ligne complète ») ne se voit plus : elle demandait une ligne d'au
+  moins 40 points. Les clés elles-mêmes ne changent pas.
+- La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
+
+### 164.3 Comment Anthony teste (sur une copie de projet)
+
+1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
+   calques, rien ne bouge.
+2. En haut des lignes, la barre du calque : tous ses réglages. Change l'opacité, le mode, le pochoir : la ligne du calque le dit
+   à droite de son nom. Remets tout à la normale : la ligne redevient nue.
+3. Survole l'œil ou le cadenas d'une ligne : l'icône apparaît en pâle ; clique pour cacher ou verrouiller ; elle reste alors
+   affichée.
+4. Les lignes des calques d'un dossier ont sa couleur ; un calque rangé dans un groupe de couleur, celle du groupe.
+5. Ferme un dossier : sa ligne montre les clés de ses calques en petit. Rouvre-le.
+6. Un dossier courant : la barre montre son œil, son cadenas, son opacité et le nombre de ses calques.
+7. Dans les trois thèmes : la teinte reste lisible, le texte de la barre aussi. Dis si la teinte est trop forte ou trop faible.

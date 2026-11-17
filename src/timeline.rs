@@ -81,6 +81,9 @@ impl App {
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
         ui.separator();
+        // La barre du calque courant (partie 164) : tous ses réglages, sur une ligne qui ne défile pas avec les calques.
+        self.barre_du_calque(ui);
+        ui.add_space(2.0);
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
         egui::TopBottomPanel::bottom("onglets_timeline")
             .resizable(false)
@@ -150,7 +153,7 @@ impl App {
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups, self.cur_layer));
+        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
         let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
@@ -222,7 +225,7 @@ impl App {
         let cell = self.timeline_cell.clamp(CELL_MIN, CELL_MAX);
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
-        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
+        let rows = rows_of(self.layers(), &self.doc.groups);
         let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
@@ -347,11 +350,12 @@ impl App {
                 theme::surface_active(crate::theme::accent(), 0.35)
             } else if !camera_seule && self.is_chosen_layer(li) {
                 theme::surface_active(crate::theme::accent(), 0.18)
-            } else if self.layers()[li].folder {
-                // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
-                theme::rangee_sombre()
             } else {
-                theme::rangee()
+                // Dossier (13b-5) : pas de dessin, une rangée plus sombre. Toute la ligne prend la couleur du rangement du calque, celle
+                // de son dossier ou de son groupe (partie 164).
+                let dossier = self.layers()[li].folder;
+                let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
+                crate::layerheads::fond_teinte(if dossier { theme::rangee_sombre() } else { theme::rangee() }, rangement, dossier)
             };
             painter.rect_filled(rect, 0.0, bg);
         }
@@ -563,6 +567,36 @@ impl App {
                     }
                 }
                 f = end;
+            }
+        }
+        // Un dossier fermé (partie 164) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
+        // un petit écart au début de chaque dessin. On voit encore où ça bouge sans rouvrir le dossier.
+        for row in &rows {
+            let layers = self.layers();
+            if !layers.get(row.li).is_some_and(|l| l.folder && l.collapsed) {
+                continue;
+            }
+            let mut enfants = crate::folders::children_of(layers, row.li);
+            enfants.reverse();
+            if enfants.is_empty() {
+                continue;
+            }
+            let (haut, bas) = (grid_top + row.top + 4.0, grid_top + row.top + row.h - 4.0);
+            let pas = ((bas - haut) / enfants.len() as f32).min(4.0);
+            let epaisseur = (pas - 1.0).max(1.0);
+            for (k, &ci) in enfants.iter().enumerate() {
+                let layer = &layers[ci];
+                let y = haut + k as f32 * pas;
+                let couleur = if layer.visible { theme::couleur_du_calque(layer) } else { theme::couleur_du_calque(layer).gamma_multiply(0.45) };
+                let mut f = if c0 < layer.frames.len() { layer.run_bounds(c0).0 } else { layer.frames.len() };
+                while f < layer.frames.len().min(c1 + 1) {
+                    let (start, end) = layer.run_bounds(f);
+                    if layer.frames[start].is_some() {
+                        let trait_ = Rect::from_min_max(pos2(r.left() + start as f32 * cell + 1.0, y), pos2(r.left() + end as f32 * cell, y + epaisseur));
+                        painter.rect_filled(trait_, 0.0, couleur);
+                    }
+                    f = end.max(f + 1);
+                }
             }
         }
         // Barre de chaque calque (chantier 1) : de son premier dessin à la fin du dernier ; ses

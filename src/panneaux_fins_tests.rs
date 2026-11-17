@@ -173,27 +173,30 @@ fn la_colonne_porte_tout(debut: f32, colonne: f32, ligne_du_calque: Rect) {
 }
 
 #[test]
-fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine_rows() {
+fn in_the_animation_the_bar_of_the_current_layer_carries_everything_and_the_rows_are_all_alike() {
+    // Partie 164 : les réglages du calque courant sont dans la barre du calque, au-dessus des lignes ; toutes les lignes ont la même
+    // hauteur (avant, partie 160 : la ligne complète du calque courant).
     let mut b = banc_dans(Espace::Animation);
     b.chauffer(2);
     let fusion = vus::ou("Mode de fusion");
-    assert_eq!(fusion.len(), 1, "une seule ligne complète, celle du calque courant : {fusion:?}");
+    assert_eq!(fusion.len(), 1, "une seule barre du calque : {fusion:?}");
+    assert!(fusion[0].height() <= crate::layerheads::BARRE_H, "dans la barre, sur une seule ligne : {fusion:?}");
     // (La colonne commence au bord gauche de la bande, après la barre d'outils : la barre d'actions part de là.)
     let debut = vus::ou(crate::barrecalques::NOMS[0]).last().copied().expect("la barre d'actions").left();
     la_colonne_porte_tout(debut, debut + crate::layerheads::HEAD_W + 2.0, fusion[0]);
-    // L'en-tête de la colonne n'a plus ses boutons (ils sont dans la barre d'actions) ni « Tout réduire ».
-    let haut_des_lignes = fusion[0].top() - crate::layerheads::ROW_FULL;
+    // Ni l'en-tête de la colonne ni la barre du calque n'ont les boutons de la barre d'actions, ni « Tout réduire ».
+    let sous_la_barre = fusion[0].bottom();
     for nom in ["Nouveau dossier", "Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
-        assert!(vus::ou(nom).iter().all(|r| r.top() > haut_des_lignes), "« {nom} » n'est plus en haut de la colonne : {:?}", vus::ou(nom));
+        assert!(vus::ou(nom).iter().all(|r| r.top() > sous_la_barre), "« {nom} » n'est pas en haut de la colonne : {:?}", vus::ou(nom));
     }
-    // Un autre calque devient courant : c'est sa ligne qui est complète, l'autre est fine.
-    let rows = |b: &Banc| crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
-    assert_eq!(rows(&b).iter().filter(|r| r.h == crate::layerheads::ROW_FULL).count(), 1);
+    // Un autre calque devient courant : rien ne change de hauteur, et la barre parle de lui.
+    let rows = |b: &Banc| crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups);
+    let avant = rows(&b);
+    assert!(avant.iter().all(|r| r.h == crate::layerheads::ROW_FINE));
     b.app.select_layer(0);
     b.chauffer(2);
-    for r in rows(&b) {
-        assert_eq!(r.h, if r.li == 0 { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE });
-    }
+    assert_eq!(rows(&b), avant);
+    assert_eq!(vus::ou("Mode de fusion").len(), 1);
 }
 
 #[test]

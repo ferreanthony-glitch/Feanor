@@ -168,9 +168,9 @@ fn a_duplicated_plan_keeps_its_folders_and_instance_names() {
 #[test]
 fn a_closed_folder_hides_the_rows_of_its_layers() {
     let mut layers = stack();
-    let rows: Vec<usize> = rows_of(&layers, &groups::defaults(), 4).iter().map(|r| r.li).collect();
+    let rows: Vec<usize> = rows_of(&layers, &groups::defaults()).iter().map(|r| r.li).collect();
     assert_eq!(rows, [4, 3, 2, 1, 0]);
     layers[3].collapsed = true;
-    let rows: Vec<usize> = rows_of(&layers, &groups::defaults(), 4).iter().map(|r| r.li).collect();
+    let rows: Vec<usize> = rows_of(&layers, &groups::defaults()).iter().map(|r| r.li).collect();
     assert_eq!(rows, [4, 3, 0]);
 }

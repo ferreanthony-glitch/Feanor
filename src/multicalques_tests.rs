@@ -1082,9 +1082,11 @@ fn champ_opacite(b: &mut Banc) -> Pos2 {
         }
     }
     b.garder_formes = false;
+    // (Partie 164 : la ligne du calque dans la timeline dit aussi « 37 % » en petit, à droite de son nom, sans champ : on garde les
+    // textes posés deux fois au même endroit, ceux d'une barre.)
     let mut seuls: Vec<Pos2> = Vec::new();
     for p in trouves.iter().copied() {
-        if !seuls.iter().any(|q| q.distance(p) < 1.0) {
+        if trouves.iter().filter(|q| q.distance(p) < 1.0).count() >= 2 && !seuls.iter().any(|q| q.distance(p) < 1.0) {
             seuls.push(p);
         }
     }
