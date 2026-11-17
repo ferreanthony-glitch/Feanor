@@ -1080,6 +1080,12 @@ fn save_dialog(app: &App, base: &str, format: Format, mxf: bool) -> Option<PathB
 
 /// Ouvre l'explorateur Windows sur le fichier (sélectionné) ou le dossier.
 pub(crate) fn reveal_in_explorer(path: &std::path::Path) {
+    // Sous `cargo test`, rien : les essais qui lancent toutes les commandes (`debogage_tests`)
+    // ouvraient de vraies fenêtres « Ce PC » et « Documents » sur le bureau d'Anthony, au
+    // premier plan, à chaque passage (un chemin vide donne « Ce PC »).
+    if cfg!(test) {
+        return;
+    }
     let mut c = std::process::Command::new("explorer.exe");
     #[cfg(windows)]
     {
