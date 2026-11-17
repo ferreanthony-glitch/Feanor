@@ -9047,7 +9047,9 @@ la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-si
 
 **Dans le code.** `logo.rs` dessine l'étoile sur 100 unités (`DESSIN`) puis la ramène sur la grille de 64 de l'animation
 et de l'icône ; ses fonctions (`image`, `icone`, `ico`, `dessiner`, l'animation d'ouverture) ne changent pas de forme,
-donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. Les variantes
+donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. L'icône
+est l'icône de base de la charte : carré arrondi au dégradé du logo, étoile blanche (`feanor-icone.svg` ; les autres
+icônes de la charte sont `feanor-icone-noire`, `-blanche` et `-jade`). Les variantes
 `Jade`, `JadePetit` et `Iris` dessinent la même étoile en dégradé (elle tient à 16 px) ; `Mono` est l'aplat. L'animation
 d'ouverture garde ses images clés : l'étoile s'ouvre en tourbillon, une seconde étoile plus petite s'efface.
 `marque.rs` : l'étoile fait 1,18 fois la hauteur des capitales à la place du O (accueil, centrée sur les capitales, petit
@@ -9060,5 +9062,5 @@ gardent l'irisé (`barre.rs`).
 1. Lance FEANOR sans projet : l'accueil montre FEAN, l'étoile à la place du O (un peu plus haute que les lettres, centrée
    sur elles), R, et la devise dessous ; l'étoile s'ouvre une fois puis reste figée.
 2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
-3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile sur le carré sombre arrondi.
+3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
 4. Thème Papier : l'accueil et À propos restent lisibles.

@@ -128,29 +128,25 @@ fn the_rest_pose_of_the_animation_draws_the_joyau_at_rest_and_the_end_has_no_sec
 }
 
 #[test]
-fn the_application_icon_is_a_dark_rounded_square_with_a_hairline_and_the_star() {
+fn the_application_icon_is_a_rounded_square_in_the_logo_gradient_with_the_white_star() {
     for taille in [16u32, 32, 64, 256] {
         let px = logo::icone(taille);
         assert_eq!(px.len(), (taille * taille * 4) as usize);
         let at = |x: u32, y: u32| [px[((y * taille + x) * 4) as usize], px[((y * taille + x) * 4) as usize + 1], px[((y * taille + x) * 4) as usize + 2], px[((y * taille + x) * 4) as usize + 3]];
         assert!(at(0, 0)[3] < 100, "coins arrondis à {taille} px");
         assert_eq!(at(taille / 2, 0)[3], 255, "{taille}");
-        // Le fond près du bord, dans l'angle bas (hors Joyau et hors filet) : le sol de la marque.
-        if taille >= 64 {
-            let (x, y) = (taille * 12 / 100, taille / 2);
-            assert_eq!(&at(x, y)[..3], &logo::SOL, "fond à {taille} px");
+        if taille >= 32 {
+            assert_eq!(at(taille / 2, taille / 2), [255, 255, 255, 255], "l'étoile blanche au centre à {taille} px");
         }
-        // Le centre est l'étoile.
-        assert_eq!(at(taille / 2, taille / 2)[3], 255, "centre à {taille} px");
     }
     let t = 256u32;
     let px = logo::icone(t);
     let at = |x: u32, y: u32| px[((y * t + x) * 4) as usize..][..4].to_vec();
-    // Le haut de l'étoile est jade : à 6,4 + 0,8 × 12 × 0,64 de la grille, soit 12,5 / 64 → 50 px sur 256.
-    let haut = at(t / 2, 50);
-    assert!(haut[3] == 255 && haut[1] > haut[0] + 60, "haut de l'étoile jade : {haut:?}");
-    // Entre deux branches, le fond sombre.
-    assert_eq!(&at(t * 30 / 100, t * 30 / 100)[..3], &logo::SOL);
+    // Le fond : jade en haut, lilas pâle en bas (entre deux branches de l'étoile, hors de l'étoile).
+    let haut = at(t * 25 / 100, t * 8 / 100);
+    assert!(haut[3] == 255 && haut[1] > haut[0] + 100, "haut du fond jade : {haut:?}");
+    let bas = at(t * 25 / 100, t * 92 / 100);
+    assert!(bas[3] == 255 && bas[2] > bas[1] && bas[0] > 150, "bas du fond lilas pâle : {bas:?}");
     assert_eq!(at(12, 12)[3], 0, "rayon d'environ 22 % du côté");
 }
 

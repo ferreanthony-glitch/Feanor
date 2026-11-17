@@ -8,11 +8,11 @@
 //! - **Jade** (référence, partout, dès 16 px) et **Iris** (moments forts : accueil) : l'étoile en dégradé.
 //!   `JadePetit` est gardé pour les appels existants : l'étoile tient à 16 px, c'est le même dessin.
 //! - **Mono** : une seule encre, en aplat.
-//! - **Icône** : carré arrondi sombre, filet intérieur, étoile réduite à 80 %.
+//! - **Icône** : l'icône de base de la charte, carré arrondi au dégradé du logo et étoile blanche.
 //!
 //! Ce fichier ne dépend que de tiny-skia : `build.rs` l'inclut pour fabriquer l'icône de l'exécutable (`feanor.ico`).
 
-use tiny_skia::{Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, SpreadMode, Stroke, Transform};
+use tiny_skia::{Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, SpreadMode, Transform};
 
 /// Côté de la grille du logo (animation, icône).
 pub const GRILLE: f32 = 64.0;
@@ -107,11 +107,19 @@ fn peinture(c: [u8; 3], alpha: f32) -> Paint<'static> {
     p
 }
 
-/// Le dégradé vertical de l'étoile (sur 100), à l'opacité `alpha`.
+/// Le dégradé vertical de l'étoile (sur 100, de 2 à 98), à l'opacité `alpha`.
 fn degrade(alpha: f32) -> Paint<'static> {
+    degrade_entre(2.0, 98.0, alpha)
+}
+
+/// L'étoile dans l'icône : 364 / 512 du côté.
+pub const ECHELLE_ICONE: f32 = 364.0 / 512.0;
+
+/// Le dégradé du logo, vertical, de `haut` à `bas` (sur 100).
+fn degrade_entre(haut: f32, bas: f32, alpha: f32) -> Paint<'static> {
     let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
     let arrets = DEGRADE.iter().map(|&(p, c)| GradientStop::new(p, Color::from_rgba8(c[0], c[1], c[2], a))).collect();
-    let shader = LinearGradient::new(Point::from_xy(50.0, 2.0), Point::from_xy(50.0, 98.0), arrets, SpreadMode::Pad, Transform::identity()).expect("dégradé du logo");
+    let shader = LinearGradient::new(Point::from_xy(50.0, haut), Point::from_xy(50.0, bas), arrets, SpreadMode::Pad, Transform::identity()).expect("dégradé du logo");
     let mut p = Paint::default();
     p.shader = shader;
     p.anti_alias = true;
@@ -247,17 +255,19 @@ fn rect_arrondi(x: f32, y: f32, l: f32, h: f32, r: f32) -> Path {
     pb.finish().expect("rectangle arrondi")
 }
 
-/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`, `.ico`) : carré
-/// arrondi `SOL` (rayon 14 sur 64, soit 22 %), filet intérieur `CANEVAS`, puis l'étoile à 80 %, centrée.
+/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`, `.ico`) : l'icône de base
+/// de la charte, un carré arrondi (rayon 14 sur 64, soit 22 %) au dégradé du logo, de haut en bas, et l'étoile blanche à
+/// 71 %, centrée (comme `assets/feanor-icone.svg`).
 pub fn icone(taille: u32) -> Vec<u8> {
     let taille = taille.max(8);
     let mut pm = Pixmap::new(taille, taille).expect("taille de l'icône");
     let s = taille as f32 / GRILLE;
     let g = Transform::from_scale(s, s);
-    pm.fill_path(&rect_arrondi(0.0, 0.0, 64.0, 64.0, 14.0), &peinture(SOL, 1.0), FillRule::Winding, g, None);
-    let filet = Stroke { width: 1.0, ..Stroke::default() };
-    pm.stroke_path(&rect_arrondi(0.5, 0.5, 63.0, 63.0, 13.5), &peinture(CANEVAS, 1.0), &filet, g, None);
-    dessiner(&mut pm, g.pre_translate(6.4, 6.4).pre_scale(0.8, 0.8), Joyau::Jade, None);
+    let k = GRILLE / DESSIN;
+    // (Le carré est dessiné sur 100, comme le dégradé, qui va de 0 à 100.)
+    pm.fill_path(&rect_arrondi(0.0, 0.0, 100.0, 100.0, 14.0 / k), &degrade_entre(0.0, 100.0, 1.0), FillRule::Winding, g.pre_scale(k, k), None);
+    let marge = 74.0 / 512.0 * GRILLE;
+    dessiner(&mut pm, g.pre_translate(marge, marge).pre_scale(ECHELLE_ICONE, ECHELLE_ICONE), Joyau::Mono([0xFF, 0xFF, 0xFF]), None);
     // Pixmap prémultiplié -> non prémultiplié.
     let mut px = pm.take();
     for p in px.chunks_exact_mut(4) {
