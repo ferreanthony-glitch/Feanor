@@ -71,7 +71,7 @@ fn only_ctrl_and_shift_together_mean_all_the_layers() {
     assert!(!is_all_layers_gesture(&none));
     assert!(!is_all_layers_gesture(&Modifiers::SHIFT), "Maj seul : ajouter / retirer");
     assert!(!is_all_layers_gesture(&Modifiers::COMMAND), "Ctrl seul : le lasso temporaire, ou la boîte autour du pivot");
-    assert!(!is_all_layers_gesture(&Modifiers::ALT), "Alt : la pipette");
+    assert!(!is_all_layers_gesture(&Modifiers::ALT), "Alt : le calque du dessin cliqué (partie 165.8)");
     assert!(is_all_layers_gesture(&(Modifiers::COMMAND | Modifiers::SHIFT)));
     assert!(!is_all_layers_gesture(&(Modifiers::COMMAND | Modifiers::SHIFT | Modifiers::ALT)));
 }

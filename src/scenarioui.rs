@@ -409,7 +409,7 @@ impl App {
             if ui.button("Valeurs d'origine").clicked() {
                 *r = Rhythm::default();
             }
-            ui.label(RichText::new("Un plan dure la somme de ses répliques (mots ÷ vitesse) et de son action (lignes × durée par ligne), entre le plus court et le plus long.").weak().small());
+            // (Comment la durée d'un plan se calcule : dans le registre des explications, `aidetextes.rs`, partie 153.)
         });
         ui.separator();
 
@@ -418,7 +418,6 @@ impl App {
         for d in [Dest::End, Dest::AfterCurrent] {
             ui.radio_value(&mut w.dest, d, d.label());
         }
-        ui.label(RichText::new("Une seule étape d'annulation. Une séquence ne se coupe pas : après le plan courant, c'est à la fin de sa séquence.").weak().small());
         if scenarioplans::is_blank(&self.doc) {
             ui.label(RichText::new("Le projet est encore vierge (un seul plan vide) : les plans du scénario le remplacent.").small());
         } else {
@@ -454,7 +453,6 @@ impl App {
                 text.push_str(&format!(" · … et {more} autre(s)"));
             }
             ui.label(RichText::new(text).small());
-            ui.label(RichText::new("Notés dans les notes du projet (Réglages du projet), pour les voix provisoires.").weak().small());
         }
         if !script.warnings.is_empty() {
             ui.add_space(4.0);
@@ -493,9 +491,6 @@ impl App {
         ui.label(format!("{} élément(s) lus, {speakers} personnage(s) qui parlent.", script.elements.len()));
         ui.add_space(4.0);
         ui.label(RichText::new("Le scénario est gardé dans le projet et se lit dans le panneau Scénario. Aucun plan n'est créé : le bouton « Créer les plans depuis le scénario… » de ce panneau le fait, quand tu le décides.").strong());
-        if self.welcome {
-            ui.label(RichText::new("Un nouveau projet le reçoit (FEANOR propose d'abord d'enregistrer le projet ouvert s'il a changé).").weak().small());
-        }
         if !script.warnings.is_empty() {
             ui.add_space(4.0);
             egui::CollapsingHeader::new(format!("Remarques ({})", script.warnings.len())).default_open(true).show(ui, |ui| {

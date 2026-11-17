@@ -19,7 +19,7 @@ use crate::document::{Cel, Document, Layer, LayerKind};
 use crate::handles::Handle;
 use crate::montagerows::{layer_in_row, LAYER_H};
 use crate::perf_tests::{banc_taille, Banc};
-use crate::pistes::{lanes_in, row_hidden, Inactifs, Replis, FOLDED_H, MORE_H};
+use crate::pistes::{lanes_in, row_hidden, Replis, DOSSIER_H, FOLDED_H};
 use crate::poskeys::PosKey;
 use crate::workspace::Espace;
 
@@ -78,11 +78,10 @@ fn by_default_only_the_active_layer_is_unfolded_and_the_others_are_thin_bands() 
     // Le calque courant est « C » (rang 0, rangée 2) : après le relâchement de la souris, il est seul déplié.
     app.pistes_follow_current(false);
     assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, LAYER_H)]);
-    assert!(app.settings.montage_inactifs == Inactifs::Replies, "d'office : repliés");
     let l = app.montage_rows(300.0).lanes;
-    assert_eq!(l[2].top, 2.0 * FOLDED_H, "les bandes fines sont au-dessus, serrées");
-    assert!(FOLDED_H <= 11.0 && FOLDED_H >= 8.0, "une bande de 8 à 9 points de haut une fois les filets retirés : {FOLDED_H}");
-    assert!(FOLDED_H < LAYER_H / 3.0);
+    assert_eq!(l[2].top, 2.0 * FOLDED_H, "les bandes sont au-dessus, serrées");
+    assert!(FOLDED_H <= 17.0 && FOLDED_H >= 14.0, "une bande de 15 points de haut une fois les filets retirés, pour un nom de 11 : {FOLDED_H}");
+    assert!(FOLDED_H < LAYER_H / 2.0);
 }
 
 #[test]
@@ -90,17 +89,24 @@ fn a_closed_folder_hides_the_tracks_of_its_layers_and_is_itself_a_thin_track() {
     let mut app = app_with("dossier-ferme", doc_with(&[&["A"]]));
     app.doc.panels[0].layers = stack_with_folder(true);
     app.pistes_follow_current(false);
-    // Le calque courant est « Libre » (rang 0, tout en bas, rangée 3) ; le dossier fermé est une bande fine, C1 et C2 n'ont plus de piste.
-    assert_eq!(heights(&app), [(0, FOLDED_H), (3, LAYER_H)]);
+    // Le calque courant est « Libre » (rang 0, tout en bas, rangée 3) ; le dossier fermé est une ligne fine, C1 et C2 n'ont plus de piste.
+    assert_eq!(heights(&app), [(0, DOSSIER_H), (3, LAYER_H)]);
     assert!(row_hidden(&app.doc.panels, 0, 0, 1) && row_hidden(&app.doc.panels, 0, 0, 2) && !row_hidden(&app.doc.panels, 0, 0, 0));
-    // Ouvert : tout revient, en bandes fines sauf le calque actif.
+    // Ouvert : tout revient, en bandes sauf le calque actif ; le dossier reste une ligne fine, jamais un calque.
     app.doc.panels[0].layers[3].collapsed = false;
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H, FOLDED_H, FOLDED_H, LAYER_H]);
-    // Le calque courant d'un dossier fermé garde sa piste (comme dans le panneau Calques).
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [DOSSIER_H, FOLDED_H, FOLDED_H, LAYER_H]);
+    assert!(DOSSIER_H < FOLDED_H, "un dossier est toujours plus petit qu'un calque");
+    // Un dossier fermé s'ouvre le temps qu'on le traverse (2026-11-11) : le calque courant est l'un des siens, toutes leurs pistes sont là.
     app.doc.panels[0].layers[3].collapsed = true;
     app.cur_layer = 2;
     let rows: Vec<usize> = heights(&app).iter().map(|l| l.0).collect();
-    assert_eq!(rows, [0, 1, 3], "C1 (rang 2, rangée 1) reste");
+    assert_eq!(rows, [0, 1, 2, 3], "C1 est courant : C2 se voit aussi, le dossier est ouvert de passage");
+    let pile = &app.doc.panels[0].layers;
+    assert!(crate::pistes::dossier_de_passage(pile, 3, 2) && !crate::pistes::dossier_ferme(pile, 3, 2));
+    // On en sort : il se referme, sans que rien n'ait été écrit.
+    app.cur_layer = 0;
+    assert_eq!(heights(&app).iter().map(|l| l.0).collect::<Vec<_>>(), [0, 3]);
+    assert!(app.doc.panels[0].layers[3].collapsed, "le drapeau du projet n'a pas bougé");
 }
 
 #[test]
@@ -212,64 +218,74 @@ fn folding_the_active_track_by_hand_keeps_it_folded_until_the_current_layer_chan
 
 #[test]
 fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
-    use crate::layerheads::{rows_of, ROW_FULL, ROW_SMALL};
+    use crate::layerheads::{rows_of, ROW_FINE, ROW_FULL};
     let mut app = app_with("timeline", doc_with(&[&["A", "B", "C"]]));
     app.pistes_follow_current(false);
-    // Les pistes du montage se replient : la timeline de l'animation (tous les calques dépliés) n'en sait rien.
+    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 160 : le calque courant y a sa ligne
+    // complète, les autres une ligne fine).
     app.set_all_tracks_folded(true);
-    let rows = rows_of(app.layers(), &app.doc.groups);
-    assert!(rows.iter().all(|r| r.h == ROW_FULL), "la timeline garde tous ses calques dépliés");
-    // Une ligne réduite de la timeline (`collapsed`) ne change rien aux pistes du montage.
+    let rows = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
+    assert_eq!(rows.iter().filter(|r| r.h == ROW_FULL).count(), 1, "le calque courant");
+    assert!(rows.iter().filter(|r| r.li != app.cur_layer).all(|r| r.h == ROW_FINE));
+    // Le drapeau « réduit » d'un calque (`collapsed`, d'avant) ne change rien aux pistes du montage, ni à la timeline.
     let before = heights(&app);
+    let avant = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
     app.layers_mut()[1].collapsed = true;
     assert_eq!(heights(&app), before);
-    let rows = rows_of(app.layers(), &app.doc.groups);
-    assert_eq!(rows.iter().filter(|r| r.h == ROW_SMALL).count(), 1);
+    assert_eq!(rows_of(app.layers(), &app.doc.groups, app.cur_layer), avant);
 }
 
-// ------------------------------------------------------------------------------------ les calques cachés
+// ------------------------------------------------------------------------------------ toute la pile, toujours
+// (2026-11-11, branche `calques-timeline` : le mode « cachés » et sa ligne « N autres calques » n'existaient plus, remplacés par
+// « trois calques » ; partie 165.7, Anthony : « supprime l'option et le bouton 3 calques » : il ne reste que toute la pile.)
 
 #[test]
-fn hidden_mode_shows_only_the_active_layer_and_a_line_that_shows_the_others() {
-    let mut app = app_with("caches", doc_with(&[&["A", "B", "C", "D"], &["X"]]));
-    app.settings.montage_inactifs = Inactifs::Caches;
-    app.cur_layer = 2; // « B », rangée 1
-    app.pistes_follow_current(false);
-    let lanes = app.montage_rows(300.0).lanes;
-    assert_eq!(lanes.iter().map(|l| (l.row, l.h)).collect::<Vec<_>>(), [(1, LAYER_H), (crate::pistes::MORE_ROW, MORE_H)], "seul le calque actif, et la ligne « N autres »");
-    assert!(lanes[1].is_more());
-    assert_eq!(crate::pistes::others_count(&app.doc.panels, 0, 2, 4, app.pistes_auto_open(), &app.pistes_replis()), 3);
-    // Un clic sur la ligne les montre en bandes fines, un autre les cache.
-    app.pistes.autres_montres = true;
-    assert_eq!(app.montage_rows(300.0).lanes.iter().map(|l| (l.row, l.h)).collect::<Vec<_>>(), [(0, FOLDED_H), (1, LAYER_H), (2, FOLDED_H), (3, FOLDED_H), (crate::pistes::MORE_ROW, MORE_H)]);
-    // Aucun autre calque : pas de ligne.
-    let mut seul = app_with("caches-seul", doc_with(&[&["A"]]));
-    seul.settings.montage_inactifs = Inactifs::Caches;
-    seul.pistes_follow_current(false);
-    assert_eq!(heights(&seul), [(0, LAYER_H)]);
-}
-
-#[test]
-fn the_choice_of_inactive_layers_is_a_setting_of_the_workstation_with_a_preferences_section() {
-    let mut app = app_with("prefs-inactifs", doc_with(&[&["A", "B"]]));
+fn the_height_of_the_plans_is_a_setting_of_the_workstation_with_a_preferences_section() {
+    use crate::pistes::HauteurPlans;
+    let mut app = app_with("prefs-pile", doc_with(&[&["A", "B"]]));
     app.modified = false;
-    app.set_inactifs(Inactifs::Caches);
-    assert_eq!(app.settings.montage_inactifs, Inactifs::Caches);
-    assert!(!app.modified, "un réglage du poste : rien dans le projet");
-    // Enregistré avec les réglages, relu ; un vieux réglage (sans la clé, ou avec l'ancien « repliage_pistes ») donne « repliés ».
+    app.set_hauteur_plans(HauteurPlans::Bandeau);
+    assert_eq!(app.montage_rows(300.0).block_h, 28.0);
+    app.basculer_hauteur_plans();
+    assert_eq!(app.montage_rows(300.0).block_h, 56.0, "la rangée des plans a la hauteur du réglage, quelle que soit la place");
+    assert_eq!(app.montage_rows(900.0).block_h, 56.0);
+    assert!(!app.modified, "des réglages du poste : rien dans le projet");
+    // Enregistrés avec les réglages, relus ; les anciennes clés (« calques_non_actifs », « repliage_pistes ») sont ignorées.
     let mut s = crate::settings::Settings::default();
-    s.montage_inactifs = Inactifs::Caches;
+    s.montage_plans = HauteurPlans::Bandeau;
     let text = toml::to_string(&s).unwrap();
-    assert!(text.contains("calques_non_actifs"), "{text}");
+    assert!(text.contains("hauteur_plans = \"bandeau\"") && !text.contains("calques_timeline"), "{text}");
     let back: crate::settings::Settings = toml::from_str(&text).unwrap();
-    assert_eq!(back.montage_inactifs, Inactifs::Caches);
-    let vieux: crate::settings::Settings = toml::from_str("repliage_pistes = \"par_plan\"\n").unwrap();
-    assert_eq!(vieux.montage_inactifs, Inactifs::Replies);
+    assert_eq!(back.montage_plans, HauteurPlans::Bandeau);
+    let vieux: crate::settings::Settings = toml::from_str("repliage_pistes = \"par_plan\"\ncalques_non_actifs = \"caches\"\n").unwrap();
+    assert_eq!(vieux.montage_plans, HauteurPlans::Moyenne);
     let defaut = toml::to_string(&crate::settings::Settings::default()).unwrap();
-    assert!(!defaut.contains("calques_non_actifs"), "la valeur d'office ne s'écrit pas");
-    assert!(Inactifs::Replies.est_replie() && crate::pistes::INACTIFS_REPLIES.ends_with('.') && crate::pistes::INACTIFS_CACHES.ends_with('.'));
+    assert!(!defaut.contains("hauteur_plans"), "les valeurs d'office de l'application ne s'écrivent pas");
 }
 
+/// Partie 165.7 (Anthony : « supprime l'option et le bouton 3 calques ») : des réglages enregistrés avec « Trois calques »
+/// (`calques_timeline = "trois"`, la valeur d'office d'avant, ou « toute ») s'ouvrent sans erreur ; les autres réglages du fichier sont
+/// gardés, la clé n'est plus réécrite, et la timeline montre toute la pile : chaque calque a sa piste, le calque actif déplié, aucune
+/// fine bande. Les fichiers projet ne changent pas (le format reste le même).
+#[test]
+fn a_saved_three_layers_setting_opens_as_the_whole_stack() {
+    for valeur in ["trois", "toute"] {
+        let texte = format!("calques_timeline = \"{valeur}\"\nhauteur_plans = \"bandeau\"\ndeplier_calque_courant = true\n");
+        let s: crate::settings::Settings = toml::from_str(&texte).unwrap_or_else(|e| panic!("« {valeur} » se lit : {e}"));
+        assert_eq!(s.montage_plans, crate::pistes::HauteurPlans::Bandeau, "« {valeur} » : les autres réglages sont gardés");
+        assert!(!toml::to_string(&s).unwrap().contains("calques_timeline"), "« {valeur} » : la vieille clé n'est plus écrite");
+        let mut app = app_with("trois-lu", doc_with(&[&["A", "B", "C", "D", "E"], &["X"]]));
+        (app.settings.montage_plans, app.settings.montage_auto_open) = (s.montage_plans, s.montage_auto_open);
+        app.cur_layer = 2; // « C », rangée 2
+        app.pistes_follow_current(false);
+        assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, LAYER_H), (3, FOLDED_H), (4, FOLDED_H)], "« {valeur} » : toute la pile");
+        // Le calque actif n'est jamais replié (165.4) : au bout de la pile aussi.
+        app.cur_layer = 4;
+        app.pistes_follow_current(false);
+        assert_eq!(heights(&app)[0], (0, LAYER_H), "« {valeur} »");
+    }
+    assert_eq!(crate::project::VERSION, 56, "le format des projets ne change pas");
+}
 // ------------------------------------------------------------------------------------ les hits
 
 /// Un plan de 24 images : « Perso » (dessin de 0 à 12 puis de 12 à 24, clés de position 4, 10, 16) et
@@ -596,18 +612,23 @@ fn the_gestures_of_the_timeline_work_on_a_thin_band() {
 #[test]
 fn a_double_click_next_to_the_name_folds_the_track_and_on_the_name_renames_it() {
     let mut b = banc_montage();
+    // (Partie 160 : la piste du calque actif porte son cadenas et son ⋮ à droite du nom ; à la largeur d'origine de la colonne,
+    // 104 points, ils touchent un nom de cinq lettres. La colonne élargie laisse de la place à côté du nom.)
+    b.app.montage_head_w = 180.0;
+    b.chauffer(3);
     let nom = textes(&b).iter().filter(|(t, _)| t == "Perso").map(|(_, r)| *r).min_by(|a, c| a.left().total_cmp(&c.left())).expect("le nom");
     // Sur le nom : renommer, comme avant.
     double_clic(&mut b, pos2(nom.left() + 4.0, nom.center().y));
     assert!(b.app.layer_rename.is_some(), "le double-clic sur le nom le renomme");
     b.app.layer_rename = None;
     b.chauffer(3);
-    // À côté du nom (dans la colonne, à droite du texte) : replier la piste du calque actif.
+    // À côté du nom (dans la colonne, à droite du texte, avant le cadenas de la piste active, partie 160) : replier la piste du
+    // calque actif.
     assert!(!b.app.track_is_folded(0));
     b.image(Vec::new(), 0.6); // pas de triple clic avec le précédent
     double_clic(&mut b, pos2(nom.right() + 14.0, nom.center().y));
     assert!(b.app.layer_rename.is_none());
-    assert!(b.app.track_is_folded(0), "le double-clic à côté du nom replie la piste");
+    assert!(b.app.track_is_folded(0), "le double-clic à côté du nom replie la piste ({nom:?}, {})", b.app.status);
 }
 
 #[test]
@@ -690,6 +711,4 @@ fn pistes_capture() {
     sauver(&mut b, "pistes-2-tout-deplie.png");
     b.app.set_all_tracks_folded(true);
     b.app.set_track_folded(0, false);
-    b.app.settings.montage_inactifs = Inactifs::Caches;
-    sauver(&mut b, "pistes-3-caches.png");
 }

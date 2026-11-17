@@ -13,7 +13,7 @@
 //!   supprimer. Les losanges lissés sont des ronds.
 //! - Dans le montage : les mêmes losanges sont dessinés sur la piste du calque (`montagerows.rs`).
 
-use eframe::egui::{self, pos2, Color32, Painter, Pos2, Rect, RichText, Shape, Stroke};
+use eframe::egui::{self, pos2, Color32, Painter, Pos2, Rect, Shape, Stroke};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -162,30 +162,41 @@ impl App {
         self.status = "Clés d'opacité supprimées : le calque garde l'opacité de cette image.".into();
     }
 
-    // ------------------------------------------------------------------ le panneau Calques
+    // ------------------------------------------------------------------ la ligne du calque courant
 
-    /// Les boutons des clés d'opacité à côté du réglage d'opacité du panneau Calques : « Créer une clé » (un losange, plein quand une
-    /// clé est posée à cette image), supprimer la clé d'ici, supprimer toutes les clés.
-    pub(crate) fn op_keys_buttons(&mut self, ui: &mut egui::Ui) {
+    /// Le losange des clés d'opacité sur la ligne du calque courant (timeline, colonne de la bande ; partie 160 : il était à côté de
+    /// l'opacité du panneau Calques), dans `rect` : plein d'encre `on` quand une clé est posée à cette image, `off` sinon. Clic :
+    /// « Créer une clé » ; clic droit : supprimer la clé d'ici, supprimer toutes les clés (leur nombre). Il vise le calque courant.
+    pub(crate) fn losange_opacite(&mut self, ui: &mut egui::Ui, rect: egui::Rect, on: egui::Color32, off: egui::Color32) {
         let (li, f) = (self.cur_layer, self.cur_frame);
         let Some(layer) = self.layers().get(li) else { return };
         let keys = layer.opacity_keys.len();
         let here = ok::key_at(&layer.opacity_keys, f).is_some();
-        if self
-            .bouton_etat(ui, here, ph::DIAMOND, "Créer une clé", "Pose une clé d'opacité à l'image courante, avec l'opacité actuelle du calque. Change d'image et règle l'opacité : elle s'anime, et va d'une clé à l'autre.", "calque.cle_opacite")
-            .clicked()
-        {
-            self.op_key_here();
+        let resp = crate::layerheads::icon_at(ui, rect, ph::DIAMOND, if here || keys > 0 { on } else { off });
+        if here {
+            ui.painter().circle_filled(rect.center(), 2.0, on);
         }
-        if keys > 0 {
-            if self.bouton_si(ui, here, ph::TRASH, "Supprimer la clé d'ici", "Retire la clé d'opacité de cette image.", "calque.cle_opacite_supprimer").clicked() {
+        let key = self.raccourci("calque.cle_opacite");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Créer une clé",
+            "Pose une clé d'opacité à l'image courante, avec l'opacité actuelle du calque. Change d'image et règle l'opacité : elle s'anime, et va d'une clé à l'autre. Clic droit : supprimer la clé d'ici, ou toutes.",
+            &key,
+        );
+        if resp.clicked() {
+            // (Plusieurs calques choisis : une clé sur chacun, `choixtout.rs`.)
+            self.run_action("calque.cle_opacite");
+        }
+        resp.context_menu(|ui| {
+            if ui.add_enabled(here, egui::Button::new(format!("{}  Supprimer la clé d'ici", ph::TRASH))).clicked() {
+                ui.close_menu();
                 self.op_keys_delete_here();
             }
-            if self.bouton(ui, ph::ERASER, "Supprimer toutes les clés d'opacité", "L'opacité n'est plus animée : le calque garde celle qu'il a à cette image.", "calque.cles_opacite_supprimer").clicked() {
+            if ui.add_enabled(keys > 0, egui::Button::new(format!("{}  Supprimer toutes les clés d'opacité ({keys})", ph::ERASER))).clicked() {
+                ui.close_menu();
                 self.op_keys_clear();
             }
-            ui.label(RichText::new(format!("{keys} clé{}", s(keys))).small().weak());
-        }
+        });
     }
 
     /// Supprime la clé de l'image courante, quel que soit le choix de la timeline (le bouton du panneau).

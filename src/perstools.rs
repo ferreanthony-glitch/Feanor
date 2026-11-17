@@ -289,14 +289,6 @@ impl App {
                 self.persp = None;
             }
         });
-        ui.label(
-            egui::RichText::new(
-                "Clic sur le dessin : son cadre apparaît (sur un calque vectoriel, la sélection s'il y en a \
-                 une). Tire un coin pour mettre en perspective, l'intérieur pour déplacer. Ctrl+Z annule \
-                 chaque geste.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Le mode d'emploi est dans l'animation « La perspective » et le registre des explications, partie 153.)
     }
 }

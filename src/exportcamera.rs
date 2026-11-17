@@ -101,8 +101,13 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
         plan.insert("titre".into(), json!(long));
         plan.insert("image_debut".into(), json!(start));
         plan.insert("images".into(), json!(len));
-        let mut keys = panel.camera.clone();
+        // Un effet de caméra vivant (partie 129) s'exporte comme il se voit : ses clés cuites (celles que donnerait « Convertir
+        // en clés »), et les valeurs image par image même si elles ne sont pas demandées. Le nom de l'effet est dit.
+        let mut keys = doc.cles_montrees(p).into_owned();
         keys.sort_by_key(|k| k.frame);
+        if let Some(v) = panel.effet_camera {
+            plan.insert("effet_vivant".into(), json!(v.params.preset.label()));
+        }
         for k in &keys {
             let v = key_json(k);
             keys_csv.push_str(&format!(
@@ -123,10 +128,20 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
             ));
         }
         plan.insert("cles".into(), Value::Array(keys.iter().map(key_json).collect()));
-        if s.per_frame {
+        // Plan en Espace 3D : la caméra est libre dans l'espace (ses valeurs ne sont pas bridées à ce qui voit la feuille).
+        // Le champ n'est écrit que pour ces plans : rien ne change pour les autres.
+        if panel.espace || panel.camera_libre {
+            plan.insert("espace_3d".into(), Value::Bool(true));
+        }
+        // Une trajectoire de caméra (partie 149) ne pose aucune clé : comme l'effet vivant, elle s'exporte comme elle se voit, image
+        // par image, même si ces valeurs ne sont pas demandées ; et le plan le dit.
+        if panel.trajectoire_camera.is_some() {
+            plan.insert("trajectoire_dans_l_espace".into(), Value::Bool(true));
+        }
+        if s.per_frame || panel.effet_camera.is_some() || panel.trajectoire_camera.is_some() {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {
-                let c = doc.panel_camera(p, f);
+                let c = doc.panel_camera_reelle(p, f);
                 frames_csv.push_str(&format!("{},{f},{},{},{},{},{},{},{},{}\n", csv_text(&name), start + f, c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan));
                 frames.push(frame_json(f, &c));
             }

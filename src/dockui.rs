@@ -7,6 +7,9 @@ use eframe::egui::{self, Id, WidgetText};
 use crate::app::{App, BoardView, Mode};
 use crate::dock::{self, DetachedPanel, DockLayout, Group, Pane};
 
+/// Ce que dit la bulle de la poignée d'un panneau (partie 160).
+pub(crate) const POIGNEE: &str = "Glisser cette poignée : poser le panneau ailleurs, ou le faire flotter. Clic droit : dans une fenêtre à part. L'icône de la barre des panneaux, à droite, l'ouvre, le met devant ou le ferme.";
+
 /// Ce qu'egui_dock affiche dans chaque onglet.
 struct Panes<'a> {
     app: &'a mut App,
@@ -15,8 +18,10 @@ struct Panes<'a> {
 impl egui_dock::TabViewer for Panes<'_> {
     type Tab = Pane;
 
-    fn title(&mut self, tab: &mut Pane) -> WidgetText {
-        format!("{} {}", tab.icon(), self.app.pane_title(*tab)).into()
+    /// Plus de nom écrit en haut des groupes (partie 160, Anthony : « Les noms écrits en haut des groupes disparaissent ; l'icône
+    /// allumée dit quel onglet est devant ») : l'onglet n'est plus qu'une fine poignée, son nom dans sa bulle.
+    fn title(&mut self, _tab: &mut Pane) -> WidgetText {
+        WidgetText::default()
     }
 
     fn id(&mut self, tab: &mut Pane) -> Id {
@@ -83,10 +88,10 @@ impl egui_dock::TabViewer for Panes<'_> {
         }
     }
 
+    /// La bulle de la poignée : le nom du panneau et comment le déplacer.
     fn on_tab_button(&mut self, tab: &mut Pane, response: &egui::Response) {
-        if tab.tab_name() != tab.name() {
-            response.clone().on_hover_text(tab.name());
-        }
+        let aide = if *tab == Pane::Canvas { "" } else { POIGNEE };
+        crate::bulles::bulle(response.clone(), self.app.pane_title(*tab), aide, "");
     }
 }
 
@@ -121,6 +126,7 @@ impl App {
 
     fn pane_content(&mut self, ui: &mut egui::Ui, pane: Pane) {
         if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
+            crate::theme::densifier_panneau(ui.style_mut());
             fit_to_pane(ui);
         }
         // Références : la place du panneau docké (pour y recevoir les fichiers lâchés, `referencesui.rs`).
@@ -148,11 +154,8 @@ impl App {
             // Retiré : les guides sont dans le menu de la règle (`cadrageui.rs`), `sanitized` ôte ce panneau.
             Pane::Guides => {}
             Pane::Sheet => self.panel_inspector(ui),
-            Pane::Layers => {
-                self.layers_panel(ui);
-                // Des effets viennent d'être copiés et ce panneau a la main : Ctrl+V les colle sur le calque cliqué.
-                self.focus_mark(ui, self.layers_pane_focus && self.fx_pile_recent && self.fx_stack_clipboard.is_some(), false);
-            }
+            // Retiré (partie 160) : les calques sont dans la colonne de la timeline, sanitized ôte ce panneau.
+            Pane::Layers => {}
             // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
             // main (copier, coller, supprimer visent ses plans, ses clés ou ses images), un cadre de
             // la couleur d'accent.
@@ -185,6 +188,8 @@ impl App {
             Pane::MonPanneau => self.mon_panneau(ui),
             Pane::Scenario => self.scenario_panneau(ui),
             Pane::Bibliotheque => self.bibliotheque_panel(ui),
+            // Les réglages de la vue Espace 3D (`espace3dpanneau.rs`) : le panneau Réglages, lui, montre toujours l'outil choisi.
+            Pane::Espace3d => self.espace3d_panneau(ui),
         }
     }
 
@@ -204,10 +209,14 @@ impl App {
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         // (Le panneau Références se redit à chaque image où il est dessiné ici.)
         self.refs.pane_rect = None;
+        // (La bande du bas redit si le pointeur est sur elle, quand elle est dessinée : `montage_panel`, `timeline_panel`.)
+        self.bande_survolee = false;
         // Mon panneau (essai du Labo) : ouvert ou non, et les ajouts demandés par un clic droit (`monpanneauui.rs`).
         self.mon_panneau_suivre(ctx);
         // L'anneau sous le stylet : ses huit commandes dites aux menus du clic droit, et celle qu'un menu y envoie (`anneauui.rs`).
         self.anneau_suivre(ctx);
+        // Le panneau Espace 3D passe devant quand la vue s'ouvre, et rend sa place quand elle se ferme (`espace3dpanneau.rs`).
+        self.espace3d_panneau_suivre();
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.
@@ -221,11 +230,15 @@ impl App {
             .style(style)
             .show_leaf_collapse_buttons(false)
             .show_leaf_close_all_buttons(false)
+            // (Plus de croix sur les poignées, trop fines : la barre des panneaux et Affichage > Panneaux ferment un panneau.)
+            .show_close_buttons(false)
             .show(ctx, &mut Panes { app: self });
         // (Un panneau peut avoir remplacé la disposition pendant l'affichage : on la garde.)
         if self.dock.is_none() {
             self.poignee_du_montage(ctx, &mut state);
             self.fit_panes(ctx, &mut state, sep, body_margin);
+            // La colonne des panneaux garde sa largeur, l'image prend le reste (partie 161).
+            self.fit_columns(ctx, &mut state, sep);
             self.dock = Some(state);
         }
         if let Some(pane) = self.detach_request.take() {
@@ -243,7 +256,9 @@ impl App {
         for i in 0..self.detached.len() {
             let d = self.detached[i].clone();
             let title = format!("FEANOR — {}", d.panneau.name());
-            let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([180.0, 120.0]);
+            // (La bande détachée garde la place de la ligne complète du calque courant, partie 165.4 : la colonne entière et un peu de grille.)
+            let min = if matches!(d.panneau, Pane::Montage | Pane::Timeline) { [crate::layerheads::HEAD_W + 120.0, 240.0] } else { [180.0, 120.0] };
+            let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size(min);
             if d.largeur > 0.0 && d.hauteur > 0.0 {
                 builder = builder.with_inner_size([d.largeur, d.hauteur]).with_position([d.x, d.y]);
             } else {
@@ -392,6 +407,10 @@ impl App {
         }
         let mut layout = self.dock_layout();
         let opening = !layout.contains(pane);
+        // (Le panneau Espace 3D ouvert à la main, la vue fermée : il reste, partie 159, `espace3d_panneau_retirer`.)
+        if pane == Pane::Espace3d {
+            self.e3_panneau.a_la_main = opening && !self.espace3d_vue_ouverte();
+        }
         if opening {
             layout.open(pane);
         } else {

@@ -130,7 +130,8 @@ fn a_path_is_cut_where_it_leaves_a_field_and_no_point_is_lost() {
 
 fn hors_cadres(b: &Banc) -> usize {
     let a = &b.app.doc.annotations;
-    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count()
+    // (Partie 127 : un trait bitmap laisse ses pixels sur la couche bitmap de la planche.)
+    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count() + a.bitmap.morceaux.len()
 }
 
 fn points_de_depart_hors_champ(b: &Banc) -> (Pos2, Pos2) {
@@ -156,6 +157,19 @@ fn a_stroke_outside_every_field_stays_on_the_board_in_no_plan_in_one_undo_step_a
         assert_eq!(hors_cadres(&b), 1, "bitmap {bitmap} : le trait est sur la planche");
         assert_eq!(b.app.doc.panels.len(), 4);
         assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape");
+        if bitmap {
+            // Partie 127 : ses pixels sur la couche bitmap de la planche (relue : `planchebitmap_tests`, `vignettes_bitmap_tests`), et dans l'export.
+            assert!(b.app.doc.annotations.traces.is_empty());
+            let opt = crate::planche::Options::default();
+            let tous: Vec<usize> = (0..b.app.doc.panels.len()).collect();
+            let p = crate::planche::construire(&b.app.doc, &tous, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
+            assert_eq!(p.annotations.bitmap.morceaux.len(), 1);
+            b.app.run_action("edition.annuler");
+            b.chauffer(2);
+            assert_eq!(hors_cadres(&b), 0);
+            assert!(rien_dans_les_plans(&b));
+            continue;
+        }
         // Enregistré et relu : mêmes traits, même calque.
         let octets = crate::annotations::to_bytes(&b.app.doc).expect("écrit").expect("un fichier");
         let relu = crate::annotations::parse(std::str::from_utf8(&octets).unwrap()).expect("relu");
@@ -178,46 +192,63 @@ fn a_stroke_outside_every_field_stays_on_the_board_in_no_plan_in_one_undo_step_a
     }
 }
 
+/// Le dessin du plan `i` a-t-il de l'encre au-delà du champ de sa case (sur la planche) : un point d'un trait vectoriel, ou un pixel bitmap.
+fn encre_hors_du_champ(b: &Banc, i: usize) -> bool {
+    let layout = b.app.board_layout();
+    let Some(k) = layout.cards.iter().position(|c| c.panel == i) else { return false };
+    let champ = champs(&layout, b.app.settings.vignettes.debord_fraction())[k];
+    let Some(pose) = crate::horschamp::pose_de_la_case(&b.app.doc, &layout, k) else { return false };
+    let doc = &b.app.doc;
+    doc.panels[i].layers.iter().filter_map(|l| l.cel_at(layout.cards[k].frame)).filter_map(|id| doc.cels.get(&id)).any(|c| {
+        let vecteur = c.vector.as_ref().is_some_and(|v| v.elements.iter().any(|e| matches!(e, crate::vector::Element::Stroke { points, .. } if points.iter().any(|p| !champ.contains(pose.planche(p.pos()))))));
+        let mut bitmap = false;
+        crate::planchebitmap::chaque_pixel(&c.raster, |x, y, _| bitmap |= !champ.contains(pose.planche(pos2(x as f32 + 0.5, y as f32 + 0.5))));
+        vecteur || bitmap
+    })
+}
+
+/// Partie 131 (avant : le trait était coupé au bord du champ de sa case, la part du champ restait au plan, le reste allait sur la planche). Un
+/// trait parti d'une case lui appartient **tout entier**, au-delà de son champ aussi : rien n'est coupé, rien ne va sur la planche.
 #[test]
-fn a_stroke_across_the_edge_of_a_case_splits_there_plan_part_stays_the_rest_goes_to_the_board_one_undo_step() {
+fn a_stroke_across_the_edge_of_a_case_stays_whole_in_its_plan_and_nothing_goes_to_the_board_one_undo_step() {
     for bitmap in [false, true] {
         let doc = if bitmap { en_bitmap(quatre_plans()) } else { quatre_plans() };
         let mut b = ouvert(doc, 4);
-        let v = vignette(&b, 0);
+        // (La case 5 : le plan 3, qui n'a qu'une case. Le plan 1 en a trois, qui montreraient toutes ce dessin neuf : il garde la règle
+        // d'avant, `render::dessins_communs`.)
+        let v = vignette(&b, 4);
         let loin = pos2(b.app.vignettes.view.left() + 4.0, v.center().y);
         let n = pas_d_annulation(&b);
         glisser(&mut b, &vague(v.center(), loin, 16));
-        assert!(encre(&b.app.doc, 0), "bitmap {bitmap} : la partie dans le champ reste dans le plan");
-        assert!(hors_cadres(&b) >= 1, "bitmap {bitmap} : le reste est sur la planche");
-        assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape pour tout le trait");
-        // Aucun point du trait de la planche n'est dans le champ de la case du plan.
-        let layout = b.app.board_layout();
-        let champ = champs(&layout, b.app.settings.vignettes.debord_fraction())[0];
-        let a = &b.app.doc.annotations;
-        for (i, t) in a.traces.iter().enumerate() {
-            if a.calque(t.calque).is_some_and(|c| c.planche) {
-                for p in a.points_planche(&layout, i).unwrap() {
-                    assert!(!champ.shrink(1.0).contains(p.pos()), "bitmap {bitmap} : {p:?} est dans le champ {champ:?}");
-                }
-            }
+        assert!(encre(&b.app.doc, 2), "bitmap {bitmap} : le trait est dans le plan de sa case");
+        assert_eq!(hors_cadres(&b), 0, "bitmap {bitmap} : rien sur la planche");
+        assert!(encre_hors_du_champ(&b, 2), "bitmap {bitmap} : le dessin du plan garde le trait au-delà du champ de sa case");
+        if !bitmap {
+            let traits: usize = b.app.doc.cels.values().filter_map(|c| c.vector.as_ref()).map(|v| v.elements.len()).sum();
+            assert_eq!(traits, 1, "un seul élément : le trait n'est pas coupé");
         }
+        assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape pour tout le trait");
         b.app.run_action("edition.annuler");
         b.chauffer(2);
-        assert!(!encre(&b.app.doc, 0) && hors_cadres(&b) == 0, "bitmap {bitmap} : tout est parti d'un coup");
+        assert!(!encre(&b.app.doc, 2) && hors_cadres(&b) == 0, "bitmap {bitmap} : tout est parti d'un coup");
         assert_eq!(pas_d_annulation(&b), n);
     }
 }
 
+/// Partie 131 (avant : chaque plan recevait sa part). Le trait reste entier dans le plan de la case où il commence ; la case voisine qu'il
+/// traverse ne reçoit rien.
 #[test]
-fn a_stroke_across_two_neighbour_cases_gives_each_plan_its_part_in_one_undo_step() {
+fn a_stroke_across_two_neighbour_cases_stays_whole_in_the_plan_where_it_starts_in_one_undo_step() {
     for bitmap in [false, true] {
         let doc = if bitmap { en_bitmap(quatre_plans()) } else { quatre_plans() };
         let mut b = ouvert(doc, 4);
         let (v4, v5) = (vignette(&b, 4), vignette(&b, 5));
         let n = pas_d_annulation(&b);
         glisser(&mut b, &vague(v4.center(), v5.center(), 24));
-        assert!(encre(&b.app.doc, 2), "bitmap {bitmap} : le plan 3 a sa part");
-        assert!(encre(&b.app.doc, 3), "bitmap {bitmap} : le plan 4 a sa part");
+        assert!(encre(&b.app.doc, 2), "bitmap {bitmap} : le plan 3 a le trait");
+        assert!(!encre(&b.app.doc, 3), "bitmap {bitmap} : le plan 4, que le trait traverse, n'a rien reçu");
+        assert!(encre_hors_du_champ(&b, 2), "bitmap {bitmap} : le trait est entier dans le dessin du plan 3, jusque dans la case voisine");
+        assert_eq!(hors_cadres(&b), 0, "bitmap {bitmap} : rien sur la planche");
         assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape");
         b.app.run_action("edition.annuler");
         b.chauffer(2);

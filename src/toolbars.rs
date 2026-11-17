@@ -82,15 +82,36 @@ impl App {
         });
     }
 
+    /// Les outils de la vue Espace 3D sont-ils en tête de la barre d'outils ? Oui tant que la vue remplace le dessin (le cube
+    /// allumé, hors de la vue caméra), hors des Vignettes, et que la barre d'outils est à l'écran. Sans elle (espace Montage, barre
+    /// cachée par Affichage, mode concentration), ils restent dans la barre au-dessus de l'image, comme avant : jamais nulle part.
+    pub(crate) fn outils_3d_dans_la_barre(&self) -> bool {
+        self.espace3d.on && !self.camera_view && self.espace != crate::workspace::Espace::Vignettes && self.barre_outils_montree()
+    }
+
+    /// La barre d'outils de gauche est-elle à l'écran ? (La même règle que `App::frame`.)
+    pub(crate) fn barre_outils_montree(&self) -> bool {
+        self.layout.tool_bar && !self.concentration_active() && !self.sans_projet()
+    }
+
     /// Barre d'outils verticale, à gauche.
     pub(crate) fn vertical_tool_bar(&mut self, ui: &mut egui::Ui) {
+        // (Pour poser la fenêtre de l'aide animée quand l'icône de l'outil n'est pas dans la barre : `aideflottante.rs`.)
+        crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::BARRE, ui.max_rect());
         egui::ScrollArea::vertical().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
                 ui.add_space(4.0);
                 let groups = if self.espace == crate::workspace::Espace::Vignettes { TOOL_GROUPS_VIGNETTES } else { TOOL_GROUPS };
+                // La vue Espace 3D ouverte : ses outils en tête de la barre, en partant du haut (Anthony, partie 160 : « Les outils
+                // de la vue Espace 3D s'ajoutent à la barre latérale d'outils. En premier en partant du haut. »). Vue fermée, la
+                // barre est celle d'avant.
+                let outils_3d = self.outils_3d_dans_la_barre();
+                if outils_3d {
+                    self.espace3d_outils(ui);
+                }
                 for (g, group) in groups.iter().enumerate() {
-                    if g > 0 {
+                    if g > 0 || outils_3d {
                         ui.add_space(crate::barres::MARGE_TRAIT);
                         let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
@@ -116,6 +137,14 @@ impl App {
         let shown = slot_tool(slot, self.tool, &self.tool_recent);
         let icon = RichText::new(self.tool_icon(shown)).size(crate::barres::ICONE);
         let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(slot.contains(&self.tool), icon));
+        // Chaque outil de la case y a son icône pour l'aide animée, même caché derrière un autre : sa fenêtre se pose à côté.
+        // (La partie visible seulement : la barre défile.)
+        let visible = resp.rect.intersect(ui.clip_rect());
+        if visible.is_positive() {
+            for &t in slot {
+                crate::aideflottante::retenir(ui.ctx(), t.action(), visible);
+            }
+        }
         let mut description = shown.description().to_string();
         // Sur la planche des Vignettes, la caméra se règle case par case (cadres A, B, C…), pas par la feuille d'un plan.
         if shown == Tool::Camera && self.espace == crate::workspace::Espace::Vignettes {

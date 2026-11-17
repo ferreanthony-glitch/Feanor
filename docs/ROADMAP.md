@@ -3413,3 +3413,31 @@ Limites connues, à décider : la gomme d'annotation efface le trait entier (pas
 d'une case vide dépendant de la dernière vignette suit cette dernière si le nombre de colonnes change beaucoup ; le dépôt d'un fichier depuis l'Explorateur lit le curseur de l'écran (Windows ne donne pas la
 place du lâcher à la fenêtre) ; l'export en pages A4 / A3 ne coupe qu'en hauteur ; la bande des couleurs dominantes est un histogramme (pas un partitionnement k-means) ; pas encore de réglages mémorisés d'une
 séance à l'autre pour les deux fenêtres d'export, ni d'annotations dans les envois de relecture.
+
+## Plan en Espace 3D : dessiner dans un décor que la caméra traverse (demandé par Anthony le 2026-11-11, branche `espace-libre`) ✅ étape A (non fusionnée, pas regardée à l'écran)
+
+Sa demande : pousser dans FEANOR le dessin dans un environnement 3D (à la manière d'un add-on de storyboard 3D pour Blender), sans rien casser. Plan de l'étape A (un plan dont la
+caméra est libre, cartes ordonnées par distance, surfaces posées face à la caméra, au sol ou en mur) : `docs/ESPACE-LIBRE.md`. Rien n'est codé. Étapes B (décor partagé par séquence)
+et C (décors glTF, mannequin) à planifier ensuite. `suivi/V1.md` range le moteur 3D en V2.
+
+- ✅ **A0** (2026-11-11) : vérifications par lecture ; le plan tient (deux constructeurs de plan seulement, zone filmée dans la feuille, dossiers en bloc, format 54).
+- ✅ **A1** (2026-11-11) : la case `Panel::espace`, enregistrée (**format 54**), commande `espace3d.plan_en_espace`, bouton dans Réglages de l'Espace 3D, une étape d'annulation ;
+  l'image n'en dépend pas encore. Pas regardé à l'écran.
+- ✅ **A2** (2026-11-11) : les maths du changement de repère (`Monde::repere_camera`, variantes à matrice) ; rien ne les appelle encore. Une caméra dans les limites d'avant
+  filme la même image par le repère, à 0,05 px près ; caméra retournée, derrière la feuille, carte au sol à 90° (essais).
+- ✅ **A3** (2026-11-11) : le rendu. Les cartes d'un plan en Espace 3D sont posées dans le repère de sa caméra (`espace3d::place_dans`), `Document::panel_camera` rend la caméra de
+  référence pour ces plans (`panel_camera_reelle` pour ce qui décrit la caméra) ; caméra non bridée ; le pinceau suit. L'export compose l'image de l'écran pixel pour pixel (essai).
+  Pas regardé à l'écran ; limites dans `docs/ESPACE-LIBRE.md`.
+- ✅ **A4** (2026-11-11) : ce qui est devant cache ce qui est derrière (`espace3d::ordre_par_distance`). Les cartes d'un même plan gardent l'ordre de la pile ; un dossier passe en
+  bloc ; un calque d'ajustement agit sur ce qui est plus loin que lui (`calqueffet::Portees`). Pas regardé à l'écran.
+- ✅ **A5** (2026-11-11) : dessiner par la caméra. Pas de trait là où le regard ne touche pas la carte (`App::to_layer_opt`), ni au-delà d'une feuille de ses bords près de
+  l'horizon ; le curseur du pinceau a la taille du trait en perspective (`App::layer_zoom`). Pas regardé à l'écran.
+- ✅ **A6** (2026-11-12) : poser une surface à dessiner face à la caméra, au sol ou en mur (`espace3d.surface_*`, `Monde::surface_xf`), à une distance choisie ; inclinaison libre
+  jusqu'au demi-tour dans un plan en Espace 3D (85° ailleurs). Limite : pas de carte derrière la caméra d'origine du plan (levée le 2026-11-12, `INTERFACE.md` partie 148,
+  format 55). Pas regardé à l'écran.
+- ✅ **A7** (2026-11-12) : la vue d'édition de l'Espace 3D trace les cartes d'un plan en Espace 3D du plus loin au plus près de son œil (`espace3d::ordre_vu`), dans l'ordre de l'image
+  avec « Regarder par la caméra » ; message d'entrée et note sur la caméra. Pas regardé à l'écran.
+- ✅ **A8** (2026-11-12) : finitions. Bascule de la caméra jusqu'à 90° (plongée totale) ; vue de dessus et cadres de caméra des Vignettes mis de côté pour ces plans ; export de
+  caméra gardé (`espace_3d`) ; 1,36 ms pour le plan d'une image de 20 cartes (Mac) ; `docs/INTERFACE.md` partie 143 et sa liste de contrôle à l'écran.
+- **L'étape A est finie**, sur la branche `espace-libre`, non fusionnée. Jamais fait : regarder à l'écran, `scripts/verifier.ps1` sous Windows.
+- Ensuite : étape B (décor partagé par séquence ; séparer la taille d'une carte de sa profondeur), étape C (décors glTF, mannequin).

@@ -7,7 +7,7 @@ use crate::topview::{depth_of, distance, field_edges, half_field, world_x};
 
 /// Caméra décalée de `offset`, sans avancée.
 fn pan(offset: eframe::egui::Vec2) -> crate::document::CameraSeen {
-    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0 }
+    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0, grossissement: 1.0, angle: 0.0 }
 }
 
 #[test]

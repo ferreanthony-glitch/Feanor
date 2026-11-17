@@ -50,6 +50,11 @@ pub(crate) fn menu_de_commande(resp: &Response, action: &str, current: &str) {
             crate::monpanneauui::demander_ajout(ui.ctx(), action);
             ui.close_menu();
         }
+        // L'aide animée d'un outil, des Vignettes ou de l'Espace 3D : la rejouer à côté de l'icône (`aideflottante.rs`, partie 155).
+        if crate::aideflottante::a_une_explication(action) && ui.button(format!("{}  Revoir l'explication", ph::PLAY)).clicked() {
+            crate::aideflottante::demander_revoir(ui.ctx(), action);
+            ui.close_menu();
+        }
         // L'anneau sous le stylet : envoyer la commande dans une de ses huit directions (`anneauui.rs`).
         crate::anneauui::menu_envoyer(ui, action);
     });
@@ -263,7 +268,9 @@ impl App {
                 let filter = self.keys_filter.to_lowercase();
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     egui::Grid::new("grille_raccourcis").num_columns(4).striped(true).show(ui, |ui| {
-                        for info in keymap::ACTIONS.iter().filter(|a| a.implemented) {
+                        // (Hors de la vue de la scène, pas de commande qui parle de la 3D, partie 159.)
+                        let scene = self.espace3d_vue_ouverte();
+                        for info in keymap::ACTIONS.iter().filter(|a| a.implemented && (scene || !keymap::de_la_scene(a))) {
                             let keys = self.keymap.labels_of(info.id);
                             let mut label = info.label.to_string();
                             match self.keymap.context_of(info.id) {

@@ -132,6 +132,11 @@ impl Gesture {
         self.current = None;
     }
 
+    /// Un geste (champ tenu, curseur tiré…) est en cours.
+    pub fn en_cours(&self) -> bool {
+        self.current.is_some()
+    }
+
     /// L'historique a avancé de `avant` à `apres` par une prolongation de l'étape du geste (`History::extend_last`) : le geste en
     /// cours, s'il en était à `avant`, reste le même geste (sinon son champ, encore ouvert, enregistrerait une étape de plus).
     pub fn suivre(&mut self, avant: u64, apres: u64) {

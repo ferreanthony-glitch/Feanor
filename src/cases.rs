@@ -84,7 +84,30 @@ impl Document {
         self.panels[index].camera = avant.to_vec();
         let suite = self.split_plan(index, at);
         if let Some(premier) = self.panels.iter_mut().find(|p| p.id == id) {
-            premier.camera = finale;
+            // (Partie 142 : les cases de derrière peuvent porter leur propre mouvement ; ses clés partent avec elles dans le plan neuf,
+            // le premier plan ne garde que celles d'avant la coupe. Un mouvement qui ne tenait pas dans une première case trop courte
+            // garde ses clés, comme avant.)
+            let gardees: Vec<CameraKey> = finale.iter().filter(|k| k.frame < at).copied().collect();
+            premier.camera = if gardees.len() >= 2 || finale.len() < 2 { gardees } else { finale };
+        }
+        suite
+    }
+
+    /// Comme `scinder_apres_mouvement`, pour un mouvement créé sur la case qui commence à l'image `apres` du plan (partie 142 : une case de
+    /// continuité porte son propre mouvement, B vers C) : les cases **derrière elle** deviennent un plan à part, avec la caméra qu'elles
+    /// montraient avant (le cadre que la case tenait) ; les cases d'avant et celle du mouvement restent. `finale` : les clés du plan après
+    /// le geste ; le premier plan garde celles d'avant la coupe.
+    pub fn scinder_apres_mouvement_de(&mut self, index: usize, avant: &[CameraKey], finale: Vec<CameraKey>, apres: usize) -> Option<usize> {
+        if apres == 0 {
+            return self.scinder_apres_mouvement(index, avant, finale);
+        }
+        let p = self.panels.get(index)?;
+        let id = p.id;
+        let at = p.marks.iter().map(|m| m.frame).filter(|&f| f > apres).min()?;
+        self.panels[index].camera = avant.to_vec();
+        let suite = self.split_plan(index, at);
+        if let Some(premier) = self.panels.iter_mut().find(|p| p.id == id) {
+            premier.camera = finale.into_iter().filter(|k| k.frame < at).collect();
         }
         suite
     }

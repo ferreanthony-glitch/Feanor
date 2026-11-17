@@ -256,9 +256,6 @@ impl App {
 
     /// Réglages des outils de forme (panneau Réglages).
     pub(crate) fn shape_options_ui(&mut self, ui: &mut egui::Ui) {
-        let note = |ui: &mut egui::Ui, text: &str| {
-            ui.label(egui::RichText::new(text).small().weak());
-        };
         use crate::bulles::interrupteur;
         use egui_phosphor::regular as ph;
         if self.tool == Tool::Line {
@@ -285,23 +282,6 @@ impl App {
                 interrupteur(ui, &mut self.shape.filled, ph::SQUARE_HALF, "Forme pleine", "Remplie de la couleur courante, sans contour.", "");
             }
         });
-        note(
-            ui,
-            match self.tool {
-                Tool::Line => match self.shape.line_mode {
-                    LineMode::Straight => "Glisser pour tracer. Maj : angle par pas de 15°.",
-                    LineMode::Curve => "Glisser pour tracer, puis glisser pour courber : la courbe passe par le pointeur.",
-                    LineMode::SCurve => {
-                        "Glisser pour tracer, puis deux glissers pour courber (le second fait le S). \
-                         Entrée : poser, Échap : annuler."
-                    }
-                },
-                Tool::Polyline => {
-                    "Un clic par point (Maj : par 15°). Double-clic ou Entrée : terminer. Clic sur le premier \
-                     point : fermer. Retour arrière : retirer un point. Échap : annuler."
-                }
-                _ => "Glisser pour tracer. Maj : carré ou cercle.",
-            },
-        );
+        // (Le mode d'emploi de chaque forme est dans l'animation « Droite, courbe, S, polyligne » et le registre des explications.)
     }
 }

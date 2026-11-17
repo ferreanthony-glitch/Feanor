@@ -140,6 +140,8 @@ impl Default for BoardSettings {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Reserve {
     pub plan: u64,
+    /// L'image du plan où commence la case qui porte le mouvement (0 : la première ; partie 142 : une case de continuité peut porter le sien).
+    pub image: usize,
     pub rect: Rect,
     /// Où est la case A (sa rangée, son x depuis le bord gauche des rangées) quand le geste commence : elle ne bouge pas tant qu'il
     /// dure, quitte à recouvrir les cases d'avant ; au lâcher la planche se range à nouveau, dans l'ordre de lecture.
@@ -156,7 +158,7 @@ pub struct Reserve {
 impl Reserve {
     /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais ; la case A reste là où le geste l'a trouvée).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y), pose_dec: self.pose_dec.or(autre.pose_dec) }
+        Reserve { plan: self.plan, image: self.image, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y), pose_dec: self.pose_dec.or(autre.pose_dec) }
     }
 
     /// Ce que la case `k` de `layout` couvre, relativement à son image A (la case seule si sa caméra ne bouge pas), et où elle est.
@@ -172,7 +174,7 @@ impl Reserve {
         let (rang0, origine_y) = layout.groupe_de(k).map_or((0, layout.origine_y), |g| (g.rang0, g.origine_y));
         let pose_y = jap.then(|| c.thumb.top() - origine_y);
         let dec = if jap { c.thumb.left() - c.ligne.left() } else { c.thumb.top() - c.ligne.top() };
-        Some(Reserve { plan: c.plan, rect, pose: Some((c.row.saturating_sub(rang0), c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
+        Some(Reserve { plan: c.plan, image: c.frame, rect, pose: Some((c.row.saturating_sub(rang0), c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
     }
 }
 
@@ -717,10 +719,10 @@ fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
 }
 
 /// La réserve du geste en cours, bit à bit : le plan, la boîte, la pose de A (rangée, x), sa hauteur (à la japonaise) et son retrait.
-type CleHold = (u64, [u32; 4], Option<(usize, u32)>, Option<u32>, Option<u32>);
+type CleHold = (u64, usize, [u32; 4], Option<(usize, u32)>, Option<u32>, Option<u32>);
 
 fn bits_hold(opt: &Options) -> Option<CleHold> {
-    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits), h.pose_dec.map(f32::to_bits)))
+    opt.hold.map(|h| (h.plan, h.image, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits), h.pose_dec.map(f32::to_bits)))
 }
 
 impl Cle {
@@ -887,7 +889,7 @@ pub fn layout_indices(doc: &Document, s: &BoardSettings, last_joins: bool, opt: 
     // quels que soient les champs cochés : le dessin d'un mouvement ne change pas de forme quand on coche ou décoche un champ.)
     let total = ng + NOTE_LINE_H;
     let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
-    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None }).collect();
+    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| vignettecam::empreinte_de_la_case(doc, b.0, b.2, &place)).collect();
     // Ce qu'elles réservent : l'enveloppe (élargie à ce que le geste en cours a déjà couvert), et la bande de note de A quand elle
     // descend sous l'enveloppe. (Relatives au coin haut-gauche de A.)
     let polys: Vec<Option<Vec<Pos2>>> = prints
@@ -895,7 +897,7 @@ pub fn layout_indices(doc: &Document, s: &BoardSettings, last_joins: bool, opt: 
         .enumerate()
         .map(|(k, e)| {
             let e = e.as_ref()?;
-            let hold = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id);
+            let hold = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && h.image == boards[k].2);
             Some(match hold {
                 None => e.enveloppe.clone(),
                 Some(h) => {
@@ -927,7 +929,7 @@ pub fn layout_indices(doc: &Document, s: &BoardSettings, last_joins: bool, opt: 
     // quand un cadre (B…) est au-dessus de A, c'est A qui est en retrait, plus bas (de `decs[k]`), et non la rangée qui descend pour lui
     // faire de la place. Les autres cases de la rangée restent à la ligne ; l'empreinte ne monte jamais au-dessus du haut de sa rangée.
     // Pendant un geste, A garde le retrait qu'elle avait à l'appui (`Reserve::pose_dec`) : elle ne bouge pas.
-    let tenue = |k: usize| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0);
+    let tenue = |k: usize| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == h.image);
     let decs: Vec<f32> = (0..n)
         .map(|k| match &polys[k] {
             None => 0.0,

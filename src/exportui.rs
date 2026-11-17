@@ -32,6 +32,12 @@ pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
 const FINI_AFFICHE: f64 = 8.0;
 
+/// Images à la clé : combien de calques des plans `plans` ne font pas de clé (cachés, calques d'effet, calques vidéo). Les annotations,
+/// qui suivent leur case à cocher, ne comptent pas (partie 153 : l'avertissement n'est dit que s'il y en a).
+pub(crate) fn calques_sans_cle(doc: &crate::document::Document, plans: &[usize]) -> usize {
+    plans.iter().filter_map(|&pi| doc.panels.get(pi)).flat_map(|p| p.layers.iter()).filter(|l| !l.annotation && (!l.visible || l.effet.is_some() || l.video.is_some())).count()
+}
+
 fn good() -> Color32 {
     crate::theme::succes()
 }
@@ -153,11 +159,27 @@ impl App {
         let mut go = false;
         let mut close = false;
         let mut choose = false;
+        let mut montage = false;
+        // Partie 163.4 : le storyboard, le film et les images se choisissent par une vignette de ce qu'on obtient, avec un aperçu et un gros
+        // bouton ; tous leurs réglages sont sous « Précis ». Le son, les calques séparés et la caméra gardent leur fenêtre telle quelle.
+        let visuel = crate::panneauxvisuels::Famille::de(s.format).is_some();
         let modal = egui::Modal::new(egui::Id::new("fenetre_export")).show(ctx, |ui| {
             ui.set_width(460.0);
             ui.heading("Exporter");
             ui.add_space(6.0);
-            egui::Grid::new("grille_export").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+            if visuel {
+                montage = self.export_tuiles(ui, &mut s);
+                ui.add_space(4.0);
+                self.export_apercu(ui, &s, &frames);
+                ui.add_space(4.0);
+                let texte = RichText::new(crate::panneauxvisuelsui::texte_exporter(s.format)).size(14.0).strong();
+                let b = ui.add_enabled(!nom_erreur, egui::Button::new(texte).min_size(vec2(ui.available_width(), 32.0)));
+                go = bulles::bulle(b, "Exporter", "Demande où écrire, puis exporte : tu pourras continuer à travailler pendant qu'il tourne.", "").clicked();
+                if nom_erreur {
+                    crate::theme::avertir_petit(ui, "La nomenclature des fichiers est à corriger (Précis).");
+                }
+            }
+            let mut grille = |ui: &mut egui::Ui| egui::Grid::new("grille_export").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                 // Le format : seulement ceux de la famille ouverte (le film en a quatre) ; un format que ce ffmpeg ne sait pas faire est
                 // grisé, avec la raison.
                 let family = family_of(s.format);
@@ -387,7 +409,7 @@ impl App {
                         if effects > 0 {
                             crate::theme::avertir_petit(ui, format!("{effects} calque{} d'effet pas écrit{} : il agit sur ce qui est dessous, il n'a pas d'image à lui.", if effects > 1 { "s" } else { "" }, if effects > 1 { "s" } else { "" }));
                         }
-                        ui.label(RichText::new("Un dossier par plan (SQ01_PL012A), une suite PNG par calque : 01_Fond_0001.png…").small().weak());
+                        // (Comment les fichiers sont rangés : dans le registre des explications, `aidetextes.rs`, partie 153.)
                     });
                     ui.end_row();
                 }
@@ -397,7 +419,6 @@ impl App {
                     ui.vertical(|ui| {
                         ui.checkbox(&mut s.camera.per_frame, "Avec la caméra de chaque image (déjà interpolée)");
                         ui.checkbox(&mut s.camera.csv, "Aussi en CSV (un tableur, un script)");
-                        ui.label(RichText::new("Le JSON et son format sont décrits dans docs/EXPORT_MONTAGE.md.").small().weak());
                     });
                     ui.end_row();
                 }
@@ -457,7 +478,6 @@ impl App {
                                 crate::theme::avertir_petit(ui, "Un plan où rien ne s'entend n'a pas de fichier.");
                             }
                         }
-                        ui.label(RichText::new("Le mixage du montage (volumes, fondus, égaliseur, écho ; muets et solo respectés), de la première à la dernière image du plan, à l'échantillon près. Un son qui passe une coupe est coupé au bord du plan.").small().weak());
                         if has_transitions {
                             ui.label(RichText::new("Les transitions ne changent rien au son : aucun fondu sonore, aucune poignée.").small().weak());
                         }
@@ -499,7 +519,11 @@ impl App {
                             if sans > 0 && cles > 0 {
                                 crate::theme::avertir_petit(ui, format!("{sans} plan{} sans clé (rien de dessiné sur un calque visible) : pas d'image.", if sans > 1 { "s" } else { "" }));
                             }
-                            ui.label(RichText::new("Les calques cachés, les calques d'effet et les calques vidéo ne font pas de clé ; les annotations seulement avec « Avec les annotations ».").small().weak());
+                            let sans_cle = calques_sans_cle(&self.doc, &plans);
+                            if sans_cle > 0 {
+                                let pl = if sans_cle > 1 { "s" } else { "" };
+                                crate::theme::avertir_petit(ui, format!("{sans_cle} calque{pl} caché{pl}, d'effet ou vidéo : pas de clé."));
+                            }
                         });
                         ui.end_row();
                     }
@@ -575,6 +599,13 @@ impl App {
                     ui.end_row();
                 }
             });
+            if visuel {
+                crate::panneauxvisuels::precis(ui, "Exporter", |ui| {
+                    grille(ui);
+                });
+            } else {
+                grille(ui);
+            }
             if s.format.uses_ffmpeg() {
                 ui.add_space(6.0);
                 ui.separator();
@@ -606,7 +637,9 @@ impl App {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                go = ui.add_enabled(!nom_erreur, egui::Button::new("Exporter…")).on_disabled_hover_text("La nomenclature des fichiers est à corriger (voir plus haut).").clicked();
+                if !visuel {
+                    go = ui.add_enabled(!nom_erreur, egui::Button::new("Exporter…")).on_disabled_hover_text("La nomenclature des fichiers est à corriger (voir plus haut).").clicked();
+                }
                 close = ui.button("Annuler").clicked();
             });
             ui.add_space(4.0);
@@ -614,6 +647,11 @@ impl App {
         });
         if choose {
             self.choose_ffmpeg();
+        }
+        // « Pour le montage » : sa fenêtre à elle prend la place de celle-ci (aucune fenêtre de plus).
+        if montage {
+            self.run_action("fichier.exporter_montage");
+            return;
         }
         // Le choix « Avec les annotations » est retenu par poste de travail, tout de suite (avec les réglages de l'application).
         if s.format.has_images() && self.settings.export_annotations != s.annotations {
@@ -933,7 +971,7 @@ fn nomenclature_ui(ui: &mut egui::Ui, n: &mut crate::nomenclature::Nomenclature,
     }
     if n.forme == Forme::Perso {
         ui.add(egui::TextEdit::singleline(&mut n.modele).desired_width(380.0).font(egui::TextStyle::Monospace));
-        ui.label(RichText::new("Champs : {projet} {episode} {sequence} {plan} {cle} {calque} {version} {case} {date} ; une largeur complète de zéros : {plan:03}. Le reste (tirets, soulignés, lettres) est écrit tel quel.").small().weak());
+        // (Les champs du modèle : dans le registre des explications, `aidetextes.rs`, partie 153.)
         for a in n.avertissements() {
             crate::theme::avertir_petit(ui, a);
         }
@@ -981,12 +1019,12 @@ fn bouton_arreter(ui: &mut egui::Ui) -> bool {
 /// Les formats qu'une fenêtre d'export propose ensemble (celui qu'on a ouvert et ses voisins).
 fn family_of(format: Format) -> &'static [Format] {
     match format {
-        Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr => &[Format::Mp4, Format::ProRes, Format::ProRes4444, Format::DnxHr],
-        Format::Gif => &[Format::Gif],
-        Format::Png => &[Format::Png],
+        // (Partie 163.4 : la vignette « Film vidéo » tient aussi le GIF, « Images une à une » les images par image et par plan ; chacun
+        // se choisit dans « Précis ».)
+        Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr | Format::Gif => &[Format::Mp4, Format::ProRes, Format::ProRes4444, Format::DnxHr, Format::Gif],
+        Format::Png | Format::Stills => &[Format::Png, Format::Stills],
         Format::Wav => &[Format::Wav],
         Format::Pdf => &[Format::Pdf],
-        Format::Stills => &[Format::Stills],
         Format::Stems => &[Format::Stems],
         Format::SonPlans => &[Format::SonPlans],
         Format::Layers => &[Format::Layers],
@@ -1042,6 +1080,12 @@ fn save_dialog(app: &App, base: &str, format: Format, mxf: bool) -> Option<PathB
 
 /// Ouvre l'explorateur Windows sur le fichier (sélectionné) ou le dossier.
 pub(crate) fn reveal_in_explorer(path: &std::path::Path) {
+    // Sous `cargo test`, rien : les essais qui lancent toutes les commandes (`debogage_tests`)
+    // ouvraient de vraies fenêtres « Ce PC » et « Documents » sur le bureau d'Anthony, au
+    // premier plan, à chaque passage (un chemin vide donne « Ce PC »).
+    if cfg!(test) {
+        return;
+    }
     let mut c = std::process::Command::new("explorer.exe");
     #[cfg(windows)]
     {

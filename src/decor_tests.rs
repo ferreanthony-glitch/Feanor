@@ -655,11 +655,16 @@ fn the_overflow_margin_setting_changes_the_margin_of_the_tiles() {
     let mut b = ouvert(quatre_plans(), 4);
     se_reposer(&mut b, 400);
     let (id, largeur) = (b.app.board_layout().cards[3].id, crate::thumbs::width_for(vignette(&b, 3).width() * b.ctx.pixels_per_point()));
-    let (_, marge0) = b.app.thumbs.case_image_of(id, largeur).expect("la vignette");
+    // (Partie 131 : une marge par côté, qui va jusqu'au dessin du plan ; ici rien ne dépasse du cadre : la même de chaque côté, celle du réglage.)
+    let (_, marges0) = b.app.thumbs.case_image_of(id, largeur).expect("la vignette");
+    let marge0 = marges0[0];
+    assert_eq!(marges0, [marge0; 4], "rien ne dépasse du cadre : la marge du réglage de chaque côté");
     assert_eq!(b.app.thumbs.debord, Some(0.12));
     b.app.settings.vignettes.debord = 24;
     se_reposer(&mut b, 400);
-    let (img, marge1) = b.app.thumbs.case_image_of(id, largeur).expect("la vignette refaite");
+    let (img, marges1) = b.app.thumbs.case_image_of(id, largeur).expect("la vignette refaite");
+    let marge1 = marges1[0];
+    assert_eq!(marges1, [marge1; 4]);
     assert_eq!(b.app.thumbs.debord, Some(0.24));
     assert!(marge1 > marge0 && (marge1 as f32 / marge0 as f32 - 2.0).abs() < 0.2, "le débord de 24 % double la marge de 12 % : {marge0} → {marge1}");
     let (tw, th) = crate::thumbs::thumb_size_of(b.app.doc.frame, largeur, crate::thumbs::scale_pct());
@@ -791,7 +796,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
         assert!(contient(&vus, m), "{m}");
     }
     // Ce qui n'y est pas : rien du montage, du dessin ou de l'équipe.
-    for m in ["Calques non actifs", "Opacité du passe-partout", "Mon nom"] {
+    for m in ["Calques dans la timeline", "Opacité du passe-partout", "Mon nom"] {
         assert!(!contient(&vus, m), "{m} n'est pas un réglage des Vignettes");
     }
     // L'onglet Montage n'a plus les rangées pâles.
@@ -800,7 +805,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
     ouvrir_preferences(&mut b, Onglet::Montage);
     let vus = textes(&b);
     assert!(!contient(&vus, "Rangées de cases pâles"), "déménagées dans l'onglet Vignettes");
-    assert!(contient(&vus, "Calques non actifs"));
+    assert!(contient(&vus, "Hauteur des plans"));
 }
 
 #[test]

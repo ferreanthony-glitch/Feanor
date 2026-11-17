@@ -240,7 +240,54 @@ pub const FORMAT: &str = "pelure-projet";
 /// exemplaires d'un même calque partagé entre plusieurs plans (mêmes dessins, chacun sous sa caméra). Une version précédente qui ouvrirait le
 /// projet en ferait des calques séparés qui partagent les mêmes dessins, et perdrait le lien à l'enregistrement : elle le refuse donc. Un
 /// projet de version 50 ou moins s'ouvre tel quel.
-pub const VERSION: u32 = 51;
+/// 52 (2026-11-08, `docs/INTERFACE.md` partie 129) : **effet de caméra vivant** — `effet_camera` d'un plan (`camfx::Vivant`) : le
+/// préréglage (tremblement, explosion, zoom…), ses réglages et son image de départ, calculés à l'évaluation de la caméra, sans clé.
+/// Une version précédente qui ouvrirait le projet ne montrerait pas l'effet et le perdrait à l'enregistrement : elle le refuse
+/// donc. Un projet de version 51 ou moins s'ouvre tel quel : ses effets déjà posés sont des clés, et le restent.
+/// 53 (2026-11-11, `docs/INTERFACE.md` partie 141) : **calque accroché à la caméra** — `accroche_camera` d'un calque (`accroche.rs`) :
+/// il garde sa place dans l'image filmée, sa pose se lit dans le cadre de la caméra. Une version précédente qui ouvrirait le projet
+/// montrerait le calque à sa place sur la feuille (le film changerait sans prévenir) et perdrait le réglage à l'enregistrement : elle
+/// le refuse donc. Un projet de version 52 ou moins s'ouvre tel quel, aucun calque accroché.
+/// 54 (2026-11-11, `docs/ESPACE-LIBRE.md`, étape A1) : **plan en Espace 3D** — `espace` d'un plan (`Panel::espace`) : sa caméra est libre
+/// dans l'Espace 3D et ses cartes se cachent selon leur distance (le rendu vient aux étapes A3 et A4 ; A1 pose la case). Une version
+/// précédente qui ouvrirait le projet ignorerait le champ sans rien dire, montrerait le plan à plat et perdrait le réglage à
+/// l'enregistrement : elle le refuse donc. Un projet de version 53 ou moins s'ouvre tel quel, aucun plan en Espace 3D.
+/// 55 (2026-11-12, `docs/INTERFACE.md` partie 148) : **carte derrière la caméra d'origine d'un plan en Espace 3D** — aucun champ
+/// nouveau : la `profondeur` d'un calque d'un plan en Espace 3D (`espace`), ajoutée à l'`ecart_profondeur` de ses clés de position,
+/// peut descendre sous −0,9 (`Layer::MIN_DEPTH`), jusqu'à −1000 : la carte passe la caméra de référence (−1) et va derrière elle.
+/// Une version précédente ramènerait ces profondeurs à −0,9 en ouvrant le projet (la carte reviendrait devant la caméra, le film
+/// changerait sans prévenir) et les perdrait à l'enregistrement : elle le refuse donc. Un projet de version 54 ou moins s'ouvre
+/// tel quel, avec les mêmes valeurs et les mêmes images (il n'a aucune profondeur sous −0,9) ; un plan ordinaire garde sa borne.
+/// Sous ce même numéro (2026-11-12, `docs/INTERFACE.md` partie 149) : **la Trajectoire dans l'Espace 3D** — deux champs facultatifs :
+/// `support` dans la `trajectoire` d'un calque (`trajectoire::Support` : le plan de l'espace où le chemin est posé, son origine et
+/// ses deux axes en mètres ; absent : une trajectoire sur la feuille, celle de toujours) et `trajectoire_camera` d'un plan (la
+/// trajectoire que suit la caméra d'un plan en Espace 3D, toujours avec son `support` ; elle ne pose aucune clé de caméra). Un
+/// projet sans eux se lit comme avant. Et la bascule et le panoramique des clés de caméra d'un plan en Espace 3D ne sont plus
+/// ramenés à ±85° à la lecture (`bornes_de_camera`) : une caméra retournée revient comme elle était.
+/// 56 (2026-11-14, `docs/INTERFACE.md` partie 159) : **tous les plans sont dans l'espace** — plus deux sortes de plans. Trois champs
+/// facultatifs, écrits seulement quand ils sont vrais : `camera_libre` d'un plan (sa caméra a été posée hors des anciennes limites,
+/// par la vue de la scène : aux images où elle en sort, l'image passe par le changement de repère), `ordre_distance` d'un plan (ce
+/// qui est devant cache ce qui est derrière, au lieu de l'ordre de la pile) et `profondeur_bornee` d'un calque (un calque d'un
+/// ancien projet que le format 55 montrait à la borne de profondeur et qu'on ne pouvait ramener sans changer son image). Une
+/// version précédente ignorerait ces champs sans rien dire (l'ordre de la pile, une caméra bridée : une autre image) : elle le
+/// refuse donc. **Un projet de version 55 ou moins s'ouvre sans question et devient 56 au premier enregistrement, avec les mêmes
+/// images au pixel près** : un plan ordinaire garde l'ordre de sa pile et sa caméra d'avant ; ses clés de profondeur au-delà de
+/// la borne sont ramenées à la borne si l'image n'en change à aucune image, sinon le calque est marqué `profondeur_bornee` ; un
+/// plan en Espace 3D garde `espace` (et donc son chemin d'image et l'ordre par la distance). Une trajectoire tracée dans l'espace
+/// d'un plan ordinaire d'un projet d'avant reste écartée comme alors ; au format 56 elle vaut pour tout plan.
+pub const VERSION: u32 = 56;
+
+/// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
+/// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
+/// libre, la bascule va jusqu'à la verticale (`espace3d::MAX_TILT`) et le panoramique fait autant de tours qu'on veut (borné
+/// comme `SceneCam::sanitized`, pour écarter une valeur abîmée).
+pub(crate) fn bornes_de_camera(espace: bool, bascule: f32, panoramique: f32) -> (f32, f32) {
+    if espace {
+        (bascule.clamp(-crate::espace3d::MAX_TILT, crate::espace3d::MAX_TILT), panoramique.clamp(-3600.0, 3600.0))
+    } else {
+        (bascule.clamp(-85.0, 85.0), panoramique.clamp(-85.0, 85.0))
+    }
+}
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -268,6 +315,14 @@ const MODELS: &str = "modeles";
 const TEXTURES: &str = "textures";
 /// Formats de son acceptés à l'import.
 pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
+
+/// Les dossiers d'un projet dont les fichiers ne sont jamais modifiés sur place : un dessin se réécrit à côté puis prend sa
+/// place d'un renommage (`write_atomic`), un son, une texture, une image collée et une image de vidéo ne changent jamais
+/// sous le même nom. Un jalon (`jalons.rs`) peut donc en garder un second nom sur le disque (lien physique) au lieu d'une
+/// copie : ce que FEANOR écrit ensuite ne touche pas à ce que le jalon voit.
+pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 5] {
+    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER]
+}
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Manifest {
@@ -326,6 +381,17 @@ pub(crate) struct Manifest {
     /// `plans/`. Absent : projet classique.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     partage: Option<partage_io::BlocPartage>,
+    /// Les vues de l'Espace 3D (`espace3dvues.rs`, `docs/INTERFACE.md` partie 144) : disposition, points de vue, bordures.
+    /// Facultatif, sans changer `VERSION` : une version qui ne le connaît pas l'ignore et ouvre le projet en une vue ; absent :
+    /// une vue. Jamais dans la structure d'un film partagé (ce n'est pas une retouche que l'équipe se transmet). Lu en souple
+    /// (une valeur quelconque, `Retenue::lire`) : un champ mal formé redonne une vue, il n'empêche jamais d'ouvrir le projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vues_3d: Option<serde_json::Value>,
+    /// L'environnement de la vue Espace 3D (`espace3ddecor.rs`, `docs/INTERFACE.md` partie 157) : couleur du fond, maillage du sol.
+    /// Facultatif, sans changer `VERSION`, comme `vues_3d` : une version qui ne le connaît pas l'ignore ; absent : l'aspect d'origine.
+    /// Lu en souple (`Environnement3d::lire`) : un champ mal formé redonne l'aspect d'origine, il n'empêche jamais d'ouvrir le projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    environnement_3d: Option<serde_json::Value>,
 }
 
 /// Propriétés du projet (format 17). Dates en secondes depuis 1970.
@@ -529,6 +595,9 @@ pub(crate) struct PanelEntry {
     /// Postérisation temporelle de la caméra (format 37 ; absente : éteinte, cadence 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     saccade: Option<SaccadeEntry>,
+    /// Effet de caméra vivant du plan (format 52, partie 129 ; absent : aucun). Un effet déjà converti est dans `camera`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effet_camera: Option<EffetCameraEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -545,6 +614,23 @@ pub(crate) struct PanelEntry {
     /// Notes dessinées sur la timeline (format 17 ; absentes : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes_dessinees: Vec<TimeNoteEntry>,
+    /// Plan en Espace 3D (format 54, `Panel::espace` ; absent : un plan ordinaire).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    espace: bool,
+    /// La caméra du plan est sortie des anciennes limites (format 56, `Panel::camera_libre` ; absent : faux).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    camera_libre: bool,
+    /// Ce qui est devant cache ce qui est derrière (format 56, `Panel::ordre_distance` ; absent : l'ordre de la pile).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    ordre_distance: bool,
+    /// Lu d'un fichier de plan d'un projet partagé écrit avant le format 56 (`projet_partage::VERSION_PLAN` 1) : il se lit
+    /// comme un plan d'un projet 55, puis `migrer_vers_56` (partie 159). Jamais écrit.
+    #[serde(default, skip_serializing)]
+    pub(crate) format_ancien: bool,
+    /// Trajectoire de la caméra d'un plan en Espace 3D (format 55, partie 149, `Panel::trajectoire_camera`) : un chemin tracé dans
+    /// l'espace, avec son `support` ; absente : la caméra des clés, telle quelle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    trajectoire_camera: Option<crate::trajectoire::Trajectoire>,
 }
 
 /// Postérisation temporelle de la caméra d'un plan (format 37) : allumée ou non, et « toutes les N images ».
@@ -553,6 +639,29 @@ struct SaccadeEntry {
     #[serde(default)]
     actif: bool,
     cadence: usize,
+}
+
+/// Un effet de caméra vivant (format 52) : le préréglage par son nom (`camfx::Preset::nom`), ses réglages, l'image du
+/// plan où il commence.
+#[derive(Serialize, Deserialize)]
+struct EffetCameraEntry {
+    preset: String,
+    debut: usize,
+    duree: usize,
+    #[serde(default = "un")]
+    intensite: f32,
+    #[serde(default)]
+    frequence: f32,
+    #[serde(default)]
+    graine: u32,
+    #[serde(default = "un")]
+    zoom: f32,
+    #[serde(default)]
+    coup_de_zoom: bool,
+}
+
+fn un() -> f32 {
+    1.0
 }
 
 /// Une note dessinée (format 17) : couleur (0 bleu, 1 rouge, 2 noir), épaisseur, points
@@ -769,6 +878,17 @@ struct LayerEntry {
     /// (une version d'avant l'ouvre comme un calque vectoriel ordinaire, avec ses notes).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     annotation: bool,
+    /// Calque accroché à la caméra (format 53, `accroche.rs`) : il garde sa place dans l'image filmée ; absent : calque ordinaire.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    accroche_camera: bool,
+    /// Calque 3D (`espace3ddecor.rs`, partie 157) : sol, mur ou ciel, et sa grille de repère ; absent : calque ordinaire. Sans changer
+    /// `VERSION` (une version d'avant l'ouvre comme un calque de dessin ordinaire, à la même place). Lu en souple
+    /// (`Calque3d::lire`) : une valeur mal formée redonne un calque ordinaire, jamais un projet qui ne s'ouvre pas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_3d: Option<serde_json::Value>,
+    /// Profondeur tenue à la borne d'autrefois (format 56, `Layer::profondeur_bornee` ; absent : faux).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    profondeur_bornee: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -1243,6 +1363,10 @@ thread_local! {
 
 #[cfg(test)]
 thread_local! {
+    /// Essais : l'enregistrement s'arrête juste après le premier passage de la couche bitmap de la planche, avant les dessins (une coupure là).
+    pub(crate) static COUPER_APRES_LA_COUCHE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+thread_local! {
     /// Essais : l'écriture s'arrête juste après le nouveau manifeste, avant l'effacement de l'ancien (un plantage là).
     pub(crate) static PLANTER_AVANT_RETRAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -1457,6 +1581,8 @@ pub struct SaveJob {
     personnages: Option<Vec<u8>>,
     /// Le fichier des annotations de la vue Vignettes (`annotations.json`) ; rien : il n'y en a plus, le fichier part.
     annotations: Option<Vec<u8>>,
+    /// La couche bitmap de la planche (`planchebitmap.rs`), écrite dans `planche_bitmap/` ; rien : non écrite (pas d'annexes dans ce travail).
+    planche_bitmap: Option<crate::planchebitmap::PlancheBitmap>,
     /// Le fichier du scénario gardé (`scenario.json`) ; rien : il n'y en a plus (un scénario lisible n'est jamais effacé : il passe à côté).
     scenario: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
@@ -1832,6 +1958,7 @@ impl SaveJob {
         self.sound_fx = crate::audiofx::to_bytes(&doc)?;
         self.personnages = crate::personnages::to_bytes(&doc)?;
         self.annotations = crate::annotations::to_bytes(&doc)?;
+        self.planche_bitmap = Some(doc.annotations.bitmap.clone());
         self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
@@ -1900,6 +2027,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
@@ -2127,6 +2255,15 @@ impl SaveJob {
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
+        // La couche bitmap de la planche d'abord (`planchebitmap.rs`) : ses images et son index sont sur le disque avant les dessins d'où des pixels ont pu
+        // partir vers elle ; une coupure entre les deux laisse au pire un pixel à deux endroits, jamais nulle part. Ce qu'elle ne cite plus part à la fin.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, false)?;
+        }
+        #[cfg(test)]
+        if COUPER_APRES_LA_COUCHE.with(|c| c.get()) {
+            return Err("coupure simulée entre la couche bitmap de la planche et les dessins".into());
+        }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
         }
@@ -2219,6 +2356,10 @@ impl SaveJob {
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        }
+        // La couche bitmap de la planche : ce que son index ne cite plus part maintenant, quand les dessins et le manifeste sont écrits.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, true)?;
         }
         // Le nouveau manifeste est sur le disque : l'ancien nom du projet (`.pelure`) peut partir. Un plantage avant laisse
         // les deux fichiers, et l'ouverture prend le plus récent (`manifeste_a_ouvrir`).
@@ -2443,6 +2584,9 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 decor: l.decor,
                 personnage: l.personnage,
                 annotation: l.annotation,
+                accroche_camera: l.accroche,
+                calque_3d: l.calque_3d.and_then(|c| serde_json::to_value(c).ok()),
+                profondeur_bornee: l.profondeur_bornee,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -2464,6 +2608,16 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             })
             .collect(),
         saccade: (panel.saccade != crate::camera::Saccade::default()).then(|| SaccadeEntry { actif: panel.saccade.actif, cadence: panel.saccade.cadence }),
+        effet_camera: panel.effet_camera.map(|v| EffetCameraEntry {
+            preset: v.params.preset.nom().into(),
+            debut: v.start,
+            duree: v.params.duration,
+            intensite: v.params.intensity,
+            frequence: v.params.freq,
+            graine: v.params.seed,
+            zoom: v.params.zoom_factor,
+            coup_de_zoom: v.params.punch,
+        }),
         marques: panel
             .marks
             .iter()
@@ -2486,6 +2640,11 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             .iter()
             .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
             .collect(),
+        espace: panel.espace,
+        camera_libre: panel.camera_libre,
+        ordre_distance: panel.ordre_distance,
+        format_ancien: false,
+        trajectoire_camera: panel.trajectoire_camera.clone(),
     };
     if digest {
         entry.signets.clear();
@@ -2585,6 +2744,8 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         // Les instantanés ne gardent que la feuille de leurs dessins (pas leur hors-feuille, `monde.rs`).
         dessins_hors: Vec::new(),
         partage: None,
+        vues_3d: None,
+        environnement_3d: None,
     };
     let loaded = load_manifest(manifest, dir, quick, None);
     for (id, previous) in videos {
@@ -2732,6 +2893,9 @@ fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: 
         },
         dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
         partage: None,
+        vues_3d: if avec_plans { doc.vues_3d.as_ref().and_then(|r| serde_json::to_value(r).ok()) } else { None },
+        // (L'aspect d'origine n'écrit rien : un projet qui n'y a pas touché garde le même manifeste.)
+        environnement_3d: if avec_plans { doc.environnement_3d.filter(|e| !e.est_d_origine()).and_then(|e| serde_json::to_value(e).ok()) } else { None },
     }
 }
 
@@ -2907,6 +3071,12 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
+    // (Le format du projet lu : un projet d'avant le format 56 passe par `migrer_vers_56`, plan par plan.)
+    let version_lue = manifest.version;
+    // Les vues de l'Espace 3D (facultatives) : posées sur le document une fois fait.
+    let vues_3d = manifest.vues_3d.take().and_then(crate::espace3dvues::Retenue::lire);
+    // L'environnement de l'Espace 3D (facultatif, partie 157), lu en souple.
+    let environnement_3d = manifest.environnement_3d.take().and_then(crate::espace3ddecor::Environnement3d::lire);
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings, annexes.plans_seuls);
     crate::imagevec::charger_dossier(dir, &mut warnings, annexes.plans_seuls);
@@ -3180,6 +3350,10 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
                 let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
                 let couleurs: Vec<Option<CouleurEntry>> = p.calques.iter().map(|l| l.calque_couleur.clone()).collect();
+                let en_espace = p.espace;
+                // (Format 56, partie 159 : tous les plans sont dans l'espace. Un projet d'avant se lit comme alors, puis
+                // migrer_vers_56.)
+                let format_56 = version_lue >= 56 && !p.format_ancien;
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -3211,17 +3385,21 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                                 angle: t.rotation,
                                 stretch_x: LayerTransform::clamp_stretch(t.etirement_x),
                                 stretch_y: LayerTransform::clamp_stretch(t.etirement_y),
-                                tilt_x: LayerTransform::clamp_tilt(t.inclinaison_x),
-                                tilt_y: LayerTransform::clamp_tilt(t.inclinaison_y),
+                                tilt_x: LayerTransform::clamp_tilt_libre(t.inclinaison_x),
+                                tilt_y: LayerTransform::clamp_tilt_libre(t.inclinaison_y),
                                 dz: 0.0,
                             })
                             .unwrap_or_default(),
                         pos_keys: crate::poskeys::from_entries(l.cles_position),
-                        trajectoire: l.trajectoire.and_then(crate::trajectoire::Trajectoire::assainie),
+                        // (Une trajectoire tracée dans l'espace ne vaut que dans un plan en Espace 3D : ailleurs, ses clés restent,
+                        // à la main.)
+                        trajectoire: l.trajectoire.filter(|t| en_espace || format_56 || t.support.is_none()).and_then(crate::trajectoire::Trajectoire::assainie),
                         opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
                         unie: l.couleur_unie,
+                        // (Plan en Espace 3D, format 55 : la profondeur est libre, la carte peut être derrière la caméra de
+                        // référence. Plan ordinaire : la borne de toujours.)
                         depth: if l.profondeur.is_finite() {
-                            l.profondeur.clamp(Layer::MIN_DEPTH, 1000.0)
+                            l.profondeur.clamp(if en_espace || format_56 { -Layer::MAX_DEPTH_LIBRE } else { Layer::MIN_DEPTH }, 1000.0)
                         } else {
                             0.0
                         },
@@ -3261,6 +3439,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         decor: l.decor,
                         personnage: l.personnage,
                         annotation: l.annotation,
+                        accroche: l.accroche_camera,
+                        calque_3d: l.calque_3d.and_then(crate::espace3ddecor::Calque3d::lire),
+                        profondeur_bornee: l.profondeur_bornee,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -3311,14 +3492,18 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     let finite =
                         [k.x, k.y, k.zoom, k.rotation, k.avance, k.adoucir_entree, k.adoucir_sortie, k.bascule, k.panoramique];
                     if finite.iter().all(|v| v.is_finite()) {
+                        // (Plan ordinaire : la caméra tournée doit encore voir la feuille, bascule et panoramique s'arrêtent à 85°.
+                        // Plan en Espace 3D : sa caméra est libre, elle bascule jusqu'à la verticale et tourne tout autour ; une
+                        // caméra retournée revient comme elle était, `bornes_de_camera`.)
+                        let (bascule, panoramique) = bornes_de_camera(p.espace || p.camera_libre, k.bascule, k.panoramique);
                         let cam = Camera {
                             x: k.x,
                             y: k.y,
                             zoom: k.zoom.clamp(0.05, 50.0),
                             angle: k.rotation,
                             dolly: k.avance,
-                            tilt: k.bascule.clamp(-85.0, 85.0),
-                            pan: k.panoramique.clamp(-85.0, 85.0),
+                            tilt: bascule,
+                            pan: panoramique,
                         };
                         crate::camera::set_key(&mut camera, k.image, cam);
                         if let Some(x) = camera.iter_mut().find(|x| x.frame == k.image) {
@@ -3338,6 +3523,20 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     notes: p.notes,
                     camera,
                     saccade: p.saccade.map_or_else(crate::camera::Saccade::default, |s| crate::camera::Saccade { actif: s.actif, cadence: s.cadence }.normalise()),
+                    // (Un préréglage inconnu, d'une version plus récente, est laissé de côté.)
+                    effet_camera: p.effet_camera.and_then(|e| {
+                        let preset = crate::camfx::Preset::du_nom(&e.preset)?;
+                        let params = crate::camfx::Params {
+                            preset,
+                            intensity: e.intensite,
+                            duration: e.duree,
+                            freq: e.frequence,
+                            seed: e.graine,
+                            zoom_factor: e.zoom,
+                            punch: e.coup_de_zoom,
+                        };
+                        Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
+                    }),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {
@@ -3360,7 +3559,17 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                             .collect(),
                     },
                     color: p.couleur.filter(|k| (*k as usize) < crate::marks::COLORS.len()),
+                    espace: p.espace,
+                    // (Format 56 : une caméra libre ne se lit pas d'un projet d'avant, qui n'en a pas.)
+                    camera_libre: p.camera_libre && format_56,
+                    ordre_distance: p.ordre_distance && format_56,
+                    // (Une trajectoire de caméra n'a de sens qu'avec son support ; avant le format 56, que dans un plan en
+                    // Espace 3D.)
+                    trajectoire_camera: p.trajectoire_camera.filter(|t| (p.espace || format_56) && t.support.is_some()).and_then(crate::trajectoire::Trajectoire::assainie),
                 });
+                if !format_56 {
+                    crate::document::migrer_vers_56(structure.panels.last_mut().expect("le plan vient d'être posé"));
+                }
             }
         }
     }
@@ -3424,12 +3633,16 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).
         structure.annotations = load_annotations(dir, &mut warnings);
+        // Et la couche bitmap de la planche (`planche_bitmap/`, absente : vide).
+        structure.annotations.bitmap = crate::planchebitmap::lire(dir, &mut warnings);
         // Le scénario gardé dans le projet (`scenario.json`, absent : aucun).
         structure.scenario = crate::scenariogarde::load(dir, &mut warnings);
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
+    doc.vues_3d = vues_3d;
+    doc.environnement_3d = environnement_3d;
     if !annexes.plans_seuls {
         // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
         if let Some(fx) = load_sound_fx(dir, &mut warnings) {

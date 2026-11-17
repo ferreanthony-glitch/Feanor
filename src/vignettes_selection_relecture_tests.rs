@@ -51,42 +51,59 @@ fn deplacer_le_choix(b: &mut Banc, d: eframe::egui::Vec2) {
 
 // ------------------------------------------------------------------------------ 1. l'ordre de peinture
 
+/// Le premier point de l'élément `i` du dessin de la case `k`.
+fn depart_de(b: &Banc, k: usize, i: usize) -> Option<eframe::egui::Pos2> {
+    match b.app.drawing(dessin_de(b, k)?)?.elements.get(i)? {
+        Element::Stroke { points, .. } => points.first().map(|p| p.pos()),
+        _ => None,
+    }
+}
+
+/// Partie 131 : le trait n'est plus coupé, il est entier dans le dessin de sa case. Déplacé sans quitter sa case, il y garde son rang ; peint
+/// derrière et déplacé dans une autre case, il y passe sous ce qui y était. (Avant : la même chose, part par part.)
 #[test]
 fn a_moved_stroke_keeps_its_rank_in_its_case_and_one_painted_behind_stays_behind() {
-    let Some((mut b, de, a, _, t2)) = trait_a_travers(false) else { return println!("pas de carte graphique") };
-    let lien = (0..nombre(&b, 2)).find_map(|i| lien_de(&b, 2, i)).expect("une part numérotée dans la case 2");
-    // Un second trait dans la case 2, posé après : il est dessus.
+    let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return println!("pas de carte graphique") };
+    let t2 = case(&b, 2);
+    // Deux traits dans la case 2 : le second, posé après, est dessus.
+    let (de, a) = (t2.center() + vec2(-40.0, -20.0), t2.center() + vec2(40.0, -6.0));
+    tracer(&mut b, de, a);
     tracer(&mut b, t2.center() + vec2(-40.0, 20.0), t2.center() + vec2(40.0, 20.0));
     repos(&mut b);
-    assert!(rangs(&b, 2, lien)[0] < nombre(&b, 2) - 1, "avant : la part du premier trait est sous le second");
-    let m = sur_le_trait(de, a, t2.center().x);
-    lasso(&mut b, m, 14.0);
+    assert_eq!(nombre(&b, 2), 2);
+    let (premier, second) = (depart_de(&b, 2, 0).unwrap(), depart_de(&b, 2, 1).unwrap());
+    lasso(&mut b, sur_le_trait(de, a, t2.center().x), 8.0);
+    assert_eq!(choisies(&b), 1, "le premier trait seul ({})", b.app.status);
     deplacer_le_choix(&mut b, vec2(0.0, 6.0));
     repos(&mut b);
-    let r = rangs(&b, 2, lien);
-    println!("rangs du trait déplacé dans la case 2 : {r:?} sur {}", nombre(&b, 2));
-    assert!(!r.is_empty() && *r.iter().max().unwrap() < nombre(&b, 2) - 1, "le trait déplacé garde son rang : toujours sous le second trait ({r:?})");
+    assert_eq!(nombre(&b, 2), 2, "le trait déplacé reste dans le dessin de sa case");
+    let (p, s) = (depart_de(&b, 2, 0).unwrap(), depart_de(&b, 2, 1).unwrap());
+    assert!(p.y > premier.y + 1.0 && (p.x - premier.x).abs() < 1.0, "le trait déplacé garde son rang : toujours sous le second ({premier:?} -> {p:?})");
+    assert!((s - second).length() < 0.01, "le second trait n'a pas bougé");
 
     // Peint derrière, déplacé dans une case d'arrivée qui a déjà un trait : il y passe dessous.
     let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return };
-    let (t1, t2, t3, t4) = (case(&b, 1), case(&b, 2), case(&b, 3), case(&b, 4));
-    for t in [t2, t3, t4] {
+    let (t1, t2) = (case(&b, 1), case(&b, 2));
+    for t in [t1, t2] {
         tracer(&mut b, t.center() + vec2(-40.0, 25.0), t.center() + vec2(40.0, 25.0));
         repos(&mut b);
     }
     b.app.paint_behind = true;
-    let (de, a) = (t1.center(), t3.center() + vec2(0.0, -10.0));
+    let (de, a) = (t1.center() + vec2(-30.0, -20.0), t1.center() + vec2(30.0, -8.0));
     tracer(&mut b, de, a);
     repos(&mut b);
     b.app.paint_behind = false;
-    let lien = lien_de(&b, 2, 0).expect("peint derrière : la part de la case 2 est la première");
-    lasso(&mut b, sur_le_trait(de, a, t2.center().x), 12.0);
-    assert!(choisies(&b) >= 3, "le trait entier");
+    assert_eq!(nombre(&b, 1), 2);
+    let derriere = depart_de(&b, 1, 0).unwrap();
+    assert!(derriere.y < depart_de(&b, 1, 1).unwrap().y, "peint derrière : il est le premier élément du dessin de la case 1");
+    lasso(&mut b, sur_le_trait(de, a, t1.center().x), 8.0);
+    assert_eq!(choisies(&b), 1, "le trait peint derrière ({})", b.app.status);
     deplacer_le_choix(&mut b, vec2(t2.center().x - t1.center().x, 0.0));
     repos(&mut b);
-    let r4 = rangs(&b, 4, lien);
-    println!("case d'arrivée 4 : rangs {r4:?} sur {}", nombre(&b, 4));
-    assert_eq!(r4.first(), Some(&0), "dans la case d'arrivée, un trait peint derrière passe sous ce qui y était");
+    assert_eq!((nombre(&b, 1), nombre(&b, 2)), (1, 2), "le trait a quitté la case 1 pour la case 2, entier");
+    let arrive = depart_de(&b, 2, 0).unwrap();
+    assert!((arrive - derriere).length() < 2.0, "dans la case d'arrivée, un trait peint derrière passe sous ce qui y était : {derriere:?} -> {arrive:?}");
+    let _ = (lien_de, rangs, trait_a_travers);
 }
 
 // ------------------------------------------------------------------------------ 2. aucune perte
@@ -99,8 +116,11 @@ fn verrouiller(b: &mut Banc, ks: &[usize]) {
     }
 }
 
+/// Partie 131 : un trait parti d'une case qui reçoit reste entier dans son plan, même s'il traverse des cases verrouillées (elles ne reçoivent
+/// rien, rien ne va par-dessus elles). Déplacé pour **commencer** dans une case verrouillée, il reste entier sur la planche, par-dessus son
+/// image, visible. (Avant : ses parts sur les cases verrouillées étaient par-dessus, une par case.)
 #[test]
-fn parts_over_cases_that_refuse_stay_above_their_image_after_a_move() {
+fn a_stroke_moved_onto_a_case_that_refuses_stays_whole_above_its_image() {
     let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return println!("pas de carte graphique") };
     verrouiller(&mut b, &[1, 2, 3]);
     let (t0, t1, t2) = (case(&b, 0), case(&b, 1), case(&b, 2));
@@ -108,16 +128,17 @@ fn parts_over_cases_that_refuse_stay_above_their_image_after_a_move() {
     let (de, a) = (t0.center() + vec2(0.0, -18.0), t2.center() + vec2(0.0, 18.0));
     tracer(&mut b, de, a);
     repos(&mut b);
-    let dessus = b.app.doc.annotations.traces.iter().filter(|t| t.dessus).count();
-    assert!(dessus >= 2, "les parts sur les cases 1 et 2, verrouillées, sont par-dessus ({dessus})");
+    assert_eq!(parts(&b), (1, 0), "le trait est entier dans le plan de la case 0 ; rien sur la planche, rien dans les cases verrouillées");
+    present(&voir(&mut b, "relecture-dessus-avant", de, a), "il se voit en entier, par-dessus les cases verrouillées qu'il traverse");
     lasso(&mut b, sur_le_trait(de, a, t0.center().x + 20.0), 10.0);
-    println!("dessus : {} parts choisies ; {}", choisies(&b), b.app.status);
-    assert!(choisies(&b) >= 3, "le trait entier, parts par-dessus comprises");
+    assert_eq!(choisies(&b), 1, "le trait entier ({})", b.app.status);
     let d = vec2(t1.center().x - t0.center().x, 0.0);
     deplacer_le_choix(&mut b, d);
     println!("dessus, après : {} ; {:?}", b.app.status, parts(&b));
+    assert_eq!(parts(&b), (0, 1), "il commence dans une case verrouillée : entier sur la planche");
+    assert!(b.app.doc.annotations.traces.iter().all(|t| t.dessus), "par-dessus l'image de la case qui ne pouvait pas le recevoir");
     let r = voir(&mut b, "relecture-dessus", de + d, a + d);
-    present(&r, "les parts sur les cases verrouillées restent visibles, par-dessus leur image");
+    present(&r, "le trait reste visible, entier, par-dessus les images");
 }
 
 /// Un projet dont la planche est pleine : des traits d'un calque d'annotation caché.
@@ -296,8 +317,8 @@ fn a_duplicated_plan_next_to_the_rest_of_the_stroke_is_not_taken_with_it() {
     let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return println!("pas de carte graphique") };
     let (t1, t3) = (case(&b, 1), case(&b, 3));
     let (de, a) = (t1.center() + vec2(-40.0, 12.0), t3.center() + vec2(40.0, 12.0));
-    tracer(&mut b, de, a);
-    repos(&mut b);
+    // (Un trait d'un projet d'avant la partie 131 : coupé en parts de même numéro, une par case.)
+    crate::vignettes_selection_tests::tracer_comme_avant(&mut b, de, a);
     let p = de + vec2(15.0, 0.0);
     assert!(t1.contains(p));
     let l = b.app.board_layout();
@@ -334,16 +355,27 @@ fn a_full_history_still_makes_one_step() {
     b.app.undo();
     present(&voir(&mut b, "relecture-histoire-annule", de, a), "un seul Ctrl+Z rend tout le trait à sa place");
     assert_eq!(parts(&b), avant, "un seul Ctrl+Z rend les parts d'avant");
-    // Le trait tracé à travers les cases (horschamp_partager), historique plein : un Ctrl+Z l'enlève entier.
+    // Le trait tracé à travers les cases et coupé comme avant la partie 131 (plusieurs étapes regroupées), historique plein : un Ctrl+Z l'enlève entier.
     let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return };
     remplir_l_historique(&mut b);
     let (t1, t3) = (case(&b, 1), case(&b, 3));
-    tracer(&mut b, t1.center(), t3.center());
-    repos(&mut b);
+    crate::vignettes_selection_tests::tracer_comme_avant(&mut b, t1.center(), t3.center());
     assert!(parts(&b).0 >= 3);
     b.app.undo();
     repos(&mut b);
     assert_eq!(parts(&b), (0, 0), "historique plein : un Ctrl+Z enlève tout le trait réparti");
+    // Depuis la partie 131 : un trait parti du papier passe entier sur la planche au lâcher (le trait, puis sa pose : deux étapes regroupées) ;
+    // historique plein, un Ctrl+Z l'enlève.
+    let Some(mut b) = planche(des_plans(12, false), 6, 1.0) else { return };
+    remplir_l_historique(&mut b);
+    let t1 = case(&b, 1);
+    let de = pos2(t1.center().x, t1.top() - t1.width() * 0.2);
+    tracer(&mut b, de, t1.center());
+    repos(&mut b);
+    assert_eq!(parts(&b), (0, 1), "le trait du papier : {}", b.app.status);
+    b.app.undo();
+    repos(&mut b);
+    assert_eq!(parts(&b), (0, 0), "historique plein : un Ctrl+Z enlève le trait du papier");
 }
 
 // ------------------------------------------------------------------------------ 8. le coût

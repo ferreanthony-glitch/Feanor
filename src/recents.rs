@@ -81,6 +81,10 @@ pub fn label(path: &Path) -> String {
 impl App {
     /// Le projet `path` vient d'être ouvert ou enregistré : en tête des récents.
     pub(crate) fn remember_project(&mut self, path: &Path) {
+        // Déjà en tête : rien ne change, les réglages ne sont pas réécrits (l'écriture continue passe ici après chaque trait, `continu.rs`).
+        if self.settings.recent_projects.first().is_some_and(|p| p == path) {
+            return;
+        }
         remember(&mut self.settings.recent_projects, path);
         if let Err(e) = self.settings.save() {
             self.status = format!("Réglages non enregistrés : {e}");

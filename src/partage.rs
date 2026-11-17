@@ -42,7 +42,8 @@ impl Layer {
     }
 
     /// Cet exemplaire accordé au `modele` : ses dessins (coupés à `images`, le dernier tenu) et ses réglages ; le numéro, la pose, la
-    /// trajectoire, les clés d'opacité, la profondeur, le dossier, la ligne réduite et la position verrouillée restent les siens.
+    /// trajectoire, les clés d'opacité, la profondeur, le dossier, la ligne réduite, la position verrouillée et l'accroche à la caméra
+    /// (elle va avec la pose, `accroche.rs`) restent les siens.
     pub(crate) fn accorde_au_partage(&self, modele: &Layer, images: usize) -> Layer {
         let mut frames = modele.frames.clone();
         frames.truncate(images);
@@ -60,6 +61,7 @@ impl Layer {
             parent: self.parent,
             collapsed: self.collapsed,
             position_locked: self.position_locked,
+            accroche: self.accroche,
             partage: self.partage,
             ..modele.clone()
         }

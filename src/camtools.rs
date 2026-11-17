@@ -89,8 +89,14 @@ pub(crate) struct CamDrag {
     handle: CamHandle,
     start: Pos2,
     cam0: Camera,
+    /// Centre du cadre **tel qu'il est peint** à l'appui (effet de caméra vivant compris) : le zoom et la rotation tournent
+    /// autour de lui, là où on le voit.
+    centre: Pos2,
     snap: Edit,
     changed: bool,
+    /// L'image se composait par le changement de repère à l'appui (`Document::repere_du_plan`) : la feuille montre ce que la
+    /// caméra filme, le cadre est au centre. Glisser dedans déplace alors la caméra dans son propre plan (`camera_glissee`).
+    libre: bool,
 }
 
 /// Vue de l'écran qui montre exactement le cadre de la caméra `cam` dans la zone `rect`.
@@ -140,15 +146,25 @@ impl App {
     /// Caméra du panneau courant à l'image courante.
     pub(crate) fn current_camera(&self) -> Camera {
         // (La caméra douce, celle des clés : l'outil règle les clés, pas les paliers de la postérisation temporelle.)
-        self.doc.panel_camera_douce(self.cur_panel, self.cur_frame)
+        let cam = self.doc.panel_camera_douce(self.cur_panel, self.cur_frame);
+        // (Plan en Espace 3D dont la caméra suit une trajectoire, partie 149 : elle est montrée, et réglée, là où son chemin l'a
+        // portée à cette image ; `set_current_camera` fait le chemin inverse avant d'écrire la clé.)
+        self.doc.camera_sur_sa_trajectoire(self.cur_panel, cam, self.cur_frame)
     }
 
     /// La caméra que **l'écran montre** (vue caméra, cadre, aides au cadrage) à l'image courante : celle des paliers de la
     /// postérisation temporelle du plan (`Panel::saccade`), comme les exports et la lecture. Seul l'outil Caméra arrêté lit
-    /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire.
+    /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire. L'effet de caméra vivant du
+    /// plan (partie 129), lui, se voit aussi avec l'outil Caméra : c'est là qu'on le règle.
+    ///
+    /// Image composée par le changement de repère (partie 159, `Document::repere_du_plan`) : la caméra de référence, le cadre
+    /// au centre de la feuille, puisque la feuille montre déjà ce que la caméra du plan filme.
     pub(crate) fn camera_montree(&self) -> Camera {
+        if self.doc.repere_du_plan(self.cur_panel, self.cur_frame).is_some() {
+            return self.doc.default_camera();
+        }
         if self.tool == crate::app::Tool::Camera && !self.playing {
-            self.current_camera()
+            self.doc.panel_camera_vivante(self.cur_panel, self.cur_frame)
         } else {
             self.doc.panel_camera(self.cur_panel, self.cur_frame)
         }
@@ -157,9 +173,24 @@ impl App {
     /// Règle la caméra du plan courant. Caméra fixe (aucune ou une image clé) : on change
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
+    ///
+    /// C'est la caméra que règlent la feuille, les champs et les menus : tournée, elle doit encore voir le plan de référence par
+    /// les quatre coins du cadre (`Camera::limited`), comme toujours. Sauf quand elle est déjà libre à cette image (la vue de
+    /// la scène l'a mise hors des anciennes limites, `Panel::camera_libre`) ou que le plan vient du format 55 en Espace 3D :
+    /// elle n'a plus à voir la feuille, on la règle telle quelle. La vue de la scène passe par `set_current_camera_libre`.
     pub(crate) fn set_current_camera(&mut self, cam: Camera) {
-        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre.
-        let cam = cam.limited(self.doc.frame);
+        let p = self.panel();
+        let libre = p.espace || (p.camera_libre && !self.doc.camera_dans_les_anciennes_limites(&self.current_camera()));
+        let cam = if libre { cam } else { cam.limited(self.doc.frame) };
+        self.poser_la_camera(cam);
+    }
+
+    /// Le travail commun de `set_current_camera` et `set_current_camera_libre` : la caméra `cam`, telle qu'on la voit, écrite
+    /// dans les clés du plan courant.
+    pub(crate) fn poser_la_camera(&mut self, cam: Camera) {
+        // (Une trajectoire de caméra, partie 149 : `cam` est la caméra telle qu'on la voit, portée par son chemin ; la clé reçoit
+        // ce qu'il faut pour que, portée de même, elle la donne. Régler la caméra à n'importe quelle image marche donc toujours.)
+        let cam = self.doc.camera_hors_de_sa_trajectoire(self.cur_panel, cam, self.cur_frame);
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let keys = &mut self.doc.panels[self.cur_panel].camera;
         if keys.len() >= 2 {
@@ -239,7 +270,8 @@ impl App {
 
     /// Partie du cadre caméra sous le pointeur (position écran).
     pub(crate) fn camera_handle_at(&self, screen: Pos2) -> Option<CamHandle> {
-        let corners = self.current_camera().corners(self.doc.frame);
+        // Le cadre tel qu'il est peint (`paint_camera`, effet de caméra vivant compris, partie 129) : on attrape ce qu'on voit.
+        let corners = self.camera_montree().corners(self.doc.frame);
         if self.rotate_handle(&corners).distance(screen) <= GRAB {
             return Some(CamHandle::Rotate);
         }
@@ -253,27 +285,55 @@ impl App {
     pub(crate) fn camera_press(&mut self, p: Pos2, screen: Pos2) {
         self.end_stroke();
         self.playing = false;
+        // (Partie 159 : sur tout plan. Quand l'image se compose par le changement de repère, la feuille montre ce que la caméra
+        // filme et le cadre reste au centre : on le tire de même, `camera_glissee`.)
+        // (Un plan venu du format 55 en Espace 3D : sa feuille montre ce que filme la caméra dès qu'elle bouge, le geste l'est
+        // donc d'emblée.)
+        let libre = self.panel().espace || self.doc.repere_du_plan(self.cur_panel, self.cur_frame).is_some();
         let Some(handle) = self.camera_handle_at(screen) else {
             self.status = "Outil Caméra : glisser dans le cadre pour le déplacer, un coin pour zoomer, \
                            la poignée ronde pour tourner."
                 .into();
             return;
         };
+        let [fw, fh] = self.doc.frame;
+        let centre = self.camera_montree().to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
         self.cam_drag = Some(CamDrag {
             handle,
             start: p,
             cam0: self.current_camera(),
+            centre,
             snap: self.snapshot(),
             changed: false,
+            libre,
         });
     }
 
+    /// La caméra `cam0` glissée de `delta` (pixels de la feuille) quand la feuille montre ce qu'elle filme (`CamDrag::libre`) :
+    /// elle se déplace dans son propre plan, le long de sa droite et de son haut, d'autant que le dessin glisse à l'écran sous le
+    /// pointeur. C'est le même geste que tirer le cadre sur la feuille : le cadre va où va la main, la caméra avec lui.
+    fn camera_glissee(&self, cam0: Camera, delta: Vec2) -> Camera {
+        let world = crate::espace3d::Monde::of(&self.doc);
+        let eye = world.eye(&cam0);
+        let (sr, cr) = cam0.angle.to_radians().sin_cos();
+        let (st, ct) = cam0.tilt.to_radians().sin_cos();
+        let (sp, cp) = cam0.pan.to_radians().sin_cos();
+        // (Les axes de l'image dans l'espace, comme `Monde::repere_camera` : sa droite et son haut, roulis compris.)
+        let (right, up) = ([cp, 0.0, sp], [-sp * st, ct, cp * st]);
+        let x_image = [0, 1, 2].map(|i| right[i] * cr - up[i] * sr);
+        let haut_image = [0, 1, 2].map(|i| right[i] * sr + up[i] * cr);
+        // (Un pixel de l'image, au plan de référence, vaut 1 / grossissement pixel de la feuille.)
+        let k = world.k / cam0.magnification(self.doc.frame).max(1e-3);
+        let pos = [0, 1, 2].map(|i| eye[i] + (x_image[i] * delta.x - haut_image[i] * delta.y) * k);
+        Camera { x: pos[0] / world.k + world.stage[0] / 2.0, y: -pos[1] / world.k + world.stage[1] / 2.0, dolly: world.d0_px - pos[2] / world.k, ..cam0 }
+    }
+
     pub(crate) fn camera_drag(&mut self, p: Pos2, shift: bool) {
-        let Some(d) = &mut self.cam_drag else { return };
-        let (cam0, start) = (d.cam0, d.start);
-        // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil).
-        let [fw, fh] = self.doc.frame;
-        let c = cam0.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
+        let Some(d) = &self.cam_drag else { return };
+        let (cam0, start, libre) = (d.cam0, d.start, d.libre);
+        // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil), tel qu'il était peint à l'appui : sans
+        // effet vivant, celui de `cam0` comme avant ; avec, le geste part de ce qu'on voit, l'effet garde son décalage par-dessus.
+        let c = d.centre;
         let cam = match d.handle {
             CamHandle::Move => {
                 let mut delta = p - start;
@@ -284,7 +344,11 @@ impl App {
                         delta.x = 0.0;
                     }
                 }
-                cam0.shifted(delta.x, delta.y)
+                if libre {
+                    self.camera_glissee(cam0, delta)
+                } else {
+                    cam0.shifted(delta.x, delta.y)
+                }
             }
             CamHandle::Zoom => {
                 // Éloigner le coin du centre élargit le cadre (moins de zoom).
@@ -303,8 +367,17 @@ impl App {
                 Camera { angle, ..cam0 }
             }
         };
-        d.changed = true;
-        self.set_current_camera(cam);
+        if let Some(d) = &mut self.cam_drag {
+            d.changed = true;
+        }
+        // (Un geste libre sur une caméra libre la garde libre jusqu'au bout, même si elle repasse dans les anciennes limites en
+        // route ; sur une caméra d'avant, la borne de toujours.)
+        let p = self.panel();
+        if libre && (p.espace || p.camera_libre) {
+            self.poser_la_camera(cam);
+        } else {
+            self.set_current_camera(cam);
+        }
         self.status = format!(
             "Caméra : décalage {:+.0} × {:+.0} px, zoom {:.0} %, rotation {:.1}°",
             cam.x - self.doc.width as f32 / 2.0,
@@ -605,18 +678,19 @@ impl App {
                     }
                 });
                 ui.end_row();
-                // Bascule et panoramique (9f) : la caméra tourne sur elle-même, sans bouger.
+                // Bascule et panoramique (9f) : la caméra tourne sur elle-même, sans bouger. (Partie 159 : une caméra que la vue de
+                // la scène a tournée plus loin n'est pas ramenée à ±85° rien qu'en se montrant ici : `clamp_existing_to_range`.)
                 ui.label("Bascule");
                 ui.horizontal(|ui| {
                     let r = ui
-                        .add(egui::DragValue::new(&mut tilt).speed(0.2).range(-85.0..=85.0).suffix("°").max_decimals(1))
+                        .add(egui::DragValue::new(&mut tilt).speed(0.2).range(-85.0..=85.0).clamp_existing_to_range(false).suffix("°").max_decimals(1))
                         .on_hover_text("Rotation autour de l'axe horizontal (X) : positive, la caméra regarde vers le haut");
                     if self.edited(&r) {
                         next = Some(Camera { tilt, ..cam });
                     }
                     ui.label("Panoramique");
                     let r = ui
-                        .add(egui::DragValue::new(&mut pan).speed(0.2).range(-85.0..=85.0).suffix("°").max_decimals(1))
+                        .add(egui::DragValue::new(&mut pan).speed(0.2).range(-85.0..=85.0).clamp_existing_to_range(false).suffix("°").max_decimals(1))
                         .on_hover_text("Rotation autour de l'axe vertical (Y) : positif, la caméra regarde vers la droite");
                     if self.edited(&r) {
                         next = Some(Camera { pan, ..cam });
@@ -639,7 +713,7 @@ impl App {
         // Postérisation temporelle : le mouvement montré par paliers (aucune clé n'est touchée).
         section(ui, "Mouvement par paliers", &mut |ui| self.camera_saccade_ui(ui));
 
-        // Effets de caméra : des préréglages qui posent des clés (`camfxui.rs`).
+        // Effets de caméra : des préréglages vivants, sans clé, que « Convertir en clés » fige (`camfxui.rs`).
         section(ui, "Effets de caméra", &mut |ui| self.camera_effects_ui(ui));
 
         // Vue et durées.
@@ -655,24 +729,9 @@ impl App {
                 }
             });
         });
-        // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin.)
-        let (s, e) = self.doc.sequence_run(self.cur_panel);
-        let sequence_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
-        section(ui, "Durées", &mut |ui| {
-            ui.label(format!("Séquence : {}", crate::storyboard::duration_label(sequence_len, fps)));
-            ui.label(format!("Plan : {}", crate::storyboard::duration_label(self.frame_count(), fps)));
-        });
-        ui.label(
-            RichText::new(
-                "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
-                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier. \
-                 Losanges jaunes de la piste Caméra : clic pour choisir (Ctrl : ajouter, Maj : la suite), glisser pour \
-                 déplacer, glisser dans le vide de la piste pour en choisir plusieurs au rectangle (Maj : ajouter, Ctrl : \
-                 basculer), Ctrl+C / Ctrl+V à l'image courante, Suppr. Aides au cadrage : menu « Cadrage » au-dessus du dessin.",
-            )
-            .small()
-            .weak(),
-        );
+        // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin. La section « Durées »,
+        // séquence et plan, est partie le 8 novembre 2026 : Anthony l'a barrée, les durées se lisent dans la timeline.)
+        // (Le mode d'emploi est dans l'animation de l'outil et le registre des explications : `aidecatalogue.rs`, partie 153.)
     }
 
     /// Règle la postérisation temporelle de la caméra du plan `pi` (une étape d'annulation, appelée par le geste `key`) : les

@@ -224,7 +224,7 @@ fn dolly_moves_the_camera_into_the_set() {
     // Un calque deux fois plus loin grossit moins : sur l'écran, 2 × 2/3 = 4/3 au lieu de 2.
     let mut far = Layer::new("Fond", LayerKind::Bitmap);
     far.depth = 1.0;
-    let seen = crate::document::CameraSeen { offset: eframe::egui::Vec2::ZERO, dolly: d0 / 2.0, d0 };
+    let seen = crate::document::CameraSeen { offset: eframe::egui::Vec2::ZERO, dolly: d0 / 2.0, d0, grossissement: 1.0, angle: 0.0 };
     let t = far.transform_seen(&seen).unwrap();
     assert!((t.scale - 2.0 / 3.0).abs() < 1e-4, "{t:?}");
     // Le plan de référence ne bouge pas (c'est le cadre qui se resserre).
@@ -236,7 +236,7 @@ fn dolly_moves_the_camera_into_the_set() {
     near.depth = -0.6;
     assert!(near.transform_seen(&seen).is_none());
     // Sans avancée : le défilement multiplan d'avant.
-    let pan = crate::document::CameraSeen { offset: eframe::egui::vec2(30.0, 0.0), dolly: 0.0, d0 };
+    let pan = crate::document::CameraSeen { offset: eframe::egui::vec2(30.0, 0.0), dolly: 0.0, d0, grossissement: 1.0, angle: 0.0 };
     let t = far.transform_seen(&pan).unwrap();
     assert!((t.x - 15.0).abs() < 1e-4 && (t.scale - 1.0).abs() < 1e-6);
 }

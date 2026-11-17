@@ -102,7 +102,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
             (ph::TEXTBOX, "Noms et production", "Le modèle de noms des plans (SQ01_PL012A ou celui du studio), la série et l'épisode : tous les exports s'en servent.", "projet.noms_production"),
             (ph::TABLE, "Fiche technique", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", "fichier.exporter_fiche"),
             (ph::STACK, "Calques séparés", "Un dossier par plan et, dedans, une suite d'images transparentes par calque visible, pour reprendre les calques dans un logiciel de compositing.", "fichier.exporter_calques"),
-            (ph::VIDEO_CAMERA, "Caméra", "Les clés de la caméra de chaque plan (position, zoom, rotation, interpolation) en JSON et en CSV, pour un script de compositing ou de 3D.", "fichier.exporter_camera"),
+            (ph::VIDEO_CAMERA, "Caméra", "Les clés de la caméra de chaque plan (position, zoom, rotation, interpolation) en JSON et en CSV, pour un script de compositing.", "fichier.exporter_camera"),
         ],
     ),
 ];
@@ -139,7 +139,7 @@ impl App {
                         if resp.clicked() {
                             run = Some(action);
                         }
-                        ui.label(RichText::new(*hint).small().weak());
+                        // (Ce que fait chaque export : son info-bulle, et le registre des explications, rubrique « Exporter ».)
                         ui.add_space(3.0);
                     }
                 }
@@ -195,7 +195,7 @@ impl App {
         if couleurs != avant {
             self.settings.theme.modifier(couleurs);
         }
-        ui.label(RichText::new("Changer une couleur passe en « Personnalisé » ; le survol, le texte secondaire et les couleurs de la timeline s'en déduisent.").small().weak());
+        // (Les explications des Préférences sont dans le registre des explications : `aidetextes.rs`, partie 153.)
     }
 
     /// Vignettes > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours (pour montrer où dessiner), le nombre de
@@ -216,7 +216,6 @@ impl App {
                 self.layout.board_min_rows = n.clamp(1, crate::board::MIN_ROWS_MAX);
             }
         });
-        ui.label(RichText::new("Une rangée pâle de plus apparaît dès qu'on dessine dans la dernière.").small().weak());
         ui.horizontal(|ui| {
             ui.label("Cases par rangée");
             let mut n = self.layout.board_columns;
@@ -271,7 +270,6 @@ impl App {
                 self.settings_a_ecrire = true;
             }
         });
-        ui.label(RichText::new("0 : pas d'aimant, le cadre suit le pointeur partout.").small().weak());
         ui.horizontal(|ui| {
             ui.label("Couleur des cadres de caméra");
             let mut c = self.settings.vignettes.couleur_cadre;
@@ -311,10 +309,15 @@ impl App {
                 self.settings_a_ecrire = true;
             }
         });
-        ui.label(RichText::new("Ne change pas le calque Décor d'un plan qui en a déjà un : il garde sa sorte et reçoit toujours les traits du décor.").small().weak());
+        // Des plans ont déjà leur calque Décor : le choix ne les change pas.
+        let deja = self.doc.panels.iter().filter(|p| p.layers.iter().any(|l| l.decor)).count();
+        if deja > 0 {
+            let s = if deja > 1 { "s" } else { "" };
+            theme::avertir_petit(ui, format!("{deja} plan{s} {} déjà son calque Décor : il garde sa sorte.", if deja > 1 { "ont" } else { "a" }));
+        }
         // (2026-10-29 : la couleur et les tailles des trois pinceaux du décor sont celles des brosses dédiées Décor, réglées dans leur panneau.)
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Brosses Décor : couleurs, pinceau et taille se règlent dans le panneau Brosses dédiées.").small().weak());
+            ui.label("Brosses Décor");
             if ui.small_button("Ouvrir le panneau").on_hover_text("Ouvre le panneau Brosses dédiées, section Décors : nom, couleur du trait, aplat, pinceau (crayon, feutre ou aplat) et taille de chaque brosse Décor.").clicked() {
                 self.show_pane(crate::dock::Pane::Personnages);
             }
@@ -444,7 +447,12 @@ impl App {
             if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %, 3 variantes, 2 images par variante, épaisseur 0 %, graine 1, immobile à l'arrêt.").clicked() {
                 d = Default::default();
             }
-            ui.label(RichText::new("Le trait tremble d'une image à l'autre. Un calque qui a son propre « Tremblement du trait » (panneau Effets) garde le sien.").small().weak());
+            // Des calques du projet ont leur propre tremblement : ils le gardent.
+            let siens = self.doc.panels.iter().flat_map(|p| p.layers.iter()).filter(|l| l.fx.iter().any(|e| e.kind == crate::fx::EffectKind::Boil)).count();
+            if siens > 0 {
+                let s = if siens > 1 { "s" } else { "" };
+                theme::avertir_petit(ui, format!("{siens} calque{s} {} son propre tremblement : il le garde.", if siens > 1 { "ont" } else { "a" }));
+            }
         });
         if d != avant {
             self.settings.tremblement_defaut = d;
@@ -499,7 +507,9 @@ impl App {
         egui::TopBottomPanel::top("prefs_haut").frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4))).show_separator_line(false).show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 crate::bulles::etiquette(ui, ph::MAGNIFYING_GLASS, "Chercher un réglage", "Tape un mot (couleur, cache, clé, équipe…) : les groupes de réglages qui répondent s'affichent, de tous les onglets.");
-                let large = (ui.available_width() - 34.0).max(80.0);
+                // (La place de la croix « effacer », avec ses marges : à 34 points la ligne dépassait de 9 dès qu'un mot était tapé, et la
+                // fenêtre, qui grandit pour contenir ce qu'elle montre, s'élargissait de 9 points à chaque image tant que la recherche durait.)
+                let large = (ui.available_width() - 52.0).max(80.0);
                 let champ = ui.add(egui::TextEdit::singleline(&mut q).hint_text("Chercher un réglage…").desired_width(large));
                 crate::bulles::bulle(champ, "Chercher un réglage", "Un ou plusieurs mots, avec ou sans accents. Les onglets qui répondent montrent le nombre de réglages trouvés.", "");
                 if !q.is_empty() && crate::bulles::icone(ui, ph::X, "Effacer la recherche", "Revenir à l'onglet ouvert.", "").clicked() {
@@ -648,7 +658,11 @@ impl App {
                     }
                 });
             }
-            Groupe::Secours => self.autosave_menu_ui(ui),
+            Groupe::Secours => {
+                // L'écriture continue d'abord (`continu.rs`) ; la copie de secours reste pour les projets qu'elle n'écrit pas.
+                self.continu_reglage_ui(ui);
+                self.autosave_menu_ui(ui);
+            }
             Groupe::Collage => self.collage_prefs_ui(ui),
             Groupe::Stylet => {
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
@@ -658,7 +672,6 @@ impl App {
                 if resp.changed() {
                     let _ = self.settings.save();
                 }
-                ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
             // L'anneau sous le stylet (`anneauui.rs`).
@@ -682,7 +695,6 @@ impl App {
                     ui.radio_value(&mut self.settings.rotation_autour, CentreRotation::CoinOppose, "Coin opposé")
                         .on_hover_text("Juste hors d'un coin, la boîte tourne autour du coin opposé.");
                 });
-                ui.label(RichText::new("Ctrl tenu pendant le geste : l'autre point fixe. Aussi dans les réglages des outils Sélection et Transformer.").small().weak());
                 if avant != (self.settings.point_fixe, self.settings.rotation_autour) {
                     let _ = self.settings.save();
                 }
@@ -737,7 +749,6 @@ impl App {
                         let _ = self.settings.save();
                     }
                 });
-                ui.label(RichText::new("Vide : le nom de l'utilisateur Windows.").small().weak());
             }
             Groupe::Equipe => self.equipe_prefs_ui(ui),
             Groupe::Generation => self.generation_prefs_ui(ui),
@@ -756,7 +767,6 @@ impl App {
                 if crate::bulles::bulle(r, "Fonctions expérimentales", "Montre le menu Labo : les suggestions sonores, Mon panneau et le banc d'essai du moteur de dessin. Elles sont à l'essai et peuvent changer. Décochée, elles restent dans la palette de commandes (Ctrl+K).", "").changed() {
                     let _ = self.settings.save();
                 }
-                ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer. Rien n'est supprimé quand la case est décochée.").small().weak());
             }
             Groupe::StyletMain => {
                 // Le bouton et la gomme du stylet (`styletlien.rs`) : rallumer pose l'écoute si elle ne l'était pas encore.

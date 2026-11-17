@@ -113,11 +113,11 @@ fn the_duration_of_the_chosen_plans_changes_all_at_once() {
     let avant = photo(&b);
     b.app.board_sel = vec![ids[0], ids[2]];
     b.app.cur_panel = 0;
-    // L'action ouvre la fenêtre, le champ prérempli de la durée d'un plan neuf (2 s = 48 images).
+    // L'action ouvre la fenêtre, le champ prérempli de la durée commune des plans choisis (partie 138 ; avant : celle d'un plan neuf).
     b.app.run_action("montage.duree_plans");
     let dlg = b.app.duree_plans.as_ref().expect("la fenêtre s'ouvre");
     assert_eq!(dlg.ids, vec![ids[0], ids[2]]);
-    assert_eq!(dlg.text, "48");
+    assert_eq!(dlg.text, L.to_string());
     b.chauffer(2);
     assert_eq!(b.app.change_plans_duration(&[ids[0], ids[2]], "20"), Some(2));
     assert_eq!(durees(&b), vec![20, L, 20, L], "seuls les plans choisis changent");

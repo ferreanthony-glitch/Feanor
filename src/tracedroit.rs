@@ -81,18 +81,27 @@ impl App {
         } else {
             self.stroke_to(p, pressure);
         }
+        // Plusieurs calques choisis : la gomme passe aussi sur les autres (`gommemulti.rs`).
+        self.gomme_multi_point(p, pressure);
         self.droit.last = Some(p);
     }
 
     /// Une fois par image, pendant un trait : Maj tenue sans que la souris bouge, le segment suit
     /// quand même la pointe (`hover` : sa place sur la feuille) ; Maj relâchée, le segment est posé.
     pub(crate) fn droit_follow(&mut self, mods: &Modifiers, primary_down: bool, hover: Option<Pos2>, pressure: f32) {
+        // (Plan en Espace 3D : rien là où le regard ne touche pas la carte du calque courant, `App::to_layer_opt`.)
+        let p = if primary_down && self.droit_wanted(mods) { hover.and_then(|stage| self.to_layer_opt(stage)) } else { None };
+        self.droit_follow_calque(mods, primary_down, p, pressure);
+    }
+
+    /// `droit_follow`, la pointe étant déjà ramenée au dessin du calque (`p` ; rien : elle n'est pas sur le dessin). La
+    /// vue Espace 3D passe par ici : elle a son propre regard (`espace3ddessin.rs`).
+    pub(crate) fn droit_follow_calque(&mut self, mods: &Modifiers, primary_down: bool, p: Option<Pos2>, pressure: f32) {
         if !primary_down {
             return;
         }
         if self.droit_wanted(mods) {
-            if let Some(stage) = hover {
-                let p = self.to_layer(stage);
+            if let Some(p) = p {
                 self.droit_aim(p, pressure, mods);
             }
         } else if self.droit.pending() {
@@ -108,19 +117,28 @@ impl App {
             self.droit.last = d.last;
             return;
         };
+        let size = self.current_brush().map_or(4.0, |s| s.size);
+        let step = (size * 0.25).clamp(2.0, 12.0);
+        let len = a.distance(b);
+        let n = ((len / step).ceil() as usize).clamp(1, MAX_POINTS);
+        let (t0, span) = (self.input_time, (len / VITESSE).max(0.02) as f64);
         if self.verase.is_some() {
             // La gomme vectorielle suit elle-même le segment parcouru.
             self.erase_to(b, d.pressure);
         } else if self.stroke.is_some() {
-            let size = self.current_brush().map_or(4.0, |s| s.size);
-            let step = (size * 0.25).clamp(2.0, 12.0);
-            let len = a.distance(b);
-            let n = ((len / step).ceil() as usize).clamp(1, MAX_POINTS);
-            let (t0, span) = (self.input_time, (len / VITESSE).max(0.02) as f64);
             for k in 1..=n {
                 let t = k as f32 / n as f32;
                 self.input_time = t0 + span * t as f64;
                 self.stroke_to(a + (b - a) * t, d.pressure);
+            }
+            self.input_time = t0;
+        }
+        // Plusieurs calques choisis : la gomme suit le même segment sur les autres (`gommemulti.rs`), en points réguliers.
+        if self.gomme_multi.actif() {
+            for k in 1..=n {
+                let t = k as f32 / n as f32;
+                self.input_time = t0 + span * t as f64;
+                self.gomme_multi_point(a + (b - a) * t, d.pressure);
             }
             self.input_time = t0;
         }

@@ -584,8 +584,9 @@ pub fn adapte_calque(l: &mut Layer, ad: &Adaptation) {
         k.t.x *= s;
         k.t.y *= s;
     }
-    // Le chemin de la trajectoire est en pixels de la feuille : il suit.
-    if let Some(t) = &mut l.trajectoire {
+    // Le chemin de la trajectoire est en pixels de la feuille : il suit. (Un chemin tracé dans l'espace est en mètres, dans son
+    // plan : il ne change pas, le cadre mesure toujours autant de mètres. Partie 149.)
+    if let Some(t) = l.trajectoire.as_mut().filter(|t| t.sur_la_feuille()) {
         t.transformer(|p| [p[0] * s, p[1] * s]);
     }
     for e in &mut l.fx {

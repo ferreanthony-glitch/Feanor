@@ -9,7 +9,7 @@
 //!
 //! Maj ajoute à la sélection. Les poignées de la sélection restent utilisables avec cet outil.
 
-use eframe::egui::{self, pos2, Color32, Pos2, RichText};
+use eframe::egui::{self, pos2, Color32, Pos2};
 
 use crate::app::App;
 use crate::document::LayerKind;
@@ -146,12 +146,8 @@ impl App {
     /// Réglages de l'outil, puis les commandes de la sélection.
     pub(crate) fn color_select_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        let note = |ui: &mut egui::Ui, text: &str| {
-            ui.label(RichText::new(text).small().weak());
-        };
-        if self.layer().kind == LayerKind::Vector {
-            note(ui, "Clic sur un trait ou une zone : tous les éléments de sa couleur dans ce dessin. Maj : ajouter.");
-        } else {
+        // (Le mode d'emploi est dans l'animation « La sélection par couleur » et le registre des explications, partie 153.)
+        if self.layer().kind != LayerKind::Vector {
             ui.add(egui::Slider::new(&mut self.color_select.tolerance, 0.0..=1.0).text("Tolérance"));
             crate::bulles::interrupteur(
                 ui,
@@ -160,11 +156,6 @@ impl App {
                 "Pixels voisins seulement",
                 "La zone d'un seul tenant autour du clic ; sinon tous les pixels de cette couleur.",
                 "",
-            );
-            note(
-                ui,
-                "Clic : la zone de cette couleur. Maj : ajouter. Poignées : échelle et rotation ; \
-                 flèches pour déplacer. Échap ou autre outil : poser.",
             );
         }
         ui.separator();

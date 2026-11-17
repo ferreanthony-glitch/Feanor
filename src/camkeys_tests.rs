@@ -3,7 +3,7 @@
 
 use crate::camera::{Camera, CameraKey};
 use crate::camkeys::{
-    between, choose, clamp_delta, clamp_ripple, copy, delete, exists, global_of, live, paste, paste_insert, ripple_frames, shift, CamClip, CamKeyRef, Group, Inserted, NoRoom,
+    apply_moves, between, choose, clamp_free, clamp_ripple, copy, delete, exists, global_of, live, moves, paste, paste_insert, ripple_frames, shift, CamClip, CamKeyRef, Group, Inserted, NoRoom,
     Pasted,
 };
 use crate::document::Document;
@@ -90,39 +90,41 @@ fn group(chosen: &[usize], all: &[usize], len: usize) -> Group {
 }
 
 #[test]
-fn a_single_key_still_moves_between_its_neighbours() {
-    // Plan de 24 images, clés à 0, 10 et 20 (le comportement d'avant les choix multiples).
+fn a_single_key_passes_its_neighbours_but_never_lands_on_them() {
+    // Plan de 24 images, clés à 0, 10 et 20. Depuis le 8 novembre 2026 (partie 129), Maj tenue, une clé passe par-dessus
+    // ses voisines ; elle ne sort pas du plan et ne se pose jamais sur une autre clé.
     let all = [0, 10, 20];
-    assert_eq!(clamp_delta(&[group(&[0], &all, 24)], 50), 9, "la première s'arrête avant la suivante");
-    assert_eq!(clamp_delta(&[group(&[10], &all, 24)], 4), 4);
-    assert_eq!(clamp_delta(&[group(&[10], &all, 24)], 50), 9, "elle s'arrête avant la clé suivante");
-    assert_eq!(clamp_delta(&[group(&[10], &all, 24)], -50), -9, "et après la précédente");
-    assert_eq!(clamp_delta(&[group(&[20], &all, 24)], 50), 3, "la dernière va jusqu'à la fin du plan (image 23)");
-    assert_eq!(clamp_delta(&[group(&[0], &all, 24)], -5), 0, "pas avant l'image 0");
+    assert_eq!(clamp_free(&[group(&[0], &all, 24)], 50), 23, "la première passe les deux autres, jusqu'à la dernière image");
+    assert_eq!(clamp_free(&[group(&[10], &all, 24)], 4), 4);
+    assert_eq!(clamp_free(&[group(&[10], &all, 24)], 10), 9, "sur la clé 20 : elle attend juste avant");
+    assert_eq!(clamp_free(&[group(&[10], &all, 24)], 11), 11, "au-delà : elle est passée");
+    assert_eq!(clamp_free(&[group(&[10], &all, 24)], -10), -9, "sur la clé 0 : juste après");
+    assert_eq!(clamp_free(&[group(&[20], &all, 24)], 50), 3, "la dernière s'arrête à la fin du plan (image 23)");
+    assert_eq!(clamp_free(&[group(&[0], &all, 24)], -5), 0, "pas avant l'image 0");
+    // La dernière image est prise : la clé s'arrête juste avant.
+    assert_eq!(clamp_free(&[group(&[5], &[5, 23], 24)], 50), 17);
     // Une seule clé : tout le plan.
-    assert_eq!(clamp_delta(&[group(&[3], &[3], 24)], 50), 20);
-    assert_eq!(clamp_delta(&[group(&[3], &[3], 24)], -50), -3);
+    assert_eq!(clamp_free(&[group(&[3], &[3], 24)], 50), 20);
+    assert_eq!(clamp_free(&[group(&[3], &[3], 24)], -50), -3);
     // Rien de choisi : rien ne bouge.
-    assert_eq!(clamp_delta(&[], 5), 0);
-    assert_eq!(clamp_delta(&[group(&[], &all, 24)], 5), 0);
+    assert_eq!(clamp_free(&[], 5), 0);
+    assert_eq!(clamp_free(&[group(&[], &all, 24)], 5), 0);
 }
 
 #[test]
-fn chosen_keys_move_together_without_passing_an_unchosen_one() {
-    // Clés 2, 4, 8, 15 ; 4 et 8 choisies : elles avancent ensemble jusqu'à la 15 (non choisie) et reculent jusqu'à la 2.
+fn chosen_keys_move_together_and_jump_over_unchosen_ones() {
+    // Clés 2, 4, 8, 15 ; 4 et 8 choisies : elles avancent ensemble, sans que l'une tombe sur la 15.
     let all = [2, 4, 8, 15];
     let g = [group(&[4, 8], &all, 24)];
-    assert_eq!(clamp_delta(&g, 99), 6, "8 + 6 = 14 : juste avant la 15");
-    assert_eq!(clamp_delta(&g, -99), -1, "4 − 1 = 3 : juste après la 2");
-    // Choisies de part et d'autre de clés non choisies : le plus serré décide.
-    let g = [group(&[2, 15], &all, 24)];
-    assert_eq!(clamp_delta(&g, 1), 1, "la 2 avance d'un cran (jusqu'à 3, avant la 4), la 15 aussi");
-    assert_eq!(clamp_delta(&g, 5), 1, "la 2 bute sur la 4 non choisie");
-    assert_eq!(clamp_delta(&g, -5), -2, "la 2 s'arrête à l'image 0");
-    // Plusieurs plans : le plus serré décide.
+    assert_eq!(clamp_free(&g, 7), 6, "8 + 7 = 15 est pris : 6");
+    assert_eq!(clamp_free(&g, 11), 10, "4 + 11 = 15 est pris : 10");
+    assert_eq!(clamp_free(&g, 99), 15, "8 + 15 = 23 : la fin du plan");
+    assert_eq!(clamp_free(&g, -99), -4, "4 − 4 = 0 ; la 2 est passée");
+    assert_eq!(clamp_free(&g, -2), -1, "4 − 2 = 2 est pris : −1 et −3 sont aussi près, le plus court gagne");
+    // Plusieurs plans : les bornes du plus serré.
     let g = [group(&[5], &[5], 24), group(&[3], &[3], 8)];
-    assert_eq!(clamp_delta(&g, 50), 4, "le plan de 8 images s'arrête à l'image 7");
-    assert_eq!(clamp_delta(&g, -50), -3);
+    assert_eq!(clamp_free(&g, 50), 4, "le plan de 8 images s'arrête à l'image 7");
+    assert_eq!(clamp_free(&g, -50), -3);
 }
 
 #[test]
@@ -277,9 +279,9 @@ fn every_edit_is_one_named_undo_step_that_restores_the_keys() {
 fn drag(doc: &mut Document, pi: usize, chosen: &[usize], want: isize, ripple: bool) -> isize {
     let all: Vec<usize> = doc.panels[pi].camera.iter().map(|k| k.frame).collect();
     let g = [Group { chosen: chosen.to_vec(), all: all.clone(), len: 24 }];
-    let delta = if ripple { clamp_ripple(&g, want) } else { clamp_delta(&g, want) };
-    let moving = if ripple { ripple_frames(&all, chosen) } else { chosen.to_vec() };
-    shift(&mut doc.panels[pi].camera, &moving, delta);
+    let delta = if ripple { clamp_ripple(&g, want) } else { clamp_free(&g, want) };
+    let mv = moves(&g[0], delta, ripple);
+    doc.panels[pi].camera = apply_moves(&doc.panels[pi].camera, &mv);
     delta
 }
 
@@ -310,13 +312,20 @@ fn a_ripple_stops_at_the_previous_key_and_at_the_end_of_the_plan() {
     let all = [2, 6, 12, 18];
     let g = |chosen: &[usize]| [group(chosen, &all, 24)];
     assert_eq!(clamp_ripple(&g(&[6]), -50), -3, "la clé choisie s'arrête juste après la clé d'avant (2)");
-    assert_eq!(clamp_ripple(&g(&[6]), 50), 5, "la dernière clé du plan (18) va jusqu'à l'image 23");
+    // Vers la droite, les clés d'après se tassent contre la fin du plan (partie 129) : la 6 va jusqu'à 21, la 12 en 22, la 18 en 23.
+    assert_eq!(clamp_ripple(&g(&[6]), 50), 15, "trois clés qui bougent : la prise s'arrête à 23 − 2");
+    assert_eq!(moves(&g(&[6])[0], 15, true), vec![(6, 21), (12, 22), (18, 23)]);
+    assert_eq!(moves(&g(&[6])[0], 8, true), vec![(6, 14), (12, 20), (18, 23)], "seule la 18 bute sur la fin");
     assert_eq!(clamp_ripple(&g(&[2]), -50), -2, "la première ne passe pas l'image 0");
     assert_eq!(clamp_ripple(&g(&[12]), -50), -5);
     assert_eq!(clamp_ripple(&g(&[18]), 50), 5);
+    // Une clé sur la dernière image ne bloque plus celles d'avant (capture 114 d'Anthony).
+    let fin = [2, 6, 12, 23];
+    assert_eq!(clamp_ripple(&[group(&[12], &fin, 24)], 5), 5);
+    assert_eq!(moves(&group(&[12], &fin, 24), 5, true), vec![(12, 17), (23, 23)]);
     // Plusieurs plans : le plus serré décide.
     let both = [group(&[6], &all, 24), group(&[3], &[3, 4], 8)];
-    assert_eq!(clamp_ripple(&both, 50), 3, "le plan de 8 images : sa dernière clé (4) s'arrête à l'image 7");
+    assert_eq!(clamp_ripple(&both, 50), 3, "le plan de 8 images : sa clé 4 en 7, la 3 en 6");
     assert_eq!(clamp_ripple(&both, -50), -3, "la clé 6 reste après la 2 (−3) ; la clé 3 irait jusqu'à l'image 0 (−3)");
     assert_eq!(clamp_ripple(&[], 5), 0);
     assert_eq!(ripple_frames(&all, &[6, 18]), vec![6, 12, 18]);
@@ -329,14 +338,17 @@ fn shift_held_moves_only_the_chosen_keys_between_their_neighbours() {
     keys(&mut doc, 0, &[2, 6, 12, 18]);
     assert_eq!(drag(&mut doc, 0, &[6], 3, false), 3);
     assert_eq!(frames(&doc, 0), vec![2, 9, 12, 18], "les clés d'après ne bougent pas");
-    // Elle ne passe pas par-dessus la voisine.
+    // Elle passe par-dessus les voisines (partie 129), jusqu'au bout du plan, sans en écraser aucune.
     let mut doc = doc3();
     keys(&mut doc, 0, &[2, 6, 12, 18]);
-    assert_eq!(drag(&mut doc, 0, &[6], 50, false), 5, "juste avant la 12");
-    assert_eq!(drag(&mut doc, 0, &[11], -50, false), -8, "juste après la 2 (la clé a bougé en 11)");
-    assert_eq!(frames(&doc, 0), vec![2, 3, 12, 18]);
+    assert_eq!(drag(&mut doc, 0, &[6], 6, false), 5, "sur la 12 : juste avant");
+    assert_eq!(drag(&mut doc, 0, &[11], 9, false), 9, "elle passe la 12 et arrive en 20, après la 18");
+    assert_eq!(frames(&doc, 0), vec![2, 12, 18, 20]);
+    assert_eq!(drag(&mut doc, 0, &[20], -50, false), -20, "jusqu'à l'image 0, par-dessus les trois autres");
+    assert_eq!(frames(&doc, 0), vec![0, 2, 12, 18]);
+    assert_eq!(doc.panels[0].camera[0].cam.x, 6.0, "elle garde sa caméra");
     // Un Maj + clic sans mouvement reste le choix d'une plage : `choose` avec l'ancre.
-    let (a, c) = (at(&doc, 0, 3), at(&doc, 0, 18));
+    let (a, c) = (at(&doc, 0, 2), at(&doc, 0, 18));
     let (chosen, _) = choose(&[a], Some(a), c, false, Some(between(&doc, a, c)));
     assert_eq!(chosen, vec![a, at(&doc, 0, 12), c]);
 }

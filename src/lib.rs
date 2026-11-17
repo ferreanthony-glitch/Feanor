@@ -15,6 +15,22 @@ mod accueil_tests;
 mod aidetouches;
 #[cfg(test)]
 mod aidetouches_tests;
+// L'aide animée (partie 153) : les animations des outils à la place des textes gris, et le registre des explications.
+mod aideanim;
+#[cfg(test)]
+mod aideanim_relecture_tests;
+#[cfg(test)]
+mod aideanim_tests;
+mod aidecatalogue;
+mod aidefenetres;
+// La fenêtre flottante de l'aide animée, à côté de l'outil (partie 155).
+mod aideflottante;
+#[cfg(test)]
+mod aideflottante_tests;
+mod aidegestes;
+mod aideregistre;
+mod aidetextes;
+mod aidevignettes;
 mod concentration;
 #[cfg(test)]
 mod concentration_tests;
@@ -72,6 +88,14 @@ mod collage;
 #[cfg(test)]
 mod collage_tests;
 mod enregistrement;
+// On n'enregistre plus (2026-11-10) : l'écriture continue du projet, et les jalons pour y revenir.
+mod continu;
+#[cfg(test)]
+mod continu_tests;
+mod jalons;
+#[cfg(test)]
+mod jalons_tests;
+mod jalonsui;
 mod remplacer;
 #[cfg(test)]
 mod remplacer_tests;
@@ -229,6 +253,26 @@ mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
+// La barre d'actions des calques, sous la colonne des calques (partie 160).
+mod barrecalques;
+#[cfg(test)]
+mod panneaux_fins_tests;
+// Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
+mod panneauxvisuels;
+mod panneauxvisuelsui;
+#[cfg(test)]
+mod panneauxvisuels_tests;
+// La Couleur, les Effets et la ligne du calque plus visuels (partie 164) : le titre « Précis », les taches, les pastilles des modes,
+// les vignettes des effets (`visuels164`) ; ce qu'ils changent est dans `colorui`, `fxui` et `layerheads`.
+mod visuels164;
+#[cfg(test)]
+mod visuels164_tests;
+// L'avant | après des Effets montre le vrai calque (partie 165), calculé en petit au fil de fond du cache des effets.
+mod avantapres165;
+#[cfg(test)]
+mod avantapres165_tests;
+#[cfg(test)]
+mod altclic_calque_tests;
 // Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
 mod monpanneau;
 mod monpanneauui;
@@ -276,6 +320,22 @@ mod fondfil_tests;
 mod fondui;
 mod aplatsur;
 mod aplatmulti;
+mod gommemulti;
+mod deformmulti;
+mod nouvellescles;
+mod accroche;
+#[cfg(test)]
+mod accroche_tests;
+#[cfg(test)]
+mod camerasuite_tests;
+mod choixtout;
+mod choixcalques;
+#[cfg(test)]
+mod selection_tout_2_tests;
+#[cfg(test)]
+mod multicalques_tests;
+#[cfg(test)]
+mod vignettes_ctrl_a_tests;
 mod aplatcouleur;
 mod aplatperso;
 #[cfg(test)]
@@ -337,6 +397,13 @@ mod horschamptex;
 mod caseprend;
 #[cfg(test)]
 mod caseprend_tests;
+// La caméra se souvient (partie 131, 2026-11-09) : un trait appartient tout entier à la case où le stylet s'est posé (`horschamp.rs`) ; la
+// gomme de la planche efface aussi ce qui dépasse des cases.
+mod gommedebord;
+#[cfg(test)]
+mod camera_souvient_tests;
+#[cfg(test)]
+mod souvient_retours_tests;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
@@ -424,6 +491,9 @@ mod camfxui;
 mod camkeys;
 #[cfg(test)]
 mod camkeys_tests;
+// Retours d'Anthony du 8 novembre sur la caméra : la clé qui ne se poussait pas, les effets vivants (partie 129).
+#[cfg(test)]
+mod camera_retours_tests;
 mod lissage;
 #[cfg(test)]
 mod lissage_camera_tests;
@@ -623,6 +693,10 @@ pub mod demarrage;
 // qui l'enregistrent, le rouvrent, le font tourner dans l'application et lui jettent des fichiers abîmés.
 #[cfg(test)]
 mod fiabilite_fixture;
+// Les essais écrivent dans un dossier temporaire propre à leur processus, effacé quand il finit (2026-11-17) : plus rien
+// ne reste dans le %TEMP% de Windows.
+#[cfg(test)]
+mod essais_temp;
 // Essais au hasard des gestes dans l'application (passe de débogage du 2026-10-22).
 #[cfg(test)]
 mod hasard_tests;
@@ -650,6 +724,11 @@ mod timeline_cles_tests;
 // Alt + glisser les clés de dessins du montage (dupliquer), Ctrl + Maj (réordonner).
 #[cfg(test)]
 mod montage_alt_tests;
+// Glisser des clés avant ou après une autre clé ; étirer les dernières clés ; durée des clés choisies (partie 138).
+mod clesordre;
+mod clesduree;
+#[cfg(test)]
+mod clesglisser_tests;
 // Durée d'un nouveau plan, durée des plans choisis.
 mod dureeplans;
 #[cfg(test)]
@@ -883,6 +962,42 @@ pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
 mod poskeysmontage_tests;
+// Les boutons de clés des réglages de l'Espace 3D (partie 145 ; dans le panneau Espace 3D depuis la partie 150) : caméra du plan et position des cartes.
+mod espace3dcles;
+#[cfg(test)]
+mod espace3dcles_tests;
+// Dessiner dans la vue Espace 3D (partie 146) : l'outil décide, le trait tombe sur la carte du calque courant.
+mod espace3ddessin;
+#[cfg(test)]
+mod espace3ddessin_tests;
+// La Trajectoire dans l'Espace 3D (partie 149) : ce qui est choisi (cartes, caméra) suit un chemin tracé sur une surface.
+mod trajectoire3d;
+#[cfg(test)]
+mod trajectoire3d_tests;
+// Le curseur « Lissage » de l'outil Trajectoire, sur la feuille et dans l'Espace 3D (partie 151).
+mod trajectoirelisse;
+#[cfg(test)]
+mod trajectoirelisse_tests;
+// Maj + un trait depuis un bout du chemin : il le prolonge (partie 151).
+mod trajectoireprolonge;
+#[cfg(test)]
+mod trajectoireprolonge_tests;
+// Ctrl+clic sur le chemin : une poignée ; la tirer tord le chemin en douceur ; dans l'espace, ses flèches x, y, z (partie 154).
+mod trajectoirepoignees;
+#[cfg(test)]
+mod trajectoirepoignees_tests;
+// Le panneau « Espace 3D » (parties 150 et 152) : les réglages de la vue, sortis du panneau Réglages ; un onglet à côté de Réglages, qui passe devant quand la vue s'ouvre.
+mod espace3dpanneau;
+#[cfg(test)]
+mod espace3dpanneau_tests;
+// L'environnement de l'Espace 3D (fond, maillage) et les calques 3D (sol, mur, ciel, leur grille de repère) : partie 157.
+mod espace3ddecor;
+#[cfg(test)]
+mod espace3ddecor_tests;
+// La vue Espace 3D met d'elle-même le plan en Espace 3D, et le maillage tout près de la scène : partie 158.
+mod espace3ddirect;
+#[cfg(test)]
+mod espace3ddirect_tests;
 pub mod opacitecles;
 mod opacitecleselui;
 #[cfg(test)]
@@ -913,6 +1028,14 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+#[cfg(test)]
+mod calques_timeline_tests;
+// Glisser des calques dans un dossier (partie 139) : `folders::poser`, `layerheads::cible_du_glisse`.
+#[cfg(test)]
+mod dossierglisser_tests;
+// Les calques de la timeline prennent la place du panneau (partie 140) : `pistes::agrandir`.
+#[cfg(test)]
+mod calquesplace_tests;
 mod clesplan;
 #[cfg(test)]
 mod timeline_repliee_tests;
@@ -1110,9 +1233,38 @@ mod espace3dmath;
 #[cfg(test)]
 mod espace3dmath_tests;
 mod espace3dui;
+// Les graphiques du panneau Espace 3D, qu'on manipule (partie 162).
+mod espace3dgraphes;
+#[cfg(test)]
+mod espace3dgraphes_tests;
 mod espace3dview;
+// Une, deux ou quatre vues de l'Espace 3D (`docs/INTERFACE.md` partie 144).
+mod espace3dvues;
+#[cfg(test)]
+mod espace3dvues_tests;
+#[cfg(test)]
+mod espace3dvues_suite_tests;
+// La fusion des vues multiples dans la branche de la Trajectoire dans l'espace (partie 151).
+#[cfg(test)]
+mod espace3dvues_fusion_tests;
 #[cfg(test)]
 mod espace3d_tests;
+// La tenue de la vue Espace 3D quand on s'y promène (partie 147) : jamais de morceau sans triangle vers la carte graphique.
+#[cfg(test)]
+mod espace3dvue_tests;
+// Retours d'Anthony sur la Trajectoire dans l'Espace 3D (partie 152) : la caméra choisie seule, et sa piste choisie dans la timeline.
+#[cfg(test)]
+mod trajectoire3d_camera_tests;
+// Partie 152 aussi : en « clés d'images », une carte qui suit un chemin dans l'espace a une clé de dessin à chaque jalon.
+#[cfg(test)]
+mod trajectoire3d_images_tests;
+// Partie 152 toujours : une clé de dessin posée à la main entre deux jalons n'est jamais remplacée par la trajectoire.
+#[cfg(test)]
+mod trajectoire_main_tests;
+// Partie 152 encore : l'outil Sélection (son lasso) dans la vue Espace 3D, sur la carte du calque courant.
+mod espace3dlasso;
+#[cfg(test)]
+mod espace3dlasso_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;
@@ -1141,6 +1293,9 @@ pub mod video;
 mod video_tests;
 mod videoui;
 mod view;
+mod vuenette;
+#[cfg(test)]
+mod vuenette_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;
@@ -1174,6 +1329,10 @@ mod vignettes_selection_relecture_tests;
 #[cfg(test)]
 mod horschamptex_tests;
 mod vignettesel;
+mod vignetteselbmp;
+mod planchebitmap;
+#[cfg(test)]
+mod vignettes_bitmap_tests;
 mod workspaceui;
 mod xsheet;
 #[cfg(test)]

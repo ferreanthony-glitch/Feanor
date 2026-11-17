@@ -45,11 +45,14 @@ impl App {
         // (Ni pendant un enregistrement : la copie recopierait des dessins que le dossier du projet n'a
         // pas encore, `enregistrement.rs`.)
         let hold = self.stroke.is_some() || self.degrade_en_retouche() || ctx.input(|i| i.pointer.any_down()) || self.export_job.is_some() || self.save_en_cours();
+        // (Un projet que FEANOR écrit tout seul n'a pas besoin de copie de secours : son dossier est à jour, `continu.rs`. Elle
+        // reprend son rôle si l'écriture continue se met en pause.)
+        let a_copier = self.modified && !self.continu_actif();
         let Some(rec) = &mut self.recovery else { return };
         let snap = Snapshot {
             doc: &self.doc,
             serial: self.history.serial(),
-            modified: self.modified,
+            modified: a_copier,
             title,
             project: self.path.clone(),
             project_written: &self.written,
@@ -62,7 +65,7 @@ impl App {
         // (Une copie demandée tout de suite attend la fin de celle qui s'écrit : on revient vite pour la lancer.)
         if rec.busy() || rec.en_attente() {
             ctx.request_repaint_after(Duration::from_millis(200));
-        } else if let (Some(i), true) = (interval, self.modified) {
+        } else if let (Some(i), true) = (interval, a_copier) {
             ctx.request_repaint_after(i.min(Duration::from_secs(10)));
         }
     }
@@ -211,11 +214,17 @@ impl App {
                 self.path = o.info.project.as_deref().map(crate::project::manifeste_a_ouvrir).filter(|p| p.parent().is_some_and(|d| d.exists()));
                 self.modified = true;
                 let _ = std::fs::remove_dir_all(&o.dir);
-                self.status = format!(
-                    "Copie de secours de « {} » ouverte. Enregistre pour la garder{}.",
-                    o.info.title,
-                    if self.path.is_some() { " dans le projet" } else { " (« Enregistrer sous »)" }
-                );
+                // L'écriture continue va mettre cette copie dans le projet : ce que le projet a sur le disque est d'abord gardé dans un jalon.
+                self.jalon_d_ouverture();
+                self.status = if self.continu_actif() {
+                    format!("Copie de secours de « {} » ouverte : elle s'écrit dans le projet. Ce que le projet avait avant est gardé dans un jalon (Fichier > Jalons…).", o.info.title)
+                } else {
+                    format!(
+                        "Copie de secours de « {} » ouverte. Enregistre pour la garder{}.",
+                        o.info.title,
+                        if self.path.is_some() { " dans le projet" } else { " (« Enregistrer sous »)" }
+                    )
+                };
             }
             Err(e) => self.status = format!("Copie de secours illisible : {e}"),
         }

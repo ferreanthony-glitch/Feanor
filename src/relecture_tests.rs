@@ -791,6 +791,8 @@ fn the_pdf_export_window_offers_the_comments_option() {
     app.doc.add_comment(a, 1, "A", 1);
     app.run_action("fichier.exporter_pdf");
     assert!(app.export_dialog.as_ref().is_some_and(|s| s.format == crate::export::Format::Pdf));
+    // (Partie 163.4 : les réglages de la fenêtre d'export sont sous « Précis ».)
+    crate::panneauxvisuels::ouvrir_precis(&ctx, "Exporter", true);
     let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1280.0, 800.0))), time: Some(0.0), ..Default::default() };
     fn collect(shape: &egui::epaint::Shape, out: &mut Vec<String>) {
         match shape {

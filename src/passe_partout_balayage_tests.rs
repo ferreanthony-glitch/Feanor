@@ -118,8 +118,12 @@ fn noirs(b: &Banc) -> (Vec<Rect>, Vec<[Pos2; 3]>) {
     (rects, tris)
 }
 
+/// (Un triangle sans aire, ses trois sommets confondus, ne couvre rien à l'écran ; `dans_polygone` le disait pourtant autour de
+/// n'importe quel point. Il en vient d'un morceau du passe-partout réduit à un point, à certaines tailles de planche : à la largeur de
+/// vue de la partie 161, une rangée de faux « couvert » en diagonale à travers une case.)
 fn dans_triangle(t: &[Pos2; 3], p: Pos2) -> bool {
-    dans_polygone(t, p)
+    let aire = ((t[1] - t[0]).x * (t[2] - t[0]).y - (t[1] - t[0]).y * (t[2] - t[0]).x).abs() * 0.5;
+    aire > 1e-3 && dans_polygone(t, p)
 }
 
 #[test]
@@ -133,6 +137,8 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
     let xf = b.app.vignettes.xf;
     let vue = b.app.vignettes.view;
     let (rects, tris) = noirs(&b);
+    // (La roue du panneau Couleur, hors de la vue, n'en est pas.)
+    let tris: Vec<_> = tris.into_iter().filter(|t| t.iter().any(|q| vue.contains(*q))).collect();
     assert!(!tris.is_empty(), "un plan à mouvement : le passe-partout est un maillage découpé autour de la zone balayée");
     let couvert = |p: Pos2| rects.iter().any(|r| r.contains(p)) || tris.iter().any(|t| dans_triangle(t, p));
     // Les trous : les cases et les polygones balayés, à l'écran.
@@ -148,6 +154,9 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
             if bord > 1.5 {
                 if trou == couvert(p) {
                     faux += 1;
+                    if faux <= 3 {
+                        println!("FAUX {p:?} : {} (bord à {bord:.1})", if trou { "couvert dans un trou" } else { "ouvert hors des trous" });
+                    }
                 }
                 if trou { ouverts += 1 } else { couverts += 1 }
             }
@@ -167,6 +176,8 @@ fn the_screen_passe_partout_opens_on_everything_the_camera_sweeps_pixel_by_pixel
     b.app.run_action("vignettes.marie_louise");
     b.chauffer(3);
     let (r2, t2) = noirs(&b);
+    // (Dans la vue seulement : la roue du panneau Couleur, visible depuis la partie 164.1, est un maillage qui part du noir.)
+    let t2: Vec<_> = t2.into_iter().filter(|t| t.iter().any(|q| vue.contains(*q))).collect();
     assert!(t2.is_empty() && r2.len() <= rects.len(), "éteint : plus de passe-partout");
 }
 

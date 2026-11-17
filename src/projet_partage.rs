@@ -18,7 +18,25 @@ use crate::rognage::Reserve;
 
 /// Format du fichier d'un plan (`plans/<n°>.json`).
 pub(crate) const FORMAT_PLAN: &str = "shot-plan";
-pub(crate) const VERSION_PLAN: u32 = 1;
+/// 2 (format 56 du projet, `docs/INTERFACE.md` partie 159) : le plan peut porter `camera_libre`, `ordre_distance`, un calque
+/// `profondeur_bornee` ; un plan écrit en 1 se lit comme un plan d'un projet 55 (`PanelEntry::format_ancien`). Une version
+/// qui ne connaît que 1 refuse un plan écrit en 2, au lieu de perdre ces champs sans rien dire.
+pub(crate) const VERSION_PLAN: u32 = 2;
+
+/// Un plan lu d'un fichier de plan écrit avant le format 56 : son entrée, et celles de ses versions, se lisent comme alors.
+fn marquer_ancien(f: &mut PlanFichier) {
+    if f.version >= 2 {
+        return;
+    }
+    f.contenu.panneau.format_ancien = true;
+    if let Some(v) = f.contenu.versions.as_mut() {
+        for a in &mut v.autres {
+            if let Some(o) = a.entree.as_object_mut() {
+                o.insert("format_ancien".into(), serde_json::Value::Bool(true));
+            }
+        }
+    }
+}
 /// Un fichier de plan plus gros qu'ici n'est pas lu (un fichier abîmé ne remplit pas la mémoire).
 const PLAN_MAX: usize = 400 * 1024 * 1024;
 
@@ -236,7 +254,8 @@ impl PlanCharge {
 /// protections (un dessin manquant ou abîmé est un avertissement). Sur un fil de fond.
 pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], quick: bool) -> Result<PlanCharge, String> {
     let hash_fichier = empreinte::de_octets(octets);
-    let fichier = PlanFichier::lire(octets)?;
+    let mut fichier = PlanFichier::lire(octets)?;
+    marquer_ancien(&mut fichier);
     if fichier.plan != plan {
         return Err(format!("le fichier du plan {plan} dit être le plan {}", fichier.plan));
     }
@@ -306,6 +325,8 @@ fn manifest_de_tete(tete: &Tete, sequences: Vec<SequenceEntry>, hors: Vec<u64>) 
         proprietes: PropertiesEntry::default(),
         dessins_hors: hors,
         partage: None,
+        vues_3d: None,
+        environnement_3d: None,
     }
 }
 
@@ -559,7 +580,8 @@ pub(super) fn ouvrir(mut structure: Manifest, dir: &Path, quick: bool, progress:
                 return Err(format!("le plan {plan} est cité deux fois par la structure du projet partagé"));
             }
             match lu {
-                Ok((f, hash, marque, pas_encore)) => {
+                Ok((mut f, hash, marque, pas_encore)) => {
+                    marquer_ancien(&mut f);
                     let mut p = f.contenu.panneau;
                     p.id = plan;
                     hors_total.extend(f.contenu.hors.iter().copied());
@@ -771,6 +793,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.variantes = if variantes { variantes_octets(doc)? } else { None };
@@ -809,6 +832,7 @@ impl SaveJob {
             sound_fx: None,
             personnages: None,
             annotations: None,
+            planche_bitmap: None,
             scenario: None,
             sons_proposes: None,
             references: Default::default(),
@@ -839,6 +863,14 @@ impl SaveJob {
         let mut resultat = ResultatPartage::default();
         let mut count = 0;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        // La couche bitmap de la planche (avec le montage, donc avec le jeton) : premier passage avant les dessins, comme pour un projet seul (rien ne se
+        // perd si l'enregistrement est coupé) ; le dernier passage, qui retire ce que rien ne cite, avec les annexes du montage.
+        let mut bitmap_ecrit = false;
+        if travail.ctx.jeton.is_some() && travail.structure.is_some() {
+            if let Some(b) = self.planche_bitmap.as_ref() {
+                bitmap_ecrit = crate::planchebitmap::ecrire(&dir, b, false)? > 0;
+            }
+        }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
         }
@@ -918,7 +950,14 @@ impl SaveJob {
         }
         // Le montage, si je tiens le jeton.
         if let (Some(manifest), Some(revision_lue)) = (travail.structure.as_mut(), travail.ctx.jeton) {
-            let mut change = false;
+            // (La couche bitmap de la planche, à côté des annotations : `planchebitmap.rs`.)
+            // (Toujours le dernier passage, même si le premier a déjà écrit.)
+            let dernier = match self.planche_bitmap.as_ref() {
+                Some(b) => crate::planchebitmap::ecrire(&dir, b, true)? > 0,
+                None => false,
+            };
+            let bitmap_ecrit = bitmap_ecrit || dernier;
+            let mut change = bitmap_ecrit;
             let mut ecrire = |path: PathBuf, bytes: Option<&[u8]>, lisible: &dyn Fn(&str) -> bool| -> Result<(), String> {
                 let identique = match (bytes, fs::read(&path)) {
                     (Some(b), Ok(actuel)) => actuel == b,

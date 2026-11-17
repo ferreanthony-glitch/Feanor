@@ -37,11 +37,13 @@ pub(crate) struct Confort {
     pub palette_ouverte: bool,
     /// Les images de l'accueil : le tirage de l'apparition en cours et les miniatures des Préférences (`accueilimages.rs`).
     pub accueil: crate::accueilimages::AccueilImages,
+    /// L'aide animée : la vignette de « Réglages » et le registre des explications (`aideanim.rs`, partie 153).
+    pub aide: crate::aideanim::Joueur,
 }
 
 impl Confort {
     pub(crate) fn new(reel: bool) -> Self {
-        Confort { conseils_actifs: reel, conseils_max_seance: 1, ..Default::default() }
+        Confort { conseils_actifs: reel, conseils_max_seance: 1, aide: crate::aideanim::Joueur::new(reel), ..Default::default() }
     }
 }
 
@@ -55,7 +57,8 @@ impl crate::app::App {
             "aide.conseils" => self.revoir_les_conseils(),
             "aide.visite" => self.visite_lancer(),
             "aide.regler_stylet" => self.ouvrir_reglage_stylet(),
-            _ => return false,
+            // L'aide animée : « Afficher les explications », le registre (`aideanim.rs`).
+            _ => return self.aide_action(action),
         }
         true
     }

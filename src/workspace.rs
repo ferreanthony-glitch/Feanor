@@ -189,7 +189,7 @@ impl Layout {
         let d = self.dock_layout();
         Layout {
             tools: d.contains(Pane::ToolOptions),
-            sheet: d.contains(Pane::Layers) || d.contains(Pane::Sheet),
+            sheet: d.contains(Pane::Effects) || d.contains(Pane::Sheet),
             strip: d.contains(Pane::Montage),
             panneaux: None,
             ..Layout::default()

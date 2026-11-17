@@ -58,6 +58,11 @@ impl Miroirs {
     pub(crate) fn est_vide(&self) -> bool {
         self.liste.is_empty()
     }
+
+    /// Le dessin `cel` reçoit déjà le trait en cours (la gomme sur plusieurs calques ne le reprend pas, `gommemulti.rs`).
+    pub(crate) fn contient(&self, cel: CelId) -> bool {
+        self.liste.iter().any(|m| m.cel == cel)
+    }
 }
 
 /// Ce que le fil de travail doit faire sur l'aplat d'une clé.
@@ -183,12 +188,14 @@ pub(crate) struct Travaux {
     poses: usize,
     /// Le travail en route est un changement de couleur (`aplatcouleur.rs`) : pas de phrase « zone posée » à son arrivée.
     silencieux: bool,
+    /// Des résultats arrivés pendant qu'on dessine sur leur dessin : posés à la fin du geste (ils comptent encore dans `en_route`).
+    differes: Vec<Option<Retour>>,
 }
 
 impl Default for Travaux {
     fn default() -> Self {
         let (tx, rx) = channel();
-        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0, silencieux: false }
+        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0, silencieux: false, differes: Vec::new() }
     }
 }
 
@@ -457,11 +464,25 @@ impl App {
     pub(crate) fn poll_aplat_multi(&mut self) {
         // (L'aplat intelligent, platintel.rs : ses calculs arrivent par ici aussi.)
         self.poll_intel(false);
+        // (La gomme sur les clés qu'on ne voit pas, `gommemulti.rs` : ses calculs arrivent par ici aussi.)
+        self.poll_gomme_multi();
         if self.aplat_travaux.en_route == 0 {
             return;
         }
-        let arrives: Vec<Option<Retour>> = self.aplat_travaux.rx.try_iter().collect();
+        let mut arrives: Vec<Option<Retour>> = std::mem::take(&mut self.aplat_travaux.differes);
+        arrives.extend(self.aplat_travaux.rx.try_iter());
         for r in arrives {
+            // Un résultat pour un dessin qu'on est en train de toucher (un trait en cours) attend la fin du geste : posé maintenant,
+            // il écraserait le trait, dont la version ne monte qu'au lâcher (partie 132, relecture).
+            let cel = match &r {
+                Some(Retour::Rempli(x)) => Some(x.cel),
+                Some(Retour::Retenu { cel, .. }) => Some(*cel),
+                None => None,
+            };
+            if cel.is_some_and(|c| self.cel_busy(c)) {
+                self.aplat_travaux.differes.push(r);
+                continue;
+            }
             self.aplat_travaux.en_route = self.aplat_travaux.en_route.saturating_sub(1);
             match r {
                 None => {}
@@ -588,6 +609,12 @@ impl App {
             std::thread::sleep(std::time::Duration::from_millis(5));
             self.poll_intel(true);
             self.poll_aplat_multi();
+            // (Ne restent que des résultats retenus par un trait en cours sur leur dessin : ils seront posés à sa fin.)
+            if self.aplat_travaux.en_route > 0 && self.aplat_travaux.en_route == self.aplat_travaux.differes.len() && !self.intel_occupe() {
+                break;
+            }
         }
+        // (Et la gomme sur les clés qu'on ne voit pas, `gommemulti.rs` : le fichier a le geste entier.)
+        self.attendre_gomme_multi();
     }
 }

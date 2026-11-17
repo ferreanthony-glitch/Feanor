@@ -578,6 +578,11 @@ pub struct App {
     pub(crate) format_custom: bool,
     /// Espace 3D (`espace3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes choisies, vue.
     pub(crate) espace3d: crate::espace3dui::Espace3dState,
+    /// Dessiner dans la vue Espace 3D (`espace3ddessin.rs`, partie 146) : le pointeur dessine ou manipule, le regard de la vue.
+    pub(crate) e3d: crate::espace3ddessin::Dessin3d,
+    /// Le panneau « Espace 3D » suit la vue (`espace3dpanneau.rs`, partie 150) : la vue était-elle montrée à la dernière
+    /// image, et l'onglet que le panneau a remplacé devant son groupe quand elle s'est ouverte.
+    pub(crate) e3_panneau: crate::espace3dpanneau::Suivi,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -629,6 +634,10 @@ pub struct App {
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
     pub(crate) recovery: Option<crate::recovery::Recovery>,
+    /// L'écriture continue du projet (`continu.rs`) : depuis quand il attend, sa pause, le jalon qui se pose.
+    pub(crate) continu: crate::continu::Continu,
+    /// La fenêtre « Jalons » du projet (`jalonsui.rs`).
+    pub(crate) jalons_ui: Option<crate::jalonsui::Fenetre>,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
@@ -845,10 +854,19 @@ pub struct App {
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
+    /// Le trait en cours a été envoyé dans l'aplat sous le trait par « Peint sur l'aplat » (`aplatsur.rs`) : s'il ne pose rien (il
+    /// n'entre pas dans la forme du trait), il ne laisse pas d'étape, et l'aplat créé pour lui est défait (partie 133).
+    pub(crate) sur_aplat_geste: Option<crate::aplatsur::GesteSurAplat>,
     /// Plusieurs clés choisies, l'aplat visé : le même trait en cours sur l'aplat des autres clés, et les remplissages qui s'y
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
     pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// Plusieurs calques choisis : la gomme en cours sur les autres calques (`gommemulti.rs`), la séance de l'outil Déformer
+    /// sur tous (`deformmulti.rs`). Propres à un projet.
+    pub(crate) gomme_multi: crate::gommemulti::GommeMulti,
+    /// La gomme sur les clés qu'on ne voit pas, calculée sur des fils de travail après le lâcher.
+    pub(crate) gomme_travaux: crate::gommemulti::GommeTravaux,
+    pub(crate) deform_multi: Option<crate::deformmulti::DeformMulti>,
     /// L'aplat intelligent (platintel.rs) : le dessin d'avant le trait en cours, les calculs en route.
     pub(crate) aplat_intel: crate::aplatintel::Etat,
     /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
@@ -860,6 +878,9 @@ pub struct App {
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
     pub(crate) fit_set: std::collections::HashMap<(crate::dock::Pane, crate::dock::Pane), f32>,
     pub(crate) fit_busy: bool,
+    /// Le pointeur est sur la bande du bas (le montage, ou la timeline en animation) à cette image d'écran : les touches du zoom de
+    /// l'image y zooment la bande (`run_action`, « vue.zoom_avant »). Remis à faux avant chaque affichage des panneaux.
+    pub(crate) bande_survolee: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
     /// Les projets récents sont-ils encore là ? (Vérifié sur un autre fil : `recents.rs`.)
@@ -886,6 +907,8 @@ pub struct App {
     pub(crate) renderer: Renderer,
     /// Le monde hors de la feuille à l'écran (toile infinie, `monde.rs`).
     pub(crate) monde: crate::monde::Monde,
+    /// Les dessins vectoriels à la taille de l'écran quand la vue grossit (`vuenette.rs`).
+    pub(crate) nette: crate::vuenette::VueNette,
     pub(crate) thumbs: Thumbs,
     /// La tenue des dessins en mémoire : les pixels des dessins qu'on ne regarde pas se rangent (`gel.rs`).
     pub(crate) gel: crate::gel::Gel,
@@ -913,6 +936,8 @@ pub struct App {
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
     /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
+    /// La fenêtre « Modifier la durée des clés d'images… » (`clesduree.rs`, partie 138).
+    pub(crate) duree_cles: Option<crate::clesduree::DureeCles>,
     /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
     /// La fenêtre de la corbeille du projet (`corbeilleui.rs`).
@@ -1261,6 +1286,8 @@ impl App {
             stage_view: None,
             format_custom: false,
             espace3d: Default::default(),
+            e3d: Default::default(),
+            e3_panneau: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -1291,6 +1318,8 @@ impl App {
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
             orphans,
             recovery,
+            continu: Default::default(),
+            jalons_ui: None,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -1410,14 +1439,19 @@ impl App {
             aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
+            sur_aplat_geste: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
+            gomme_multi: Default::default(),
+            gomme_travaux: Default::default(),
+            deform_multi: None,
             aplat_intel: Default::default(),
             aplat_couleur_attente: None,
             aplat_portee: Default::default(),
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
+            bande_survolee: false,
             messages: Vec::new(),
             last_status: String::new(),
             toasts: Vec::new(),
@@ -1428,6 +1462,7 @@ impl App {
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             monde: crate::monde::Monde::new(),
+            nette: crate::vuenette::VueNette::new(),
             thumbs: Thumbs::default(),
             gel: Default::default(),
             montage_zoom: 4.0,
@@ -1442,6 +1477,7 @@ impl App {
             snap_on: true,
             duration_dialog: None,
             duree_plans: None,
+            duree_cles: None,
             fusion_noms: None,
             corbeille_ui: None,
             corbeille_charge: None,
@@ -1601,24 +1637,76 @@ impl App {
 
     /// Le calque courant est une carte inclinée (Espace 3D) : le monde, son placement, l'œil de la caméra. Il ne se pose
     /// plus par une affinité mais par une projection (`espace3d.rs`).
-    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3d::Xf, [f32; 3])> {
+    ///
+    /// Dans un plan en Espace 3D dont la caméra n'est pas la caméra de référence (`Document::repere_du_plan`), toute carte
+    /// est dans ce cas, même à plat : sa matrice est passée dans le repère de la caméra, et l'œil est celui de référence
+    /// (comme `espace3d::place_dans` la pose dans l'image). Un calque accroché à la caméra reste dans le cadre.
+    pub(crate) fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3dmath::M4, [f32; 3])> {
         let l = self.layer();
         let t = l.pose(self.cur_frame);
-        if !t.is_tilted() {
+        let repere = self.doc.repere_du_plan(self.cur_panel, self.cur_frame).filter(|_| !l.accroche);
+        if !t.is_tilted() && repere.is_none() {
             return None;
         }
-        let world = crate::espace3d::Monde::of(&self.doc);
-        let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
-        let eye = world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame));
-        Some((world, xf, eye))
+        // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
+        let world = self.e3_world();
+        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
+        match repere {
+            Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
+            None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
+        }
     }
 
     /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre). Sur une carte inclinée, le
     /// regard de la caméra qui passe par ce point de la feuille traverse la carte au point où l'on peint.
     pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
-        if let Some((world, xf, eye)) = self.tilted_card() {
-            return world.sheet_to_card(eye, &xf, stage).unwrap_or(stage);
+        if let Some((world, mx, eye)) = self.tilted_card() {
+            return world.sheet_to_card_m(eye, &mx, stage).unwrap_or(stage);
         }
+        self.to_layer_a_plat(stage)
+    }
+
+    /// Comme `to_layer`, mais **rien** quand le regard qui passe par ce point de la feuille ne touche pas la carte du
+    /// calque courant : elle est derrière la caméra, ou vue par la tranche. Ce qui peint (pinceau, crayon, gomme, pot,
+    /// dégradé) passe par ici : pas de trait là où il n'y a pas de carte.
+    ///
+    /// **Plan en Espace 3D : rien non plus hors des bords de la carte** (`docs/INTERFACE.md`, partie 146.1). Une carte
+    /// posée par un maillage (inclinée, ou vue par une caméra qui n'est pas la caméra de référence) ne montre que sa
+    /// feuille (`Monde::card_warp_m`) : un point au-delà de ses bords serait de l'encre qu'on ne voit pas. La condition
+    /// est celle de la vue Espace 3D, `espace3ddessin::carte_montre`. (Avant le 2026-11-12, l'étape A5 acceptait un point
+    /// jusqu'à une feuille au-delà des bords : caméra dos aux cartes, un trait dans le bas du cadre s'enregistrait hors
+    /// d'une surface au sol, sans rien montrer ni rien dire.) Carte à plat sous la caméra de référence, ou plan
+    /// ordinaire : inchangé, la toile infinie reste peinte et filmée.
+    pub(crate) fn to_layer_opt(&self, stage: Pos2) -> Option<Pos2> {
+        let Some((world, mx, eye)) = self.tilted_card() else { return Some(self.to_layer_a_plat(stage)) };
+        let p = world.sheet_to_card_m(eye, &mx, stage)?;
+        if self.image_par_le_repere() && !crate::espace3ddessin::carte_montre(p, world.stage) {
+            return None;
+        }
+        Some(p)
+    }
+
+    /// Pourquoi `to_layer_opt` ne rend rien en ce point de la feuille : le mot de la barre d'état. Le regard touche le
+    /// plan de la carte hors de ses bords, ou ne le touche pas du tout (carte derrière la caméra, vue par la tranche).
+    pub(crate) fn rien_a_peindre(&self, stage: Pos2) -> &'static str {
+        let hors_des_bords = self.tilted_card().is_some_and(|(world, mx, eye)| world.sheet_to_card_m(eye, &mx, stage).is_some());
+        if hors_des_bords {
+            crate::espace3ddessin::HORS_CARTE_FEUILLE
+        } else {
+            crate::espace3ddessin::PAS_SOUS_LE_POINTEUR
+        }
+    }
+
+    /// L'image courante du plan courant se compose par le changement de repère de sa caméra (`Document::repere_du_plan`), ou
+    /// le plan vient du format 55 en Espace 3D (`Panel::espace`) : le pinceau ne peint que sur la carte, et sa taille est
+    /// celle qu'un pixel de la carte a sous le pointeur. Partout ailleurs, les outils de dessin font ce qu'ils ont toujours fait
+    /// (partie 159).
+    pub(crate) fn image_par_le_repere(&self) -> bool {
+        self.panel().espace || self.doc.repere_du_plan(self.cur_panel, self.cur_frame).is_some()
+    }
+
+    /// `to_layer` pour un calque posé par une affinité (ni carte inclinée, ni plan en Espace 3D à la caméra tournée).
+    fn to_layer_a_plat(&self, stage: Pos2) -> Pos2 {
         if self.layer_seen().is_identity() {
             return stage;
         }
@@ -1627,8 +1715,12 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
-        if let Some((world, xf, eye)) = self.tilted_card() {
-            let stage = world.card_to_sheet(eye, &xf, p).unwrap_or(p);
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : le point de la carte, vu par cette vue.
+        if let Some(carte) = self.e3_carte_vue() {
+            return carte.vers_ecran(p).unwrap_or(egui::pos2(-1e6, -1e6));
+        }
+        if let Some((world, mx, eye)) = self.tilted_card() {
+            let stage = world.card_to_sheet_m(eye, &mx, p).unwrap_or(p);
             return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
         }
         let stage = if self.layer_seen().is_identity() {
@@ -1641,7 +1733,30 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
-        let t = self.layer().pose(self.cur_frame);
+        // On dessine dans la vue Espace 3D (`espace3ddessin.rs`) : la taille d'un pixel de la carte sous le pointeur, vu
+        // par cette vue.
+        if let Some(z) = self.e3_zoom_du_dessin() {
+            return z;
+        }
+        // Plan en Espace 3D : la carte est vue en perspective, un pixel de son dessin n'a pas partout la même taille à
+        // l'écran. On prend celle qu'il a sous le pointeur (au centre de la carte s'il n'y est pas) : le curseur du
+        // pinceau a la taille du trait qu'il va laisser à cet endroit.
+        if self.image_par_le_repere() {
+            if let Some((world, mx, eye)) = self.tilted_card() {
+                let [w, h] = world.stage;
+                let ici = self.hover_canvas.and_then(|s| self.to_layer_opt(s)).unwrap_or(egui::pos2(w / 2.0, h / 2.0));
+                let sur_la_feuille = |p: Pos2| world.card_to_sheet_m(eye, &mx, p);
+                if let (Some(o), Some(a), Some(b)) = (sur_la_feuille(ici), sur_la_feuille(ici + vec2(1.0, 0.0)), sur_la_feuille(ici + vec2(0.0, 1.0))) {
+                    let (u, v) = (a - o, b - o);
+                    let aire = (u.x * v.y - u.y * v.x).abs();
+                    if aire.is_finite() && aire > 1e-12 {
+                        return self.view.zoom * aire.sqrt();
+                    }
+                }
+            }
+        }
+        // (Un calque accroché à la caméra, `accroche.rs` : sa taille à l'écran est celle qu'on voit, grossissement de la caméra compris.)
+        let t = if self.layer().accroche { self.layer_seen() } else { self.layer().pose(self.cur_frame) };
         self.view.zoom * t.scale * (t.stretch_x * t.stretch_y).abs().sqrt()
     }
 
@@ -1785,6 +1900,8 @@ impl App {
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
         let world = crate::espace3d::Monde::of(&self.doc);
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`) : le changement de repère de sa caméra, comme les sorties (`render.rs`).
+        let repere = self.doc.repere_du_plan(self.cur_panel, frame);
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1797,14 +1914,20 @@ impl App {
         // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
         let mut starts: Vec<usize> = vec![0; layers.len()];
         // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
-        for li in crate::calqueannot::ordre(layers, annotations) {
+        let order = crate::calqueannot::ordre(layers, annotations);
+        // Plan en Espace 3D (`docs/ESPACE-LIBRE.md`, A4) : du plus loin de la caméra au plus près, comme les sorties (`render.rs`).
+        let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
+        let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
+        let mut portees = crate::calqueffet::Portees::new(par_distance);
+        for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
+            portees.visiter(layers, li, items.len());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
             if layer.effet.is_some() {
-                items.extend(crate::calqueffet::marker(layers, li, frame, opacity, &starts));
+                items.extend(portees.marker(layers, li, frame, opacity, &starts));
                 continue;
             }
             if washed && li != cur {
@@ -1812,7 +1935,7 @@ impl App {
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
             // (Carte inclinée de l'Espace 3D : posée par un maillage, `espace3d::place`.)
-            let Some(placed) = crate::espace3d::place(&world, layer, frame, &camera) else { continue };
+            let Some(placed) = crate::espace3d::place_dans(&world, layer, frame, &camera, repere.as_ref()) else { continue };
             let (transform, card_pre) = (placed.transform, placed.pre);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
@@ -1847,7 +1970,9 @@ impl App {
             if onion && !self.playing && li == cur && self.tool == Tool::Trajectoire {
                 if let Some(t) = layer.trajectoire.as_ref().filter(|t| t.cles == crate::trajectoire::Cles::Interpolation) {
                     for f in t.images_des_jalons(self.frame_count()).into_iter().filter(|&f| f != frame) {
-                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place(&world, layer, f, &camera)) else { continue };
+                        // (Plan en Espace 3D : la silhouette se pose comme le calque lui-même, par le repère de la caméra du plan à
+                        // l'image montrée ; sans lui elle ignorait cette caméra, partie 149.)
+                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place_dans(&world, layer, f, &camera, repere.as_ref())) else { continue };
                         onion_items.push(PlanItem {
                             cel,
                             opacity: crate::trajectoireui::FANTOME_OPACITE,
@@ -2043,6 +2168,9 @@ impl App {
     }
 
     pub(crate) fn select_layer(&mut self, layer: usize) {
+        // Choisir un calque, même celui qui est déjà courant, lâche la caméra du plan choisie dans la vue Espace 3D : la
+        // timeline et le montage lui rendent sa rangée (`espace3dui.rs`, partie 152).
+        self.e3_calque_choisi(layer);
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;
@@ -2350,11 +2478,28 @@ impl App {
         let (Some(settings), Some(r)) = (self.current_brush(), self.layer().fond) else {
             return;
         };
-        let (cel, prefix) = self.ensure_cel();
         let (w, h) = (self.doc.width, self.doc.height);
-        let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h)) else { return };
+        let refus = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).";
+        // La forme de l'aplat, lue avant de créer quoi que ce soit : pas de dessin à cette image, ou pas de trait, et le geste ne laisse
+        // rien, ni dessin vide ni étape d'annulation (partie 133 : sinon une case pâle qui naissait gardait son plan vide). (Un calque de
+        // couleur reflète son trait en ouvrant son dessin : il est lu après, comme avant.)
+        let ici = self.cel_here().filter(|_| self.layer().couleur.is_none());
+        let deja = ici.and_then(|id| self.doc.cels.get(&id)).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h));
+        if self.layer().couleur.is_none() && deja.as_ref().is_none_or(|c| c.iter().all(|&v| v == 0)) {
+            self.status = refus.into();
+            return;
+        }
+        let (cel, prefix) = self.ensure_cel();
+        // (La cassure automatique rend une copie du dessin : même trait, même forme.)
+        let cover = match deja {
+            Some(c) => c,
+            None => {
+                let Some(c) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h)) else { return };
+                c
+            }
+        };
         if cover.iter().all(|&c| c == 0) {
-            self.status = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).".into();
+            self.status = refus.into();
             if let Some(p) = prefix {
                 self.history.push(p);
             }
@@ -2497,6 +2642,8 @@ impl App {
                     c.version += 1;
                 }
                 self.renderer.invalidate_tiles(&dirty);
+                // « Peint sur l'aplat » : un trait qui n'a rien posé ne laisse pas d'étape, l'aplat créé pour lui est défait (partie 133).
+                self.sur_aplat_fin(&mut edits);
                 // Peinture et coupe : une seule étape d'annulation, nommée « Aplat : … ».
                 let nom = if self.tool == Tool::Eraser { "Aplat : gomme" } else { "Aplat : peinture" };
                 let avant = self.history.context.replace(nom.to_string());
@@ -2507,6 +2654,7 @@ impl App {
                 }
                 self.history.context = avant;
             } else {
+                self.sur_aplat_geste = None;
                 let edit = match self.doc.cels.get_mut(&cel) {
                     Some(c) => stroke.finish(&mut c.raster, &mut dirty),
                     None => None,
@@ -2552,6 +2700,8 @@ impl App {
             self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
+        // La gomme sur les autres calques choisis : leurs étapes et celle du calque courant n'en font qu'une (`gommemulti.rs`).
+        self.gomme_multi_fin();
         self.finish_cut();
         self.sculpt_finish();
         // (Le geste d'un champ chiffré de la boîte de sélection dure tant que le champ a la main :
@@ -2567,8 +2717,10 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
-        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé.
+        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé. Dans la vue Espace 3D aussi
+        // (`trajectoire3d.rs`).
         self.trajectoire_lacher();
+        self.e3_traj_lacher();
         self.guides.stroke = None;
         self.shape_drag = None;
         // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un tracé abandonné ; une retouche en cours
@@ -2583,6 +2735,31 @@ impl App {
     pub(crate) fn pick_color(&mut self, p: Pos2) {
         if let Some(c) = self.couleur_du_monde(p) {
             self.color = c;
+        }
+    }
+
+    /// Partie 165.8 : le calque du plan courant dont l'encre est au point `p` de la feuille, à l'image courante : le plus haut de ceux
+    /// qu'on voit. Un calque caché (lui ou son dossier) ou à l'opacité 0 n'a rien à cet endroit ; un calque d'un dossier fermé, oui.
+    pub(crate) fn calque_sous_le_point(&self, p: Pos2) -> Option<usize> {
+        if !p.x.is_finite() || !p.y.is_finite() || self.doc.panels.get(self.cur_panel).is_none() {
+            return None;
+        }
+        let (x, y) = (p.x.floor() as i64, p.y.floor() as i64);
+        // Du plus bas au plus haut, chacun seul, tel que la caméra le pose (annotations comprises : elles sont dans la vue).
+        let calques = render::panel_layer_plans(&self.doc, self.cur_panel, self.cur_frame, true);
+        calques.iter().rev().find(|(_, plan)| render::couverture_pixel_i(&self.doc, plan, x, y) > 0).map(|(li, _)| *li)
+    }
+
+    /// Partie 165.8 (Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ») : Alt + clic dans la vue
+    /// de dessin rend actif le calque dont l'encre est sous le curseur. Rien n'est écrit dans le projet (aucune étape d'annulation), la
+    /// couleur ne change pas ; dans le vide, rien ne change.
+    pub(crate) fn alt_clic_calque(&mut self, p: Pos2) {
+        match self.calque_sous_le_point(p) {
+            Some(li) => {
+                self.select_layer(li);
+                self.status = format!("Calque actif : {}", self.layers()[li].name);
+            }
+            None => self.status = "Aucun dessin sous le curseur".into(),
         }
     }
 
@@ -2653,7 +2830,9 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         // Les contours de tous les calques sont pris sur la feuille : sur un calque transformé, ils
         // ne tomberaient pas au bon endroit de son dessin ; on prend alors le calque seul.
-        if self.fill.sample_all && self.layer().pose(self.cur_frame).is_identity() {
+        // (Un calque accroché à la caméra, `accroche.rs` : « transformé » se lit sur ce qu'on voit, la caméra comprise.)
+        let a_plat = if self.layer().accroche { self.layer_seen().is_identity() } else { self.layer().pose(self.cur_frame).is_identity() };
+        if self.fill.sample_all && a_plat {
             return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
         }
         match self.cel_here() {
@@ -2782,6 +2961,8 @@ impl App {
             || self.multi.busy_on(cel)
             || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
             || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
+            || self.deform_multi.as_ref().is_some_and(|d| d.busy_on(cel))
+            || self.gomme_multi.busy_on(cel)
             || self.sculpt_occupe(cel)
     }
 
@@ -3247,8 +3428,27 @@ impl App {
         self.drop_bitmap_selection();
         self.vsel = None;
         self.record_step();
+        // (Le calque est dans le choix : tous les calques choisis prennent l'inverse de son état, partie 136.)
+        let lis = self.calques_du_geste(li);
+        if lis.len() >= 2 {
+            let v = !self.layers()[li].locked;
+            for &k in &lis {
+                self.layers_mut()[k].locked = v;
+            }
+            self.status = format!("{} calques {}.", lis.len(), if v { "verrouillés" } else { "déverrouillés" });
+            if v {
+                let ids: Vec<u64> = lis.iter().filter_map(|&k| self.layers().get(k).map(|l| l.id)).collect();
+                self.apres_verrou(&ids);
+            }
+            return;
+        }
         let layer = &mut self.layers_mut()[li];
         layer.locked = !layer.locked;
+        if layer.locked {
+            let id = layer.id;
+            self.apres_verrou(&[id]);
+        }
+        let layer = &self.layers()[li];
         self.status = format!(
             "Calque « {} » {}.",
             layer.name,
@@ -3310,9 +3510,9 @@ impl App {
         let what = if clip.layer.folder { "Dossier" } else { "Calque" };
         let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
         self.status = if n > 1 {
-            format!("{n} calques copiés : Ctrl+V dans le panneau Calques (ou X) pour les coller, ici ou dans un autre plan.")
+            format!("{n} calques copiés : Ctrl+V dans la colonne des calques (ou X) pour les coller, ici ou dans un autre plan.")
         } else {
-            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", clip.layer.name)
+            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans la colonne des calques) pour le coller dans un autre plan.", clip.layer.name)
         };
         // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
         self.layer_clip_recent = true;
@@ -3463,6 +3663,11 @@ impl App {
         // Une durée rendue par l'annulation n'est pas signalée.
         self.plan_len_seen = None;
         self.end_stroke();
+        // La gomme sur les clés qu'on ne voit pas finit d'être posée d'abord (tout ou rien : Ctrl+Z annule le geste entier, Ctrl+Maj+Z
+        // le rend entier) ; au-delà de 150 ms, la commande part à la fin du calcul, la fenêtre continuant de se peindre (`gommemulti.rs`).
+        if self.gomme_retient("edition.annuler") {
+            return;
+        }
         // (Le trait qu'on annule en plein geste n'est pas à répartir : `horschamp.rs`.)
         self.vignettes.fini = None;
         self.vignettes.debord_garde = None;
@@ -3484,6 +3689,9 @@ impl App {
         self.cancel_montage_drag();
         self.plan_len_seen = None;
         self.end_stroke();
+        if self.gomme_retient("edition.retablir") {
+            return;
+        }
         self.drop_bitmap_selection();
         self.multi_before_history();
         let mut nav = Nav {
@@ -3546,7 +3754,11 @@ impl App {
         if self.saving.is_some() {
             self.after_save = Some(action);
         } else if self.modified {
-            self.pending = Some(action);
+            // L'écriture continue (`continu.rs`) : pas de question, le projet s'écrit puis l'action suit. Sinon (projet sans
+            // dossier, film partagé, réglage décoché, écriture en pause) : la boîte de toujours.
+            if !self.continu_avant(action) {
+                self.pending = Some(action);
+            }
         } else {
             self.perform(action);
         }
@@ -3600,6 +3812,16 @@ impl App {
         if self.montrer_si_deja_ouvert(&path) {
             return;
         }
+        // Un retour à un jalon coupé au milieu (plantage, courant) se finit avant la lecture : le projet est alors celui du jalon
+        // (`jalons.rs`). Le manifeste a pu reprendre son ancien nom.
+        let path = match path.parent().map(crate::jalons::finir_un_retour) {
+            Some(Ok(Some(_))) => crate::project::manifeste_a_ouvrir(&path),
+            Some(Err(e)) => {
+                self.status = format!("Impossible d'ouvrir le projet : le retour à un jalon, coupé au milieu, n'a pas pu se finir ({e}).");
+                return;
+            }
+            _ => path,
+        };
         if io::is_legacy_file(&path) {
             match io::load_legacy(&path) {
                 Ok(mut doc) => {
@@ -3628,6 +3850,11 @@ impl App {
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
+        // (Le jalon de l'ancien projet finit de se poser ; l'écriture continue et la fenêtre des jalons repartent de zéro pour le
+        // nouveau, `continu.rs`.)
+        self.attendre_le_jalon();
+        self.continu = Default::default();
+        self.jalons_ui = None;
         // (Un autre projet prend la place : si l'ancien était un film partagé, ce qu'on y tenait est rendu.)
         self.lacher_la_session();
         self.rejeu.cancel_all();
@@ -3668,6 +3895,7 @@ impl App {
         self.stroke = None;
         self.fond_stroke = None;
         self.fond_cut = None;
+        self.sur_aplat_geste = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -3720,6 +3948,7 @@ impl App {
         self.stroke = None;
         self.fond_stroke = None;
         self.fond_cut = None;
+        self.sur_aplat_geste = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -4080,6 +4309,8 @@ impl App {
         if matches!(action, "edition.copier" | "edition.couper") {
             self.fx_pile_recent = false;
             self.layer_clip_recent = false;
+            // (Et celle des pixels de la planche : Ctrl+C de la sélection bitmap des Vignettes la redonne, plus bas.)
+            self.vignettes.selb_presse = None;
         }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
@@ -4212,9 +4443,15 @@ impl App {
         match action {
             "fichier.nouveau" => self.request(Pending::New),
             "fichier.ouvrir" => self.request(Pending::Open),
+            // Avec l'écriture continue, le projet est déjà sur le disque : Ctrl+S pose un jalon (`jalonsui.rs`).
             "fichier.enregistrer" => {
-                self.save();
+                if self.continu_actif() {
+                    self.jalon_demander();
+                } else {
+                    self.save();
+                }
             }
+            "fichier.jalons" => self.jalons_ouvrir(None),
             "fichier.afficher_explorateur" => match self.path.clone() {
                 Some(p) => crate::exportui::reveal_in_explorer(&p),
                 None => self.status = "Projet pas encore enregistré : Fichier > Enregistrer d'abord.".into(),
@@ -4343,6 +4580,7 @@ impl App {
             "calque.cles_position_supprimer" => self.pos_keys_clear(),
             // Les clés d'opacité (`opacitecleselui.rs`).
             "edition.supprimer" if self.op_keys_have_focus() => self.op_keys_delete(),
+            "calque.cle_opacite" if self.chosen_layers().len() >= 2 => self.cle_opacite_choisis(),
             "calque.cle_opacite" => self.op_key_here(),
             "calque.cle_opacite_lisser" => self.op_key_smooth(),
             "calque.cle_opacite_supprimer" => self.op_keys_delete(),
@@ -4399,13 +4637,20 @@ impl App {
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
-            "edition.supprimer" if self.key_focus => self.delete_keys(false),
+            // Suppr sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : leurs dessins se
+            // vident, les clés restent (`choixtout.rs`). Supprimer les clés : le menu de la piste.
+            "edition.supprimer" if self.suppr_vide_les_cles() => self.vider_cles(),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
             // une copie du dessin (F5), ou vide (F4).
             "dessin.nouvelle_cle" | "dessin.nouvelle_cle_vide" => {
                 let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
-                self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                // Plusieurs calques choisis : une clé sur chacun, en une étape (`nouvellescles.rs`).
+                if self.nouvelle_cle_sur_tous(li) {
+                    self.nouvelle_cle_choisis(action == "dessin.nouvelle_cle");
+                } else {
+                    self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
+                }
             }
             // Ctrl+A choisit toutes les clés de la sorte qui a la main : caméra, effet, ou dessins
             // (les clés de caméra et d'effets donnent aussi `key_focus` : elles passent d'abord).
@@ -4436,12 +4681,30 @@ impl App {
                 }
             }
             "edition.supprimer" if self.selp_a_la_main() => self.selp_supprimer(),
+            // Des pixels choisis sur la planche, calque bitmap (partie 127) : entiers, partout où ils sont ; Ctrl+V les repose à leur place, répartis.
+            "edition.copier" if self.selb_a_la_main() => {
+                self.selb_copier();
+            }
+            "edition.couper" if self.selb_a_la_main() => {
+                if self.selb_copier() {
+                    self.selb_supprimer();
+                }
+            }
+            "edition.supprimer" if self.selb_a_la_main() => self.selb_supprimer(),
+            "edition.coller" if self.selb_possible() && self.vignettes.selb_presse.is_some() && !self.panels_have_focus() && !self.images_focus && !self.key_focus => {
+                self.selb_coller();
+            }
             // Une sélection sur plusieurs calques copie, coupe et colle calque par calque.
             "edition.couper" if self.multi.sel.is_some() => self.multi_cut(),
             "edition.copier" if self.multi.sel.is_some() => {
                 self.multi_copy();
             }
-            "edition.coller" if self.multi_clip.is_some() && self.chosen_layers().len() >= 2 => self.multi_paste(),
+            // La dernière copie est celle d'une sélection sur plusieurs dessins (plusieurs calques choisis, ou plusieurs clés choisies
+            // dans la timeline) : c'est elle qu'on colle, quel que soit le nombre de calques choisis à cet instant. Avant, il en
+            // fallait deux : avec deux clés restées choisies et un seul calque choisi, Ctrl+V ne collait rien — la copie n'était
+            // pas dans le presse-papiers d'un seul calque (Anthony, 2026-11-11 : « le Ctrl+C / Ctrl+V ne fonctionne plus pour
+            // copier-coller plusieurs lignes vectorielles »). Une copie d'un seul calque la remplace (`copy_selection`).
+            "edition.coller" if self.multi_clip.is_some() => self.multi_paste(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -4487,6 +4750,8 @@ impl App {
                     self.status = "Rien de sélectionné : Suppr n'efface rien (Édition > Vider le dessin pour tout effacer).".into();
                 }
             }
+            // Plusieurs calques choisis : le dessin de chacun à cette image (`choixtout.rs`).
+            "dessin.vider" if self.chosen_layers().len() >= 2 && !self.in_card => self.vider_dessins_choisis(),
             "dessin.vider" => self.clear_image(),
             // Maj+Suppr : une zone bitmap choisie est remplie de la couleur courante (`remplirsel.rs`) ;
             // sinon la touche garde son ancien sens : effacer hors de la sélection.
@@ -4506,6 +4771,10 @@ impl App {
             }
             // Dans la timeline : toutes les images de tous les calques (audit A2).
             "edition.tout_selectionner" if self.images_focus => self.select_whole_timeline(),
+            // Dans les Vignettes : le choix de la planche, traits entiers et papier compris (partie 134).
+            // (L'aplat visé par l'outil Sélection, et les clés choisies, gardent leur chemin : `select_all` → `multi_select_all`.)
+            "edition.tout_selectionner" if self.selp_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selp_tout(),
+            "edition.tout_selectionner" if self.selb_possible() && !self.aplat_strate_selection() && !self.keys_mode() => self.selb_tout(),
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();
@@ -4513,6 +4782,11 @@ impl App {
                 self.drop_bitmap_selection();
                 self.drop_multi();
             }
+            // Le zoom suit le pointeur (Anthony, 2026-11-11 : « les raccourcis de zoom et dézoom dans la timeline sont les mêmes que pour la
+            // zone de dessin ») : sur la bande du bas (le montage, ou la timeline en animation), les touches du zoom de l'image zooment
+            // la bande. `bande.zoom_avant` / `bande.zoom_arriere` gardent leurs touches à elles, où que soit le pointeur.
+            "vue.zoom_avant" if self.bande_survolee => self.zoom_strip(1.25),
+            "vue.zoom_arriere" if self.bande_survolee => self.zoom_strip(1.0 / 1.25),
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
             "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),
@@ -4591,6 +4865,9 @@ impl App {
             "outil.main" => self.set_tool(Tool::Pan),
             "outil.taille_plus" => self.resize_brush(1.15),
             "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
+            // Plusieurs calques choisis : retournés ensemble, comme un seul objet (`choixtout.rs`).
+            "calque.miroir_h" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(true),
+            "calque.miroir_v" if self.chosen_layers().len() >= 2 => self.retourner_calques_choisis(false),
             "calque.miroir_h" => self.flip_layer(true),
             "calque.miroir_v" => self.flip_layer(false),
             "plan.retourner" => self.flip_panels(),
@@ -4647,8 +4924,9 @@ impl App {
             "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
             "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
             "calque.supprimer" => self.delete_chosen_layers(),
-            "calque.dessus" => self.select_layer(self.cur_layer + 1),
-            "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            // De dessin en dessin : jamais sur un dossier, et l'on traverse un dossier fermé (`pistes.rs`, 2026-11-11).
+            "calque.dessus" => self.aller_au_calque(1, 1),
+            "calque.dessous" => self.aller_au_calque(-1, 1),
             // Calques choisis et opérations sur plusieurs calques (13b, `layerops.rs`).
             "calque.nouveau" => self.open_new_layer_dialog(),
             "calque.dupliquer" => self.duplicate_chosen_layers(),
@@ -4813,6 +5091,8 @@ impl App {
                 self.set_all_tracks_folded(false);
             }
             "piste.auto_deplier" => self.toggle_auto_open(),
+            // Les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
+            "bande.plans_en_bandeau" => self.basculer_hauteur_plans(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Panneau de la pelure d'oignon (13f, `onionui.rs`).
@@ -4895,6 +5175,11 @@ impl App {
             // Calque de couleur (`calquecouleurui.rs`) : en ajouter un, le détacher, griffonner.
             "calque.nouveau_couleur" => self.new_colour_layer(),
             "calque.nouveau_annotation" => self.nouveau_calque_d_annotation(),
+            // Calques 3D (`espace3ddecor.rs`, partie 157) : sol, mur, ciel ; la grille de repère du calque courant.
+            "calque.nouveau_sol" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Sol),
+            "calque.nouveau_mur" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Mur),
+            "calque.nouveau_ciel" => self.nouveau_calque_3d(crate::espace3ddecor::Sorte3d::Ciel),
+            "calque.grille_3d" => self.basculer_grille_3d(self.cur_layer),
             "calque.detacher_couleur" => self.detach_colour_layer(),
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
@@ -4947,6 +5232,7 @@ impl App {
             "sequence.afficher_aucune_autre" => self.affichage_aucune_autre(),
             "sequence.afficher_ordre_film" => self.affichage_ordre_du_film(),
             "montage.duree_plans" => self.open_plans_duration_dialog(),
+            "cles.duree" => self.open_key_duration_dialog(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),
@@ -4957,6 +5243,8 @@ impl App {
             "outil.camera" => self.set_tool(Tool::Camera),
             "outil.transformer" => self.set_tool(Tool::Transform),
             "calque.reinit_transformation" => self.reset_layer_transform(),
+            // Accrocher les calques choisis à la caméra, ou les décrocher (`accroche.rs`).
+            "calque.accrocher_camera" => self.basculer_accroche(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.
@@ -5020,7 +5308,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.deform_multi_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
@@ -5047,6 +5335,9 @@ impl App {
             self.tool_recent.retain(|t| *t != tool);
             self.tool_recent.insert(0, tool);
         }
+        // Vue Espace 3D : l'outil décide. Un outil de dessin y fait dessiner le pointeur, un autre lui rend les cartes
+        // (`espace3ddessin.rs`, partie 146). Même si l'outil était déjà celui-là.
+        self.e3_outil_pris(tool);
     }
 
     /// Zoom de la bande du bas par le facteur `f` : le montage en storyboard, la timeline en
@@ -5212,7 +5503,9 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Sans titre".into());
-        let title = format!("{name}{} — FEANOR", if self.modified || self.saving.is_some() { " •" } else { "" });
+        // (Le « • » d'un projet à enregistrer : pas pour un projet que FEANOR écrit tout seul, il clignoterait à chaque trait, `continu.rs`.)
+        let a_enregistrer = (self.modified || self.saving.is_some()) && !self.continu_actif();
+        let title = format!("{name}{} — FEANOR", if a_enregistrer { " •" } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -5454,6 +5747,7 @@ impl App {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
+        // (La même règle que `barre_outils_montree`, qui dit où sont les outils de la vue Espace 3D.)
         if self.layout.tool_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
@@ -5506,6 +5800,9 @@ impl App {
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);
             self.tick_save(ctx);
+            // L'écriture continue et les jalons (`continu.rs`, `jalonsui.rs`) : après l'adoption d'une écriture finie.
+            self.tick_continu(ctx);
+            self.jalons_fenetre(ctx);
             self.fusion_tick(ctx);
             // Travailler à plusieurs : ce que la session a préparé est posé (`cooperationui.rs`).
             self.cooperation_tick(ctx);
@@ -5522,6 +5819,13 @@ impl App {
             self.sequence_fenetre(ctx);
             // « Mes habitudes » et la note de friction en cours (`usageui.rs`, `frictionui.rs`).
             self.habitudes_fenetre(ctx);
+            // Le registre des explications (`aideregistre.rs`, partie 153).
+            self.aide_registre_fenetre(ctx);
+            // L'aide animée, dans sa petite fenêtre à côté de l'outil (`aideflottante.rs`, partie 155) : après les barres et les
+            // panneaux, qui ont retenu où sont leurs icônes. Rien sans projet, ni en mode concentration (elle jouera en sortant).
+            if !concentre && !sans_projet && !compact {
+                self.aide_flottante_ui(ctx);
+            }
             self.friction_fenetre(ctx);
             // Le banc du stylet : ce que Windows en dit, à côté de ce que FEANOR reçoit (`styletui.rs`).
             self.stylet_fenetre(ctx);
@@ -5602,6 +5906,9 @@ impl App {
         // Un enregistrement qui dure encore est attendu : on ne perd jamais un projet à la fermeture.
         // Même règle pour chaque onglet, dont la copie de secours est effacée (`onglets.rs`).
         self.retenir_la_session();
+        // L'écriture continue : ce qui n'était pas encore écrit l'est maintenant (la fenêtre fermée par le système, au milieu du délai).
+        self.continu_avant_de_partir();
+        self.attendre_le_jalon();
         self.fermer_tous_les_onglets();
         let current = self.current_layout();
         self.settings.set_layout_of(self.espace, current);

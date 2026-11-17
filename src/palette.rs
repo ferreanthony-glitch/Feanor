@@ -97,10 +97,17 @@ pub(crate) struct Palette {
 }
 
 impl App {
+    /// Les commandes que la palette propose ici : hors de la vue de la scène, aucune de celles qui parlent de la 3D, sauf
+    /// sa porte (`keymap::de_la_scene`, partie 159).
+    pub(crate) fn palette_commandes_ici(&self) -> Vec<(&'static str, &'static str)> {
+        let scene = self.espace3d_vue_ouverte();
+        palette_commands().into_iter().filter(|(id, _)| scene || !crate::keymap::action_info(id).is_some_and(crate::keymap::de_la_scene)).collect()
+    }
+
     /// La palette de commandes, si elle est ouverte.
     pub(crate) fn palette_window(&mut self, ctx: &egui::Context) {
         let Some(mut p) = self.palette.take() else { return };
-        let commands = palette_commands();
+        let commands = self.palette_commandes_ici();
         let found = rank(&commands, &p.query);
         let shown = found.len().min(14);
         let (up, down, enter, escape) = ctx.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown), i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));

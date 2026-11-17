@@ -2,7 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::App;
 use crate::handles::{GridMenu, GridSelect, Handle};
-use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
+use crate::layerheads::{row_at, rows_height, rows_of, Row};
 use crate::storyboard::duration_label;
 use crate::theme;
 
@@ -11,9 +11,17 @@ pub(crate) const CELL_W: f32 = 16.0;
 pub(crate) const CELL_MIN: f32 = 3.0;
 pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
-const HEADER_H: f32 = 20.0;
-/// Largeur de l'en-tête des calques (13b).
-const NAMES_W: f32 = HEAD_W;
+/// Hauteur de la première ligne des boutons dans la colonne des calques, en face des numéros de la règle des images (partie 165.5 :
+/// une case de bouton, 26 points, y tient).
+pub(crate) const LIGNE1_H: f32 = 30.0;
+/// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la seconde ligne des boutons, juste sous la première.
+pub(crate) const LIGNE2_H: f32 = 28.0;
+/// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
+/// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
+pub(crate) const HEADER_H: f32 = LIGNE1_H + LIGNE2_H;
+/// Partie 165.6 : les groupes de la barre de la timeline sur la première ligne (le plan, puis le transport, l'image courante, les
+/// repères et l'affichage) ; les dessins, la caméra et le reste sur la seconde, avec « Plus… » et la légende des clés.
+pub(crate) const DERNIER_GROUPE_LIGNE1: u8 = 1;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
@@ -32,6 +40,9 @@ const PLAN_END_W: f32 = 9.0;
 #[cfg(test)]
 thread_local! {
     pub(crate) static PRISE_FIN_DU_PLAN: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+    /// Partie 165.6 : le haut et le bas de chaque ligne de calque (rang du calque, haut, bas) dans la colonne (`.0`) et dans la grille
+    /// (`.1`), à la dernière image : les essais vérifient que calques et pistes sont alignés.
+    pub(crate) static LIGNES_PEINTES: std::cell::RefCell<(Vec<(usize, f32, f32)>, Vec<(usize, f32, f32)>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) };
 }
 
 /// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
@@ -76,9 +87,11 @@ impl App {
         if self.bande_film_vide(ui) {
             return;
         }
-        ui.add_space(2.0);
-        self.timeline_toolbar(ui);
-        ui.separator();
+        // Le pointeur sur la bande : les touches du zoom de l'image zooment la timeline (`run_action`).
+        self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
+        // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre au-dessus de la timeline ; ses commandes sont sur une ligne
+        // en haut de la colonne des calques, en face de la règle des images (`layerheads::timeline_heads`). La timeline gagne la
+        // hauteur de l'ancienne barre.
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
         egui::TopBottomPanel::bottom("onglets_timeline")
             .resizable(false)
@@ -101,17 +114,6 @@ impl App {
                             .show(ui, |ui| self.timeline_grid(ui));
                     });
                 });
-        });
-    }
-
-    /// Barre de la timeline, sur une seule ligne qui ne défile pas (`barres.rs`) : le plan, le
-    /// transport, les dessins, la caméra et la pelure ; le reste sous « Plus… ». Les commandes en
-    /// icônes ont leur nom, leur raccourci et une description dans une bulle (12d).
-    fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            self.barre_ui(ui, crate::barres::Barre::Timeline);
-            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
         });
     }
 
@@ -148,7 +150,7 @@ impl App {
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));
+        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups, self.cur_layer));
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
         let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
@@ -160,29 +162,40 @@ impl App {
             resp.context_menu(|ui| app.grid_menu_ui(ui, m));
         };
         if notes_h > 0.0 {
-            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(r.width(), notes_h)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
             menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
         }
         {
             let y = r.top() + HEADER_H + rows_h;
-            let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, theme::rangee_sombre());
+            let row = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), CAM_H)).shrink2(vec2(0.0, 1.0));
+            // La caméra du plan choisie seule dans la vue Espace 3D : sa rangée est montrée comme celle d'un calque courant, et
+            // plus aucune rangée de calque ne l'est (`espace3dui.rs`, partie 152).
+            let choisie = self.e3_camera_seule();
+            painter.rect_filled(row, 2.0, if choisie { theme::surface_active(crate::theme::accent(), 1.0) } else { theme::rangee_sombre() });
+            if choisie && theme::palette().identite {
+                painter.rect_stroke(row, 2.0, Stroke::new(1.5_f32, crate::theme::accent()), StrokeKind::Inside);
+            }
             let n = self.panel().camera.len();
             let label = match n {
                 0 => "Caméra".to_string(),
                 1 => "Caméra (fixe)".to_string(),
                 _ => format!("Caméra ({n} clés)"),
             };
-            painter.text(
-                pos2(r.left() + 8.0, row.center().y),
-                Align2::LEFT_CENTER,
-                label,
-                FontId::proportional(11.0),
-                visuals.weak_text_color(),
-            );
-            menu_on(self, ui, row, "camera", GridMenu::Camera);
+            let encre = match choisie {
+                true if theme::palette().identite => theme::texte_fort(),
+                true => crate::theme::sur_accent(),
+                false => visuals.weak_text_color(),
+            };
+            painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(11.0), encre);
+            // Un clic sur le nom : la caméra choisie seule dans la vue Espace 3D, sa rangée la rangée choisie
+            // (`e3_piste_camera_cliquee`) ; clic droit : son menu.
+            let resp = ui.interact(row, ui.id().with(("nom_ligne", "camera")), Sense::click());
+            if resp.clicked() {
+                self.e3_piste_camera_cliquee();
+            }
+            resp.context_menu(|ui| self.grid_menu_ui(ui, GridMenu::Camera));
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
@@ -209,7 +222,7 @@ impl App {
         let cell = self.timeline_cell.clamp(CELL_MIN, CELL_MAX);
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
-        let rows = rows_of(self.layers(), &self.doc.groups);
+        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
         let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
@@ -254,7 +267,8 @@ impl App {
         {
             let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, theme::rangee_sombre());
+            // (La caméra choisie seule dans la vue Espace 3D : sa rangée a la surbrillance du calque courant, partie 152.)
+            painter.rect_filled(row, 0.0, if self.e3_camera_seule() { theme::surface_active(crate::theme::accent(), 0.35) } else { theme::rangee_sombre() });
             // (Cachées par le filtre de la légende, `legendecles.rs` : la rangée reste, sans losanges.)
             let keys: &[crate::camera::CameraKey] = if self.cle_vue(crate::legendecles::Sorte::Camera) { &self.panel().camera } else { &[] };
             let cx = |f: usize| r.left() + (f as f32 + 0.5) * cell;
@@ -323,13 +337,17 @@ impl App {
             }
         }
 
-        // Fond des lignes, calque courant en surbrillance.
+        // Fond des lignes, calque courant en surbrillance (aucun quand la caméra du plan est choisie seule dans la vue
+        // Espace 3D : c'est sa rangée qui l'est, partie 152).
+        let camera_seule = self.e3_camera_seule();
+        #[cfg(test)]
+        LIGNES_PEINTES.with(|l| l.borrow_mut().1 = rows.iter().map(|row| (row.li, grid_top + row.top, grid_top + row.top + row.h)).collect());
         for row in &rows {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
-            let bg = if li == self.cur_layer {
+            let bg = if self.calque_montre_courant(li) {
                 theme::surface_active(crate::theme::accent(), 0.35)
-            } else if self.is_chosen_layer(li) {
+            } else if !camera_seule && self.is_chosen_layer(li) {
                 theme::surface_active(crate::theme::accent(), 0.18)
             } else if self.layers()[li].folder {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
@@ -358,7 +376,7 @@ impl App {
             let shown = if time_code { c % (fps * seconds) == 0 } else { c == 0 || (c + 1) % step == 0 };
             if c < cols && shown {
                 painter.text(
-                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + HEADER_H * 0.5),
+                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + LIGNE1_H * 0.5),
                     if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
                     self.frame_label(c),
                     FontId::monospace(9.0),
@@ -819,7 +837,7 @@ impl App {
             cur_frame(),
         );
         painter.text(
-            pos2(cx + cell * 0.5, r.top() + HEADER_H * 0.5),
+            pos2(cx + cell * 0.5, r.top() + LIGNE1_H * 0.5),
             Align2::CENTER_CENTER,
             // En time code, seule l'image dans la seconde tient dans la case.
             match self.time_display {
@@ -1087,7 +1105,13 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 let (c0, c1) = self.image_drag.take().unwrap_or((c0, c0));
                 let m = ui.input(|i| i.modifiers);
-                self.drop_images(c1 as isize - c0 as isize, crate::images::DropMode::de_touches(&m));
+                let mode = crate::images::DropMode::de_touches(&m);
+                // Sans touche, lâchées sur un autre dessin du calque pointé : les clés prises s'insèrent avant ou après lui (partie 138).
+                let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);
+                match (mode, self.image_insertion(pointed, c1)) {
+                    (crate::images::DropMode::Move, Some(d)) => self.insert_chosen_images(pointed, d),
+                    _ => self.drop_images(c1 as isize - c0 as isize, mode),
+                }
             }
         }
         // Choisir au rectangle (chantier 3) : un glisser qui part d'une case d'un calque (hors
@@ -1128,7 +1152,7 @@ impl App {
                 let (a, b) = self.image_range();
                 let (n, m) = (b - a, self.image_layers().len());
                 self.status = format!(
-                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (Ctrl ou Alt : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
+                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (sur un autre dessin : avant ou après lui ; Ctrl ou Alt : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
                     if n > 1 { "s" } else { "" },
                     if m > 1 { "s" } else { "" }
                 );
@@ -1178,6 +1202,12 @@ impl App {
                     None if ease_under(self, p).is_some() => cam_clicked = true,
                     None => self.clear_cam_keys(),
                 }
+                // Un clic dans la rangée Caméra (une clé, une poignée de lissage, le vide) : la caméra est choisie seule dans
+                // la vue Espace 3D, sa rangée devient la rangée choisie (`e3_piste_camera_cliquee`). (La poignée de la fin du
+                // plan, qui passe dans cette rangée, n'en est pas.)
+                if cam_row.contains(p) && self.timeline_handle_at(p, r, cell, &rows, grid_top).is_none() {
+                    self.e3_piste_camera_cliquee();
+                }
             }
         }
         if (resp.clicked() || resp.dragged()) && !fx_clicked && !pos_clicked && !cam_clicked && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
@@ -1202,6 +1232,26 @@ impl App {
             }
         }
 
+        // Pendant un glisser sans touche sur un autre dessin : la ligne d'insertion sur chaque calque choisi (partie 138).
+        let insertion = match self.image_drag.filter(|(c0, c1)| c0 != c1) {
+            Some((_, c1)) if ui.input(|i| i.modifiers.is_none()) => {
+                let pointed = ui.input(|i| i.pointer.latest_pos()).and_then(|p| row_at(&rows, p.y - grid_top)).map(|row| row.li).filter(|&li| self.is_chosen_layer(li)).unwrap_or(self.cur_layer);
+                self.image_insertion(pointed, c1).map(|d| self.image_insertion_lines(d))
+            }
+            _ => None,
+        };
+        if let Some(lines) = &insertion {
+            for &(li, x) in lines {
+                if let Some(row) = rows.iter().find(|row| row.li == li) {
+                    let px = r.left() + x as f32 * cell;
+                    let (top, bottom) = (grid_top + row.top, grid_top + row.top + row.h);
+                    painter.line_segment([pos2(px, top), pos2(px, bottom)], Stroke::new(3.0_f32, theme::contour()));
+                    let t = 4.0;
+                    painter.add(egui::Shape::convex_polygon(vec![pos2(px - t, top), pos2(px + t, top), pos2(px, top + t)], theme::contour(), Stroke::NONE));
+                    painter.add(egui::Shape::convex_polygon(vec![pos2(px - t, bottom), pos2(px, bottom - t), pos2(px + t, bottom)], theme::contour(), Stroke::NONE));
+                }
+            }
+        }
         // Images choisies : un cadre blanc sur les calques choisis.
         if let Some((a, b)) = self.frame_sel {
             for row in rows.iter().filter(|row| self.is_chosen_layer(row.li) && !self.layers()[row.li].folder) {
@@ -1211,7 +1261,7 @@ impl App {
                 );
                 painter.rect(sel, 2.0, theme::contour().gamma_multiply(0.11), Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
                 // Pendant un glisser : là où elles vont se poser.
-                if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1) {
+                if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1 && insertion.is_none()) {
                     let dx = (c1 as f32 - c0 as f32) * cell;
                     let ghost = sel.translate(vec2(dx, 0.0));
                     painter.rect(ghost, 2.0, theme::marque().gamma_multiply(0.25), Stroke::new(1.5_f32, theme::marque()), StrokeKind::Inside);

@@ -28,6 +28,8 @@ pub(crate) struct EffetsUi {
     /// Les effets dépliés du panneau Effets : un booléen par effet de la pile de chaque calque (par son numéro).
     /// La séance seulement : ni le projet ni les réglages ne le gardent (`fxui::plis_apres`).
     pub open: std::collections::HashMap<u64, Vec<bool>>,
+    /// L'avant | après du vrai calque (partie 165) : ses deux images arrivées du fil de fond. La séance seulement.
+    pub apercu: crate::avantapres165::Apercu,
 }
 
 pub(crate) struct EffetDialog {
@@ -513,7 +515,7 @@ impl App {
         match effet.contenu {
             crate::calqueffet::Contenu::Ajustement => {
                 ui.label(RichText::new(format!("{}  Calque d'effet : sa pile agit sur tout ce qui est dessous{}.", ph::SPARKLE, if l.parent.is_some() { " dans son dossier" } else { "" })).small())
-                    .on_hover_text("Il agit aux images où il a une exposition (comme un dessin tenu dans la timeline) ; les clés des effets font varier les réglages. Son opacité et son mode de fusion sont ceux du panneau Calques.");
+                    .on_hover_text("Il agit aux images où il a une exposition (comme un dessin tenu dans la timeline) ; les clés des effets font varier les réglages. Son opacité et son mode de fusion sont sur sa ligne de la timeline.");
                 ui.separator();
             }
             crate::calqueffet::Contenu::Incrustation(mut inc) => {

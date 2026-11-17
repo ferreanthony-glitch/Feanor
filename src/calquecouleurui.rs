@@ -167,12 +167,20 @@ impl App {
         self.end_stroke();
         self.record_step();
         let visible = !self.layers()[li].visible;
-        let mut all = cc::couleurs_de(self.layers(), li);
-        all.push(li);
+        // (Le calque cliqué est dans le choix : tous les calques choisis prennent son inverse, partie 136.)
+        let lis = self.calques_du_geste(li);
+        let mut all = Vec::new();
+        for &k in &lis {
+            all.extend(cc::couleurs_de(self.layers(), k));
+            all.push(k);
+        }
         for k in all {
             self.layers_mut()[k].visible = visible;
         }
         self.renderer.invalidate_all();
+        if lis.len() >= 2 {
+            self.status = format!("{} calques {}.", lis.len(), if visible { "affichés" } else { "cachés" });
+        }
     }
 
     /// Le dessin de couleur de l'image courante, créé au besoin : à une image où le trait n'a rien,

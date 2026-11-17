@@ -5,9 +5,9 @@
 //! aux options »).
 //! - Une barre au bord droit de la colonne l'élargit ou la rétrécit ; la largeur est retenue
 //!   dans les réglages. Double-clic : tout montrer, ou revenir à la colonne étroite.
-//! - La rangée d'un calque ne montre que l'œil, la pastille de sa sorte et le nom (`pistes::montage_head`, 2026-10-28) : l'opacité,
-//!   le verrou, le mode de fusion, la pelure d'oignon et le reste sont au clic droit (`montage_layer_menu`) et dans le panneau
-//!   Calques. La largeur sert aux noms longs.
+//! - La rangée d'un calque ne montre que l'œil, la pastille de sa sorte et le nom (`pistes::montage_head`, 2026-10-28) ; celle du
+//!   calque actif porte toutes ses options sur deux rangées (`pistes::piste_active_head`, partie 160). Tout est aussi au clic
+//!   droit (`montage_layer_menu`). La largeur sert aux noms longs, et à la vignette du calque actif.
 //! - Clic droit sur la rangée : tout ce qui touche au calque (`montage_layer_menu`).
 
 
@@ -37,6 +37,23 @@ pub(crate) fn clamp_head_w(w: f32) -> f32 {
     }
 }
 
+/// Partie 165.5 : la largeur avant la première mesure de la barre (celle de la barre du montage d'origine et de sa légende).
+const LARGEUR_AVANT_MESURE: f32 = 480.0;
+
+/// Partie 165.5 (Anthony : « toujours garder cette colonne avec un maximum d'information. On peut verrouiller la taille minimale
+/// de la colonne s'il faut. ») : la colonne ne descend jamais sous la largeur de la ligne des boutons de `barre` (mesurée à son
+/// dessin, `barres::largeur_mesuree`), ni sous celle où la piste du calque actif montre sa vignette (`pistes::LARGEUR_VIGNETTE`).
+/// Une colonne plus étroite (réglage d'avant, glissé) est élargie.
+pub(crate) fn largeur_min_colonne(barre: crate::barres::Barre) -> f32 {
+    // (Dans l'espace Montage, la barre reste au-dessus de la bande : la colonne garde ses bornes d'avant.)
+    if barre != crate::barres::Barre::Montage {
+        return HEAD_MIN;
+    }
+    let mesure = crate::barres::largeur_mesuree(barre);
+    let barre = if mesure > 0.0 { mesure } else { LARGEUR_AVANT_MESURE };
+    barre.max(crate::pistes::LARGEUR_VIGNETTE + 8.0).max(HEAD_MIN)
+}
+
 /// Icône d'un pré / post-comportement.
 pub(crate) fn behaviour_icon(b: Behaviour) -> &'static str {
     match b {
@@ -60,8 +77,10 @@ impl App {
         if hot {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
         }
+        // (Jamais sous la largeur des boutons, partie 165.5 : le glissé s'arrête là.)
+        let min = largeur_min_colonne(crate::barres::Barre::du_montage_dans(self.espace));
         if resp.dragged() {
-            self.montage_head_w = clamp_head_w(self.montage_head_w + resp.drag_delta().x);
+            self.montage_head_w = clamp_head_w(self.montage_head_w + resp.drag_delta().x).max(min);
         }
         let resp = bulle(
             resp,
@@ -70,7 +89,7 @@ impl App {
             "",
         );
         if resp.double_clicked() {
-            self.montage_head_w = if self.montage_head_w < HEAD_ALL - 1.0 { HEAD_ALL } else { HEAD_MIN };
+            self.montage_head_w = (if self.montage_head_w < HEAD_ALL.max(min) - 1.0 { HEAD_ALL.max(min + 60.0) } else { HEAD_MIN }).max(min);
         }
         if resp.drag_stopped() || resp.double_clicked() {
             self.settings.montage_head_w = self.montage_head_w;

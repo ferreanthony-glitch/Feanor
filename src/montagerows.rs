@@ -28,8 +28,9 @@ use crate::theme;
 /// Hauteur de la piste Caméra et d'une piste de calque.
 pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
-/// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40).
-pub(crate) const LAYER_H: f32 = 40.0;
+/// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
+/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7).
+pub(crate) const LAYER_H: f32 = 44.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
@@ -37,6 +38,9 @@ pub(crate) const BAR_H: f32 = 5.0;
 pub(crate) const BAR_OFF: f32 = 3.0;
 /// Hauteur du liseré d'un calque de couleur lié, sous le bloc de son calque de trait.
 const LISERE_H: f32 = 3.0;
+/// La place laissée sous la bande quand les calques grandissent pour remplir le panneau (`App::montage_rows`) : la barre de
+/// défilement horizontale et un peu d'air, pour que la bande ne se mette pas à défiler de haut en bas à cause d'eux.
+pub(crate) const SOUS_LA_BANDE: f32 = 18.0;
 /// La couleur des clés de caméra (celle du thème).
 fn cam_color() -> Color32 {
     theme::camera()
@@ -97,9 +101,7 @@ impl Rows {
     /// La rangée sous la hauteur `y` (depuis le haut des pistes de calques), la plus proche si `y`
     /// est avant la première piste ou après la dernière (choix au rectangle).
     pub fn row_near(&self, y: f32) -> usize {
-        // (Sans la ligne « N autres calques », qui n'est la rangée d'aucun calque : un rectangle de choix qui s'y termine s'arrête à la
-        // dernière piste de calque.)
-        let real = || self.lanes.iter().filter(|l| !l.is_more());
+        let real = || self.lanes.iter();
         real().find(|l| y >= l.top && y < l.top + l.h).or_else(|| if y < 0.0 { real().next() } else { real().last() }).map_or(0, |l| l.row)
     }
     pub fn lanes_top(&self) -> f32 {
@@ -113,21 +115,34 @@ impl Rows {
 
 
 impl App {
-    /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
+    /// Rangées pour une bande haute de `available` : les plans ont la hauteur de leur réglage, et les pistes de calques prennent la
+    /// place qui reste — les calques les plus proches du calque actif à la grande hauteur tant qu'il y en a (`pistes::agrandir`).
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
         // (La hauteur des pistes son : celle du réglage, montagehauteur.rs.)
         self.poser_hauteur_pistes();
         let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
-        let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
-        let mut rows = Rows { block_h: 0.0, lanes };
-        let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
-        rows.block_h = (available - fixed).clamp(56.0, 170.0);
-        rows
+        let mut lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
+        // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
+        // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »).
+        let block_h = self.settings.montage_plans.points();
+        if self.settings.montage_grands {
+            // Ce que la bande montre en plus des pistes de calques : la règle, les séquences, la caméra, les plans, les pistes son,
+            // et la barre de défilement horizontale sous la bande. Le reste est aux calques.
+            let sans_calques = Rows { block_h, lanes: Vec::new() }.height(self.doc.audio_tracks.len());
+            crate::pistes::agrandir(&mut lanes, available - sans_calques - SOUS_LA_BANDE);
+        }
+        Rows { block_h, lanes }
     }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
     /// le rend courant.
     pub(crate) fn row_headers(&mut self, ui: &mut egui::Ui, rect: Rect, rows: &Rows) {
+        // Un clic sur les pistes de calques de la colonne lui donne la main, comme au panneau Calques d'avant (partie 160) : Ctrl+C,
+        // Ctrl+V copient et collent le calque, ou collent les effets copiés sur le calque cliqué (`fxcopie.rs`).
+        let calques = Rect::from_min_max(pos2(rect.left(), rect.top() + rows.layers_top()), pos2(rect.right(), rect.top() + rows.background_top()));
+        if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(calques) {
+            self.take_layers_pane_focus();
+        }
         let painter = ui.painter_at(rect);
         let visuals = ui.visuals().clone();
         let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(rect.width() - 8.0, h - 2.0));
@@ -142,9 +157,20 @@ impl App {
             );
         };
         let cam = lane(rows.camera_top(), CAM_H);
-        label(cam, "Caméra", visuals.text_color());
-        // Clic droit sur « Caméra » : le menu de la caméra (passe interface).
-        ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click()).context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
+        // La caméra du plan choisie seule dans la vue Espace 3D : sa piste est montrée comme celle du calque actif (texte
+        // fort, cadre), et plus aucune piste de calque ne l'est (`espace3dui.rs`, partie 152).
+        let camera_seule = self.e3_camera_seule();
+        label(cam, "Caméra", if camera_seule { visuals.strong_text_color() } else { visuals.text_color() });
+        if camera_seule {
+            painter.rect_stroke(cam, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
+        }
+        // Clic sur « Caméra » : la caméra choisie seule dans la vue Espace 3D, sa piste la piste choisie
+        // (`e3_piste_camera_cliquee`) ; clic droit : le menu de la caméra (passe interface).
+        let resp = ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click());
+        if resp.clicked() {
+            self.e3_piste_camera_cliquee();
+        }
+        resp.context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
         painter.rect_filled(header, 3.0, theme::etiquette());
         self.project_header(ui, header);
@@ -176,19 +202,36 @@ impl App {
             }
             let row = track.row;
             let r = lane(rows.layers_top() + track.top, track.h);
-            if track.is_more() {
-                self.more_line(ui, &painter, r);
-                continue;
-            }
             let Some(k) = item else {
                 label(r, &name, visuals.weak_text_color());
                 ui.interact(r, ui.id().with(("piste_calque_absente", row)), Sense::hover())
                     .on_hover_text("Le plan courant a moins de calques : cette rangée est à d'autres plans.");
                 continue;
             };
+            // La ligne fine d'un dossier : jamais un calque. Un clic la ferme ou l'ouvre ; elle se glisse et a son menu comme une piste.
+            if track.est_dossier() {
+                grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
+                let resp = ui.interact(r, ui.id().with(("ligne_dossier", row)), Sense::click_and_drag());
+                if resp.drag_started() {
+                    self.montage_layer_drag = Some(k);
+                }
+                let resp = crate::bulles::bulle(
+                    resp,
+                    "Dossier",
+                    "Un clic le ferme ou l'ouvre. Fermé, il s'ouvre quand tu y entres avec « calque du dessus » ou « du dessous » et se referme quand tu en sors. Glisser : il monte ou descend avec ses calques. Clic droit : son menu.",
+                    "",
+                );
+                if resp.clicked() {
+                    self.basculer_dossier(k);
+                }
+                let survol = resp.hovered();
+                resp.context_menu(|ui| self.montage_layer_menu(ui, k));
+                self.dossier_head(ui, r, k, survol);
+                continue;
+            }
             grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
             // (Le calque de couleur courant est « actif » par la rangée de son trait.)
-            let current = Some(row) == cur_row;
+            let current = Some(row) == cur_row && !camera_seule;
             // Un calque de toute la scène : son nom teinté « fond ».
             let wide = self.doc.panels[self.cur_panel].layers[k].scene_wide.is_some();
             let color = match (wide, current) {
@@ -204,7 +247,7 @@ impl App {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
             }
             // Choisi avec d'autres (Ctrl ou Maj + clic) : surligné plus légèrement.
-            if !current && self.is_chosen_layer(k) {
+            if !current && !camera_seule && self.is_chosen_layer(k) {
                 painter.rect_filled(r, 3.0, crate::theme::surface_active(crate::theme::accent(), 0.3));
                 painter.rect_stroke(r, 3.0, Stroke::new(1.0_f32, crate::theme::accent()), StrokeKind::Inside);
             }
@@ -219,7 +262,16 @@ impl App {
                 pick = Some((k, resp.secondary_clicked()));
             }
             if let (true, Some(p)) = (resp.double_clicked(), resp.interact_pointer_pos()) {
-                let name_rect = crate::pistes::head_layout(r, track.folded).name;
+                let mut name_rect = crate::pistes::head_layout(r, track.folded).name;
+                // (La piste du calque actif écrit le nom de son dossier avant le sien, partie 160 : la zone du nom commence après.)
+                if current && !track.folded {
+                    let layers = &self.doc.panels[self.cur_panel].layers;
+                    if let Some(d) = crate::folders::parent_index(layers, k).map(|fi| layers[fi].name.clone()) {
+                        let w = ui.fonts(|f| f.layout_no_wrap(format!("{d} ›"), FontId::proportional(9.5), Color32::WHITE).size().x);
+                        let retrait = if crate::folders::couleur_du_rangement(layers, k, &self.doc.groups).is_some() { crate::pistes::RETRAIT } else { 0.0 };
+                        name_rect.min.x += w + 3.0 + retrait;
+                    }
+                }
                 if self.double_click_is_on_name(ui, p, name_rect, &name, crate::pistes::name_size(track.folded)) {
                     let id = self.doc.panels[self.cur_panel].layers[k].id;
                     self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
@@ -228,7 +280,12 @@ impl App {
                 }
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
-            self.montage_head(ui, r, k, color, track.folded);
+            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160) ; les autres, l'œil, la pastille, le nom.
+            if current && !track.folded && track.h >= 2.0 * crate::pistes::RANGEE_ACTIVE {
+                self.piste_active_head(ui, r, k, color);
+            } else {
+                self.montage_head(ui, r, k, color, track.folded);
+            }
         }
         // (Les calques ont changé pendant les rangées : le glissé et le clic de cette image visaient les rangs d'avant.)
         tient &= self.calques_tiennent(&avant, usize::MAX);
@@ -239,18 +296,18 @@ impl App {
         if let Some(from) = self.montage_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             let base = rect.top() + rows.layers_top();
+            // Un trait entre deux pistes, ou le cadre de la ligne d'un dossier : lâchés dessus, les calques y entrent ; les calques
+            // choisis partent ensemble (`layerheads::cible_du_glisse`, `poser_les_calques`).
             let pointer = ui.input(|i| i.pointer.interact_pos());
-            if let Some(p) = pointer {
-                let slot = grid.iter().filter(|g| g.top + g.h * 0.5 < p.y - base).count();
-                let y = base + grid.get(slot).map_or(grid.last().map_or(0.0, |g| g.top + g.h), |g| g.top);
-                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.right() - 6.0, y)], Stroke::new(2.0_f32, theme::contour()));
+            let cible = pointer.and_then(|p| self.cible_des_calques_glisses(&grid, from, p.y - base));
+            if let Some((c, dans)) = cible {
+                crate::layerheads::peindre_cible(&painter, egui::Rangef::new(rect.left() + 2.0, rect.right() - 6.0), base, c, dans, 10.0);
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.montage_layer_drag = None;
-                if let Some(p) = pointer {
-                    let to = crate::layerheads::drop_index(&grid, from, p.y - base);
-                    if to != from && !self.content_refuses() {
-                        self.move_layer_to(from, to);
+                if let Some((c, _)) = cible {
+                    if !self.content_refuses() {
+                        self.poser_les_calques(from, c.pose());
                     }
                 }
             }
@@ -265,75 +322,48 @@ impl App {
         }
     }
 
-    /// La ligne « ▾ N autres calques » (mode « cachés ») : un clic montre les autres calques en bandes fines, un autre les cache.
-    fn more_line(&mut self, ui: &mut egui::Ui, painter: &Painter, r: Rect) {
-        use egui_phosphor::regular as ph;
-        let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
-        let n = crate::pistes::others_count(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
-        let shown = self.pistes.autres_montres;
-        painter.rect_filled(r, 3.0, theme::etiquette());
-        let text = match (shown, n) {
-            (false, 1) => format!("{} 1 autre calque", ph::CARET_DOWN),
-            (false, n) => format!("{} {n} autres calques", ph::CARET_DOWN),
-            (true, _) => format!("{} Cacher les autres", ph::CARET_UP),
-        };
-        let resp = ui.interact(r, ui.id().with("autres_calques"), Sense::click());
-        let ink = if resp.hovered() { theme::texte_fort() } else { ui.visuals().weak_text_color() };
-        painter.with_clip_rect(r).text(pos2(r.left() + 8.0, r.center().y), Align2::LEFT_CENTER, text, FontId::proportional(10.5), ink);
-        let resp = resp.on_hover_text("Les calques non actifs sont cachés (Préférences > Montage). Un clic les montre en bandes fines, un autre les cache de nouveau.");
-        if resp.clicked() {
-            self.pistes.autres_montres = !shown;
-        }
-    }
-
     /// À la place du mot « Storyboard », en face des plans (choix d'Anthony, 2026-10-16, comme
-    /// la colonne de gauche du panneau Projet de TVPaint) : les commandes des plans et le nom du
-    /// projet, qui ouvre ses réglages.
+    /// la colonne de gauche du panneau Projet de TVPaint) : « Nouveau plan », les autres commandes des plans derrière « ⋯ », et le nom
+    /// du projet, qui ouvre ses réglages. Sur une seule ligne depuis que la rangée des plans est moins haute (2026-11-11 : moyenne ou
+    /// bandeau) ; les commandes rangées restent au clic droit sur un plan et dans le menu « Plans » de la barre.
     fn project_header(&mut self, ui: &mut egui::Ui, r: Rect) {
         use egui_phosphor::regular as ph;
-        let inner = r.shrink2(vec2(4.0, 3.0));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("entete_projet").layout(egui::Layout::top_down(egui::Align::Min)));
+        let inner = r.shrink2(vec2(4.0, 1.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("entete_projet").layout(egui::Layout::left_to_right(egui::Align::Center)));
         child.set_clip_rect(r.intersect(ui.clip_rect()));
         child.spacing_mut().item_spacing = vec2(3.0, 3.0);
         let ui = &mut child;
         let mut run: Option<&str> = None;
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
-                run = Some("panneau.nouveau");
-            }
-            if self.bouton(ui, ph::ARROW_LINE_LEFT, "Nouveau plan avant", "Avant le plan courant, dans la même séquence.", "plan.nouveau_avant").clicked() {
-                run = Some("plan.nouveau_avant");
-            }
-            if self.bouton(ui, ph::COPY_SIMPLE, "Dupliquer le plan", "Une copie du plan courant, juste après lui.", "panneau.dupliquer").clicked() {
-                run = Some("panneau.dupliquer");
-            }
+        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
+            run = Some("panneau.nouveau");
+        }
+        // Le cadenas quand le storyboard est verrouillé : l'état reste visible, et un clic ouvre le même menu.
+        let locked = self.doc.storyboard_locked;
+        let menu = ui.menu_button(egui::RichText::new(if locked { ph::LOCK } else { ph::DOTS_THREE }).size(15.0), |ui| {
+            self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+            self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
+            self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
+            ui.separator();
+            self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+            ui.separator();
+            self.action_item(ui, if locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" }, "storyboard.verrouiller");
         });
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::TRASH, "Supprimer les plans", "Les plans choisis, sinon le plan courant.", "panneau.supprimer").clicked() {
-                run = Some("panneau.supprimer");
-            }
-            if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
-                run = Some("sequence.nouvelle");
-            }
-            let locked = self.doc.storyboard_locked;
-            let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
-            let what = "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.";
-            if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
-                run = Some("storyboard.verrouiller");
-            }
-        });
+        let aide = if locked {
+            "Le storyboard est verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus. Ce menu le déverrouille."
+        } else {
+            "Nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard. Aussi au clic droit sur un plan."
+        };
+        crate::bulles::bulle(menu.response, "Plans", aide, "");
         let title = self.doc.properties.title.trim().to_string();
         let name = if title.is_empty() { self.base_name_or("Sans titre") } else { title };
         let plans = self.doc.panels.len();
-        ui.horizontal(|ui| {
-            if self.bouton(ui, ph::GEAR_SIX, "Réglages du projet", "Propriétés, résolution, cadence.", "projet.proprietes").clicked() {
-                run = Some("projet.proprietes");
-            }
-            let resp = ui.add(egui::Label::new(egui::RichText::new(&name).small().strong()).truncate().sense(Sense::click()));
-            if resp.on_hover_text(format!("{name} : {plans} plan(s). Clic : réglages du projet.")).clicked() {
-                run = Some("projet.proprietes");
-            }
-        });
+        if self.bouton(ui, ph::GEAR_SIX, "Réglages du projet", "Propriétés, résolution, cadence.", "projet.proprietes").clicked() {
+            run = Some("projet.proprietes");
+        }
+        let resp = ui.add(egui::Label::new(egui::RichText::new(&name).small().strong()).truncate().sense(Sense::click()));
+        if resp.on_hover_text(format!("{name} : {plans} plan(s). Clic : réglages du projet.")).clicked() {
+            run = Some("projet.proprietes");
+        }
         if let Some(action) = run {
             self.run_action(action);
         }
@@ -392,6 +422,13 @@ impl App {
                 self.paint_cam_diamond(painter, c, self.cam_key_chosen(i, key.frame), cam_color(), 4.0, Stroke::NONE);
             }
         }
+        // La caméra du plan choisie seule dans la vue Espace 3D : sa piste a, sous le plan courant, le cadre que la case du
+        // calque actif a d'ordinaire (partie 152).
+        let camera_seule = self.e3_camera_seule();
+        if let Some(b) = blocks.get(self.cur_panel).filter(|_| camera_seule) {
+            let case = Rect::from_min_max(pos2(b.left(), cam.top()), pos2(b.right(), cam.bottom()));
+            painter.rect_stroke(case, 2.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
+        }
 
         // Les calques de chaque plan, dans son ordre.
         let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
@@ -399,9 +436,6 @@ impl App {
             let row = track.row;
             let lr = lane(rows.layers_top() + track.top, track.h);
             painter.rect_filled(lr, 0.0, theme::rangee_sombre());
-            if track.is_more() {
-                continue;
-            }
             // Le nom de la rangée : celui du calque du plan courant, que la colonne de gauche écrit. Un bloc n'écrit son nom que s'il en diffère.
             let row_name = layer_in_row(&current_plan.layers, row).map(|k| current_plan.layers[k].name.as_str());
             for (i, b) in blocks.iter().enumerate() {
@@ -411,7 +445,13 @@ impl App {
                 }
                 let p = &self.doc.panels[i];
                 let Some(k) = layer_in_row(&p.layers, row) else { continue };
-                let current = i == self.cur_panel && k == self.cur_layer;
+                // Un dossier n'a pas de dessin : un trait résume ceux de ses calques (plus épais quand il est fermé).
+                if p.layers[k].folder {
+                    let ferme = crate::pistes::dossier_ferme(&p.layers, k, if i == self.cur_panel { self.cur_layer } else { usize::MAX });
+                    paint_dossier_cell(painter, cell, &p.layers, k, ppf, ferme);
+                    continue;
+                }
+                let current = i == self.cur_panel && self.calque_montre_courant(k);
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
                 let show_name = row_name != Some(p.layers[k].name.as_str());
@@ -579,7 +619,7 @@ impl App {
             return None;
         }
         let lane = rows.lane_at(y - rows.layers_top())?;
-        if lane.folded || lane.is_more() {
+        if lane.folded {
             return None;
         }
         let in_row = (y - rows.layers_top()) - lane.top;
@@ -602,7 +642,9 @@ impl App {
     pub(crate) fn layer_row_hit(&self, p: Pos2, top: f32, blocks: &[Rect], rows: &Rows) -> Option<(usize, usize)> {
         let row = self.row_at(p, top, rows)?;
         let i = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0)?;
-        Some((i, layer_in_row(&self.doc.panels[i].layers, row)?))
+        // (Jamais un dossier : dans la timeline il n'est pas un calque, un clic sur sa ligne ne le rend pas courant.)
+        let layers = &self.doc.panels[i].layers;
+        layer_in_row(layers, row).filter(|&k| !layers[k].folder).map(|k| (i, k))
     }
 
     /// La rangée de calques sous le point `p` (`top` : haut de la bande).
@@ -634,6 +676,20 @@ impl App {
             let k = layer_in_row(layers, row)?;
             cell_handle_in(&layers[k], k, p, blocks[i].left() - 1.0, lane_top, ppf, tol, lane.bar_from()).map(|h| (i, k, h))
         })
+    }
+}
+
+/// La ligne fine d'un dossier sous un plan (`fi` : son rang dans la pile `stack`) : un trait gris du premier au dernier dessin de ses
+/// calques, plus épais quand le dossier est fermé (il résume alors ce qu'on ne voit plus).
+fn paint_dossier_cell(painter: &Painter, cell: Rect, stack: &[Layer], fi: usize, ppf: f32, ferme: bool) {
+    let bornes = crate::folders::children_of(stack, fi).into_iter().filter_map(|c| content_bounds(&stack[c])).reduce(|(a, b), (s, e)| (a.min(s), b.max(e)));
+    let Some((a, b)) = bornes else { return };
+    let x0 = cell.left() - 1.0;
+    let demi = if ferme { 2.5 } else { 1.0 };
+    let y = cell.center().y;
+    let seg = Rect::from_min_max(pos2((x0 + a as f32 * ppf).max(cell.left()), y - demi), pos2((x0 + b as f32 * ppf - 1.0).min(cell.right()), y + demi));
+    if seg.width() > 0.0 {
+        painter.rect_filled(seg, 1.0, theme::texte_doux().gamma_multiply(if ferme { 0.75 } else { 0.45 }));
     }
 }
 

@@ -206,11 +206,15 @@ fn a_kept_stroke_stays_visible_a_little_beyond_the_case_edge_and_the_margin_hold
     let width = crate::thumbs::width_for(case.width() * b.ctx.pixels_per_point());
     let (img, marge) = b.app.thumbs.case_image_of(id, width).expect("la vignette de la case est composÃ©e");
     let (tw, th) = crate::thumbs::thumb_size_of(doc_frame, width, crate::thumbs::scale_pct());
-    assert_eq!(marge, crate::thumbs::marge_px(tw));
+    // (Partie 131 : une marge par côté, qui va jusqu'au dessin du plan. Le trait ne sort qu'à droite : là, la marge va au moins jusqu'à lui ;
+    // des trois autres côtés, c'est celle du réglage.)
+    let [marge, haut, droite, bas] = marge;
+    assert_eq!((marge, haut, bas), (crate::thumbs::marge_px(tw), crate::thumbs::marge_px(tw), crate::thumbs::marge_px(tw)));
+    assert!(droite >= marge, "à droite, la marge va au moins jusqu'au trait : {droite}");
     assert!((marge as f32 / tw as f32 - 0.12).abs() < 0.01, "la marge est de 12 % de la largeur de la case : {marge} pour {tw}");
     // Elle dépasse l'écart serré d'un même plan : les marges de deux cases voisines se recouvrent, la dernière peinte l'emporte.
     assert!(board::RING_FRACTION * 240.0 > board::gap_same(240.0), "la marge recouvre un peu la voisine");
-    assert_eq!(img.size, [tw + 2 * marge, th + 2 * marge], "le cadre et sa marge tout autour");
+    assert_eq!(img.size, [tw + marge + droite, th + 2 * marge], "le cadre et ses marges tout autour");
     let at = |x: usize, y: usize| img.pixels[y * img.size[0] + x];
     // Le papier ne dÃ©borde pas : les coins de la marge sont transparents, le cadre est blanc.
     assert_eq!(at(0, 0).a(), 0);
@@ -219,7 +223,7 @@ fn a_kept_stroke_stays_visible_a_little_beyond_the_case_edge_and_the_margin_hold
     assert_eq!(at(marge + 1, marge + 1), egui::Color32::WHITE, "le cadre est le papier");
     // Le trait, lui, passe le bord droit et se voit dans la marge, Ã  la hauteur oÃ¹ on l'a tirÃ©.
     let y = marge + ((depart.y - case.top()) / case.height() * th as f32).round() as usize;
-    let dans_la_marge = (marge + tw..marge + tw + marge).any(|x| (y.saturating_sub(2)..=y + 2).any(|yy| {
+    let dans_la_marge = (marge + tw..marge + tw + droite).any(|x| (y.saturating_sub(2)..=y + 2).any(|yy| {
         let c = at(x, yy);
         c.a() > 200 && c.r() > 150 && c.b() > 150 && c.g() < 110
     }));

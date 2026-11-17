@@ -67,6 +67,12 @@ pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHan
     LayerTransform { x: t1.x + keep.x, y: t1.y + keep.y, ..t1 }
 }
 
+/// Un calque sans rotation (à un millième de degré près, tour complet compris) : il peut s'étirer dans le sens de la feuille.
+fn droit(angle: f32) -> bool {
+    let a = angle.rem_euclid(360.0);
+    a < 1e-3 || 360.0 - a < 1e-3
+}
+
 /// Un calque choisi qui suit l'outil Transformer avec les autres : sa transformation d'avant le
 /// geste, et de combien le défilement multiplan le décale (le point fixe se lit sans lui).
 struct Peer {
@@ -259,7 +265,9 @@ impl App {
         let corners = self.box_corners();
         // Centre de la boîte telle qu'on la voit, ramené au repère de la transformation du calque
         // (sans le défilement multiplan, qui ne dépend que de la caméra).
-        let (seen, own) = (self.layer_seen(), self.layer().pose(self.cur_frame));
+        // (Un calque accroché à la caméra, `accroche.rs` : le geste se fait sur la pose qu'on voit ; elle est ramenée dans le cadre de
+        // la caméra quand elle est écrite, `poser_du_geste`.)
+        let (seen, own) = (self.layer_seen(), self.pose_du_geste(self.cur_layer));
         let seen_center = pos2(
             corners.iter().map(|c| c.x).sum::<f32>() / 4.0,
             corners.iter().map(|c| c.y).sum::<f32>() / 4.0,
@@ -282,9 +290,10 @@ impl App {
 
     /// Un appui sur la boîte commune de plusieurs calques choisis : le geste commence.
     fn transform_many_press(&mut self, stage: Pos2, handle: BoxHandle, peers: &[usize]) {
-        // Un côté étire dans un seul sens : le repère de chaque calque n'est pas le même.
-        if matches!(handle, BoxHandle::Edge(_)) {
-            self.status = "Étirer par le milieu d'un côté se fait sur un seul calque (choisis-en un). Un coin agrandit tous les calques choisis.".into();
+        // Un côté étire dans un seul sens, celui de la feuille : chaque calque l'étire dans le sien, ce qui n'est juste que pour
+        // des calques sans rotation (partie 132). Un calque tourné : le geste est refusé, le message le dit.
+        if matches!(handle, BoxHandle::Edge(_)) && peers.iter().any(|&li| !droit(self.pose_du_geste(li).angle)) {
+            self.status = "Étirer par le milieu d'un côté : un des calques choisis est tourné, il ne peut pas s'étirer dans le sens de la feuille. Un coin agrandit tous les calques choisis.".into();
             return;
         }
         let box0 = self.many_box(peers);
@@ -293,7 +302,8 @@ impl App {
             .iter()
             .map(|&li| {
                 let l = &self.layers()[li];
-                let own = l.pose(self.cur_frame);
+                // (Un calque accroché à la caméra : sa pose du geste est celle qu'on voit, sans écart.)
+                let own = self.pose_du_geste(li);
                 let seen = l.transform_seen_at(&camera, self.cur_frame).unwrap_or(own);
                 Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y) }
             })
@@ -306,7 +316,7 @@ impl App {
             handle,
             start: stage,
             many: Some(Many { peers: list, box0, a: crate::vector::Affine::IDENTITY }),
-            t0: self.layer().pose(self.cur_frame),
+            t0: self.pose_du_geste(self.cur_layer),
             center: Pos2::ZERO,
             seen_center: Pos2::ZERO,
             content: box0,
@@ -334,6 +344,8 @@ impl App {
             Shift(Vec2),
             Turn(f32, Pos2),
             Scale(f32, Pos2),
+            /// Étirer : facteurs en largeur et en hauteur (sur la feuille) autour d'un point.
+            Stretch(f32, f32, Pos2),
         }
         let (a, text, op) = match handle {
             BoxHandle::Move => {
@@ -365,7 +377,14 @@ impl App {
                 let f = ((p - anchor).dot(dir) / dir.length_sq().max(1e-6)).clamp(0.01, 100.0);
                 (Affine::scale_about(anchor, f, f), format!("à {:.0} %", f * 100.0), Op::Scale(f, anchor))
             }
-            BoxHandle::Edge(_) => return,
+            BoxHandle::Edge(k) => {
+                let mids = [m.box0.center_top(), m.box0.right_center(), m.box0.center_bottom(), m.box0.left_center()];
+                let (h, anchor) = (mids[k % 4], if centre { c } else { mids[(k + 2) % 4] });
+                let along_x = k % 2 == 1;
+                let ratio = |num: f32, den: f32| if den.abs() < 1e-3 { 1.0 } else { (num / den).clamp(0.01, 100.0) };
+                let (fx, fy) = if along_x { (ratio(p.x - anchor.x, h.x - anchor.x), 1.0) } else { (1.0, ratio(p.y - anchor.y, h.y - anchor.y)) };
+                (Affine::scale_about(anchor, fx, fy), format!("étirés à {:.0} %", (if along_x { fx } else { fy }) * 100.0), Op::Stretch(fx, fy, anchor))
+            }
         };
         m.a = a;
         let n = m.peers.len();
@@ -377,13 +396,25 @@ impl App {
                     Op::Shift(delta) => LayerTransform { x: q.t0.x + delta.x, y: q.t0.y + delta.y, ..q.t0 },
                     Op::Turn(turn, rc) => q.t0.around(pivot, rc - q.off, 1.0, turn),
                     Op::Scale(f, anchor) => q.t0.around(pivot, anchor - q.off, f, 0.0),
+                    Op::Stretch(fx, fy, anchor) => {
+                        // (Un calque sans rotation : la largeur de la feuille est la sienne ; le point fixe reste où on le voit.)
+                        let t1 = LayerTransform { stretch_x: LayerTransform::clamp_stretch(q.t0.stretch_x * fx), stretch_y: LayerTransform::clamp_stretch(q.t0.stretch_y * fy), ..q.t0 };
+                        match q.t0.affine(pivot).inverse() {
+                            Some(inv) => {
+                                let a_local = inv.apply(anchor - q.off);
+                                let keep = q.t0.affine(pivot).apply(a_local) - t1.affine(pivot).apply(a_local);
+                                LayerTransform { x: t1.x + keep.x, y: t1.y + keep.y, ..t1 }
+                            }
+                            None => q.t0,
+                        }
+                    }
                 };
                 (q.li, t)
             })
             .collect();
         d.changed = true;
         for (li, t) in moved {
-            self.set_layer_pose(li, t);
+            self.poser_du_geste(li, t);
         }
         self.modified = true;
         self.status = format!("{n} calques {text}.");
@@ -444,7 +475,7 @@ impl App {
         };
         d.changed = true;
         let li = self.cur_layer;
-        self.set_layer_pose(li, t);
+        self.poser_du_geste(li, t);
         self.modified = true;
         self.status = format!(
             "Calque : décalage {:+.0} × {:+.0} px, largeur {:.0} %, hauteur {:.0} %, rotation {:.1}°",
@@ -460,9 +491,21 @@ impl App {
         let Some(d) = self.layer_drag.take() else { return };
         if d.changed {
             // Un calque à trajectoire (`trajectoireui.rs`) : le calque et son chemin bougent ensemble, les clés sont reposées.
-            if d.many.is_none() {
-                let li = self.cur_layer;
-                self.trajectoire_apres_transformer(li, d.t0);
+            // (Plusieurs calques : chacun, comme un seul calque, partie 132.)
+            match &d.many {
+                None => {
+                    let li = self.cur_layer;
+                    self.trajectoire_apres_transformer(li, d.t0);
+                }
+                Some(m) => {
+                    let peers: Vec<(usize, LayerTransform)> = m.peers.iter().map(|q| (q.li, q.t0)).collect();
+                    for (li, t0) in peers {
+                        self.trajectoire_apres_transformer(li, t0);
+                    }
+                    if !m.peers.is_empty() {
+                        self.status = format!("{} calques transformés ensemble.", m.peers.len());
+                    }
+                }
             }
             // Plusieurs calques : une seule étape, au nom du geste.
             let name = match d.handle {
@@ -523,10 +566,33 @@ impl App {
     }
 
     /// Le calque `li` prend la pose `t` à l'image courante : sa transformation fixe, ou, s'il est animé
-    /// (clés de position), la clé de cette image, posée au besoin (`Layer::set_pose`).
+    /// (clés de position), la clé de cette image, posée au besoin (`Layer::set_pose`). Dans un plan en Espace 3D, la
+    /// profondeur du calque reste libre : une carte passée derrière la caméra d'origine du plan n'en revient pas parce
+    /// qu'on la déplace ou qu'on annule sa transformation (`Layer::set_pose_selon`, partie 148).
     pub(crate) fn set_layer_pose(&mut self, li: usize, t: LayerTransform) {
         let f = self.cur_frame;
-        self.layers_mut()[li].set_pose(f, t);
+        // (Tout plan est dans l'espace, partie 159 : la même chose qu'avant pour une profondeur dans la borne.)
+        self.layers_mut()[li].set_pose_selon(f, t, true);
+    }
+
+    /// La pose du calque `li` à l'image courante telle que l'outil Transformer la travaille : la sienne ; pour un calque accroché à la
+    /// caméra (`accroche.rs`), celle qu'on voit sur la feuille (sa pose se lit dans le cadre de la caméra, qui peut être ailleurs,
+    /// zoomée ou tournée : un geste fait sur la feuille ne s'y ajoute pas tel quel).
+    pub(crate) fn pose_du_geste(&self, li: usize) -> LayerTransform {
+        let l = &self.layers()[li];
+        let own = l.pose(self.cur_frame);
+        if l.accroche {
+            l.transform_seen_at(&self.doc.camera_seen(self.cur_panel, self.cur_frame), self.cur_frame).unwrap_or(own)
+        } else {
+            own
+        }
+    }
+
+    /// Le calque `li` prend à l'image courante la pose `t` que donne le geste de l'outil Transformer (`pose_du_geste`) : pour un
+    /// calque accroché à la caméra, elle est ramenée dans le cadre de la caméra avant d'être écrite.
+    pub(crate) fn poser_du_geste(&mut self, li: usize, t: LayerTransform) {
+        let t = if self.layers()[li].accroche { self.doc.camera_seen(self.cur_panel, self.cur_frame).decrochee(t) } else { t };
+        self.set_layer_pose(li, t);
     }
 
     /// Boîte et poignées de l'outil Transformer.

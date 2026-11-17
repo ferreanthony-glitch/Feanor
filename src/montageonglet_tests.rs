@@ -223,7 +223,8 @@ fn the_montage_layout_is_made_for_editing() {
 fn entering_the_montage_shows_its_panes_and_the_camera_and_leaving_gives_the_stage_back() {
     let mut b = banc();
     assert!(!b.app.camera_view);
-    assert!(has(&b.app, Pane::Layers) && has(&b.app, Pane::Color) && b.app.layout.tool_bar);
+    // (Partie 160 : plus de panneau Calques ; les effets ont sa colonne.)
+    assert!(has(&b.app, Pane::Effects) && has(&b.app, Pane::Color) && b.app.layout.tool_bar);
     b.app.set_espace(Espace::Montage);
     b.chauffer(4);
     for p in [Pane::Canvas, Pane::Montage, Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History] {
@@ -237,7 +238,7 @@ fn entering_the_montage_shows_its_panes_and_the_camera_and_leaving_gives_the_sta
     b.app.set_espace(Espace::Storyboard);
     b.chauffer(2);
     assert!(!b.app.camera_view, "la vue du plateau revient, puisque c'est l'entrée dans le Montage qui l'avait changée");
-    assert!(b.app.layout.tool_bar && has(&b.app, Pane::Layers));
+    assert!(b.app.layout.tool_bar && has(&b.app, Pane::Effects));
     assert_eq!(b.app.pane_title(Pane::Canvas), "Dessin");
     // Une vue caméra choisie avant d'entrer dans le Montage reste telle quelle en en sortant.
     b.app.set_camera_view(true);
@@ -471,8 +472,10 @@ fn the_montage_space_is_idle_at_rest_and_drawing_it_stays_cheap() {
     let mut b = banc();
     // Le même repos que celui du storyboard : le premier saut de temps peut réveiller une fois (un délai qui
     // s'écoule), pas plus.
+    // (Partie 163 : la Fiche du plan n'a plus la même hauteur ; la colonne du Montage glisse vers elle, 45 % du reste par image,
+    // en une douzaine d'images au lieu de huit. Le repos se mesure une fois ce glissement fini.)
     let au_repos = |b: &mut Banc| -> Vec<std::time::Duration> {
-        b.chauffer(8);
+        b.chauffer(14);
         b.image(Vec::new(), 0.5);
         (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect()
     };
@@ -480,7 +483,8 @@ fn the_montage_space_is_idle_at_rest_and_drawing_it_stays_cheap() {
     assert!(storyboard.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "le storyboard au repos : {storyboard:?}");
     b.app.set_espace(Espace::Montage);
     let repos = au_repos(&mut b);
-    assert!(repos.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "l'espace Montage ne fait pas repeindre au repos : {repos:?}");
+    let raison = if repos.iter().all(|r| *r >= std::time::Duration::from_secs(1)) { String::new() } else { b.raison_du_reveil() };
+    assert!(repos.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "l'espace Montage ne fait pas repeindre au repos : {repos:?}{raison}");
     // Le texte de la barre d'état dit où l'on est : une astuce courte (le titre « Montage · … » à gauche n'y est plus,
     // l'onglet allumé le dit déjà).
     b.chauffer(2);

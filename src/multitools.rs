@@ -12,7 +12,7 @@
 //!   et tout ce qui l'utilise (poignées, curseurs, champs chiffrés) marche sans changement.
 //! - Un geste de la boîte = une étape d'annulation (`Edit::Group`) au nom du geste.
 //! - L'outil Transformer, lui, déplace, tourne et agrandit les calques choisis ensemble
-//!   (`layertools.rs`) ; l'outil Déformer reste sur le calque courant.
+//!   (`layertools.rs`) ; l'outil Déformer et la Gomme les prennent tous aussi (`deformmulti.rs`, `gommemulti.rs`, partie 132).
 
 use eframe::egui::{self, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 
@@ -31,9 +31,30 @@ const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
 const NUDGE_GESTURE: u64 = 0x6d75_6c74_696e_7564;
 
+/// « 42 traits sur 3 calques », « 12 traits et 2 zones sur 6 dessins de 2 calques » : ce que « Tout sélectionner » a pris.
+pub(crate) fn compte_tout(sel: &MultiSel) -> String {
+    let s = |n: usize| if n > 1 { "s" } else { "" };
+    let traits: usize = sel.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(multisel::Part::count).sum();
+    let zones = sel.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
+    let mut calques: Vec<u64> = sel.parts.iter().map(|p| p.layer).collect();
+    calques.sort_unstable();
+    calques.dedup();
+    let quoi = match (traits, zones) {
+        (t, 0) => format!("{t} trait{}", s(t)),
+        (0, z) => format!("{z} zone{}", s(z)),
+        (t, z) => format!("{t} trait{} et {z} zone{}", s(t), s(z)),
+    };
+    let (n, m) = (sel.parts.len(), calques.len());
+    if sel.by_keys {
+        format!("{quoi} sur {n} dessin{} de {m} calque{}", s(n), s(m))
+    } else {
+        format!("{quoi} sur {m} calque{}", s(m))
+    }
+}
+
 /// Les touches tenues font-elles le geste « tous les calques » (Ctrl+Maj avec
 /// l'outil Sélection) ? Ctrl seul garde le lasso temporaire et la boîte autour du pivot, Maj seul
-/// ajoute ou retire ; Alt est la pipette.
+/// ajoute ou retire ; Alt + clic choisit le calque du dessin cliqué (partie 165.8).
 pub(crate) fn is_all_layers_gesture(m: &egui::Modifiers) -> bool {
     (m.command || m.ctrl) && m.shift && !m.alt
 }
@@ -82,6 +103,51 @@ impl App {
     /// non.
     pub(crate) fn keys_mode(&self) -> bool {
         !self.multi.all_layers && self.chosen_key_drawings().len() >= 2
+    }
+
+    /// Les clés choisies du plan courant (calque, image de début), tous calques confondus.
+    pub(crate) fn cles_du_plan(&self) -> Vec<(u64, usize)> {
+        let Some(panel) = self.doc.panels.get(self.cur_panel).map(|p| p.id) else { return Vec::new() };
+        self.key_sel.iter().filter(|k| k.panel == panel).map(|k| (k.layer, k.start)).collect()
+    }
+
+    /// Les dessins que visent la gomme et l'outil Déformer quand plusieurs dessins sont choisis (partie 132) : ceux des clés
+    /// choisies du plan courant (dans la timeline ou le montage : plusieurs calques et plusieurs clés, chaque dessin une seule
+    /// fois, même tenu sur plusieurs images), s'il y en a deux au moins ; sinon ceux des calques choisis à l'image courante.
+    /// Vrai : par les clés.
+    pub(crate) fn dessins_choisis(&self) -> (Targets, bool) {
+        let keys = self.cles_du_plan();
+        if keys.len() >= 2 {
+            let t = multisel::targets_for_keys_in(&self.doc, self.cur_panel, self.cur_frame, &keys, false);
+            if t.list.len() >= 2 {
+                return (t, true);
+            }
+        }
+        (multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_layers()), false)
+    }
+
+    /// Plusieurs dessins sont réellement visés (calques ou clés choisis, une fois écartés les cachés, verrouillés, vidéo, sans
+    /// dessin) : deux au moins. Avec un seul, la gomme et Déformer gardent le chemin d'un seul calque (sa sélection, son
+    /// enveloppe).
+    pub(crate) fn plusieurs_dessins_choisis(&self) -> bool {
+        if self.chosen_layers().len() < 2 && self.cles_du_plan().len() < 2 {
+            return false;
+        }
+        self.dessins_choisis().0.list.len() >= 2
+    }
+
+    /// Les dessins visés, en clair : « 15 dessins (5 clés sur 3 calques) », ou « 3 calques ».
+    pub(crate) fn dessins_texte(t: &Targets, par_cles: bool) -> String {
+        let mut calques: Vec<u64> = t.list.iter().map(|x| x.id).collect();
+        calques.sort_unstable();
+        calques.dedup();
+        let (n, m) = (t.list.len(), calques.len());
+        let s = |k: usize| if k > 1 { "s" } else { "" };
+        if par_cles {
+            format!("{n} dessin{} ({n} clé{} sur {m} calque{})", s(n), s(n), s(m))
+        } else {
+            format!("{n} calque{}", s(n))
+        }
     }
 
     /// Les dessins des clés choisies, à prendre ensemble (`keys_mode`).
@@ -403,10 +469,11 @@ impl App {
         }
         self.multi.sel = Some(self.new_multi_sel(parts));
         self.tool = Tool::Select;
-        let summary = self.multi_summary().unwrap_or_default();
+        // « 42 traits sur 3 calques » (ou « … sur 6 dessins de 2 calques », par les clés ; « et 2 zones » pour les calques bitmap).
+        let compte = self.multi.sel.as_ref().map(compte_tout).unwrap_or_default();
         self.status = match left {
-            Some(l) => format!("{summary} choisis. {l}"),
-            None => format!("{summary} choisis."),
+            Some(l) => format!("Tout sélectionné : {compte}. {l}"),
+            None => format!("Tout sélectionné : {compte}."),
         };
     }
 
@@ -521,7 +588,9 @@ impl App {
         }
     }
 
-    /// Colle sur les calques choisis ce que la copie avait pris sur eux, à la même place.
+    /// Colle sur les calques choisis ce que la copie avait pris sur eux, à la même place. Avec un seul calque en face (un seul
+    /// calque choisi, sans plusieurs clés choisies) et aucun calque de la copie parmi eux : tout ce qui est de sa sorte s'y colle.
+    /// Ce qui n'a pas de calque en face est laissé de côté, et la barre d'état le dit.
     pub(crate) fn multi_paste(&mut self) {
         if self.content_refuses() {
             return;
@@ -548,22 +617,48 @@ impl App {
         // calque choisi de même sorte (vectoriel pour des éléments, bitmap pour des pixels) encore libre, dans l'ordre ;
         // ce qui n'a pas de calque en face est laissé de côté.
         if !clip.items.iter().any(|(l, _)| targets.list.iter().any(|t| t.id == *l)) {
-            let mut pris = vec![false; targets.list.len()];
-            for item in &mut clip.items {
-                let vectoriel = matches!(item.1, crate::multisel::ClipWhat::Vector(_));
-                let place = targets.list.iter().enumerate().find(|(i, t)| !pris[*i] && t.vector == vectoriel);
-                item.0 = match place {
-                    Some((i, t)) => {
-                        pris[i] = true;
-                        t.id
-                    }
-                    None => 0,
-                };
+            if let [seul] = targets.list.as_slice() {
+                // Un seul calque en face (on est revenu à un seul calque, ou on colle sur un autre) : tout ce qui est de sa sorte
+                // s'y colle, comme une copie d'un seul calque.
+                for item in &mut clip.items {
+                    item.0 = if matches!(item.1, crate::multisel::ClipWhat::Vector(_)) == seul.vector { seul.id } else { 0 };
+                }
+            } else {
+                let mut pris = vec![false; targets.list.len()];
+                for item in &mut clip.items {
+                    let vectoriel = matches!(item.1, crate::multisel::ClipWhat::Vector(_));
+                    let place = targets.list.iter().enumerate().find(|(i, t)| !pris[*i] && t.vector == vectoriel);
+                    item.0 = match place {
+                        Some((i, t)) => {
+                            pris[i] = true;
+                            t.id
+                        }
+                        None => 0,
+                    };
+                }
             }
         }
+        // Plusieurs morceaux de la copie pour un même calque (deux clés d'un même calque copiées ensemble, ou regroupés ci-dessus) :
+        // un seul morceau, les éléments à la suite — une seule part par dessin, une seule étape d'annulation par dessin. Des
+        // pixels ne se regroupent pas : le premier morceau seul est gardé.
+        let mut regroupes: Vec<(u64, crate::multisel::ClipWhat)> = Vec::new();
+        let mut laisses = 0usize;
+        for (calque, quoi) in std::mem::take(&mut clip.items) {
+            if !targets.list.iter().any(|t| t.id == calque) {
+                laisses += 1;
+                continue;
+            }
+            match (regroupes.iter_mut().find(|(c, _)| *c == calque), quoi) {
+                (Some((_, crate::multisel::ClipWhat::Vector(deja))), crate::multisel::ClipWhat::Vector(els)) => deja.extend(els),
+                (Some(_), _) => laisses += 1,
+                (None, quoi) => regroupes.push((calque, quoi)),
+            }
+        }
+        clip.items = regroupes;
         let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, &clip);
         if parts.is_empty() {
-            self.status = "Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.".into();
+            let pourquoi = targets.skipped_text().map(|t| format!(" {t}")).unwrap_or_default();
+            self.status = format!("Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.{pourquoi}");
             return;
         }
         self.renderer.invalidate_all();
@@ -572,7 +667,12 @@ impl App {
         self.named_step("Coller", |app| app.history.push(crate::history::Edit::Group(edits)));
         self.modified = true;
         let summary = self.multi_summary().unwrap_or_default();
-        self.status = format!("{summary} collés : déplace-les.");
+        let reste = match laisses {
+            0 => String::new(),
+            1 => " Un morceau de la copie n'avait pas de calque choisi en face : laissé de côté.".to_string(),
+            n => format!(" {n} morceaux de la copie n'avaient pas de calque choisi en face : laissés de côté."),
+        };
+        self.status = format!("{summary} collés : déplace-les.{reste}");
     }
 
     /// Suppr : ce qui est choisi sur chaque calque s'efface, en une seule étape.
@@ -607,6 +707,8 @@ impl App {
     /// Avant une annulation ou un rétablissement : les feuilles lâchées sont terminées, la
     /// sélection s'en va (elle ne serait plus celle des dessins refaits).
     pub(crate) fn multi_before_history(&mut self) {
+        // (La séance de Déformer sur plusieurs calques aussi : ses dessins d'origine ne seraient plus ceux du projet.)
+        self.deform_multi_fermer();
         self.drop_multi();
         self.multi_flush();
     }
@@ -644,6 +746,14 @@ impl App {
     }
 
     fn settle_float(&mut self, f: Flottante, adopted: bool) {
+        // Une déformation sur plusieurs calques (`deformmulti.rs`) : la feuille déformée est posée sur le reste, comme
+        // `flush_flottante` le fait pour un seul calque.
+        if !adopted {
+            if let Some(warp) = &f.warp {
+                let tiles = Flottante::flatten_warp_slot(&mut self.doc, f.src, f.slot, warp);
+                self.renderer.invalidate_tiles(&tiles);
+            }
+        }
         Flottante::release_slot(&mut self.doc, f.slot);
         if adopted {
             return;
@@ -787,14 +897,6 @@ impl App {
         Some(shape)
     }
 
-    /// Outil Déformer avec plusieurs calques choisis : il agit sur le calque courant seul.
-    pub(crate) fn deform_many_note(&mut self) {
-        let n = self.chosen_layers().len();
-        if n >= 2 {
-            self.status = format!("Déformer agit sur le calque courant seul ({n} calques choisis) : choisis-en un seul pour déformer son contenu.");
-        }
-    }
-
     /// Réglages de l'outil Sélection avec plusieurs calques choisis.
     pub(crate) fn multi_selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
         use crate::bulles::choix;
@@ -864,8 +966,7 @@ impl App {
         if has {
             self.box_fields_ui(ui);
         }
-        if lasso {
-            ui.label(egui::RichText::new("Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. Un clic sur un trait le prend ; Maj : ajouter ou retirer ; Ctrl+Maj : prendre sur tous les calques du plan (leurs clés se choisissent aussi dans le montage). Les calques cachés ou verrouillés sont laissés de côté.").small().weak());
-        }
+        // (Le mode d'emploi est dans l'animation « Plusieurs calques dans une seule boîte » et le registre des explications.)
+        self.avertir_laisses_de_cote(ui);
     }
 }

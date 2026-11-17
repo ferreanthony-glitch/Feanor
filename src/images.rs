@@ -114,6 +114,10 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
             m.frame += n;
         }
     }
+    // La trajectoire de la caméra (partie 149) : son départ, sa fin et ses marques restent sur leurs images, comme celle d'un calque.
+    if let Some(t) = panel.trajectoire_camera.as_mut() {
+        t.decaler_images(at, n, removed);
+    }
     // Une marque ne peut pas être sur la première image (c'est le début du plan).
     panel.marks.retain(|m| m.frame > 0);
     // Signets, points d'entrée et de sortie (13d) : ils suivent leurs images.
@@ -515,6 +519,10 @@ impl App {
         let lis = if all { self.all_image_layers() } else { self.image_layers() };
         let hole = self.hole;
         let snap = self.snapshot();
+        if all && hole == Hole::FromRight {
+            // L'effet de caméra vivant devient ses clés, sans changer l'image, pour suivre les images comme elles (partie 129).
+            self.doc.cuire_effet_vivant(self.cur_panel);
+        }
         for li in lis {
             let layer = &mut self.layers_mut()[li];
             delete_frames(&mut layer.frames, a, b, hole);
@@ -546,6 +554,10 @@ impl App {
         let at = if before { a } else { b };
         let lis = if all { self.all_image_layers() } else { self.image_layers() };
         let snap = self.snapshot();
+        if all {
+            // L'effet de caméra vivant devient ses clés, sans changer l'image, pour suivre les images comme elles (partie 129).
+            self.doc.cuire_effet_vivant(self.cur_panel);
+        }
         let row = vec![None; n];
         for li in lis {
             let layer = &mut self.layers_mut()[li];
@@ -1134,6 +1146,9 @@ impl App {
             self.action_item(ui, "Supprimer l'image (ou les images choisies)", "images.supprimer_plan");
         });
         ui.menu_button("Instances (dessin et ses expositions)", |ui| {
+            // La durée des clés touchées par les images choisies (partie 138) : en tête, c'est la commande de ce sous-menu qu'on cherche.
+            self.action_item(ui, "Modifier la durée des clés d'images…", "cles.duree");
+            ui.separator();
             self.action_item(ui, "Instance précédente", "instance.precedente");
             self.action_item(ui, "Instance suivante", "instance.suivante");
             self.action_item(ui, "Clé précédente (tous les calques)", "cle.precedente");

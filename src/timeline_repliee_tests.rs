@@ -1,18 +1,18 @@
-﻿//! Montage plus lisible (Anthony, 2026-10-28, branche `timeline-repliee`) : seul le calque actif est déplié dans le Storyboard et le
+//! Montage plus lisible (Anthony, 2026-10-28, branche `timeline-repliee`) : seul le calque actif est déplié dans le Storyboard et le
 //! Montage (tous les calques restent dépliés dans l'Animation) ; les clés de tous les calques d'un plan sont de petits traits de la
 //! couleur de leur sorte sur son bloc ; un calque de couleur lié n'a plus de piste, un liseré rose sous le bloc de son trait le montre ; un
 //! bloc n'écrit son nom que s'il diffère de celui de sa rangée ; au repos, rien ne repeint et rien ne se recalcule.
 //!
 //! (Les gestes, les hauteurs, le mode « cachés » en pur et les menus sont dans `pistes_tests.rs`.)
 
-use eframe::egui::{epaint::Shape, Color32, Modifiers, Rect};
+use eframe::egui::{epaint::Shape, Color32, Rect};
 
 use crate::clesplan::{cles_du_plan, ClesBlocs};
 use crate::document::{Cel, LayerKind};
 use crate::montagerows::{layer_in_row, row_count, row_of_layer, LAYER_H};
 use crate::perf_tests::Banc;
-use crate::pistes::{Inactifs, FOLDED_H};
-use crate::pistes_tests::{app_with, banc_montage, clic, doc_with, lieu, losanges, textes};
+use crate::pistes::FOLDED_H;
+use crate::pistes_tests::{app_with, banc_montage, doc_with, lieu, textes};
 use crate::poskeys::PosKey;
 use crate::workspace::Espace;
 
@@ -227,37 +227,16 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
         assert_eq!(hs, [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "{espace:?}");
     }
-    // L'Animation : sa timeline (tous les calques dépliés, comme avant) ne lit pas l'état des pistes du montage.
+    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 160 : le calque courant y a sa ligne complète, les
+    // autres une ligne fine).
     let mut b = banc_montage();
     b.app.set_espace(Espace::Animation);
     b.chauffer(8);
-    let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups);
-    assert!(rows.iter().all(|r| r.h == crate::layerheads::ROW_FULL), "tous les calques de la timeline sont dépliés");
+    let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
+    assert!(rows.iter().all(|r| r.h == if r.li == b.app.cur_layer { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE }), "le courant complet, les autres fins");
     assert_eq!(rows.len(), 4);
     for nom in ["Perso", "Décor", "Fond", "Vide"] {
         assert!(combien(&b, nom) >= 1, "« {nom} » manque dans la timeline de l'animation");
     }
     assert!(b.app.doc.panels[0].layers.iter().all(|l| !l.collapsed), "rien n'a été écrit dans les calques");
-}
-
-#[test]
-fn the_hidden_mode_shows_a_line_that_a_click_unfolds_into_the_other_layers() {
-    let mut b = banc_montage();
-    let base = combien(&b, "Décor");
-    b.app.settings.montage_inactifs = Inactifs::Caches;
-    b.chauffer(6);
-    let t = textes(&b);
-    let ligne = |t: &[(String, Rect)], fin: &str| t.iter().find(|(s, _)| s.contains(fin)).map(|(_, r)| *r);
-    assert!(ligne(&t, "3 autres calques").is_some(), "{t:?}");
-    assert_eq!(combien(&b, "Décor"), base - 1, "les autres calques sont cachés");
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 2);
-    clic(&mut b, ligne(&t, "3 autres calques").unwrap().center(), Modifiers::NONE);
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 5, "les trois autres, la ligne et le calque actif");
-    assert_eq!(combien(&b, "Décor"), base);
-    let t = textes(&b);
-    let cacher = ligne(&t, "Cacher les autres").expect("la ligne qui les cache de nouveau");
-    clic(&mut b, cacher.center(), Modifiers::NONE);
-    assert_eq!(b.app.montage_rows(300.0).lanes.len(), 2);
-    // Les losanges du calque actif restent ceux d'une piste dépliée.
-    assert_eq!(losanges(&b, crate::theme::POIGNEE_CALQUE).len(), 3);
 }

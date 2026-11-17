@@ -771,7 +771,8 @@ impl App {
 
     /// Supprime les clés d'effets choisies (rien sans clé choisie).
     pub(crate) fn delete_fx_keys(&mut self) {
-        let targets = self.fx_targets();
+        // (Et les clés des mêmes images sur l'effet de même sorte des autres calques choisis, partie 136.)
+        let targets = self.cles_fx_du_geste(self.fx_targets());
         if targets.is_empty() {
             self.status = "Pas de clé d'effet choisie : rien n'est supprimé.".into();
             return;
@@ -787,7 +788,8 @@ impl App {
         }
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
-        self.status = format!("{n} clé{} d'effet supprimée{}.", s(n), s(n));
+        let m = targets.len();
+        self.status = if m >= 2 { format!("{n} clé{} d'effet supprimée{} sur {m} calques.", s(n), s(n)) } else { format!("{n} clé{} d'effet supprimée{}.", s(n), s(n)) };
         self.commit_named(snap, "Supprimer des clés d'effet");
     }
 

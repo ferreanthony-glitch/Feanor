@@ -443,17 +443,30 @@ impl App {
         if self.bande_film_vide(ui) {
             return;
         }
-        ui.add_space(2.0);
-        // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
-        // `barres.rs`, le reste sous « Plus… ».
-        // (Dans l'espace Montage, la barre du travail de montage : coupes, rognage, transitions, son…)
+        // Le pointeur sur la bande : les touches du zoom de l'image zooment le montage (`run_action`).
+        self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
+        // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre au-dessus de la bande. Ses commandes (`barres.rs`, le reste
+        // sous « Plus… ») et la légende des clés sont sur une ligne dans la colonne de gauche, en face de la règle des temps et de la
+        // ligne des séquences ; la bande gagne la hauteur de l'ancienne barre. La colonne est au moins aussi large que cette ligne
+        // (Anthony : « toujours garder cette colonne avec un maximum d'information »).
+        // (Dans l'espace Montage, la barre du travail de montage — coupes, rognage, transitions, son, relecture, exports — reste au-dessus
+        // de la bande : elle a trois fois plus de commandes, et sur une ligne dans la colonne elle prendrait presque toute la largeur.)
         let barre = crate::barres::Barre::du_montage_dans(self.espace);
-        ui.horizontal(|ui| {
-            self.barre_ui(ui, barre);
-            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
-        });
-        ui.separator();
+        let dans_la_colonne = barre == crate::barres::Barre::Montage;
+        if dans_la_colonne {
+            let min = crate::montagehead::largeur_min_colonne(barre);
+            if self.montage_head_w < min {
+                self.montage_head_w = min;
+            }
+        } else {
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                self.barre_ui(ui, barre);
+                // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
+            });
+            ui.separator();
+        }
         // Le zoom, petit, tout en bas de la bande.
         egui::TopBottomPanel::bottom("zoom_montage")
             .resizable(false)
@@ -482,6 +495,11 @@ impl App {
                         // qui n'a pas autant de calques, 2026-10-17).
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
+                        // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
+                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + BANDS_H));
+                        if dans_la_colonne {
+                            self.barre_dans_la_colonne(&mut column, ligne, barre);
+                        }
                         self.head_width_grip(&mut column, headers);
                         egui::ScrollArea::horizontal()
                             .id_salt("montage_h")
@@ -540,6 +558,10 @@ impl App {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             ui.spacing_mut().slider_width = 70.0;
+            // La barre d'actions des calques, sous la colonne des calques (partie 160, `barrecalques.rs`) ; le zoom à sa droite.
+            // (La barre du bas a une marge de 4 points à gauche : la barre finit au bord de la colonne.)
+            self.barre_calques(ui, self.montage_head_w - 4.0);
+            ui.add_space(4.0);
             let small = |icon: &str| egui::Button::new(RichText::new(icon).size(11.0)).frame(false).min_size(vec2(16.0, 14.0));
             let (out, inn, all) = (self.raccourci("bande.zoom_arriere"), self.raccourci("bande.zoom_avant"), self.raccourci("bande.tout_voir"));
             if bulle(ui.add(small(ph::MAGNIFYING_GLASS_MINUS)), "Zoom arrière", "Ou Ctrl + molette sur la bande.", &out).clicked() {
@@ -558,6 +580,10 @@ impl App {
             }
             // La hauteur des pistes son : petite, moyenne, grande (`montagehauteur.rs`).
             self.hauteur_pistes_bouton(ui);
+            // La hauteur des plans (moyenne ou bandeau), à portée de main (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi
+            // dans Préférences > Montage, `pistes.rs`). (Le choix « trois calques / toute la pile » est retiré, partie 165.7.)
+            ui.add_space(8.0);
+            self.plans_choix_ui(ui, true);
         });
     }
 
@@ -802,7 +828,9 @@ impl App {
         // Plans. (Les numéros du film, trouvés une fois pour les titres et la barre des séquences.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
-        let thumb_h = (block_h - 24.0).max(10.0);
+        // En bandeau (`pistes::HauteurPlans`), la vignette tient dans la hauteur du bloc ; le titre et la durée sont à sa droite, sur une ligne.
+        let bandeau = block_h < 40.0;
+        let thumb_h = if bandeau { (block_h - 8.0).max(10.0) } else { (block_h - 24.0).max(10.0) };
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         // Les repères « modifié depuis le dernier envoi » posés ce coup-ci : où, et à quel plan (`envoisui.rs`).
@@ -886,11 +914,13 @@ impl App {
                 visuals.weak_text_color(),
             );
             // La durée n'est affichée que si elle tient à côté du titre.
-            if title.size().x + duration.size().x + 20.0 < rect.width() {
-                let at = pos2(rect.right() - 7.0 - duration.size().x, rect.bottom() - 7.0 - duration.size().y);
+            let gauche = if bandeau { rect.left() + 3.0 + thumb_h * aspect + 5.0 } else { rect.left() + 5.0 };
+            let y_de = |h: f32| if bandeau { rect.center().y - h * 0.5 - 1.0 } else { rect.bottom() - 7.0 - h };
+            if (gauche - rect.left()) + title.size().x + duration.size().x + 15.0 < rect.width() {
+                let at = pos2(rect.right() - 7.0 - duration.size().x, y_de(duration.size().y));
                 clip.galley(at, duration, visuals.weak_text_color());
             }
-            let at = pos2(rect.left() + 5.0, rect.bottom() - 7.0 - title.size().y);
+            let at = pos2(gauche, y_de(title.size().y));
             clip.galley(at, title, visuals.text_color());
             // Les clés de tous les calques du plan, en petits traits le long du bas du bloc (`clesplan.rs`), de la couleur de leur calque ;
             // calculées une fois par changement du document.
@@ -1246,7 +1276,8 @@ impl App {
                     self.begin_keys_drag(free_frame_at(origin.x));
                 } else {
                     self.set_panel(i);
-                    self.select_layer(k);
+                    // (Une poignée d'un des calques choisis : le choix des calques reste entier, `clic_dans_la_piste`.)
+                    self.clic_dans_la_piste(k, false);
                     self.begin_handle_drag(h);
                 }
             } else {
@@ -1505,7 +1536,8 @@ impl App {
                     let mods = ui.input(|i| i.modifiers);
                     self.goto_global(frame_at(p.x));
                     if self.cur_panel == i {
-                        self.select_layer(k);
+                        // (Parmi plusieurs calques choisis, le choix reste entier : `clic_dans_la_piste`.)
+                        self.clic_dans_la_piste(k, mods.command || mods.shift);
                     }
                     self.click_key(key, mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
@@ -1562,6 +1594,11 @@ impl App {
                         }
                     }
                 }
+                // Un clic dans la piste Caméra (une clé, une poignée de lissage, le vide) : la caméra du plan, devenu le plan
+                // courant, est choisie seule dans la vue Espace 3D, sa piste la piste choisie (`e3_piste_camera_cliquee`).
+                if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                    self.e3_piste_camera_cliquee();
+                }
             }
         }
         if resp.double_clicked() && !comment_ptr.busy && !label_click {
@@ -1582,9 +1619,15 @@ impl App {
                     // Ni sur un losange vert de clé de position.
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows).filter(|_| p.y < r.top() + rows.background_top()) {
                     // Double-clic sur la piste d'un calque : une nouvelle clé à cette image, copie du
-                    // dessin comme F5.
+                    // dessin comme F5. Sur la piste d'un des calques choisis : une clé sur chacun, comme F5 et le menu de la piste
+                    // (2026-11-11 ; avant, ce calque seul recevait la clé et le choix des calques était défait).
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
-                    self.montage_new_key(i, k, f, true);
+                    if i == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                        self.cur_frame = f.min(self.doc.panels[i].frame_count().saturating_sub(1));
+                        self.nouvelle_cle_choisis(true);
+                    } else {
+                        self.montage_new_key(i, k, f, true);
+                    }
                 } else if let Some((track, Some((id, _)))) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Double-clic sur un extrait de son : une clé de volume là où l'on a cliqué.
                     self.double_click_clip(track, id, p, left, ppf, lanes_top);
@@ -1669,7 +1712,8 @@ impl App {
                     }
                     self.goto_global(frame_at(p.x));
                     (self.cur_panel == i).then(|| {
-                        self.select_layer(k);
+                        // (Clic droit dans la piste d'un des calques choisis : le choix reste, le menu les vise tous.)
+                        self.clic_dans_la_piste(k, false);
                         MenuTarget::Layer(self.layers()[k].id)
                     })
                 } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {
@@ -1722,12 +1766,21 @@ impl App {
                     if crate::bulles::bulle(resp, "Nouvelle clé ici", "Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.", "").clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
-                        self.montage_new_key(pi, k, f, true);
+                        // (La piste d'un des calques choisis : une clé sur chacun, `nouvellescles.rs`.)
+                        if pi == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                            self.nouvelle_cle_choisis(true);
+                        } else {
+                            self.montage_new_key(pi, k, f, true);
+                        }
                     }
                     if ui.add(egui::Button::new("Nouvelle clé vide ici").shortcut_text(self.keymap.label("dessin.nouvelle_cle_vide"))).clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
-                        self.montage_new_key(pi, k, f, false);
+                        if pi == self.cur_panel && self.nouvelle_cle_sur_tous(k) {
+                            self.nouvelle_cle_choisis(false);
+                        } else {
+                            self.montage_new_key(pi, k, f, false);
+                        }
                     }
                     self.key_focus = true;
                     // Les cinq commandes communes aux trois sortes de clés (`clescommun.rs`), puis
@@ -1749,6 +1802,7 @@ impl App {
                             self.colorier_comme_precedente();
                         }
                     }
+                    self.action_item(ui, "Modifier la durée des clés d'images…", "cles.duree");
                     let resp = ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide"));
                     if crate::bulles::bulle(resp, "Laisser un vide", "Leurs images restent vides ; les autres clés ne bougent pas.", "").clicked() {
                         ui.close_menu();
@@ -1876,9 +1930,20 @@ impl App {
         ui.add_space(4.0);
         ui.heading(crate::planversui::titre_long_avec_version(&self.doc, i));
         self.kitsu_etiquette(ui, i);
+        // Partie 163.1 : la durée, une barre qu'on étire ; les versions, de petites vignettes. Les champs en chiffres sont sous « Précis ».
+        crate::panneauxvisuels::titre(ui, "Durée");
+        self.fiche_duree_barre(ui);
+        crate::panneauxvisuels::titre(ui, "Versions");
+        self.fiche_versions(ui);
+        // Une durée cible dépassée se voit sans ouvrir « Précis ».
+        for (nom, budget) in [("de la séquence", self.doc.budget_de_sequence(self.doc.sequence_of(i))), ("du film", self.doc.budget_du_film())] {
+            if let Some(b) = budget.filter(|b| b.depasse()) {
+                ui.colored_label(ui.visuals().error_fg_color, format!("Cible {nom} : {} : trop long", b.texte(fps)));
+            }
+        }
         // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on
         // reporte la valeur (une étape par saisie).
-        egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
+        crate::panneauxvisuels::precis(ui, "Fiche du plan", |ui| egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
             ui.label("Séquence");
             if let Some(mut name) = self.doc.sequences.iter().find(|s| s.id == seq).map(|s| s.name.clone()) {
                 let resp = ui
@@ -1936,7 +2001,7 @@ impl App {
                 }
                 ui.end_row();
             }
-        });
+        }));
         ui.label("Caméra").on_hover_text("Décalage du centre, zoom, rotation (outil Caméra pour la régler à la souris)");
         self.camera_fields(ui);
         for (label, field, rows) in [("Action", 0, 3), ("Dialogue", 1, 2), ("Notes", 2, 2)] {

@@ -57,6 +57,10 @@ pub(crate) fn sur_le_trait(de: Pos2, a: Pos2, x: f32) -> Pos2 {
 
 /// La planche de la capture : six cases par rangée, un trait du papier au-dessus de la case 1 au papier sous la case 3, par le centre de la case 2.
 /// Rend le banc, les deux bouts du trait à l'écran, et les images des cases 1 et 2.
+///
+/// **Le trait est coupé comme avant la partie 131** (`horschamp::COMME_AVANT_131` : une part par case traversée et pour le papier, toutes du
+/// même numéro) : c'est le trait d'un projet d'avant, que la sélection doit toujours prendre entier, et recoller quand on le déplace. Depuis la
+/// partie 131 un trait qu'on trace n'est plus coupé (`camera_souvient_tests.rs`).
 pub(crate) fn trait_a_travers(bitmap: bool) -> Option<(Banc, Pos2, Pos2, Rect, Rect)> {
     let mut b = planche(des_plans(12, bitmap), 6, 1.0)?;
     let l = b.app.board_layout();
@@ -64,10 +68,17 @@ pub(crate) fn trait_a_travers(bitmap: bool) -> Option<(Banc, Pos2, Pos2, Rect, R
     let (t1, t2) = (xf.rect(l.cards[1].thumb), xf.rect(l.cards[2].thumb));
     let de = pos2(t1.center().x, t1.top() - 30.0);
     let a = pos2(2.0 * t2.center().x - de.x, 2.0 * t2.center().y - de.y);
-    tracer(&mut b, de, a);
-    repos(&mut b);
+    tracer_comme_avant(&mut b, de, a);
     assert!(t2.shrink(22.0).contains(sur_le_trait(de, a, t2.center().x)), "le trait passe par le milieu de la case 2");
     Some((b, de, a, t1, t2))
+}
+
+/// Un trait droit, **coupé au lâcher comme avant la partie 131** (le trait d'un projet d'avant), puis le repos.
+pub(crate) fn tracer_comme_avant(b: &mut Banc, de: Pos2, a: Pos2) {
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(true));
+    tracer(b, de, a);
+    repos(b);
+    crate::horschamp::COMME_AVANT_131.with(|c| c.set(false));
 }
 
 /// Les parts du trait : (éléments vectoriels des dessins, traits de la planche).
@@ -173,7 +184,9 @@ fn moving_a_stroke_selected_in_one_case_moves_the_whole_stroke() {
     absent(&voir(&mut b, "selection-1b-ancienne", de, a), "l'ancienne place");
     assert_eq!(b.app.history.undo_len(), pas0 + 1, "une seule étape d'annulation pour le geste");
     assert_eq!(rejeux, 0, "aucun rejeu du moteur sur le fil de l'interface, du geste au lâcher");
-    assert!(choisies(&b) >= 3, "le choix suit le trait à sa nouvelle place ({})", choisies(&b));
+    // Partie 131 : déplacé, le trait coupé d'avant est posé entier, à un seul endroit (là où il commence : le papier), et le choix le suit.
+    assert_eq!(choisies(&b), 1, "le choix suit le trait à sa nouvelle place, redevenu un seul trait ({})", choisies(&b));
+    assert_eq!(parts(&b), (0, 1), "le trait est entier, sur le papier où il commence");
     // Annuler, rétablir.
     b.app.undo();
     present(&voir(&mut b, "selection-2-annule", de, a), "annulé : le trait revient");
@@ -239,10 +252,12 @@ fn copy_cut_paste_and_delete_take_the_whole_stroke() {
     absent(&voir(&mut b, "selection-supprime", de, a), "supprimé : toutes les parts");
     assert_eq!(parts(&b), (0, 0), "plus aucune part, ni dans les cases, ni sur la planche");
     assert_eq!(b.app.history.undo_len(), pas0 + 1, "supprimer : une étape");
-    // Coller : le trait revient à sa place, réparti comme un trait qu'on vient de tracer.
+    // Coller : le trait revient à sa place, entier, là où il commence (partie 131 : avant, réparti de nouveau entre les cases et le papier).
     b.app.run_action("edition.coller");
     present(&voir(&mut b, "selection-colle", de, a), "collé");
-    assert_eq!(parts(&b), avant, "collé : réparti comme le trait d'origine");
+    let colle = parts(&b);
+    assert!(avant.0 + avant.1 > 1, "le trait d'avant était coupé en parts : {avant:?}");
+    assert_eq!(colle, (0, 1), "collé : un seul trait, entier, sur le papier où il commence");
     assert_eq!(b.app.history.undo_len(), pas0 + 2, "coller : une étape");
     // Couper : copié, puis effacé ; annuler le rend.
     lasso(&mut b, m, 20.0);
@@ -250,7 +265,7 @@ fn copy_cut_paste_and_delete_take_the_whole_stroke() {
     absent(&voir(&mut b, "selection-coupe", de, a), "coupé");
     b.app.undo();
     present(&voir(&mut b, "selection-coupe-annule", de, a), "coupé puis annulé");
-    assert_eq!(parts(&b), avant);
+    assert_eq!(parts(&b), colle);
 }
 
 #[test]

@@ -11,7 +11,7 @@ const RED: Color32 = Color32::from_rgb(220, 20, 20);
 
 /// Caméra décalée de `offset`, sans avancée.
 fn pan(offset: Vec2) -> crate::document::CameraSeen {
-    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0 }
+    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0, grossissement: 1.0, angle: 0.0 }
 }
 
 /// Feuille 64×48 avec un point rouge en (10, 10) et une caméra fixe décalée de (8, 0).

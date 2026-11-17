@@ -677,6 +677,10 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     for t in &mut annotations.traces {
         t.anchor.rank = 0;
     }
+    // (De même pour les morceaux de la couche bitmap de la planche, partie 127.)
+    for m in &mut annotations.bitmap.morceaux {
+        m.anchor.rank = 0;
+    }
     let _ = writeln!(s, "annotations {:?}", annotations);
     // (Sans les index internes : un dictionnaire se dit dans un ordre qui change d'une lecture à l'autre.)
     let _ = writeln!(s, "scenario {:?}", doc.scenario.as_ref().map(|g| (g.id, &g.nom, &g.script, &g.liens)));

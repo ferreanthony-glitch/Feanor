@@ -7,12 +7,11 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{pos2, vec2, Event, Key, Modifiers, Pos2};
 
-use crate::annotations_calques_tests::{clic, entourer_trait, lasso, ouvert_vignettes, poser, texte_en};
-use crate::annotationsui::depot_du_calque;
+use crate::annotations_calques_tests::{clic, entourer_trait, lasso, poser, texte_en};
 use crate::calqueannot_tests::{banc_dessin, trait_au_milieu};
 use crate::export::{ExportJob, ExportSettings, Format};
 use crate::perf_tests::Banc;
-use crate::vignettes_tests::{dernier_nom, glisser, pas_d_annulation, quatre_plans};
+use crate::vignettes_tests::{dernier_nom, pas_d_annulation, quatre_plans};
 
 // ------------------------------------------------------------------------------------ « Avec les annotations »
 
@@ -124,6 +123,8 @@ fn the_export_check_box_is_off_by_default_and_the_choice_is_kept_by_the_workstat
     assert!(!toml::to_string(&crate::settings::Settings::default()).unwrap().contains("export_avec_annotations"), "rien d'écrit tant qu'elle est décochée");
     // La fenêtre d'export : la case est là (images, film, GIF, PDF), pas pour le son seul ; cocher la retient ; une nouvelle fenêtre s'ouvre cochée.
     let mut b = plan_annote();
+    // (Partie 163.4 : les réglages de la fenêtre d'export sont sous « Précis ».)
+    crate::panneauxvisuels::tout_ouvrir(true);
     let mut ecran = Fenetre::new();
     for format in [Format::Png, Format::Pdf, Format::Mp4, Format::Gif] {
         b.app.open_export(format);
@@ -259,74 +260,5 @@ fn the_delete_key_erases_the_strokes_chosen_with_the_annotation_lasso_in_one_und
     assert_eq!(b.app.doc.annotations.calques.len(), 1);
 }
 
-// ------------------------------------------------------------------------------------ le glissé des calques
-
-#[test]
-fn the_drop_slot_of_a_dragged_layer_is_read_from_the_pointer() {
-    // Trois lignes à 10, 30, 50 (haut en bas) : la liste a le calque du dessus en premier ; dans `calques`, il est le dernier.
-    let centres = [10.0, 30.0, 50.0];
-    // La ligne 2 (tout en bas) tirée au-dessus de tout : elle devient la première affichée, donc la dernière du modèle.
-    assert_eq!(depot_du_calque(&centres, 2, 0.0), (0, 2));
-    // Tirée entre les deux autres.
-    assert_eq!(depot_du_calque(&centres, 2, 25.0), (1, 1));
-    // Laissée dans sa propre ligne : elle reste où elle est (rang du modèle 0 pour la dernière ligne affichée).
-    assert_eq!(depot_du_calque(&centres, 2, 49.0), (2, 0));
-    assert_eq!(depot_du_calque(&centres, 2, 90.0), (3, 0));
-    // La ligne 0 (le calque du dessus) tirée sous tout : tout en bas.
-    assert_eq!(depot_du_calque(&centres, 0, 90.0), (3, 0));
-    // La ligne 0 laissée au-dessus de la ligne 1 : elle reste la première.
-    assert_eq!(depot_du_calque(&centres, 0, 12.0), (1, 2));
-}
-
-/// Tient le nom `de` du panneau et le lâche en `a` : un glissé par petits pas.
-fn glisser_de_a(b: &mut Banc, de: Pos2, a: Pos2) {
-    let pas: Vec<Pos2> = (0..=8).map(|k| de + (a - de) * (k as f32 / 8.0)).collect();
-    glisser(b, &pas);
-    b.chauffer(3);
-}
-
-#[test]
-fn dragging_a_layer_in_the_planche_panel_reorders_it_one_undo_step_per_drop() {
-    let mut b = ouvert_vignettes(quatre_plans(), 3);
-    let a = b.app.doc.annotations.calque_ou_premier(None);
-    let c = b.app.doc.annotations.ajouter_calque().unwrap();
-    let d = b.app.doc.annotations.ajouter_calque().unwrap();
-    b.app.doc.annotations.renommer_calque(c, "Reprises");
-    b.app.doc.annotations.renommer_calque(d, "Sam");
-    poser(&mut b, Some(a), 0, 40.0);
-    b.garder_formes = true;
-    b.chauffer(3);
-    let ordre = |b: &Banc| b.app.doc.annotations.calques.iter().map(|k| k.id).collect::<Vec<_>>();
-    assert_eq!(ordre(&b), [a, c, d], "le dernier est dessus : « Sam », « Reprises », « Annotations »");
-    let (sam, reprises, annotations) = (texte_en(&b, "Sam").unwrap(), texte_en(&b, "Reprises").unwrap(), texte_en(&b, "Annotations").unwrap());
-    assert!(sam.y < reprises.y && reprises.y < annotations.y);
-    let etapes = pas_d_annulation(&b);
-    // « Annotations » (tout en bas) tirée au-dessus de « Sam » : elle devient le calque du dessus.
-    glisser_de_a(&mut b, annotations, sam - vec2(0.0, 12.0));
-    assert_eq!(ordre(&b), [c, d, a], "« Annotations » est maintenant dessus");
-    assert_eq!((pas_d_annulation(&b), dernier_nom(&b)), (etapes + 1, "Ranger un calque d'annotation".to_string()), "une étape pour le dépôt");
-    // Ctrl+Z la remet en bas ; rétablir la remonte.
-    b.app.run_action("edition.annuler");
-    b.chauffer(2);
-    assert_eq!(ordre(&b), [a, c, d]);
-    assert_eq!(pas_d_annulation(&b), etapes);
-    b.app.run_action("edition.retablir");
-    b.chauffer(2);
-    assert_eq!(ordre(&b), [c, d, a]);
-    // Un glissé qui retombe sur la même place ne prend aucune étape (et ne change pas l'ordre).
-    let avant = pas_d_annulation(&b);
-    let reprises = texte_en(&b, "Reprises").unwrap();
-    glisser_de_a(&mut b, reprises, reprises + vec2(2.0, 3.0));
-    assert_eq!(ordre(&b), [c, d, a]);
-    assert_eq!(pas_d_annulation(&b), avant, "aucune étape quand le calque ne change pas de place");
-    // Un second dépôt, une seconde étape : « Sam » (le deuxième) tiré tout en bas, sous « Dessin ».
-    let (sam, dessin) = (texte_en(&b, "Sam").unwrap(), crate::annotations_calques_tests::texte_en(&b, "Dessin de la case").unwrap());
-    glisser_de_a(&mut b, sam, pos2(sam.x, dessin.y + 40.0));
-    assert_eq!(ordre(&b), [d, c, a], "« Sam » est tout en bas des calques d'annotation");
-    assert_eq!(pas_d_annulation(&b), avant + 1);
-    // Le tracé des annotations, les noms et l'œil n'ont pas bougé ; « Monter / Descendre » du menu marchent toujours.
-    assert_eq!(b.app.doc.annotations.traces.len(), 1);
-    b.app.annot_calque_deplacer(d, true);
-    assert_eq!(ordre(&b), [c, d, a]);
-    assert_eq!(dernier_nom(&b), "Monter un calque d'annotation");
-}
+// (Le glissé des couches d'annotation dans la liste du panneau Planche n'existe plus, partie 160 : la liste est devenue la ligne
+// « Annotations », ses couches sont au clic droit, avec Monter et Descendre, `panneaux_fins_tests.rs`.)

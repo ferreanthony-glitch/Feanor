@@ -71,7 +71,7 @@ fn the_card_lists_the_tool_the_tab_and_what_works_everywhere_with_their_keys() {
     let ligne = |section: usize, nom: &str| s[section].lignes.iter().find(|l| l.nom == nom).unwrap_or_else(|| panic!("« {nom} » manque : {:?}", s[section].lignes)).touches.clone();
     assert_eq!(ligne(0, CHOISIR_L_OUTIL), "Alt+B");
     assert_eq!(ligne(0, "Plus gros"), map.keys_text("outil.taille_plus"));
-    assert_eq!(ligne(0, "Pipette"), "Alt + clic", "un geste de souris, écrit comme tel");
+    assert_eq!(ligne(0, "Choisir le calque du dessin cliqué"), "Alt + clic", "un geste de souris, écrit comme tel (partie 165.8 : plus la pipette)");
     assert_eq!(ligne(1, "Nouveau Plan"), map.keys_text("panneau.nouveau"));
     assert_eq!(ligne(2, "Annuler"), "Ctrl+Z");
     assert_eq!(ligne(2, "Mode concentration"), "F11");

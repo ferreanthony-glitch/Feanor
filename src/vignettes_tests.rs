@@ -124,10 +124,15 @@ pub(crate) fn deux_sequences() -> Document {
     doc
 }
 
+/// Largeur de la fenêtre des essais de la planche (`ouvert`).
+pub(crate) const LARGEUR_D_ESSAI: u32 = 1282;
+
 /// La vue Vignettes ouverte sur `doc`, `colonnes` vignettes par ligne, une seule page, assez petites pour tenir à l'écran.
 pub(crate) fn ouvert(doc: Document, colonnes: usize) -> Banc {
-    // (940 de haut : la barre du bas de la planche, 30 points, prend sa place sans changer celle des essais d'avant.)
-    let mut b = banc_taille(doc, false, 1600, 940);
+    // (940 de haut : la barre du bas de la planche, 30 points, prend sa place sans changer celle des essais d'avant. 1 282 de large :
+    // depuis la partie 161, la colonne des panneaux garde 290 points et la planche prend le reste ; à cette largeur, la planche a
+    // celle qu'elle avait dans une fenêtre de 1 600 avec les deux colonnes d'avant, et les cases leur taille d'avant.)
+    let mut b = banc_taille(doc, false, LARGEUR_D_ESSAI, 940);
     b.app.board_view = BoardView::Panels;
     b.app.layout.board_columns = colonnes;
     b.app.layout.board_rows = 0;
@@ -241,9 +246,9 @@ fn a_stroke_draws_in_any_image_the_moment_the_pen_goes_down_without_a_prior_clic
     b.image(vec![appui(c.center(), false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     assert!(encre(&b.app.doc, 1));
-    // (Depuis le 2026-10-30, la part du trait qui tombe dans le champ de la vignette voisine va à son plan : `horschamp.rs`.)
-    assert!(encre(&b.app.doc, 0), "le trait traverse les cases du plan 1 : il en a sa part");
-    for i in [2, 3] {
+    // (Partie 131 : le trait reste tout entier dans le plan où il a commencé, comme à l'origine. Entre le 2026-10-30 et la partie 131, sa part dans
+    // le champ d'une vignette voisine allait au plan de celle-ci : `horschamp.rs`.)
+    for i in [0, 2, 3] {
         assert!(!encre(&b.app.doc, i), "plan {} : rien", i + 1);
     }
     assert_eq!(b.app.cur_panel, 1);

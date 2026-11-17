@@ -165,8 +165,12 @@ etat_projet! {
     bdrag: Option<crate::pixtools::BDrag> = None,
     fond_stroke: Option<CelId> = None,
     fond_cut: Option<crate::brush::StrokeState> = None,
+    sur_aplat_geste: Option<crate::aplatsur::GesteSurAplat> = None,
     aplat_miroirs: crate::aplatmulti::Miroirs = Default::default(),
     aplat_travaux: crate::aplatmulti::Travaux = Default::default(),
+    gomme_multi: crate::gommemulti::GommeMulti = Default::default(),
+    gomme_travaux: crate::gommemulti::GommeTravaux = Default::default(),
+    deform_multi: Option<crate::deformmulti::DeformMulti> = None,
     aplat_intel: crate::aplatintel::Etat = Default::default(),
     aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente> = None,
     cam_drag: Option<crate::camtools::CamDrag> = None,
@@ -209,6 +213,7 @@ etat_projet! {
     res_edit: Option<crate::projetui::ResolutionEdit> = None,
     duration_dialog: Option<crate::rognageui::DurationDialog> = None,
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
+    duree_cles: Option<crate::clesduree::DureeCles> = None,
     fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
     corbeille_ui: Option<crate::corbeilleui::Fenetre> = None,
     corbeille_charge: Option<crate::corbeilleui::Chargement> = None,
@@ -224,6 +229,7 @@ etat_projet! {
     flip_manual: Option<(usize, usize)> = None,
     // --- Espace 3D, références, envois, versions
     espace3d: crate::espace3dui::Espace3dState = Default::default(),
+    e3d: crate::espace3ddessin::Dessin3d = Default::default(),
     refs: crate::referencesui::RefUi = Default::default(),
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),
     comparaison: Option<crate::comparerui::Comparaison> = None,
@@ -246,6 +252,7 @@ etat_projet! {
         r
     },
     monde: crate::monde::Monde = crate::monde::Monde::new(),
+    nette: crate::vuenette::VueNette = crate::vuenette::VueNette::new(),
     thumbs: crate::thumbs::Thumbs = Default::default(),
     gel: crate::gel::Gel = Default::default(),
     layer_thumbs: crate::layersui::LayerThumbs = Default::default(),
@@ -264,6 +271,9 @@ etat_projet! {
     open_job: Option<crate::ouverture::OpenJob> = None,
     video_import: Option<crate::videoui::VideoImport> = None,
     recovery: Option<crate::recovery::Recovery> = None,
+    // --- l'écriture continue et les jalons (`continu.rs`, `jalonsui.rs`)
+    continu: crate::continu::Continu = Default::default(),
+    jalons_ui: Option<crate::jalonsui::Fenetre> = None,
 }
 
 
@@ -291,12 +301,20 @@ pub(crate) struct InfosOnglet {
     pub actif: bool,
     /// Jamais servi : l'accueil (« Nouvel onglet »).
     pub vierge: bool,
+    /// FEANOR écrit ce projet tout seul (`continu.rs`) : « modifié » ne dure qu'un instant, et fermer ne demande rien.
+    pub continu: bool,
 }
 
 impl InfosOnglet {
-    /// Le projet a quelque chose à perdre (modifié, ou pas encore écrit) : la pastille « • » de l'onglet.
+    /// Le projet a quelque chose à perdre (modifié, ou pas encore écrit) : fermer doit d'abord l'écrire, ou demander.
     pub(crate) fn a_perdre(&self) -> bool {
         self.modifie || self.ecriture
+    }
+
+    /// La pastille « • » de l'onglet : quelque chose à perdre que FEANOR n'écrit pas tout seul. (Avec l'écriture continue, elle
+    /// clignoterait à chaque trait.)
+    pub(crate) fn pastille(&self) -> bool {
+        self.a_perdre() && !self.continu
     }
 }
 
@@ -385,6 +403,7 @@ impl App {
                     ecriture: self.saving.is_some(),
                     actif: true,
                     vierge,
+                    continu: self.continu_actif(),
                 }
             }
             Some(e) => {
@@ -397,6 +416,7 @@ impl App {
                     ecriture: e.saving.is_some(),
                     actif: false,
                     vierge,
+                    continu: e.continu.vaut(self.settings.enregistrer_en_continu, e.path.as_deref(), e.partage.is_some()),
                 }
             }
         }
@@ -599,6 +619,8 @@ impl App {
     /// Le changement lui-même. `fermeture` : l'ancien onglet est jeté après (il ne range pas ses caches).
     fn bascule(&mut self, vers: usize, fermeture: bool) {
         let (reserve, textures) = self.sortir_de_l_onglet();
+        // L'écriture continue : le projet qu'on range s'écrit d'abord (son écriture finit pendant qu'il est caché, `tick_onglets`).
+        self.continu_avant_de_ranger();
         let mut e = self.onglets[vers].etat.take().expect("un onglet inactif a son état rangé");
         let (reserve_b, textures_b) = (e.reserve_fx.take(), e.textures_gpu.take());
         self.echanger_etat(&mut e);
@@ -637,6 +659,7 @@ impl App {
             return false;
         }
         let (reserve, textures) = self.sortir_de_l_onglet();
+        self.continu_avant_de_ranger();
         let mut e = Box::new(EtatProjet::vierge(self.gpu.is_some()));
         self.echanger_etat(&mut e);
         e.reserve_fx = Some(reserve);
@@ -812,6 +835,8 @@ impl App {
 
     /// Ferme tous les onglets sauf `garde` (son numéro) ; si certains sont modifiés, une seule boîte les liste.
     pub(crate) fn fermer_les_autres(&mut self, garde: u64) {
+        self.end_stroke();
+        self.continu_ecrire_les_onglets();
         let modifies: Vec<(u64, String)> = self.onglets_modifies().into_iter().filter(|(id, _)| *id != garde).collect();
         if modifies.is_empty() {
             self.fermer_autres_sans_demander(garde);
@@ -926,8 +951,10 @@ impl App {
             let status = std::mem::replace(&mut app.status, avant);
             (app.save_error.is_some(), status)
         });
-        // Le message de l'écriture est celui d'un autre onglet : on dit lequel.
-        self.status = format!("{nom} — {status}");
+        // Le message de l'écriture est celui d'un autre onglet : on dit lequel. (L'écriture continue ne dit rien.)
+        if !status.is_empty() {
+            self.status = format!("{nom} — {status}");
+        }
         self.session_a_ecrire = true;
         erreur
     }
@@ -939,10 +966,12 @@ impl App {
     pub(crate) fn tick_secours_cache(&mut self, i: usize, interval: Option<Duration>) -> Option<Duration> {
         let Some(e) = self.onglets[i].etat.as_mut() else { return None };
         let Some(rec) = e.recovery.as_mut() else { return None };
+        // (Un projet que FEANOR écrit tout seul n'a pas besoin de copie de secours : son dossier est à jour, `continu.rs`.)
+        let continu = e.continu.vaut(self.settings.enregistrer_en_continu, e.path.as_deref(), e.partage.is_some());
         let snap = crate::recovery::Snapshot {
             doc: &e.doc,
             serial: e.history.serial(),
-            modified: e.modified,
+            modified: e.modified && !continu,
             title: nom_de(e.path.as_deref(), e.import_source.as_deref(), false),
             project: e.path.clone(),
             project_written: &e.written,
@@ -973,12 +1002,32 @@ impl App {
     pub(crate) fn demander_a_quitter(&mut self) {
         self.end_stroke();
         self.playing = false;
+        // L'écriture continue : ces projets-là s'écrivent sans rien demander ; on attend leur écriture, puis on quitte.
+        self.continu_ecrire_les_onglets();
         let modifies = self.onglets_modifies();
         let ecritures = self.infos_onglets().iter().any(|i| i.ecriture);
         if modifies.is_empty() && !ecritures {
             self.perform(Pending::Quit);
         } else {
             self.groupe = Some(Groupe { action: ActionGroupe::Quitter, onglets: modifies.clone(), attente: modifies.is_empty() });
+        }
+    }
+
+    /// L'écriture continue avant de quitter ou de fermer plusieurs onglets : chaque projet que FEANOR écrit tout seul et qui a
+    /// encore quelque chose à écrire part maintenant, sans question (`continu.rs`).
+    fn continu_ecrire_les_onglets(&mut self) {
+        self.continu_avant_de_ranger();
+        let reglage = self.settings.enregistrer_en_continu;
+        for i in 0..self.onglets.len() {
+            if i == self.actif {
+                continue;
+            }
+            let a_ecrire = self.onglets[i].etat.as_ref().is_some_and(|e| e.modified && e.saving.is_none() && e.save_error.is_none() && e.continu.vaut(reglage, e.path.as_deref(), e.partage.is_some()));
+            if a_ecrire {
+                self.avec_onglet_cache(i, |app| {
+                    app.continu_ecrire();
+                });
+            }
         }
     }
 

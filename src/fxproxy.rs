@@ -92,6 +92,8 @@ pub fn downscale(raster: &Raster, level: u8) -> Raster {
     if level == 0 {
         return raster.clone();
     }
+    #[cfg(test)]
+    crate::fx::compter_un_calcul();
     let f = 1usize << level;
     let (w, h) = (raster.width.div_ceil(f), raster.height.div_ceil(f));
     let mut out = Raster::new(w, h);

@@ -128,6 +128,16 @@ impl Tile {
     pub fn rouvrir(&self) {
         let _ = self.0.pixels();
     }
+
+    /// Lit les pixels **sans les garder** s'ils sont rangés : ils sont rouverts le temps de `f`, puis oubliés (la couche bitmap de la planche les relit
+    /// ainsi pour ses textures, son export, son enregistrement : sa mémoire reste celle des tampons).
+    pub fn avec_les_pixels<R>(&self, f: impl FnOnce(&[Color32; TILE_PIXELS]) -> R) -> R {
+        match (self.0.px.get(), self.0.rangee.get().and_then(Option::as_ref)) {
+            (Some(p), _) => f(p),
+            (None, Some(o)) => f(&crate::tuilepack::unpack(o)),
+            (None, None) => f(self.0.pixels()),
+        }
+    }
 }
 
 impl std::ops::Deref for Tile {

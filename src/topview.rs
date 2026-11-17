@@ -157,7 +157,7 @@ impl App {
     fn top_fit(&self, rect: Rect, items: &[Item]) -> Fit {
         let unit = self.doc.frame[0] as f32;
         let d_max = items.iter().map(|it| it.shown).fold(1.5_f32, f32::max) * 1.12;
-        let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
+        let cam = self.doc.panel_camera_reelle(self.cur_panel, self.cur_frame);
         let cam_x = cam.x - self.doc.stage_center().x;
         let [(a, _), (b, _)] = field_edges(cam_x, self.camera_advance(&cam), d_max, cam.zoom, cam.pan, unit);
         let (mut lo, mut hi) = (a.min(b).min(cam_x), a.max(b).max(cam_x));
@@ -186,6 +186,8 @@ impl App {
     }
 
     fn top_view_ui(&mut self, ui: &mut egui::Ui) {
+        // (Partie 159 : sur tout plan, la même vue qu'avant. Elle montre la caméra du plan telle qu'elle est, panoramique
+        // compris ; une carte couchée au sol ou en mur y est un trait à sa profondeur, comme tout calque.)
         ui.label(
             egui::RichText::new(
                 "Glisser un calque vers le haut l'éloigne (il défile moins vite quand la caméra \
@@ -213,6 +215,10 @@ impl App {
                         self.status = "Calque verrouillé : déverrouille-le pour changer sa profondeur.".into();
                     } else if self.layers()[li].position_locked {
                         self.status = "Position verrouillée : déverrouille-la pour changer la profondeur du calque.".into();
+                    } else if self.layers()[li].passe_la_borne(self.cur_frame) {
+                        // (Partie 159 : un calque posé plus près que la vue de dessus ne sait le montrer ne saute pas à sa borne
+                        // au premier glissé.)
+                        self.status = format!("Calque « {} » : plus près que la vue de dessus ne sait le montrer, sa profondeur ne se règle pas ici.", self.layers()[li].name);
                     } else {
                         let y = fit.to_screen(rect, 0.0, items[li].shown).y;
                         self.top_drag = Some(TopDrag {
@@ -296,7 +302,7 @@ impl App {
         let unit = fit.unit;
         let cx = self.doc.stage_center().x;
         let cone = |frame: usize| {
-            let cam = self.doc.panel_camera(self.cur_panel, frame);
+            let cam = self.doc.panel_camera_reelle(self.cur_panel, frame);
             let x = cam.x - cx;
             // La caméra avancée (travelling) est plus haut, plus près des calques ; le
             // panoramique tourne son champ.

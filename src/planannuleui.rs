@@ -128,6 +128,7 @@ impl App {
         };
         let c = layout.cards[k];
         self.vignettes.appui_bande = Some(pos);
+        self.noter_appui_papier(layout, p);
         self.board_sel = vec![c.plan];
         self.board_notes.clear();
         let f = self.cur_frame.min(self.frame_count().saturating_sub(1));

@@ -24,7 +24,7 @@
 //! outils Sélection et Transformer, Préférences > Dessin) :
 //! - **Point fixe des poignées** : « Poignée opposée » (d'office) — un coin ou un côté tiré (échelle ou inclinaison)
 //!   garde la poignée opposée en place ; ou « Centre » — tout se fait autour du pivot (le centre de la boîte, s'il
-//!   n'est pas déplacé). Ctrl tenu pendant le geste donne l'autre mode (Alt est pris par la pipette) ;
+//!   n'est pas déplacé). Ctrl tenu pendant le geste donne l'autre mode (Alt + clic choisit le calque du dessin cliqué, partie 165.8) ;
 //! - **Rotation autour de** : « Pivot » (d'office) ou « Coin opposé » — une rotation prise juste hors d'un coin
 //!   tourne autour du coin opposé de la boîte.
 

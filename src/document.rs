@@ -265,6 +265,10 @@ impl Default for LayerTransform {
 
 /// Inclinaison la plus grande d'une carte (au-delà, elle est vue par la tranche).
 pub const MAX_TILT: f32 = 85.0;
+/// Inclinaison la plus grande d'une carte d'un **plan en Espace 3D** (`docs/ESPACE-LIBRE.md`, étape A6) : un demi-tour.
+/// Une carte s'y couche au sol (90°) et se tourne face à une caméra qui regarde n'importe où. C'est aussi la borne de ce
+/// qui se lit d'un fichier : un plan ordinaire n'écrit jamais plus de `MAX_TILT`.
+pub const MAX_TILT_LIBRE: f32 = 180.0;
 
 impl LayerTransform {
     pub fn is_identity(&self) -> bool {
@@ -279,6 +283,11 @@ impl LayerTransform {
     /// Une inclinaison ramenée entre −`MAX_TILT` et `MAX_TILT` (une valeur abîmée : 0).
     pub fn clamp_tilt(v: f32) -> f32 {
         if v.is_finite() { v.clamp(-MAX_TILT, MAX_TILT) } else { 0.0 }
+    }
+
+    /// Une inclinaison d'un plan en Espace 3D, ou lue d'un fichier : entre −`MAX_TILT_LIBRE` et `MAX_TILT_LIBRE`.
+    pub fn clamp_tilt_libre(v: f32) -> f32 {
+        if v.is_finite() { v.clamp(-MAX_TILT_LIBRE, MAX_TILT_LIBRE) } else { 0.0 }
     }
 
     /// Un étirement ramené entre 1 % et 100 fois, son signe gardé (négatif : calque retourné).
@@ -319,12 +328,15 @@ impl LayerTransform {
 }
 
 /// Où est la caméra, pour le multiplan (`Layer::transform_seen`) : son décalage depuis le centre
-/// de la feuille, son avancée, et la distance de référence (pixels de la feuille).
+/// de la feuille, son avancée, et la distance de référence (pixels de la feuille). Pour un calque accroché à la caméra
+/// (`accroche.rs`, partie 141) : son grossissement (l'objectif et l'avancée) et sa rotation, en degrés.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CameraSeen {
     pub offset: Vec2,
     pub dolly: f32,
     pub d0: f32,
+    pub grossissement: f32,
+    pub angle: f32,
 }
 
 /// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
@@ -442,6 +454,19 @@ pub struct Layer {
     /// Calque d'annotation (`calqueannot.rs`) : des notes de réalisateur sur le plan, vectorielles, peintes par-dessus tout à l'écran et
     /// jamais dans un export ni dans les vignettes (sauf si on le demande). Un calque vectoriel ordinaire pour le reste.
     pub annotation: bool,
+    /// Accroché à la caméra (`accroche.rs`, Anthony 2026-11-11) : le calque garde sa place dans l'image filmée, quoi que fasse la caméra
+    /// (déplacement, zoom, rotation, avancée). Sa pose se lit alors dans le cadre de la caméra, et le multiplan ne le fait plus défiler.
+    pub accroche: bool,
+    /// Calque 3D (`espace3ddecor.rs`, Anthony 2026-11-14, partie 157) : un Sol, un Mur ou un Ciel créé par « Nouveau calque > Calques 3D »,
+    /// avec sa grille de repère (jamais dessinée dans le calque, jamais exportée). Un calque de dessin ordinaire pour tout le reste. Aucun :
+    /// calque ordinaire.
+    pub calque_3d: Option<crate::espace3ddecor::Calque3d>,
+    /// **Profondeur tenue à la borne d'autrefois** (format 56, `docs/INTERFACE.md` partie 159) : un calque d'un plan dessiné à
+    /// plat d'un projet d'avant le format 56, dont une clé de position passait `MIN_DEPTH` et que le format 55 montrait à cette
+    /// borne, sans qu'on puisse ramener ses clés à la borne sans changer son image entre deux clés (`Layer::ramener_si_rien_ne_change`).
+    /// Sa profondeur se lit alors toujours bornée (`depth_libre_at` = `depth_at`), comme avant : la même image. Faux pour tout
+    /// autre calque.
+    pub profondeur_bornee: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -517,6 +542,9 @@ impl Layer {
             decor: false,
             personnage: None,
             annotation: false,
+            accroche: false,
+            calque_3d: None,
+            profondeur_bornee: false,
         }
     }
 
@@ -539,6 +567,16 @@ impl Layer {
 
     /// Plus proche que ça, le calque serait derrière la caméra.
     pub const MIN_DEPTH: f32 = -0.9;
+
+    /// La profondeur d'une carte d'un **plan en Espace 3D** va de −`MAX_DEPTH_LIBRE` à `MAX_DEPTH_LIBRE`
+    /// (`docs/INTERFACE.md`, partie 148) : elle passe `MIN_DEPTH`, atteint la caméra de référence (à −1) et va derrière
+    /// elle. C'est aussi la borne de ce qui se lit d'un fichier pour ces plans.
+    pub const MAX_DEPTH_LIBRE: f32 = 1000.0;
+
+    /// Une profondeur d'un plan en Espace 3D : entre −`MAX_DEPTH_LIBRE` et `MAX_DEPTH_LIBRE` (une valeur abîmée : 0).
+    pub fn clamp_depth_libre(v: f32) -> f32 {
+        if v.is_finite() { v.clamp(-Self::MAX_DEPTH_LIBRE, Self::MAX_DEPTH_LIBRE) } else { 0.0 }
+    }
 
     /// Facteur de perspective : 1 au plan de référence, ½ deux fois plus loin, 2 deux fois plus près.
     pub fn perspective(&self) -> f32 {
@@ -589,6 +627,134 @@ impl Layer {
         self.transform.dz = 0.0;
     }
 
+    // ---- Plan en Espace 3D : la profondeur libre (`docs/INTERFACE.md`, partie 148).
+    //
+    // Dans un plan ordinaire, la profondeur s'arrête à `MIN_DEPTH` (les quatre fonctions ci-dessus, inchangées). Dans un
+    // plan en Espace 3D, elle est libre : la carte passe la caméra de référence et va derrière elle. Tout ce qui lit ou
+    // écrit la profondeur d'une carte d'un tel plan passe par les fonctions ci-dessous ; `libre` est `Panel::espace`.
+
+    /// La profondeur du calque à l'image `frame` dans un **plan en Espace 3D** : comme `depth_at`, sans la borne
+    /// `MIN_DEPTH`. Sous cette borne, la carte ne change plus de taille avec sa profondeur (`Monde::card_xf`) : elle avance
+    /// seulement, jusqu'à la caméra de référence, puis derrière elle.
+    pub fn depth_libre_at(&self, frame: usize) -> f32 {
+        // (Un calque d'un ancien projet dont les clés ne se ramenaient pas à la borne sans changer l'image : toujours lu
+        // borné, comme le format 55 le montrait. Partie 159.)
+        if self.profondeur_bornee {
+            return self.depth_at(frame);
+        }
+        Self::clamp_depth_libre(self.depth + self.pose(frame).dz)
+    }
+
+    /// **À l'ouverture d'un projet d'avant le format 56** (partie 159, point c) : un calque d'un plan dessiné à plat dont la
+    /// profondeur passe `MIN_DEPTH` à l'une des images `0..images` (une clé de position, que le format 55 montrait à la
+    /// borne). Ses clés sont ramenées à la borne (`ramener_a_la_borne`) **si et seulement si** cela ne change rien de ce qui
+    /// fait son image à aucune de ces images : la même pose, la même profondeur lue, au bit près. Sinon le calque garde ses
+    /// valeurs et se lit borné pour toujours (`profondeur_bornee`) : la même image aussi. Rend vrai si quelque chose a changé
+    /// dans le calque.
+    pub fn ramener_si_rien_ne_change(&mut self, images: usize) -> bool {
+        let images = images.max(1).max(self.pos_keys.last().map_or(0, |k| k.frame + 1));
+        if (0..images).all(|f| self.depth_libre_at(f) == self.depth_at(f)) && self.depth >= Self::MIN_DEPTH {
+            return false;
+        }
+        let avant: Vec<(LayerTransform, f32)> = (0..images).map(|f| (self.pose(f), self.depth_at(f))).collect();
+        let mut essai = self.clone();
+        essai.ramener_a_la_borne();
+        // (La pose de chaque image, l'écart de profondeur mis à part : il se lit avec `depth`, que la borne recompte.)
+        let sans_dz = |t: LayerTransform| LayerTransform { dz: 0.0, ..t };
+        let pareil = (0..images).all(|f| {
+            let (t, d) = avant[f];
+            sans_dz(essai.pose(f)) == sans_dz(t) && essai.depth_libre_at(f).to_bits() == d.to_bits() && essai.depth_at(f).to_bits() == d.to_bits()
+        });
+        if pareil {
+            *self = essai;
+        } else {
+            self.profondeur_bornee = true;
+        }
+        true
+    }
+
+    /// `depth_libre_at` dans un plan en Espace 3D (`libre`), `depth_at` dans un plan ordinaire.
+    pub fn depth_selon(&self, frame: usize, libre: bool) -> f32 {
+        if libre { self.depth_libre_at(frame) } else { self.depth_at(frame) }
+    }
+
+    /// Dans un plan en Espace 3D, à l'image `frame`, la carte est au-delà de ce qu'un plan ordinaire sait poser : plus près
+    /// de la caméra de référence que `MIN_DEPTH`, ou derrière elle. (À un cheveu près, `PRES_DE_LA_BORNE` : l'arrondi d'une
+    /// profondeur et de son écart ne fait pas passer la borne à une carte qui y est posée.)
+    pub fn passe_la_borne(&self, frame: usize) -> bool {
+        self.depth_libre_at(frame) < Self::MIN_DEPTH - Self::PRES_DE_LA_BORNE
+    }
+
+    /// En deçà de cet écart sous `MIN_DEPTH`, une carte compte pour posée à la borne (`passe_la_borne`).
+    const PRES_DE_LA_BORNE: f32 = 1e-4;
+
+    /// `set_depth_at` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH`.
+    pub fn set_depth_selon(&mut self, frame: usize, depth: f32, libre: bool) {
+        if !libre {
+            return self.set_depth_at(frame, depth);
+        }
+        let depth = Self::clamp_depth_libre(depth);
+        if self.pos_keys.is_empty() {
+            self.depth = depth;
+        } else {
+            let mut t = self.pose(frame);
+            t.dz = depth - self.depth;
+            self.set_pose_selon(frame, t, true);
+        }
+    }
+
+    /// `fold_dz` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH` :
+    /// une carte passée derrière la caméra de référence y reste quand elle perd ses clés de position.
+    pub fn fold_dz_selon(&mut self, libre: bool) {
+        if !libre {
+            return self.fold_dz();
+        }
+        self.depth = Self::clamp_depth_libre(self.depth + self.transform.dz);
+        self.transform.dz = 0.0;
+    }
+
+    /// `set_pose` dans un plan ordinaire ; dans un plan en Espace 3D (`libre`), la même chose sans la borne `MIN_DEPTH` sur
+    /// la profondeur d'un calque fixe.
+    pub fn set_pose_selon(&mut self, frame: usize, t: LayerTransform, libre: bool) {
+        if !libre {
+            return self.set_pose(frame, t);
+        }
+        if self.pos_keys.is_empty() {
+            self.transform = t;
+            self.fold_dz_selon(true);
+        } else {
+            crate::poskeys::set_key(&mut self.pos_keys, frame, t);
+        }
+    }
+
+    /// Ramène la profondeur du calque dans ce qu'un plan ordinaire sait tenir (au plus près `MIN_DEPTH`) : sa profondeur de
+    /// base et celle de chacune de ses clés de position. Une carte passée derrière la caméra de référence revient devant
+    /// elle, à la borne ; sa place en largeur et en hauteur, sa taille et son orientation dans l'espace ne changent pas
+    /// (sous la borne, la taille ne dépend plus de la profondeur). Vrai si le calque, ou l'une de ses clés, était au-delà de
+    /// la borne. C'est ce que fait l'ouverture d'un projet d'avant le format 56, quand cela ne change rien (`Layer::ramener_si_rien_ne_change`).
+    pub fn ramener_a_la_borne(&mut self) -> bool {
+        let avant = self.depth;
+        // (Comme `passe_la_borne` : une carte posée à la borne, à l'arrondi près, n'est pas « ramenée ».)
+        let au_dela = |dz: f32| avant + dz < Self::MIN_DEPTH - Self::PRES_DE_LA_BORNE;
+        let touche = if self.pos_keys.is_empty() { au_dela(self.transform.dz) } else { self.pos_keys.iter().any(|k| au_dela(k.t.dz)) };
+        if !touche && avant >= Self::MIN_DEPTH {
+            return false;
+        }
+        // (La profondeur de base revient dans la borne, et chaque écart est recompté depuis elle : une clé qui était
+        // devant la borne garde sa profondeur, une clé au-delà prend celle de la borne.)
+        let base = avant.max(Self::MIN_DEPTH);
+        let ecart = |dz: f32| (avant + dz).max(Self::MIN_DEPTH) - base;
+        self.transform.dz = ecart(self.transform.dz);
+        for k in &mut self.pos_keys {
+            k.t.dz = ecart(k.t.dz);
+        }
+        self.depth = base;
+        if self.pos_keys.is_empty() {
+            self.fold_dz();
+        }
+        touche
+    }
+
     /// La pose du calque à l'image `frame` du plan : celle que donnent ses clés de position, sinon sa
     /// transformation fixe (`transform`).
     pub fn pose(&self, frame: usize) -> LayerTransform {
@@ -614,7 +780,11 @@ impl Layer {
     /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`). Pour une carte inclinée
     /// (`LayerTransform::is_tilted`), c'est la pose à plat : l'inclinaison se pose par un maillage
     /// (`espace3d.rs`), pas par une affinité.
-    fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
+    pub(crate) fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
+        // Accroché à la caméra (`accroche.rs`) : sa pose se lit dans le cadre de la caméra, où qu'elle soit ; pas de multiplan.
+        if self.accroche {
+            return Some(seen.accrochee(t));
+        }
         let depth = self.depth + t.dz;
         if depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
             return Some(t);
@@ -824,12 +994,55 @@ pub struct Panel {
     pub camera: Vec<CameraKey>,
     /// Postérisation temporelle de la caméra (« saccade ») : rien dans les clés, tout à l'évaluation.
     pub saccade: camera::Saccade,
+    /// Effet de caméra vivant (tremblement, explosion, zoom…), calculé à l'évaluation de la caméra, sans clé
+    /// (`camfx::Vivant`, partie 129) ; « Convertir en clés » le cuit dans `camera`.
+    pub effet_camera: Option<crate::camfx::Vivant>,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
     pub cues: Cues,
     /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
     pub color: Option<u8>,
+    /// **Plan venu du format 55 en Espace 3D** (`docs/ESPACE-LIBRE.md`, formats 54 et 55 ; `docs/INTERFACE.md`, partie 159) :
+    /// son image passe par le changement de repère dès que sa caméra quitte la caméra d'origine (`repere_du_plan`), et ses
+    /// cartes se cachent selon leur distance. Depuis le format 56, **tous les plans sont dans l'espace** et rien ne pose plus
+    /// ce champ : il ne garde que l'image de ces anciens plans au pixel près. Faux pour tout autre plan.
+    pub espace: bool,
+    /// **La caméra du plan est sortie des anciennes limites** (format 56, partie 159) : posée telle quelle dans la vue de la
+    /// scène (elle s'est retournée, a basculé au-delà de ce que voyait la feuille, a passé la feuille…), ou elle suit une
+    /// trajectoire dans l'espace. À chaque image où elle est hors de ces limites (`Document::camera_dans_les_anciennes_limites`),
+    /// l'image passe par le changement de repère ; aux autres, par le chemin de toujours. Faux : la caméra du plan est
+    /// toujours lue comme avant le format 56.
+    pub camera_libre: bool,
+    /// **Ce qui est devant cache ce qui est derrière** (format 56, partie 159) : les calques se posent du plus loin au plus
+    /// près de la caméra (`espace3d::ordre_par_distance`). Faux : dans l'ordre de la pile, comme tout plan dessiné à plat.
+    /// Un plan venu du format 55 en Espace 3D (`espace`) l'a toujours.
+    pub ordre_distance: bool,
+    /// **La trajectoire de la caméra** d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149, format 55) : un chemin tracé dans
+    /// l'espace (toujours avec son `support`), que la caméra du plan suit. Elle **ne pose aucune clé de caméra** : à chaque image,
+    /// la caméra des clés est déplacée dans l'espace du déplacement du chemin depuis son départ (`deplacement_de_la_camera`),
+    /// comme l'effet de caméra vivant s'ajoute aux clés ; panoramique, bascule, rotation et focale restent ceux des clés. Rien :
+    /// la caméra des clés, telle quelle.
+    pub trajectoire_camera: Option<crate::trajectoire::Trajectoire>,
+}
+
+/// **Un plan lu d'un projet d'avant le format 56** (`docs/INTERFACE.md`, partie 159), sans question ni fenêtre : il devient un
+/// plan du format 56 qui donne la même image, au pixel près, à toutes ses images.
+///
+/// - Un plan en Espace 3D du format 55 (`espace`) garde ce champ : son chemin d'image et l'ordre par la distance restent ceux
+///   d'alors.
+/// - Un plan ordinaire garde l'ordre de sa pile (`ordre_distance` faux) et sa caméra d'avant (`camera_libre` faux : elle passe
+///   toujours par le chemin de toujours). Ses calques dont une clé de profondeur passe la borne d'autrefois, que le format
+///   55 montrait à la borne, sont ramenés à la borne si cela ne change rien, sinon tenus à la borne
+///   (`Layer::ramener_si_rien_ne_change`) : depuis le format 56, la profondeur d'une carte est libre partout.
+pub fn migrer_vers_56(panel: &mut Panel) {
+    if panel.espace {
+        return;
+    }
+    let images = panel.frame_count();
+    for l in &mut panel.layers {
+        l.ramener_si_rien_ne_change(images);
+    }
 }
 
 /// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
@@ -941,6 +1154,12 @@ pub struct ImageMark {
 }
 
 impl Panel {
+    /// Ses calques se posent du plus loin au plus près de la caméra (`ordre_distance`, ou un plan venu du format 55 en
+    /// Espace 3D, `espace`), au lieu de l'ordre de la pile.
+    pub fn ordre_par_la_distance(&self) -> bool {
+        self.ordre_distance || self.espace
+    }
+
     pub fn frame_count(&self) -> usize {
         self.layers
             .iter()
@@ -1337,6 +1556,13 @@ pub struct Document {
     /// « Durée d'un nouveau plan » (Préférences > Montage), en secondes : celle que reçoit un plan neuf (`make_panel`). Comme `report_decor`,
     /// un réglage de l'application que `App` pose avant ses commandes (`dureeplans.rs`) : il n'est pas dans le projet.
     pub duree_plan_neuf: f32,
+    /// Les vues de l'Espace 3D retenues par le projet (`espace3dvues.rs`) : écrites dans le manifeste (champ facultatif
+    /// `vues_3d`). Hors de l'annulation : c'est une façon de regarder, pas une retouche du film. Rien : une vue.
+    pub vues_3d: Option<crate::espace3dvues::Retenue>,
+    /// L'environnement de la vue Espace 3D retenu par le projet (`espace3ddecor.rs`, partie 157) : couleur du fond, maillage du sol
+    /// (montré, couleur, opacité, pas). Écrit dans le manifeste (champ facultatif `environnement_3d`, sans changer `VERSION`). Hors de
+    /// l'annulation, comme `vues_3d` : une façon de regarder, jamais dans l'image du film. Rien : l'aspect d'origine.
+    pub environnement_3d: Option<crate::espace3ddecor::Environnement3d>,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1405,6 +1631,8 @@ impl Document {
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
+            vues_3d: None,
+            environnement_3d: None,
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1479,6 +1707,8 @@ impl Document {
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
+            vues_3d: None,
+            environnement_3d: None,
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1530,6 +1760,8 @@ impl Document {
             report_decor: self.report_decor,
             decor_bitmap: self.decor_bitmap,
             duree_plan_neuf: self.duree_plan_neuf,
+            vues_3d: self.vues_3d.clone(),
+            environnement_3d: self.environnement_3d,
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
@@ -1676,55 +1908,308 @@ impl Document {
     /// C'est la caméra **montrée** : avec la postérisation temporelle du plan (`Panel::saccade`), elle ne change
     /// que toutes les N images ; tout ce qui montre ou exporte l'image passe par ici. Ce qui règle les clés
     /// (outil Caméra, pose d'une clé, réunion) lit la caméra douce : `panel_camera_douce`.
+    ///
+    /// **Plan en Espace 3D** (`Panel::espace`, `docs/ESPACE-LIBRE.md`) : la caméra qui **cadre** l'image est la caméra de
+    /// référence (au centre de la feuille, de face), parce que les cartes sont déjà posées comme la caméra du plan les voit
+    /// (`repere_du_plan`). Ce qui décrit ou règle la caméra du plan elle-même lit `panel_camera_reelle`.
+    ///
+    /// **Depuis le format 56** (partie 159), c'est image par image : la caméra de référence aux images que le changement de
+    /// repère compose (`repere_du_plan`), la caméra du plan elle-même aux autres, comme toujours.
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
-        self.panel_camera_selon(index, frame, true)
+        if self.repere_du_plan(index, frame).is_some() {
+            return self.default_camera();
+        }
+        self.panel_camera_reelle(index, frame)
+    }
+
+    /// La caméra du plan `index` à l'image `frame` telle qu'elle est dans l'espace (paliers et effet vivant compris), même
+    /// pour un plan en Espace 3D : pour ce qui la décrit (fiche, export de caméra, vue de dessus, tracé de son chemin).
+    /// Pour un plan ordinaire, c'est `panel_camera`.
+    ///
+    /// **Avec une trajectoire de caméra** (`Panel::trajectoire_camera`, partie 149) : la caméra des clés, déplacée dans l'espace
+    /// du déplacement du chemin à cette image. C'est par ici que l'image (`repere_du_plan`), l'export de la caméra, la fiche, la
+    /// vue de dessus et le tracé de sa course la voient là où son chemin l'a portée. Avec la postérisation temporelle, le
+    /// déplacement avance par paliers comme le reste (`image_du_palier`).
+    pub fn panel_camera_reelle(&self, index: usize, frame: usize) -> Camera {
+        let cam = self.panel_camera_selon(index, frame, true, true);
+        match self.panels.get(index) {
+            Some(p) if p.trajectoire_camera.is_some() => {
+                let image = Self::image_du_palier(p, &self.cles_montrees(index), frame);
+                self.camera_sur_la_trajectoire_de(p, cam, image)
+            }
+            _ => cam,
+        }
+    }
+
+    // ---- La trajectoire de la caméra d'un plan en Espace 3D (`docs/INTERFACE.md`, partie 149).
+
+    /// Le déplacement dans l'espace (mètres) que la trajectoire de caméra du plan `p` donne à sa caméra à l'image `frame` : rien
+    /// sans trajectoire, hors d'un plan en Espace 3D, ou si le plan s'arrête avant que le chemin ne commence.
+    pub fn deplacement_de_la_camera(&self, p: &Panel, frame: usize) -> Option<[f32; 3]> {
+        p.trajectoire_camera.as_ref()?.deplacement_a_l_image(frame, Self::duree_de_la_trajectoire_camera(p))
+    }
+
+    /// La durée sur laquelle se lit la trajectoire de caméra du plan `p` : celle du plan, ou davantage si la fin posée du chemin
+    /// est après sa dernière image. Un plan raccourci par la fin ne resserre donc pas le chemin : la caméra garde son mouvement
+    /// image pour image, le plan s'arrête en route, et le rallonger rend la suite (le montage change la durée, pas le mouvement).
+    pub fn duree_de_la_trajectoire_camera(p: &Panel) -> usize {
+        let n = p.frame_count();
+        p.trajectoire_camera.as_ref().and_then(|t| t.fin).map_or(n, |f| n.max(f + 1))
+    }
+
+    /// La caméra `cam` déplacée dans l'espace de `d` mètres (`sens` : 1 pour l'y porter, −1 pour l'en ramener). Seule sa place
+    /// change (centre du cadre et avancée, `espace3d::Monde::eye`) : panoramique, bascule, rotation et focale restent.
+    pub fn camera_deplacee(&self, cam: Camera, d: [f32; 3], sens: f32) -> Camera {
+        let k = crate::espace3d::Monde::of(self).k;
+        Camera { x: cam.x + sens * d[0] / k, y: cam.y - sens * d[1] / k, dolly: cam.dolly - sens * d[2] / k, ..cam }
+    }
+
+    fn camera_sur_la_trajectoire_de(&self, p: &Panel, cam: Camera, frame: usize) -> Camera {
+        match self.deplacement_de_la_camera(p, frame) {
+            Some(d) => self.camera_deplacee(cam, d, 1.0),
+            None => cam,
+        }
+    }
+
+    /// La caméra `cam` du plan `index` (celle de ses clés à l'image `frame`), portée là où sa trajectoire la met à cette image.
+    /// Sans trajectoire : `cam`. C'est ce que la vue Espace 3D montre et règle (`App::current_camera`).
+    pub fn camera_sur_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
+        self.panels.get(index).map_or(cam, |p| self.camera_sur_la_trajectoire_de(p, cam, frame))
+    }
+
+    /// Le chemin inverse de `camera_sur_sa_trajectoire` : la caméra `cam`, vue à l'image `frame` là où la trajectoire l'a portée,
+    /// ramenée à ce que ses clés doivent dire. Régler la caméra à n'importe quelle image (`App::set_current_camera`) écrit donc
+    /// la clé qui, une fois portée par le chemin, donne la caméra voulue.
+    pub fn camera_hors_de_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
+        match self.panels.get(index).and_then(|p| self.deplacement_de_la_camera(p, frame)) {
+            Some(d) => self.camera_deplacee(cam, d, -1.0),
+            None => cam,
+        }
+    }
+
+    /// L'image dont le déplacement de la trajectoire de caméra est montré à l'image `frame` du plan `p` (`keys` : ses clés
+    /// montrées) : avec la postérisation temporelle du plan, le début du palier, tant que la caméra bouge encore (avant sa
+    /// dernière clé et la fin de son chemin) ; sinon l'image elle-même.
+    fn image_du_palier(p: &Panel, keys: &[camera::CameraKey], frame: usize) -> usize {
+        if !p.saccade.actif {
+            return frame;
+        }
+        let fin_du_chemin = p.trajectoire_camera.as_ref().and_then(|t| t.images_des_jalons(Self::duree_de_la_trajectoire_camera(p)).last().copied()).unwrap_or(0);
+        let fin = keys.last().map_or(0, |k| k.frame).max(fin_du_chemin);
+        if frame >= fin { frame } else { frame - frame % camera::Saccade::cadence_valide(p.saccade.cadence) }
+    }
+
+    /// Écrit la trajectoire de caméra des plans `indices` dans leurs clés et la retire, **sans changer aucune image** : une clé
+    /// par image là où le chemin porte la caméra (de la dernière clé d'avant son départ à la première d'après sa fin), et les
+    /// clés d'après prennent le déplacement du bout du chemin. Les gestes qui coupent, réunissent ou rognent un plan le font
+    /// d'abord, après `cuire_effets_vivants` : ils savent garder l'image avec des clés, pas avec un chemin qui couvre le plan
+    /// entier. Décocher « Plan en Espace 3D » aussi. Vrai s'il y avait une trajectoire.
+    pub fn cuire_trajectoires_camera(&mut self, indices: &[usize]) -> bool {
+        let mut cuit = false;
+        for &i in indices {
+            let Some(p) = self.panels.get(i).filter(|p| p.trajectoire_camera.is_some()) else { continue };
+            cuit = true;
+            let dernier = p.frame_count().saturating_sub(1);
+            let jalons = p.trajectoire_camera.as_ref().map(|t| t.images_des_jalons(Self::duree_de_la_trajectoire_camera(p))).unwrap_or_default();
+            let (Some(&depart), Some(&fin), true) = (jalons.first(), jalons.last(), jalons.first().is_some_and(|&d| d <= dernier)) else {
+                self.panels[i].trajectoire_camera = None;
+                continue;
+            };
+            // (Un chemin dont la fin est après la dernière image du plan : les clés s'arrêtent avec le plan.)
+            let au_bout = fin.min(dernier);
+            let a = p.camera.iter().map(|k| k.frame).filter(|&f| f <= depart).max().unwrap_or(0);
+            let b = p.camera.iter().map(|k| k.frame).filter(|&f| f >= au_bout).min().unwrap_or(dernier).max(au_bout);
+            let mut poses: Vec<(usize, Camera)> = (a..=b).map(|f| (f, self.camera_sur_la_trajectoire_de(p, self.panel_camera_douce(i, f), f))).collect();
+            if let Some(d) = self.deplacement_de_la_camera(p, fin) {
+                poses.extend(p.camera.iter().filter(|k| k.frame > b).map(|k| (k.frame, self.camera_deplacee(k.cam, d, 1.0))));
+            }
+            let p = &mut self.panels[i];
+            for (f, cam) in poses {
+                camera::set_key(&mut p.camera, f, cam);
+            }
+            p.trajectoire_camera = None;
+        }
+        cuit
+    }
+
+    /// **Les calques du plan `index` se posent du plus loin au plus près de la caméra** (`Panel::ordre_distance`, ou un plan
+    /// venu du format 55 en Espace 3D) ; sinon dans l'ordre de la pile, comme tout plan dessiné à plat.
+    pub fn ordre_par_la_distance(&self, index: usize) -> bool {
+        self.panels.get(index).is_some_and(Panel::ordre_par_la_distance)
+    }
+
+    /// La caméra `cam` est **dans les anciennes limites** (partie 159) : celles de toute caméra d'avant le format 56, que le
+    /// chemin de toujours (le multiplan, puis le cadre sur la feuille) filme juste. Le cadre voit encore la feuille par ses
+    /// quatre coins (`Camera::sees_reference`, bascule et panoramique d'au plus 85°), et la caméra n'a pas avancé jusqu'à la
+    /// feuille (`Camera::distance` ne la retient pas). Hors de ces limites, seule la vue de la scène la met (`Panel::camera_libre`).
+    pub fn camera_dans_les_anciennes_limites(&self, cam: &Camera) -> bool {
+        let d0 = crate::camera::ref_distance(self.frame);
+        let fini = [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].iter().all(|v| v.is_finite());
+        fini && cam.tilt.abs() <= 85.0 && cam.pan.abs() <= 85.0 && d0 - cam.dolly > d0 * 0.02 && cam.sees_reference(self.frame)
+    }
+
+    /// La caméra du plan `index` se dit par des **cadres sur la feuille** (les mouvements de caméra des Vignettes) : ses clés
+    /// sont toutes dans les anciennes limites, sans chemin dans l'espace, et le plan ne vient pas du format 55 en Espace 3D
+    /// (son image montre alors ce que la caméra filme, pas la feuille). C'est le cas de tout plan dont la vue de la scène n'a
+    /// pas libéré la caméra (partie 159).
+    pub fn camera_en_cadres(&self, index: usize) -> bool {
+        self.panels.get(index).is_some_and(|p| !p.espace && p.trajectoire_camera.is_none() && (!p.camera_libre || p.camera.iter().all(|k| self.camera_dans_les_anciennes_limites(&k.cam))))
+    }
+
+    /// Le changement de repère de la caméra du plan `index` à son image `frame`, s'il en faut un (`repere_d_un_plan`) ; rien :
+    /// le plan se compose à cette image par le chemin de toujours (mêmes pixels). Les deux constructeurs de plan le passent
+    /// à `espace3d::place_dans`.
+    pub fn repere_du_plan(&self, index: usize, frame: usize) -> Option<crate::espace3dmath::M4> {
+        let p = self.panels.get(index)?;
+        self.repere_d_un_plan(p, &self.panel_camera_reelle(index, frame), frame)
+    }
+
+    /// Comme `repere_du_plan`, pour un plan rangé (une version qui n'est pas dans `panels`).
+    pub fn repere_du_plan_range(&self, p: &Panel, frame: usize) -> Option<crate::espace3dmath::M4> {
+        self.repere_d_un_plan(p, &self.camera_reelle_du_plan_range(p, frame), frame)
+    }
+
+    /// Le changement de repère du plan `p`, filmé par sa caméra `cam` à son image `frame` (partie 159 : tous les plans sont
+    /// dans l'espace, mais le chemin de toujours reste celui de toute image qu'il sait filmer). Il en faut un :
+    ///
+    /// - quand l'une de ses cartes a passé la borne d'autrefois (`Layer::passe_la_borne` : tout contre la caméra de
+    ///   référence, ou derrière elle, `docs/INTERFACE.md` partie 148) : le multiplan la montrerait à la borne ;
+    /// - pour un plan dont la caméra est libre (`Panel::camera_libre`), aux images où elle est hors des anciennes limites
+    ///   (`camera_dans_les_anciennes_limites`) : le cadre sur la feuille ne sait pas la filmer ;
+    /// - pour un plan venu du format 55 en Espace 3D (`Panel::espace`), dès que sa caméra n'est pas la caméra de référence,
+    ///   comme alors : la même image au pixel près.
+    ///
+    /// Partout ailleurs, rien : le chemin de toujours, les mêmes pixels qu'avant le format 56. Un calque accroché à la caméra
+    /// ne compte pas : il reste dans le cadre, sa profondeur ne joue pas.
+    fn repere_d_un_plan(&self, p: &Panel, cam: &Camera, frame: usize) -> Option<crate::espace3dmath::M4> {
+        let une_carte_passe = || p.layers.iter().any(|l| crate::espace3d::is_card(l) && !l.accroche && l.passe_la_borne(frame));
+        let par_la_camera = if p.espace {
+            *cam != self.default_camera()
+        } else {
+            p.camera_libre && !self.camera_dans_les_anciennes_limites(cam)
+        };
+        (par_la_camera || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }
 
     /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la
-    /// postérisation temporelle : celle des clés, que l'édition règle.
+    /// postérisation temporelle ni l'effet vivant : celle des clés, que l'édition règle.
     pub fn panel_camera_douce(&self, index: usize, frame: usize) -> Camera {
-        self.panel_camera_selon(index, frame, false)
+        self.panel_camera_selon(index, frame, false, false)
     }
 
-    fn panel_camera_selon(&self, index: usize, frame: usize, montree: bool) -> Camera {
+    /// La caméra douce (sans les paliers), avec l'effet de caméra vivant du plan (partie 129) : ce que montre l'outil
+    /// Caméra arrêté, pour que l'effet se voie pendant qu'on le règle.
+    pub fn panel_camera_vivante(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, false, true)
+    }
+
+    /// Les clés de caméra du plan `index` telles qu'elles se montrent : les siennes, et son effet vivant cuit dedans
+    /// (`camfx::cuire`), comme le ferait « Convertir en clés ». Sans effet : ses clés, sans copie.
+    pub fn cles_montrees(&self, index: usize) -> std::borrow::Cow<'_, [camera::CameraKey]> {
+        use std::borrow::Cow;
+        let Some(p) = self.panels.get(index) else { return Cow::Borrowed(&[]) };
+        let Some(v) = p.effet_camera else { return Cow::Borrowed(&p.camera) };
+        let base = |f: usize| self.panel_camera_douce(index, f);
+        match crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base) {
+            Some(k) => Cow::Owned(k),
+            None => Cow::Borrowed(&p.camera),
+        }
+    }
+
+    /// Écrit l'effet vivant du plan `index` dans ses clés et le retire, **sans changer aucune image** : les clés écrites
+    /// sont celles que l'effet montrait (`cles_montrees`). Les gestes qui coupent, réunissent, rognent ou décalent les
+    /// images d'un plan le font d'abord (partie 129) : ils savent garder l'image avec des clés, pas avec un effet vivant.
+    /// Vrai s'il y avait un effet.
+    pub fn cuire_effet_vivant(&mut self, index: usize) -> bool {
+        self.cuire_effets_vivants(&[index])
+    }
+
+    /// Comme `cuire_effet_vivant`, pour plusieurs plans **d'un coup** : toutes les clés sont lues avant d'en écrire une,
+    /// pour que deux plans voisins sans clé, chacun avec son effet, gardent chacun son image (la base de l'un ne bouge pas
+    /// quand l'autre devient des clés).
+    pub fn cuire_effets_vivants(&mut self, indices: &[usize]) -> bool {
+        let cuites: Vec<(usize, Vec<camera::CameraKey>)> = indices
+            .iter()
+            .copied()
+            .filter(|&i| self.panels.get(i).is_some_and(|p| p.effet_camera.is_some()))
+            .map(|i| (i, self.cles_montrees(i).into_owned()))
+            .collect();
+        for (i, keys) in &cuites {
+            let p = &mut self.panels[*i];
+            p.camera = keys.clone();
+            p.effet_camera = None;
+        }
+        !cuites.is_empty()
+    }
+
+    fn panel_camera_selon(&self, index: usize, frame: usize, paliers: bool, effet: bool) -> Camera {
         let default = self.default_camera();
         let Some(p) = self.panels.get(index) else { return default };
-        let au = |q: &Panel, f: usize| camera::camera_at(&q.camera, if montree { q.saccade.image_montree(&q.camera, f) } else { f }, default);
-        if !p.camera.is_empty() {
-            return au(p, frame);
+        // La continuité (un plan sans clé prend la caméra de son voisin) se lit **avec l'effet du voisin**, partout : à
+        // l'écran comme pour la caméra douce, base de l'effet d'un plan. Ainsi convertir l'effet du voisin en clés ne change
+        // rien chez lui (partie 129). Une seule exception, pour ne pas tourner en rond : la base de l'effet d'un plan sans
+        // clé ne lit pas l'effet d'un voisin lui aussi sans clé.
+        let base_d_un_effet_sans_cle = !effet && p.camera.is_empty() && p.effet_camera.is_some();
+        let cles = |i: usize| {
+            let q = &self.panels[i];
+            let lire_effet = if i == index { effet } else { !(base_d_un_effet_sans_cle && q.camera.is_empty()) };
+            if lire_effet { self.cles_montrees(i) } else { std::borrow::Cow::Borrowed(q.camera.as_slice()) }
+        };
+        let au = |q: &Panel, keys: &[camera::CameraKey], f: usize| camera::camera_at(keys, if paliers { q.saccade.image_montree(keys, f) } else { f }, default);
+        let mine = cles(index);
+        if !mine.is_empty() {
+            return au(p, &mine, frame);
         }
         let (start, end) = self.scene_run(index);
-        if let Some(q) = self.panels[start..index].iter().rev().find(|q| !q.camera.is_empty()) {
-            return au(q, q.frame_count().saturating_sub(1));
+        for i in (start..index).rev() {
+            let k = cles(i);
+            if !k.is_empty() {
+                let q = &self.panels[i];
+                return au(q, &k, q.frame_count().saturating_sub(1));
+            }
         }
-        if let Some(q) = self.panels[index + 1..end].iter().find(|q| !q.camera.is_empty()) {
-            return au(q, 0);
+        for i in index + 1..end {
+            let k = cles(i);
+            if !k.is_empty() {
+                return au(&self.panels[i], &k, 0);
+            }
         }
         default
     }
 
     /// Caméra d'un plan rangé (une version qui n'est pas dans `panels`) à son image `frame` : ses propres clés,
-    /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une).
+    /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une, et son effet vivant).
+    ///
+    /// Plan en Espace 3D : la caméra de référence, comme `panel_camera` ; la sienne est `camera_reelle_du_plan_range`.
     pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
-        let default = self.default_camera();
-        if p.camera.is_empty() {
-            default
-        } else {
-            camera::camera_at(&p.camera, p.saccade.image_montree(&p.camera, frame), default)
+        if self.repere_du_plan_range(p, frame).is_some() {
+            return self.default_camera();
         }
+        self.camera_reelle_du_plan_range(p, frame)
+    }
+
+    /// La caméra d'un plan rangé telle qu'elle est dans l'espace (voir `panel_camera_reelle`).
+    pub fn camera_reelle_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
+        let default = self.default_camera();
+        let base = |f: usize| camera::camera_at(&p.camera, f, default);
+        let vivantes = p.effet_camera.and_then(|v| crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base));
+        let keys = vivantes.as_deref().unwrap_or(&p.camera);
+        let cam = if keys.is_empty() { default } else { camera::camera_at(keys, p.saccade.image_montree(keys, frame), default) };
+        // (Sa trajectoire de caméra, s'il en a une : comme `panel_camera_reelle`.)
+        self.camera_sur_la_trajectoire_de(p, cam, Self::image_du_palier(p, keys, frame))
     }
 
     /// Comme `camera_seen`, pour un plan rangé.
     pub fn camera_seen_du_plan_range(&self, p: &Panel, frame: usize) -> CameraSeen {
         let c = self.camera_du_plan_range(p, frame);
-        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
+        CameraSeen::de(&c, self.stage_center(), self.frame)
     }
 
     /// Où est la caméra du plan `index` à l'image `frame`, pour le multiplan : décalage depuis
     /// le centre de la feuille, avancée, distance de référence.
     pub fn camera_seen(&self, index: usize, frame: usize) -> CameraSeen {
         let c = self.panel_camera(index, frame);
-        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
+        CameraSeen::de(&c, self.stage_center(), self.frame)
     }
 
     pub fn structure(&self) -> Structure {
@@ -2327,6 +2812,10 @@ impl Document {
         if at == 0 || at >= n {
             return None;
         }
+        // Un effet de caméra vivant devient d'abord ses clés, sans changer l'image : la coupe des clés (`split_keys`) garde
+        // alors chaque image des deux plans (partie 129). Une trajectoire de caméra aussi (partie 149).
+        self.cuire_effet_vivant(index);
+        self.cuire_trajectoires_camera(&[index]);
         let source = self.panels[index].clone();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layers = Vec::with_capacity(source.layers.len());
@@ -2378,11 +2867,18 @@ impl Document {
             notes: String::new(),
             camera: keys_after,
             saccade: source.saccade,
+            // (L'effet vivant a été cuit en clés avant la coupe.)
+            effet_camera: None,
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
+            espace: source.espace,
+            camera_libre: source.camera_libre,
+            ordre_distance: source.ordre_distance,
+            // (La trajectoire de la caméra est devenue des clés avant la coupe, comme l'effet vivant.)
+            trajectoire_camera: None,
         };
         // Le contenu rogné à la fin du plan est celui de la fin du second (qui finit où le plan finissait) : il lui passe, avec
         // les numéros de ses calques. Rien n'est oublié.
@@ -2421,8 +2917,12 @@ impl Document {
         if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
             return None;
         }
-        // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
-        let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
+        // Deux effets de caméra vivants ne tiennent pas dans un plan : ils deviennent d'abord leurs clés, sans changer l'image
+        // (partie 129). Puis les caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) sont gardées ; les
+        // caméras douces, celles des clés (comme `append_next_with`).
+        self.cuire_effets_vivants(&[index, index + 1]);
+        self.cuire_trajectoires_camera(&[index, index + 1]);
+        let (cam_a, cam_b) = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         // Les calques partagés du second (`partage.rs`) se détachent d'abord : ses dessins, copiés, suivent dans le plan réuni sans
@@ -2581,9 +3081,14 @@ impl Document {
             notes: String::new(),
             camera: Vec::new(),
             saccade: camera::Saccade::default(),
+            effet_camera: None,
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,
+            espace: false,
+            camera_libre: false,
+            ordre_distance: false,
+            trajectoire_camera: None,
         }
     }
 
@@ -2812,6 +3317,9 @@ impl Document {
     /// Comme `append_next`, avec ce qu'on a répondu à la question des calques de même nom (`JoinOpts`).
     pub(crate) fn append_next_with(&mut self, index: usize, opts: &JoinOpts) -> Option<String> {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
+        // Les effets de caméra vivants des deux plans deviennent d'abord leurs clés, sans changer l'image (partie 129).
+        self.cuire_effets_vivants(&[index, index + 1]);
+        self.cuire_trajectoires_camera(&[index, index + 1]);
         // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
         let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));

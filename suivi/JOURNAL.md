@@ -3,6 +3,609 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-17
+
+- **`avant-apres-reel` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (0073f65, exe de 20 h 15), sur son
+  « vas y ». Contenu : partie 165.6 (deux lignes de boutons en tête de la colonne des calques de l'Animation, colonne à 410 points
+  au lieu de 757, règle et en-tête à 58 points), 165.7 (le mode « Trois calques » retiré : toute la pile, toujours ; un réglage
+  « trois » enregistré s'ouvre en toute la pile, format 56 inchangé), 165.8 (Alt + clic dans la vue de dessin choisit le calque du
+  dessin cliqué ; ce n'est plus la pipette). Fusion de main dans la branche (conflits INTERFACE.md et calques_timeline_tests.rs
+  résolus), puis avance rapide de main. L'avertissement des méthodes inutilisées d'`espace3d.rs` était déjà corrigé par main.
+  Vérificateur complet : compilation sans avertissement, 4 796 réussis aux deux passages, 0 échec, aucun intermittent, dix groupes
+  OK. Son FEANOR (lancé par la jonction Work\tvpaint-rs) a été arrêté sans enregistrer avant la reconstruction. Contrôle de
+  lancement : l'exe ouvert sur une copie de « retakes brawlydays » (Tests\lancement main 0073f65) avec de faux réglages, vivant
+  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
+  fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
+  été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;
+  ses vrais réglages n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place. La session de la timeline a le numéro du commit
+  pour refaire sa fusion de main dans `timeline-claire`.
+- **Lissé pendant que la vue bouge, et l'image nette refaite en route** (branche `vue-nette-lissage`, section 166.8). Son premier
+  retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la vue.
+  Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? ». La cause : l'image nette ne se refaisait qu'à
+  l'arrêt ; en attendant, on voyait l'image de toujours, en marches. **Ce qui est fait** : tant qu'une image nette est montrée ou
+  attendue, la carte graphique pose l'image de toujours lissée quand la vue la grossit (adoucie au lieu d'être en marches : la bande
+  que la vue découvre, tout le dessin pendant un zoom, la zone d'un trait en cours) ; l'image nette se refait pendant le mouvement,
+  une à la fois, sans attendre le repos ; déplacée seulement, elle est recalée sur les pixels de l'écran et reste nette. Un plan
+  tout en bitmap et une zone sans rien de vectoriel gardent leurs pixels nets. La règle « sans latence » est précisée : rien ne se
+  calcule pendant un geste de dessin (trait en cours, ou bouton tenu sans que la vue bouge) ; un geste de vue n'arrête rien.
+  **Les essais** : onze dans `vuenette_tests.rs`, dont un sur la carte graphique qui lit l'écran peint à 400 % (en marches sans la
+  vue nette, lissée quand une image nette est attendue, bord fin une fois arrivée). Vérificateur complet (15 h 24) : compilation
+  sans avertissement, 4 787 réussis, 0 échec, dix groupes OK. **Pas regardé à
+  l'écran** : aucune capture cette fois (il travaillait à son poste). Le dossier de travail `vectoriel-net` et le dossier d'essai
+  avaient été retirés juste avant, à sa demande (« Oui, retire-les », branche gardée, 2,1 Go rendus).
+- **Son FEANOR habituel reconstruit depuis main** (567c90c, exe de 14 h 39), sur son « Oui, reconstruis-le » : prévenu qu'il y
+  perdait la timeline plus claire et la vue 3D à côté qu'il essayait (branche `timeline-claire`, non fusionnée, intacte), il a
+  choisi d'avoir le trait vectoriel net tout de suite. Le dossier `Source` est repassé de `timeline-claire` à `main` (il était
+  propre). Il avait fermé son FEANOR lui-même : rien n'a été arrêté. Ses réglages : `timeline-claire` n'y ajoute qu'un champ
+  (`part_espace3d`), que main ignore ; une copie est dans `Documents\SHOT\Tests\reglages avant reconstruction 2026-11-17`.
+  Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ; son FEANOR
+  n'a pas été rouvert à sa place (il travaillait dans Photoshop). La session de la timeline est prévenue : pour reprendre son
+  essai, elle fusionnera main dans sa branche.
+- **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
+  Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
+  sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
+  lui-même ce matin depuis `timeline-claire` (c8fdfd5, le dossier `Source` est sur cette branche) et il est en train de l'essayer
+  (liste 164.3) ; le reconstruire depuis main lui retirerait la timeline plus claire et la vue 3D à côté. La session de la timeline,
+  consultée, fusionnera main dans sa branche après son retour : il aura alors les deux. En attendant, la vue nette s'essaie par le
+  dossier `Documents\SHOT\Tests\essai vectoriel-net` (l'exe de 14 h 06, lancé une fois sur la copie : il s'ouvre, aucun plantage).
+- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; fusionnée ensuite, voir au-dessus). Anthony, avec une capture de son projet
+  « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer pourquoi et comment résoudre ce
+  problème ? ». **La cause**, mesurée sur sa capture : la vue était à 225 % (un pixel du dessin = 2,25 pixels d'écran), et FEANOR
+  montre un dessin vectoriel à travers une image en pixels à la taille de la feuille, grossie sans lissage. Rien n'était abîmé dans
+  le dessin. Trois remèdes proposés ; il a choisi le premier : « Oui, construis-le ». **Ce qui est fait** : au-delà de 100 %, la zone
+  que la vue regarde est composée à la taille de l'écran sur un autre fil, les dessins vectoriels rejoués à cette échelle par le moteur
+  des pinceaux (ses traits gardent tous le réglage complet du pinceau), le bitmap laissé en pixels ; l'image est posée par-dessus
+  celle de toujours. Rien ne se calcule pendant un trait ; la zone du trait est en pixels le temps du geste, puis redevient nette.
+  Le dessin, le fichier, l'export ne changent pas ; aucun texte, aucun réglage, aucun format. **Les essais** : huit dans
+  `vuenette_tests.rs` (le bord d'un trait tenu à 0,3 pixel de la feuille à 400 %, là où l'image grossie échoue ; le bitmap au pixel
+  près ; aucun calcul pendant un geste ; un trait tracé au pointeur dans la vraie fenêtre sans écran, à 300 %, puis Ctrl+Z).
+  Vérificateur complet sur le code final (14 h 05) : 4 784 réussis, 0 échec, dix groupes OK, le seul avertissement connu ; la
+  première suite avait sept échecs, tous de mon ajout (le champ `nette` à déclarer dans `etat_projet!`, et la vue nette qui
+  réveillait l'écran dans les essais de repos : elle est éteinte d'origine dans les essais, allumée dans les siens).
+  **Regardé à l'écran par Claude** (12 h 53, exe de la branche, copie de « dd », réglages neufs) : plan 2
+  grossi à environ 350 %, les traits nets, les bords au pixel d'écran (mesuré sur les pixels réels). **Pas regardé à l'écran** :
+  tracer, déplacer et tourner la vue, annuler, plusieurs calques, la pelure, un calque bitmap : le contrôle a été arrêté parce
+  qu'Anthony travaillait dans Photoshop et que les captures d'écran réduisaient ses fenêtres (rouvertes, Photoshop remis devant).
+  **Ce qui n'est pas net** (l'image de toujours reste seule) : plan sans papier, calque à effets, carte inclinée de l'Espace 3D et
+  caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
+  pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
+  très chargés à fort zoom, la zone en pixels pendant le trait.
+
+## 2026-11-13
+
+- **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la
+  branche construit à 20 h 54 puis à 21 h 10, copie du projet `afa`, réglages neufs, fenêtre rétrécie). **Le bouton
+  « Caméra »** : outil Trajectoire en main dans la vue Espace 3D du plan 1, un clic sur la case : la caméra choisie seule (son
+  dessin en bleu, sa piste allumée, plus aucun calque choisi), la case allumée, la légende de l'outil Trajectoire toujours en
+  bas de la vue ; un trait long au sol : « Trajectoire tracée : la caméra, 0 marque, de l'image 31 à l'image 60. » **Les
+  dessins posés à la main**, sur la feuille (plan 5, calque « Dessin », qui avait déjà deux dessins) : le chemin tracé en clés
+  d'images laisse le second dessin à son image ; une marque posée, « Nouveau dessin » (qui insère une image), un trait de
+  pinceau dessus, la marque glissée deux fois : les dessins restent à leurs images, aucune fenêtre ne s'ouvre. **Défaut vu
+  à l'écran, corrigé** : la phrase « dessin posé à la main gardé », écrite à la suite du message du geste, ne se lisait
+  pas : la barre d'état ne montre que la première phrase d'un message long, puis « … ». Elle passe maintenant devant, et sans
+  parenthèse pour un seul calque ; lue à l'écran après correction : « Trajectoire : 2 dessins posés à la main gardés aux
+  images 18 et 19, entre les marques… ». Les essais vérifient désormais ce que la barre montre (`messages::resume`), plus
+  seulement le message entier. À savoir : un calque qui avait déjà plusieurs dessins avant le chemin les garde tous (ils
+  comptent comme posés à la main), et ils ne suivent pas le chemin. Pas regardé à l'écran, couvert par les essais : le jalon
+  posé à côté (point 28), les deux cartes dans l'espace (29), la suppression (30), le calque dupliqué (31). Filtre
+  `trajectoire` : 67 réussis. Vérificateur complet sur ce code (21 h 11) : 4 620 réussis, 0 échec, dix groupes OK, le seul
+  avertissement connu. La fenêtre d'essai (copie du projet, faux réglages) est rouverte pour lui avec cet exe.
+- **Deux décisions d'Anthony sur ce qui restait imparfait** (branche `trajectoire-espace`, partie 152 ; regardé à l'écran le
+  soir, voir au-dessus). **Le bouton « Caméra »** : « Le bouton « Caméra » de la barre de la vue fait quitter
+  l'outil Trajectoire. On garde l'outil ». Avec l'outil Trajectoire dans la vue Espace 3D, la case « Caméra » choisit la caméra
+  seule (Maj+clic : avec les cartes), reste allumée, et l'outil garde le pointeur : le trait suivant trace le chemin de la
+  caméra. Avec un autre outil, la case fait ce qu'elle faisait. **Les dessins posés à la main** : « Une clé de dessin posée à
+  la main entre deux marques est écrasée au recalcul suivant du chemin : une boîte de dialogue demande si on écrase le dessin ou
+  non », puis « Je préfère qu'on évite au maximum la boîte de dialogue. Tout ce qui peut s'en passer s'en passera ». Ce cas
+  s'en passe : en clés d'images, sur la feuille comme dans l'espace, la trajectoire ne remplace plus jamais une clé de dessin
+  qu'elle n'a pas posée. Ta clé reste à son image avec son dessin, le dessin de la marque d'avant est exposé jusqu'à elle ; une
+  marque qui tomberait sur son image est posée sur l'image libre d'à côté ; la barre d'état le dit une fois (« Trajectoire :
+  1 dessin posé à la main gardé à l'image 18, entre les marques. »), aucune fenêtre ne s'ouvre. Rien de neuf dans le fichier
+  (format 55). Aucun cas n'a demandé de question. Arrangé en chemin : un calque dupliqué exposait, à son premier calcul, les
+  dessins de l'original (les deux calques partageaient leurs poses) ; il garde les siens. Vu en lisant le code, pas réglé :
+  Échap pendant qu'on glisse sur la timeline la clé de position d'un jalon (carte en clés d'images) ne rend pas les clés de
+  dessin. Vérificateur complet (10 h 07) : 4 619 réussis, 1 échec (un essai de repos des Vignettes sans rapport, réussi repassé
+  seul le soir sur le même code), dix groupes OK, le seul avertissement connu. Le travail s'est arrêté le matin sur la limite
+  d'usage, avant l'enregistrement ; relu, complété et enregistré le soir. À vérifier à l'écran par Anthony : points 26 à 31 de
+  la partie 152.
+- **Ce qui restait imparfait, regardé à l'écran par Claude** (4 h 20 à 4 h 40, souris simulée, exe de la branche construit à 4 h 38,
+  copie du projet `afa`, réglages neufs, fenêtre rétrécie hors de la fenêtre invisible de Claude). Un clic simple sur la caméra avec
+  l'outil de la vue la choisit seule, alors que des cartes sont derrière ; la rangée « Caméra » du montage est la rangée choisie et
+  le panneau Calques ne montre plus aucun calque choisi ; un clic sur « Vectoriel 3 » dans Calques reprend le calque et lâche la
+  caméra ; un clic sur le nom de la piste « Caméra » du montage reprend la caméra. Le panneau Espace 3D arrive en onglet de Réglages
+  et passe devant ; vu trop bas (il gardait la hauteur de Réglages et coupait la liste des cartes) : réglé par Claude (238e6e1,
+  `ajuste.rs`), il prend maintenant la hauteur de ses cartes et de la caméra, et Réglages reprend la sienne à la fermeture. Suite
+  complète sur 238e6e1 : 4 614 réussis, 0 échec, le seul avertissement connu. Pas regardé à l'écran : une marque ajoutée au milieu
+  d'un chemin en clés d'images (couvert par trois essais), le stylet.
+- **Ce qui restait imparfait après la partie 152, réglé** (à sa demande : « règle ce qui reste imparfait » ; branche
+  `trajectoire-espace`, quatre commits, rien fusionné, rien poussé, rien regardé à l'écran). (1) Avec les outils de la vue,
+  un clic simple sur le dessin de la caméra la prend, même avec une carte derrière, et la tirer la déplace, elle. (2) Un clic
+  sur la piste « Caméra » de la timeline ou du montage (son nom, le vide de sa rangée, une clé) choisit la caméra seule, la
+  vue Espace 3D montrée ; vue fermée, rien de plus qu'avant. (3) La caméra choisie seule, le panneau Calques ne montre plus
+  de calque choisi ; un clic sur un calque ou son aplat, un outil de dessin pris ou un trait dans la vue le rendent. (4) En
+  « Clés d'images », chaque copie reste à son jalon, sur la feuille comme dans l'espace : une marque posée au milieu reçoit
+  une copie du dessin du jalon d'avant, les poses redessinées ne se décalent plus ; rien de neuf dans le fichier. À lui de
+  dire (partie 152, points 22 à 25) : si le dessin de la caméra prend le clic d'assez près, et si la piste « Caméra » devrait
+  se montrer choisie vue fermée. Essais : 6 nouveaux, 1 adapté. Vérificateur, deux passages : 4 611 réussis et 2 échecs de
+  rendu et de temps au premier (une autre session lançait ses essais en même temps ; réussis relancés seuls), puis 4 613
+  réussis, 0 échec ; aucun nouvel avertissement.
+- **Le panneau Espace 3D devient un onglet de Réglages** (partie 152, point 3, modifié après sa réponse ; branche
+  `trajectoire-espace`, rien fusionné, rien regardé à l'écran). Entre « Colonne à part » et « Onglet de Réglages » (comme il
+  l'avait rangé lui-même dans son essai), Anthony a choisi : « Onglet de Réglages ». La colonne est retirée ; le panneau
+  arrive en onglet après Réglages et la fiche quand la vue s'ouvre, passe devant, Réglages revient devant à la fermeture, et
+  l'onglet reste ; rangé, fermé ou glissé à la main, il est respecté. Une disposition retenue qui l'a en onglet de Réglages le
+  garde. À lui de dire : si la hauteur du groupe suffit quand l'onglet Espace 3D est devant (le bord avec la couleur ne
+  s'ajuste pas tout seul). Essais : 4 récrits, 4 adaptés, 1 nouveau. Vérificateur : 4 607 réussis, 0 échec, aucun nouvel
+  avertissement.
+- **Partie 152 regardée à l'écran par Claude** (1 h 46 à 1 h 57, souris simulée, exe de la branche construit à 1 h 45, copie du projet
+  `afa`). Avec des réglages neufs : la vue Espace 3D ouverte, le panneau « Espace 3D » arrive dans une colonne à droite de Réglages,
+  Réglages montre le Pinceau à côté ; un clic dans la liste des cartes de la colonne choisit la carte, ses champs apparaissent.
+  Outil Trajectoire, Ctrl+clic sur la caméra : elle est choisie seule, la rangée « Caméra » du montage est la rangée choisie, aucune
+  rangée de calque ne l'est ; Ctrl+clic sur une carte la reprend et lâche la caméra. « Clés d'images » : un chemin au sol et une
+  marque sur la carte « Vectoriel 4 » donnent, dans la timeline, une clé de dessin à la marque (image 38) ; chemin retiré ensuite
+  par « Effacer ». Outil Sélection dans la vue : un lasso autour du trait bleu de la carte sélectionne cinq éléments, la boîte et ses
+  poignées sont posées sur la carte ; Échap la lâche. Dans les réglages de son propre essai, Anthony avait rangé le panneau
+  « Espace 3D » en onglet à côté de « Réglages » et « Fiche » : il y est resté, et ses boutons répondent. Piège du banc d'essai : une
+  fenêtre de l'application Claude, invisible sur les captures, couvrait la droite de l'écran et y prenait les clics ; vu avec
+  `WindowFromPoint`, contourné en rétrécissant la fenêtre d'essai, puis remise en plein écran. Pas regardé à l'écran : le stylet,
+  le déplacement de la sélection, couper / coller sur une carte, Maj+Ctrl+clic, l'espace Animation.
+- **Retours d'Anthony sur la Trajectoire dans l'Espace 3D** (partie 152, branche `trajectoire-espace`, rien fusionné, rien regardé
+  à l'écran). Ses quatre phrases après son essai des parties 149 et 150, et ce qui a changé. 1. « Un calque est toujours sélectionné
+  en même temps » : choisir la caméra la choisit seule (Ctrl+clic avec l'outil Trajectoire, « choisir » du panneau Espace 3D ; Maj
+  pour l'ajouter exprès aux cartes), et la timeline et le montage montrent alors la piste « Caméra » comme la rangée choisie, plus
+  aucun calque ; choisir un calque la lâche. 2. « Clés d'images ne crée pas de clés d'images » : une carte en clés d'images a
+  maintenant une clé de dessin à chaque jalon, copie du dessin du départ qu'on peut redessiner (la copie n'est pas déplacée : la
+  carte porte le mouvement). 3. « Place-le à côté de réglages plutôt » : le panneau Espace 3D a une colonne à lui à droite de
+  Réglages, 340 points pris au dessin, qui arrive quand la vue s'ouvre et repart quand elle se ferme ; rangé ou ouvert à la main,
+  il reste où il est ; l'onglet que la partie 150 avait mis avec la couleur dans les dispositions retenues part une fois. 4. « Le
+  lasso ne fonctionne pas dans l'espace 3D » : l'outil Sélection prend le pointeur dans la vue, sur la carte du calque courant
+  (lasso, boîte, poignées, Suppr, couper, copier, coller, Échap, annulation) ; Ctrl+glisser trace un lasso depuis un outil de
+  dessin, Ctrl+clic prend toujours une carte. À lui de dire : si la rangée « Caméra » se lit bien comme choisie, si la colonne du
+  panneau (sa largeur, son va-et-vient avec la vue) convient, si le lasso et ses poignées tombent juste sur une carte en biais.
+  Non fait : la sélection sur plusieurs calques dans la vue, le clic simple qui prend la caméra avant une carte. Essais : 12
+  nouveaux (caméra seule 4, clés d'images 4, lasso 4) et 8 récrits pour la colonne du panneau. Vérificateur, deux passages : 4 605 réussis et 1 échec chacun, un essai de temps des
+  Vignettes différent à chaque fois, vert relancé seul ; dix groupes OK ; aucun nouvel avertissement. Commits 6e72a99, af3d064,
+  6ad1f1f, 9232a63, puis la documentation.
+
+## 2026-11-12
+
+- **Partie 150 regardée à l'écran par Claude** (23 h 33, souris simulée, exe de la branche construit à 23 h 32, copie du projet `afa`,
+  réglages à part). Vue Espace 3D ouverte sur le plan 6 : « Réglages » montre le Pinceau (taille, opacité) ; dessous, le groupe de
+  Couleur a trois onglets et « Espace 3D » est devant. Outil Trajectoire pris : « Réglages » montre « Trajectoire dans l'espace » et
+  ses boutons. Ctrl+clic sur le symbole de la caméra, posé devant la surface au sol : c'est la caméra qui est choisie. Vue fermée :
+  Couleur revient devant ; rouverte : « Espace 3D » repasse devant. Remarque : dans l'espace Storyboard, le panneau « Espace 3D » n'a
+  que la hauteur du groupe de Couleur, une centaine de pixels ; la liste des cartes et les champs demandent de faire défiler ou de
+  tirer la bordure. Pas essayé à l'écran : l'espace Animation, une disposition enregistrée avant ce changement, le pinceau qui
+  dessine sur une carte avec ses réglages sous les yeux, le stylet.
+- **Un panneau « Espace 3D » : Réglages montre toujours l'outil choisi** (partie 150, branche `trajectoire-espace`, toujours le
+  format 55). Anthony : « même dans l'espace 3D, le panneau réglages affiche les réglages de l'outil sélectionné. Les réglages de
+  l'espace 3D basculent dans un panneau spécifique », puis, pour sa place : « Sa place par défaut : en dessous de réglages, à la
+  place de la couleur. » Réglages montre l'outil en main, vue Espace 3D ouverte ou non : le pinceau, le crayon, la gomme quand ils
+  dessinent sur une carte, et les réglages de la Trajectoire dans l'espace (ils ne sont plus en tête de ceux de la vue). Les
+  réglages de la vue (options, « Plan en Espace 3D », « Nouvelle surface », cartes, clés, caméra du plan) sont dans un panneau
+  « Espace 3D » (cube), un onglet de plus à côté de la couleur, sous Réglages, dans le Storyboard, l'Animation et les dispositions
+  standard. Il passe devant la couleur quand la vue s'ouvre et lui rend sa place quand elle se ferme ; fermé, la vue le remet à sa
+  place ; la disposition retenue garde la couleur devant. Vue fermée : une phrase et le bouton « Ouvrir la vue Espace 3D ». Les
+  dispositions enregistrées avant lui le reçoivent une fois, sans que rien d'autre y bouge (Storyboard, Animation, espaces
+  enregistrés ; pas les Vignettes ni le Montage). Commande `vue.espace3d_panneau` (sans touche), icône dans la barre des panneaux,
+  case dans Affichage > Panneaux. Les messages qui disaient « dans Réglages » disent « dans le panneau Espace 3D ». Défaut corrigé :
+  avec l'outil Trajectoire, Ctrl+clic sur la caméra choisit la caméra, plus la carte qui passe dessous. 14 essais de plus ; deux
+  essais des boutons de clés et une étape de l'essai de fumée lisent maintenant le panneau Espace 3D. Vérificateur : 4 593
+  réussis, 0 échec, dix groupes OK, le seul avertissement connu. Pas fait : le clic simple de l'outil « choisir » prend encore la carte avant la caméra ; le panneau ne repasse pas devant tout seul
+  après un clic sur l'onglet Couleur. À savoir : un fichier de réglages écrit par cette branche nomme le panneau, une version
+  d'avant ne le lit pas (réglages à part pour l'exe de la branche). Rien regardé à l'écran, exe non reconstruit. Rien fusionné,
+  rien poussé.
+- **Parties 148 et 149 regardées à l'écran par Claude** (22 h 15 à 22 h 20, souris simulée, exe de la branche construit à 22 h 14,
+  copie du projet `afa`, réglages à part). Partie 148 : la carte rouge du plan 6 mise à Z 8 m par son champ (profondeur −1,37,
+  derrière la caméra d'origine) : acceptée, elle sort de l'image du plan ; annulé. Remarque : son champ « Échelle » affiche alors
+  1000 %, la valeur interne. Partie 149 : outil Trajectoire dans la vue Espace 3D, « Clés d'interpolation » ; un chemin tracé au sol
+  avec la carte rouge choisie : elle le suit, sa profondeur passe de 0 à −0,82 ; un petit trait en travers pose une marque (trois
+  jalons sur la timeline). Caméra choisie par le bouton « choisir » des Réglages, chemin tracé au sol : elle le suit, « Regarder
+  par la caméra » le montre, aucune clé de plus sur sa piste ; Ctrl+Z retire le chemin en une étape, Ctrl+Y le rend. Fermé puis
+  rouvert : les deux chemins sont là (copie au format 55). Défaut vu : Ctrl+clic sur la caméra, avec l'outil, a choisi la surface
+  au sol qui était dessous, pas la caméra. Pas essayé à l'écran : tordre ou déplacer le chemin, glisser ou retirer une marque,
+  plusieurs cartes à la fois, carte et caméra ensemble, un chemin sur un mur, les « Clés d'images », le stylet.
+- **La Trajectoire dans l'Espace 3D** (partie 149, branche `trajectoire-espace`, toujours le format 55). Anthony : « Je voudrais
+  qu'on essaye d'intégrer l'outil trajectoire dans l'environnement 3D, afin de générer des mouvements dans l'espace », puis « Un
+  calque ou la caméra, les deux. Ce qui est sélectionné est sujet à la trajectoire. » Dans la vue Espace 3D d'un plan en Espace 3D,
+  l'outil Trajectoire trace un chemin posé sur une surface (une carte non choisie, sinon le sol, sinon un plan face à la vue), et
+  tout ce qui est choisi le suit : chaque carte choisie, la caméra si elle l'est ; rien de choisi, la carte du calque courant.
+  Mêmes gestes que sur la feuille (trait long, marque en travers, glisser ou arracher une marque, tirer, Maj pour déplacer, second
+  trait, Échap), pour tout ce qui est choisi, en une étape d'annulation. Une carte reçoit des clés de position (une par image, ou
+  une tenue par marque) et garde sa taille et son orientation dans l'espace ; la caméra ne reçoit aucune clé, son chemin s'ajoute à
+  ses clés quand on l'évalue (image, exports, « Regarder par la caméra », vue de dessus), et on peut toujours la régler à toute
+  image. Réglages en tête du panneau de l'Espace 3D : départ, fin, temps égaux, sortes de clés, détacher, effacer, pour tout ce qui
+  est choisi. Montage : raccourcir le plan par la fin ne change pas le mouvement de la caméra ; couper, réunir, ou rogner le début
+  au-delà du départ écrit son chemin en clés sans changer l'image. Fichier : deux champs facultatifs, pas de nouveau numéro.
+  Décision prise en route : le sol l'emporte sur une carte quand il est devant elle (une carte descend sous le sol). Trois défauts
+  de la partie 148 corrigés : la caméra retournée d'un plan en Espace 3D est relue telle quelle (plus ramenée à 85°, y compris
+  dans le contenu rogné) ; le message « En construction » de la case est remplacé ; les silhouettes de la trajectoire de la feuille
+  suivent la caméra du plan. 17 essais de plus. Vérificateur : 4 579 réussis, 0 échec, dix groupes OK, le seul avertissement connu (celui des fonctions jamais appelées de `espace3d.rs` ; il n'en nomme plus que cinq, `Monde::to_frame` sert maintenant). Pas fait : la trajectoire de la caméra ne se voit pas sur la
+  timeline ; pas de silhouettes dans la vue ; un chemin tient sur une seule surface ; le miroir d'un calque ne retourne pas son
+  chemin dans l'espace ; un plan sans clé de caméra qui suit un plan à trajectoire de caméra ne reprend pas la caméra là où le
+  chemin l'a laissée. Rien regardé à l'écran, exe non reconstruit. Rien fusionné, rien poussé.
+- **Une carte passe derrière la caméra d'origine du plan** (partie 148, branche `trajectoire-espace`, **format 55**). À ma phrase
+  « Une carte ne peut pas passer derrière la caméra d'origine du plan. Un personnage qui vient vers nous s'arrêtera donc avant de
+  nous dépasser », Anthony : « Alors dépassons cette limite absurde. » La profondeur d'un calque s'arrêtait à −0,9 parce que la
+  taille d'une carte dans l'espace vaut « taille dessinée × (1 + profondeur) ». Dans un plan en Espace 3D seulement, elle est
+  maintenant libre : sous −0,9 cette règle reste à sa valeur de la borne et la carte ne fait plus qu'avancer, jusqu'à la caméra
+  d'origine et derrière elle. Rien de neuf dans le fichier, mais un nouveau numéro de format : une version d'avant ramènerait ces
+  cartes devant la caméra. Suivent : les poignées de la vue Espace 3D, les champs « Position » et « Profondeur », « Nouvelle
+  surface » (plus de refus derrière la caméra d'origine), le pinceau, la suppression des clés de position, l'outil Transformer.
+  Sous la caméra d'origine, un plan dont une carte a passé la borne est composé par maillage : la carte passée derrière n'est plus
+  filmée. Décocher « Plan en Espace 3D » ramène ces cartes à −0,9, le dit, et un Ctrl+Z rend tout. Trouvé en chemin : un champ de
+  nombre borné écrit sa borne rien qu'en se montrant ; les deux champs « Profondeur » (Réglages de l'Espace 3D, menu du calque)
+  descendent donc à −1000 dans ces plans. 9 essais de plus, 1 réécrit (la surface refusée), le numéro de format dans six fichiers
+  d'essais. Vérificateur : 4 562 réussis, 0 échec, dix groupes OK, le seul avertissement connu. Pas fait : entre deux clés posées à
+  des profondeurs différentes, la carte ne garde pas sa taille dans l'espace (défaut d'avant, à régler avec la trajectoire de
+  l'Espace 3D). Vu en passant, pas corrigé : la caméra d'un plan en Espace 3D est relue bornée à ±85° (une caméra retournée revient
+  à 85° à la réouverture) ; le message « En construction » de la case est périmé. Rien regardé à l'écran, exe non reconstruit.
+  Rien fusionné, rien poussé.
+- **Fin de la liste de la partie 143, faite par Claude sur la fenêtre d'essai** (17 h à 17 h 16, souris simulée, sur son « continue »),
+  copie du projet `afa`. Point 2 (plan 6, trois calques de couleur pleine : plan ordinaire, la pile décide ; coché, le plus proche
+  passe devant ; à profondeur égale la pile départage) : bon. Point 3 (caméra passée derrière les cartes, non bridée ; la feuille et
+  « Regarder par la caméra » montrent la carte la plus proche devant, en miroir) : bon. Point 4, lecture d'un mouvement de caméra à
+  trois clés : bon. Point 8 (sol dessiné, caméra au-dessus, −89° puis −90° : plongée totale, pas d'image qui tourne d'un coup) : bon.
+  Point 12, vidéo (MP4 du plan, image 24 comparée à l'export en image : ressemblance 0,98 à 0,99 ; couleurs un peu décalées, encodeur
+  H.264 de Windows faute de ffmpeg complet à côté de l'exe d'essai, cause non vérifiée) : bon pour l'image. Point 13, refus par le
+  FEANOR habituel (format 53) d'une copie au format 54 : la copie n'est pas touchée ; texte du refus pas lu à l'écran. Point 14 (plan
+  ordinaire : bascule bridée à −72,9° pour −90° tapé, vue de dessus présente) : bon pour ce qui a été regardé. Point 15 (rotations Y
+  et X tapées de 85 à 95°, anneau tiré de 80 à 125° par pas de 15°) : pas de saut. Restent à son œil : le stylet, la bulle et la
+  lisibilité des icônes, le « sans à-coup » du point 7. Rien changé au code.
+- **Retour d'Anthony sur la partie 147** (vers 15 h, autre PC : i7-9700K, 16 Go, RTX 2060, seconde version portable d'essai) :
+  « Non, plus de plantage ». Juste avant : « Pas de ralentissement ici avec une machine sous cette config ». Rien changé pour les
+  ralentissements du matin, dont la cause reste inconnue. Rien fusionné, rien poussé.
+- **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, même branche). Anthony, après la
+  version portable d'essai : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ». Rapport du 12 novembre,
+  0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage avec des sommets et aucun
+  triangle quand il ne restait pas un carreau entier de la carte devant l'œil ; egui le laisse passer, wgpu le refuse. Le défaut est
+  aussi dans `main`, rare tant que les cartes font face à la caméra ; fréquent avec un sol ou un mur. Corrigé dans la vue
+  (`espace3dview.rs`) et dans le canevas (`canvas.rs`, même maillage). Essai dirigé rouge puis vert (`espace3dvue_tests.rs`), une
+  promenade de 360 images en plus (1,14 ms par image en médiane sur ce PC). Vérificateur : 4 552 réussis, 0 échec, dix groupes OK,
+  le seul avertissement connu. Les ralentissements dont il parle ne sont pas retrouvés ici : rien changé pour eux, question posée
+  (quelle machine, quel geste). Mesure geste par geste ajoutée ensuite (troisième essai, lancé seul, carte graphique comprise) :
+  1,5 ms par image pour tourner, glisser, avancer ; 2,2 à 2,3 ms quand c'est la caméra du plan qui bouge ; pire image 4,95 ms.
+  Exe reconstruit (13 h 16) ; deuxième version portable d'essai `FEANOR-portable-2026-11-12b-ESSAI-espace-3d` (dossier et zip),
+  dézippée et ouverte ici par son lanceur sur une copie : fenêtre ouverte, aucun plantage, vrais réglages inchangés. La fenêtre
+  d'essai de ce PC est rouverte sur le nouvel exe.
+- **Deux versions portables**, demandées par Anthony (« sors moi une nouvelle version portable pour pc »), dans `Logiciel\Portable`,
+  dossier et zip. `FEANOR-portable-2026-11-12` : le FEANOR habituel (`main` 00b5e44, format 53). `FEANOR-portable-2026-11-12-ESSAI-espace-3d` :
+  cette branche (3f4e3e9, format 54), l'exe rangé dans `programme\` et lancé par « Lancer FEANOR essai Espace 3D.cmd », qui lui donne
+  ses propres réglages dans `reglages\` à côté de lui : elle ne lit pas les préférences habituelles, donc ne rouvre et ne réécrit
+  aucun vrai projet au format 54 (raccourcis et brosses d'origine). Rien construit : les exe existaient. Chaque zip dézippé et ouvert
+  ici sur une copie du projet d'essai : fenêtre ouverte, aucun plantage, vrais réglages et vrai projet inchangés.
+- **Sur la feuille d'un plan en Espace 3D, plus de trait que la carte ne montre pas** (partie 146.1, même branche ; correction de
+  l'étape A5 de la session du Mac). Le défaut vu à l'écran ce jour, point 9 de la liste de la partie 143 : caméra dos aux cartes
+  (panoramique 180°), pinceau sur « Surface au sol », sur la feuille : rien ne se voyait, mais un trait était enregistré hors de la
+  surface (y = 2 541 à 3 153 pour une feuille de 2 160), sans un mot. Son « Oui » à « Je corrige le défaut du point 9, le trait
+  invisible hors de la carte ? ». Cause : `App::to_layer_opt` acceptait un point jusqu'à une feuille au-delà des bords de la carte, alors
+  qu'une carte posée par un maillage ne montre que sa feuille (`Monde::card_warp_m`). Règle : dans un plan en Espace 3D, un point n'est
+  accepté que dans les bords de la carte (`espace3ddessin::carte_montre`, la même condition que dans la vue Espace 3D, une seule
+  fonction) ; un trait commencé au-delà ne commence pas et la barre d'état le dit (message neuf pour le bord de la carte,
+  `App::rien_a_peindre`) ; pendant un trait les points qui sortent sont laissés. Rien ne change sous la caméra de référence avec une carte
+  à plat (la toile infinie reste peinte), ni dans un plan ordinaire. Essai neuf
+  `on_the_sheet_of_a_plan_in_3d_space_no_stroke_is_recorded_where_the_card_will_not_show_it` (le cas vu à l'écran, le bord de la carte
+  caméra tournée, le trait qui sort de la carte, la caméra de référence, le plan ordinaire). Un essai existant de l'étape A5 touché :
+  `near_the_horizon_of_a_card_on_the_ground_the_brush_stops_instead_of_running_away` (`espace3d_tests.rs`) vérifiait « jamais à plus
+  d'une feuille des bords » ; il vérifie maintenant « jamais hors des bords » (il passait aussi sans ce changement). Pas regardé à
+  l'écran. Limite laissée : une carte inclinée d'un plan ordinaire accepte encore un trait hors de ses bords, qui ne se voit pas.
+- **Dessiner dans la vue Espace 3D** (partie 146, branche locale `espace-libre-cles`, à la suite des boutons de clés). Sa demande,
+  pendant le même essai : « il est impossible de dessiner dans l'espace 3D pour l'instant. C'est quelque
+  chose qui doit être faisable en permanence, le trait s'appliquant sur la carte », et « Oui, ici » à « je le code ici ? ». La règle :
+  **l'outil décide**. Dans la vue (orbite ou « Regarder par la caméra », plan ordinaire ou plan en Espace 3D), le pinceau, le crayon, la
+  gomme ou le mélangeur (case, touche, ou le bouton neuf « Dessiner sur la carte », commande `espace3d.dessiner`, sans touche) font
+  dessiner le pointeur sur la carte du calque courant ; un outil de la vue (choisir, déplacer, tourner, taille, caméra) lui rend les
+  cartes ; Alt+glisser, clic droit, milieu et molette restent à la vue ; Ctrl+clic prend une autre carte. Le trait passe par le moteur
+  de toujours (`begin_paint`, `stroke_point`, `end_stroke`) : seule change la conversion écran → dessin, par le regard d'UNE vue
+  (`espace3ddessin::Regard3d`, `CarteVue`, prévu pour les vues côte à côte de `vues-3d`) ; `layer_to_screen` et `layer_zoom` y passent
+  tant qu'on dessine dans la vue. Le trait se voit pendant le geste sans rejeu du moteur : la texture de la carte dessinée est refaite
+  par morceaux, les tuiles changées seulement (`render::cel_image_zone`). Le cercle du pinceau est posé sur la carte (ellipse sur une
+  carte penchée). Refus avec un mot : hors de la carte, de dos, par la tranche, derrière l'œil, cartes cachées, calque verrouillé ou caché.
+  Jamais d'encre qu'on ne voit pas : un trait ne commence et ne reçoit de points que dans les bords de la carte.
+  Fichiers : `src/espace3ddessin.rs` et `src/espace3ddessin_tests.rs` (neufs), quelques lignes dans `espace3dview.rs`, `espace3dui.rs`,
+  `app.rs` (`set_tool`, `layer_to_screen`, `layer_zoom`), `canvas.rs`, `tracedroit.rs`, `render.rs`, `onglets.rs`, `keymap.rs`,
+  `keymap.toml`, `lib.rs`. Hors de cette étape : pot de peinture, dégradé, formes, sélection, Transformer, coller une image dans la vue.
+  Essais : 9 neufs (`espace3ddessin_tests.rs` : de vrais traits de souris dans la vue d'orbite et par la caméra, carte de face, penchée,
+  surface au sol ; les refus ; l'outil qui décide ; Alt+glisser et Ctrl+clic ; la taille du pinceau ; la texture par morceaux et le
+  retour au repos ; calque vectoriel et segment droit ; la feuille d'un plan en Espace 3D, puce ci-dessus), et les familles voisines,
+  0 échec (les nombres sont dans le dernier commit). Commits sur `espace-libre-cles` : 7b6800e et 072cbda (en cours), e6755ff (la règle
+  des bords dans la vue), puis celui de la partie 146.1. Limites : pot de peinture, dégradé, formes, sélection, Transformer absents de
+  la vue ; à l'entrée dans la vue le pointeur manipule et la barre d'outils de gauche garde son outil allumé ; carte vue de dos refusée
+  dans la vue. **Rien n'a été regardé à l'écran ni essayé au stylet** (liste en 11 points, partie 146) ; la suite de référence entière
+  n'a pas été relancée ; l'exe n'est pas construit (son FEANOR d'essai tournait) ; pas poussé, pas fusionné.
+- Pendant son essai à l'écran de la branche `espace-libre` (plan en Espace 3D), sa remarque : « les clés de caméras et de transformation
+  des objets ont disparu avec la vue 3D », puis « j'aimerais qu'un bouton y apparaisse » (vue Espace 3D ouverte, le panneau Réglages
+  n'avait aucun bouton de clés, sur `main` non plus). Chantier `espace-libre-cles` (partie 145), branche locale du même nom depuis
+  `espace-libre` e5dc84e, dans `Chantiers\calques-place` ; `espace-libre` elle-même ne reçoit aucun commit. Ajouté dans les Réglages de
+  l'Espace 3D, avec les icônes, les bulles et les commandes des panneaux 2D (aucune commande neuve) : sur la ligne « Caméra du plan », le
+  losange « Clé de caméra ici » (allumé quand l'image courante porte une clé) et la corbeille qui la retire ; sur la ligne de la carte
+  choisie, ou « N cartes choisies », le losange « Clé de position » (allumé quand toutes les cartes choisies ont une clé ici) et sa
+  corbeille. Sa règle « la sélection agit sur tout ce qui est choisi » : vue Espace 3D ouverte, les commandes de clés de position visent
+  les cartes choisies et non le seul calque courant, en une étape d'annulation ; une carte verrouillée est laissée de côté, avec un mot.
+  Essais : 6 neufs (`espace3dcles_tests.rs`, dont un vrai clic dans le panneau et une surface au sol qui garde son inclinaison), et les
+  familles voisines (Espace 3D 86, caméra 248, clés 102, clés de position 18, trajectoire 29, Transformer 31, bulles, raccourcis, fumée) :
+  0 échec ; `cargo check --release` : le seul avertissement déjà connu de `espace3d.rs`. Pas fait : la suite de référence entière ; l'exe
+  n'a pas été construit (son FEANOR d'essai tournait) ; **rien n'a été regardé à l'écran** (liste en 7 points, partie 145). Pas poussé,
+  pas fusionné.
+- **plantage-carte-vide fusionné dans `main`** (41fe5a9) sur le « Oui, corrige-le » d'Anthony, poussé sur GitHub. Exe principal
+  reconstruit (18 h 37, aucun avertissement) et ouvert deux fois sur une copie de son projet `afa`, réglages à part : pas de
+  plantage, la copie reste au format 52. La promenade dans la vue Espace 3D n'a pas été refaite à l'écran avec cet exe : les essais
+  la couvrent, et Anthony l'a faite sur un autre PC avec la même correction. Pas de version portable (sa consigne). À tester par
+  Anthony : la liste de la partie 147.
+- **La vue Espace 3D ne ferme plus FEANOR quand une carte passe derrière le regard** (partie 147, branche `plantage-carte-vide`).
+  Anthony, pendant l'essai de « Plan en Espace 3D » : « il y a beaucoup de crash du logiciel quand on se balade dans l'espace 3D ».
+  Son rapport du 12 novembre, 0 h 27 : « Buffer slices can not be empty » dans egui-wgpu. Cause : `card_mesh` rendait un maillage
+  avec des sommets et aucun triangle quand il ne restait pas un carreau entier de la carte devant l'œil ; egui le laisse passer,
+  wgpu le refuse. Corrigé d'abord sur la branche d'essai `espace-libre-cles` (il a confirmé sur un autre PC : « Non, plus de
+  plantage »), puis porté ici à sa demande (« Oui, corrige-le ») : la vue (`espace3dview.rs`) et le canevas (`canvas.rs`, même
+  maillage), ligne pour ligne la même correction. Essai dirigé rouge sur le code d'avant, vert après (`espace3dvue_tests.rs`) ; une
+  promenade de 360 images à travers les cartes en plus (0,94 ms par image en médiane). Vérificateur : 4 502 réussis, 0 échec, aucun
+  avertissement, dix groupes OK. Le Plan en Espace 3D, les boutons de clés et le dessin dans la vue Espace 3D ne sont pas dans
+  `main` : ils restent sur `espace-libre-cles`, envoyée sur GitHub le même jour à sa demande. Format inchangé : 53.
+
+## 2026-11-11
+
+- Calques dans la timeline, suite : ses deux idées (« trois calques maximum affichés », ceux du dessus et du dessous venant quand on
+  monte ou descend ; la rangée des plans trop épaisse) numérotées 39 et 40 et maquettées sur la page des propositions. Avis donné :
+  oui aux deux ; le calque actif toujours au milieu, deux fines bandes qui comptent les autres, un bouton « Toute la pile » ; la
+  hauteur des plans réglable en tirant son bord, jusqu'au bandeau, retenue par onglet (`montage_rows` donne aujourd'hui aux plans la
+  place qui reste, entre 56 et 170 points). La 39 remplace la 37. Rien de codé : attend son accord.
+- Ses décisions après avoir vu la maquette : « Toute la pile » gardée (comparer deux calques éloignés, en choisir plusieurs) ; plans
+  en taille moyenne ou en bandeau seulement ; l'affichage des calques réglable depuis la barre du bas de la timeline et depuis les
+  Préférences ; **un dossier n'est jamais traité comme un calque dans la timeline : toujours plus petit, il se plie et se déplie** ;
+  les touches de zoom de la timeline sont celles de la zone de dessin (41 : chez lui Maj+1 et Maj+2 ; la timeline a aujourd'hui
+  `bande.zoom_*` sur Alt+1 et Alt+2). Maquette refaite (version 3 de la page) : fenêtre de trois calques avec le calque actif au
+  milieu, ligne fine de dossier qui prend sa place à la fine bande, barre du bas, Préférences. Mes choix signalés comme à
+  contredire : les flèches sautent les dossiers, boutons de plans réduits à « Nouveau plan », réglages et « ⋯ », un seul réglage
+  pour Storyboard et Montage, fin du réglage « Calques non actifs ». Toujours rien de codé.
+- Troisième tour : sa règle, à la place de mon « dossier fermé traversé d'un pas » : **un dossier fermé se traverse avec « calque du
+  dessus / du dessous » et se referme quand on en sort**. Sa question : d'accord pour les couleurs par dossier, mais risque de
+  confusion avec les couleurs par type de calque (partie 98). Réponse proposée et maquettée (version 4 de la page) : jamais les deux
+  sens au même endroit ; la bande garde la couleur du type ; le dossier a un filet de couleur dans la colonne de gauche, pris dans
+  les treize groupes de couleur existants (`groups.rs`, `Layer::group`, déjà peints en filet dans la timeline de l'Animation, jamais
+  utilisés dans ses projets), attribué tout seul à la création du dossier. Attend son avis et son accord pour coder.
+- Sur son « code, pas besoin de version portable jusqu'à nouvel ordre » : **les calques dans la timeline** (partie 137, branche
+  `calques-timeline`, chantier `Chantiers\calques-timeline`, depuis main 8da4f1d). Trois calques à la fois (le calque actif au milieu,
+  toujours à la même place ; deux fines bandes comptent les autres) ou toute la pile ; un dossier est une ligne fine qui se ferme
+  et s'ouvre, jamais un calque ; un dossier fermé se traverse avec « calque du dessus / du dessous » et se referme à la sortie,
+  sans rien écrire ; la bande garde la couleur du type, le dossier a son filet à gauche (groupes de couleur, d'office par
+  dossier) ; plans de hauteur moyenne ou en bandeau ; réglages dans la barre du bas de la bande et dans Préférences > Montage ;
+  les touches du zoom de l'image zooment la bande quand le pointeur est dessus. Annoncé puis corrigé auprès de lui : la bande du
+  bas ne rétrécit pas toute seule (sa hauteur est le bord tiré à la main), le chantier ne rend donc pas de place à l'image. Trouvé
+  en passant : la fenêtre des Préférences s'élargissait de 9 points par image pendant une recherche (défaut d'avant, corrigé) ;
+  `ahead_capacity` s'arrêtait net sur une feuille de moins de 64 Ko (corrigé). Un travers du banc d'essai noté : le premier clic
+  après l'apparition du pointeur se perd. Captures sur une copie de « retakes brawlydays ». Vérificateur sur la branche : 4 444
+  essais réussis, 0 échec, aucun avertissement. Pas fait : les propositions 34, 35, 36 et 38 ; la bande qui prendrait la hauteur
+  de son contenu. Pas fusionné : attend son essai ou son accord.
+- Fusion de `calques-timeline` dans main (c410030, sans avance rapide) sur son « Fusionne directement », sans qu'il ait essayé l'exe
+  de la branche ; pas de version portable (sa consigne du jour). `main` n'avait pas bougé depuis le départ de la branche : aucun
+  conflit, même contenu que la branche. L'autre session prévenue avant (message déposé, pas de réponse attendue) ; son chantier
+  `cles-glisser` (`Chantiers\multi-calques`, non validé) touche les mêmes fichiers et devra ramener main avant d'être fusionné.
+  Vérificateur sur main : 4 444 essais réussis, 0 échec, aucun avertissement, tous les groupes de fiabilité OK (712 s). Poussé sur
+  GitHub. Exe principal reconstruit (`target\release\feanor.exe`, 11 h 53) et ouvert deux fois sur une copie de « retakes brawlydays »
+  avec de faux réglages : pas de plantage. Pas vérifié : la timeline manipulée à la main dans le vrai exe (sa liste 137.8). Le
+  dossier de chantier `Chantiers\calques-timeline` attend son accord pour être retiré.
+- Son essai de l'exe de midi, quatre retours : « Ajoute les bandes de couleur du dossier dans le panneau calque également » ;
+  « Modifier la durée des images clés et la durée des plans n'est pas intégré » ; « Sélectionner plusieurs calques et créer une
+  nouvelle image clé (vides également) n'a pas été intégré » ; « Déplacer une image clé avant ou après la suivante n'a pas été
+  intégré ». Ce que j'ai trouvé : la durée des clés et des plans et les clés glissées avant ou après une autre étaient codées par
+  une autre session depuis le 10 au soir, mais restées **non validées** dans `Chantiers\multi-calques` (branche `cles-glisser`,
+  16 fichiers modifiés, 3 neufs, dernière écriture le 11 à 0 h 03), jamais vérifiées ni fusionnées ; aucune session ne s'en réclame
+  (l'une hors ligne, l'autre sans chantier en cours). Repris : validé tel que trouvé (4bc6fbf), main ramené dedans (d8aaf8f ; un
+  seul conflit, `docs/INTERFACE.md` : sa partie devient la 138), ses 16 essais passent. La nouvelle clé sur plusieurs calques, elle,
+  **était dans main** (partie 132) mais trois gestes courants la réduisaient à un seul calque : un clic dans la piste d'un des
+  calques choisis (le calque courant n'était pas inscrit dans le choix), des clés prises sur plusieurs pistes sans cliquer de nom,
+  et le double-clic sur une piste (qui défaisait en plus le choix) ; corrigés (partie 137.11). Son geste exact n'est pas connu : son
+  compteur d'usage dit seulement F5 au clavier. Le filet du dossier dans le panneau Calques : tout à gauche du rang, la bande de la
+  sorte juste après, rien de changé dans un plan sans dossier ; regardé sur une capture d'une copie de « retakes brawlydays ».
+  Vérificateur sur la branche : 4 464 essais réussis, 0 échec, aucun avertissement (669 s). Sur son second « Fusionne directement »
+  (donné pendant le travail) : fusion dans main à suivre.
+- Fusion de `cles-glisser` dans main (805b8e3, sans avance rapide) : `main` n'avait pas bougé, même contenu que la branche vérifiée
+  (le vérificateur n'a donc pas été relancé sur main). L'autre session prévenue par deux messages, sans réponse. Poussé sur GitHub.
+  Exe principal reconstruit (`target\release\feanor.exe`, 13 h 54) et ouvert deux fois sur une copie de « retakes brawlydays » avec
+  de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (ses listes
+  137.11 et 138) ; la partie 138 n'a été ni écrite ni essayée par moi au-delà de ses 16 essais et du vérificateur. Les dossiers de
+  chantier `Chantiers\calques-timeline` et `Chantiers\multi-calques` attendent son accord pour être retirés.
+- Sur son « Oui, retire-les » : les deux dossiers de chantier retirés (propres, leurs branches entièrement dans main ; 21 Go de
+  fichiers de construction rendus au disque). Les branches `calques-timeline` (7e89e7b) et `cles-glisser` (49472b8) restent. Il ne
+  reste que `Source`.
+- Deux nouveaux retours de son essai de l'exe de 13 h 54 (partie 139, branche `dossier-glisser`, chantier
+  `Chantiers\dossier-glisser`, depuis main 8c2417d ; le dossier de construction est celui de `Source`, pour ne pas tout
+  recompiler). **« glisser des calques dans un dossier ne fonctionne pas »** (capture : trois calques choisis sous un dossier vide) :
+  quatre causes dans le code — pris par son nom, un calque ne partait pas du panneau Calques (le texte du nom se sélectionnait) ; le
+  lâcher sur le rang d'un dossier ne rangeait pas dedans ; le calque posé juste sous un dossier vide ne pouvait pas y entrer ; un
+  seul calque partait, et rien n'entrait dans un dossier fermé. Corrigé aux trois endroits (panneau Calques, colonne de la bande,
+  en-têtes de l'Animation) : lâchés sur la ligne d'un dossier, les calques choisis y entrent ensemble (`folders::poser`,
+  `layerheads::cible_du_glisse`). **« le ctrl+c/ctrl+v ne fonctionne plus pour copier/coller plusieurs lignes vectorielles »** :
+  avec deux clés restées choisies dans la timeline (ce que laisse une nouvelle clé posée sur deux calques) et un seul calque choisi,
+  la copie partait dans le presse-papiers « plusieurs dessins » que Ctrl+V ne lisait qu'avec deux calques choisis : rien ne se
+  collait. Ctrl+V colle maintenant la dernière copie quel que soit le nombre de calques choisis, et un clic sur le nom d'un calque
+  lâche les clés choisies sur les autres. Son geste exact n'est pas connu : c'est le seul chemin trouvé où le collage ne fait rien,
+  reproduit par un essai (écrit après la correction : je ne l'ai pas vu échouer avant). Vérificateur sur la branche : 4 472 essais
+  réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`, 14 h 41) ouvert deux fois sur
+  une copie de « retakes brawlydays » avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
+- Fusion de `dossier-glisser` dans main (b78ea38, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée (vérificateur non relancé sur main). L'autre session prévenue (message déposé, sans réponse).
+  Poussé sur GitHub. Son FEANOR, ouvert depuis 13 h 59, fermé sans enregistrer pour reconstruire (il était prévenu ; l'écriture est
+  continue). Exe principal reconstruit (`target\release\feanor.exe`, 14 h 48) et ouvert deux fois sur une copie de « retakes
+  brawlydays » avec de faux réglages : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le
+  vrai exe (sa liste 139.3). Le dossier de chantier `Chantiers\dossier-glisser` attend son accord pour être retiré.
+- Sur son « Oui, retire-le » : le dossier de chantier `Chantiers\dossier-glisser` retiré (propre, sa branche entièrement dans main).
+  La branche `dossier-glisser` (0293edd) reste. Il ne reste que `Source`.
+- Nouveau retour, deux captures à l'appui : « Sélectionner 3 calques et cliquer sur F5 ne crée une clé d'image que sur un seul
+  calque au lieu des trois ». Sur ses captures, les pistes de deux des trois calques choisis sont ternes : c'est ainsi que la bande
+  peint un calque masqué. Son projet le confirme (lu sans y toucher) : « Vectoriel 14 » et « Vectoriel 15 » ont l'œil fermé. La
+  nouvelle clé sur plusieurs calques (partie 132) laissait de côté les calques masqués, en le disant seulement dans la barre
+  d'état, alors qu'un calque masqué seul la reçoit. Corrigé (partie 139.5, branche `cle-masques`, chantier `Chantiers\cle-masques`,
+  depuis main 4395c46) : un calque masqué reçoit sa clé ; les calques verrouillés restent de côté (à décider par lui). Vérifié sur
+  une copie fraîche de son projet : les trois calques de ses captures choisis, F5, « Nouvelle clé sur 3 calques ». Vérificateur sur
+  la branche : 4 473 essais réussis, 0 échec, aucun avertissement. Exe de la branche (`Source\target\msvc\release\feanor.exe`,
+  15 h 59) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas fusionné : attend son accord.
+  Ma correction du matin (partie 137.11) visait d'autres gestes : elle n'était pas la cause de son cas.
+- Fusion de `cle-masques` dans main (02c1ceb, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé, même
+  contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR, ouvert
+  depuis 15 h 35, fermé sans enregistrer pour reconstruire (il était prévenu). Exe principal reconstruit (`target\release\feanor.exe`,
+  16 h 05) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Pas de version portable. Sa question
+  ouverte : la clé sur les calques verrouillés. Le dossier de chantier `Chantiers\cle-masques` attend son accord pour être retiré.
+- Sa demande, capture à l'appui (la bande tirée très haut, à moitié vide) : « que la taille des calques dans la timeline s'adapte
+  aussi à la taille du panneau. La taille la plus grande reste la même mais quand il y a plus de place […] les calques les plus
+  proches du calque sélectionné prennent aussi la taille la plus grande », puis « il faut que ce soit toujours le plus confortable
+  possible à utiliser ». Codé (partie 140, branche `calques-place`, chantier `Chantiers\calques-place`) : quand la bande est plus
+  haute que ses pistes, les calques grandissent un à un autour du calque actif (le dessus, le dessous, puis les suivants) tant
+  qu'il reste de la place ; dans « Trois calques », les deux voisins ; pas assez de place : rien ne grandit, la bande défile comme
+  avant. Une case dans Préférences > Montage, allumée d'office (éteinte dans les essais). Captures sur une copie fraîche de son
+  projet, regardées et envoyées. Vérificateur sur la branche : 4 478 essais réussis, 0 échec, aucun avertissement. Exe de la
+  branche (16 h 27) ouvert deux fois sur une copie de projet avec de faux réglages : pas de plantage. Son « Fusionne directement »
+  est arrivé pendant le vérificateur : fusion dans main à suivre. Limite dite : deux hauteurs seulement (grande ou en bande).
+- Fusion de `calques-place` dans main (7e96224, sans avance rapide) : `main` n'avait pas bougé, même contenu que la branche
+  vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR n'était pas ouvert. Exe principal
+  reconstruit (`target\release\feanor.exe`, 16 h 34) et ouvert deux fois sur une copie de projet avec de faux réglages : pas de
+  plantage. Pas de version portable. Pas vérifié : la bande tirée à la main dans le vrai exe (sa liste 140.4). Les dossiers de
+  chantier `Chantiers\cle-masques` et `Chantiers\calques-place` attendent son accord pour être retirés.
+- Sa demande du soir : « une option de calque qui permet d'accrocher le calque à la caméra. Quand la caméra bouge, le calque suit
+  naturellement car il y est accroché ». Chantier `calque-camera` (partie 141 de l'interface), sur une branche du même nom dans le
+  dossier `Chantiers\calques-place` réutilisé. La règle : un calque accroché garde sa place dans l'image filmée, quoi que fasse la
+  caméra (déplacement, zoom, rotation, avancée) ; l'accrocher ou le décrocher ne le déplace pas à l'image courante ; un calque animé
+  garde son mouvement ; l'outil Transformer travaille sur ce qu'on voit ; les calques choisis s'accrochent ensemble, un dossier compte
+  pour ses calques, un calque de couleur suit son trait. Un petit bouton caméra par calque dans le panneau Calques, la même icône
+  dans l'en-tête de la timeline, Plus > Réglages avancés, une commande sans touche. Format de projet 53 (un projet ouvert par cette
+  version ne s'ouvre plus avec une version d'avant). Vérificateur sur la branche : 4 489 essais réussis, 0 échec, aucun
+  avertissement (un premier passage avait 7 échecs : des essais anciens qui comptaient sur le numéro de format 52, mis à jour).
+  Quatre captures d'un plan d'essai regardées et envoyées. Exe de la branche (19 h 26) ouvert deux fois sur une copie fraîche de
+  son projet avec de faux réglages, dont une fois avec un calque accroché sous sa caméra à deux clés : pas de plantage. Pas vérifié :
+  aucun geste fait à la main dans le vrai exe. Limites dites : la bascule et le panoramique de la caméra ne sont pas suivis ;
+  l'Espace 3D et la vue de dessus montrent le calque à sa pose dans le cadre ; pendant un geste du Transformer, la ligne d'état donne
+  les valeurs vues sur la feuille. Les dossiers `Chantiers\cle-masques` et `Chantiers\calques-place` (qui porte ce chantier) restent.
+  Fusion dans main : à son accord.
+- Fusion de `calque-camera` dans main (c6cca20, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 19 h 44) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages, dont une fois avec un calque accroché sous sa caméra à
+  deux clés : pas de plantage. Pas de version portable. Pas vérifié : aucun geste fait à la main dans le vrai exe (sa liste 141.6).
+  Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent ; le second est repris pour le sujet suivant
+  (un mouvement de caméra B vers C dans les Vignettes).
+- Son sujet suivant, avec une capture annotée : « ajouter un mouvement de caméra dans Vignettes après une continuité de vignettes qui a
+  déjà un mouvement A vers B. Ajouter possibilité de B vers C etc. » Chantier `camera-suite` (partie 142 de l'interface), branche du
+  même nom dans le dossier `Chantiers\calques-place` réutilisé. Avant, un plan ne portait qu'un mouvement, sur sa première case, et une
+  case de continuité refusait la caméra. Maintenant une case de continuité porte son propre mouvement : il part du cadre qu'elle montre
+  (B) et va vers un nouveau cadre (C) sur la durée de la case ; la case d'après montre C et peut porter C vers D. Mêmes gestes que
+  d'habitude, faits sur la case (Ctrl + Maj + glisser, le « + » de Maj, « Ajouter un cadre »). Les lettres courent d'un bout à l'autre du
+  plan. Le premier cadre d'un mouvement de continuité est la case : il ne se déplace pas. Déplacer B emmène le départ de B vers C. Un
+  mouvement créé sur une case du milieu met les cases de derrière dans un plan à part (la règle du 22 octobre). Le format du projet ne
+  change pas : tout se lit dans les clés de caméra. Vérificateur sur la branche : 4 497 essais réussis, 0 échec, aucun avertissement.
+  Captures de la planche regardées et envoyées. Exe de la branche (20 h 32) ouvert deux fois sur une copie fraîche de son projet avec de
+  faux réglages : pas de plantage (une première construction avait échoué sur un caractère parasite dans un commentaire, corrigé ; les
+  essais de la caméra repassés ensuite). Pas vérifié : aucun geste fait à la main dans le vrai exe ; la lecture à la japonaise
+  et l'export de la planche n'ont pas d'essai propre à ce cas. Fusion dans main : à son accord.
+- Fusion de `camera-suite` dans main (2066ecf, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 20 h 57) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages : pas de plantage. Pas de version portable. Pas
+  vérifié : aucun geste fait à la main dans le vrai exe (sa liste 142.4) ; la copie de projet ouverte n'a pas de case de continuité
+  qui porte un mouvement. Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent.
+- Son retour après l'essai du mouvement B vers C, avec deux captures : « sur le plan 5 par exemple, je ne peux pas créer de mouvement de
+  caméra depuis la deuxième vignette, il s'applique automatiquement à la première », et sa règle : « un mouvement de caméra peut démarrer
+  d'une vignette même si la vignette n'est pas la première vignette du plan. Le mouvement de caméra démarre alors du début de la clé
+  d'image et termine à la fin de la clé d'image ». J'avais gardé l'ancienne règle pour un plan qui ne bouge pas encore (le premier
+  mouvement naissait sur la première case) : elle est retirée. Chantier `camera-case` (partie 142.6), branche du même nom dans
+  `Chantiers\calques-place`. Le mouvement naît sur la case où on le demande, de sa première à sa dernière image, que le plan bouge déjà
+  ou non ; le « + » de Maj sert toujours la case survolée ; un mouvement vit sur la case où il commence. Une case qu'un mouvement
+  commencé ailleurs traverse refuse le geste et dit de quelle image à quelle image. Trouvé dans son projet (lu seulement) : la clé B de
+  son plan 3 est à l'image 108, au-delà de sa première case (elle était à l'image 48 à 18 h 43) ; c'est pour cela que sa dernière case ne
+  prenait pas de mouvement tant qu'il n'avait pas ajouté un cadre sur la première. Sur une copie fraîche de son projet : son plan 5 prend
+  son mouvement sur la deuxième case (clés aux images 49 et 96), son plan 3 dit pourquoi. Vérificateur sur la branche : 4 500 essais
+  réussis, 0 échec, aucun avertissement (un premier passage, la machine chargée, avait un échec sur un essai de capture d'écran qui passe
+  seul et au second passage). Fusion dans main : à son accord.
+- Fusion de `camera-case` dans main (2777b27, sans avance rapide) sur son « Fusionne directement » : `main` n'avait pas bougé,
+  même contenu que la branche vérifiée. L'autre session prévenue (message déposé, sans réponse). Poussé sur GitHub. Son FEANOR
+  était ouvert : fermé sans rien demander avant la construction. Exe principal reconstruit (`target\release\feanor.exe`, 22 h 26) et
+  ouvert deux fois sur une copie fraîche de son projet avec de faux réglages : pas de plantage. Pas de version portable. Pas
+  vérifié : aucun geste fait à la main dans le vrai exe (sa liste 142.6). À lui de voir : la clé B de son plan 3 est à l'image 108,
+  au-delà de sa première case. Les dossiers de chantier `Chantiers\cle-masques` et `Chantiers\calques-place` restent.
+
+## 2026-11-10
+
+- Fusion de `camera-souvient` dans main (35a6e42, sans avance rapide), après l'essai d'Anthony dans la version portable du 9 novembre et
+  son accord (« ok tu peux fusionner avec le reste ») ; l'autre session prévenue avant. `main` n'avait pas bougé depuis le départ de la
+  branche : aucun conflit. Vérificateur sur main : 4 329 essais réussis, 0 échec, aucun avertissement, tous les groupes de fiabilité OK
+  (828 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`) et ouvert sur une copie de projet avec de faux
+  réglages : pas de plantage. Le dossier de chantier `Chantiers\camera-souvient` attend son accord pour être retiré.
+- Son retour sur « afa » (« la planche ne prend plus le trait… le trait disparaît au lâcher ») : la cause était l'interrupteur « Peint
+  sur l'aplat » resté allumé (vu dans sa vidéo d'écran), pas la fusion ; ses trois symptômes rejoués sur une copie de son projet. Sur son
+  « Oui, corrige » : partie 133, branche `souvient-retours` (chantier `Chantiers\souvient-retours`, depuis main 3e2b090). Un trait posé
+  sur le papier va au papier ; un trait qui ne laisse rien ne crée ni aplat, ni dessin vide, ni étape, ni plan vide ; la barre d'état
+  dit pourquoi ; la barre du bas de la planche montre l'interrupteur allumé, un clic l'éteint. Vérificateur sur la branche : 4 339
+  essais réussis, 0 échec, aucun avertissement, fiabilité OK. Exe de branche ouvert sur une copie de son projet avec de faux réglages :
+  pas de plantage. Pas fusionné : attend son essai et son accord.
+- L'autre session a fusionné `multi-calques` dans main (00a047e, partie 132) et l'a demandé : main fusionné dans `souvient-retours`
+  (c7addc7), seul conflit dans docs/INTERFACE.md (132 puis 133, les deux gardées). Vérificateur : un premier passage sous forte charge
+  (1 010 s) a vu échouer `camera_traits_tests::scrubbing_far_away_never_cuts_the_stroke_again` (aperçu réduit des effets fait en
+  arrière-plan, sensible au temps) ; seul, il passe trois fois sur trois ; second passage complet : 4 385 réussis, 0 échec, aucun
+  avertissement, fiabilité OK (416 s). Exe de branche reconstruit et ouvert sur une copie d'afa : pas de plantage. Ctrl+A des Vignettes
+  laissé à l'autre session (vignettesel.rs, partie 134).
+- Sur son « Fusionne directement » : `souvient-retours` fusionné dans main (cc9e505, sans avance rapide), l'autre session prévenue
+  avant ; main n'avait pas bougé depuis 00a047e : aucun conflit. Vérificateur sur main : 4 385 essais réussis, 0 échec, aucun
+  avertissement, fiabilité OK (985 s). Poussé sur GitHub. Exe principal reconstruit (`target\release\feanor.exe`, FEANOR n'était pas
+  ouvert) et ouvert sur une copie d'afa avec de faux réglages : pas de plantage. Le dossier `Chantiers\souvient-retours` retiré avec
+  son accord (« Oui, retire-le ») ; la branche est gardée.
+- Audit à sa demande (« audit sévère s'il faut »), à partir de son compteur d'habitudes et de ses projets : `suivi/AUDIT-2026-11-10.md`,
+  cinq constats, propositions 21 à 29, puis la 30 (« La feuille par axe ») en réponse à « si tu repartais de zéro ». Rien de codé.
+- Sur son « fais la proposition 25 » : **on n'enregistre plus** (partie 135, branche `sans-enregistrer`, chantier
+  `Chantiers\sans-enregistrer`, depuis main a17ad33). FEANOR écrit le projet tout seul dès que le stylet se lève (l'enregistrement
+  de toujours, déclenché par `continu.rs`, silencieux) ; fermer et quitter ne demandent plus rien ; Ctrl+S pose un jalon ; un jalon
+  automatique à chaque ouverture remplace « Ne pas enregistrer » ; Fichier > Jalons… pour nommer, revenir, supprimer. Un jalon est
+  un projet complet en liens physiques (`jalons.rs`), qui ne prend presque pas de place. Pas pour un film partagé ni un projet sans
+  dossier. Réglage « Enregistrer en continu » dans les Préférences. Le format ne change pas (52). Trouvé en relisant : chaque
+  écriture réécrivait les réglages (liste des récents) et le titre de la fenêtre aurait clignoté ; corrigé. Vérificateur sur la
+  branche : 4 406 essais réussis, 0 échec, aucun avertissement, fiabilité OK (975 s). Exe de branche lancé sur une copie d'« afa »
+  avec de faux réglages : jalon d'ouverture posé en 1,5 s (300 fichiers, en liens), aucun fichier du projet changé, pas de second
+  jalon au second lancement, arrêt brutal sans reste. Pas fait : le fichier de projet unique (étape à part), l'annulation qui survit
+  à la fermeture. Pas fusionné : attend son essai et son accord.
+- L'autre session a fusionné dans main `vignettes-ctrl-a` (d07678e, partie 134) puis `selection-tout-2` (d3662ef, partie 136) et l'a
+  rappelé : main fusionné dans `sans-enregistrer` (d7f1761), seul conflit dans docs/INTERFACE.md (parties rangées 134, 135, 136).
+  Vérifié dans le code reçu : ni fil, ni canal, ni travail de fond nouveau, donc rien à ajouter à `App::continu_retenu`. Vérificateur
+  sur la branche : 4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (785 s). L'exe de la branche n'a pas été
+  reconstruit : la version portable du soir (dac56c7) reste celle de son essai. Toujours pas fusionné : attend son essai et son accord.
+- Sur son « Fusionne directement » : `sans-enregistrer` fusionné dans main (6093d46, sans avance rapide), l'autre session prévenue
+  avant ; main n'avait pas bougé depuis d3662ef : aucun conflit, contenu identique à la branche vérifiée. Vérificateur sur main :
+  4 437 essais réussis, 0 échec, aucun avertissement, fiabilité OK (732 s). Poussé sur GitHub. Exe principal reconstruit
+  (`target\release\feanor.exe`, FEANOR n'était pas ouvert) et ouvert deux fois sur une copie d'afa avec de faux réglages : pas de
+  plantage, jalon d'ouverture posé au premier lancement (300 fichiers), aucun fichier du projet changé, pas de second jalon au
+  second lancement, arrêt brutal sans reste. Il n'a pas essayé la version portable avant : le stylet pendant l'écriture continue
+  reste à juger par lui, dans son FEANOR habituel. Le dossier `Chantiers\sans-enregistrer` retiré avec son accord (« Oui,
+  retire-le ») ; la branche est gardée.
+- Sa remarque sur les calques dans la timeline (« un peu bordélique », les bandes repliées « manquent parfois de lisibilité ») : relevé
+  du code (parties 29 et 68, `pistes.rs`, `montagerows.rs`) et de ses projets en lecture seule (13 calques dans le plan le plus chargé
+  de « retakes brawlydays », dix bandes de la même couleur, aucun nom donné par lui, 172 montées et descentes de calque au clavier).
+  Huit propositions numérotées 31 à 38 (couleur par dossier, bandes et noms plus lisibles, dossiers visibles, calques cachés en une
+  ligne, noms sans les taper, retrouver un calque par son dessin, pile qui ne saute plus, un plan à la fois) et une page de maquettes
+  cliquables. Rien de codé : attend son choix par numéros.
+
+## 2026-11-09
+
+- La caméra se souvient (partie 131, branche `camera-souvient`, chantier `Chantiers\camera-souvient`) : à sa demande de repenser les
+  Vignettes « quitte à repartir de zéro », cinq approches présentées (A à E) ; son choix : « Ok on essaye A ». **Un trait appartient tout
+  entier à la case où le stylet s'est posé ; hors de toute case, il appartient au papier** : plus de découpe du trait au bord des cases.
+  La planche montre chaque trait en entier, par-dessus les cases qu'il traverse (« la feuille ») ; le passe-partout montre le film (chaque
+  case son plan) ; le plan, le montage et les exports du film restent coupés au cadre. La vignette d'une case s'étend à son encre (quatre
+  cadres par côté au plus). La sélection de la planche (vectorielle et bitmap), le collage et la case qui naît reposent le trait entier là
+  où il commence ; un vieux trait coupé redevient entier quand on le déplace. Le bout d'un trait ne fait plus naître la case pâle
+  suivante ; la marge de la première case pâle la fait naître. La gomme de la planche efface aussi ce que les cases ont dessiné hors de
+  leur cadre (`gommedebord.rs`). Le format du projet ne change pas. Mesure demandée par l'autre session (60 cases, 2 040 traits) : une
+  image d'écran en 0,89 ms. Onze essais neufs (`camera_souvient_tests.rs`), les essais d'avant réécrits pour dire la règle neuve. Limites
+  notées : caméra en perspective (le trait qui dépasse s'amincit), quatre cadres au plus, un débord ne se gomme pas depuis la case d'une
+  autre. **Relecture indépendante** du code avant toute proposition de fusion (demandée par l'autre session) : quinze remarques, dont
+  plusieurs sérieuses sur la gomme toute neuve (elle prenait un trait resté dans son cadre, ignorait le verrou du storyboard et le
+  passe-partout) et sur les dessins montrés par plusieurs cases. Corrigé : ces dessins-là (le Décor, une planche-mère, un calque de toute
+  la scène) gardent la règle d'avant, pour ne pas s'étaler autour de chaque case qui les montre ; un trait bitmap parti du papier n'emporte
+  plus un double du dessin qu'il traverse ; la marge ordinaire d'une case ne disparaît plus dans un grand export. Pas fusionné : exe de
+  branche à essayer par Anthony.
+- À sa demande (« fusionner sur une version portable seulement sans altérer la version principale ») : version portable d'essai
+  `Logiciel\Portable\FEANOR-portable-2026-11-09-camera-souvient` (dossier et zip), faite de l'exe de la branche (a9f3540). `main` n'avait
+  pas bougé depuis le départ de la branche (6f27220) : cet exe est déjà le FEANOR habituel plus la partie 131, sans aucune fusion. Ouverte
+  sur une copie de projet avec de faux réglages : pas de plantage. `main`, `Source` et son exe ne sont pas touchés.
+
 ## 2026-11-08
 
 - Dépôt GitHub de sauvegarde, à la demande d'Anthony (« afin de ne rien perdre ») : il a créé le dépôt privé
