@@ -907,6 +907,8 @@ pub struct App {
     pub(crate) renderer: Renderer,
     /// Le monde hors de la feuille à l'écran (toile infinie, `monde.rs`).
     pub(crate) monde: crate::monde::Monde,
+    /// Les dessins vectoriels à la taille de l'écran quand la vue grossit (`vuenette.rs`).
+    pub(crate) nette: crate::vuenette::VueNette,
     pub(crate) thumbs: Thumbs,
     /// La tenue des dessins en mémoire : les pixels des dessins qu'on ne regarde pas se rangent (`gel.rs`).
     pub(crate) gel: crate::gel::Gel,
@@ -1460,6 +1462,7 @@ impl App {
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             monde: crate::monde::Monde::new(),
+            nette: crate::vuenette::VueNette::new(),
             thumbs: Thumbs::default(),
             gel: Default::default(),
             montage_zoom: 4.0,

@@ -1287,6 +1287,9 @@ pub mod video;
 mod video_tests;
 mod videoui;
 mod view;
+mod vuenette;
+#[cfg(test)]
+mod vuenette_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;

@@ -252,6 +252,7 @@ etat_projet! {
         r
     },
     monde: crate::monde::Monde = crate::monde::Monde::new(),
+    nette: crate::vuenette::VueNette = crate::vuenette::VueNette::new(),
     thumbs: crate::thumbs::Thumbs = Default::default(),
     gel: crate::gel::Gel = Default::default(),
     layer_thumbs: crate::layersui::LayerThumbs = Default::default(),
