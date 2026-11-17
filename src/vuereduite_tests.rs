@@ -271,3 +271,103 @@ fn vue_reduite_captures() {
         println!("CAPTURE {nom} : plan {}, zone du dessin {:?}", plan + 1, b.app.canvas_rect);
     }
 }
+
+// ---------------------------------------------------------------------------------------------- les vignettes (processeur)
+
+/// L'encre d'un pixel opaque d'une vignette : la part couverte de noir, en lumière linéaire ou en valeurs gamma.
+fn encre_de(c: eframe::egui::Color32, lineaire: bool) -> f32 {
+    if lineaire {
+        1.0 - eframe::egui::ecolor::linear_f32_from_gamma_u8(c.r())
+    } else {
+        1.0 - c.r() as f32 / 255.0
+    }
+}
+
+/// Pour chaque trait et chaque ligne de la vignette qu'il traverse : l'encre de la ligne autour du trait, rapportée à ce qu'elle doit
+/// être (un trait d'un pixel de la feuille, réduit `reduction` fois, laisse `1 / reduction` par ligne). `marge` : celle de la vignette.
+fn encre_par_ligne_de_vignette(image: &eframe::egui::ColorImage, reduction: f32, marge: usize, lineaire: bool) -> Vec<f32> {
+    let [l, h] = image.size;
+    let mut mesures = Vec::new();
+    for (x0, pente) in TRAITS {
+        for yy in marge..h - marge {
+            let y = (yy - marge) as f32 * reduction + reduction / 2.0;
+            if y < HAUT as f32 + 12.0 || y > BAS as f32 - 12.0 {
+                continue;
+            }
+            let x = (x0 as f32 + (y - HAUT as f32) / pente as f32 + 0.5) / reduction + marge as f32;
+            let (a, z) = ((x - 5.0).round() as usize, ((x + 5.0).round() as usize).min(l - 1));
+            mesures.push((a..=z).map(|xx| encre_de(image.pixels[yy * l + xx], lineaire)).sum::<f32>() * reduction);
+        }
+    }
+    mesures
+}
+
+/// Une vignette garde les traits fins entiers, comme l'affichage : à chaque ligne, l'encre d'un trait d'un pixel vaut ce qu'elle doit, que
+/// la vignette soit une case des Vignettes (avec sa marge, en lumière linéaire) ou une vignette de plan (sans marge, en gamma), au tiers
+/// comme au vingtième. (Avant la partie 166.10 : 4 à 16 points lus par pixel ; un trait y perdait des lignes entières.)
+#[test]
+fn une_vignette_garde_les_traits_fins_entiers() {
+    let doc = feuille_de_traits_fins();
+    let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+    let cam = doc.panel_camera(0, 0);
+    for (largeur, marge) in [(592usize, 8usize), (300, 8), (300, 0), (160, 0), (80, 0)] {
+        let hauteur = largeur * HAUTEUR / LARGEUR;
+        let reduction = LARGEUR as f32 / largeur as f32;
+        let image = crate::render::thumbnail_marge_until(&doc, &plan, &cam, largeur, hauteur, marge, None, &|| false).expect("jamais interrompue");
+        assert_eq!(image.size, [largeur + 2 * marge, hauteur + 2 * marge]);
+        let (moins, plus, moyenne, n) = resume(&encre_par_ligne_de_vignette(&image, reduction, marge, marge > 0));
+        println!("     vignette de {largeur} pixels (réduction {reduction:.1}, marge {marge}) : {n} lignes, encre de {moins:.2} à {plus:.2} fois la normale, {moyenne:.3} en moyenne");
+        assert!(n >= 100, "les traits sont dans la vignette : {n} lignes");
+        assert!((moyenne - 1.0).abs() < 0.05 && moins >= 0.85 && plus <= 1.15, "vignette de {largeur} pixels : un trait fin garde son encre à chaque ligne, de {moins:.2} à {plus:.2} fois la normale ({moyenne:.3} en moyenne)");
+    }
+}
+
+/// Le raccourci des pixels sans encre ne change aucun pixel : la même vignette avec et sans, caméra droite, caméra qui zoome et se
+/// décale, caméra en roulis (lectures en grille), calque déplacé et tourné, avec une marge et sans.
+#[test]
+fn le_raccourci_des_pixels_sans_encre_ne_change_rien() {
+    let mut doc = feuille_de_traits_fins();
+    // (Un second calque, transformé : ses lectures sont lissées, le raccourci doit en tenir compte.)
+    let dessin = doc.panels[0].layers[0].cel_at(0).expect("le calque a un dessin");
+    let mut calque = Layer::new("Tourné", LayerKind::Bitmap);
+    calque.set(0, Some(dessin));
+    calque.transform = crate::document::LayerTransform { x: 37.5, y: -22.0, angle: 12.0, scale: 0.8, ..Default::default() };
+    doc.panels[0].layers.push(calque);
+    let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+    let droite = doc.panel_camera(0, 0);
+    let cameras = [droite, crate::camera::Camera { x: droite.x + 130.3, y: droite.y - 71.7, zoom: 1.7, ..droite }, crate::camera::Camera { angle: 17.0, zoom: 0.8, ..droite }];
+    for (k, cam) in cameras.iter().enumerate() {
+        for (largeur, marge) in [(300usize, 12usize), (173, 0)] {
+            let hauteur = largeur * HAUTEUR / LARGEUR;
+            let vignette = || crate::render::thumbnail_marge_until(&doc, &plan, cam, largeur, hauteur, marge, None, &|| false).expect("jamais interrompue");
+            let avec = vignette();
+            crate::render::SANS_RACCOURCI.with(|c| c.set(true));
+            let sans = vignette();
+            crate::render::SANS_RACCOURCI.with(|c| c.set(false));
+            let differents = avec.pixels.iter().zip(&sans.pixels).filter(|(a, b)| a != b).count();
+            assert_eq!(differents, 0, "caméra {k}, vignette de {largeur} pixels, marge {marge} : {differents} pixels diffèrent avec le raccourci");
+            // (Un trait d'un pixel réduit cinq fois est pâle : 19 % d'encre, en lumière linéaire, donne un rouge vers 232.)
+            assert!(avec.pixels.iter().any(|c| c.r() < 250 && c.a() > 0), "caméra {k} : la vignette montre de l'encre");
+        }
+    }
+}
+
+/// Au demi, caméra droite, sans marge : chaque pixel de la vignette est la moyenne de ses quatre pixels de la feuille, tronquée, comme
+/// les quatre lectures d'avant.
+#[test]
+fn au_demi_la_vignette_est_la_moyenne_des_quatre_pixels() {
+    let doc = feuille_de_traits_fins();
+    let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+    let cam = doc.panel_camera(0, 0);
+    let image = crate::render::thumbnail(&doc, &plan, &cam, LARGEUR / 2, HAUTEUR / 2);
+    for (x0, pente) in TRAITS {
+        for y in (HAUT + 10..BAS - 10).step_by(7) {
+            let x = colonne(x0, pente, y);
+            let (vx, vy) = (x / 2, y / 2);
+            // Les quatre pixels de la feuille sous ce pixel de vignette : papier (255), sauf ceux du trait (0).
+            let noirs = [(2 * vx, 2 * vy), (2 * vx + 1, 2 * vy), (2 * vx, 2 * vy + 1), (2 * vx + 1, 2 * vy + 1)].iter().filter(|(px, py)| colonne(x0, pente, *py) == *px).count();
+            let attendu = (255 * (4 - noirs) / 4) as u8;
+            assert_eq!(image.pixels[vy * (LARGEUR / 2) + vx].r(), attendu, "pixel ({vx}, {vy}) de la vignette au demi : {noirs} pixels noirs sur quatre");
+        }
+    }
+}
