@@ -174,7 +174,7 @@ fn la_colonne_porte_tout(debut: f32, colonne: f32, ligne_du_calque: Rect) {
 
 #[test]
 fn in_the_animation_the_bar_of_the_current_layer_carries_everything_and_the_rows_are_all_alike() {
-    // Partie 167 : les réglages du calque courant sont dans la barre du calque, au-dessus des lignes ; toutes les lignes ont la même
+    // Partie 168 : les réglages du calque courant sont dans la barre du calque, au-dessus des lignes ; toutes les lignes ont la même
     // hauteur (avant, partie 160 : la ligne complète du calque courant).
     let mut b = banc_dans(Espace::Animation);
     b.chauffer(2);
@@ -190,7 +190,7 @@ fn in_the_animation_the_bar_of_the_current_layer_carries_everything_and_the_rows
         assert!(vus::ou(nom).iter().all(|r| r.top() > sous_la_barre), "« {nom} » n'est pas en haut de la colonne : {:?}", vus::ou(nom));
     }
     // Un autre calque devient courant : rien ne change de hauteur, et la barre parle de lui.
-    let rows = |b: &Banc| crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups);
+    let rows = |b: &Banc| crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
     let avant = rows(&b);
     assert!(avant.iter().all(|r| r.h == crate::layerheads::ROW_FINE));
     b.app.select_layer(0);
@@ -203,9 +203,8 @@ fn in_the_animation_the_bar_of_the_current_layer_carries_everything_and_the_rows
 fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    // La fenêtre des trois calques grandit de deux rangées de 22 : 134 points.
+    // La piste du calque actif : deux rangées de 22.
     assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
-    assert_eq!(crate::pistes::MARGE_H * 2.0 + crate::montagerows::LAYER_H, 134.0);
     let fusion = vus::ou("Mode de fusion");
     assert_eq!(fusion.len(), 1, "seule la piste du calque actif : {fusion:?}");
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)

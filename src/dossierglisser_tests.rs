@@ -14,7 +14,6 @@ use crate::calques_timeline_tests::{banc_de_retakes, colonne, rang, trouver};
 use crate::document::{Layer, LayerKind};
 use crate::folders::{poser, Pose};
 use crate::layerheads::{cible_du_glisse, Cible, Row};
-use crate::pistes::Pile;
 use crate::pistes_tests::{etapes, glisser};
 
 // ------------------------------------------------------------------------------------ l'outillage
@@ -172,7 +171,6 @@ fn parent(app: &crate::app::App, nom: &str) -> Option<String> {
 fn on_screen_a_layer_dragged_onto_the_thin_line_of_a_folder_in_the_strip_goes_in() {
     // La colonne de la bande du montage, toute la pile : les calques et les lignes fines des dossiers.
     let mut b = banc_de_retakes(true, "V13");
-    b.app.settings.montage_pile = Pile::Toute;
     b.chauffer(6);
     let n0 = etapes(&b);
     b.image(vec![Event::PointerMoved(pos2(900.0, 300.0))], 1.0 / 60.0);

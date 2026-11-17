@@ -289,9 +289,10 @@ fn a_folder_closes_and_opens_from_its_triangle_in_the_timeline_column() {
 }
 
 #[test]
-fn the_current_layer_in_a_closed_folder_is_announced_and_one_click_opens_it() {
-    // (Le panneau Calques gardait le calque courant d'un dossier fermé dans sa liste ; il n'existe plus, partie 160. La colonne de
-    // la timeline le dit dans son en-tête, et un clic rouvre le dossier.)
+fn the_current_layer_in_a_closed_folder_keeps_its_row_and_the_caret_opens_the_folder() {
+    // (Le panneau Calques gardait le calque courant d'un dossier fermé dans sa liste ; il n'existe plus, partie 160. Partie 165.4 : la
+    // colonne de la timeline lui garde sa ligne complète, les autres calques du dossier restent cachés ; le triangle du dossier le
+    // rouvre. L'avis de l'en-tête a laissé sa place aux boutons de la timeline, partie 165.5.)
     let mut app = app_with_folder("courant");
     app.layers_mut()[2].collapsed = true;
     app.cur_layer = 0;
@@ -300,12 +301,13 @@ fn the_current_layer_in_a_closed_folder_is_announced_and_one_click_opens_it() {
         a.timeline_heads(ui, 24.0, 0.0);
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, avis) = textes.iter().find(|(t, _)| t.contains("Calque courant dans « Décors »")).unwrap_or_else(|| panic!("l'avis de l'en-tête : {textes:?}")).clone();
-    assert!(trouver(&textes, "C2").is_none());
-    let textes = ecran.cliquer(&mut app, avis.center(), &mut ui_calques);
+    assert!(trouver(&textes, "C1").is_some(), "le calque courant garde sa ligne : {textes:?}");
+    assert!(trouver(&textes, "C2").is_none(), "les autres calques du dossier fermé restent cachés");
+    let (_, caret) = textes.iter().find(|(t, r)| t.contains(egui_phosphor::regular::CARET_RIGHT) && r.left() < 30.0).expect("le triangle fermé").clone();
+    let textes = ecran.cliquer(&mut app, caret.center(), &mut ui_calques);
     assert!(!app.layers()[2].collapsed, "un clic rouvre le dossier");
-    let textes = if trouver(&textes, "C1").is_some() { textes } else { ecran.chauffer(&mut app, 2, &mut ui_calques) };
-    assert!(trouver(&textes, "C1").is_some(), "le calque courant ne se perd pas de vue : {textes:?}");
+    let textes = if trouver(&textes, "C2").is_some() { textes } else { ecran.chauffer(&mut app, 2, &mut ui_calques) };
+    assert!(trouver(&textes, "C2").is_some() && trouver(&textes, "C1").is_some(), "{textes:?}");
 }
 
 #[test]
@@ -404,7 +406,7 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
-    // (Partie 167 : la barre du calque courant porte le bouton, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les
+    // (Partie 168 : la barre du calque courant porte le bouton, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les
     // lignes des calques ne l'ont pas.) « C1 » est le calque courant.
     app.cur_layer = 0;
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {

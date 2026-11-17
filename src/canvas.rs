@@ -205,8 +205,13 @@ impl App {
         let setup = mixed.map(|(_, mix)| self.mix_setup(&mix, &plan, rect, size));
         // La vue nette (`vuenette.rs`) : au-delà de 100 %, les dessins vectoriels à la taille de l'écran, posés par-dessus l'image
         // composée (elle seule pour une case des Vignettes, une transition du montage, la vue en perspective).
-        let nette = if zone.is_none() && !self.in_card && setup.is_none() && ws.is_none() { self.vue_nette(ui.ctx(), rect, size, &plan) } else { None };
+        let vue_nette = zone.is_none() && !self.in_card && setup.is_none() && ws.is_none();
+        let nette = if vue_nette { self.vue_nette(ui.ctx(), rect, size, &plan) } else { None };
+        // Tant qu'une image nette est montrée ou attendue, l'image composée se pose lissée au lieu de pixels nets : ce qu'on en
+        // voit (la vue qui bouge, la zone d'un trait en cours) est adouci plutôt qu'en marches (`GpuCanvas::lisser`).
+        let lisser = vue_nette && self.nette.lisse();
         if let Some(gpu) = &mut self.gpu {
+            gpu.lisser = lisser;
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             let stage = [self.doc.width, self.doc.height];
@@ -496,10 +501,16 @@ impl App {
                         self.guides.drag = Some(k);
                         continue;
                     }
-                    // (Avec le Dégradé, Alt dit « tout le calque » : la pipette reste à l'outil Pipette.)
-                    if (modifiers.alt && self.tool != Tool::Gradient) || self.tool == Tool::Picker {
+                    // La pipette : l'outil Pipette seul.
+                    if self.tool == Tool::Picker {
                         self.picking = true;
                         self.pick_color(stage);
+                        continue;
+                    }
+                    // Partie 165.8 (Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ») : le
+                    // calque dont l'encre est sous le curseur devient actif. (Avec le Dégradé, Alt dit toujours « tout le calque ».)
+                    if modifiers.alt && self.tool != Tool::Gradient {
+                        self.alt_clic_calque(stage);
                         continue;
                     }
                     // Une brosse du décor choisie, sur le dessin du Storyboard : le trait part dans le calque Décor du plan

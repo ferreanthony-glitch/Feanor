@@ -815,6 +815,14 @@ pub fn composite_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> Color32
     pixel_of(&resolve(doc, plan), paper_color(plan), x, y)
 }
 
+/// Partie 165.8 : l'opacité (0 à 255) de ce que le plan `plan` pose au pixel (`x`, `y`) du monde, sans papier (l'Alt + clic de la vue
+/// de dessin cherche le calque dont l'encre est sous le curseur).
+pub fn couverture_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> u8 {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
+    pixel_of(&resolve(doc, plan), Color32::TRANSPARENT, x, y).a()
+}
+
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
 ///

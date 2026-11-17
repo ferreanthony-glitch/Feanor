@@ -9945,7 +9945,7 @@ Demande d'Anthony, sur deux jours. Le 10 novembre : « comment s'organisent les 
 
 Fichiers : `src/pistes.rs` (les lignes de la timeline, les réglages, la colonne de gauche), `src/montagerows.rs` (rangées, fines bandes, lignes de dossier, colonne des plans), `src/storyboard.rs` (bloc d'un plan en bandeau, barre du bas, pointeur sur la bande), `src/folders.rs` (`couleur_du_rangement`), `src/layerheads.rs` (le même filet dans la timeline de l'animation), `src/settings.rs`, `src/app.rs` (actions, zoom), `src/keymap.rs` + `keymap.toml`, `src/dockui.rs`, `src/timeline.rs` ; essais dans `calques_timeline_tests.rs` (neuf), `pistes_tests.rs` et `timeline_repliee_tests.rs` (adaptés). Remplace le mode « cachés » et la ligne « N autres calques » de la § 68.2 ; le reste de la § 68 (clés sur le bloc du plan, liseré de l'aplat, noms des blocs) ne change pas.
 
-### 137.1 Trois calques à la fois
+### 137.1 Trois calques à la fois — retiré à la demande d'Anthony (partie 165.7 : toute la pile seule)
 
 Dans les onglets **Storyboard** et **Montage**, la pile ne montre plus que **trois calques** : le **calque actif** au milieu (40 points, ses losanges, sa barre), **son voisin du dessus et celui du dessous** (19 points : leurs dessins, leurs clés en petits traits, leur nom en 11 points). Le calque actif est **toujours à la même place** ; la fenêtre fait **toujours 130 points de haut**, quel que soit le nombre de calques.
 
@@ -9971,7 +9971,7 @@ Les deux sens ne sont jamais au même endroit. **La bande d'un calque garde la c
 
 La rangée des plans ne prend plus la place que les pistes laissent (jusqu'à 170 points) : elle a **la hauteur du réglage**, **moyenne** (56 points : la vignette, le nom et la durée dessous) ou **en bandeau** (28 points : une petite vignette, le nom et la durée sur une ligne). Dans sa colonne de gauche, sur une ligne : **« Nouveau plan »**, **« ⋯ »** (nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard ; un cadenas à sa place quand le storyboard est verrouillé), les **réglages du projet** et son nom. Les commandes rangées restent au clic droit sur un plan et dans le menu « Plans » de la barre.
 
-### 137.5 Les réglages : en bas de la timeline, et dans les Préférences
+### 137.5 Les réglages : en bas de la timeline, et dans les Préférences — « trois calques / toute la pile » retiré à la demande d'Anthony (partie 165.7) ; « Hauteur des plans » reste
 
 **Barre du bas de la bande**, à droite du zoom : deux paires de petites icônes, avec leur bulle — **trois calques / toute la pile**, **plans moyens / en bandeau**. Les mêmes dans **Fichier > Préférences… > Montage** (« Calques dans la timeline », « Hauteur des plans ») et au clic droit sur une piste. Deux actions à qui donner une touche : `piste.toute_la_pile`, `bande.plans_en_bandeau` (sans touche d'office). Réglages du poste (`reglages.toml` : `calques_timeline`, `hauteur_plans` ; les valeurs d'office ne s'écrivent pas) ; l'ancien réglage « Calques non actifs : repliés / cachés » n'existe plus (une vieille clé est ignorée).
 
@@ -13268,7 +13268,9 @@ changent : `src/colorui.rs`, `src/fxui.rs`, `src/layerheads.rs` ; les essais : `
 - **Ce qui manque de la maquette** : « Nuit » n'existe pas comme effet dans FEANOR (le plus proche : Teinte / saturation ou Luminosité /
   contraste, sous Précis). Il n'a pas été inventé.
 
-### 164.3 La ligne du calque dans la timeline (proposition 8)
+### 164.3 La ligne du calque dans la timeline (proposition 8) — retirée à la demande d'Anthony (partie 165.3)
+
+> Anthony : « Je préfère la version texte classique. Reviens en arrière. » La ligne a retrouvé « 100 % » et « Normal ▾ » (165.3).
 
 - **L'opacité se règle en glissant sur la miniature** du calque courant : vers la droite, plus opaque ; vers la gauche, plus transparent
   (120 points pour tout l'écart, d'où que parte le geste). La miniature se voile d'autant, une barre fine de l'accent, en bas de la
@@ -13313,10 +13315,10 @@ plutôt qu'écrit : aucune police ne peut le changer en carré vide (`visuels164
 | Effets : flèche de l'effet, réglages en chiffres, clés, monter / descendre, « Appliquer pour de bon » | Effets > Précis, effet par effet |
 | Effets : le curseur de force (intensité, rayon, quantité…) | aussi la barre de l'avant | après |
 | Effets : « Rallumer » (effets éteints par fx) | inchangé, en tête |
-| Ligne du calque : barre d'opacité « 100 % » | glisser sur la miniature (voile et barre fine) ; Couleur unie et dossier : la barre |
-| Ligne du calque : losange des clés d'opacité | en tête de la troisième rangée |
-| Ligne du calque : liste « Normal ▾ » | la pastille du mode et son nom ; un clic : toutes les pastilles |
-| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la pastille |
+| Ligne du calque : barre d'opacité « 100 % » | retiré à la demande d'Anthony (165.3) : la barre « 100 % » est revenue |
+| Ligne du calque : losange des clés d'opacité | retiré à la demande d'Anthony (165.3) : de nouveau à droite de la barre |
+| Ligne du calque : liste « Normal ▾ » | retiré à la demande d'Anthony (165.3) : la liste « Normal ▾ » est revenue |
+| Ligne du calque : mode précédent / suivant | inchangés, de part et d'autre de la liste |
 | Ligne du calque : œil, cadenas, pelure, transparence, pochoir, position, groupe, fx, caméra, aplat, maillon, ⋮ | inchangés, à leur place |
 | Clic droit du calque > Apparence > Mode de fusion, opacité | inchangés |
 
@@ -13368,6 +13370,237 @@ Essais anciens changés, et pourquoi :
 - Gardé tel quel : les couleurs fixes des schémas (papier, encre, les deux ronds bleu et orange des pastilles) : ce sont des images,
   pas l'interface ; et le contrôle « un seul titre Précis » reste une lecture des sources.
 
+## 165. L'avant | après montre le vrai calque ; la piste du Storyboard comme la ligne de la timeline (2026-11-16, branche `avant-apres-reel`)
+
+Deux demandes d'Anthony après la partie 164 : l'avant | après des Effets doit montrer **le vrai calque** (à gauche de la barre, le
+calque sans l'effet ; à droite, avec l'effet, à la force courante), et, « pareil partout », la piste du calque actif de la vue
+Storyboard doit fonctionner comme la ligne du calque de la timeline (164.3). Code : `src/avantapres165.rs` (l'aperçu),
+`src/visuels164.rs` (la peinture, partagée avec le schéma), `src/fxui.rs`, `src/pistes.rs`, `src/layerheads.rs` ; essais :
+`src/avantapres165_tests.rs`. Aucune crate, aucun format, aucune fenêtre.
+
+### 165.1 L'avant | après du vrai calque
+
+- L'image de l'avant | après est **le dessin du calque à l'image courante**, recadré sur ce qui est dessiné (avec une marge pour ce
+  que l'effet étend autour, au moins un bon tiers de la feuille), sur le papier du projet. À gauche de la barre : le calque passé par
+  les autres effets de sa pile, sans celui-ci ; à droite : avec lui, allumé, à ses réglages de l'image courante. La barre, sa poignée
+  et les mots « avant » / « Lueur · 50 % » sont ceux de la partie 164.
+- **Règle « sans latence »** : rien n'est calculé sur le fil de l'interface. Les deux moitiés sont des dessins dérivés comme ceux de
+  l'écran, demandés au fil de fond du cache des effets (`fxcache::request`), **en petit** : le dessin réduit 2, 4, 8… fois, à peu près
+  à la largeur du panneau, et une feuille de 1 024 px ou plus toujours au moins de moitié (les rayons et décalages des effets mis à
+  l'échelle, comme l'aperçu de la vue en lecture, `fxproxy`). Le dessin d'origine est la copie que le cache garde déjà pour l'écran
+  (des tuiles partagées : rien n'est recopié). La demande passe après l'image affichée ; aucune n'est faite pendant la lecture ni
+  pendant un trait, et alors l'aperçu montré reste tel quel (rien n'est relu, converti ni envoyé à la carte). Le moteur de pinceau
+  n'est jamais rejoué.
+- **Pendant qu'on tire la barre**, l'image d'avant reste (la dernière prête). Une seule demande à la fois par moitié : la force
+  demandée il y a quelques images se finit et se montre, puis la dernière est demandée (pas de file de forces périmées) ; au lâcher,
+  la dernière force arrive et l'écran se redessine. Le geste reste une seule étape d'annulation, par le chemin de la partie 164 (le
+  curseur du réglage).
+- **Repli sur le schéma de la partie 164** : calque vide (rien de dessiné dans la feuille), calque sans dessin (calque d'effet, vidéo),
+  effet qui ne se calcule pas en petit (une déformation, le liseré, l'encre qui bave, les effets du trait, qui lisent les traits en
+  pleine résolution ; un effet du trait choisi donne le schéma, pas deux moitiés pareilles), et le tout premier instant, avant que la
+  première image arrive.
+- Les deux images sont gardées le temps de la séance, en textures (quelques centaines de pixels de large), par onglet ; un autre
+  calque, un autre effet ou un autre dessin (une autre image de l'animation) repart du schéma, puis de l'image.
+
+### 165.2 La piste du calque actif, vue Storyboard — annulée à la demande d'Anthony (165.3)
+
+La piste avait reçu le glissé sur la miniature pour l'opacité et les pastilles du mode, comme la ligne de la timeline (164.3). Annulé
+avant toute fusion : voir 165.3.
+
+### 165.3 Retour à la ligne du calque en texte (annule 164.3 et 165.2)
+
+Anthony : « Je préfère la version texte classique. Reviens en arrière. »
+
+- **Timeline** (ligne du calque courant) : la barre d'opacité « 100 % » qu'on clique ou qu'on tire est revenue, avec le losange des
+  clés d'opacité à sa droite ; le mode est de nouveau la liste texte « Normal ▾ », avec ses flèches ‹ › de part et d'autre. La
+  miniature ne règle plus l'opacité : comme avant 164, un glissé vertical depuis la ligne range le calque.
+- **Storyboard** (piste du calque actif) : la barre d'opacité « 100 % » et l'icône du mode avec sa liste des modes en texte, comme
+  avant 165.
+- **Le menu des 27 pastilles disparaît partout**, et le code qui le peignait aussi (`opacite_miniature`, `pastille_du_mode`,
+  `visuels164::pastille_fusion`, `couleur_melee`, `lentille`).
+- Repris de l'état d'avant 164 (58b8aec) : `src/layerheads.rs`, et les essais que 164.3 avait adaptés (`multicalques_tests`,
+  `optim_rendu_tests`, le contrôle « 100 % » de `panneaux_tests`) ; `src/pistes.rs` d'avant 165 (d04a23c). Les essais des pastilles et
+  de la miniature (`visuels164_tests`, `avantapres165_tests`) sont retirés.
+- Un essai ancien, `fx_tests::the_export_composites_the_blurred_drawing`, a échoué dans la suite complète (le cache commun des
+  dessins dérivés est partagé par les essais qui tournent ensemble) : il calcule maintenant avec sa réserve privée, comme l'export.
+- **Gardé** : la roue Couleur (164.1), les vignettes d'effets et l'avant | après sur le vrai calque (164.2, 165.1), le titre
+  « Précis » partout (164.4).
+
+### 165, les essais (165.1 à 165.3)
+
+`src/avantapres165_tests.rs`, dans la vraie fenêtre sans écran :
+
+- avec un gros trait rouge et une Lueur : l'aperçu arrive du fil de fond, l'avant a les pixels rouges du trait (pas le schéma),
+  l'après a plus d'encre (la lueur) ; la lueur poussée à 200 : l'après gagne encore par rapport à l'avant ;
+- tirer la barre : aucun effet ni aucune réduction calculés par l'aperçu sur le fil de l'interface pendant le geste (un compteur des
+  essais dans `fx::apply_with` et `fxproxy::downscale`), la dernière image reste montrée à chaque image du geste, une seule étape ;
+  la nouvelle image arrive après ;
+- un calque vide : le schéma, et la barre se tire toujours ; un effet du trait : le schéma ;
+- le cadrage (autour du dessin, à la forme de l'aperçu, dans la feuille) et la taille de calcul ;
+- 165.3 : dans la timeline, « 100 % » et « Normal » sont écrits dans la ligne du calque, les flèches sont là, la liste s'ouvre sans
+  aucune pastille, tirer la barre règle l'opacité en une étape que Ctrl+Z rend ; sur la piste du Storyboard, « 100 % » est écrit et
+  le menu des modes est en texte (« Normal », « Produit »…), sans pastille.
+
+### 165, relecture indépendante (sous-agent), et ce qui a été corrigé
+
+- un effet du trait choisi montrait deux moitiés pareilles (corrigé : le schéma ; essai ajouté) ;
+- sur une grande feuille, l'aperçu pouvait se calculer en pleine résolution sur le fil de fond qui sert aussi la vue (corrigé : au
+  moins de moitié au-delà de 1 024 px) ;
+- pendant le glissé, une demande neuve partait à chaque image, et les forces périmées passaient d'abord (corrigé : une demande à la
+  fois par moitié, renouvelée sans rien recopier ; la force arrivée entre-temps se montre) ;
+- pendant la lecture ou un trait, une image arrivée était encore convertie et envoyée à la carte (corrigé : l'aperçu reste tel quel) ;
+- une image d'un autre dessin pouvait rester montrée (corrigé : un autre dessin repart du schéma) ; l'image en mémoire n'est plus
+  gardée hors des essais ;
+- l'essai « aucun calcul sur le fil de l'interface » ne mesure que la préparation de l'aperçu : la vue de dessin du banc d'essai, sans
+  carte graphique, compose encore la lueur du calque sur ce fil (dans FEANOR, la vue passe par la carte, `gpu.rs`, sans attendre).
+- Les remarques sur la miniature de la piste sont sans objet depuis 165.3.
+
+### 165, à tester par Anthony (sur une copie de projet)
+
+1. Effets : sur un calque dessiné, pose une Lueur ; regarde l'avant | après, tire la barre. Dis si le temps d'arrivée de l'image te
+   va, et si le cadrage (autour du dessin) est le bon.
+2. Animation et Storyboard : la ligne du calque montre de nouveau « 100 % » et « Normal ▾ » ; tire la barre, change le mode.
+
+### 165.4 La ligne du calque courant, toujours entière dans la timeline
+
+Anthony, sur la capture de la ligne en texte : « je veux que cette version toujours visible » ; « Jamais repliée ».
+
+Où elle pouvait ne pas se voir en entier, et ce qui change :
+
+- **Timeline trop basse pour tous les calques** (elle défile) : la ligne du calque courant pouvait être hors de ce qu'on voit, ou
+  coupée par le bord. Elle se dessine maintenant en dernier, par-dessus les autres, et reste collée en haut ou en bas de ce qu'on voit
+  (comme une ligne figée d'un tableur), avec une ombre ; sa rangée dans la grille, elle, défile (`layerheads::ligne_toujours_visible`).
+- **Calque courant dans un groupe caché de la timeline, ou dans un dossier fermé** : il n'avait plus de ligne du tout (seul un
+  message en tête de colonne). Il garde maintenant sa ligne complète ; le message reste.
+- **Bande détachée dans sa fenêtre** : sa taille minimale contient la colonne entière (312 points) et un peu de grille.
+- Ce qui ne la repliait déjà pas : la colonne des calques de la timeline a une largeur fixe de 312 points (la ligne complète y tient
+  entière) ; la hauteur des lignes ne dépend d'aucun réglage (56 points pour le calque courant, 22 pour les autres, partie 160) ; la
+  bande garde 200 points au moins (`montagehauteur::BANDE_MIN`) et la fenêtre 960 × 600.
+- Les autres calques ne changent pas. La piste du Storyboard (icône ◐) non plus.
+
+Essais (`src/avantapres165_tests.rs`) : la fenêtre la plus petite permise (960 × 600), les trois dispositions de l'espace Animation
+(Standard, Dessin, Timeline), vingt-cinq calques, le calque courant tout en bas de la pile, hors de la vue : « 100 % », « Normal » et
+son nom sont entiers à l'écran, la flèche « Mode suivant » change le mode en une étape que Ctrl+Z rend ; le calque courant dans un
+groupe caché garde sa ligne complète ; le calcul de la place de la ligne (à sa place, collée en bas, collée en haut).
+
+### 165.5 Les boutons montés dans la colonne de gauche ; la colonne ne rétrécit plus sous eux
+
+Anthony, sur une capture de la bande en vue Storyboard : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre
+les boutons sur la même ligne que la timeline » ; puis « toujours garder cette colonne avec un maximum d'information. On peut
+verrouiller la taille minimale de la colonne s'il faut. »
+
+- **Storyboard (la bande du montage)** : la barre au-dessus de la bande n'existe plus. Ses boutons (la lecture et le temps ; plans et
+  calques ; liste, aimant, son…, puis « Plus… ») et la légende des clés sont sur **une seule ligne**, dans la place vide en haut de
+  la colonne de gauche, en face de la règle des temps et de la ligne « Séquence 1 », au-dessus de « Caméra ». Même ordre, mêmes
+  bulles, mêmes raccourcis, même « Plus… ». La bande gagne la hauteur de l'ancienne barre.
+- **Animation (la timeline, dispositions Standard, Dessin, Timeline)** : de même, la barre de la timeline est sur une ligne en haut de
+  la colonne des calques, en face de la règle des images (qui passe de 20 à 30 points pour qu'une case de bouton, 26 points, y
+  tienne) ; l'avis « Calque courant caché / dans un dossier fermé » qui était là n'a plus d'objet (165.4 : le calque courant garde
+  sa ligne ; son groupe se remontre par son menu, son dossier par son triangle).
+- **La largeur minimale de la colonne** est celle de la ligne des boutons, mesurée à son dessin (la plus grande vue dans la séance :
+  la colonne ne bouge pas quand un time code raccourcit), et au moins celle où la piste du calque actif montre sa vignette. Une
+  colonne réglée plus étroite (réglage enregistré d'avant, double-clic, glissé de la poignée) est élargie ; la poignée s'arrête à ce
+  minimum. Avec les barres d'origine, mesurées dans les essais : la colonne du Storyboard fait au moins **474 points** ; la colonne
+  des calques de la timeline, **757 points** (sa barre est plus longue que la ligne complète d'un calque, 312 points : la ligne du
+  calque s'étire). Épingler d'autres commandes dans une barre élargit sa colonne d'autant.
+- **Pas dans l'espace Montage** : sa barre du travail de montage (coupes, rognage, transitions, son, relecture, exports) a trois fois
+  plus de commandes ; sur une ligne dans la colonne, elle prendrait presque toute la largeur de la bande. Elle reste au-dessus de la
+  bande, et la colonne y garde ses bornes d'avant.
+
+Essais (`src/avantapres165_tests.rs`) : Storyboard, fenêtre la plus petite, colonne réglée trop étroite : elle est élargie ; chaque
+bouton de la barre du montage est entier à l'écran, dans la colonne, au-dessus de « Caméra », tous sur une ligne, aucun au-dessus de
+la colonne (plus de barre en haut) ; la poignée tirée de 300 points vers la gauche s'arrête au minimum, tout reste visible ; la boucle
+répond au clic. Animation, fenêtre la plus petite, trois dispositions : chaque bouton de la timeline sur une ligne en haut de la
+colonne, au-dessus de la ligne du calque courant ; la colonne au moins aussi large que la ligne ; « Image suivante » répond.
+Essai ancien changé : `notes_calques_tests` (le calque courant d'un dossier fermé garde sa ligne, le triangle rouvre le dossier ; il
+n'y a plus d'avis en tête de colonne).
+
+### 165.6 Animation : deux lignes de boutons en tête de la colonne des calques
+
+Anthony, sur la colonne des calques à 757 points (un tiers de la timeline, la ligne du calque étirée) : « Deux lignes de boutons, et
+laisse le Montage. »
+
+- **Animation (la timeline, les trois dispositions)** : la barre de la timeline est répartie sur **deux lignes** en haut de la colonne
+  des calques, par groupes entiers (aucun groupe n'est coupé) :
+  - **première ligne**, en face des numéros de la règle des images : le plan (son titre, sa durée ; « Animer ce plan » s'il est
+    épinglé), puis le transport (première, précédente, lecture, suivante, dernière image, boucle), l'image courante, les menus
+    Repères et Affichage ;
+  - **seconde ligne**, juste dessous : les dessins (nouveau, allonger, raccourcir, exposition des nouveaux dessins, menu Images), la
+    caméra (clés au début, ici, à la fin, supprimer), puis ce qu'on a épinglé des groupes suivants (marque, commentaire, pelure, flips,
+    son), « Plus… » et la légende des clés.
+- **L'en-tête gagne une ligne** : la règle des images passe de 30 à **58 points** (30 + 28), dans la grille comme dans la colonne : les
+  calques et leurs pistes commencent à la même hauteur et restent alignés au point près. Les numéros des images et celui de la tête de
+  lecture restent dans la bande du haut, en face de la première ligne ; crochets d'entrée et de sortie, marques, signets, fanions des
+  commentaires et la prise de la fin du plan occupent toute la hauteur de la règle, qui se prend aussi pour glisser la tête de lecture.
+- **La largeur minimale de la colonne** est celle de la plus longue des deux lignes, mesurée à son dessin (même mécanisme qu'en 165.5 :
+  la plus grande vue dans la séance ; une colonne plus étroite est élargie) : avec les barres d'origine, mesurée dans les essais,
+  **410 points** au lieu de 757. Épingler d'autres commandes allonge la seconde ligne.
+- **Storyboard** : rien ne change (une ligne, 474 points). **Montage** : rien ne change (sa barre reste au-dessus de la bande).
+
+Essais (`src/avantapres165_tests.rs`) : rouges d'abord (toute la barre sur la première ligne : la colonne dépasse 420 points), puis
+verts : Animation, fenêtre la plus petite, trois dispositions : tous les boutons entiers dans la colonne, au-dessus de la première
+ligne de calque, sur deux lignes et pas plus, chacun sur la ligne de son groupe, « Plus… » au bout de la seconde ; la colonne au moins
+aussi large que la plus longue ligne et au plus 420 points ; « Image suivante » (première ligne) et « Clé de caméra ici » (seconde)
+répondent. Avec 25 calques, dans les trois dispositions, chaque ligne de calque de la colonne a le même haut et le même bas que sa
+piste dans la grille (`timeline::LIGNES_PEINTES`, relevé à chaque image dans les essais). L'essai 165.5 « sur une ligne » de
+l'Animation devient celui-ci.
+
+### 165.7 Le mode « Trois calques » retiré : toute la pile, toujours
+
+Anthony : « supprime l'option et le bouton 3 calques ».
+
+- **Retiré** : le mode « Trois calques » des pistes du Storyboard et du Montage (`pistes.rs` : `Pile`, la fenêtre des trois calques,
+  les voisins à 19 points, les fines bandes « N au-dessus / au-dessous », « Haut / Bas de la pile » et leur clic qui sautait de trois
+  calques ; `montagerows.rs` : leur dessin) ; les deux icônes « Trois calques / Toute la pile » de la barre du bas de la bande ; la
+  ligne « Calques dans la timeline » de Préférences > Montage (et sa place dans la recherche des Préférences) ; le choix dans le menu
+  « Calques dans la timeline » du clic droit sur une piste (il garde déplier / replier cette piste, tout replier, tout déplier et
+  « Déplier le calque courant tout seul ») ; l'action `piste.toute_la_pile` (`keymap.rs`, son bloc de `keymap.toml`) ; les bulles et
+  les textes qui en parlaient (`PILE_TROIS`, `PILE_TOUTE`).
+- **Reste** : toute la pile — le calque actif déplié, les autres en bandes de 17 points, les dossiers en lignes fines ; « Déplier le
+  calque courant tout seul » ; « Agrandir les calques proches quand il y a de la place » ; « Hauteur des plans » (barre du bas et
+  Préférences) ; la règle 165.4 (la ligne du calque actif n'est jamais repliée dans la timeline de l'Animation).
+- **Réglages enregistrés** : la clé `calques_timeline` (« trois », la valeur d'office d'avant, ou « toute ») est ignorée à
+  l'ouverture, sans erreur ni question ; les autres réglages du fichier sont gardés et elle n'est plus réécrite. Un fichier de
+  raccourcis personnel qui donnait une touche à `piste.toute_la_pile` s'ouvre aussi : l'action inconnue est ignorée, avec la remarque
+  habituelle du gestionnaire de raccourcis. **Les projets ne changent pas** : le format reste 56.
+
+Essais : `pistes_tests.rs` — `a_saved_three_layers_setting_opens_as_the_whole_stack` (des réglages « trois » et « toute » se lisent,
+gardent leurs autres valeurs, ne réécrivent pas la clé, et la timeline montre toute la pile, le calque actif déplié jusqu'au bout de la
+pile ; format 56) ; l'essai des réglages ne garde que la hauteur des plans. `calques_timeline_tests.rs` — les essais de la fenêtre des
+trois calques et de ses fines bandes sont retirés ou réécrits pour toute la pile : un dossier est une ligne fine et jamais le calque
+actif ; la traversée d'un dossier fermé ; le clic sur la ligne d'un dossier ; à l'écran, toute la pile sans fine bande ; la barre du bas
+sans icône « Trois calques » (ni bulle, ni action), la hauteur des plans qui se règle toujours. Retirés aussi :
+`three_layers_mode_shows_the_active_layer_between_its_neighbours_and_two_thin_strips` (`pistes_tests.rs`),
+`in_the_three_layers_window_the_two_neighbours_grow_and_the_strips_stay` (`calquesplace_tests.rs`),
+`the_three_layers_mode_shows_a_strip_that_a_click_jumps_into` (`timeline_repliee_tests.rs`). Adaptés : `calquesplace_tests.rs`,
+`dossierglisser_tests.rs`, `panneaux_fins_tests.rs`, `decor_tests.rs`, `prefsui_tests.rs` (plus de « Calques dans la timeline »).
+
+### 165.8 Alt + clic choisit le calque cliqué (ce n'est plus la pipette)
+
+Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ».
+
+- **Dans la vue de dessin**, Alt + clic rend **actif le calque du plan courant dont l'encre est sous le curseur**, à l'image
+  courante. Plusieurs calques y ont de l'encre : **le plus haut qu'on voit** gagne (l'ordre de pose de l'image, Espace 3D compris).
+  Un calque caché (lui ou son dossier) ou à l'opacité 0 est ignoré ; un calque rangé dans un **dossier fermé** devient actif quand
+  même. Barre d'état : « Calque actif : <nom> ». **Dans le vide**, rien ne change ; la barre d'état dit « Aucun dessin sous le
+  curseur ». Le geste ne modifie pas le projet : **aucune étape d'annulation**, la couleur ne change pas. Valable avec tous les outils
+  de la feuille (pinceau, crayon, gomme, mélangeur, pot de peinture, formes, sélections…), dans une case des Vignettes aussi
+  (`App::alt_clic_calque`, `App::calque_sous_le_point`, `render::couverture_pixel_i`).
+- **Ne change pas** : l'outil **Pipette** reste la pipette ; l'Alt + clic du **mélangeur de couleurs** (son panneau, `melangeur.rs`)
+  reste une pipette ; l'Alt + clic de la fenêtre des références (`referencesui.rs`) prend toujours la couleur de la référence.
+- **Alt garde son sens là où il en avait un autre** : avec le **Dégradé**, Alt = « tout le calque » (inchangé, pas de choix de
+  calque) ; dans la **vue Espace 3D**, Alt + glisser fait tourner la vue (`espace3ddessin.rs`, `espace3dlasso.rs`, inchangé) ; Alt
+  tenu pendant un trait commencé (segment droit à angle aimanté, `tracedroit.rs`) ne change pas. Le lasso et la transformation ne
+  prenaient pas Alt à l'appui (la pipette passait avant eux) : rien n'y change.
+- **Textes mis à jour** : l'aide de la barre sous le dessin (pinceau, crayon, gomme, mélangeur, pot de peinture), l'aide des touches de
+  l'outil, la liste des gestes de la souris (Aide), l'animation d'aide de la pipette (plus de touche Alt), des commentaires. Le
+  gestionnaire de raccourcis n'avait pas ce geste (ce n'est pas une touche).
+
+Essais (`src/altclic_calque_tests.rs`), rouges d'abord (Alt + clic était encore la pipette), puis verts : deux calques superposés,
+on touche celui du dessus, et à côté celui du dessous, sans étape d'annulation ni couleur changée ; un calque caché et un calque à
+l'opacité 0 sont ignorés (l'œil rouvert, le caché répond) ; un clic dans le vide ne change pas le calque actif et le dit ; un calque
+d'un dossier fermé devient actif ; l'outil Pipette prend toujours la couleur. `aidetouches_tests` adapté.
+
 ## 166. La vue nette : au-delà de 100 %, le vectoriel à la taille de l'écran (2026-11-17, branche `vectoriel-net`)
 
 Anthony, avec une capture de son projet « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer
@@ -13398,10 +13631,11 @@ l'écran quand la vue grossit : « Oui, construis-le ». Le code : `src/vuenette
 - **Le dessin lui-même ne change pas** : ni son image à la taille de la feuille, ni le fichier, ni l'export, ni les vignettes, ni la
   lecture. La vue nette n'est qu'un affichage.
 - **Pendant qu'on trace** : rien ne se calcule (règle « sans latence »). Les carrés de 64 pixels de la feuille que le trait touche
-  montrent l'image de toujours (en pixels, avec le trait en cours) ; le reste de la vue reste net. Au lâcher, après 70 millièmes de
-  seconde de repos, la vue redevient nette partout, avec le trait neuf.
+  montrent l'image de toujours (en pixels, avec le trait en cours ; adoucie depuis 166.8) ; le reste de la vue reste net. Au lâcher,
+  après 70 millièmes de seconde de repos, la vue redevient nette partout, avec le trait neuf.
 - **Quand la vue bouge** (déplacer, zoomer, tourner) : l'image nette reste collée au dessin pendant le geste ; ce qu'elle ne couvre
-  pas se voit en pixels, et la nouvelle image la remplace au repos.
+  pas se voit en pixels, et la nouvelle image la remplace au repos. (Revu le même jour, à son premier retour : adouci au lieu d'être
+  en pixels, et l'image nette refaite pendant le mouvement, voir 166.8.)
 - **Quand tout a pu changer** (autre image, autre calque, annulation, réglage d'un calque) : l'image nette est retirée tout de suite
   (on voit l'image de toujours), puis revient.
 
@@ -13476,7 +13710,8 @@ Résultats (17 novembre, 14 h 05, sur le code final) : `vuenette` 8 réussis ; v
 dix groupes de fiabilité OK ; le seul avertissement de compilation est celui d'avant (les cinq méthodes inutilisées de
 `src\espace3d.rs`), qui fait écrire ÉCHEC au vérificateur. Puis, le main du jour (633c450) fusionné dans la branche, à 14 h 23 :
 compilation sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK ». Fusionnée dans main (7742e31) et
-poussée sur son « Fusionne directement ». Son FEANOR habituel n'est pas reconstruit : il essaie `timeline-claire` (voir le journal).
+poussée sur son « Fusionne directement ». Son FEANOR habituel, qu'il avait construit depuis `timeline-claire` pour l'essayer, a été
+reconstruit depuis main à 14 h 39 sur son « Oui, reconstruis-le » (voir le journal) ; contrôle de lancement sur une copie : bon.
 
 ### 166.6 Regardé à l'écran (par Claude, le 17 novembre vers 12 h 53)
 
@@ -13494,8 +13729,8 @@ ont été rouvertes). Le tracé, l'annulation et le retour à 100 % sont couvert
 
 ### 166.7 À vérifier à l'écran (par Anthony)
 
-Le dossier d'essai : `Documents\SHOT\Tests\essai vectoriel-net` (« Ouvrir l'essai.cmd » : l'exe de la branche sur une copie de « dd »,
-réglages à part).
+Le dossier d'essai `Documents\SHOT\Tests\essai vectoriel-net` et le dossier de travail de la branche ont été retirés le même jour, à
+sa demande (« Oui, retire-les ») : son FEANOR habituel, reconstruit depuis main, a la même chose. La branche `vectoriel-net` est gardée.
 
 1. Plan 2 de « dd », zoom à 225 % ou plus : les traits sont nets, sans marches.
 2. Tracer un trait au stylet en gros plan : aucun ralentissement ; la zone du trait est en pixels pendant le geste, puis nette au
@@ -13506,6 +13741,75 @@ réglages à part).
 6. Un plan chargé (beaucoup de traits) à fort zoom : le temps que met l'image nette à arriver.
 7. Un calque bitmap dans le même plan : toujours en pixels, à sa place dans la pile.
 8. Ctrl+Z, changer d'image, changer de calque : l'image nette revient.
+
+### 166.8 Lissé pendant que la vue bouge, et refait en route (le même jour, branche `vue-nette-lissage`)
+
+Son premier retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la
+vue. Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? » Ce qu'il voyait : pendant qu'il zoomait ou
+déplaçait la vue, l'image nette n'était refaite qu'à l'arrêt (70 millièmes de seconde de repos, puis le calcul) ; en attendant, ce
+qu'elle ne couvrait pas montrait l'image de toujours, en marches, et l'image nette grossie par le zoom montrait ses propres pixels.
+
+Ce qui change :
+
+- **L'image de toujours se pose lissée** tant qu'une image nette est montrée ou attendue (`VueNette::lisse`, `GpuCanvas::lisser`) : la
+  carte graphique la lit lissée aussi en grossissant (en lumière linéaire, comme elle la lit déjà en réduisant). Ce qu'on en voit, la
+  bande que la vue découvre en se déplaçant, tout le dessin pendant un zoom, la zone d'un trait en cours, est **adouci au lieu d'être
+  en marches**. Un plan tout en bitmap, et une zone qui n'a rien de vectoriel, gardent leurs pixels nets, à l'arrêt comme en
+  mouvement (un trait qu'on y trace sur un calque bitmap ne la lisse pas non plus).
+- **L'image nette se refait pendant le mouvement** : dès que la vue bouge (déplacer, zoomer, tourner, bouton tenu ou non), l'image
+  suivante se calcule sans attendre le repos, une à la fois, chacune partant à l'arrivée de la précédente. Le retard se compte en
+  dixièmes de seconde, pas jusqu'à l'arrêt.
+- **Déplacée seulement, l'image nette reste nette** : elle est recalée sur les pixels entiers de l'écran (`coins_a_l_ecran`). Zoomée
+  ou tournée, elle se lit lissée le temps que la suivante arrive (`options` : lissée dans les deux sens).
+- **La règle « sans latence » est précisée** : rien ne se calcule pendant un geste de dessin (un trait en cours, ou un bouton tenu
+  pendant que la vue ne bouge pas : une sélection qu'on tire, une poignée) ; un geste de vue n'arrête rien. La vue « bouge » tant
+  qu'elle a changé depuis moins d'un quart de seconde.
+
+Ce qui ne change pas : sans carte graphique (composition par le processeur), l'image de toujours reste en pixels nets pendant le
+mouvement, et ce qui est dessiné hors de la feuille aussi (`monde.rs`) ; l'image nette, elle, se refait de la même façon.
+
+À juger par lui : pendant un zoom ou un déplacement rapide, le dessin est-il assez propre (adouci, puis net) ? La zone du trait en
+cours, adoucie au lieu d'être en pixels, lui convient-elle ? La vue reste-t-elle fluide pendant que l'image nette se refait en route
+(les calculs prennent des cœurs du processeur pendant le déplacement) ?
+
+Les essais (`src/vuenette_tests.rs`, trois de plus, onze en tout) : un bouton tenu sans que la vue bouge ne laisse partir aucun
+calcul ; la vue déplacée bouton tenu, sans s'arrêter, refait l'image nette en route ; un plan sans vectoriel, et une zone sans trait
+vectoriel, ne sont jamais lissés ; l'image nette déplacée tombe sur des pixels entiers de l'écran, à 1 et 1,5 pixel par point ; et
+sur la carte graphique, la vue à 400 %, les trois états lus sur l'écran peint : l'image de toujours seule est en marches, l'image
+attendue est lissée (la couleur change de pixel à pixel dans tout le bord), l'image nette arrivée a un bord fin (moins de la moitié
+des pixels intermédiaires des deux autres).
+Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte graphique a bien tourné, il n'a pas été sauté) ;
+vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
+l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
+
+## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
+
+**Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
+charte du 17/11/2026 : une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, pointes très
+légèrement arrondies (`ARRONDI_POINTES`), sans facettes,
+au dégradé vertical jade `#2FD4C0` → turquoise `#2FCCDB` → bleu ciel `#86C7EF` → bleu `#B4C1F4` et lilas pâles
+`#D6C3EC`. En une couleur (encre, blanc), c'est un aplat. La charte complète (couleurs, polices, règles d'usage) est dans
+la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-site/logo/silmaril/` (`fabrique.mjs`).
+
+**Dans le code.** `logo.rs` dessine l'étoile sur 100 unités (`DESSIN`) puis la ramène sur la grille de 64 de l'animation
+et de l'icône ; ses fonctions (`image`, `icone`, `ico`, `dessiner`, l'animation d'ouverture) ne changent pas de forme,
+donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. L'icône
+est l'icône de base de la charte : carré arrondi au dégradé du logo, étoile blanche (`feanor-icone.svg` ; les autres
+icônes de la charte sont `feanor-icone-noire`, `-blanche` et `-jade`). Les variantes
+`Jade`, `JadePetit` et `Iris` dessinent la même étoile en dégradé (elle tient à 16 px) ; `Mono` est l'aplat. L'animation
+d'ouverture garde ses images clés : l'étoile s'ouvre en tourbillon, une seconde étoile plus petite s'efface.
+`marque.rs` : l'étoile fait 1,18 fois la hauteur des capitales à la place du O (accueil, centrée sur les capitales, petit
+écart de chaque côté) et 1,87 fois devant le mot (À propos ; `cote_devant`). `assets/feanor-viseur-*.svg` sont remplacés
+par `assets/feanor-logo*.svg`, `feanor-icone*.svg`, `feanor-mot-*.svg`, `feanor-empile-*.svg`. Les barres de chargement
+gardent l'irisé (`barre.rs`).
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : l'accueil montre FEAN, l'étoile à la place du O (un peu plus haute que les lettres, centrée
+   sur elles), R, et la devise dessous ; l'étoile s'ouvre une fois puis reste figée.
+2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
+3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
+4. Thème Papier : l'accueil et À propos restent lisibles.
 
 ## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
 
@@ -13618,7 +13922,7 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
     sur la feuille par la caméra : la carte suit.
 12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
 
-## 167. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+## 168. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
 
 Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
 quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
@@ -13626,17 +13930,17 @@ reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout s
 « Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
 se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
 
-### 167.1 Ce qui a changé
+### 168.1 Ce qui a changé
 
-1. **Toutes les lignes ont la même hauteur, 22 points** (`layerheads::ROW_FINE`), calque courant et dossiers compris. Avant
+1. **Toutes les lignes ont la même hauteur, 28 points** (`layerheads::ROW_FINE` ; 22 avant la partie 168.4), calque courant et dossiers compris. Avant
    (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
    fait plus bouger la timeline. Le calque courant garde son fond d'accent.
-2. **La barre du calque**, entre la barre de la timeline et les lignes (`App::barre_du_calque`, 24 points, elle ne défile pas avec
-   les calques) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
+2. **La barre du calque**, au-dessus de la timeline, sur toute sa largeur (`App::barre_du_calque`, 24 points, elle ne défile pas avec
+   les calques ; les boutons de la timeline sont en haut de la colonne des calques depuis la partie 165.5) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
    pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets, accroche à la caméra, aplat
    et planche-mère, la couleur d'un calque Couleur unie, l'opacité et son losange de clés, le mode de fusion (précédent, liste,
-   suivant). Depuis la fusion du `main` (partie 164 du `main` : la ligne du calque plus visuelle), l'opacité d'un calque s'y règle
-   en glissant sur sa miniature, et le mode par ses pastilles ; un dossier et un calque Couleur unie gardent la barre d'opacité. Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
+   suivant). Depuis la partie 165.3 du `main` (Anthony préfère la version texte), l'opacité s'y règle
+   par la barre « 100 % » et le mode par la liste « Normal ▾ » ; la miniature du calque, devant, ne fait que montrer son dessin. Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
    Mêmes bulles, mêmes gestes qu'avant ; seule la place change.
 3. **Une ligne ne montre que l'exception** (`App::exceptions_du_calque`). L'œil n'apparaît que si le calque est caché, le cadenas
    que s'il est verrouillé ; sous la souris, leur case montre l'icône en pâle et un clic agit comme avant. À droite du nom, en
@@ -13651,7 +13955,7 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
    en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
    caché, plus pâle). Avant : une rangée sombre et vide.
 
-### 167.2 Choix faits sans Anthony (à confirmer)
+### 168.2 Choix faits sans Anthony (à confirmer)
 
 - Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
   que disent les données ; la question est restée ouverte sur la page des pistes).
@@ -13659,11 +13963,25 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
   moins 40 points. Les clés elles-mêmes ne changent pas.
 - La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
 
-### 167.3 Comment Anthony teste (sur une copie de projet)
+### 168.4 Après la fusion du `main` du 18 novembre (parties 165 à 167)
+
+Le `main` avait pris l'autre chemin : la ligne complète du calque courant « toujours visible, jamais repliée » (165.4), les boutons
+de la timeline en haut de la colonne sur deux lignes (165.5, 165.6), « 100 % » et « Normal ▾ » en texte (165.3). Sur deux maquettes
+côte à côte, Anthony a choisi la barre du calque (« B mais la taille d'une ligne de calque est plus épaisse »). Ce qui en résulte :
+
+1. Les lignes passent de 22 à 28 points.
+2. Les boutons de la timeline restent en haut de la colonne des calques, sur deux lignes (165.6) ; la barre du calque est
+   au-dessus de la timeline, où était l'ancienne barre de boutons.
+3. Le calque courant garde toujours sa ligne, même dans un groupe caché ou un dossier fermé (165.4), mais une ligne fine comme les
+   autres, à sa place : elle ne flotte plus au bord de la vue (`ligne_toujours_visible` retirée), la barre suffit.
+4. Essais adaptés : `multicalques_tests` prend le « 37 % » de la barre (la ligne fine le dit aussi, l'exception) ;
+   `avantapres165_tests` trouve le bord de la colonne par la barre du calque ; l'essai de la ligne flottante est retiré.
+
+### 168.3 Comment Anthony teste (sur une copie de projet)
 
 1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
    calques, rien ne bouge.
-2. En haut des lignes, la barre du calque : tous ses réglages. Change l'opacité, le mode, le pochoir : la ligne du calque le dit
+2. Au-dessus de la timeline, la barre du calque : tous ses réglages. Change l'opacité, le mode, le pochoir : la ligne du calque le dit
    à droite de son nom. Remets tout à la normale : la ligne redevient nue.
 3. Survole l'œil ou le cadenas d'une ligne : l'icône apparaît en pâle ; clique pour cacher ou verrouiller ; elle reste alors
    affichée.

@@ -805,7 +805,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
     ouvrir_preferences(&mut b, Onglet::Montage);
     let vus = textes(&b);
     assert!(!contient(&vus, "Rangées de cases pâles"), "déménagées dans l'onglet Vignettes");
-    assert!(contient(&vus, "Calques dans la timeline"));
+    assert!(contient(&vus, "Hauteur des plans"));
 }
 
 #[test]

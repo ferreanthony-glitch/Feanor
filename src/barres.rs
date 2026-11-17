@@ -561,16 +561,90 @@ pub(crate) struct Vue {
     pub actif: bool,
 }
 
+/// Partie 165.5 : la largeur qu'il faut à chaque barre pour tenir sur une seule ligne, mesurée à son dessin dans la colonne de gauche
+/// de la bande (la plus grande vue pendant la séance : la colonne ne rétrécit pas quand un time code ou un nom de plan raccourcit).
+static MESURES: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
+
+fn rang(b: Barre) -> usize {
+    match b {
+        Barre::Commandes => 0,
+        Barre::Montage => 1,
+        Barre::MontageEdition => 2,
+        Barre::Timeline => 3,
+    }
+}
+
+/// La largeur mesurée de la barre `b` sur une ligne, légende des clés comprise (0 tant qu'elle n'a pas été dessinée).
+pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
+    MESURES.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
+}
+
 impl App {
+    /// Partie 165.5 (Anthony : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre les boutons sur la même
+    /// ligne que la timeline ») : la barre `barre` et la légende des clés, sur une seule ligne, dans `ligne`, la place vide de la
+    /// colonne de gauche en face de la règle des temps. Rien ne passe sous « Plus… » faute de place : la ligne est dessinée à sa
+    /// largeur entière, et cette largeur est retenue (`largeur_mesuree`) pour que la colonne la contienne.
+    pub(crate) fn barre_dans_la_colonne(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
+        let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        child.set_clip_rect(ligne.intersect(ui.clip_rect()));
+        child.add_space(4.0);
+        self.barre_ui(&mut child, barre);
+        self.legende_cles_ui(&mut child);
+        let w = child.min_rect().width() + 8.0;
+        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        if w > m[rang(barre)] + 0.5 {
+            m[rang(barre)] = w;
+        }
+        // (Une image de plus seulement si la colonne doit s'élargir pour la contenir : au repos, rien ne repeint.)
+        if w > ligne.width() + 6.5 {
+            ui.ctx().request_repaint();
+        }
+    }
+
+    /// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre `barre` sur deux lignes, dans `ligne1` (en face de la règle des
+    /// temps) et `ligne2` (juste dessous). La première ligne prend les groupes jusqu'à `dernier_groupe_ligne1` compris, la seconde les
+    /// suivants, puis « Plus… » et la légende des clés : un groupe n'est jamais coupé entre les deux. Rien ne passe sous « Plus… »
+    /// faute de place ; la largeur retenue (`largeur_mesuree`) est celle de la plus longue des deux lignes.
+    pub(crate) fn barre_dans_la_colonne_deux_lignes(&mut self, ui: &mut Ui, ligne1: egui::Rect, ligne2: egui::Rect, barre: Barre, dernier_groupe_ligne1: u8) {
+        let mut w: f32 = 0.0;
+        for (k, ligne) in [ligne1, ligne2].into_iter().enumerate() {
+            let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre), k)).layout(egui::Layout::left_to_right(egui::Align::Center)));
+            child.set_clip_rect(ligne.intersect(ui.clip_rect()));
+            child.add_space(4.0);
+            if k == 0 {
+                self.barre_ui_groupes(&mut child, barre, 0..=dernier_groupe_ligne1, false);
+            } else {
+                self.barre_ui_groupes(&mut child, barre, dernier_groupe_ligne1.saturating_add(1)..=u8::MAX, true);
+                self.legende_cles_ui(&mut child);
+            }
+            w = w.max(child.min_rect().width() + 8.0);
+        }
+        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        if w > m[rang(barre)] + 0.5 {
+            m[rang(barre)] = w;
+        }
+        if w > ligne1.width() + 6.5 {
+            ui.ctx().request_repaint();
+        }
+    }
+
     /// Une barre, sur une seule ligne, sans défilement : ses commandes, puis « Plus… ».
     pub(crate) fn barre_ui(&mut self, ui: &mut Ui, barre: Barre) {
+        self.barre_ui_groupes(ui, barre, 0..=u8::MAX, true);
+    }
+
+    /// Les commandes de `barre` des groupes `groupes`, sur une ligne, puis « Plus… » si `plus` (partie 165.6 : la timeline sur deux
+    /// lignes dans la colonne des calques).
+    fn barre_ui_groupes(&mut self, ui: &mut Ui, barre: Barre, groupes: std::ops::RangeInclusive<u8>, plus: bool) {
         ui.spacing_mut().item_spacing.x = ECART;
         let reglage = self.settings.bars.de(barre).clone();
         let mut debordent: Vec<&'static Cmd> = Vec::new();
         let mut groupe: Option<u8> = None;
         // Le montage et la timeline gardent la place de l'icône de la légende des clés, au bout de la ligne.
         let reserve = if barre == Barre::Commandes { 0.0 } else { CASE[0] + ECART };
-        for c in dans_la_barre(barre, &reglage) {
+        for c in dans_la_barre(barre, &reglage).into_iter().filter(|c| groupes.contains(&c.groupe)) {
             // Une commande qui ne s'applique pas à l'instant disparaît de la barre (elle reste, grisée et
             // expliquée, sous « Plus… ») : ni cases mortes, ni place prise pour rien.
             if matches!(c.genre, Genre::Bouton | Genre::Etat) && !self.vue_de(barre, c).actif {
@@ -588,6 +662,9 @@ impl App {
             }
             groupe = Some(c.groupe);
             self.commande_dans_la_barre(ui, barre, c);
+        }
+        if !plus {
+            return;
         }
         let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(ICONE), |ui| self.plus_menu(ui, barre, &debordent)).response;
         bulle(resp, "Plus…", "Les autres commandes de la barre. L'épingle d'une ligne la remet dans la barre.", "");

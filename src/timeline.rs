@@ -2,7 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::App;
 use crate::handles::{GridMenu, GridSelect, Handle};
-use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
+use crate::layerheads::{row_at, rows_height, rows_of, Row};
 use crate::storyboard::duration_label;
 use crate::theme;
 
@@ -11,9 +11,17 @@ pub(crate) const CELL_W: f32 = 16.0;
 pub(crate) const CELL_MIN: f32 = 3.0;
 pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
-const HEADER_H: f32 = 20.0;
-/// Largeur de l'en-tête des calques (13b).
-const NAMES_W: f32 = HEAD_W;
+/// Hauteur de la première ligne des boutons dans la colonne des calques, en face des numéros de la règle des images (partie 165.5 :
+/// une case de bouton, 26 points, y tient).
+pub(crate) const LIGNE1_H: f32 = 30.0;
+/// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la seconde ligne des boutons, juste sous la première.
+pub(crate) const LIGNE2_H: f32 = 28.0;
+/// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
+/// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
+pub(crate) const HEADER_H: f32 = LIGNE1_H + LIGNE2_H;
+/// Partie 165.6 : les groupes de la barre de la timeline sur la première ligne (le plan, puis le transport, l'image courante, les
+/// repères et l'affichage) ; les dessins, la caméra et le reste sur la seconde, avec « Plus… » et la légende des clés.
+pub(crate) const DERNIER_GROUPE_LIGNE1: u8 = 1;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
@@ -32,6 +40,9 @@ const PLAN_END_W: f32 = 9.0;
 #[cfg(test)]
 thread_local! {
     pub(crate) static PRISE_FIN_DU_PLAN: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+    /// Partie 165.6 : le haut et le bas de chaque ligne de calque (rang du calque, haut, bas) dans la colonne (`.0`) et dans la grille
+    /// (`.1`), à la dernière image : les essais vérifient que calques et pistes sont alignés.
+    pub(crate) static LIGNES_PEINTES: std::cell::RefCell<(Vec<(usize, f32, f32)>, Vec<(usize, f32, f32)>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) };
 }
 
 /// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
@@ -78,10 +89,10 @@ impl App {
         }
         // Le pointeur sur la bande : les touches du zoom de l'image zooment la timeline (`run_action`).
         self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
+        // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre de boutons au-dessus de la timeline ; ses commandes sont en
+        // haut de la colonne des calques, en face de la règle des images (`layerheads::timeline_heads`).
+        // La barre du calque courant (partie 168) : tous ses réglages, sur une ligne qui ne défile pas avec les calques.
         ui.add_space(2.0);
-        self.timeline_toolbar(ui);
-        ui.separator();
-        // La barre du calque courant (partie 167) : tous ses réglages, sur une ligne qui ne défile pas avec les calques.
         self.barre_du_calque(ui);
         ui.add_space(2.0);
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
@@ -106,17 +117,6 @@ impl App {
                             .show(ui, |ui| self.timeline_grid(ui));
                     });
                 });
-        });
-    }
-
-    /// Barre de la timeline, sur une seule ligne qui ne défile pas (`barres.rs`) : le plan, le
-    /// transport, les dessins, la caméra et la pelure ; le reste sous « Plus… ». Les commandes en
-    /// icônes ont leur nom, leur raccourci et une description dans une bulle (12d).
-    fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            self.barre_ui(ui, crate::barres::Barre::Timeline);
-            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
         });
     }
 
@@ -153,7 +153,7 @@ impl App {
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));
+        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups, self.cur_layer));
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
         let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
@@ -165,14 +165,14 @@ impl App {
             resp.context_menu(|ui| app.grid_menu_ui(ui, m));
         };
         if notes_h > 0.0 {
-            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(r.width(), notes_h)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
             menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
         }
         {
             let y = r.top() + HEADER_H + rows_h;
-            let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), CAM_H)).shrink2(vec2(0.0, 1.0));
             // La caméra du plan choisie seule dans la vue Espace 3D : sa rangée est montrée comme celle d'un calque courant, et
             // plus aucune rangée de calque ne l'est (`espace3dui.rs`, partie 152).
             let choisie = self.e3_camera_seule();
@@ -225,7 +225,7 @@ impl App {
         let cell = self.timeline_cell.clamp(CELL_MIN, CELL_MAX);
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
-        let rows = rows_of(self.layers(), &self.doc.groups);
+        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
         let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
@@ -343,6 +343,8 @@ impl App {
         // Fond des lignes, calque courant en surbrillance (aucun quand la caméra du plan est choisie seule dans la vue
         // Espace 3D : c'est sa rangée qui l'est, partie 152).
         let camera_seule = self.e3_camera_seule();
+        #[cfg(test)]
+        LIGNES_PEINTES.with(|l| l.borrow_mut().1 = rows.iter().map(|row| (row.li, grid_top + row.top, grid_top + row.top + row.h)).collect());
         for row in &rows {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
@@ -352,7 +354,7 @@ impl App {
                 theme::surface_active(crate::theme::accent(), 0.18)
             } else {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre. Toute la ligne prend la couleur du rangement du calque, celle
-                // de son dossier ou de son groupe (partie 167).
+                // de son dossier ou de son groupe (partie 168).
                 let dossier = self.layers()[li].folder;
                 let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
                 crate::layerheads::fond_teinte(if dossier { theme::rangee_sombre() } else { theme::rangee() }, rangement, dossier)
@@ -378,7 +380,7 @@ impl App {
             let shown = if time_code { c % (fps * seconds) == 0 } else { c == 0 || (c + 1) % step == 0 };
             if c < cols && shown {
                 painter.text(
-                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + HEADER_H * 0.5),
+                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + LIGNE1_H * 0.5),
                     if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
                     self.frame_label(c),
                     FontId::monospace(9.0),
@@ -569,7 +571,7 @@ impl App {
                 f = end;
             }
         }
-        // Un dossier fermé (partie 167) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
+        // Un dossier fermé (partie 168) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
         // un petit écart au début de chaque dessin. On voit encore où ça bouge sans rouvrir le dossier.
         for row in &rows {
             let layers = self.layers();
@@ -869,7 +871,7 @@ impl App {
             cur_frame(),
         );
         painter.text(
-            pos2(cx + cell * 0.5, r.top() + HEADER_H * 0.5),
+            pos2(cx + cell * 0.5, r.top() + LIGNE1_H * 0.5),
             Align2::CENTER_CENTER,
             // En time code, seule l'image dans la seconde tient dans la case.
             match self.time_display {

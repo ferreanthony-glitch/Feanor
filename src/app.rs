@@ -2738,6 +2738,31 @@ impl App {
         }
     }
 
+    /// Partie 165.8 : le calque du plan courant dont l'encre est au point `p` de la feuille, à l'image courante : le plus haut de ceux
+    /// qu'on voit. Un calque caché (lui ou son dossier) ou à l'opacité 0 n'a rien à cet endroit ; un calque d'un dossier fermé, oui.
+    pub(crate) fn calque_sous_le_point(&self, p: Pos2) -> Option<usize> {
+        if !p.x.is_finite() || !p.y.is_finite() || self.doc.panels.get(self.cur_panel).is_none() {
+            return None;
+        }
+        let (x, y) = (p.x.floor() as i64, p.y.floor() as i64);
+        // Du plus bas au plus haut, chacun seul, tel que la caméra le pose (annotations comprises : elles sont dans la vue).
+        let calques = render::panel_layer_plans(&self.doc, self.cur_panel, self.cur_frame, true);
+        calques.iter().rev().find(|(_, plan)| render::couverture_pixel_i(&self.doc, plan, x, y) > 0).map(|(li, _)| *li)
+    }
+
+    /// Partie 165.8 (Anthony : « Alt+clic n'est plus la pipette, il permet de sélectionner le calque cliqué ») : Alt + clic dans la vue
+    /// de dessin rend actif le calque dont l'encre est sous le curseur. Rien n'est écrit dans le projet (aucune étape d'annulation), la
+    /// couleur ne change pas ; dans le vide, rien ne change.
+    pub(crate) fn alt_clic_calque(&mut self, p: Pos2) {
+        match self.calque_sous_le_point(p) {
+            Some(li) => {
+                self.select_layer(li);
+                self.status = format!("Calque actif : {}", self.layers()[li].name);
+            }
+            None => self.status = "Aucun dessin sous le curseur".into(),
+        }
+    }
+
     /// La couleur du dessin au point `p` de la feuille (la pipette de l'outil, sans toucher à la couleur de dessin).
     pub(crate) fn couleur_du_monde(&self, p: Pos2) -> Option<[u8; 3]> {
         if !p.x.is_finite() || !p.y.is_finite() {
@@ -5110,8 +5135,7 @@ impl App {
                 self.set_all_tracks_folded(false);
             }
             "piste.auto_deplier" => self.toggle_auto_open(),
-            // Trois calques ou toute la pile ; les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
-            "piste.toute_la_pile" => self.basculer_pile(),
+            // Les plans de hauteur moyenne ou en bandeau (`pistes.rs`, 2026-11-11).
             "bande.plans_en_bandeau" => self.basculer_hauteur_plans(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),

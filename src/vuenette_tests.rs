@@ -226,7 +226,7 @@ fn rien_de_net_sans_dessin_vectoriel_dans_la_zone() {
 fn attendre(n: &mut VueNette, ctx: &egui::Context, doc: &Document, plan: &Plan, c: Option<Cadrage>, fini: impl Fn(&VueNette) -> bool) -> Option<crate::vuenette::Peinte> {
     let debut = Instant::now();
     loop {
-        let p = n.update(ctx, doc, plan, c, true, false, &[]);
+        let p = n.update(ctx, doc, plan, c, false, false, false, &[]);
         if fini(n) {
             return p;
         }
@@ -243,49 +243,133 @@ fn la_vue_nette_suit_ce_qui_change_et_ne_calcule_pas_pendant_un_geste() {
     let plan = Plan { paper: Some(PAPIER), items: vec![item(dessin)] };
     let c = cadrage(&doc, &vue(3.0));
     let mut n = VueNette::new();
-    // Première image : rien à peindre encore (l'image de toujours), le calcul part après un court repos, sur un autre fil.
-    assert!(n.update(&ctx, &doc, &plan, Some(c), true, true, &[]).is_none());
+    // Première image : rien à peindre encore (l'image de toujours, lissée en attendant), le calcul part après un court repos, sur
+    // un autre fil.
+    assert!(n.update(&ctx, &doc, &plan, Some(c), false, false, true, &[]).is_none());
+    assert!(n.lisse(), "une image nette est attendue : l'image de toujours se pose lissée");
     let p = attendre(&mut n, &ctx, &doc, &plan, Some(c), |n| n.composees == 1).expect("l'image nette est arrivée");
     assert_eq!(p.cadrage, c);
     // Rien ne change : elle reste, et rien ne se recalcule.
     std::thread::sleep(Duration::from_millis(120));
-    assert!(n.update(&ctx, &doc, &plan, Some(c), true, false, &[]).is_some());
+    assert!(n.update(&ctx, &doc, &plan, Some(c), false, false, false, &[]).is_some());
     assert!(!n.en_calcul() && n.composees == 1);
     // Un trait en cours touche des tuiles : l'image reste (percée là où ça change), et **rien ne se calcule pendant le geste**.
     for _ in 0..30 {
-        assert!(n.update(&ctx, &doc, &plan, Some(c), false, false, &[17, 18]).is_some());
-        assert!(!n.en_calcul(), "aucun calcul pendant un geste");
+        assert!(n.update(&ctx, &doc, &plan, Some(c), true, true, false, &[17, 18]).is_some());
+        assert!(!n.en_calcul(), "aucun calcul pendant un trait");
         std::thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(n.composees, 1);
     // Le geste fini : l'image se refait.
     attendre(&mut n, &ctx, &doc, &plan, Some(c), |n| n.composees == 2).expect("l'image nette est revenue");
+    // Un bouton tenu pendant que la vue ne bouge pas (une sélection qu'on tire) : un geste de dessin lui aussi, rien ne se calcule.
+    std::thread::sleep(Duration::from_millis(300));
+    for _ in 0..20 {
+        assert!(n.update(&ctx, &doc, &plan, Some(c), false, true, false, &[17]).is_some());
+        assert!(!n.en_calcul(), "aucun calcul pendant un geste, la vue immobile");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    attendre(&mut n, &ctx, &doc, &plan, Some(c), |n| n.composees == 3).expect("l'image nette est revenue");
     // La vue bouge : l'ancienne image reste montrée (collée au dessin) jusqu'à la nouvelle.
     let c2 = cadrage(&doc, &View { pan: vec2(30.0, -12.0), ..vue(3.0) });
-    let p = n.update(&ctx, &doc, &plan, Some(c2), true, false, &[]).expect("l'image d'avant reste");
+    let p = n.update(&ctx, &doc, &plan, Some(c2), false, false, false, &[]).expect("l'image d'avant reste");
     assert_eq!(p.cadrage, c);
-    let p = attendre(&mut n, &ctx, &doc, &plan, Some(c2), |n| n.composees == 3).expect("la nouvelle image");
+    let p = attendre(&mut n, &ctx, &doc, &plan, Some(c2), |n| n.composees == 4).expect("la nouvelle image");
     assert_eq!(p.cadrage, c2);
+    // **On déplace la vue, bouton tenu, sans s'arrêter** (une image d'écran toutes les 5 ms, la vue décalée à chacune) : l'image
+    // nette se refait pendant le mouvement, sans attendre le repos.
+    let avant = n.composees;
+    for k in 1..=80 {
+        let ck = cadrage(&doc, &View { pan: vec2(30.0 + k as f32, -12.0), ..vue(3.0) });
+        assert!(n.update(&ctx, &doc, &plan, Some(ck), false, true, false, &[]).is_some(), "une image nette reste montrée pendant le déplacement");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(n.composees > avant, "l'image nette s'est refaite pendant le déplacement ({} puis {})", avant, n.composees);
+    let c3 = cadrage(&doc, &View { pan: vec2(110.0, -12.0), ..vue(3.0) });
+    let p = attendre(&mut n, &ctx, &doc, &plan, Some(c3), |n| !n.en_calcul() && n.composees > avant).expect("la dernière image");
+    let p = if p.cadrage == c3 { p } else { attendre(&mut n, &ctx, &doc, &plan, Some(c3), |n| !n.en_calcul()).expect("la dernière image") };
+    let _ = p;
+    let fini = n.composees;
     // Tout a pu changer (autre image, réglage) : l'image nette est retirée tout de suite, puis revient.
-    assert!(n.update(&ctx, &doc, &plan, Some(c2), true, true, &[]).is_none());
-    attendre(&mut n, &ctx, &doc, &plan, Some(c2), |n| n.composees == 4).expect("l'image nette est revenue");
-    // Un geste qui commence pendant un calcul l'arrête.
-    assert!(n.update(&ctx, &doc, &plan, Some(c2), true, true, &[]).is_none());
-    let debut = Instant::now();
-    while !n.en_calcul() {
-        n.update(&ctx, &doc, &plan, Some(c2), true, false, &[]);
-        assert!(debut.elapsed() < Duration::from_secs(20) && n.composees == 4 || n.en_calcul() || n.composees > 4, "le calcul ne part pas");
-        if n.composees > 4 {
-            break;
-        }
+    assert!(n.update(&ctx, &doc, &plan, Some(c3), false, false, true, &[]).is_none());
+    attendre(&mut n, &ctx, &doc, &plan, Some(c3), |n| n.composees > fini && !n.en_calcul()).expect("l'image nette est revenue");
+    // Un trait qui commence pendant un calcul l'arrête.
+    assert!(n.update(&ctx, &doc, &plan, Some(c3), false, false, true, &[]).is_none());
+    let (debut, la) = (Instant::now(), n.composees);
+    while !n.en_calcul() && n.composees == la {
+        n.update(&ctx, &doc, &plan, Some(c3), false, false, false, &[]);
+        assert!(debut.elapsed() < Duration::from_secs(20), "le calcul ne part pas");
         std::thread::sleep(Duration::from_millis(2));
     }
-    if n.composees == 4 {
-        n.update(&ctx, &doc, &plan, Some(c2), false, false, &[]);
-        assert!(!n.en_calcul(), "le geste arrête le calcul en cours");
+    if n.composees == la {
+        n.update(&ctx, &doc, &plan, Some(c3), true, true, false, &[]);
+        assert!(!n.en_calcul(), "le trait arrête le calcul en cours");
     }
-    // À 100 % (plus de cadrage) : plus rien à peindre.
-    assert!(n.update(&ctx, &doc, &plan, None, true, false, &[]).is_none());
+    // À 100 % (plus de cadrage) : plus rien à peindre, plus rien à lisser.
+    assert!(n.update(&ctx, &doc, &plan, None, false, false, false, &[]).is_none());
+    assert!(!n.lisse());
+}
+
+#[test]
+fn un_plan_sans_vectoriel_garde_ses_pixels_nets_et_une_zone_sans_trait_aussi() {
+    let ctx = egui::Context::default();
+    let mut doc = Document::new(400, 300, 24);
+    let fond = bitmap(&mut doc, &[8, 9, 10, 15, 16, 17], [40, 90, 160, 255]);
+    let plan = Plan { paper: Some(PAPIER), items: vec![item(fond)] };
+    let c = cadrage(&doc, &vue(3.0));
+    let mut n = VueNette::new();
+    // Tout en bitmap : jamais d'image nette, jamais de lissage, en mouvement comme à l'arrêt.
+    for k in 0..20 {
+        let ck = cadrage(&doc, &View { pan: vec2(k as f32, 0.0), ..vue(3.0) });
+        assert!(n.update(&ctx, &doc, &plan, Some(ck), false, k % 2 == 0, k == 0, &[]).is_none());
+        assert!(!n.lisse() && !n.en_calcul(), "un plan sans dessin vectoriel garde ses pixels nets");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    // Un plan qui a du vectoriel, mais pas dans la zone regardée : au repos, constat fait, la zone garde ses pixels nets ; et un
+    // trait qu'on y trace sur le bitmap (des tuiles changent) ne la lisse pas le temps du geste.
+    let loin = vectoriel(&mut doc, vec![trait_droit(pos2(5.0, 5.0), pos2(20.0, 8.0), 2.0, false)]);
+    let plan = Plan { paper: Some(PAPIER), items: vec![item(fond), item(loin)] };
+    let debut = Instant::now();
+    loop {
+        assert!(n.update(&ctx, &doc, &plan, Some(c), false, false, false, &[]).is_none());
+        if !n.lisse() {
+            break;
+        }
+        assert!(debut.elapsed() < Duration::from_secs(20), "le constat « rien de vectoriel ici » n'arrive pas");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    for _ in 0..10 {
+        assert!(n.update(&ctx, &doc, &plan, Some(c), true, true, false, &[17]).is_none());
+        assert!(!n.lisse() && !n.en_calcul(), "la zone sans trait vectoriel reste en pixels nets pendant le geste");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn l_image_nette_reste_sur_les_pixels_de_l_ecran_quand_la_vue_se_deplace() {
+    let doc = Document::new(400, 300, 24);
+    for ppp in [1.0_f32, 1.5] {
+        let size = vec2(400.0, 300.0);
+        let image = Cadrage::de(&vue(3.0), zone(), size, ppp).expect("la vue grossit");
+        // La même vue : à sa place exacte.
+        let coins = crate::vuenette::coins_a_l_ecran(&image, Some(&image), ppp).expect("même vue");
+        assert_eq!(coins[0], pos2(image.origine[0] as f32 / ppp, image.origine[1] as f32 / ppp));
+        // La vue déplacée de (30, −12) points : l'image suit, d'un nombre entier de pixels d'écran.
+        let deplacee = Cadrage::de(&View { pan: vec2(30.0, -12.0), ..vue(3.0) }, zone(), size, ppp).expect("la vue grossit");
+        let coins = crate::vuenette::coins_a_l_ecran(&image, Some(&deplacee), ppp).expect("la vue n'a fait que se déplacer");
+        let attendu = pos2(image.origine[0] as f32 / ppp + 30.0, image.origine[1] as f32 / ppp - 12.0);
+        assert!(coins[0].distance(attendu) <= 0.75 / ppp, "le coin de l'image : {:?}, attendu près de {attendu:?}", coins[0]);
+        for c in coins {
+            let (x, y) = (c.x * ppp, c.y * ppp);
+            assert!((x - x.round()).abs() < 1e-3 && (y - y.round()).abs() < 1e-3, "le coin {c:?} tombe sur un pixel entier de l'écran");
+        }
+        assert!((coins[2] - coins[0] - vec2(image.taille[0] as f32 / ppp, image.taille[1] as f32 / ppp)).length() < 1e-3);
+        // La vue a zoomé, ou tourné : pas de recalage (l'image suit ses coins sur la feuille).
+        assert!(crate::vuenette::coins_a_l_ecran(&image, Cadrage::de(&vue(3.3), zone(), size, ppp).as_ref(), ppp).is_none());
+        assert!(crate::vuenette::coins_a_l_ecran(&image, Cadrage::de(&View { rotation: 0.2, ..vue(3.0) }, zone(), size, ppp).as_ref(), ppp).is_none());
+        assert!(crate::vuenette::coins_a_l_ecran(&image, None, ppp).is_none());
+    }
+    let _ = doc;
 }
 
 // ---------------------------------------------------------------------------------------------- dans la vraie fenêtre
@@ -364,4 +448,71 @@ fn dans_la_vraie_fenetre_un_trait_trace_en_gros_plan_revient_net() {
         b.image(Vec::new(), 1.0 / 60.0);
     }
     assert!(!b.app.nette.en_calcul() && b.app.nette.composees == au_cent, "à 100 %, rien à composer");
+}
+
+// ---------------------------------------------------------------------------------------------- sur la carte graphique
+
+/// Dans la zone `zone` de la capture d'écran `px` (1920 × 1080, RGBA) : le nombre de paires de pixels voisins sur une ligne dont le
+/// rouge diffère d'au moins 2, et le nombre de pixels ni encre ni papier (rouge entre 40 et 215).
+fn mesurer(px: &[u8], zone: Rect) -> (usize, usize) {
+    let (x0, x1) = (zone.min.x.ceil().max(0.0) as usize, (zone.max.x.floor() as usize).min(1919));
+    let (y0, y1) = (zone.min.y.ceil().max(0.0) as usize, (zone.max.y.floor() as usize).min(1079));
+    let rouge = |x: usize, y: usize| px[(y * 1920 + x) * 4] as i32;
+    let (mut changements, mut gris) = (0, 0);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            if (rouge(x, y) - rouge(x + 1, y)).abs() >= 2 {
+                changements += 1;
+            }
+            if (40..=215).contains(&rouge(x, y)) {
+                gris += 1;
+            }
+        }
+    }
+    (changements, gris)
+}
+
+/// Sur la carte graphique, la vue à 400 % : l'image de toujours seule est en marches ; une image nette attendue, elle se pose
+/// lissée ; l'image nette arrivée, le bord du trait tient en un pixel d'écran.
+#[test]
+fn sur_la_carte_graphique_l_image_attendue_est_lissee_puis_nette() {
+    let mut doc = Document::new(400, 300, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].length = 4;
+    let (a, z) = (pos2(150.0, 120.0), pos2(250.0, 180.0));
+    let dessin = vectoriel(&mut doc, vec![trait_droit(a, z, 6.0, true)]);
+    let mut calque = crate::document::Layer::new("Trait", LayerKind::Vector);
+    calque.set(0, Some(dessin));
+    doc.panels[0].layers.push(calque);
+    let mut b = crate::perf_tests::banc(doc, true);
+    if b.capturer().is_none() {
+        println!("     pas de carte graphique pour les essais : essai sauté");
+        return;
+    }
+    b.app.set_mode(crate::app::Mode::Animation);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.chauffer(10);
+    b.app.zoom_by(4.0 / b.app.view.zoom);
+    b.chauffer(4);
+    // La zone du trait à l'écran, avec un peu de papier autour.
+    let zone = Rect::from_two_pos(ecran(&b, a), ecran(&b, z)).expand(40.0).intersect(b.app.canvas_rect.shrink(4.0));
+    assert!(zone.width() > 200.0 && zone.height() > 120.0, "le trait est à l'écran : {zone:?}");
+    // 1. La vue nette éteinte (comme dans tous les autres essais) : l'image de toujours, grossie sans lissage.
+    let (marches, gris_marches) = mesurer(&b.capturer().expect("carte graphique"), zone);
+    // 2. La vue nette allumée, à sa première image : rien de net encore (le calcul n'est pas parti), mais une image nette est
+    //    attendue : l'image de toujours se pose lissée.
+    crate::vuenette::activer_pour_essai();
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(b.app.nette.lisse() && b.app.nette.composees == 0, "une image nette est attendue, aucune n'est encore arrivée");
+    let (lisse, gris_lisse) = mesurer(&b.capturer().expect("carte graphique"), zone);
+    // 3. L'image nette arrivée.
+    images_jusqu_a(&mut b, "l'image nette n'arrive pas à 400 %", |a| a.nette.composees >= 1 && !a.nette.en_calcul());
+    b.chauffer(2);
+    let (net, gris_net) = mesurer(&b.capturer().expect("carte graphique"), zone);
+    // En marches : la couleur ne change, sur une ligne, qu'aux bords des carrés de 4 pixels. Lissée : elle change de pixel en pixel
+    // dans tout le dégradé du bord.
+    assert!(lisse as f32 > 1.5 * marches as f32, "l'image attendue est lissée : {lisse} changements de pixel à pixel, contre {marches} en marches");
+    // Nette : le bord tient en un pixel d'écran ; bien moins de pixels intermédiaires que l'image en marches ou lissée.
+    assert!((gris_net as f32) < 0.5 * gris_marches as f32 && (gris_net as f32) < 0.5 * gris_lisse as f32, "l'image nette a un bord fin : {gris_net} pixels intermédiaires, contre {gris_marches} en marches et {gris_lisse} lissée");
+    assert!(net > 0 && gris_net > 0, "le trait est bien dans la zone mesurée");
 }

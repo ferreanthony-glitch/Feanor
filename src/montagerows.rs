@@ -29,7 +29,7 @@ use crate::theme;
 pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
 /// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
-/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandit d'autant).
+/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7).
 pub(crate) const LAYER_H: f32 = 44.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
@@ -101,9 +101,7 @@ impl Rows {
     /// La rangée sous la hauteur `y` (depuis le haut des pistes de calques), la plus proche si `y`
     /// est avant la première piste ou après la dernière (choix au rectangle).
     pub fn row_near(&self, y: f32) -> usize {
-        // (Sans la ligne « N autres calques », qui n'est la rangée d'aucun calque : un rectangle de choix qui s'y termine s'arrête à la
-        // dernière piste de calque.)
-        let real = || self.lanes.iter().filter(|l| !l.is_more());
+        let real = || self.lanes.iter();
         real().find(|l| y >= l.top && y < l.top + l.h).or_else(|| if y < 0.0 { real().next() } else { real().last() }).map_or(0, |l| l.row)
     }
     pub fn lanes_top(&self) -> f32 {
@@ -204,10 +202,6 @@ impl App {
             }
             let row = track.row;
             let r = lane(rows.layers_top() + track.top, track.h);
-            if track.is_more() {
-                self.bande_head(ui, r, &track);
-                continue;
-            }
             let Some(k) = item else {
                 label(r, &name, visuals.weak_text_color());
                 ui.interact(r, ui.id().with(("piste_calque_absente", row)), Sense::hover())
@@ -261,12 +255,9 @@ impl App {
             if resp.drag_started() {
                 self.montage_layer_drag = Some(k);
             }
-            let toute = self.settings.montage_pile == crate::pistes::Pile::Toute;
-            let resp = resp.on_hover_text(if toute {
-                "Calque du plan courant : clic, il devient actif (la piste se déplie) ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…)."
-            } else {
-                "Calque du plan courant : clic, il devient actif et vient au milieu ; double-clic sur le nom, le renommer ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…)."
-            });
+            let resp = resp.on_hover_text(
+                "Calque du plan courant : clic, il devient actif (la piste se déplie) ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…).",
+            );
             if resp.clicked() || resp.secondary_clicked() {
                 pick = Some((k, resp.secondary_clicked()));
             }
@@ -284,7 +275,7 @@ impl App {
                 if self.double_click_is_on_name(ui, p, name_rect, &name, crate::pistes::name_size(track.folded)) {
                     let id = self.doc.panels[self.cur_panel].layers[k].id;
                     self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
-                } else if toute {
+                } else {
                     self.toggle_track_fold(row, false);
                 }
             }
@@ -378,35 +369,6 @@ impl App {
         }
     }
 
-    /// Une fine bande de la fenêtre des trois calques (`pistes.rs`), dans `lr` : sous chaque plan, un trait par calque des rangées qu'elle
-    /// résume, de la couleur de sa sorte, le long de ses dessins. La ligne d'un dossier y laisse un vide : on y lit la forme de la pile.
-    fn paint_bande(&self, painter: &Painter, lr: Rect, blocks: &[Rect], ppf: f32, track: &Lane) {
-        let (de, a) = track.rangees;
-        let n = a.saturating_sub(de);
-        if n == 0 {
-            return;
-        }
-        let pas = ((lr.height() - 2.0) / n as f32).min(3.0);
-        let ep = (pas - 1.0).max(1.0);
-        for (i, b) in blocks.iter().enumerate() {
-            let cell = Rect::from_min_max(pos2(b.left(), lr.top()), pos2(b.right(), lr.bottom()));
-            if !painter.clip_rect().intersects(cell) {
-                continue;
-            }
-            let p = &self.doc.panels[i];
-            let x0 = cell.left() - 1.0;
-            for (j, row) in (de..a).enumerate() {
-                let Some(l) = layer_in_row(&p.layers, row).map(|k| &p.layers[k]).filter(|l| !l.folder) else { continue };
-                let Some((s, e)) = content_bounds(l) else { continue };
-                let y = lr.top() + 1.0 + j as f32 * pas;
-                let seg = Rect::from_min_max(pos2((x0 + s as f32 * ppf).max(cell.left()), y), pos2((x0 + e as f32 * ppf - 1.0).min(cell.right()), y + ep));
-                if seg.width() > 0.0 {
-                    painter.rect_filled(seg, 0.0, theme::couleur_du_calque(l).gamma_multiply(if l.visible { 0.8 } else { 0.3 }));
-                }
-            }
-        }
-    }
-
     /// Pistes Caméra, calques et fond, dans la bande `r` ; `blocks` : les panneaux à l'écran ;
     /// `lit` : la poignée de calque survolée ou tenue (vrai : tenue), et son plan ; `drops` : les
     /// clés qu'on glisse (fantômes et repères, `montagekeys::drop_view`).
@@ -474,10 +436,6 @@ impl App {
             let row = track.row;
             let lr = lane(rows.layers_top() + track.top, track.h);
             painter.rect_filled(lr, 0.0, theme::rangee_sombre());
-            if track.is_more() {
-                self.paint_bande(painter, lr, blocks, ppf, track);
-                continue;
-            }
             // Le nom de la rangée : celui du calque du plan courant, que la colonne de gauche écrit. Un bloc n'écrit son nom que s'il en diffère.
             let row_name = layer_in_row(&current_plan.layers, row).map(|k| current_plan.layers[k].name.as_str());
             for (i, b) in blocks.iter().enumerate() {
@@ -661,7 +619,7 @@ impl App {
             return None;
         }
         let lane = rows.lane_at(y - rows.layers_top())?;
-        if lane.folded || lane.is_more() {
+        if lane.folded {
             return None;
         }
         let in_row = (y - rows.layers_top()) - lane.top;

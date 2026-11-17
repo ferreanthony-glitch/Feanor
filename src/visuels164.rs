@@ -2,16 +2,17 @@
 //! visuels, plus facilement compréhensibles, qui donnent envie d'être manipulés » ; sur la maquette : « si l'on doit interagir avec
 //! les graphiques pour modifier directement la scène c'est super »). Ce module tient ce qui ne dépend pas de l'application : le titre
 //! du repli « Précis » (une seule apparence partout, parties 162, 163 et 164), les taches de couleur « avant · maintenant », les
-//! pastilles des modes de fusion (deux ronds qui se chevauchent, leur intersection calculée par la vraie formule du mode,
-//! `BlendMode::mix`), les vignettes des effets (ce qu'ils produisent, peint au `Painter`), et la « force » d'un effet (le réglage que
-//! tire la barre de l'avant | après). Les méthodes qui écrivent dans le projet sont dans `colorui.rs`, `fxui.rs` et `layerheads.rs`.
+//! vignettes des effets (ce qu'ils produisent, peint au `Painter`), et la « force » d'un effet (le réglage que tire la barre de
+//! l'avant | après). Les méthodes qui écrivent dans le projet sont dans `colorui.rs` et `fxui.rs`. (Les pastilles des modes de fusion
+//! et l'opacité sur la miniature de la ligne du calque, partie 164.3, sont retirées à la demande d'Anthony, partie 165.3 : la ligne a
+//! retrouvé « 100 % » et « Normal ▾ ».)
 //!
-//! Aucune image : tout est peint. Les vignettes des effets sont des schémas (un trait sur un papier) : montrer le vrai calque avec et
-//! sans l'effet demanderait un rendu de plus du calque, hors du cache des effets.
+//! Aucune image : tout est peint. Les vignettes des effets sont des schémas (un trait sur un papier). L'avant | après, lui, montre le
+//! vrai calque depuis la partie 165 (`avantapres165.rs`, calculé en petit au fil de fond du cache des effets) ; le schéma reste son
+//! repli (calque vide, aperçu pas encore arrivé).
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui};
 
-use crate::blend::BlendMode;
 use crate::fx::EffectKind;
 use crate::theme;
 
@@ -99,57 +100,6 @@ impl AvantMaintenant {
             None => self.vue = Some(couleur),
             _ => {}
         }
-    }
-}
-
-// ------------------------------------------------------------------ 164.3 : les pastilles des modes de fusion
-
-/// Les deux couleurs d'une pastille : le dessous (bleu) et le calque (orange), comme sur la maquette.
-pub(crate) const DESSOUS: [u8; 3] = [51, 102, 204];
-pub(crate) const DESSUS: [u8; 3] = [238, 153, 0];
-
-/// La couleur de l'intersection des deux ronds pour le mode `mode` : la vraie formule du mode (`BlendMode::mix`, celle du rendu).
-pub(crate) fn couleur_melee(mode: BlendMode) -> Color32 {
-    let f = |c: [u8; 3]| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0];
-    let m = mode.mix(f(DESSOUS), f(DESSUS));
-    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color32::from_rgb(b(m[0]), b(m[1]), b(m[2]))
-}
-
-/// L'intersection de deux disques de même rayon `r` (centres `a` et `b`, plus proches que 2 `r`) : un polygone convexe.
-pub(crate) fn lentille(a: Pos2, b: Pos2, r: f32) -> Vec<Pos2> {
-    let d = (b - a).length();
-    if d <= 1e-3 || d >= 2.0 * r {
-        return Vec::new();
-    }
-    let dir = (b - a) / d;
-    let base = dir.y.atan2(dir.x);
-    let alpha = (d / (2.0 * r)).clamp(-1.0, 1.0).acos();
-    let n = 10;
-    let mut pts = Vec::with_capacity(2 * n + 2);
-    for k in 0..=n {
-        let t = base - alpha + 2.0 * alpha * k as f32 / n as f32;
-        pts.push(a + vec2(t.cos(), t.sin()) * r);
-    }
-    for k in 0..=n {
-        let t = base + std::f32::consts::PI - alpha + 2.0 * alpha * k as f32 / n as f32;
-        pts.push(b + vec2(t.cos(), t.sin()) * r);
-    }
-    pts
-}
-
-/// Peint la pastille du mode `mode` dans `r` : deux ronds qui se chevauchent, leur intersection de la couleur que donne le mode.
-pub(crate) fn pastille_fusion(p: &Painter, r: Rect, mode: BlendMode) {
-    let rayon = (r.height() * 0.5 - 1.0).min(r.width() * 0.32).max(2.0);
-    let ecart = rayon * 1.0;
-    let a = pos2(r.center().x - ecart * 0.5, r.center().y);
-    let b = pos2(r.center().x + ecart * 0.5, r.center().y);
-    let col = |c: [u8; 3]| Color32::from_rgb(c[0], c[1], c[2]);
-    p.circle_filled(a, rayon, col(DESSOUS));
-    p.circle_filled(b, rayon, col(DESSUS));
-    let l = lentille(a, b, rayon);
-    if !l.is_empty() {
-        p.add(Shape::convex_polygon(l, couleur_melee(mode), Stroke::NONE));
     }
 }
 
@@ -370,6 +320,33 @@ pub(crate) fn avant_apres(p: &Painter, r: Rect, kind: EffectKind, f: f32, nom: &
     if droite.width() > 0.5 {
         dessin_effet(&p.with_clip_rect(droite.intersect(p.clip_rect())), r, kind, f);
     }
+    barre_avant_apres(p, r, f, nom);
+}
+
+/// Partie 165 : l'avant | après du vrai calque. `vue` : les deux images (le calque sans l'effet, avec lui), de l'aperçu calculé en
+/// arrière-plan (`avantapres165`), posées à `vue.place` (relative) sur le papier du projet `papier` ; la barre et les textes par-dessus,
+/// comme pour le schéma.
+pub(crate) fn avant_apres_reel(p: &Painter, r: Rect, vue: &crate::avantapres165::Vue, papier: [u8; 3], f: f32, nom: &str) {
+    let x = r.left() + r.width() * (1.0 - f.clamp(0.0, 1.0));
+    let p = p.with_clip_rect(r.intersect(p.clip_rect()));
+    p.rect_filled(r, 0.0, Color32::from_rgb(papier[0], papier[1], papier[2]));
+    let place = Rect::from_min_max(r.lerp_inside(vue.place.min.to_vec2()), r.lerp_inside(vue.place.max.to_vec2()));
+    let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    let gauche = Rect::from_min_max(r.min, pos2(x, r.bottom()));
+    let droite = Rect::from_min_max(pos2(x, r.top()), r.max);
+    if gauche.width() > 0.5 {
+        p.with_clip_rect(gauche.intersect(p.clip_rect())).image(vue.avant, place, uv, Color32::WHITE);
+    }
+    if droite.width() > 0.5 {
+        p.with_clip_rect(droite.intersect(p.clip_rect())).image(vue.apres, place, uv, Color32::WHITE);
+    }
+    barre_avant_apres(&p, r, f, nom);
+}
+
+/// Le cadre, la barre (de l'accent) et sa poignée à la force `f`, et « avant » / « nom · n % » écrits en bas : le même pour le schéma
+/// et pour le vrai calque.
+fn barre_avant_apres(p: &Painter, r: Rect, f: f32, nom: &str) {
+    let x = r.left() + r.width() * (1.0 - f.clamp(0.0, 1.0));
     p.rect_stroke(r, 3.0, Stroke::new(1.0_f32, theme::bord_fort()), StrokeKind::Inside);
     let barre = Rect::from_center_size(pos2(x, r.center().y), vec2(3.0, r.height()));
     p.rect_filled(barre, 0.0, theme::accent());

@@ -141,13 +141,13 @@ fn a_position_locked_layer_cannot_be_drawn_on() {
 
 #[test]
 fn header_rows_all_have_the_same_height() {
-    // Partie 167 : toutes les lignes ont la même hauteur, calque courant et dossiers compris (avant, partie 160 : le calque courant
+    // Partie 168 : toutes les lignes ont la même hauteur, calque courant et dossiers compris (avant, partie 160 : le calque courant
     // avait sa ligne complète, un dossier courant une ligne de 40 points) ; ses réglages sont dans la barre du calque. Le drapeau
     // « réduit » d'un calque (`collapsed`, d'avant) n'y change rien.
     use crate::layerheads::{row_at, rows_height, rows_of, ROW_FINE};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
     layers[2].collapsed = true;
-    let rows = rows_of(&layers, &groups::defaults());
+    let rows = rows_of(&layers, &groups::defaults(), usize::MAX);
     // Le calque le plus haut (le dernier) en premier.
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [2, 1, 0]);
     assert_eq!(rows.iter().map(|r| r.h).collect::<Vec<_>>(), [ROW_FINE; 3]);
@@ -159,15 +159,15 @@ fn header_rows_all_have_the_same_height() {
     // Un dossier : la même ligne.
     let mut avec_dossier = layers.clone();
     avec_dossier.push(Layer::new_folder("D"));
-    assert_eq!(rows_of(&avec_dossier, &groups::defaults())[0].h, ROW_FINE);
-    assert!(ROW_FINE <= 22.0, "une ligne fait 22 points");
+    assert_eq!(rows_of(&avec_dossier, &groups::defaults(), usize::MAX)[0].h, ROW_FINE);
+    assert_eq!(ROW_FINE, 28.0, "une ligne fait 28 points (partie 168.4)");
 }
 
 #[test]
 fn a_dragged_header_row_lands_between_rows() {
     use crate::layerheads::{cible_du_glisse, rows_of, Row, ROW_FINE};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
-    let rows = rows_of(&layers, &groups::defaults());
+    let rows = rows_of(&layers, &groups::defaults(), usize::MAX);
     // La pile (les noms, du bas vers le haut) une fois le calque `from` lâché à `y` ; rien : elle ne change pas.
     let lache = |layers: &[Layer], rows: &[Row], from: usize, y: f32| -> Option<Vec<String>> {
         let cible = cible_du_glisse(rows, layers, &[from], y, true)?;
@@ -184,7 +184,7 @@ fn a_dragged_header_row_lands_between_rows() {
     hidden[4].shown = false;
     layers.push(Layer::new("C3", LayerKind::Bitmap));
     layers[1].group = 4;
-    let rows = rows_of(&layers, &hidden);
+    let rows = rows_of(&layers, &hidden, usize::MAX);
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [3, 2, 0]);
     // C0 lâché entre C3 et C2 : juste au-dessus de C2 (C1, sans ligne, ne bouge pas).
     assert_eq!(lache(&layers, &rows, 0, ROW_FINE * 1.2).unwrap(), ["C1", "C2", "C0", "C3"]);
@@ -200,8 +200,11 @@ fn hiding_a_group_hides_its_rows_only() {
     layers[2].group = 2;
     let mut g = groups::defaults();
     g[2].shown = false;
-    let shown: Vec<usize> = rows_of(&layers, &g).iter().map(|r| r.li).collect();
+    let shown: Vec<usize> = rows_of(&layers, &g, 1).iter().map(|r| r.li).collect();
     assert_eq!(shown, [3, 1]);
+    // (Partie 165.4 : le calque courant garde sa ligne, même dans un groupe caché.)
+    let shown: Vec<usize> = rows_of(&layers, &g, 0).iter().map(|r| r.li).collect();
+    assert_eq!(shown, [3, 1, 0]);
     assert!(layers.iter().all(|l| l.visible), "le filtre ne cache rien à l'image");
 }
 

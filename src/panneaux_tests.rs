@@ -284,7 +284,7 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     assert!(include_str!("menucalque.rs").contains("fx_switch_item") && include_str!("menucalque.rs").contains("aplat_item"));
 }
 
-/// Ouvre le menu ⋮ du calque courant (dans la barre du calque, partie 167 ; avant, sur sa ligne de la timeline : le même menu que
+/// Ouvre le menu ⋮ du calque courant (dans la barre du calque, partie 168 ; avant, sur sa ligne de la timeline : le même menu que
 /// l'ancien « … » du panneau Calques, qui n'existe plus depuis la partie 160) et rend tous les textes que ses sous-menus montrent au
 /// survol.
 fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
@@ -324,7 +324,7 @@ fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
 
 #[test]
 fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer() {
-    // (Partie 167 : la barre du calque courant les porte, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les lignes
+    // (Partie 168 : la barre du calque courant les porte, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les lignes
     // des calques ne les ont pas : un calque normal ne montre rien à droite de son nom.)
     let mut app = app_layers("fusion", &[LayerKind::Bitmap, LayerKind::Vector, LayerKind::Vector]);
     let mut ecran = Ecran::new();
@@ -334,8 +334,14 @@ fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer()
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
     assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 1, "un seul mode de fusion : {textes:?}");
-    // (Partie 164.3 : l'opacité est sur la miniature du calque courant, qu'on glisse ; son chiffre ne s'écrit que pendant le geste.)
-    assert!(!textes.iter().any(|(t, _)| t.contains("100 %")), "plus de « 100 % » écrit au repos : {textes:?}");
+    // (La barre d'opacité écrit sa valeur deux fois au même endroit : sur sa partie pleine et sur le reste.)
+    let mut places: Vec<Rect> = Vec::new();
+    for (_, r) in textes.iter().filter(|(t, _)| t.contains("100 %")) {
+        if !places.iter().any(|p| p.center().distance(r.center()) < 1.0) {
+            places.push(*r);
+        }
+    }
+    assert_eq!(places.len(), 1, "une seule opacité : {textes:?}");
 }
 
 // ============================================================================================= 2. Couleur

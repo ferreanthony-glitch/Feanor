@@ -21,10 +21,11 @@ pub(crate) const HEAD_W: f32 = 312.0;
 /// Hauteur des lignes de la caméra, des notes et du son sous les calques (une ligne de texte ; c'était aussi celle d'une ligne
 /// de calque réduite à la main, avant la partie 160).
 pub(crate) const ROW_SMALL: f32 = 24.0;
-/// Hauteur de toutes les lignes de la timeline, calques et dossiers (partie 167 : avant, le calque courant avait une ligne complète de
+/// Hauteur de toutes les lignes de la timeline, calques et dossiers (partie 168 : avant, le calque courant avait une ligne complète de
 /// 56 points et un dossier courant une ligne de 40 ; ses réglages sont maintenant dans la barre du calque, `barre_du_calque`).
-pub(crate) const ROW_FINE: f32 = 22.0;
-/// Hauteur de la barre du calque courant, au-dessus des lignes (partie 167).
+/// Partie 168.4 (Anthony : « la taille d'une ligne de calque est plus épaisse ») : 28 points au lieu de 22.
+pub(crate) const ROW_FINE: f32 = 28.0;
+/// Hauteur de la barre du calque courant, au-dessus des lignes (partie 168).
 pub(crate) const BARRE_H: f32 = 24.0;
 /// Décalage des lignes des calques rangés dans un dossier.
 const INDENT: f32 = 12.0;
@@ -41,17 +42,18 @@ pub(crate) struct Row {
 }
 
 /// Lignes des calques, du plus haut au plus bas ; les calques d'un groupe caché de la timeline
-/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas. Toutes les lignes ont la même hauteur (partie 167) : changer
-/// de calque courant ne fait plus bouger la timeline.
-pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup]) -> Vec<Row> {
+/// (filtre de groupe, 13b-4) ou d'un dossier fermé (13b-5) n'en ont pas, sauf le calque courant (partie 165.4 : il garde toujours sa
+/// ligne). Toutes les lignes ont la même hauteur (partie 168) : changer de calque courant ne fait plus bouger la timeline.
+pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup], cur: usize) -> Vec<Row> {
     let closed: Vec<u64> = layers.iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
     let mut top = 0.0;
     layers
         .iter()
         .enumerate()
         .rev()
-        .filter(|(_, l)| groups.get(l.group as usize).is_none_or(|g| g.shown))
-        .filter(|(_, l)| l.parent.is_none_or(|p| !closed.contains(&p)))
+        // (Partie 165.4 : le calque courant garde toujours sa ligne, même dans un groupe caché ou un dossier fermé.)
+        .filter(|(li, l)| *li == cur || groups.get(l.group as usize).is_none_or(|g| g.shown))
+        .filter(|(li, l)| *li == cur || l.parent.is_none_or(|p| !closed.contains(&p)))
         .map(|(li, _)| {
             let row = Row { li, top, h: ROW_FINE };
             top += ROW_FINE;
@@ -59,6 +61,17 @@ pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup]) -> Vec<Row> {
         })
         .collect()
 }
+
+/// Partie 165.5 : largeur de la colonne des calques de la timeline : celle d'une ligne complète (HEAD_W), ou plus, celle de la ligne
+/// des boutons de la timeline mesurée à son dessin (une estimation avant).
+pub(crate) fn largeur_colonne_timeline() -> f32 {
+    let mesure = crate::barres::largeur_mesuree(crate::barres::Barre::Timeline);
+    HEAD_W.max(if mesure > 0.0 { mesure } else { LARGEUR_BARRE_TIMELINE_AVANT_MESURE })
+}
+
+/// Partie 165.5 : la largeur de la ligne des boutons de la timeline avant sa première mesure (partie 165.6 : la plus longue des deux
+/// lignes).
+const LARGEUR_BARRE_TIMELINE_AVANT_MESURE: f32 = 400.0;
 
 /// Hauteur de toutes les lignes.
 pub(crate) fn rows_height(rows: &[Row]) -> f32 {
@@ -136,7 +149,7 @@ pub(crate) fn peindre_cible(painter: &egui::Painter, x: egui::Rangef, top: f32, 
     }
 }
 
-/// Le fond d'une ligne de calque (en-tête et grille), teinté de la couleur du rangement du calque (partie 167) : celle de son dossier,
+/// Le fond d'une ligne de calque (en-tête et grille), teinté de la couleur du rangement du calque (partie 168) : celle de son dossier,
 /// sinon celle de son groupe ; rien, le fond d'origine. Un dossier est teinté plus fort : sa ligne sert de titre.
 pub(crate) fn fond_teinte(base: Color32, rangement: Option<Color32>, dossier: bool) -> Color32 {
     let Some(c) = rangement else { return base };
@@ -155,7 +168,29 @@ pub(crate) fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> eg
     ui.put(rect, egui::Button::new(RichText::new(icon).size(13.0).color(color)).frame(false))
 }
 
-// (La liste « Normal ▾ » des modes de fusion, `blend_combo`, est remplacée par leurs pastilles, `App::pastille_du_mode`, partie 164.3.)
+/// Liste des modes de fusion posée dans `rect`, aussi basse que la barre d'opacité (en-têtes de
+/// la timeline et du montage) : le mode choisi, s'il a changé.
+pub(crate) fn blend_combo(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: BlendMode) -> Option<BlendMode> {
+    let mut mode = blend;
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(salt.with("cadre")).layout(Layout::left_to_right(Align::Center)));
+    // Aussi bas que la barre d'opacité, pour tenir dans la ligne.
+    child.spacing_mut().interact_size.y = 16.0;
+    child.spacing_mut().button_padding = vec2(4.0, 0.0);
+    let resp = egui::ComboBox::from_id_salt(salt)
+        .selected_text(RichText::new(blend.label()).size(11.0))
+        .width(rect.width() - 4.0)
+        .show_ui(&mut child, |ui| {
+            for m in BlendMode::ALL {
+                if BlendMode::FAMILY_STARTS.contains(&m) {
+                    ui.separator();
+                }
+                ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
+            }
+        })
+        .response;
+    bulle(resp, "Mode de fusion", blend.hint(), "");
+    (mode != blend).then_some(mode)
+}
 
 /// Ce que la ligne d'un calque montre (copié pour ne pas garder le calque emprunté).
 struct Head {
@@ -196,60 +231,27 @@ impl App {
     /// L'en-tête des calques, à gauche de la grille de la timeline : bande du haut (`header_h`),
     /// une ligne par calque, puis la place des lignes caméra et son (`below`).
     pub(crate) fn timeline_heads(&mut self, ui: &mut Ui, header_h: f32, below: f32) -> Rect {
-        let rows = rows_of(self.layers(), &self.doc.groups);
-        let size = vec2(HEAD_W, header_h + rows_height(&rows) + below);
+        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
+        // Partie 165.5 : la colonne est au moins aussi large que la ligne des boutons de la timeline (Anthony : « toujours garder
+        // cette colonne avec un maximum d'information »), qui est en haut de la colonne, en face de la règle des images.
+        // (Jamais plus large que la place : dans la fenêtre la plus petite, la bande en a toujours assez ; un écran d'essai plus étroit
+        // garde la ligne complète du calque, `HEAD_W`.)
+        let w = largeur_colonne_timeline().min(ui.available_width().max(HEAD_W));
+        let size = vec2(w, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(Rect::from_min_size(rect.min, vec2(HEAD_W, header_h)), 0.0, theme::regle());
-        // Le calque courant est dans un groupe caché de la timeline : on le dit, et un clic sur
-        // la couleur de son groupe le remontre.
-        let hidden_group = self.layers().get(self.cur_layer).map(|l| l.group as usize).filter(|&g| !self.doc.groups[g].shown);
-        // Ou dans un dossier fermé (13b-5) : un clic sur le dossier le rouvre.
-        let closed_folder = crate::folders::parent_index(self.layers(), self.cur_layer).filter(|&fi| self.layers()[fi].collapsed);
-        match (hidden_group, closed_folder) {
-            (None, Some(fi)) => {
-                let name = self.layers()[fi].name.clone();
-                let r = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top()), vec2(HEAD_W - 100.0, header_h));
-                let resp = ui.interact(r, egui::Id::new("dossier_ferme_courant"), Sense::click());
-                painter.text(
-                    pos2(r.left() + 2.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    format!("{} Calque courant dans « {name} »", ph::FOLDER),
-                    FontId::proportional(11.0),
-                    theme::marque(),
-                );
-                if bulle(resp, "Le calque courant est dans un dossier fermé", "Clic : ouvrir le dossier.", "").clicked() {
-                    self.layers_mut()[fi].collapsed = false;
-                    self.modified = true;
-                }
-            }
-            (Some(g), _) => {
-                let group = self.doc.groups[g].clone();
-                let swatch = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top() + 3.0), vec2(14.0, header_h - 6.0));
-                let resp = ui.interact(swatch, egui::Id::new("groupe_cache_courant"), Sense::click());
-                painter.rect_filled(swatch, 2.0, group_color(group.color));
-                painter.text(
-                    pos2(swatch.right() + 6.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    "Calque courant caché",
-                    FontId::proportional(11.0),
-                    theme::marque(),
-                );
-                let tip = format!("Il est dans le groupe « {} », caché de la timeline. Clic sur la couleur pour montrer ce groupe.", group.name);
-                if bulle(resp, "Le calque est caché", &tip, "").clicked() {
-                    self.set_group_shown(g, true);
-                }
-            }
-            (None, None) => {
-                painter.text(
-                    pos2(rect.left() + 6.0, rect.top() + header_h * 0.5),
-                    Align2::LEFT_CENTER,
-                    "Calques",
-                    FontId::proportional(11.0),
-                    ui.visuals().weak_text_color(),
-                );
-            }
-        }
+        let tete = Rect::from_min_size(rect.min, vec2(w, header_h));
+        painter.rect_filled(tete, 0.0, theme::regle());
+        // (Les messages « calque courant caché » et « dans un dossier fermé » qui étaient là ne servent plus : le calque courant garde sa
+        // ligne dans tous les cas, partie 165.4 ; son groupe se remontre par son menu, son dossier par son triangle.)
+        // Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre sur deux lignes, la première en face des numéros de la règle,
+        // la seconde juste dessous ; la colonne ne prend plus que la largeur de la plus longue des deux.
+        let h1 = crate::timeline::LIGNE1_H.min(header_h);
+        let ligne1 = Rect::from_min_size(tete.min, vec2(w, h1));
+        let ligne2 = Rect::from_min_max(pos2(tete.left(), tete.top() + h1), tete.max);
+        self.barre_dans_la_colonne_deux_lignes(ui, ligne1, ligne2, crate::barres::Barre::Timeline, crate::timeline::DERNIER_GROUPE_LIGNE1);
+        #[cfg(test)]
+        crate::timeline::LIGNES_PEINTES.with(|l| l.borrow_mut().0 = rows.iter().map(|row| (row.li, rect.top() + header_h + row.top, rect.top() + header_h + row.top + row.h)).collect());
         // (Partie 160 : Nouveau dossier, Groupes de calques et les opérations sur les calques sont dans la barre d'actions, en bas
         // de la colonne, `barrecalques.rs` ; « Tout réduire / tout agrandir » n'existe plus : le calque courant a toujours sa ligne
         // complète, les autres une ligne fine.)
@@ -257,16 +259,6 @@ impl App {
         // comme le faisait le panneau Calques).
         if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(rect) {
             self.take_layers_pane_focus();
-        }
-
-        // Les pastilles des modes d'un calque qui n'est plus le courant (changé au clavier, par exemple) : refermées, sinon elles
-        // resteraient ouvertes en mémoire sans se dessiner (partie 164.3).
-        let cur = self.cur_layer;
-        for (li, l) in self.layers().iter().enumerate() {
-            let id = egui::Id::new(("fusion_tete", l.id)).with("pastilles");
-            if li != cur && ui.memory(|m| m.is_popup_open(id)) {
-                ui.memory_mut(|m| m.close_popup());
-            }
         }
 
         let top = rect.top() + header_h;
@@ -280,9 +272,11 @@ impl App {
                 tient = false;
                 break;
             }
-            let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
+            let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(w, row.h));
             self.layer_head(ui, r, row.li);
         }
+        // (Partie 165.4 faisait flotter la ligne complète du calque courant au bord de ce qu'on voit ; avec la barre du calque, fixe
+        // au-dessus de la timeline, il n'en a plus besoin : partie 168.4.)
         tient &= self.calques_tiennent(&avant, 0);
         if !tient {
             ui.ctx().request_repaint();
@@ -336,7 +330,7 @@ impl App {
         }
     }
 
-    /// Ce qui sort de l'ordinaire sur le calque `li` (partie 167) : ce que sa ligne montre à droite, en petit. Rien : un calque
+    /// Ce qui sort de l'ordinaire sur le calque `li` (partie 168) : ce que sa ligne montre à droite, en petit. Rien : un calque
     /// normal (visible, déverrouillé, opacité pleine, mode normal, sans pochoir…). L'œil et le cadenas ont leur propre case.
     pub(crate) fn exceptions_du_calque(&self, li: usize) -> Vec<(&'static str, String)> {
         let Some(l) = self.layers().get(li) else { return Vec::new() };
@@ -369,7 +363,7 @@ impl App {
         v
     }
 
-    /// La ligne du calque `li` dans `rect` (partie 167) : la même pour tous, courant ou non. Œil à gauche, nom, et à droite seulement
+    /// La ligne du calque `li` dans `rect` (partie 168) : la même pour tous, courant ou non. Œil à gauche, nom, et à droite seulement
     /// ce qui sort de l'ordinaire ; les réglages du calque courant sont dans la barre du calque (`barre_du_calque`). Un dossier : son
     /// triangle, son nom en titre et le nombre de ses calques. Toute la ligne prend la couleur du rangement du calque (son dossier,
     /// sinon son groupe).
@@ -393,7 +387,7 @@ impl App {
         let painter = ui.painter_at(r);
         let group = self.doc.groups[h.group].clone();
         // La couleur du rangement du calque — celle de son dossier, sinon celle de son groupe (la même règle que dans le Storyboard et
-        // le Montage, `folders::couleur_du_rangement`, 2026-11-11) : le filet de gauche, et une teinte sur toute la ligne (partie 167).
+        // le Montage, `folders::couleur_du_rangement`, 2026-11-11) : le filet de gauche, et une teinte sur toute la ligne (partie 168).
         let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
         let filet = rangement.unwrap_or_else(|| group_color(group.color));
         // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
@@ -536,7 +530,7 @@ impl App {
         }
     }
 
-    /// La barre du calque courant, au-dessus des lignes de la timeline (partie 167) : son nom, puis tous ses réglages sur une ligne —
+    /// La barre du calque courant, au-dessus des lignes de la timeline (partie 168) : son nom, puis tous ses réglages sur une ligne —
     /// afficher, verrouiller, pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets,
     /// accroche à la caméra, aplat et planche-mère, opacité et ses clés, mode de fusion — et ses commandes (⋮). Ce que portait la ligne
     /// complète du calque courant (partie 160), qui n'existe plus : les lignes ont toutes la même hauteur. Pour un dossier : afficher,
@@ -677,18 +671,15 @@ impl App {
         // Opacité. Un calque : sa miniature à l'image courante, sur laquelle on glisse (partie 164.3 : elle se voile, une barre fine
         // dit la valeur). Un dossier et un calque Couleur unie (sa miniature est sa couleur, plus haut) : une barre qu'on tire. À
         // droite, le losange des clés d'opacité.
+        // Opacité (partie 165.3 : la barre « 100 % » en texte, de retour). Un calque : d'abord sa miniature à l'image courante, pour
+        // voir de quel dessin il s'agit (un calque Couleur unie a sa couleur, plus haut). À droite, le losange des clés d'opacité.
         x += 6.0;
-        if h.folder || h.unie {
-            let bar = Rect::from_min_size(pos2(x, y + 2.5), vec2(if h.folder { 108.0 } else { 92.0 }, 13.0));
-            x = bar.right() + 2.0;
-            let (nom_op, desc_op) = if h.folder { ("Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.") } else { ("Opacité du calque", "Cliquer ou tirer dans la barre.") };
-            self.opacity_bar(ui, &painter, bar, rect, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, true, nom_op, desc_op);
-        } else {
+        if !h.folder && !h.unie {
             let fr = self.doc.frame_rect();
             let tw = 36.0;
             let th = (tw * fr.height() / fr.width().max(1.0)).clamp(10.0, BARRE_H - 4.0);
             let thumb = Rect::from_min_size(pos2(x, rect.center().y - th * 0.5), vec2(tw, th));
-            x = thumb.right() + 2.0;
+            x = thumb.right() + 6.0;
             match self.layers()[li].cel_at(self.cur_frame).and_then(|c| self.layer_thumb(ui.ctx(), c)) {
                 Some(t) => {
                     let tint = if h.visible { Color32::WHITE } else { Color32::from_gray(120) };
@@ -699,13 +690,15 @@ impl App {
                 }
             }
             painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
-            let fond = fond_teinte(theme::etiquette(), rangement, false);
-            self.opacite_miniature(ui, &painter, thumb, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, fond);
         }
+        let bar = Rect::from_min_size(pos2(x, y + 2.5), vec2(if h.folder { 108.0 } else { 92.0 }, 13.0));
+        x = bar.right() + 2.0;
+        let (nom_op, desc_op) = if h.folder { ("Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.") } else { ("Opacité du calque", "Cliquer ou tirer dans la barre.") };
+        self.opacity_bar(ui, &painter, bar, rect, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, true, nom_op, desc_op);
         if !h.folder {
             let losange = place(16.0, &mut x);
             self.losange_opacite(ui, losange, fg, off);
-            // Mode de fusion : sa pastille et son nom, un clic ouvre toutes les pastilles (partie 164.3) ; précédent / suivant.
+            // Mode de fusion : la liste « Normal ▾ » en texte (partie 165.3), avec précédent / suivant.
             let modes = BlendMode::ALL;
             let at = modes.iter().position(|m| *m == h.blend).unwrap_or(0);
             let mut mode = h.blend;
@@ -714,7 +707,7 @@ impl App {
                 mode = modes[(at + modes.len() - 1) % modes.len()];
             }
             let combo = place(130.0, &mut x);
-            mode = self.pastille_du_mode(ui, combo, egui::Id::new(("fusion_tete", h.id)), h.blend, fg).unwrap_or(mode);
+            mode = blend_combo(ui, combo, egui::Id::new(("fusion_tete", h.id)), h.blend).unwrap_or(mode);
             let next = place(14.0, &mut x);
             if bulle(icon_at(ui, next, ph::CARET_RIGHT, fg), "Mode suivant", "", "").clicked() {
                 mode = modes[(at + 1) % modes.len()];
@@ -724,131 +717,6 @@ impl App {
                 self.regler_mode_calques(li, mode);
             }
         }
-    }
-
-    /// L'opacité du calque `li` sur sa miniature `thumb` (partie 164.3) : on glisse horizontalement dessus (vers la droite, plus
-    /// opaque ; 120 points pour tout l'écart), la miniature se voile d'autant, une barre fine de l'accent dit la valeur ; le chiffre ne
-    /// se montre que pendant le geste, et dans la bulle. Une étape d'annulation par geste (`edited`), comme la barre d'avant ; plusieurs
-    /// calques choisis prennent tous la valeur (`regler_opacite`). Un clic seul choisit le calque comme le reste de la ligne ; clic
-    /// droit : le menu du calque.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn opacite_miniature(&mut self, ui: &mut Ui, painter: &egui::Painter, thumb: Rect, li: usize, key: egui::Id, opacity: f32, fond: Color32) {
-        let mut resp = ui.interact(thumb, key, Sense::click_and_drag());
-        let o = opacity.clamp(0.0, 1.0);
-        // Le voile : la couleur de la ligne, d'autant plus couvrante que le calque est transparent.
-        painter.rect_filled(thumb, 0.0, fond.gamma_multiply((1.0 - o) * 0.85));
-        let barre = Rect::from_min_max(pos2(thumb.left(), thumb.bottom() - 3.0), thumb.max);
-        painter.rect_filled(barre, 0.0, Color32::from_black_alpha(140));
-        painter.rect_filled(Rect::from_min_size(barre.min, vec2(barre.width() * o, barre.height())), 0.0, theme::accent());
-        let depart = key.with("depart");
-        let mut value = opacity;
-        if resp.drag_started() {
-            // (Depuis l'appui : le glissé ne commence qu'après quelques points de mouvement, qui comptent aussi.)
-            if let Some(p) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()) {
-                ui.data_mut(|d| d.insert_temp(depart, (p.x, opacity)));
-            }
-        }
-        // Un glissé surtout vertical range le calque, comme depuis le reste de la ligne (la miniature reste une prise pour le déplacer).
-        if resp.drag_started() {
-            let d = ui.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(egui::Vec2::ZERO, |(a, b)| b - a));
-            if d.y.abs() > d.x.abs() {
-                self.select_layer(li);
-                self.head_drag = Some(li);
-                ui.data_mut(|d| d.remove::<(f32, f32)>(depart));
-            }
-        }
-        if resp.dragged() && self.head_drag.is_none() {
-            if let (Some(p), Some((x0, o0))) = (resp.interact_pointer_pos(), ui.data(|d| d.get_temp::<(f32, f32)>(depart))) {
-                value = ((o0 + (p.x - x0) / 120.0).clamp(0.0, 1.0) * 100.0).round() / 100.0;
-                if value != opacity {
-                    resp.mark_changed();
-                }
-            }
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-            let texte = format!("{:.0} %", value * 100.0);
-            painter.text(thumb.center() + vec2(1.0, 1.0), Align2::CENTER_CENTER, &texte, FontId::proportional(11.0), Color32::BLACK);
-            painter.text(thumb.center(), Align2::CENTER_CENTER, &texte, FontId::proportional(11.0), Color32::WHITE);
-        } else if resp.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-        }
-        let resp = bulle(
-            resp,
-            "Opacité du calque",
-            &format!("{:.0} % · glisse sur la miniature : vers la droite, plus opaque ; vers la gauche, plus transparent. Elle se voile d'autant.", opacity * 100.0),
-            "",
-        );
-        if resp.clicked() {
-            let m = ui.input(|i| i.modifiers);
-            self.click_layer_head(li, m.command, m.shift);
-        }
-        resp.context_menu(|ui| self.layer_head_menu(ui, li));
-        if self.edited(&resp) {
-            // (Plusieurs calques choisis : tous prennent cette valeur, comme dans l'ancien panneau Calques, `choixtout.rs`.)
-            self.regler_opacite(li, value);
-            // (Un réglage : aucune tuile n'est renvoyée à la carte graphique pendant le geste.)
-            self.renderer.invalidate_params();
-        }
-    }
-
-    /// Le mode de fusion dans `rect` (partie 164.3) : sa pastille et son nom ; un clic ouvre toutes les pastilles, par familles (deux
-    /// ronds, le dessous bleu et le calque orange, leur intersection peinte par la formule du mode). Le mode choisi, s'il a changé.
-    pub(crate) fn pastille_du_mode(&mut self, ui: &mut Ui, rect: Rect, id: egui::Id, blend: BlendMode, encre: Color32) -> Option<BlendMode> {
-        let resp = ui.interact(rect, id, Sense::click());
-        let p = ui.painter_at(rect);
-        if resp.hovered() {
-            p.rect_filled(rect, 3.0, theme::controle_survol().gamma_multiply(0.6));
-        }
-        let pastille = Rect::from_min_size(pos2(rect.left() + 2.0, rect.center().y - 7.5), vec2(24.0, 15.0));
-        crate::visuels164::pastille_fusion(&p, pastille, blend);
-        p.text(pos2(pastille.right() + 5.0, rect.center().y), Align2::LEFT_CENTER, blend.label(), FontId::proportional(11.0), encre);
-        let resp = bulle(resp, "Mode de fusion", &format!("{} : {} Clic : toutes les pastilles des modes.", blend.label(), blend.hint()), "");
-        let popup = id.with("pastilles");
-        if resp.clicked() {
-            ui.memory_mut(|m| m.toggle_popup(popup));
-        }
-        let mut choisi = None;
-        egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-            ui.set_width(4.0 * 66.0 + 3.0 * 3.0);
-            let mut familles: Vec<Vec<BlendMode>> = Vec::new();
-            for m in BlendMode::ALL {
-                if familles.is_empty() || BlendMode::FAMILY_STARTS.contains(&m) {
-                    familles.push(Vec::new());
-                }
-                if let Some(f) = familles.last_mut() {
-                    f.push(m);
-                }
-            }
-            for (k, famille) in familles.iter().enumerate() {
-                if k > 0 {
-                    ui.add_space(2.0);
-                }
-                for rangee in famille.chunks(4) {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        for &m in rangee {
-                            let on = m == blend;
-                            let (r, resp) = ui.allocate_exact_size(vec2(66.0, 38.0), Sense::click());
-                            let p = ui.painter_at(r);
-                            let fond = if on { theme::selection() } else if resp.hovered() { theme::controle_survol() } else { theme::controle() };
-                            p.rect_filled(r, 4.0, fond);
-                            if on {
-                                p.rect_stroke(r, 4.0, Stroke::new(1.25_f32, theme::accent()), StrokeKind::Inside);
-                            }
-                            crate::visuels164::pastille_fusion(&p, Rect::from_min_size(pos2(r.center().x - 16.0, r.top() + 3.0), vec2(32.0, 20.0)), m);
-                            let ink = crate::panneauxvisuels::encre(on);
-                            p.text(pos2(r.center().x, r.bottom() - 2.0), Align2::CENTER_BOTTOM, m.label(), FontId::proportional(9.5), ink);
-                            if bulle(resp, &format!("Mode : {}", m.label()), m.hint(), "").clicked() {
-                                choisi = Some(m);
-                            }
-                        }
-                    });
-                }
-            }
-        });
-        if choisi.is_some() {
-            ui.memory_mut(|m| m.close_popup());
-        }
-        choisi.filter(|m| *m != blend)
     }
 
     /// Barre d'opacité du calque `li` (identifiée par `key`) qu'on clique ou qu'on tire ; une

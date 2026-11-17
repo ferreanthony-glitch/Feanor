@@ -465,17 +465,28 @@ impl App {
         }
         // Le pointeur sur la bande : les touches du zoom de l'image zooment le montage (`run_action`).
         self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
-        ui.add_space(2.0);
-        // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
-        // `barres.rs`, le reste sous « Plus… ».
-        // (Dans l'espace Montage, la barre du travail de montage : coupes, rognage, transitions, son…)
+        // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre au-dessus de la bande. Ses commandes (`barres.rs`, le reste
+        // sous « Plus… ») et la légende des clés sont sur une ligne dans la colonne de gauche, en face de la règle des temps et de la
+        // ligne des séquences ; la bande gagne la hauteur de l'ancienne barre. La colonne est au moins aussi large que cette ligne
+        // (Anthony : « toujours garder cette colonne avec un maximum d'information »).
+        // (Dans l'espace Montage, la barre du travail de montage — coupes, rognage, transitions, son, relecture, exports — reste au-dessus
+        // de la bande : elle a trois fois plus de commandes, et sur une ligne dans la colonne elle prendrait presque toute la largeur.)
         let barre = crate::barres::Barre::du_montage_dans(self.espace);
-        ui.horizontal(|ui| {
-            self.barre_ui(ui, barre);
-            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
-        });
-        ui.separator();
+        let dans_la_colonne = barre == crate::barres::Barre::Montage;
+        if dans_la_colonne {
+            let min = crate::montagehead::largeur_min_colonne(barre);
+            if self.montage_head_w < min {
+                self.montage_head_w = min;
+            }
+        } else {
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                self.barre_ui(ui, barre);
+                // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
+            });
+            ui.separator();
+        }
         // Le zoom, petit, tout en bas de la bande.
         egui::TopBottomPanel::bottom("zoom_montage")
             .resizable(false)
@@ -504,6 +515,11 @@ impl App {
                         // qui n'a pas autant de calques, 2026-10-17).
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
+                        // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
+                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + BANDS_H));
+                        if dans_la_colonne {
+                            self.barre_dans_la_colonne(&mut column, ligne, barre);
+                        }
                         self.head_width_grip(&mut column, headers);
                         egui::ScrollArea::horizontal()
                             .id_salt("montage_h")
@@ -584,11 +600,9 @@ impl App {
             }
             // La hauteur des pistes son : petite, moyenne, grande (`montagehauteur.rs`).
             self.hauteur_pistes_bouton(ui);
-            // L'affichage des calques (trois, ou toute la pile) et la hauteur des plans (moyenne ou bandeau), à portée de main
-            // (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi dans Préférences > Montage, `pistes.rs`).
+            // La hauteur des plans (moyenne ou bandeau), à portée de main (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi
+            // dans Préférences > Montage, `pistes.rs`). (Le choix « trois calques / toute la pile » est retiré, partie 165.7.)
             ui.add_space(8.0);
-            self.pile_choix_ui(ui, true);
-            ui.add_space(6.0);
             self.plans_choix_ui(ui, true);
         });
     }

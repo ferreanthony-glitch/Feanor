@@ -5,7 +5,6 @@
 use eframe::egui::{pos2, vec2, Modifiers, Rect};
 
 use crate::app::Tool;
-use crate::blend::BlendMode;
 use crate::bulles::vus;
 use crate::document::LayerKind;
 use crate::dock::Pane;
@@ -36,37 +35,12 @@ fn present(nom: &str) -> bool {
 }
 
 
-/// Le pointeur posé un moment sur `p`, comme une main avant d'appuyer : la bulle de l'élément a sa place (à sa première image,
-/// egui la pose par-dessus l'élément, le temps de connaître sa taille ; un appui à cette image-là irait à la bulle).
-fn survoler(b: &mut Banc, p: eframe::egui::Pos2) {
-    b.image(vec![eframe::egui::Event::PointerMoved(p)], 1.0 / 60.0);
-    b.chauffer(2);
-}
-
 fn annuler(b: &mut Banc) {
     b.app.run_action("edition.annuler");
     b.chauffer(3);
 }
 
 // ------------------------------------------------------------------------------------ les calculs
-
-#[test]
-fn the_blend_pastille_uses_the_real_formula_and_the_lens_is_convex() {
-    assert_eq!(v::couleur_melee(BlendMode::Normal), eframe::egui::Color32::from_rgb(v::DESSUS[0], v::DESSUS[1], v::DESSUS[2]));
-    let produit = v::couleur_melee(BlendMode::Multiply);
-    assert!(produit.r() <= v::DESSUS[0] && produit.g() <= v::DESSUS[1] && produit.b() <= v::DESSOUS[2], "le produit assombrit : {produit:?}");
-    let eclaircir = v::couleur_melee(BlendMode::Screen);
-    assert!(eclaircir.r() >= v::DESSUS[0] && eclaircir.b() >= v::DESSOUS[2], "superposition éclaircit : {eclaircir:?}");
-    // Chaque mode donne une intersection : 27 pastilles, au moins une douzaine de couleurs différentes.
-    let mut vues: Vec<eframe::egui::Color32> = BlendMode::ALL.iter().map(|m| v::couleur_melee(*m)).collect();
-    vues.sort_by_key(|c| c.to_array());
-    vues.dedup();
-    assert!(vues.len() >= 12, "{vues:?}");
-    let l = v::lentille(pos2(0.0, 0.0), pos2(10.0, 0.0), 10.0);
-    assert!(!l.is_empty());
-    assert!(l.iter().all(|p| p.distance(pos2(0.0, 0.0)) <= 10.01 && p.distance(pos2(10.0, 0.0)) <= 10.01), "dans les deux ronds");
-    assert!(v::lentille(pos2(0.0, 0.0), pos2(30.0, 0.0), 10.0).is_empty(), "pas de chevauchement : rien");
-}
 
 #[test]
 fn the_force_of_an_effect_and_the_bar() {
@@ -309,80 +283,10 @@ fn every_old_effect_setting_is_still_reached() {
     assert!(!present("Tremblement du trait") && present("Lueur"), "{:?}", vus::noms());
 }
 
-// ------------------------------------------------------------------------------------ 164.3 : la ligne du calque
+// ------------------------------------------------------------------------------------ 164.3 : retirée (partie 165.3)
 
-#[test]
-fn sliding_on_the_thumbnail_sets_the_opacity_in_one_step() {
-    let mut b = banc_164(Espace::Animation);
-    let r = ou("Opacité du calque");
-    assert!(r.width() > 30.0 && r.width() < 60.0, "la miniature : {r:?}");
-    let avant = etapes(&b);
-    survoler(&mut b, r.center());
-    glisser(&mut b, r.center(), r.center() - vec2(60.0, 0.0));
-    let o = b.app.layers()[b.app.cur_layer].opacity_at(b.app.cur_frame);
-    assert!((o - 0.5).abs() < 0.02, "60 points à gauche : la moitié de l'opacité ({o})");
-    assert_eq!(etapes(&b), avant + 1, "un geste, une étape");
-    // Un simple clic ne change rien.
-    clic(&mut b, ou("Opacité du calque").center(), Modifiers::NONE);
-    assert_eq!(etapes(&b), avant + 1);
-    annuler(&mut b);
-    assert_eq!(b.app.layers()[b.app.cur_layer].opacity_at(b.app.cur_frame), 1.0, "Ctrl+Z rend l'opacité");
-    // Un glissé surtout vertical depuis la miniature range le calque (comme depuis le reste de la ligne), sans toucher l'opacité.
-    b.app.doc.panels[0].layers.insert(0, crate::document::Layer::new("Fond", LayerKind::Vector));
-    let haut = b.app.layers().len() - 1;
-    b.app.select_layer(haut);
-    b.chauffer(4);
-    let r = ou("Opacité du calque");
-    let id = b.app.layers()[b.app.cur_layer].id;
-    let (rang, avant) = (b.app.cur_layer, etapes(&b));
-    survoler(&mut b, r.center());
-    glisser(&mut b, r.center(), r.center() + vec2(0.0, 70.0));
-    assert_eq!(b.app.layers()[b.app.layers().iter().position(|l| l.id == id).unwrap()].opacity_at(b.app.cur_frame), 1.0, "l'opacité n'a pas bougé");
-    assert_ne!(b.app.layers().iter().position(|l| l.id == id), Some(rang), "le calque est rangé ailleurs");
-    assert_eq!(etapes(&b), avant + 1);
-    annuler(&mut b);
-    // Les lignes gardent leur finesse (partie 167 : toutes, la miniature est dans la barre du calque courant).
-    assert_eq!(crate::layerheads::ROW_FINE, 22.0);
-}
-
-#[test]
-fn a_blend_pastille_sets_the_mode_in_one_step() {
-    let mut b = banc_164(Espace::Animation);
-    assert_eq!(vus::ou("Mode de fusion").len(), 1, "la pastille du calque courant seul");
-    assert!(!present("Mode : Produit"), "les pastilles s'ouvrent au clic");
-    survoler(&mut b, ou("Mode de fusion").center());
-    clic(&mut b, ou("Mode de fusion").center(), Modifiers::NONE);
-    for m in BlendMode::ALL {
-        assert!(present(&format!("Mode : {}", m.label())), "{} : {:?}", m.label(), vus::noms());
-    }
-    let avant = etapes(&b);
-    clic(&mut b, ou("Mode : Produit").center(), Modifiers::NONE);
-    assert_eq!(b.app.layers()[b.app.cur_layer].blend, BlendMode::Multiply);
-    assert_eq!(etapes(&b), avant + 1, "une étape");
-    assert!(!present("Mode : Produit"), "les pastilles se referment");
-    annuler(&mut b);
-    assert_eq!(b.app.layers()[b.app.cur_layer].blend, BlendMode::Normal, "Ctrl+Z rend le mode");
-}
-
-#[test]
-fn every_old_setting_of_the_layer_row_is_still_reached() {
-    let mut b = banc_164(Espace::Animation);
-    for nom in ["Afficher / cacher", "Verrouiller / déverrouiller", "Pelure d'oignon du calque", "Préserver la transparence", "Pochoir", "Pochoir positif", "Verrouiller la position", "Opacité du calque", "Créer une clé", "Mode précédent", "Mode de fusion", "Mode suivant", "Commandes du calque"] {
-        assert!(present(nom), "« {nom} » : {:?}", vus::noms());
-    }
-    // L'œil, le cadenas, le pochoir sont avec la miniature, dans la barre du calque courant (partie 167), à sa gauche.
-    let mini = ou("Opacité du calque");
-    for nom in ["Afficher / cacher", "Verrouiller / déverrouiller", "Pochoir"] {
-        let r = *vus::ou(nom).iter().find(|r| (r.center().y - mini.center().y).abs() < 8.0).unwrap_or_else(|| panic!("{nom}"));
-        assert!(r.right() <= mini.left(), "« {nom} » à gauche de la miniature : {r:?} / {mini:?}");
-    }
-    // Les modes en chiffres d'avant (la liste) : précédent et suivant les parcourent tous.
-    let avant = b.app.layers()[b.app.cur_layer].blend;
-    clic(&mut b, ou("Mode suivant").center(), Modifiers::NONE);
-    assert_ne!(b.app.layers()[b.app.cur_layer].blend, avant);
-    clic(&mut b, ou("Mode précédent").center(), Modifiers::NONE);
-    assert_eq!(b.app.layers()[b.app.cur_layer].blend, avant);
-}
+// (Les pastilles des modes de fusion et l'opacité sur la miniature sont retirées à la demande d'Anthony : la ligne du calque a
+// retrouvé « 100 % » et « Normal ▾ », `avantapres165_tests::the_layer_rows_show_100_and_normal_again`.)
 
 // ------------------------------------------------------------------------------------ 164.4 : un seul « Précis »
 

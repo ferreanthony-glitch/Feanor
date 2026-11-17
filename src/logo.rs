@@ -1,20 +1,23 @@
-//! Logo et icône de FEANOR : le « Joyau » (une pierre taillée avec une étoile de lumière, qui est aussi la croix de
-//! centrage d'un cadre), dessiné en vecteur sur une grille de 64 × 64 puis rasterisé (tiny-skia, sans bibliothèque SVG).
+//! Logo et icône de FEANOR : l'**étoile** de la charte du 17/11/2026, dessinée en vecteur puis rasterisée (tiny-skia, sans
+//! bibliothèque SVG). Une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, sans facettes, au
+//! dégradé vertical jade → turquoise → bleu ciel → bleu et lilas pâles.
 //!
-//! Les formes et les couleurs sont celles du livre de marque (`assets/feanor-*.svg` en sont la copie lisible ; un essai
-//! vérifie que les points sont les mêmes). Quatre variantes :
-//! - **Jade** (référence, partout, dès 16 px, sur fond sombre) : pierre jade, facette basse jade profond, étoile blanche.
-//! - **Irisé** (moments forts, jamais sous 32 px : accueil, À propos) : pierre en dégradé jade, lilas, rose, jaune pâle ;
-//!   facette basse jade profond à 42 %. Une animation d'ouverture (`etat_animation`) le fait apparaître une fois.
-//! - **Mono** : une seule encre, où la pierre et l'étoile s'échangent le plein et le vide (pair-impair) ; pas de facette.
-//! - **Icône** : carré arrondi sombre, filet intérieur, Joyau jade réduit à 70 %.
+//! Le dessin est fait sur 100 unités (`DESSIN`), puis ramené sur la grille de 64 (`GRILLE`) où vivent l'animation et
+//! l'icône. Les fichiers lisibles sont `assets/feanor-logo*.svg` (copie de `feanor-site/logo/silmaril/public`, que
+//! `fabrique.mjs` refait ; un essai vérifie que la forme et les couleurs sont les mêmes). Variantes :
+//! - **Jade** (référence, partout, dès 16 px) et **Iris** (moments forts : accueil) : l'étoile en dégradé.
+//!   `JadePetit` est gardé pour les appels existants : l'étoile tient à 16 px, c'est le même dessin.
+//! - **Mono** : une seule encre, en aplat.
+//! - **Icône** : l'icône de base de la charte, carré arrondi au dégradé du logo et étoile blanche.
 //!
 //! Ce fichier ne dépend que de tiny-skia : `build.rs` l'inclut pour fabriquer l'icône de l'exécutable (`feanor.ico`).
 
-use tiny_skia::{Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, SpreadMode, Stroke, Transform};
+use tiny_skia::{Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, SpreadMode, Transform};
 
-/// Côté de la grille du logo.
+/// Côté de la grille du logo (animation, icône).
 pub const GRILLE: f32 = 64.0;
+/// Côté du dessin de l'étoile : ses formes sont données sur 100 unités, ramenées sur la grille par `GRILLE / DESSIN`.
+pub const DESSIN: f32 = 100.0;
 
 // ---------------------------------------------------------------------------------------------
 // Couleurs du livre de marque (le logo ; celles de l'interface sont dans `theme.rs`).
@@ -23,48 +26,78 @@ pub const SOL: [u8; 3] = [0x12, 0x12, 0x14];
 pub const CANEVAS: [u8; 3] = [0x2C, 0x2C, 0x2E];
 pub const ENCRE_SOMBRE: [u8; 3] = [0xED, 0xED, 0xEF];
 pub const ENCRE_CLAIRE: [u8; 3] = [0x12, 0x12, 0x14];
+/// La couleur d'identité, en haut de l'étoile.
 pub const JADE: [u8; 3] = [0x2F, 0xD4, 0xC0];
 pub const JADE_PROFOND: [u8; 3] = [0x0E, 0x7C, 0x7B];
-pub const ETOILE_BLANCHE: [u8; 3] = [0xF6, 0xFF, 0xFD];
+pub const TURQUOISE: [u8; 3] = [0x2F, 0xCC, 0xDB];
+pub const BLEU_CIEL: [u8; 3] = [0x86, 0xC7, 0xEF];
+pub const BLEU_PALE: [u8; 3] = [0xB4, 0xC1, 0xF4];
+pub const LILAS_PALE: [u8; 3] = [0xD6, 0xC3, 0xEC];
+// (Les couleurs irisées de l'ancien Joyau servent encore aux barres de chargement, `barre.rs`.)
 pub const IRIS_LILAS: [u8; 3] = [0xC7, 0xB5, 0xFF];
 pub const IRIS_ROSE: [u8; 3] = [0xFF, 0xB3, 0xD1];
 pub const IRIS_PALE: [u8; 3] = [0xFF, 0xF1, 0xA8];
 
+/// Le dégradé de l'étoile, de haut (0) en bas (1).
+pub const DEGRADE: [(f32, [u8; 3]); 6] = [(0.0, JADE), (0.1, JADE), (0.38, TURQUOISE), (0.66, BLEU_CIEL), (0.88, BLEU_PALE), (1.0, LILAS_PALE)];
+
 // ---------------------------------------------------------------------------------------------
-// Formes (grille 64 × 64).
+// Forme (sur 100 unités).
 
-/// La pierre.
-pub const PIERRE: [(f32, f32); 5] = [(18.0, 17.0), (44.0, 13.0), (53.0, 35.0), (39.0, 52.0), (14.0, 43.0)];
-/// La facette basse.
-pub const FACETTE: [(f32, f32); 4] = [(53.0, 35.0), (39.0, 52.0), (14.0, 43.0), (32.0, 32.0)];
-/// L'étoile de lumière.
-pub const ETOILE: [(f32, f32); 8] = [(32.0, 2.0), (35.0, 29.0), (60.0, 32.0), (35.0, 35.0), (32.0, 62.0), (29.0, 35.0), (4.0, 32.0), (29.0, 29.0)];
-/// L'étoile du petit Joyau (sous 24 pixels : bras plus épais pour tenir à 16 px).
-pub const ETOILE_PETITE: [(f32, f32); 8] = [(32.0, 2.0), (36.0, 28.0), (60.0, 32.0), (36.0, 36.0), (32.0, 62.0), (28.0, 36.0), (4.0, 32.0), (28.0, 28.0)];
-/// Taille (pixels) en dessous de laquelle on dessine le petit Joyau.
-pub const PETIT_SOUS: u32 = 24;
-/// La seconde étoile, petite, de l'animation d'ouverture.
-pub const ETOILE_SECONDE: [(f32, f32); 8] = [(32.0, 14.0), (33.6, 30.4), (50.0, 32.0), (33.6, 33.6), (32.0, 50.0), (30.4, 33.6), (14.0, 32.0), (30.4, 30.4)];
+/// L'étoile : les quatre pointes (haut, droite, bas, gauche) et, entre elles, les points de contrôle des flancs creusés
+/// (courbes quadratiques) : pointe, contrôle, pointe, contrôle…
+pub const ETOILE: [(f32, f32); 8] = [(50.0, 2.0), (59.0, 41.0), (82.0, 50.0), (59.0, 59.0), (50.0, 98.0), (41.0, 59.0), (18.0, 50.0), (41.0, 41.0)];
+/// Les pointes sont très légèrement arrondies : chaque flanc est raccourci de cette part de sa longueur (en paramètre de
+/// courbe) à chaque bout, et les deux bouts se rejoignent par une petite courbe dont la pointe est le point de contrôle.
+pub const ARRONDI_POINTES: f32 = 0.09;
+/// Ce que l'étoile occupe, sur 100 : haut, bas, gauche, droite.
+pub const PIERRE_HAUT: f32 = 2.0;
+pub const PIERRE_BAS: f32 = 98.0;
+pub const PIERRE_GAUCHE: f32 = 18.0;
+pub const PIERRE_DROITE: f32 = 82.0;
+/// La seconde étoile de l'animation d'ouverture : la même, à cette échelle.
+pub const ECHELLE_SECONDE: f32 = 0.45;
 
-/// Les quatre variantes du Joyau.
+/// Les variantes de l'étoile.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Joyau {
     Jade,
-    /// Le Joyau jade du dessous de 24 pixels : même pierre et même facette, étoile aux bras plus épais, sans dégradé.
+    /// Gardé pour les appels existants : la même étoile (elle tient à 16 pixels).
     JadePetit,
     Iris,
     /// Une seule encre (clair sur fond sombre : `ENCRE_SOMBRE` ; sombre sur fond clair : `ENCRE_CLAIRE`).
     Mono([u8; 3]),
 }
 
-fn polygone(points: &[(f32, f32)]) -> Path {
+/// Le contour de l'étoile (sur 100), pointes arrondies.
+pub fn etoile() -> Path {
+    let q = |p0: (f32, f32), c: (f32, f32), p2: (f32, f32), t: f32| {
+        let u = 1.0 - t;
+        (u * u * p0.0 + 2.0 * t * u * c.0 + t * t * p2.0, u * u * p0.1 + 2.0 * t * u * c.1 + t * t * p2.1)
+    };
+    // Le point de contrôle du morceau de courbe entre t0 et t1.
+    let sous = |p0: (f32, f32), c: (f32, f32), p2: (f32, f32), t0: f32, t1: f32| {
+        let (a, b, d) = ((1.0 - t0) * (1.0 - t1), t0 * (1.0 - t1) + t1 * (1.0 - t0), t0 * t1);
+        (a * p0.0 + b * c.0 + d * p2.0, a * p0.1 + b * c.1 + d * p2.1)
+    };
+    let r = ARRONDI_POINTES;
+    let flanc = |k: usize| (ETOILE[2 * k], ETOILE[2 * k + 1], ETOILE[(2 * k + 2) % 8]);
     let mut pb = PathBuilder::new();
-    pb.move_to(points[0].0, points[0].1);
-    for p in &points[1..] {
-        pb.line_to(p.0, p.1);
+    for k in 0..4 {
+        let (p0, c, p2) = flanc(k);
+        let (a, b, m) = (q(p0, c, p2, r), q(p0, c, p2, 1.0 - r), sous(p0, c, p2, r, 1.0 - r));
+        if k == 0 {
+            pb.move_to(a.0, a.1);
+        } else {
+            pb.quad_to(p0.0, p0.1, a.0, a.1);
+        }
+        pb.quad_to(m.0, m.1, b.0, b.1);
     }
+    let (p0, c, p2) = flanc(0);
+    let debut = q(p0, c, p2, r);
+    pb.quad_to(p0.0, p0.1, debut.0, debut.1);
     pb.close();
-    pb.finish().expect("polygone du logo")
+    pb.finish().expect("étoile du logo")
 }
 
 fn peinture(c: [u8; 3], alpha: f32) -> Paint<'static> {
@@ -74,18 +107,19 @@ fn peinture(c: [u8; 3], alpha: f32) -> Paint<'static> {
     p
 }
 
-/// Pierre irisée : dégradé linéaire (12, 12) → (54, 52), réfléchi, jade / lilas / rose / jaune pâle.
-fn degrade_iris(debut: (f32, f32), fin: (f32, f32), alpha: f32) -> Paint<'static> {
+/// Le dégradé vertical de l'étoile (sur 100, de 2 à 98), à l'opacité `alpha`.
+fn degrade(alpha: f32) -> Paint<'static> {
+    degrade_entre(2.0, 98.0, alpha)
+}
+
+/// L'étoile dans l'icône : 364 / 512 du côté.
+pub const ECHELLE_ICONE: f32 = 364.0 / 512.0;
+
+/// Le dégradé du logo, vertical, de `haut` à `bas` (sur 100).
+fn degrade_entre(haut: f32, bas: f32, alpha: f32) -> Paint<'static> {
     let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let arret = |p: f32, c: [u8; 3]| GradientStop::new(p, Color::from_rgba8(c[0], c[1], c[2], a));
-    let shader = LinearGradient::new(
-        Point::from_xy(debut.0, debut.1),
-        Point::from_xy(fin.0, fin.1),
-        vec![arret(0.0, JADE), arret(0.38, IRIS_LILAS), arret(0.66, IRIS_ROSE), arret(1.0, IRIS_PALE)],
-        SpreadMode::Reflect,
-        Transform::identity(),
-    )
-    .expect("dégradé du logo");
+    let arrets = DEGRADE.iter().map(|&(p, c)| GradientStop::new(p, Color::from_rgba8(c[0], c[1], c[2], a))).collect();
+    let shader = LinearGradient::new(Point::from_xy(50.0, haut), Point::from_xy(50.0, bas), arrets, SpreadMode::Pad, Transform::identity()).expect("dégradé du logo");
     let mut p = Paint::default();
     p.shader = shader;
     p.anti_alias = true;
@@ -93,7 +127,7 @@ fn degrade_iris(debut: (f32, f32), fin: (f32, f32), alpha: f32) -> Paint<'static
 }
 
 // ---------------------------------------------------------------------------------------------
-// Animation d'ouverture (jouée une fois sur le Joyau irisé, puis figée) : 1,15 s.
+// Animation d'ouverture (jouée une fois à l'accueil, puis figée) : 1,15 s. L'étoile s'ouvre en tourbillon.
 
 /// Durée de l'animation d'ouverture, en secondes.
 pub const DUREE_ANIMATION: f32 = 1.15;
@@ -164,60 +198,39 @@ pub fn etat_repos() -> EtatAnim {
 // ---------------------------------------------------------------------------------------------
 // Dessin.
 
-/// Transformation d'une étoile autour du centre (32, 32).
+/// Transformation d'une étoile autour du centre (32, 32) de la grille.
 fn autour_du_centre(global: Transform, degres: f32, echelle: f32) -> Transform {
     global.pre_translate(32.0, 32.0).pre_rotate(degres).pre_scale(echelle, echelle).pre_translate(-32.0, -32.0)
 }
 
-/// Dessine le Joyau (sans fond) dans `pm`, `global` envoyant la grille de 64 sur les pixels. `anim` : l'état de
-/// l'animation d'ouverture (variante irisée).
+/// Dessine l'étoile (sans fond) dans `pm`, `global` envoyant la grille de 64 sur les pixels. `anim` : l'état de
+/// l'animation d'ouverture (l'étoile s'ouvre en tourbillon, une seconde étoile plus petite s'efface).
 pub fn dessiner(pm: &mut Pixmap, global: Transform, v: Joyau, anim: Option<&EtatAnim>) {
-    match v {
-        Joyau::Mono(encre) => {
-            // Pair-impair de la pierre et de l'étoile : là où elles se recouvrent, c'est vide ; la facette n'existe pas.
-            let mut pb = PathBuilder::new();
-            for poly in [&PIERRE[..], &ETOILE[..]] {
-                pb.move_to(poly[0].0, poly[0].1);
-                for p in &poly[1..] {
-                    pb.line_to(p.0, p.1);
-                }
-                pb.close();
+    let k = GRILLE / DESSIN;
+    let forme = etoile();
+    let peint = |alpha: f32| match v {
+        Joyau::Mono(encre) => peinture(encre, alpha),
+        _ => degrade(alpha),
+    };
+    match anim {
+        None => pm.fill_path(&forme, &peint(1.0), FillRule::Winding, global.pre_scale(k, k), None),
+        Some(a) => {
+            // (L'étoile à -180° est sa pose de repos : on tourne depuis le repos, de `angle + 180`.)
+            if a.seconde_echelle > 0.001 && a.seconde_opacite > 0.002 {
+                let t = autour_du_centre(global, a.seconde_angle, a.seconde_echelle * ECHELLE_SECONDE).pre_scale(k, k);
+                pm.fill_path(&forme, &peint(a.seconde_opacite), FillRule::Winding, t, None);
             }
-            pm.fill_path(&pb.finish().expect("mono"), &peinture(encre, 1.0), FillRule::EvenOdd, global, None);
-        }
-        Joyau::Jade | Joyau::JadePetit | Joyau::Iris => {
-            let forme_etoile: &[(f32, f32)] = if v == Joyau::JadePetit { &ETOILE_PETITE } else { &ETOILE };
-            let (pierre, facette) = if v == Joyau::Iris {
-                // (La facette basse reste #0E7C7B à 42 %, au repos comme pendant l'animation.)
-                (degrade_iris((12.0, 12.0), (54.0, 52.0), 1.0), peinture(JADE_PROFOND, 0.42))
-            } else {
-                (peinture(JADE, 1.0), peinture(JADE_PROFOND, 1.0))
-            };
-            pm.fill_path(&polygone(&PIERRE), &pierre, FillRule::Winding, global, None);
-            pm.fill_path(&polygone(&FACETTE), &facette, FillRule::Winding, global, None);
-            let blanc = peinture(ETOILE_BLANCHE, 1.0);
-            match anim {
-                None => pm.fill_path(&polygone(forme_etoile), &blanc, FillRule::Winding, global, None),
-                Some(a) => {
-                    // (L'étoile à -180° est sa pose de repos : on tourne depuis le repos, de `angle + 180`.)
-                    if a.etoile_echelle > 0.001 {
-                        pm.fill_path(&polygone(forme_etoile), &blanc, FillRule::Winding, autour_du_centre(global, a.etoile_angle + 180.0, a.etoile_echelle), None);
-                    }
-                    if a.seconde_echelle > 0.001 && a.seconde_opacite > 0.002 {
-                        pm.fill_path(&polygone(&ETOILE_SECONDE), &peinture(ETOILE_BLANCHE, a.seconde_opacite), FillRule::Winding, autour_du_centre(global, a.seconde_angle, a.seconde_echelle), None);
-                    }
-                }
+            if a.etoile_echelle > 0.001 {
+                pm.fill_path(&forme, &peint(1.0), FillRule::Winding, autour_du_centre(global, a.etoile_angle + 180.0, a.etoile_echelle).pre_scale(k, k), None);
             }
         }
     }
 }
 
-/// Le Joyau seul (fond transparent), carré de `taille` pixels. Pixels RVBA **prémultipliés** (la forme qu'attend
+/// L'étoile seule (fond transparent), carré de `taille` pixels. Pixels RVBA **prémultipliés** (la forme qu'attend
 /// `ColorImage::from_rgba_premultiplied`).
 pub fn image(taille: u32, v: Joyau, anim: Option<&EtatAnim>) -> Vec<u8> {
     let taille = taille.max(8);
-    // Sous 24 pixels, le Joyau jade est le petit.
-    let v = if v == Joyau::Jade && taille < PETIT_SOUS { Joyau::JadePetit } else { v };
     let mut pm = Pixmap::new(taille, taille).expect("taille du logo");
     let s = taille as f32 / GRILLE;
     dessiner(&mut pm, Transform::from_scale(s, s), v, anim);
@@ -242,19 +255,19 @@ fn rect_arrondi(x: f32, y: f32, l: f32, h: f32, r: f32) -> Path {
     pb.finish().expect("rectangle arrondi")
 }
 
-/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`, `.ico`) : carré
-/// arrondi `SOL` (rayon 14 sur 64, soit 22 %), filet intérieur `CANEVAS`, puis le Joyau jade à 80 %, centré.
+/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`, `.ico`) : l'icône de base
+/// de la charte, un carré arrondi (rayon 14 sur 64, soit 22 %) au dégradé du logo, de haut en bas, et l'étoile blanche à
+/// 71 %, centrée (comme `assets/feanor-icone.svg`).
 pub fn icone(taille: u32) -> Vec<u8> {
     let taille = taille.max(8);
     let mut pm = Pixmap::new(taille, taille).expect("taille de l'icône");
     let s = taille as f32 / GRILLE;
     let g = Transform::from_scale(s, s);
-    pm.fill_path(&rect_arrondi(0.0, 0.0, 64.0, 64.0, 14.0), &peinture(SOL, 1.0), FillRule::Winding, g, None);
-    let filet = Stroke { width: 1.0, ..Stroke::default() };
-    pm.stroke_path(&rect_arrondi(0.5, 0.5, 63.0, 63.0, 13.5), &peinture(CANEVAS, 1.0), &filet, g, None);
-    // (À 16 pixels, le petit Joyau.)
-    let joyau = if taille < PETIT_SOUS { Joyau::JadePetit } else { Joyau::Jade };
-    dessiner(&mut pm, g.pre_translate(6.4, 6.4).pre_scale(0.8, 0.8), joyau, None);
+    let k = GRILLE / DESSIN;
+    // (Le carré est dessiné sur 100, comme le dégradé, qui va de 0 à 100.)
+    pm.fill_path(&rect_arrondi(0.0, 0.0, 100.0, 100.0, 14.0 / k), &degrade_entre(0.0, 100.0, 1.0), FillRule::Winding, g.pre_scale(k, k), None);
+    let marge = 74.0 / 512.0 * GRILLE;
+    dessiner(&mut pm, g.pre_translate(marge, marge).pre_scale(ECHELLE_ICONE, ECHELLE_ICONE), Joyau::Mono([0xFF, 0xFF, 0xFF]), None);
     // Pixmap prémultiplié -> non prémultiplié.
     let mut px = pm.take();
     for p in px.chunks_exact_mut(4) {

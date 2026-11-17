@@ -201,12 +201,12 @@ pub(crate) static GESTES: &[Anim] = &[
     },
     Anim {
         id: "outils.pipette",
-        titre: "La pipette (Alt + clic)",
+        titre: "La pipette",
         rubrique: "Autres outils",
         contextes: &["pipette"],
         duree: 4.0,
         dessin: pipette,
-        texte: "Clique sur le dessin pour prélever une couleur. Avec les autres outils : Alt + clic.",
+        texte: "Clique sur le dessin pour prélever une couleur. (Alt + clic, avec les autres outils, choisit le calque du dessin cliqué.)",
     },
     Anim {
         id: "outils.main",
@@ -897,7 +897,7 @@ fn texte(p: &Painter, r: Rect, t: f32, th: &Teintes) {
     }
 }
 
-/// La pipette : Alt tenue, un clic sur une couleur du dessin, la couleur courante la prend.
+/// La pipette : un clic sur une couleur du dessin, la couleur courante la prend.
 fn pipette(p: &Painter, r: Rect, t: f32, th: &Teintes) {
     let c = Toile::new(p, r, th);
     c.fond();
@@ -909,7 +909,6 @@ fn pipette(p: &Painter, r: Rect, t: f32, th: &Teintes) {
     let carre = Rect::from_min_size(pos2(200.0, 115.0), vec2(22.0, 22.0));
     c.pave(carre, courante);
     c.cadre(carre, 1.2, if t > 2.1 && t < 2.8 { th.jade } else { th.douce });
-    c.touche(pos2(26.0, 18.0), "Alt", t > 1.2 && t < 2.4);
     if t < 3.4 {
         let ici = mixp(pos2(60.0, 130.0), b, doux(t, 0.3, 1.6));
         c.curseur(ici, t > 1.9 && t < 2.1);

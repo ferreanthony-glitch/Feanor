@@ -3,8 +3,56 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-18
+
+- **`main` (95dc93b : vue nette lissée 166.8, `avant-apres-reel` 165.3 à 165.8, nouveau logo 167) fusionné dans
+  `timeline-claire`.** Première tentative annulée sans rien écrire : le `main` avait pris l'autre chemin pour le calque courant (sa
+  ligne complète toujours visible, 165.4). Deux maquettes côte à côte (A : la ligne complète ; B : la barre du calque, lignes toutes
+  fines) ; Anthony : « B mais la taille d'une ligne de calque est plus épaisse ». Les lignes passent de 22 à 28 points ; les boutons
+  de la timeline restent en haut de la colonne (165.6), la barre du calque au-dessus de la timeline, avec « 100 % » et « Normal ▾ »
+  en texte (165.3) ; le calque courant garde sa ligne même dans un groupe caché (165.4) mais elle ne flotte plus. La timeline plus
+  claire devient la partie **168** (le logo a pris la 167). Deux essais du `main` adaptés, un retiré (la ligne flottante). Suite sur
+  le Mac : les mêmes 89 échecs propres au Mac qu'avant. Pas regardé à l'écran.
+
 ## 2026-11-17
 
+- **`avant-apres-reel` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (0073f65, exe de 20 h 15), sur son
+  « vas y ». Contenu : partie 165.6 (deux lignes de boutons en tête de la colonne des calques de l'Animation, colonne à 410 points
+  au lieu de 757, règle et en-tête à 58 points), 165.7 (le mode « Trois calques » retiré : toute la pile, toujours ; un réglage
+  « trois » enregistré s'ouvre en toute la pile, format 56 inchangé), 165.8 (Alt + clic dans la vue de dessin choisit le calque du
+  dessin cliqué ; ce n'est plus la pipette). Fusion de main dans la branche (conflits INTERFACE.md et calques_timeline_tests.rs
+  résolus), puis avance rapide de main. L'avertissement des méthodes inutilisées d'`espace3d.rs` était déjà corrigé par main.
+  Vérificateur complet : compilation sans avertissement, 4 796 réussis aux deux passages, 0 échec, aucun intermittent, dix groupes
+  OK. Son FEANOR (lancé par la jonction Work\tvpaint-rs) a été arrêté sans enregistrer avant la reconstruction. Contrôle de
+  lancement : l'exe ouvert sur une copie de « retakes brawlydays » (Tests\lancement main 0073f65) avec de faux réglages, vivant
+  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
+  fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
+  été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;
+  ses vrais réglages n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place. La session de la timeline a le numéro du commit
+  pour refaire sa fusion de main dans `timeline-claire`.
+- **Lissé pendant que la vue bouge, et l'image nette refaite en route** (branche `vue-nette-lissage`, section 166.8). Son premier
+  retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la vue.
+  Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? ». La cause : l'image nette ne se refaisait qu'à
+  l'arrêt ; en attendant, on voyait l'image de toujours, en marches. **Ce qui est fait** : tant qu'une image nette est montrée ou
+  attendue, la carte graphique pose l'image de toujours lissée quand la vue la grossit (adoucie au lieu d'être en marches : la bande
+  que la vue découvre, tout le dessin pendant un zoom, la zone d'un trait en cours) ; l'image nette se refait pendant le mouvement,
+  une à la fois, sans attendre le repos ; déplacée seulement, elle est recalée sur les pixels de l'écran et reste nette. Un plan
+  tout en bitmap et une zone sans rien de vectoriel gardent leurs pixels nets. La règle « sans latence » est précisée : rien ne se
+  calcule pendant un geste de dessin (trait en cours, ou bouton tenu sans que la vue bouge) ; un geste de vue n'arrête rien.
+  **Les essais** : onze dans `vuenette_tests.rs`, dont un sur la carte graphique qui lit l'écran peint à 400 % (en marches sans la
+  vue nette, lissée quand une image nette est attendue, bord fin une fois arrivée). Vérificateur complet (15 h 24) : compilation
+  sans avertissement, 4 787 réussis, 0 échec, dix groupes OK. **Pas regardé à
+  l'écran** : aucune capture cette fois (il travaillait à son poste). Le dossier de travail `vectoriel-net` et le dossier d'essai
+  avaient été retirés juste avant, à sa demande (« Oui, retire-les », branche gardée, 2,1 Go rendus).
+- **Son FEANOR habituel reconstruit depuis main** (567c90c, exe de 14 h 39), sur son « Oui, reconstruis-le » : prévenu qu'il y
+  perdait la timeline plus claire et la vue 3D à côté qu'il essayait (branche `timeline-claire`, non fusionnée, intacte), il a
+  choisi d'avoir le trait vectoriel net tout de suite. Le dossier `Source` est repassé de `timeline-claire` à `main` (il était
+  propre). Il avait fermé son FEANOR lui-même : rien n'a été arrêté. Ses réglages : `timeline-claire` n'y ajoute qu'un champ
+  (`part_espace3d`), que main ignore ; une copie est dans `Documents\SHOT\Tests\reglages avant reconstruction 2026-11-17`.
+  Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ; son FEANOR
+  n'a pas été rouvert à sa place (il travaillait dans Photoshop). La session de la timeline est prévenue : pour reprendre son
+  essai, elle fusionnera main dans sa branche.
 - **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
   Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
   sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
@@ -34,7 +82,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
   pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
   très chargés à fort zoom, la zone en pixels pendant le trait.
-- **Timeline plus claire** (INTERFACE partie 167, d'abord numérotée 164, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
+- **Timeline plus claire** (INTERFACE partie 168, d'abord numérotée 164 puis 167, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
   l'interface autour des clés pour 15 calques. Deux séries de dix pistes en maquettes (page « Timeline de Feanor, dix pistes ») ;
   la première écartée (« à côté du vrai problème », « trop compliquées »). Ses gênes : retrouver un calque, lire le timing, la
   place, les en-têtes chargés ; ses règles : ordre de la pile, temps horizontal, rien d'automatique. Gardées : l'exception seule

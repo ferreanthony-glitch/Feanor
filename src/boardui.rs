@@ -965,7 +965,7 @@ impl App {
                 return false;
             }
         }
-        // Ctrl seul (Alt : la pipette) : le lasso, dans le dessin de la case, comme partout (`springtools.rs`).
+        // Ctrl seul (Alt : le calque du dessin cliqué, partie 165.8) : le lasso, dans le dessin de la case, comme partout (`springtools.rs`).
         let lasso = (m.command || m.ctrl) && !m.shift && !m.alt;
         let selecting = m.shift;
         match hit {
