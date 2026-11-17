@@ -770,7 +770,7 @@ pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<P
                     crate::planvers::Rangee { numero: a.numero, date: a.date, panel: p }
                 })
                 .collect();
-            VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres }
+            VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres, couleurs: vf.couleurs.clone() }
         });
         let mut ids: Vec<u64> = vec![panel.id, pf.scene.id, pf.sequence.id];
         ids.extend(panel.marks.iter().map(|m| m.id));

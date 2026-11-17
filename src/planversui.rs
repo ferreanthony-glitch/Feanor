@@ -25,7 +25,9 @@ pub(crate) fn titre_avec_version(doc: &Document, index: usize) -> String {
     avec_version(doc, index, crate::storyboard::panel_title(doc, index))
 }
 
-/// `titre_avec_version`, les numéros du film déjà trouvés (un titre par bloc visible du montage, à chaque image d'écran).
+/// `titre_avec_version`, les numéros du film déjà trouvés (un titre par bloc visible du montage, à chaque image d'écran). (Depuis la
+/// partie 167, la bande pose le nom et les étiquettes des versions elle-même, `versiondeplieeui.rs` ; les essais de rendu s'en servent.)
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn titre_avec_version_n(doc: &Document, numeros: &crate::numerotation::Numeros, index: usize) -> String {
     avec_version(doc, index, crate::storyboard::panel_title_n(doc, numeros, index))
 }

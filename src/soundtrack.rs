@@ -78,6 +78,8 @@ pub(crate) enum MenuTarget {
     /// Une transition (son id) du montage, ou une coupe entre deux plans (`transitionsui.rs`).
     Transition(u64),
     Cut(usize),
+    /// L'étiquette d'une version d'un plan (ou le bloc d'une version dépliée) : sa couleur, y passer, la déplier (partie 167).
+    Version { plan: u64, numero: u32 },
 }
 
 impl App {
@@ -107,7 +109,8 @@ impl App {
     /// Image de départ et plage jouée (en images du montage) : tout le montage, ou le panneau.
     fn play_range(&self) -> (usize, (usize, usize)) {
         if self.play_montage {
-            (self.global_frame(), (0, self.doc.total_frames()))
+            // La tête dans une version dépliée (partie 167) : le son du film à la même place dans le plan.
+            (self.depli_son_global().unwrap_or_else(|| self.global_frame()), (0, self.doc.total_frames()))
         } else {
             // Entre les points d'entrée et de sortie du plan (13d).
             let s = self.doc.panel_start(self.cur_panel);
@@ -169,7 +172,18 @@ impl App {
         let pos = engine.position();
         let still_playing = engine.is_playing();
         let g = (pos / spf).floor().max(0.0) as usize;
-        if self.play_montage {
+        // Des versions dépliées dans la timeline (partie 167) : elles prennent la main quand le son passe par elles.
+        if self.play_montage && self.depli_actif() && self.depli_suivre_le_son(g) {
+            // (Le son a pu repartir d'ailleurs : seul un son vraiment fini compte. Fini pendant une version dépliée, sa suite se lit à
+            // l'horloge de l'ordinateur.)
+            if !still_playing && !self.audio.as_ref().is_some_and(|e| e.is_playing()) {
+                self.audio_clock = false;
+                if self.depli.tete.is_none() {
+                    self.playing = false;
+                }
+            }
+            return true;
+        } else if self.play_montage {
             let (p, f) = self.doc.locate(g.min(self.doc.total_frames() - 1));
             if p != self.cur_panel || f != self.cur_frame {
                 self.set_panel(p);

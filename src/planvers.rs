@@ -64,6 +64,9 @@ pub struct VersionsDuPlan {
     pub prochaine: u32,
     /// Les autres, par numéro.
     pub autres: Vec<Rangee>,
+    /// La couleur de repère de l'étiquette de chaque version (partie 167 : clic droit sur l'étiquette « V2 » de la timeline), par
+    /// numéro : un rang de `marks::COLORS`. Elle suit le numéro, donc la version (passer de l'une à l'autre ne la change pas).
+    pub couleurs: BTreeMap<u32, u8>,
 }
 
 impl VersionsDuPlan {
@@ -191,7 +194,7 @@ impl Document {
         }
         let source = self.panels[index].clone();
         let copie = self.copie_de(&source);
-        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new() });
+        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: BTreeMap::new() });
         v.autres.push(Rangee { numero: v.actuelle, date: v.date_actuelle, panel: copie });
         v.autres.sort_by_key(|r| r.numero);
         v.actuelle = v.prochaine;
@@ -332,6 +335,29 @@ impl Document {
         let n = numeros.len() as i32;
         Some(numeros[(k as i32 + sens).rem_euclid(n) as usize])
     }
+
+    /// La couleur de repère de la version `numero` du plan `plan` (un rang de `marks::COLORS`), s'il en a une.
+    pub fn couleur_de_version(&self, plan: u64, numero: u32) -> Option<u8> {
+        self.versions.get(&plan)?.couleurs.get(&numero).copied()
+    }
+
+    /// Pose (ou retire, `None`) la couleur de repère de la version `numero` du plan `plan` ; faux si rien ne change ou si ce
+    /// numéro n'est pas une version du plan.
+    pub fn colorer_version(&mut self, plan: u64, numero: u32, couleur: Option<u8>) -> bool {
+        let Some(v) = self.versions.get_mut(&plan) else { return false };
+        if v.actuelle != numero && v.rangee(numero).is_none() {
+            return false;
+        }
+        let avant = v.couleurs.get(&numero).copied();
+        if avant == couleur {
+            return false;
+        }
+        match couleur {
+            Some(c) => v.couleurs.insert(numero, c),
+            None => v.couleurs.remove(&numero),
+        };
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------------- le fichier
@@ -353,6 +379,10 @@ pub(crate) struct PlanFichier {
     pub prochaine: u32,
     #[serde(default)]
     pub autres: Vec<VersionFichier>,
+    /// Les couleurs de repère des étiquettes, par numéro de version (partie 167). Absent d'un fichier d'avant : aucune couleur ;
+    /// une version d'avant qui relit ce fichier l'ignore (le format du fichier ne change pas).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub couleurs: BTreeMap<u32, u8>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -371,7 +401,9 @@ pub(crate) fn plan_fichier(host: u64, v: &VersionsDuPlan) -> Result<PlanFichier,
     for r in &v.autres {
         autres.push(VersionFichier { numero: r.numero, date: r.date, entree: crate::project::snapshot_value(&r.panel, &|c| c)? });
     }
-    Ok(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
+    // (Seulement les couleurs des versions qui existent encore : une version supprimée n'en laisse pas.)
+    let couleurs = v.couleurs.iter().filter(|(n, _)| **n == v.actuelle || v.rangee(**n).is_some()).map(|(n, c)| (*n, *c)).collect();
+    Ok(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres, couleurs })
 }
 
 /// Un fichier fait des versions de plusieurs plans, nettoyé comme celui qu'on lit (numéros uniques et non nuls…).
@@ -475,7 +507,7 @@ pub(crate) fn installer(doc: &mut Document, lu: Fichier, cles: Vec<(u64, u32)>, 
                 doc.reserve_id(m.id);
             }
         }
-        out.insert(p.plan, VersionsDuPlan { actuelle: p.actuelle, date_actuelle: p.date_actuelle, prochaine: p.prochaine, autres });
+        out.insert(p.plan, VersionsDuPlan { actuelle: p.actuelle, date_actuelle: p.date_actuelle, prochaine: p.prochaine, autres, couleurs: p.couleurs });
     }
     doc.versions = out;
 }

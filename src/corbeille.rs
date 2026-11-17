@@ -447,7 +447,7 @@ pub(crate) fn charger(e: &Entree, dir: Option<&Path>, deja: &dyn Fn(CelId) -> bo
                     let l = crate::project::charger_plans(dir, &e.tete, 1, entrees, false)?;
                     cels.extend(l.doc.cels.into_iter().filter(|(id, _)| !deja(*id)));
                     let autres = pf.autres.iter().zip(l.doc.panels.iter()).map(|(a, p)| Rangee { numero: a.numero, date: a.date, panel: p.clone() }).collect();
-                    Some(VersionsDuPlan { actuelle: pf.actuelle, date_actuelle: pf.date_actuelle, prochaine: pf.prochaine, autres })
+                    Some(VersionsDuPlan { actuelle: pf.actuelle, date_actuelle: pf.date_actuelle, prochaine: pf.prochaine, autres, couleurs: pf.couleurs.clone() })
                 }
                 None => None,
             };

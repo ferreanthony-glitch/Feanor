@@ -164,6 +164,12 @@ mod pilevers;
 #[cfg(test)]
 mod pilevers_tests;
 mod pileversui;
+// Les versions d'un plan dans la timeline (partie 167) : étiquettes « V2 ▸ », version dépliée à côté (affichage seulement), couleur
+// de repère. La carte film ↔ écran (`versiondepliee`) et l'interface (`versiondeplieeui`).
+mod versiondepliee;
+#[cfg(test)]
+mod versiondepliee_tests;
+mod versiondeplieeui;
 // Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) : le calcul (`comparer`),
 // la fenêtre (`comparerui`).
 mod comparer;
