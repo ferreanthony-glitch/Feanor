@@ -304,6 +304,8 @@ impl Monde {
     /// La caméra de référence comme caméra du plan : au centre de la feuille, sans zoom, avancée, rotation, bascule ni
     /// panoramique. Elle filme le cadre au centre de la feuille ; c'est elle qui cadre un plan en Espace 3D, une fois les
     /// cartes passées dans le repère de la caméra réelle (`repere_camera`).
+    // (Seuls les essais s'en servent : le programme part de l'œil de référence, `eye_reference`.)
+    #[cfg(test)]
     pub fn camera_reference(&self) -> Camera {
         Camera { x: self.stage[0] / 2.0, y: self.stage[1] / 2.0, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 }
     }
@@ -348,6 +350,8 @@ impl Monde {
 
     /// La matrice de la carte `xf` dans le repère de la caméra `cam` : à donner à `card_warp_m`, `card_to_sheet_m` et
     /// `sheet_to_card_m` avec l'œil de référence (`eye_reference`).
+    // (Seuls les essais s'en servent : le programme compose `repere_camera` lui-même.)
+    #[cfg(test)]
     pub fn carte_dans_le_repere(&self, cam: &Camera, xf: &Xf) -> m::M4 {
         m::mul(&self.repere_camera(cam), &xf.matrix())
     }
@@ -463,6 +467,8 @@ impl Monde {
     ///
     /// Taille : le placement garde la taille que la carte a dans le monde (elle rapetisse si on la recule). Si les deux
     /// axes ont changé du même rapport, c'est l'échelle uniforme qui bouge ; sinon, les étirements.
+    // (Partie 159 : le programme pose toujours libre, `card_from_xf_libre` ; celle-ci reste pour les essais de la borne.)
+    #[cfg(test)]
     pub fn card_from_xf(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf) -> (LayerTransform, f32) {
         self.card_from_xf_selon(prev, prev_depth, xf, false)
     }
@@ -567,6 +573,8 @@ impl Monde {
     }
 
     /// Le point `p` de la carte (pixels de son dessin) vu de l'œil `eye`, sur la feuille (pixels).
+    // (Seuls les essais s'en servent : le programme passe par la matrice, `card_to_sheet_m`.)
+    #[cfg(test)]
     pub fn card_to_sheet(&self, eye: V3, xf: &Xf, p: Pos2) -> Option<Pos2> {
         self.card_to_sheet_m(eye, &xf.matrix(), p)
     }
@@ -579,6 +587,8 @@ impl Monde {
 
     /// Le chemin inverse : le point `s` de la feuille, retrouvé sur la carte (pixels de son dessin), là où le regard de
     /// l'œil `eye` qui passe par `s` traverse le plan de la carte. C'est ce qui sert à dessiner sur une carte inclinée.
+    // (Seuls les essais s'en servent : le programme passe par la matrice, `sheet_to_card_m`.)
+    #[cfg(test)]
     pub fn sheet_to_card(&self, eye: V3, xf: &Xf, s: Pos2) -> Option<Pos2> {
         self.sheet_to_card_m(eye, &xf.matrix(), s)
     }
