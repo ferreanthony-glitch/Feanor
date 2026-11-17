@@ -346,7 +346,7 @@ fn the_transform_panel_is_short_with_the_values_on_one_line_under_the_title_and_
         { let (p, l) = (app.cur_panel, app.cur_layer); app.doc.panels[p].layers[l].kind = genre; }
         app.set_tool(Tool::Transform);
         let textes = textes_du_panneau(&mut app);
-        let trouver = |t: &str| textes.iter().find(|(s, _)| (s.trim().starts_with(t) || (t == "Transformer" && s.ends_with("Transformer")))).map(|(_, r)| *r).unwrap_or_else(|| panic!("{nom} : « {t} » : {textes:?}"));
+        let trouver = |t: &str| textes.iter().find(|(s, _)| s.trim().starts_with(t) || (t == "Transformer" && s.ends_with("Transformer"))).map(|(_, r)| *r).unwrap_or_else(|| panic!("{nom} : « {t} » : {textes:?}"));
         let (titre, x, y, angle) = (trouver("Transformer"), trouver("x "), trouver("y "), trouver("0.0°"));
         assert!(x.top() > titre.bottom() - 2.0, "{nom} : les valeurs sont sous le titre");
         assert!((x.center().y - y.center().y).abs() < 2.0, "{nom} : x et y sur la même ligne");
