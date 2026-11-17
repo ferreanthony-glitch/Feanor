@@ -26,13 +26,20 @@
 //!
 //! - **Rien ne se calcule sur le fil de l'interface** : le plan est figé (`Instantane` : les éléments visibles des dessins vectoriels,
 //!   les tuiles partagées des autres), puis composé sur un autre fil (`composer`).
-//! - **Rien ne se calcule pendant un geste** : un calcul ne part qu'au repos (ni trait en cours, ni bouton tenu), `ATTENTE` après le
-//!   dernier changement ; un geste qui commence arrête celui qui tourne.
+//! - **Rien ne se calcule pendant un geste de dessin** (un trait en cours, ou un bouton tenu pendant que la vue ne bouge pas : une
+//!   sélection qu'on tire, une poignée) : un calcul ne part qu'après, `ATTENTE` après le dernier changement des dessins ; un geste
+//!   de dessin qui commence arrête celui qui tourne.
 //! - **Ce qui change se voit tout de suite** : les tuiles qu'un trait touche sont percées dans l'image nette (on y voit l'image de
 //!   toujours, avec le trait en cours) ; quand tout a pu changer (autre image, autre calque, réglage), l'image nette est retirée. Elle
 //!   revient au repos.
-//! - **La vue qui bouge garde l'image** : elle reste collée au dessin (ses coins sont gardés en points de la feuille) pendant qu'on
-//!   déplace, tourne ou zoome ; la suivante la remplace quand elle arrive.
+//! - **La vue qui bouge garde l'image, et la refait en route** (Anthony, 2026-11-17 : « on voit encore la pixelisation au moment du
+//!   zoom ou quand on déplace la vue ») : l'image reste collée au dessin (ses coins sont gardés en points de la feuille) ; déplacée
+//!   seulement, elle est recalée sur les pixels de l'écran (`coins_a_l_ecran` : elle reste nette) ; et pendant qu'on déplace, zoome ou
+//!   tourne, l'image suivante se calcule sans attendre le repos, une à la fois, chacune partant à l'arrivée de la précédente.
+//! - **Ce qu'on voit en attendant est lissé, pas en marches** : tant qu'une image nette est montrée ou attendue (`VueNette::lisse`),
+//!   la carte graphique pose l'image de toujours lissée quand la vue la grossit (`GpuCanvas::lisser`), et l'image nette elle-même se
+//!   lit lissée quand la vue l'a grossie depuis (`options`). Un plan tout en bitmap, et une zone sans rien de vectoriel, gardent leurs
+//!   pixels nets, à l'arrêt comme en mouvement.
 //!
 //! # Ce qui n'est pas net (la vue de toujours reste seule)
 //!
@@ -58,8 +65,11 @@ use crate::view::View;
 pub(crate) const SEUIL: f32 = 1.02;
 /// Plus grand côté de l'image nette, en pixels d'écran.
 const COTE_MAX: usize = 8192;
-/// Repos demandé après le dernier changement (vue ou dessin) avant de lancer un calcul.
+/// Repos demandé après le dernier changement des dessins avant de lancer un calcul.
 const ATTENTE: Duration = Duration::from_millis(70);
+/// La vue « bouge » tant qu'elle a changé depuis moins que cela : un bouton tenu pendant ce temps est un geste de vue (on la
+/// déplace), pas un geste de dessin.
+const VUE_BOUGE: Duration = Duration::from_millis(250);
 /// Lignes composées par morceau (`render::par_chunks`).
 const LIGNES: usize = 16;
 
@@ -306,17 +316,32 @@ pub(crate) struct VueNette {
     /// Ce qui a changé depuis le départ du calcul en cours : tout, ou ces tuiles.
     depuis_tout: bool,
     depuis: Vec<usize>,
-    /// Le dernier cadrage demandé, et l'instant du dernier changement (vue ou dessin).
+    /// Le dernier cadrage demandé, l'instant où la vue a bougé pour la dernière fois, et celui du dernier changement des dessins.
     demande: Option<Cadrage>,
-    change: Instant,
+    vue_change: Instant,
+    contenu_change: Instant,
     /// Rien de net à montrer pour ce plan et ce cadrage (aucun dessin vectoriel dans la zone) : on ne refige pas le plan à chaque image.
     rien: Option<(Plan, Cadrage)>,
+    /// Les dessins ont changé depuis que `rien` a été constaté : à revoir au repos (en attendant, on s'y tient : la zone n'avait
+    /// rien de vectoriel, elle reste en pixels pendant le geste).
+    rien_a_revoir: bool,
+    /// Une image nette est montrée, se calcule ou va se calculer pour ce plan et cette vue : l'image de toujours, qui se voit en
+    /// attendant et dans les trous, se pose **lissée** au lieu de pixels nets (`GpuCanvas::lisser`).
+    attendue: bool,
     /// Images nettes composées depuis le début (mesures, essais).
     pub(crate) composees: u64,
 }
 
+/// L'image nette se lit lissée dans les deux sens : posée pixel pour pixel elle est exacte ; grossie ou réduite (la vue zoome
+/// avant que la suivante n'arrive), elle s'adoucit au lieu de montrer des marches.
 fn options() -> TextureOptions {
-    TextureOptions { magnification: TextureFilter::Nearest, minification: TextureFilter::Linear, ..TextureOptions::LINEAR }
+    TextureOptions { magnification: TextureFilter::Linear, minification: TextureFilter::Linear, ..TextureOptions::LINEAR }
+}
+
+/// Le plan montre-t-il au moins un dessin vectoriel tel quel qui a des éléments ? (Sinon rien ne sera jamais net : un plan tout
+/// en bitmap garde ses pixels nets, à l'arrêt comme en mouvement.)
+fn a_du_vectoriel(doc: &Document, plan: &Plan) -> bool {
+    plan.items.iter().any(|i| dessin_net(doc, i).is_some_and(|v| !v.elements.is_empty()))
 }
 
 /// Les coordonnées de tuile d'un numéro de tuile d'un dessin d'une feuille de `width` pixels de large (dans la feuille, ou hors d'elle).
@@ -338,13 +363,19 @@ impl Default for VueNette {
 
 impl VueNette {
     pub(crate) fn new() -> Self {
-        Self { texture: None, taille: [0, 0], montre: None, job: None, depuis_tout: false, depuis: Vec::new(), demande: None, change: Instant::now(), rien: None, composees: 0 }
+        let maintenant = Instant::now();
+        Self { texture: None, taille: [0, 0], montre: None, job: None, depuis_tout: false, depuis: Vec::new(), demande: None, vue_change: maintenant, contenu_change: maintenant, rien: None, rien_a_revoir: false, attendue: false, composees: 0 }
     }
 
     /// Un calcul tourne-t-il ? (Essais.)
     #[cfg(test)]
     pub(crate) fn en_calcul(&self) -> bool {
         self.job.is_some()
+    }
+
+    /// L'image de toujours doit-elle se poser lissée (une image nette est montrée ou attendue pour ce plan et cette vue) ?
+    pub(crate) fn lisse(&self) -> bool {
+        self.attendue
     }
 
     /// Perce dans l'image montrée les tuiles `tuiles` du dessin (leur rectangle sur la feuille, ramené dans l'image, à un pixel
@@ -373,15 +404,21 @@ impl VueNette {
     }
 
     /// Met la vue nette à jour pour cette image d'écran et rend ce qu'il faut peindre par-dessus l'image de toujours (rien : elle
-    /// seule). `cadrage` : celui que la vue demande (rien : la vue nette ne sert pas, `Cadrage::de`) ; `repos` : aucun geste en
-    /// cours ; `tout`, `tuiles` : ce qui a changé dans les dessins depuis la dernière fois (`Renderer::take_net_dirty`).
+    /// seule). `cadrage` : celui que la vue demande (rien : la vue nette ne sert pas, `Cadrage::de`) ; `trait_en_cours` : un trait
+    /// se trace ; `bouton_tenu` : un bouton du pointeur est tenu ; `tout`, `tuiles` : ce qui a changé dans les dessins depuis la
+    /// dernière fois (`Renderer::take_net_dirty`).
+    ///
+    /// **Un geste de dessin** (un trait en cours, ou un bouton tenu pendant que la vue ne bouge pas : une sélection qu'on tire, une
+    /// poignée) arrête tout calcul et n'en laisse partir aucun. **Un geste de vue** (la vue bouge : on la déplace, on zoome, on la
+    /// tourne, bouton tenu ou non) n'arrête rien : l'image nette se refait pendant le mouvement, une à la fois, la suivante partant
+    /// à l'arrivée de la précédente.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn update(&mut self, ctx: &egui::Context, doc: &Document, plan: &Plan, cadrage: Option<Cadrage>, repos: bool, tout: bool, tuiles: &[usize]) -> Option<Peinte> {
+    pub(crate) fn update(&mut self, ctx: &egui::Context, doc: &Document, plan: &Plan, cadrage: Option<Cadrage>, trait_en_cours: bool, bouton_tenu: bool, tout: bool, tuiles: &[usize]) -> Option<Peinte> {
         let maintenant = Instant::now();
         // 1. Ce qui a changé depuis la dernière image.
         if tout || !tuiles.is_empty() {
-            self.change = maintenant;
-            self.rien = None;
+            self.contenu_change = maintenant;
+            self.rien_a_revoir = true;
         }
         if tout {
             self.montre = None;
@@ -394,15 +431,17 @@ impl VueNette {
         }
         if self.montre.as_ref().is_some_and(|m| m.plan != *plan) {
             self.montre = None;
-            self.change = maintenant;
-        }
-        // Un geste qui commence, un autre plan : le calcul en cours ne servira pas, et ne doit rien prendre au geste.
-        if self.job.as_ref().is_some_and(|j| !repos || j.plan != *plan) {
-            self.arreter_le_calcul();
+            self.contenu_change = maintenant;
         }
         if cadrage != self.demande {
             self.demande = cadrage;
-            self.change = maintenant;
+            self.vue_change = maintenant;
+        }
+        let vue_bouge = maintenant.duration_since(self.vue_change) < VUE_BOUGE;
+        let geste = trait_en_cours || (bouton_tenu && !vue_bouge);
+        // Un geste de dessin qui commence, un autre plan : le calcul en cours ne servira pas, et ne doit rien prendre au geste.
+        if self.job.as_ref().is_some_and(|j| geste || j.plan != *plan) {
+            self.arreter_le_calcul();
         }
         // 2. L'image qui arrive.
         let recu = self.job.as_ref().and_then(|j| match j.rx.try_recv() {
@@ -434,22 +473,27 @@ impl VueNette {
                 self.arreter_le_calcul();
                 self.montre = None;
                 self.rien = Some((plan_du_calcul, c));
+                self.rien_a_revoir = false;
             }
             None => {}
         }
         // 3. Faut-il une image, et peut-on la lancer ?
-        let Some(c) = cadrage.filter(|_| admis(plan)) else {
+        let Some(c) = cadrage.filter(|_| admis(plan) && a_du_vectoriel(doc, plan)) else {
             self.arreter_le_calcul();
             self.montre = None;
+            self.attendue = false;
             return None;
         };
         let a_jour = self.montre.as_ref().is_some_and(|m| m.cadrage == c && !m.troue);
-        let en_route = self.job.as_ref().is_some_and(|j| j.cadrage == c && !self.depuis_tout && self.depuis.is_empty());
-        let rien = self.rien.as_ref().is_some_and(|(p, k)| *k == c && p == plan);
-        if !a_jour && !en_route && !rien {
-            let attendu = maintenant.duration_since(self.change);
-            if repos && attendu >= ATTENTE {
+        // (Un calcul parti pour une vue d'avant, les dessins n'ayant pas changé depuis, est attendu : son image servira, collée
+        // au dessin, et la suivante partira à son arrivée.)
+        let en_route = self.job.is_some() && !self.depuis_tout && self.depuis.is_empty();
+        let rien_ici = self.rien.as_ref().is_some_and(|(p, k)| *k == c && p == plan);
+        if !a_jour && !en_route && !(rien_ici && !self.rien_a_revoir) {
+            let attendu = maintenant.duration_since(self.contenu_change);
+            if !geste && attendu >= ATTENTE {
                 self.arreter_le_calcul();
+                self.rien_a_revoir = false;
                 match Instantane::de(doc, plan, c) {
                     Some(snap) => {
                         let (tx, rx) = channel();
@@ -475,11 +519,14 @@ impl VueNette {
                         self.rien = Some((plan.clone(), c));
                     }
                 }
-            } else if repos {
-                // (Au repos, on revient voir quand l'attente sera passée ; pendant un geste, rien : sa fin réveille l'écran.)
+            } else if !geste {
+                // (Hors d'un geste de dessin, on revient voir quand l'attente sera passée ; pendant ce geste, rien : sa fin réveille l'écran.)
                 ctx.request_repaint_after(ATTENTE.saturating_sub(attendu).max(Duration::from_millis(10)));
             }
         }
+        // L'image de toujours se pose lissée tant qu'une image nette est montrée ou attendue ici ; là où la zone n'a rien de
+        // vectoriel, elle garde ses pixels nets.
+        self.attendue = !self.rien.as_ref().is_some_and(|(p, k)| *k == c && p == plan);
         let id = self.texture.as_ref()?.id();
         self.montre.as_ref().map(|m| Peinte { id, cadrage: m.cadrage })
     }
@@ -489,6 +536,30 @@ impl VueNette {
         self.depuis_tout = false;
         self.depuis.clear();
     }
+}
+
+/// Les coins à l'écran (en points : haut-gauche, haut-droit, bas-droit, bas-gauche) de l'image composée pour le cadrage `image`,
+/// quand la vue d'aujourd'hui (`vue`, son cadrage) ne diffère de celui-là que par un déplacement : même zoom, même angle, même
+/// miroir. L'image est alors posée sur des pixels entiers de l'écran, au plus près de sa place : un pixel de l'image = un pixel de
+/// l'écran, rien n'est adouci. Rien : la vue a zoomé ou tourné (ou ne grossit plus).
+pub(crate) fn coins_a_l_ecran(image: &Cadrage, vue: Option<&Cadrage>, ppp: f32) -> Option<[Pos2; 4]> {
+    let vue = vue?;
+    let (a, b) = (image.vers_feuille, vue.vers_feuille);
+    let meme = |x: f32, y: f32| (x - y).abs() <= 1e-5 * x.abs().max(y.abs()).max(1e-6);
+    if !(meme(a.a, b.a) && meme(a.b, b.b) && meme(a.c, b.c) && meme(a.d, b.d)) {
+        return None;
+    }
+    // Où tombe le coin haut-gauche de l'image dans les pixels de la vue d'aujourd'hui : l'écart des deux origines sur la feuille,
+    // ramené en pixels (la différence d'abord : elle est petite, les flottants la gardent exacte).
+    let (dx, dy) = (a.tx - b.tx, a.ty - b.ty);
+    let det = b.a * b.d - b.b * b.c;
+    let p = pos2((dx * b.d - dy * b.b) / det, (dy * b.a - dx * b.c) / det);
+    if !p.x.is_finite() || !p.y.is_finite() {
+        return None;
+    }
+    let o = pos2((vue.origine[0] as f32 + p.x.round()) / ppp, (vue.origine[1] as f32 + p.y.round()) / ppp);
+    let (w, h) = (image.taille[0] as f32 / ppp, image.taille[1] as f32 / ppp);
+    Some([o, o + egui::vec2(w, 0.0), o + egui::vec2(w, h), o + egui::vec2(0.0, h)])
 }
 
 #[cfg(test)]
@@ -516,21 +587,17 @@ impl crate::app::App {
         }
         let (tout, tuiles) = self.renderer.take_net_dirty();
         let cadrage = if self.playing { None } else { Cadrage::de(&self.view, rect, size, ctx.pixels_per_point()) };
-        let repos = self.stroke.is_none() && !ctx.input(|i| i.pointer.any_down());
-        self.nette.update(ctx, &self.doc, plan, cadrage, repos, tout, &tuiles)
+        let bouton_tenu = ctx.input(|i| i.pointer.any_down());
+        self.nette.update(ctx, &self.doc, plan, cadrage, self.stroke.is_some(), bouton_tenu, tout, &tuiles)
     }
 
-    /// Peint l'image nette `n` : à sa place exacte, pixel pour pixel, quand la vue est celle où elle a été composée ; sinon collée au
-    /// dessin (ses coins, gardés sur la feuille, suivent la vue qui bouge).
+    /// Peint l'image nette `n`. La vue est celle où elle a été composée : à sa place exacte, pixel pour pixel. La vue a seulement
+    /// été déplacée (même zoom, même angle) : collée au dessin, **recalée sur les pixels de l'écran** (elle reste nette pendant
+    /// qu'on déplace la vue). La vue a zoomé ou tourné : ses coins, gardés sur la feuille, suivent la vue (elle s'adoucit le temps
+    /// que la suivante arrive).
     pub(crate) fn peindre_vue_nette(&self, painter: &egui::Painter, rect: Rect, size: Vec2, n: Peinte) {
         let ppp = painter.ctx().pixels_per_point();
-        let [w, h] = [n.cadrage.taille[0] as f32, n.cadrage.taille[1] as f32];
-        let coins = if Cadrage::de(&self.view, rect, size, ppp) == Some(n.cadrage) {
-            let o = pos2(n.cadrage.origine[0] as f32 / ppp, n.cadrage.origine[1] as f32 / ppp);
-            [o, o + egui::vec2(w / ppp, 0.0), o + egui::vec2(w / ppp, h / ppp), o + egui::vec2(0.0, h / ppp)]
-        } else {
-            n.cadrage.coins_sur_la_feuille().map(|p| self.view.to_screen(rect, size, p))
-        };
+        let coins = coins_a_l_ecran(&n.cadrage, Cadrage::de(&self.view, rect, size, ppp).as_ref(), ppp).unwrap_or_else(|| n.cadrage.coins_sur_la_feuille().map(|p| self.view.to_screen(rect, size, p)));
         let mut mesh = egui::Mesh::with_texture(n.id);
         for (pos, uv) in coins.into_iter().zip([pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)]) {
             mesh.vertices.push(egui::epaint::Vertex { pos, uv, color: Color32::WHITE });

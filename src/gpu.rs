@@ -419,6 +419,8 @@ struct Frame {
     target: wgpu::TextureView,
     /// Lecture en sRGB pour l'affichage.
     display_group: wgpu::BindGroup,
+    /// La même lecture, lissée aussi en grossissant (`GpuCanvas::lisser`).
+    display_group_lisse: wgpu::BindGroup,
     /// Copie de l'image composée jusque-là, lue par les calques en mode de fusion (8).
     backdrop: wgpu::Texture,
     backdrop_group: wgpu::BindGroup,
@@ -628,6 +630,10 @@ pub struct GpuStats {
 /// Côté application : de quoi mettre à jour les textures et commander le dessin.
 pub struct GpuCanvas {
     render_state: RenderState,
+    /// L'image composée se pose **lissée** quand la vue la grossit, au lieu de pixels nets : pendant que la vue nette (`vuenette.rs`)
+    /// n'a pas encore l'image à la taille de l'écran (la vue bouge, un trait vient d'être tracé), on voit un dessin adouci plutôt
+    /// qu'en marches (Anthony, 2026-11-17). Réglé à chaque image par l'écran ; faux : l'affichage de toujours.
+    pub(crate) lisser: bool,
 }
 
 impl GpuCanvas {
@@ -830,6 +836,7 @@ impl GpuCanvas {
         crate::memoirevideo::suivre(&rs.adapter.get_info());
         Self {
             render_state: rs.clone(),
+            lisser: false,
         }
     }
 
@@ -1283,7 +1290,7 @@ impl GpuCanvas {
             // La couche de couleur : un aplat sur la feuille, d'opacité `k`.
             shows.push(quad(&first, false, [m.k.clamp(0.0, 1.0), 0.0, m.grey]));
         }
-        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, split, shows })
+        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, split, shows, lisser: self.lisser })
     }
 
     /// Les éléments à composer pour un plan : papier, puis un par dessin (voir `paint`).
@@ -1522,6 +1529,8 @@ struct CanvasPaint {
     split: usize,
     /// Ce qu'on pose à l'écran, dans l'ordre.
     shows: Vec<Show>,
+    /// Poser l'image lissée quand la vue la grossit (`GpuCanvas::lisser`).
+    lisser: bool,
 }
 
 /// Compose les éléments `span` de `items` dans `frame` (effacée d'abord). Un calque en mode de
@@ -1753,7 +1762,7 @@ impl CallbackTrait for CanvasPaint {
         for (k, show) in self.shows.iter().enumerate() {
             let Some(frame) = (if show.second { &res.frame2 } else { &res.frame }) else { continue };
             pass.set_bind_group(0, &res.uniform_group, &[((self.items.len() + k) as u64 * res.stride) as u32]);
-            pass.set_bind_group(1, &frame.display_group, &[]);
+            pass.set_bind_group(1, if self.lisser { &frame.display_group_lisse } else { &frame.display_group }, &[]);
             pass.draw(0..6, 0..1);
         }
     }
@@ -1777,6 +1786,8 @@ fn make_frame(device: &wgpu::Device, texture_layout: &wgpu::BindGroupLayout, smo
         ..Default::default()
     });
     let display_group = texture_group(device, texture_layout, &srgb, smooth);
+    // (L'échantillonneur « composer » est bilinéaire dans les deux sens : c'est celui qu'il faut pour lisser en grossissant.)
+    let display_group_lisse = texture_group(device, texture_layout, &srgb, nearest);
     let backdrop = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("fond des modes de fusion"),
         size: extent(size.0, size.1),
@@ -1788,7 +1799,7 @@ fn make_frame(device: &wgpu::Device, texture_layout: &wgpu::BindGroupLayout, smo
         view_formats: &[],
     });
     let backdrop_group = texture_group(device, texture_layout, &backdrop.create_view(&Default::default()), nearest);
-    Frame { size, texture, target, display_group, backdrop, backdrop_group, composed: None }
+    Frame { size, texture, target, display_group, display_group_lisse, backdrop, backdrop_group, composed: None }
 }
 
 fn extent(width: u32, height: u32) -> wgpu::Extent3d {
