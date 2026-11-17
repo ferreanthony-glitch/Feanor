@@ -3,6 +3,66 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-17
+
+- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
+  fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
+  été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;
+  ses vrais réglages n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place. La session de la timeline a le numéro du commit
+  pour refaire sa fusion de main dans `timeline-claire`.
+- **Lissé pendant que la vue bouge, et l'image nette refaite en route** (branche `vue-nette-lissage`, section 166.8). Son premier
+  retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la vue.
+  Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? ». La cause : l'image nette ne se refaisait qu'à
+  l'arrêt ; en attendant, on voyait l'image de toujours, en marches. **Ce qui est fait** : tant qu'une image nette est montrée ou
+  attendue, la carte graphique pose l'image de toujours lissée quand la vue la grossit (adoucie au lieu d'être en marches : la bande
+  que la vue découvre, tout le dessin pendant un zoom, la zone d'un trait en cours) ; l'image nette se refait pendant le mouvement,
+  une à la fois, sans attendre le repos ; déplacée seulement, elle est recalée sur les pixels de l'écran et reste nette. Un plan
+  tout en bitmap et une zone sans rien de vectoriel gardent leurs pixels nets. La règle « sans latence » est précisée : rien ne se
+  calcule pendant un geste de dessin (trait en cours, ou bouton tenu sans que la vue bouge) ; un geste de vue n'arrête rien.
+  **Les essais** : onze dans `vuenette_tests.rs`, dont un sur la carte graphique qui lit l'écran peint à 400 % (en marches sans la
+  vue nette, lissée quand une image nette est attendue, bord fin une fois arrivée). Vérificateur complet (15 h 24) : compilation
+  sans avertissement, 4 787 réussis, 0 échec, dix groupes OK. **Pas regardé à
+  l'écran** : aucune capture cette fois (il travaillait à son poste). Le dossier de travail `vectoriel-net` et le dossier d'essai
+  avaient été retirés juste avant, à sa demande (« Oui, retire-les », branche gardée, 2,1 Go rendus).
+- **Son FEANOR habituel reconstruit depuis main** (567c90c, exe de 14 h 39), sur son « Oui, reconstruis-le » : prévenu qu'il y
+  perdait la timeline plus claire et la vue 3D à côté qu'il essayait (branche `timeline-claire`, non fusionnée, intacte), il a
+  choisi d'avoir le trait vectoriel net tout de suite. Le dossier `Source` est repassé de `timeline-claire` à `main` (il était
+  propre). Il avait fermé son FEANOR lui-même : rien n'a été arrêté. Ses réglages : `timeline-claire` n'y ajoute qu'un champ
+  (`part_espace3d`), que main ignore ; une copie est dans `Documents\SHOT\Tests\reglages avant reconstruction 2026-11-17`.
+  Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ; son FEANOR
+  n'a pas été rouvert à sa place (il travaillait dans Photoshop). La session de la timeline est prévenue : pour reprendre son
+  essai, elle fusionnera main dans sa branche.
+- **`vectoriel-net` fusionnée dans main et poussée** (7742e31, 14 h 25), sur son « Fusionne directement », sans son essai au stylet.
+  Avant : le main du jour (633c450) fusionné dans la branche, sans conflit, et le vérificateur complet sur cet arbre : compilation
+  sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK. **Son FEANOR habituel n'est pas reconstruit** : il l'a construit
+  lui-même ce matin depuis `timeline-claire` (c8fdfd5, le dossier `Source` est sur cette branche) et il est en train de l'essayer
+  (liste 164.3) ; le reconstruire depuis main lui retirerait la timeline plus claire et la vue 3D à côté. La session de la timeline,
+  consultée, fusionnera main dans sa branche après son retour : il aura alors les deux. En attendant, la vue nette s'essaie par le
+  dossier `Documents\SHOT\Tests\essai vectoriel-net` (l'exe de 14 h 06, lancé une fois sur la copie : il s'ouvre, aucun plantage).
+- **Le trait vectoriel net au zoom** (branche `vectoriel-net`, partie 166 ; fusionnée ensuite, voir au-dessus). Anthony, avec une capture de son projet
+  « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer pourquoi et comment résoudre ce
+  problème ? ». **La cause**, mesurée sur sa capture : la vue était à 225 % (un pixel du dessin = 2,25 pixels d'écran), et FEANOR
+  montre un dessin vectoriel à travers une image en pixels à la taille de la feuille, grossie sans lissage. Rien n'était abîmé dans
+  le dessin. Trois remèdes proposés ; il a choisi le premier : « Oui, construis-le ». **Ce qui est fait** : au-delà de 100 %, la zone
+  que la vue regarde est composée à la taille de l'écran sur un autre fil, les dessins vectoriels rejoués à cette échelle par le moteur
+  des pinceaux (ses traits gardent tous le réglage complet du pinceau), le bitmap laissé en pixels ; l'image est posée par-dessus
+  celle de toujours. Rien ne se calcule pendant un trait ; la zone du trait est en pixels le temps du geste, puis redevient nette.
+  Le dessin, le fichier, l'export ne changent pas ; aucun texte, aucun réglage, aucun format. **Les essais** : huit dans
+  `vuenette_tests.rs` (le bord d'un trait tenu à 0,3 pixel de la feuille à 400 %, là où l'image grossie échoue ; le bitmap au pixel
+  près ; aucun calcul pendant un geste ; un trait tracé au pointeur dans la vraie fenêtre sans écran, à 300 %, puis Ctrl+Z).
+  Vérificateur complet sur le code final (14 h 05) : 4 784 réussis, 0 échec, dix groupes OK, le seul avertissement connu ; la
+  première suite avait sept échecs, tous de mon ajout (le champ `nette` à déclarer dans `etat_projet!`, et la vue nette qui
+  réveillait l'écran dans les essais de repos : elle est éteinte d'origine dans les essais, allumée dans les siens).
+  **Regardé à l'écran par Claude** (12 h 53, exe de la branche, copie de « dd », réglages neufs) : plan 2
+  grossi à environ 350 %, les traits nets, les bords au pixel d'écran (mesuré sur les pixels réels). **Pas regardé à l'écran** :
+  tracer, déplacer et tourner la vue, annuler, plusieurs calques, la pelure, un calque bitmap : le contrôle a été arrêté parce
+  qu'Anthony travaillait dans Photoshop et que les captures d'écran réduisaient ses fenêtres (rouvertes, Photoshop remis devant).
+  **Ce qui n'est pas net** (l'image de toujours reste seule) : plan sans papier, calque à effets, carte inclinée de l'Espace 3D et
+  caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
+  pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
+  très chargés à fort zoom, la zone en pixels pendant le trait.
+
 ## 2026-11-13
 
 - **Ses deux décisions, regardées à l'écran par Claude, et un défaut corrigé** (20 h 55 à 21 h 15, souris simulée, exe de la

@@ -184,7 +184,15 @@ impl App {
         // superposer, composés par la carte graphique comme le plan courant (`transitionsui.rs`).
         let mixed = if self.gpu.is_some() { self.transition_preview() } else { None };
         let setup = mixed.map(|(_, mix)| self.mix_setup(&mix, &plan, rect, size));
+        // La vue nette (`vuenette.rs`) : au-delà de 100 %, les dessins vectoriels à la taille de l'écran, posés par-dessus l'image
+        // composée (elle seule pour une case des Vignettes, une transition du montage, la vue en perspective).
+        let vue_nette = zone.is_none() && !self.in_card && setup.is_none() && ws.is_none();
+        let nette = if vue_nette { self.vue_nette(ui.ctx(), rect, size, &plan) } else { None };
+        // Tant qu'une image nette est montrée ou attendue, l'image composée se pose lissée au lieu de pixels nets : ce qu'on en
+        // voit (la vue qui bouge, la zone d'un trait en cours) est adouci plutôt qu'en marches (`GpuCanvas::lisser`).
+        let lisser = vue_nette && self.nette.lisse();
         if let Some(gpu) = &mut self.gpu {
+            gpu.lisser = lisser;
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             let stage = [self.doc.width, self.doc.height];
@@ -245,6 +253,10 @@ impl App {
             if !mesh.indices.is_empty() {
                 painter.add(Shape::mesh(mesh));
             }
+        }
+
+        if let Some(n) = nette {
+            self.peindre_vue_nette(&painter, rect, size, n);
         }
 
         // La grille de repère du calque courant, si c'est un calque 3D qui l'a allumée (`espace3ddecor.rs`) : par-dessus

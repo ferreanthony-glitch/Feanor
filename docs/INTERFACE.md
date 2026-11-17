@@ -13600,3 +13600,184 @@ Essais (`src/altclic_calque_tests.rs`), rouges d'abord (Alt + clic était encore
 on touche celui du dessus, et à côté celui du dessous, sans étape d'annulation ni couleur changée ; un calque caché et un calque à
 l'opacité 0 sont ignorés (l'œil rouvert, le caché répond) ; un clic dans le vide ne change pas le calque actif et le dit ; un calque
 d'un dossier fermé devient actif ; l'outil Pipette prend toujours la couleur. `aidetouches_tests` adapté.
+
+## 166. La vue nette : au-delà de 100 %, le vectoriel à la taille de l'écran (2026-11-17, branche `vectoriel-net`)
+
+Anthony, avec une capture de son projet « dd » : « je trouve le trait très pixélisé alors que c'est du vectoriel, tu peux m'expliquer
+pourquoi et comment résoudre ce problème ? », puis, à la proposition de redessiner les traits vectoriels visibles à la taille de
+l'écran quand la vue grossit : « Oui, construis-le ». Le code : `src/vuenette.rs` ; ce qu'il a fallu ailleurs : `src/vector.rs`
+(`rendre_net`, `stamp_path_net`), `src/render.rs` (`Renderer::take_net_dirty`), `src/canvas.rs` (deux appels), `src/app.rs` (le champ
+`nette`) ; les essais : `src/vuenette_tests.rs`. Aucun texte d'interface, aucun réglage, aucun format nouveau (56).
+
+### 166.1 Le défaut, mesuré sur sa capture
+
+- Sur la capture, un pixel du dessin occupe 2,25 pixels d'écran (des marches de 2, 2, 2, 3 pixels) : la vue était à 225 %. Recoupé
+  avec le dessin : son zigzag fait 280 pixels de large dans la feuille (3840 × 2160) et 630 à l'écran.
+- La cause : un dessin vectoriel garde ses chemins, mais tout ce qui le montre passe par son image (`Cel::raster`, « la composition,
+  la pelure d'oignon et l'export ne voient que des pixels »), faite à la taille de la feuille ; et la vue grossit cette image sans la
+  lisser (`render::texture_options`, l'échantillonneur « afficher » de `gpu.rs`). C'est voulu pour le bitmap ; le vectoriel passait
+  par le même chemin.
+- Ses traits gardent tous le réglage complet du pinceau (`pinceau`, dans le fichier du dessin) : ils sont rejoués par le moteur des
+  pinceaux, empreinte par empreinte. Les montrer nets, c'est donc **rejouer ce moteur à la taille de l'écran**, pas agrandir une image.
+
+### 166.2 Ce qui change à l'écran
+
+- **Au-delà de 100 %** (dès qu'un pixel de la feuille vaut plus de 1,02 pixel d'écran, l'échelle de Windows comprise), la zone que la
+  vue regarde est composée à la taille de l'écran : **les dessins vectoriels y sont nets**, à n'importe quel zoom, vue tournée ou
+  retournée comprise. À 100 % ou moins, rien ne change (la vue réduit déjà l'image en la lissant).
+- **Le reste ne change pas** : un calque bitmap, une vidéo, un aplat sous le trait, une couleur unie, un remplissage au griffonnage
+  gardent les pixels de la feuille, grossis sans lissage comme avant (on y lit les vrais pixels). L'ordre des calques, les opacités, la
+  pelure d'oignon, la table lumineuse, les modes de fusion, les calques déplacés sont ceux de l'image de toujours.
+- **Le dessin lui-même ne change pas** : ni son image à la taille de la feuille, ni le fichier, ni l'export, ni les vignettes, ni la
+  lecture. La vue nette n'est qu'un affichage.
+- **Pendant qu'on trace** : rien ne se calcule (règle « sans latence »). Les carrés de 64 pixels de la feuille que le trait touche
+  montrent l'image de toujours (en pixels, avec le trait en cours ; adoucie depuis 166.8) ; le reste de la vue reste net. Au lâcher,
+  après 70 millièmes de seconde de repos, la vue redevient nette partout, avec le trait neuf.
+- **Quand la vue bouge** (déplacer, zoomer, tourner) : l'image nette reste collée au dessin pendant le geste ; ce qu'elle ne couvre
+  pas se voit en pixels, et la nouvelle image la remplace au repos. (Revu le même jour, à son premier retour : adouci au lieu d'être
+  en pixels, et l'image nette refaite pendant le mouvement, voir 166.8.)
+- **Quand tout a pu changer** (autre image, autre calque, annulation, réglage d'un calque) : l'image nette est retirée tout de suite
+  (on voit l'image de toujours), puis revient.
+
+### 166.3 Comment c'est fait
+
+- `Cadrage::de` : la zone du dessin à l'écran en pixels réels, et la transformation de ces pixels vers la feuille (zoom, rotation,
+  miroir, décalage de la vue).
+- `Instantane::de`, sur le fil de l'interface : le plan figé. Pour un dessin vectoriel montré tel quel, ses éléments visibles ; pour
+  tout le reste, les tuiles de l'image montrée (partagées, rien n'est copié). Rien ne s'y calcule (`fxcache::soft_scope`).
+- `composer`, sur un autre fil : chaque dessin vectoriel est redessiné sur une image de la taille de l'écran (`vector::rendre_net` :
+  une zone, un texte, un trait lisse d'après leur géométrie ; un trait au pinceau rejoué par le moteur, ses points, ses rayons et son
+  diamètre agrandis comme une sélection qu'on agrandit, le papier, la vitesse et la longueur du fondu à la même échelle), un dessin par
+  cœur ; puis chaque pixel d'écran reçoit le papier et les couches dans l'ordre, les couches en pixels lues comme `render::pixel_of`
+  au pixel de la feuille qui est dessous. Le cache des traits du dessin n'est ni lu ni écrit ; ce rejeu ne compte pas dans
+  `vector::replay_count`.
+- `VueNette::update`, à chaque image d'écran : perce les tuiles changées (`Renderer::take_net_dirty`), reçoit l'image qui arrive,
+  lance la suivante au repos. Un geste qui commence arrête le calcul en cours.
+- `canvas.rs` : l'image nette est peinte juste après l'image composée (carte graphique ou processeur), avant la grille, le cadre de
+  la caméra et le passe-partout.
+- `onglets.rs` : l'image nette est un état du projet (`etat_projet!`), rangée avec son onglet comme le hors-feuille.
+- Une panique du calcul (le rejeu d'un trait) est rattrapée sur son fil : l'image de toujours reste, et le calcul n'est pas relancé
+  pour ce plan et ce cadrage tant que rien ne change.
+
+### 166.4 Ce qui n'est pas net, et ce qui reste à juger
+
+La vue de toujours reste seule (comme avant) dans ces cas :
+
+- un plan sans papier (arrière-plan « aucun » ou « damier ») ;
+- un plan dont un calque a une pile d'effets, ou qu'un calque d'effet couvre et que la carte graphique compose (tremblement compris) ;
+- un calque posé par un maillage : carte inclinée de l'Espace 3D, plan dont la caméra est libre, enveloppe ou perspective en cours ;
+- la vue en perspective (caméra tournée), la lecture, une transition du montage sous la tête de lecture ;
+- les cases des Vignettes ;
+- la zone d'un geste en cours (voir 166.2), et une sélection qu'on déplace, en pixels le temps du geste (d'après le code : pas essayé).
+
+Et ce qui n'a pas changé du tout : une caméra qui cadre plus serré que 100 %, l'export et les vignettes montrent toujours les pixels
+de la feuille (lissés par l'interpolation). Les rendre nets serait une étape de plus, pas faite.
+
+À juger à l'œil par Anthony :
+
+- **les traits très fins** : le moteur a ses planchers en pixels (rayon minimal, trait fin estompé). À 100 %, un trait d'un demi-pixel
+  de rayon se montre plus large et plus pâle ; au zoom, il est rejoué à sa vraie épaisseur, donc plus fin et plus franc qu'à 100 % ;
+- **les brosses à grain et les pointes en image** : le grain est rejoué à l'échelle du zoom, pas agrandi : son dessin exact n'est pas
+  celui de la feuille (et il ne suit pas une vue tournée) ;
+- **les dessins très chargés à fort zoom** : chaque image nette rejoue les traits visibles ; elle arrive plus tard (l'image de toujours
+  en attendant). Pas mesuré sur un vrai dessin lourd.
+
+### 166.5 Les essais
+
+Dans les essais, la vue nette de l'application est **éteinte d'origine** (`vuenette::activer_pour_essai` l'allume pour le fil d'un
+essai) : les bancs tournent sur de petites feuilles, souvent au-delà de 100 %, avec une horloge simulée, et beaucoup contrôlent qu'au
+repos rien ne demande à être repeint ; son fil de fond les réveillait (sept échecs à la première suite complète, dont le champ `nette`
+à déclarer dans `etat_projet!`). Dans le vrai FEANOR elle sert toujours.
+
+`src/vuenette_tests.rs` :
+
+- le cadrage suit la vue droite, tournée, retournée, à 1, 1,25 et 1,5 pixel par point ; rien à 100 % et en dessous ;
+- le bitmap garde les pixels de la feuille : loin d'un trait vectoriel, chaque pixel d'écran est exactement le pixel de la feuille
+  qui est dessous (un calque en mode Produit et déplacé compris) ;
+- un trait lisse à 400 %, vue droite puis tournée et retournée : son bord est tenu à 0,3 pixel de la feuille de son contour exact ;
+  l'image de la feuille grossie échoue au même contrôle (c'est le défaut) ;
+- un trait au pinceau à 400 % : rejoué par le moteur, bord tenu à un demi-pixel de la feuille, du détail plus fin que le pixel de la
+  feuille, le cache du trait d'origine intact, aucun rendu compté ;
+- un calque déplacé montre son trait à sa place ;
+- rien de net sans dessin vectoriel dans la zone ; un plan sans papier n'est pas admis ;
+- la vue nette suit ce qui change : elle arrive au repos, reste quand rien ne change, ne calcule rien pendant un geste (trente images
+  bouton tenu), se refait après, reste collée quand la vue bouge, est retirée quand tout change ;
+- dans la vraie fenêtre sans écran (`perf_tests::Banc`), au pointeur : la vue à 300 %, un trait de pinceau sur un calque vectoriel ;
+  aucun calcul pendant le trait, l'image nette refaite après, rien au repos (et rien ne demande plus à être repeint), refaite après
+  Ctrl+Z, plus rien à 100 %.
+
+Résultats (17 novembre, 14 h 05, sur le code final) : `vuenette` 8 réussis ; vérificateur complet : **4 784 réussis, 0 échec**, les
+dix groupes de fiabilité OK ; le seul avertissement de compilation est celui d'avant (les cinq méthodes inutilisées de
+`src\espace3d.rs`), qui fait écrire ÉCHEC au vérificateur. Puis, le main du jour (633c450) fusionné dans la branche, à 14 h 23 :
+compilation sans avertissement, 4 784 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK ». Fusionnée dans main (7742e31) et
+poussée sur son « Fusionne directement ». Son FEANOR habituel, qu'il avait construit depuis `timeline-claire` pour l'essayer, a été
+reconstruit depuis main à 14 h 39 sur son « Oui, reconstruis-le » (voir le journal) ; contrôle de lancement sur une copie : bon.
+
+### 166.6 Regardé à l'écran (par Claude, le 17 novembre vers 12 h 53)
+
+Le FEANOR de la branche (construit à 12 h 51, avant les dernières corrections : la panique rattrapée, le rangement par onglet, le
+réveil au repos ; le calcul de l'image n'a pas changé depuis), sur une copie du projet « dd », réglages neufs. L'exe final (14 h 06)
+a seulement été lancé sur la copie, fenêtre réduite : il s'ouvre, aucun rapport de plantage.
+
+Plan 2, la vue grossie à la molette jusqu'à environ 350 % :
+les traits du zigzag se voient nets. Mesuré sur les pixels réels de l'écran (une zone de 480 × 300 pixels dans la vue) : la couleur
+change à chaque colonne (479 sur 480), les bords montent d'un pixel d'écran à la fois, sans marche de plusieurs pixels.
+
+**Pas regardé à l'écran** : tracer un trait, déplacer et tourner la vue, annuler, un plan à plusieurs calques, la pelure d'oignon, un
+calque bitmap. Le contrôle a été arrêté : Anthony travaillait dans Photoshop, et les captures d'écran réduisaient ses fenêtres (elles
+ont été rouvertes). Le tracé, l'annulation et le retour à 100 % sont couverts par l'essai dans la vraie fenêtre sans écran.
+
+### 166.7 À vérifier à l'écran (par Anthony)
+
+Le dossier d'essai `Documents\SHOT\Tests\essai vectoriel-net` et le dossier de travail de la branche ont été retirés le même jour, à
+sa demande (« Oui, retire-les ») : son FEANOR habituel, reconstruit depuis main, a la même chose. La branche `vectoriel-net` est gardée.
+
+1. Plan 2 de « dd », zoom à 225 % ou plus : les traits sont nets, sans marches.
+2. Tracer un trait au stylet en gros plan : aucun ralentissement ; la zone du trait est en pixels pendant le geste, puis nette au
+   lâcher. Est-ce gênant à l'œil ?
+3. Déplacer, zoomer, tourner la vue : l'image suit, puis redevient nette.
+4. Un trait très fin : au zoom, il est plus fin et plus franc qu'à 100 %. Est-ce ce qu'il attend ?
+5. Une brosse à grain (crayon, brosse importée) en gros plan : l'aspect du grain.
+6. Un plan chargé (beaucoup de traits) à fort zoom : le temps que met l'image nette à arriver.
+7. Un calque bitmap dans le même plan : toujours en pixels, à sa place dans la pile.
+8. Ctrl+Z, changer d'image, changer de calque : l'image nette revient.
+
+### 166.8 Lissé pendant que la vue bouge, et refait en route (le même jour, branche `vue-nette-lissage`)
+
+Son premier retour, la vue nette dans son FEANOR habituel : « On voit encore la pixelisation au moment du zoom ou quand on déplace la
+vue. Est-ce qu'on peut ajouter un système d'anti-aliasing pour régler ce problème ? » Ce qu'il voyait : pendant qu'il zoomait ou
+déplaçait la vue, l'image nette n'était refaite qu'à l'arrêt (70 millièmes de seconde de repos, puis le calcul) ; en attendant, ce
+qu'elle ne couvrait pas montrait l'image de toujours, en marches, et l'image nette grossie par le zoom montrait ses propres pixels.
+
+Ce qui change :
+
+- **L'image de toujours se pose lissée** tant qu'une image nette est montrée ou attendue (`VueNette::lisse`, `GpuCanvas::lisser`) : la
+  carte graphique la lit lissée aussi en grossissant (en lumière linéaire, comme elle la lit déjà en réduisant). Ce qu'on en voit, la
+  bande que la vue découvre en se déplaçant, tout le dessin pendant un zoom, la zone d'un trait en cours, est **adouci au lieu d'être
+  en marches**. Un plan tout en bitmap, et une zone qui n'a rien de vectoriel, gardent leurs pixels nets, à l'arrêt comme en
+  mouvement (un trait qu'on y trace sur un calque bitmap ne la lisse pas non plus).
+- **L'image nette se refait pendant le mouvement** : dès que la vue bouge (déplacer, zoomer, tourner, bouton tenu ou non), l'image
+  suivante se calcule sans attendre le repos, une à la fois, chacune partant à l'arrivée de la précédente. Le retard se compte en
+  dixièmes de seconde, pas jusqu'à l'arrêt.
+- **Déplacée seulement, l'image nette reste nette** : elle est recalée sur les pixels entiers de l'écran (`coins_a_l_ecran`). Zoomée
+  ou tournée, elle se lit lissée le temps que la suivante arrive (`options` : lissée dans les deux sens).
+- **La règle « sans latence » est précisée** : rien ne se calcule pendant un geste de dessin (un trait en cours, ou un bouton tenu
+  pendant que la vue ne bouge pas : une sélection qu'on tire, une poignée) ; un geste de vue n'arrête rien. La vue « bouge » tant
+  qu'elle a changé depuis moins d'un quart de seconde.
+
+Ce qui ne change pas : sans carte graphique (composition par le processeur), l'image de toujours reste en pixels nets pendant le
+mouvement, et ce qui est dessiné hors de la feuille aussi (`monde.rs`) ; l'image nette, elle, se refait de la même façon.
+
+À juger par lui : pendant un zoom ou un déplacement rapide, le dessin est-il assez propre (adouci, puis net) ? La zone du trait en
+cours, adoucie au lieu d'être en pixels, lui convient-elle ? La vue reste-t-elle fluide pendant que l'image nette se refait en route
+(les calculs prennent des cœurs du processeur pendant le déplacement) ?
+
+Les essais (`src/vuenette_tests.rs`, trois de plus, onze en tout) : un bouton tenu sans que la vue bouge ne laisse partir aucun
+calcul ; la vue déplacée bouton tenu, sans s'arrêter, refait l'image nette en route ; un plan sans vectoriel, et une zone sans trait
+vectoriel, ne sont jamais lissés ; l'image nette déplacée tombe sur des pixels entiers de l'écran, à 1 et 1,5 pixel par point ; et
+sur la carte graphique, la vue à 400 %, les trois états lus sur l'écran peint : l'image de toujours seule est en marches, l'image
+attendue est lissée (la couleur change de pixel à pixel dans tout le bord), l'image nette arrivée a un bord fin (moins de la moitié
+des pixels intermédiaires des deux autres).
+Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte graphique a bien tourné, il n'a pas été sauté) ;
+vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
+l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
