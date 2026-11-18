@@ -5,6 +5,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-montage` et sa branche locale retirés (elle n'avait jamais
+  été poussée ; tout est dans main, sur GitHub), `Tests\essai 175` mis à la corbeille (il n'avait pas servi : la copie de
+  « dd » était encore au format 59). `Chantiers\piste-mode` et `Tests\essai 173`, à l'autre session, pas touchés.
 - **`prereglages-montage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (23efd4c, exe du 19 novembre à
   0 h 01), sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (93ad4fd),
   ni ici ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 880 réussis, 0 échec, les dix
