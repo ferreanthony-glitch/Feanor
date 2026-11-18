@@ -303,8 +303,9 @@ fn encre_par_ligne_de_vignette(image: &eframe::egui::ColorImage, reduction: f32,
 }
 
 /// Une vignette garde les traits fins entiers, comme l'affichage : à chaque ligne, l'encre d'un trait d'un pixel vaut ce qu'elle doit, que
-/// la vignette soit une case des Vignettes (avec sa marge, en lumière linéaire) ou une vignette de plan (sans marge, en gamma), au tiers
-/// comme au vingtième. (Avant la partie 166.10 : 4 à 16 points lus par pixel ; un trait y perdait des lignes entières.)
+/// la vignette soit une case des Vignettes (avec sa marge, en lumière linéaire) ou sans marge (en gamma), du tiers au dixième. Plus
+/// petite encore (une vignette de plan, au vingtième), l'encre est juste en moyenne. (Avant la partie 166.10 : 4 à 16
+/// points lus par pixel ; un trait y perdait des lignes entières et d'autres comptaient double.)
 #[test]
 fn une_vignette_garde_les_traits_fins_entiers() {
     let doc = feuille_de_traits_fins();
@@ -318,7 +319,41 @@ fn une_vignette_garde_les_traits_fins_entiers() {
         let (moins, plus, moyenne, n) = resume(&encre_par_ligne_de_vignette(&image, reduction, marge, marge > 0));
         println!("     vignette de {largeur} pixels (réduction {reduction:.1}, marge {marge}) : {n} lignes, encre de {moins:.2} à {plus:.2} fois la normale, {moyenne:.3} en moyenne");
         assert!(n >= 100, "les traits sont dans la vignette : {n} lignes");
-        assert!((moyenne - 1.0).abs() < 0.05 && moins >= 0.85 && plus <= 1.15, "vignette de {largeur} pixels : un trait fin garde son encre à chaque ligne, de {moins:.2} à {plus:.2} fois la normale ({moyenne:.3} en moyenne)");
+        if reduction <= 12.0 {
+            // La moyenne exacte : chaque ligne du trait a son encre.
+            assert!((moyenne - 1.0).abs() < 0.05 && moins >= 0.85 && plus <= 1.15, "vignette de {largeur} pixels : un trait fin garde son encre à chaque ligne, de {moins:.2} à {plus:.2} fois la normale ({moyenne:.3} en moyenne)");
+        } else {
+            // Une toute petite vignette (lectures en grille, une pour deux pixels couverts au mieux) : un trait d'un pixel y fait un
+            // dixième de pixel ou moins ; son encre est juste en moyenne, pas à chaque ligne.
+            assert!((moyenne - 1.0).abs() < 0.1 && plus <= 3.0, "vignette de {largeur} pixels : l'encre d'un trait fin est juste en moyenne ({moyenne:.3}), au plus {plus:.2} fois la normale sur une ligne");
+        }
+    }
+    // Les mêmes vignettes calculées comme avant la partie 166.10 ne tiennent pas cette mesure : l'essai distingue bien les deux.
+    let _avant = Interrupteur::allumer(&crate::render::COMME_AVANT);
+    for (largeur, marge) in [(300usize, 8usize), (300, 0), (80, 0)] {
+        let hauteur = largeur * HAUTEUR / LARGEUR;
+        let reduction = LARGEUR as f32 / largeur as f32;
+        let image = crate::render::thumbnail_marge_until(&doc, &plan, &cam, largeur, hauteur, marge, None, &|| false).expect("jamais interrompue");
+        let (moins, plus, moyenne, _) = resume(&encre_par_ligne_de_vignette(&image, reduction, marge, marge > 0));
+        println!("     comme avant, vignette de {largeur} pixels (marge {marge}) : encre de {moins:.2} à {plus:.2} fois la normale, {moyenne:.3} en moyenne");
+        assert!(moins < 0.6 || plus > 1.4, "comme avant, vignette de {largeur} pixels (marge {marge}) : l'encre d'un trait fin devait aller du simple au double, pas de {moins:.2} à {plus:.2}");
+    }
+}
+
+/// Allume un interrupteur d'essai de `render` et l'éteint en sortant, même si l'essai échoue (un essai lancé seul sur son fil partage
+/// ce fil avec les suivants).
+struct Interrupteur(&'static std::thread::LocalKey<std::cell::Cell<bool>>);
+
+impl Interrupteur {
+    fn allumer(cle: &'static std::thread::LocalKey<std::cell::Cell<bool>>) -> Interrupteur {
+        cle.with(|c| c.set(true));
+        Interrupteur(cle)
+    }
+}
+
+impl Drop for Interrupteur {
+    fn drop(&mut self) {
+        self.0.with(|c| c.set(false));
     }
 }
 
@@ -341,9 +376,10 @@ fn le_raccourci_des_pixels_sans_encre_ne_change_rien() {
             let hauteur = largeur * HAUTEUR / LARGEUR;
             let vignette = || crate::render::thumbnail_marge_until(&doc, &plan, cam, largeur, hauteur, marge, None, &|| false).expect("jamais interrompue");
             let avec = vignette();
-            crate::render::SANS_RACCOURCI.with(|c| c.set(true));
-            let sans = vignette();
-            crate::render::SANS_RACCOURCI.with(|c| c.set(false));
+            let sans = {
+                let _sans = Interrupteur::allumer(&crate::render::SANS_RACCOURCI);
+                vignette()
+            };
             let differents = avec.pixels.iter().zip(&sans.pixels).filter(|(a, b)| a != b).count();
             assert_eq!(differents, 0, "caméra {k}, vignette de {largeur} pixels, marge {marge} : {differents} pixels diffèrent avec le raccourci");
             // (Un trait d'un pixel réduit cinq fois est pâle : 19 % d'encre, en lumière linéaire, donne un rouge vers 232.)
@@ -370,4 +406,94 @@ fn au_demi_la_vignette_est_la_moyenne_des_quatre_pixels() {
             assert_eq!(image.pixels[vy * (LARGEUR / 2) + vx].r(), attendu, "pixel ({vx}, {vy}) de la vignette au demi : {noirs} pixels noirs sur quatre");
         }
     }
+}
+
+/// Le projet des essais à regarder : une COPIE de projet (`FEANOR_PROJET_ESSAI` : son manifeste), sinon la feuille de traits fins.
+fn projet_a_regarder() -> Document {
+    match std::env::var_os("FEANOR_PROJET_ESSAI") {
+        Some(p) => crate::project::load(std::path::Path::new(&p)).expect("le projet s'ouvre").doc,
+        None => feuille_de_traits_fins(),
+    }
+}
+
+/// Le coût d'une vignette (essai ignoré : il imprime des millièmes de seconde) : pour chaque plan du projet à regarder, à la taille
+/// d'une case des Vignettes (avec sa marge) et d'une vignette de plan, comme avant la partie 166.10, maintenant, et maintenant sans le
+/// raccourci des pixels sans encre. Le meilleur de trois passages.
+/// `FEANOR_PROJET_ESSAI=… cargo test --release --offline --lib --target-dir target\msvc cout_des_vignettes -- --ignored --nocapture`
+#[test]
+#[ignore = "mesure des temps"]
+fn cout_des_vignettes() {
+    let doc = projet_a_regarder();
+    let [fw, fh] = doc.frame;
+    let mut totaux = [[0.0_f64; 3]; 3];
+    for index in 0..doc.panels.len() {
+        let plan = crate::render::panel_plan_at(&doc, index, 0, Some(doc.paper));
+        let cam = doc.panel_camera(index, 0);
+        for (k, (largeur, marge)) in [(360usize, 24usize), (200, 14), (96, 0)].into_iter().enumerate() {
+            let hauteur = largeur * fh / fw;
+            let mesure = || {
+                (0..3)
+                    .map(|_| {
+                        let t = std::time::Instant::now();
+                        let _ = crate::render::thumbnail_marge_until(&doc, &plan, &cam, largeur, hauteur, marge, None, &|| false);
+                        t.elapsed().as_secs_f64() * 1e3
+                    })
+                    .fold(f64::MAX, f64::min)
+            };
+            let maintenant = mesure();
+            let avant = {
+                let _i = Interrupteur::allumer(&crate::render::COMME_AVANT);
+                mesure()
+            };
+            let sans = {
+                let _i = Interrupteur::allumer(&crate::render::SANS_RACCOURCI);
+                mesure()
+            };
+            println!("COUT plan {}, vignette de {largeur} pixels (marge {marge}) : avant {avant:.1} ms, maintenant {maintenant:.1} ms, sans le raccourci {sans:.1} ms", index + 1);
+            for (t, v) in totaux[k].iter_mut().zip([avant, maintenant, sans]) {
+                *t += v;
+            }
+        }
+    }
+    for (nom, t) in ["cases des Vignettes à trois par ligne (360 pixels)", "cases des Vignettes à six par ligne (200 pixels)", "vignettes de plan (96 pixels)"].iter().zip(totaux) {
+        println!("COUT total, {nom} ({} plans) : avant {:.0} ms, maintenant {:.0} ms, sans le raccourci {:.0} ms", doc.panels.len(), t[0], t[1], t[2]);
+    }
+}
+
+/// Des images à regarder (essai ignoré, à lancer SEUL : il change les vignettes de tout le processus), dans `FEANOR_CAPTURE_DIR` :
+/// l'onglet Vignettes du projet à regarder, les vignettes calculées comme avant la partie 166.10 puis comme maintenant.
+/// `FEANOR_PLAN_ESSAI` : le plan courant (la case vivante), le dernier sinon. Sans carte graphique : rien.
+#[test]
+#[ignore = "écrit des captures : FEANOR_CAPTURE_DIR"]
+fn vignettes_captures() {
+    let dossier = std::env::var_os("FEANOR_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    std::fs::create_dir_all(&dossier).unwrap();
+    for (nom, avant) in [("vignettes-avant.png", true), ("vignettes-maintenant.png", false)] {
+        crate::render::COMME_AVANT_PARTOUT.store(avant, std::sync::atomic::Ordering::Relaxed);
+        let doc = projet_a_regarder();
+        let plans = doc.panels.len().max(1);
+        let plan = std::env::var("FEANOR_PLAN_ESSAI").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(plans).clamp(1, plans) - 1;
+        let mut b = crate::perf_tests::banc(doc, true);
+        if b.capturer().is_none() {
+            crate::render::COMME_AVANT_PARTOUT.store(false, std::sync::atomic::Ordering::Relaxed);
+            return println!("CAPTURE pas de carte graphique : rien");
+        }
+        b.app.set_espace(crate::workspace::Espace::Vignettes);
+        (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (plan, 0, 0);
+        // (La même planche dans les deux captures : six cases par ligne, le zoom d'ouverture refait.)
+        b.app.layout.board_columns = 6;
+        b.app.layout.board_rows = 0;
+        b.app.board_zoom = 0.0;
+        b.chauffer(10);
+        // (Les vignettes se font sur des fils de fond : on attend qu'elles soient toutes là.)
+        for _ in 0..40 {
+            b.attendre_vignettes();
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        b.chauffer(6);
+        let rgba = b.capturer().expect("carte graphique");
+        image::save_buffer(dossier.join(nom), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        println!("CAPTURE {nom} : plan courant {}, onglet {:?}", plan + 1, b.app.espace);
+    }
+    crate::render::COMME_AVANT_PARTOUT.store(false, std::sync::atomic::Ordering::Relaxed);
 }

@@ -1095,14 +1095,24 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
     // (partie 166.10 ; avant : 4 à 16 points lus par pixel, pour 20 à 40 pixels couverts dans une case des Vignettes).
     // - Caméra droite (ni roulis ni bascule) : la **moyenne exacte**, comme l'affichage (`gpu.rs`, `fs_display`). Chaque pixel de la feuille
     //   couvert est lu une fois, pour la part de lui que couvre le pixel de la vignette (`pixels_de_l_axe`, un axe après l'autre).
-    // - Sinon, ou si un pixel en couvre trop (`EXACT_MAX`) : des lectures en grille, une par pixel couvert et par axe (`LECTURES_VIGNETTE` au plus).
-    let axes = axes_droits(&map);
+    // - Sinon (caméra en roulis ou basculée), ou si un pixel en couvre plus de `EXACT_MAX` par axe (les toutes petites vignettes) : des
+    //   lectures en grille (`lectures_en_grille`).
+    // (Essais : `COMME_AVANT` refait la vignette d'avant la partie 166.10, pour mesurer ce qui a changé, à l'œil et au chronomètre.)
+    #[cfg(test)]
+    let avant = COMME_AVANT.with(|c| c.get()) || COMME_AVANT_PARTOUT.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(test))]
+    let avant = false;
+    let axes = if avant { None } else { axes_droits(&map) };
     let colonnes: Option<Vec<Vec<(f32, i64, f32)>>> = axes.and_then(|[ax, bx, _, _]| (0..ow).map(|x| pixels_de_l_axe(ax, bx, (x as f32 - mx) * sx, (x as f32 + 1.0 - mx) * sx)).collect());
-    let n = (pixels_couverts(&map, [fw, fh], sx, sy).ceil() as usize).clamp(2, LECTURES_VIGNETTE);
+    let n = if avant {
+        if comme_le_vivant { ((sx.max(sy) / 2.5).ceil() as usize).clamp(2, 4) } else { 2 }
+    } else {
+        lectures_en_grille(pixels_couverts(&map, [fw, fh], sx, sy))
+    };
     let hauteurs: Vec<f32> = (0..n).map(|k| (k as f32 + 0.5) / n as f32).collect();
     let mut lus: Vec<Color32> = Vec::with_capacity(n * n);
     #[cfg(test)]
-    let raccourci = !SANS_RACCOURCI.with(|c| c.get());
+    let raccourci = !avant && !SANS_RACCOURCI.with(|c| c.get());
     #[cfg(not(test))]
     let raccourci = true;
     for y in 0..oh {
@@ -1128,7 +1138,15 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
             // Le raccourci : là où aucun dessin n'a d'encre (d'après ses tuiles dessinées, aucun pixel lu), toutes les lectures rendraient le
             // fond tel quel. La plus grande part d'une vignette au trait : c'est ce qui paie les lectures de plus là où il y a de l'encre.
             let (gauche, haut, droite, bas) = ((x as f32 - mx) * sx, (y as f32 - m) * sy, (x as f32 + 1.0 - mx) * sx, (y as f32 + 1.0 - m) * sy);
-            let vide = raccourci && sans_encre(layers, &map, gauche, haut, droite, bas);
+            let vide = raccourci
+                && match &exact {
+                    // (Caméra droite : le rectangle de la feuille que ce pixel couvre se lit dans les listes déjà faites.)
+                    Some((colonnes, ligne, _)) => match (colonnes[x].first(), colonnes[x].last(), ligne.first(), ligne.last()) {
+                        (Some(a), Some(b), Some(c), Some(d)) => sans_encre_sur_la_feuille(layers, a.1 as f32, c.1 as f32, b.1 as f32 + 1.0, d.1 as f32 + 1.0),
+                        _ => false,
+                    },
+                    None => sans_encre(layers, &map, gauche, haut, droite, bas),
+                };
             if vide && masque.is_none() {
                 // (Tout le pixel dans le cadre : le papier. Tout dehors : rien. À cheval : lecture par lecture, plus bas.)
                 if gauche >= 0.0 && haut >= 0.0 && droite <= fw as f32 && bas <= fh as f32 {
@@ -1189,11 +1207,24 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
     })
 }
 
-/// Le plus de lectures par axe et par pixel d'une vignette, quand elles se font en grille (`thumbnail_marges_until`).
-const LECTURES_VIGNETTE: usize = 8;
-/// Le plus de pixels de la feuille qu'un pixel de vignette peut couvrir, par axe, pour être moyenné exactement ; au-delà (une caméra
-/// qui filme de très loin), des lectures en grille.
-const EXACT_MAX: usize = 64;
+/// Le plus de lectures par axe et par pixel d'une toute petite vignette, quand elles se font en grille (`lectures_en_grille`).
+const LECTURES_VIGNETTE: usize = 6;
+
+/// Le nombre de lectures en grille, par axe, pour un pixel de vignette qui couvre `couverts` pixels de la feuille par axe : une par pixel
+/// couvert jusqu'à `EXACT_MAX` (la caméra en roulis d'une case des Vignettes : autant de lectures que la moyenne exacte) ; au-delà, une
+/// pour deux, `LECTURES_VIGNETTE` au plus (une vignette de plan : 36 lectures par pixel au lieu de 4, pas 400).
+fn lectures_en_grille(couverts: f32) -> usize {
+    if couverts <= EXACT_MAX as f32 {
+        (couverts.ceil() as usize).clamp(2, EXACT_MAX)
+    } else {
+        ((couverts / 2.0).ceil() as usize).clamp(4, LECTURES_VIGNETTE)
+    }
+}
+/// Le plus de pixels de la feuille qu'un pixel de vignette peut couvrir, par axe, pour être moyenné exactement : une case des Vignettes
+/// en couvre 5 (trois cases par ligne) à 10 (six par ligne, sur un écran de 1 920 pixels). Au-delà (une vignette de plan de la timeline en
+/// couvre 20, un pixel d'un trait y est invisible), des lectures en grille : tout lire coûtait vingt fois plus pour rien (mesuré : 2 ms
+/// avant, 100 à 200 ms, pour une vignette de 96 pixels).
+const EXACT_MAX: usize = 12;
 
 /// Caméra droite, ni roulis ni bascule : chaque axe du cadre filmé suit un axe de la feuille. Rend alors [ax, bx, ay, by] :
 /// `x de la feuille = ax × x du cadre + bx`, de même en y. Rien sinon.
@@ -1292,7 +1323,15 @@ impl Moyenne {
 thread_local! {
     /// Essais : composer les vignettes sans le raccourci des pixels sans encre (`sans_encre`), pour comparer les deux images.
     pub(crate) static SANS_RACCOURCI: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Essais : composer les vignettes comme avant la partie 166.10 (2 à 4 lectures en grille par axe, sans raccourci), pour mesurer
+    /// ce qui a changé.
+    pub(crate) static COMME_AVANT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
+
+/// Essais : `COMME_AVANT` pour tous les fils, ceux des vignettes de l'application compris. Seulement dans un essai ignoré, lancé seul
+/// (`vignettes_captures`) : allumé pendant la suite, il changerait les vignettes des essais qui tournent à côté.
+#[cfg(test)]
+pub(crate) static COMME_AVANT_PARTOUT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Combien de pixels de la feuille un pixel de la vignette couvre, par axe (le plus grand des deux), au milieu du cadre : `sx` et `sy` sont
 /// les pixels du cadre par pixel de la vignette, la caméra `map` dit ce qu'ils valent sur la feuille (un zoom avant en couvre moins).
@@ -1319,7 +1358,12 @@ fn sans_encre(layers: &[Resolved], map: &crate::camera::FrameMap, gauche: f32, h
         }
         (x0, y0, x1, y1) = (x0.min(p.x), y0.min(p.y), x1.max(p.x), y1.max(p.y));
     }
-    let (x0, y0, x1, y1) = (x0 - 1.0, y0 - 1.0, x1 + 1.0, y1 + 1.0);
+    sans_encre_sur_la_feuille(layers, x0 - 1.0, y0 - 1.0, x1 + 1.0, y1 + 1.0)
+}
+
+/// Le rectangle (`x0`, `y0`, `x1`, `y1`) de la feuille (du monde), en pixels, est-il sans encre dans tous les éléments ? Comme `sans_encre` ;
+/// le rectangle doit contenir tous les pixels qui seront lus.
+fn sans_encre_sur_la_feuille(layers: &[Resolved], x0: f32, y0: f32, x1: f32, y1: f32) -> bool {
     const T: f32 = TILE as f32;
     layers.iter().all(|l| {
         let r = l.laid.as_ref().unwrap_or(&l.cel.raster);

@@ -770,9 +770,9 @@ fn the_timeline_columns_to_paint_cover_the_visible_area() {
     assert_eq!(visible_columns(-50.0, 40.0, 100.0, 16.0, 2000).0, 0);
 }
 
-/// La vignette (dessins cherchés une fois, puis chaque échantillon composé) donne les pixels de la
-/// composition entière échantillonnée aux mêmes points : opacité, teinte, mode de fusion,
-/// transformation du calque comprises.
+/// La vignette (dessins cherchés une fois, puis chaque pixel composé) est la moyenne de **tous** les pixels de la
+/// composition entière que chacun de ses pixels couvre, chacun pour sa part (partie 166.10 ; avant, quatre points par
+/// pixel) : opacité, teinte, mode de fusion, transformation du calque comprises.
 #[test]
 fn the_thumbnail_samples_the_full_composition() {
     let mut doc = projet_long(1, 4, 6, 30);
@@ -782,31 +782,56 @@ fn the_thumbnail_samples_the_full_composition() {
     let cam = doc.panel_camera(0, 0);
     let mut plan = crate::render::panel_plan_at(&doc, 0, 2, Some(doc.paper));
     plan.items[3].tint = Some([200, 40, 40]);
-    let (tw, th) = (96, 54);
+    // (La taille d'une case des Vignettes : la moyenne exacte. Une vignette de plan de 96 pixels se lit en grille, `render::EXACT_MAX`.)
+    let [fw, fh] = doc.frame;
+    let (tw, th) = (fw / 8, fh / 8);
     let thumb = crate::render::thumbnail(&doc, &plan, &cam, tw, th);
     let full = crate::render::composite_full(&doc, &plan);
-    let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
-    let mut painted = 0;
+    // La caméra est droite : chaque axe du cadre suit un axe de la feuille.
+    let (o, i, j) = (map.at(0.0, 0.0).expect("caméra droite"), map.at(1.0, 0.0).expect("caméra droite"), map.at(0.0, 1.0).expect("caméra droite"));
+    assert!((i.y - o.y).abs() < 1e-6 && (j.x - o.x).abs() < 1e-6, "la caméra de cet essai est droite");
+    // Les pixels de la feuille que couvre, sur un axe, l'intervalle [lo, hi] du cadre : leur rang et la part couverte de chacun.
+    let couverts = |a: f32, b: f32, lo: f32, hi: f32| -> Vec<(i64, f32)> {
+        let rond = |v: f32| if (v - v.round()).abs() < 1e-3 { v.round() } else { v };
+        let (p, q) = (rond(a * lo + b), rond(a * hi + b));
+        let (p, q) = (p.min(q), p.max(q));
+        let mut out = Vec::new();
+        let mut k = p.floor();
+        while k < q {
+            let part = q.min(k + 1.0) - p.max(k);
+            if part > 1e-4 {
+                out.push((k as i64, part));
+            }
+            k += 1.0;
+        }
+        out
+    };
+    let (mut painted, mut couverts_au_plus) = (0, 0);
     for y in 0..th {
+        let lignes = couverts(j.y - o.y, o.y, y as f32 * sy, (y as f32 + 1.0) * sy);
         for x in 0..tw {
-            let mut acc = [0u32; 4];
-            for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
-                    Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => full[p.y as usize * doc.width + p.x as usize],
-                    _ => Color32::TRANSPARENT,
-                };
-                for (a, v) in acc.iter_mut().zip(c.to_array()) {
-                    *a += v as u32;
+            let colonnes = couverts(i.x - o.x, o.x, x as f32 * sx, (x as f32 + 1.0) * sx);
+            couverts_au_plus = couverts_au_plus.max(lignes.len() * colonnes.len());
+            let (mut acc, mut poids) = ([0.0_f32; 4], 0.0_f32);
+            for &(iy, hy) in &lignes {
+                for &(ix, hx) in &colonnes {
+                    let c = if ix >= 0 && iy >= 0 && (ix as usize) < doc.width && (iy as usize) < doc.height { full[iy as usize * doc.width + ix as usize] } else { Color32::TRANSPARENT };
+                    for (a, v) in acc.iter_mut().zip(c.to_array()) {
+                        *a += hx * hy * v as f32;
+                    }
+                    poids += hx * hy;
                 }
             }
-            let want = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
-            let got = thumb.pixels[y * tw + x];
-            painted += usize::from(want != Color32::from_rgb(255, 255, 255));
-            assert_eq!(got, want, "pixel ({x}, {y})");
+            let want = acc.map(|v| v / poids);
+            let got = thumb.pixels[y * tw + x].to_array();
+            painted += usize::from(want.iter().any(|v| *v < 254.0));
+            // (La vignette tronque sa moyenne : un niveau d'écart au plus.)
+            assert!(got.iter().zip(&want).all(|(g, w)| (*g as f32 - w).abs() <= 1.01), "pixel ({x}, {y}) : {got:?}, moyenne des pixels couverts {want:?}");
         }
     }
+    assert!(couverts_au_plus > 16, "chaque pixel de la vignette couvre bien plus de quatre pixels de la feuille ({couverts_au_plus} au plus)");
     assert!(painted > 200, "la vignette doit montrer des dessins ({painted} pixels autres que le papier)");
 }
 
