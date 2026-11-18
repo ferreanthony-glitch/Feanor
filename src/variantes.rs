@@ -708,7 +708,7 @@ impl Document {
                 self.adopt_scene_layers(std::slice::from_mut(&mut p), scene);
                 autres.push(Rangee { numero: r.numero, date: r.date, panel: p });
             }
-            versions.insert(host, VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres });
+            versions.insert(host, VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres, couleurs: v.couleurs.clone(), sons: v.sons.clone() });
         }
         let mut comments: Vec<Comment> = self.comments.iter().filter(|c| plan_map.contains_key(&c.panel)).cloned().collect();
         for c in &mut comments {
@@ -857,7 +857,7 @@ impl Document {
             p.scene = scene;
             autres.push(Rangee { numero: r.numero, date: r.date, panel: p });
         }
-        Some(VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
+        Some(VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres, couleurs: v.couleurs.clone(), sons: v.sons.clone() })
     }
 
     /// Le plan `premier` vient d'être coupé, `second` est la suite (scène `scene`) : les versions **rangées** de `premier`, restées
@@ -872,7 +872,7 @@ impl Document {
             return;
         }
         if self.versions_protegees().contains(&(premier, v.actuelle)) {
-            self.versions.insert(premier, VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres: Vec::new() });
+            self.versions.insert(premier, VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres: Vec::new(), couleurs: v.couleurs.clone(), sons: v.sons.clone() });
         }
         let numeros: HashSet<u32> = v.autres.iter().map(|r| r.numero).collect();
         for r in &mut v.autres {
@@ -910,7 +910,7 @@ impl Document {
     pub(crate) fn absorber_versions(&mut self, hote: u64, absorbees: Option<VersionsDuPlan>) {
         let Some(mut absorbees) = absorbees.filter(|v| !v.autres.is_empty()) else { return };
         let scene = self.panels.iter().find(|p| p.id == hote).map_or(0, |p| p.scene);
-        let v = self.versions.entry(hote).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new() });
+        let v = self.versions.entry(hote).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: Default::default(), sons: Default::default() });
         absorbees.autres.sort_by_key(|r| r.numero);
         for mut r in absorbees.autres {
             poser_scene(&mut r.panel, scene);
@@ -1506,7 +1506,7 @@ fn lire_un_plan(
                 rangees.push(Rangee { numero: r.numero, date: r.date, panel: p });
             }
         }
-        (!rangees.is_empty() || vf.autres.is_empty()).then_some(VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres: rangees })
+        (!rangees.is_empty() || vf.autres.is_empty()).then_some(VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres: rangees, couleurs: vf.couleurs.clone(), sons: vf.sons.clone() })
     });
     let reserve = rognages.remove(&cle).and_then(|l| l.pour_plans(&[&panel], missing).into_iter().next().map(|(_, r)| r));
     let id = panel.id;

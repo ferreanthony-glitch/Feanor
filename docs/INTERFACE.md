@@ -14050,3 +14050,132 @@ gardent l'irisé (`barre.rs`).
 2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
 3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
 4. Thème Papier : l'accueil et À propos restent lisibles.
+
+## 168. Les versions d'un plan dans la timeline : « V2 ▸ », la version dépliée à côté, la couleur de repère (2026-11-17, branche `versions-plan` ; numérotée 167 sur la branche, 168 à la fusion : le nouveau logo avait pris le 167)
+
+Anthony, sur une capture de la timeline en vue Storyboard (en-têtes « Plan 1 · V1 », « Plan 2 »…) : « Je veux que la V2 d'un plan
+apparaisse sur le plan et qu'un clic sur une flèche vers la droite la déploie à côté dans la timeline pour la lire et la comparer
+directement à l'autre version. Un clic direct sur le mot V2 (ou V3) change la version en cours pour celle cliquée. » Puis : « Les
+étiquettes V2 peuvent être colorées pour donner un repère visuel avec un clic droit dessus. » À la question posée : la V2 dépliée
+décale les plans suivants **pour l'affichage seulement**, la lecture enchaîne V1 puis V2, le montage et les exports ne changent pas,
+un clic sur ◂ replie.
+
+Le code : `src/versiondepliee.rs` (la carte des images du film vers celles de l'écran), `src/versiondeplieeui.rs` (étiquettes, bloc
+déplié, palette, vue en lecture seule) ; ce qu'il a fallu ailleurs : `src/storyboard.rs` (la bande du montage passe par la carte),
+`src/app.rs` (lecture, flèches), `src/soundtrack.rs` (le son), `src/canvas.rs` (la vue), `src/planvers.rs` (la couleur des versions).
+Les essais : `src/versiondepliee_tests.rs` (onze).
+
+### 168.1 Les étiquettes sur le bloc du plan
+
+- Sur le bloc d'un plan qui a plusieurs versions, le nom reste « Plan 1 · V1 » (la version en cours), suivi des **autres versions en
+  étiquettes texte** : « V2 », « V3 »…, chacune suivie d'une flèche ▸. Du texte, pas de pastille ni de miniature. Un plan à une seule
+  version n'a rien de plus.
+- **Un clic sur « V2 »** : la V2 devient la version en cours. C'est le « Passer à la version » de toujours : une étape d'annulation
+  (« Passer à la version V2 »), le même message dans la barre d'état (« Le plan est maintenant en V2 ; la V1 est gardée. … »).
+  Aucune boîte de dialogue. Un clic sur la version en cours (« V1 » dans le nom) ouvre la pile des versions (`pileversui.rs`).
+- **Faute de place** (plan court, zoom arrière) : les étiquettes qui ne tiennent pas se résument en « +2 » ; un clic dessus ouvre la
+  pile des versions, un clic droit un menu avec chacune (passer, déplier, colorer). Plus étroit encore, il ne reste que le nom. Une
+  étiquette coupée par le bord du bloc ne se pose pas : jamais deux étiquettes l'une sur l'autre, jamais sur la poignée de fin.
+- La durée du plan n'est écrite que s'il reste de la place après les étiquettes.
+- L'étiquette « V2 » au milieu du haut du bloc (la pile au survol, 2026-10-30) reste telle quelle.
+
+### 168.2 La version dépliée
+
+- **Un clic sur ▸** déplie la V2 **juste après la V1** : un bloc à part, bordé (à la couleur de la version, sinon du contour), hachuré
+  légèrement, avec son aperçu, « V2 ◂ dépliée » et sa durée ; sous lui, une colonne hachurée (pas de pistes : rien ne s'y modifie).
+  Les plans suivants, leurs pistes, le son, les transitions, les commentaires glissent **à l'écran** de la durée de la V2. La flèche
+  devient ◂ (dans le nom du plan et sur le bloc déplié) : un clic replie.
+- **Rien n'est écrit** : pas d'étape d'annulation, rien à enregistrer, pas de changement du format du projet. Le montage, les durées,
+  l'export, l'animatique exportée, les envois ne voient que le film. (Essai : l'empreinte du projet, du fichier des versions et de
+  l'export est la même avant, pendant et après.)
+- **Plusieurs versions dépliées** se suivent dans l'ordre de leurs numéros (V1 puis V2 après la V3 en cours, par exemple) ; d'autres
+  plans peuvent avoir les leurs.
+- **Lecture seule** : un clic dans le bloc ou la colonne pose seulement la tête de lecture (un glisser la fait courir) ; la vue montre
+  alors l'image de la version, composée sur les fils des vignettes, avec « Plan 1 · V2 dépliée · lecture seule · image 12 » écrit
+  dessus. On n'y dessine pas ; le clic droit sur le bloc donne la palette, « Passer à la V2 », « Replier la V2 ».
+- **La lecture** traverse la V1, puis chaque version dépliée, puis le plan suivant ; les flèches (image précédente / suivante) aussi.
+- **Le son pendant une version dépliée** (revu le 18, voir 168.7) : le son **tel qu'il était posé sous cette version** quand elle a
+  cessé d'être la version en cours, à la même place dans le plan ; une version sans son gardé rejoue le son du film **depuis le début
+  du plan**. Après elle, le son reprend au début du plan suivant. Sans son, la lecture suit l'horloge comme d'habitude.
+- **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée, revu le 18) : elle devient la version en cours et se
+  replie ; aucune version ne se déplie à la place de l'ancienne ; les autres versions dépliées le restent.
+- Le dépliage est de l'affichage de la séance : il ne survit pas à la fermeture du projet, et se défait de lui-même si la version
+  disparaît (supprimée, annulée).
+
+### 168.3 La couleur de repère
+
+- **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles **douces** (revu le 18 :
+  bleu, vert, cyan, rouge, rose, orange, violet, brun, jaune doux et gris bleu, moins saturées et plus claires que les couleurs de
+  plan) et « Aucune ». Une étape
+  d'annulation par changement (« Couleur de la V2 »), rien si la couleur ne change pas ; la barre d'état le dit.
+- La couleur colore le fond de l'étiquette « V2 » (le texte passe en clair ou en sombre selon la teinte) ; elle se voit aussi sur
+  « V1 » dans le nom du plan quand cette version est la version en cours, sur le bord et l'étiquette du bloc déplié, et autour de
+  son image dans la vue.
+- Elle **suit le numéro** de la version : passer de l'une à l'autre ne la change pas ; une version supprimée ne laisse pas la sienne.
+- **Fichier** : un champ `couleurs` (numéro → rang de couleur) dans chaque plan de `plans_versions.json`, écrit seulement s'il y a
+  une couleur. **Le format du projet ne change pas** (56), ni celui du fichier des versions (1) : un projet d'avant s'ouvre tel quel
+  (essai : le champ retiré à la main, le projet se rouvre sans avertissement), et une version d'avant qui ouvre un projet de cette
+  branche l'ignore. Seule limite : une version d'avant qui **enregistre** ce projet perd les couleurs (rien d'autre).
+
+### 168.4 Les bulles
+
+- Sur « V2 » : « Passer à la V2 » — le clic en fait la version en cours, Ctrl+Z revient, clic droit = couleur. Sur la version en
+  cours : ce qu'elle est, clic = la pile. Sur ▸ : « Déplier la V2 » (après la V1, lecture seule, les plans suivants glissent à l'écran
+  seulement) ; sur ◂ : « Replier la V2 ». Sur « +2 » : la pile, et le clic droit. Sur la colonne dépliée et sur sa vue : lecture seule.
+  Toutes au délai habituel (`bulles.rs`, une seconde).
+
+### 168.5 Ce qui reste à juger (par Anthony)
+
+- Le bloc déplié est-il assez distinct d'un plan du film (bord, hachures, « dépliée ») sans être trop chargé ?
+- Le son sous une version dépliée : repris au début du plan (choix fait pour comparer à son égal) ; préfère-t-il le silence ?
+- La palette : dix teintes des couleurs de plan ; les veut-il plus douces (pastel) pour des étiquettes ?
+- Passer à une version dépliée déplie l'ancienne à sa place : est-ce ce qu'il attend ?
+
+### 168.6 Regardé à l'écran (par Claude, le 17 novembre au soir)
+
+Exe de la branche, réglages à part, sur une copie de « retakes brawlydays » (`Tests\essai 167`), fenêtre capturée seule. Le plan 1
+(V2 en cours, V1 rangée) montre « Plan 1 · V2 » puis « V1 ▸ » ; un clic sur ▸ pose le bloc « V1 ◂ dépliée » (2 s 13) après lui, les
+plans suivants glissent, la barre de la séquence reste entière ; un clic dans le bloc montre la V1 dans la vue avec « lecture
+seule ». Premier essai : la vue restait sombre (l'image était rangée dans la file des vignettes sous un numéro que son élagage ne
+connaît pas, et lâchée aussitôt) ; corrigé en la rangeant sous le numéro du plan rangé de la version. Le clic droit sur « V1 » ouvre
+la palette ; l'orange colore l'étiquette du nom, celle du bloc déplié, son bord et le cadre de la vue.
+
+Vérificateur (17 novembre, vers 22 h 50, `-Repetitions 2`) : compilation sans avertissement ; passage 2 : **4 807 réussis, 0 échec** ;
+passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`
+(intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
+passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
+
+### 168.7 Ses réponses (18 novembre) et ce qui a changé
+
+1. **Le son** : « Sur la version dépliée le son se rejoue. Si le son a été posé différemment que la version active, la version
+   dépliée garde le son tel qu'il a été posé. »
+   - **Ce qui existait** : une version de plan ne gardait **aucun son**. Les sons sont des extraits sur les pistes du film, en
+     images du montage ; changer de version laisse le son en place (« le son reste en place », message de « Passer à la version »).
+   - **Ce qui est ajouté** : quand une version cesse d'être la version en cours (nouvelle version, passer à une autre, restaurer),
+     les extraits posés sous le plan à ce moment (ceux qui touchent ses images : piste, début par rapport au plan, son, décalage,
+     durée ; pas leurs fondus ni leurs clés de volume) sont **gardés avec elle** (`SonPose`, champ `sons` du plan dans
+     `plans_versions.json`, facultatif, format inchangé). Le son du film, lui, ne change toujours pas.
+   - **À la lecture** : sous une version dépliée qui a son son gardé, on entend **ce son-là, là où il était posé** ; sinon, le son du
+     film depuis le début du plan. La forme d'onde des pistes son sous le bloc déplié montre ce qu'on entend (le son gardé, ou celui
+     du film à partir du début du plan). Les sons qu'écoutent seulement des versions restent dans le projet (`used_sounds`).
+   - Une version qui avait été rangée **avant** ce changement n'a pas de son gardé : elle rejoue le son du film. Une version sous
+     laquelle rien n'était posé non plus.
+2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 168.2.
+3. Le dépliage n'est pas gardé à la fermeture : inchangé.
+4. Les teintes « plus douces » : voir 168.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
+   avait prend les nouvelles teintes. Essai : chaque teinte garde un contraste d'au moins 4,5 avec son texte, et toutes se
+   distinguent.
+
+Essais (`src/versiondepliee_tests.rs`, treize) : la V1 dépliée choisie devient la version en cours, se replie, la V3 ne se déplie
+pas, la V2 dépliée le reste ; deux versions au son posé différemment : la partie dépliée joue celui de sa version, à sa place, le
+film garde le sien, et tout se retrouve après enregistrement et réouverture ; les teintes douces.
+
+Vérificateur après ces retours (18 novembre, vers 1 h 45, `-Repetitions 2`) : compilation sans avertissement ; passage 1 : **4 809
+réussis, 0 échec** ; passage 2 : 4 808 réussis, un échec, `effets_debord_tests::a_reserve_too_small_does_not_compute_without_end`
+(intermittent, sans lien avec les versions : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Captures
+refaites sur le banc sans fenêtre (essai ignoré `versions_depliees_captures`, sur une copie de projet) : la fenêtre de l'exe de
+branche, derrière le FEANOR d'Anthony, ne se redessinait pas.
+
+Note de journal : le message du commit `ab1c03f` (« teintes orange et jaune plus distinctes ; captures sur banc ») est inexact sur
+les teintes : leur réglage est déjà dans `b0f7b4f` ; `ab1c03f` n'ajoute que l'essai des captures.
+
