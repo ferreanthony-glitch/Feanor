@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`prereglages-travellings` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (cd23311, exe de 19 h 21),
+  sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (603851a), ni ici
+  ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 855 réussis, 0 échec, les dix groupes
+  OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 15 h 17) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 58) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 59 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  172.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-travellings` et `Tests\essai 172`.
 - **Préréglages dans la timeline, lot 3 : la caméra dans l'espace** (partie 172, branche `prereglages-travellings` partie de
   main 603851a, **format 59**), sur son « Oui, le lot 3 ». Quatre préréglages de plus en blocs vivants, qui déplacent vraiment
   la caméra (travelling latéral C13, orbite C14, grue C15, survol C16, famille « Travellings ») : l'œil bouge, chaque calque
