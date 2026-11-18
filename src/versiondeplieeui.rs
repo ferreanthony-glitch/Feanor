@@ -30,8 +30,27 @@ use crate::planvers::etiquette;
 use crate::theme;
 use crate::versiondepliee::{Carte, Lieu};
 
-/// Les couleurs de repère proposées (des rangs de `marks::COLORS`, les teintes des couleurs de plan) : dix.
-pub(crate) const PALETTE: [u8; 10] = [6, 7, 8, 9, 10, 11, 4, 5, 0, 1];
+/// Les couleurs de repère des étiquettes : dix teintes douces (moins saturées et un peu plus claires que les couleurs de plan, à
+/// la demande d'Anthony : « plus douces »), lisibles avec le texte de l'étiquette sur le fond sombre et distinctes entre elles. Un
+/// projet enregistre le **rang** de la teinte (0 à 9), pas sa valeur : changer une teinte ici change toutes les étiquettes qui l'ont.
+pub(crate) const PALETTE: [(&str, [u8; 3]); 10] = [
+    ("Bleu doux", [122, 152, 208]),
+    ("Vert doux", [128, 182, 132]),
+    ("Cyan doux", [118, 182, 192]),
+    ("Rouge doux", [208, 124, 118]),
+    ("Rose doux", [200, 130, 182]),
+    ("Orange doux", [216, 158, 108]),
+    ("Violet doux", [158, 134, 204]),
+    ("Brun doux", [172, 138, 104]),
+    ("Jaune doux", [200, 196, 108]),
+    ("Gris bleu", [142, 156, 172]),
+];
+
+/// La teinte de rang `k` (une valeur hors de la palette, venue d'un fichier abîmé : un gris).
+pub(crate) fn couleur(k: u8) -> Color32 {
+    let [r, g, b] = PALETTE.get(k as usize).map_or([150, 150, 150], |c| c.1);
+    Color32::from_rgb(r, g, b)
+}
 
 /// Hauteur d'une étiquette de version.
 const ETIQ_H: f32 = 15.0;
@@ -85,10 +104,11 @@ pub(crate) struct Depli {
 
 /// Le texte lisible sur la couleur `c`.
 fn encre_sur(c: Color32) -> Color32 {
-    if theme::luminance(c) > 0.55 {
-        Color32::from_gray(20)
+    let (sombre, clair) = (Color32::from_gray(24), Color32::WHITE);
+    if theme::contraste(sombre, c) >= theme::contraste(clair, c) {
+        sombre
     } else {
-        Color32::WHITE
+        clair
     }
 }
 
@@ -265,25 +285,60 @@ impl App {
         }
     }
 
+    /// Les pistes du film portant le son gardé de la version `numero` du plan `plan` (partie 167), posé à la place du plan dans le
+    /// film : ce qu'on entend sous la version dépliée. Rien si la version n'a pas de son gardé (on rejoue alors le son du film depuis
+    /// le début du plan). Les extraits d'une piste retirée depuis, ou d'un son qui n'est plus là, sont oubliés.
+    pub(crate) fn depli_pistes(&self, plan: u64, numero: u32) -> Option<Vec<crate::document::AudioTrack>> {
+        let sons = self.doc.son_de_version(plan, numero).filter(|s| !s.is_empty())?;
+        let host = self.doc.panels.iter().position(|p| p.id == plan)?;
+        let debut = self.doc.panel_start(host) as i64;
+        let mut pistes: Vec<crate::document::AudioTrack> = self.doc.audio_tracks.iter().map(|t| crate::document::AudioTrack { clips: Vec::new(), ..t.clone() }).collect();
+        for (k, s) in sons.iter().enumerate() {
+            let Some(piste) = pistes.iter_mut().find(|t| t.id == s.piste) else { continue };
+            if !self.doc.sounds.contains_key(&s.son) {
+                continue;
+            }
+            let mut a = debut + s.debut;
+            let (mut decalage, mut duree) = (s.decalage, s.duree as i64);
+            if a < 0 {
+                decalage += (-a) as usize;
+                duree += a;
+                a = 0;
+            }
+            if duree <= 0 {
+                continue;
+            }
+            // (Des numéros d'extraits à part : ils ne sont jamais ceux du film.)
+            piste.clips.push(crate::document::SoundClip::new(u64::MAX - k as u64, s.son, a as usize, decalage, duree as usize));
+        }
+        Some(pistes)
+    }
+
+    /// Le mélange à jouer quand la tête est dans une version dépliée qui a son son gardé.
+    pub(crate) fn depli_mix(&self) -> Option<Vec<crate::audio::MixClip>> {
+        let t = self.depli.tete?;
+        let pistes = self.depli_pistes(t.plan, t.numero)?;
+        Some(crate::audiofx::build_mix_pistes(&self.doc, &pistes, false))
+    }
+
     // ------------------------------------------------------------------ changer de version, colorer
 
-    /// Un clic sur l'étiquette « V2 » du plan `index` : elle devient la version en cours. Dépliée, elle laisse sa place à la version
-    /// d'avant (la comparaison reste à l'écran).
+    /// Un clic sur l'étiquette « V2 » du plan `index` : elle devient la version en cours. Dépliée, elle se replie (elle est maintenant
+    /// le plan) ; aucune autre ne se déplie à sa place.
     pub(crate) fn depli_passer(&mut self, index: usize, numero: u32) {
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
         let ancien = self.doc.numero_de_version(plan);
         if ancien == numero {
             return;
         }
-        let deplie = self.est_deplie(plan, numero);
         self.passer_a_la_version(index, numero);
-        if self.doc.numero_de_version(plan) == numero && deplie {
-            for e in self.depli.liste.iter_mut() {
-                if *e == (plan, numero) {
-                    *e = (plan, ancien);
-                }
+        // (Anthony : « si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : elle
+        // quitte les versions dépliées, et rien ne se déplie à la place de l'ancienne ; les autres versions dépliées le restent.)
+        if self.doc.numero_de_version(plan) == numero {
+            self.depli.liste.retain(|e| *e != (plan, numero));
+            if self.depli.tete.is_some_and(|t| t.plan == plan) {
+                self.depli.tete = None;
             }
-            self.depli.tete = None;
         }
     }
 
@@ -302,7 +357,7 @@ impl App {
         self.commit_structure(snap);
         self.history.context = before;
         self.status = match couleur {
-            Some(c) => format!("Étiquette {nom} en {} (Ctrl+Z l'enlève).", crate::marks::COLORS.get(c as usize).map_or("couleur", |c| c.0).to_lowercase()),
+            Some(c) => format!("Étiquette {nom} en {} (Ctrl+Z l'enlève).", PALETTE.get(c as usize).map_or("couleur", |c| c.0).to_lowercase()),
             None => format!("Étiquette {nom} sans couleur (Ctrl+Z la remet)."),
         };
     }
@@ -325,15 +380,15 @@ impl App {
         let mut choix: Option<Option<u8>> = None;
         ui.horizontal_wrapped(|ui| {
             ui.set_max_width(5.0 * 24.0 + 8.0);
-            for k in PALETTE {
+            for k in 0..PALETTE.len() as u8 {
                 let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
-                ui.painter().rect_filled(rect.shrink(2.0), 4.0, crate::marks::color(k));
+                ui.painter().rect_filled(rect.shrink(2.0), 4.0, couleur(k));
                 if courante == Some(k) {
                     ui.painter().rect_stroke(rect, 4.0, Stroke::new(2.0_f32, ui.visuals().strong_text_color()), StrokeKind::Inside);
                 } else if resp.hovered() {
                     ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0_f32, ui.visuals().text_color()), StrokeKind::Inside);
                 }
-                let nom_couleur = crate::marks::COLORS.get(k as usize).map_or("", |c| c.0);
+                let nom_couleur = PALETTE[k as usize].0;
                 if crate::bulles::bulle(resp, nom_couleur, &format!("Colore l'étiquette {nom} : un repère, rien d'autre ne change."), "").clicked() {
                     choix = Some(Some(k));
                 }
@@ -429,7 +484,7 @@ impl App {
         let r = Rect::from_min_size(pos2(x - 1.0, cy - ETIQ_H * 0.5), vec2(g.size().x + 2.0 + if v.couleurs.contains_key(&cur) { 6.0 } else { 0.0 }, ETIQ_H));
         let encre = match v.couleurs.get(&cur) {
             Some(&c) => {
-                let c = crate::marks::color(c);
+                let c = couleur(c);
                 clip.rect_filled(r, 3.0, c);
                 encre_sur(c)
             }
@@ -457,7 +512,7 @@ impl App {
             let r = Rect::from_min_size(pos2(x, cy - ETIQ_H * 0.5), vec2(g.size().x + 8.0, ETIQ_H));
             let encre = match v.couleurs.get(&n) {
                 Some(&c) => {
-                    let c = crate::marks::color(c);
+                    let c = couleur(c);
                     clip.rect_filled(r, 3.0, c);
                     encre_sur(c)
                 }
@@ -499,7 +554,7 @@ impl App {
     /// Les versions dépliées de la bande : leur bloc (bordé, hachuré, « V2 dépliée »), et leur colonne hachurée sous lui (pas de
     /// pistes : rien ne s'y modifie). Rend les colonnes posées et les étiquettes de leurs blocs.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn peindre_versions_depliees(&mut self, ctx: &egui::Context, painter: &Painter, carte: &Carte, left: f32, ppf: f32, strip: Rect, top: f32, block_h: f32, thumb_h: f32, bandeau: bool) -> (Vec<(Rect, usize)>, Vec<ZoneVersion>) {
+    pub(crate) fn peindre_versions_depliees(&mut self, ctx: &egui::Context, painter: &Painter, carte: &Carte, left: f32, ppf: f32, strip: Rect, top: f32, block_h: f32, thumb_h: f32, bandeau: bool, lanes_top: f32) -> (Vec<(Rect, usize)>, Vec<ZoneVersion>) {
         let mut colonnes = Vec::new();
         let mut zones = Vec::new();
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
@@ -525,7 +580,18 @@ impl App {
                 p.line_segment([pos2(xh, peinte.bottom()), pos2(xh + peinte.height(), peinte.top())], hachure);
                 xh += pas;
             }
-            let couleur = self.doc.couleur_de_version(ins.plan, ins.numero).map(crate::marks::color);
+            // Sous le bloc, la piste son montre ce qu'on y entend : le son gardé de la version, sinon celui du film depuis le début du
+            // plan (posé à la place du plan, décalé jusqu'à la colonne).
+            let l = x0 - self.doc.panel_start(ins.host) as f32 * ppf;
+            let sous = Rect::from_min_max(pos2(x0, lanes_top), pos2(x1, strip.bottom())).intersect(painter.clip_rect());
+            if sous.width() > 0.0 && sous.height() > 0.0 && !self.doc.audio_tracks.is_empty() {
+                let pl = painter.with_clip_rect(sous);
+                match self.depli_pistes(ins.plan, ins.numero) {
+                    Some(pistes) => self.paint_lanes_of(&pl, strip, l, ppf, lanes_top, theme::contour(), &pistes),
+                    None => self.paint_lanes(&pl, strip, l, ppf, lanes_top, theme::contour()),
+                }
+            }
+            let couleur = self.doc.couleur_de_version(ins.plan, ins.numero).map(couleur);
             let bloc = Rect::from_min_max(pos2(x0 + 1.0, top + 2.0), pos2(x1 - 1.0, top + block_h));
             let fond = couleur.map_or(theme::bloc(), |c| theme::bloc().lerp_to_gamma(c, 0.3));
             p.rect_filled(bloc, 4.0, fond);
@@ -623,7 +689,7 @@ impl App {
                 painter.text(image.center(), Align2::CENTER_CENTER, "Image en préparation…", FontId::proportional(14.0), theme::texte_doux());
             }
         }
-        let couleur = self.doc.couleur_de_version(t.plan, t.numero).map(crate::marks::color);
+        let couleur = self.doc.couleur_de_version(t.plan, t.numero).map(couleur);
         painter.rect_stroke(image, 0.0, Stroke::new(2.0_f32, couleur.unwrap_or_else(theme::contour)), StrokeKind::Outside);
         // « Plan 1 · V2 dépliée · lecture seule », en haut à gauche de l'image.
         let titre = format!("{} · {} dépliée · lecture seule · image {}", crate::storyboard::panel_title(&self.doc, host), etiquette(t.numero), t.frame + 1);

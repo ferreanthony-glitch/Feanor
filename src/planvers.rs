@@ -65,8 +65,26 @@ pub struct VersionsDuPlan {
     /// Les autres, par numéro.
     pub autres: Vec<Rangee>,
     /// La couleur de repère de l'étiquette de chaque version (partie 167 : clic droit sur l'étiquette « V2 » de la timeline), par
-    /// numéro : un rang de `marks::COLORS`. Elle suit le numéro, donc la version (passer de l'une à l'autre ne la change pas).
+    /// numéro : un rang de `versiondeplieeui::PALETTE` (enregistré par numéro de teinte, pas en valeur). Elle suit le numéro, donc la
+    /// version (passer de l'une à l'autre ne la change pas).
     pub couleurs: BTreeMap<u32, u8>,
+    /// Le son tel qu'il était posé sous le plan quand chaque version a cessé d'être la version en cours (partie 167 : « si le son a
+    /// été posé différemment que la version active, la version dépliée garde le son tel qu'il a été posé »), par numéro. Seulement
+    /// pour la lecture d'une version dépliée : le son du film, lui, reste où il est quand on change de version.
+    pub sons: BTreeMap<u32, Vec<SonPose>>,
+}
+
+/// Un extrait de son tel qu'il était posé sous une version d'un plan : sa piste, son début par rapport au début du plan (négatif :
+/// il commençait avant), le son, les images sautées au début du son, sa durée. (Ses effets — fondus, clés de volume — ne sont pas
+/// gardés.)
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SonPose {
+    pub piste: u64,
+    pub debut: i64,
+    pub son: u64,
+    #[serde(default)]
+    pub decalage: usize,
+    pub duree: usize,
 }
 
 impl VersionsDuPlan {
@@ -90,6 +108,15 @@ impl VersionsDuPlan {
 /// messages, noms de clips de l'export pour le montage).
 pub fn etiquette(numero: u32) -> String {
     format!("V{numero}")
+}
+
+/// Garde le son posé sous la version `numero` qui cesse d'être en cours (rien de posé : rien de gardé).
+fn noter_son(v: &mut VersionsDuPlan, numero: u32, son: Vec<SonPose>) {
+    if son.is_empty() {
+        v.sons.remove(&numero);
+    } else {
+        v.sons.insert(numero, son);
+    }
 }
 
 /// Échange le contenu de deux plans : tout, sauf leur numéro et leur scène.
@@ -194,7 +221,9 @@ impl Document {
         }
         let source = self.panels[index].clone();
         let copie = self.copie_de(&source);
-        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: BTreeMap::new() });
+        let son = self.son_sous_le_plan(index);
+        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: BTreeMap::new(), sons: BTreeMap::new() });
+        noter_son(v, v.actuelle, son);
         v.autres.push(Rangee { numero: v.actuelle, date: v.date_actuelle, panel: copie });
         v.autres.sort_by_key(|r| r.numero);
         v.actuelle = v.prochaine;
@@ -235,8 +264,10 @@ impl Document {
     /// contenu. Rend faux si ce numéro n'est pas rangé.
     pub fn changer_de_version(&mut self, index: usize, numero: u32) -> bool {
         let Some(host) = self.panels.get(index).map(|p| p.id) else { return false };
+        let son = self.son_sous_le_plan(index);
         let Some(v) = self.versions.get_mut(&host) else { return false };
         let Some(k) = v.autres.iter().position(|r| r.numero == numero) else { return false };
+        noter_son(v, v.actuelle, son);
         let rangee = &mut v.autres[k];
         echanger(&mut self.panels[index], &mut rangee.panel);
         std::mem::swap(&mut rangee.numero, &mut v.actuelle);
@@ -255,10 +286,12 @@ impl Document {
         }
         let source = v.rangee(numero)?.panel.clone();
         let mut copie = self.copie_de(&source);
+        let son = self.son_sous_le_plan(index);
         let mut rangee = self.coquille(index);
         echanger(&mut self.panels[index], &mut rangee);
         echanger(&mut self.panels[index], &mut copie);
         let v = self.versions.get_mut(&host)?;
+        noter_son(v, v.actuelle, son);
         v.autres.push(Rangee { numero: v.actuelle, date: v.date_actuelle, panel: rangee });
         v.autres.sort_by_key(|r| r.numero);
         v.actuelle = v.prochaine;
@@ -336,6 +369,29 @@ impl Document {
         Some(numeros[(k as i32 + sens).rem_euclid(n) as usize])
     }
 
+    /// Les extraits de son posés sous le plan `index` (ceux qui touchent ses images), par rapport à son début.
+    pub fn son_sous_le_plan(&self, index: usize) -> Vec<SonPose> {
+        let Some(p) = self.panels.get(index) else { return Vec::new() };
+        let (s, e) = (self.panel_start(index), self.panel_start(index) + p.frame_count());
+        let mut out = Vec::new();
+        for t in &self.audio_tracks {
+            for c in t.clips.iter().filter(|c| c.start < e && c.end() > s) {
+                out.push(SonPose { piste: t.id, debut: c.start as i64 - s as i64, son: c.sound, decalage: c.offset, duree: c.length });
+            }
+        }
+        out
+    }
+
+    /// Le son gardé de la version rangée `numero` du plan `plan`, s'il en a un (vide : aucun son n'était posé sous elle).
+    pub fn son_de_version(&self, plan: u64, numero: u32) -> Option<&[SonPose]> {
+        self.versions.get(&plan)?.sons.get(&numero).map(Vec::as_slice)
+    }
+
+    /// Les sons qu'écoutent les versions rangées (gardés dans le projet même si plus aucun extrait du film ne les cite).
+    pub fn sons_des_versions(&self) -> impl Iterator<Item = u64> + '_ {
+        self.versions_vivantes().flat_map(|(_, v)| v.sons.iter().filter(|(n, _)| v.rangee(**n).is_some()).flat_map(|(_, s)| s.iter().map(|p| p.son)))
+    }
+
     /// La couleur de repère de la version `numero` du plan `plan` (un rang de `marks::COLORS`), s'il en a une.
     pub fn couleur_de_version(&self, plan: u64, numero: u32) -> Option<u8> {
         self.versions.get(&plan)?.couleurs.get(&numero).copied()
@@ -383,6 +439,9 @@ pub(crate) struct PlanFichier {
     /// une version d'avant qui relit ce fichier l'ignore (le format du fichier ne change pas).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub couleurs: BTreeMap<u32, u8>,
+    /// Le son posé sous chaque version rangée quand elle a cessé d'être en cours (partie 167), même règle.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sons: BTreeMap<u32, Vec<SonPose>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -403,7 +462,8 @@ pub(crate) fn plan_fichier(host: u64, v: &VersionsDuPlan) -> Result<PlanFichier,
     }
     // (Seulement les couleurs des versions qui existent encore : une version supprimée n'en laisse pas.)
     let couleurs = v.couleurs.iter().filter(|(n, _)| **n == v.actuelle || v.rangee(**n).is_some()).map(|(n, c)| (*n, *c)).collect();
-    Ok(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres, couleurs })
+    let sons = v.sons.iter().filter(|(n, _)| v.rangee(**n).is_some()).map(|(n, s)| (*n, s.clone())).collect();
+    Ok(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres, couleurs, sons })
 }
 
 /// Un fichier fait des versions de plusieurs plans, nettoyé comme celui qu'on lit (numéros uniques et non nuls…).
@@ -507,7 +567,7 @@ pub(crate) fn installer(doc: &mut Document, lu: Fichier, cles: Vec<(u64, u32)>, 
                 doc.reserve_id(m.id);
             }
         }
-        out.insert(p.plan, VersionsDuPlan { actuelle: p.actuelle, date_actuelle: p.date_actuelle, prochaine: p.prochaine, autres, couleurs: p.couleurs });
+        out.insert(p.plan, VersionsDuPlan { actuelle: p.actuelle, date_actuelle: p.date_actuelle, prochaine: p.prochaine, autres, couleurs: p.couleurs, sons: p.sons });
     }
     doc.versions = out;
 }

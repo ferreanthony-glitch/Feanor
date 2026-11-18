@@ -13825,18 +13825,19 @@ Les essais : `src/versiondepliee_tests.rs` (onze).
   alors l'image de la version, composée sur les fils des vignettes, avec « Plan 1 · V2 dépliée · lecture seule · image 12 » écrit
   dessus. On n'y dessine pas ; le clic droit sur le bloc donne la palette, « Passer à la V2 », « Replier la V2 ».
 - **La lecture** traverse la V1, puis chaque version dépliée, puis le plan suivant ; les flèches (image précédente / suivante) aussi.
-- **Le son pendant une version dépliée** : celui du film, repris **au début du plan** (on entend sous la V2 ce qu'on entend sous la
-  V1 ; si la V2 est plus longue, la suite du son continue). Après elle, le son reprend au début du plan suivant. Sans son, la lecture
-  suit l'horloge comme d'habitude.
-- **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée) : elle devient la version en cours, et c'est la version
-  d'avant (la V1) qui se déplie à sa place : la comparaison reste à l'écran.
+- **Le son pendant une version dépliée** (revu le 18, voir 167.7) : le son **tel qu'il était posé sous cette version** quand elle a
+  cessé d'être la version en cours, à la même place dans le plan ; une version sans son gardé rejoue le son du film **depuis le début
+  du plan**. Après elle, le son reprend au début du plan suivant. Sans son, la lecture suit l'horloge comme d'habitude.
+- **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée, revu le 18) : elle devient la version en cours et se
+  replie ; aucune version ne se déplie à la place de l'ancienne ; les autres versions dépliées le restent.
 - Le dépliage est de l'affichage de la séance : il ne survit pas à la fermeture du projet, et se défait de lui-même si la version
   disparaît (supprimée, annulée).
 
 ### 167.3 La couleur de repère
 
-- **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles (les teintes des couleurs
-  de plan de FEANOR : bleu, vert, cyan, rouge, magenta, orange, violet, brun, bleu foncé, vert foncé) et « Aucune ». Une étape
+- **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles **douces** (revu le 18 :
+  bleu, vert, cyan, rouge, rose, orange, violet, brun, jaune doux et gris bleu, moins saturées et plus claires que les couleurs de
+  plan) et « Aucune ». Une étape
   d'annulation par changement (« Couleur de la V2 »), rien si la couleur ne change pas ; la barre d'état le dit.
 - La couleur colore le fond de l'étiquette « V2 » (le texte passe en clair ou en sombre selon la teinte) ; elle se voit aussi sur
   « V1 » dans le nom du plan quand cette version est la version en cours, sur le bord et l'étiquette du bloc déplié, et autour de
@@ -13874,3 +13875,28 @@ Vérificateur (17 novembre, vers 22 h 50, `-Repetitions 2`) : compilation sans a
 passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`
 (intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
 passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
+
+### 167.7 Ses réponses (18 novembre) et ce qui a changé
+
+1. **Le son** : « Sur la version dépliée le son se rejoue. Si le son a été posé différemment que la version active, la version
+   dépliée garde le son tel qu'il a été posé. »
+   - **Ce qui existait** : une version de plan ne gardait **aucun son**. Les sons sont des extraits sur les pistes du film, en
+     images du montage ; changer de version laisse le son en place (« le son reste en place », message de « Passer à la version »).
+   - **Ce qui est ajouté** : quand une version cesse d'être la version en cours (nouvelle version, passer à une autre, restaurer),
+     les extraits posés sous le plan à ce moment (ceux qui touchent ses images : piste, début par rapport au plan, son, décalage,
+     durée ; pas leurs fondus ni leurs clés de volume) sont **gardés avec elle** (`SonPose`, champ `sons` du plan dans
+     `plans_versions.json`, facultatif, format inchangé). Le son du film, lui, ne change toujours pas.
+   - **À la lecture** : sous une version dépliée qui a son son gardé, on entend **ce son-là, là où il était posé** ; sinon, le son du
+     film depuis le début du plan. La forme d'onde des pistes son sous le bloc déplié montre ce qu'on entend (le son gardé, ou celui
+     du film à partir du début du plan). Les sons qu'écoutent seulement des versions restent dans le projet (`used_sounds`).
+   - Une version qui avait été rangée **avant** ce changement n'a pas de son gardé : elle rejoue le son du film. Une version sous
+     laquelle rien n'était posé non plus.
+2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 167.2.
+3. Le dépliage n'est pas gardé à la fermeture : inchangé.
+4. Les teintes « plus douces » : voir 167.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
+   avait prend les nouvelles teintes. Essai : chaque teinte garde un contraste d'au moins 4,5 avec son texte, et toutes se
+   distinguent.
+
+Essais (`src/versiondepliee_tests.rs`, treize) : la V1 dépliée choisie devient la version en cours, se replie, la V3 ne se déplie
+pas, la V2 dépliée le reste ; deux versions au son posé différemment : la partie dépliée joue celui de sa version, à sa place, le
+film garde le sien, et tout se retrouve après enregistrement et réouverture ; les teintes douces.

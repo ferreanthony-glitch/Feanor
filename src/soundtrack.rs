@@ -126,7 +126,8 @@ impl App {
         if !self.sound_on {
             return;
         }
-        let clips = audio::mix_clips(&self.doc);
+        // (La tête dans une version dépliée qui a son son gardé : c'est lui qu'on entend, partie 167.)
+        let clips = self.depli_mix().unwrap_or_else(|| audio::mix_clips(&self.doc));
         if clips.is_empty() {
             return;
         }
@@ -158,7 +159,7 @@ impl App {
         }
         // Suivre les changements faits pendant la lecture : extrait déplacé, piste muette, son coupé.
         let clips = if self.sound_on {
-            audio::mix_clips(&self.doc)
+            self.depli_mix().unwrap_or_else(|| audio::mix_clips(&self.doc))
         } else {
             Vec::new()
         };
@@ -575,8 +576,14 @@ impl App {
 
     /// Pistes son sous les panneaux, dans la bande de montage. `left` = abscisse de l'image 0.
     pub(crate) fn paint_lanes(&self, painter: &Painter, r: Rect, left: f32, ppf: f32, lanes_top: f32, select: Color32) {
+        self.paint_lanes_of(painter, r, left, ppf, lanes_top, select, &self.doc.audio_tracks);
+    }
+
+    /// `paint_lanes` pour d'autres pistes que celles du film, rangée pour rangée : le son gardé d'une version dépliée (partie 167).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn paint_lanes_of(&self, painter: &Painter, r: Rect, left: f32, ppf: f32, lanes_top: f32, select: Color32, tracks: &[crate::document::AudioTrack]) {
         let fps = self.doc.fps;
-        for (t, track) in self.doc.audio_tracks.iter().enumerate() {
+        for (t, track) in tracks.iter().enumerate() {
             let y = lanes_top + t as f32 * crate::montagehauteur::piste_son();
             let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + crate::montagehauteur::piste_son() - 1.0));
             painter.rect_filled(lane, 0.0, theme::rangee_sombre());

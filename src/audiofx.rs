@@ -481,9 +481,19 @@ pub fn build_mix(doc: &Document, wait: bool) -> Vec<MixClip> {
 /// Comme `build_mix`, pour les pistes que `keep` (rang de la piste, la piste) retient : le son d'une seule piste (`exportstems.rs`),
 /// avec son volume, ses fondus, ses clés, son égaliseur et son écho.
 pub fn build_mix_where(doc: &Document, wait: bool, keep: impl Fn(usize, &AudioTrack) -> bool) -> Vec<MixClip> {
+    build_mix_of(doc, &doc.audio_tracks, wait, keep)
+}
+
+/// Le mélange de pistes qui ne sont pas celles du film : le son gardé d'une version dépliée (partie 167, `versiondeplieeui.rs`),
+/// posé sur des copies des pistes du film (mêmes réglages, muettes et solo compris).
+pub fn build_mix_pistes(doc: &Document, tracks: &[AudioTrack], wait: bool) -> Vec<MixClip> {
+    build_mix_of(doc, tracks, wait, |_, t| audible(doc, t))
+}
+
+fn build_mix_of(doc: &Document, tracks: &[AudioTrack], wait: bool, keep: impl Fn(usize, &AudioTrack) -> bool) -> Vec<MixClip> {
     let spf = samples_per_frame(doc.fps);
     let mut out = Vec::new();
-    for track in doc.audio_tracks.iter().enumerate().filter(|(i, t)| keep(*i, t)).map(|(_, t)| t) {
+    for track in tracks.iter().enumerate().filter(|(i, t)| keep(*i, t)).map(|(_, t)| t) {
         let track_gain = track.volume * doc.master_volume;
         let mut order: Vec<usize> = (0..track.clips.len()).collect();
         order.sort_by_key(|&i| track.clips[i].start);

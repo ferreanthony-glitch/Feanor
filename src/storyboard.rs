@@ -1111,7 +1111,7 @@ impl App {
             (Vec::new(), Vec::new())
         } else {
             let ctx = ui.ctx().clone();
-            self.peindre_versions_depliees(&ctx, &painter, &carte, left, ppf, r, top, block_h, thumb_h, bandeau)
+            self.peindre_versions_depliees(&ctx, &painter, &carte, left, ppf, r, top, block_h, thumb_h, bandeau, lanes_top)
         };
         zones_versions.extend(zones_depliees);
         self.depli.zones.clone_from(&zones_versions);

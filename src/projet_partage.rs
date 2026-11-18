@@ -451,7 +451,7 @@ impl Document {
         let mut panel = self.copie_de(&panel);
         panel.scene = self.panels[index].scene;
         panel.notes = if panel.notes.is_empty() { format!("[{de}]") } else { format!("[{de}]\n{}", panel.notes) };
-        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: Default::default() });
+        let v = self.versions.entry(host).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new(), couleurs: Default::default(), sons: Default::default() });
         let numero = v.prochaine;
         v.prochaine += 1;
         v.autres.push(crate::planvers::Rangee { numero, date: now, panel });

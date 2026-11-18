@@ -321,15 +321,104 @@ fn playback_goes_through_the_plan_then_its_unfolded_versions_then_the_next_plan(
 }
 
 #[test]
-fn switching_to_an_unfolded_version_keeps_the_comparison_on_screen() {
-    let mut b = banc_film(film_en_v2(2, 30));
+fn choosing_an_unfolded_version_makes_it_current_folds_it_and_unfolds_nothing_in_its_place() {
+    let mut doc = film_en_v2(2, 30);
+    doc.nouvelle_version(0, 2);
+    // Plan 1 : V3 en cours, V1 et V2 rangées, toutes deux dépliées.
+    let mut b = banc_film(doc);
     let plan = b.app.doc.panels[0].id;
     b.app.depli_basculer(0, 1);
+    b.app.depli_basculer(0, 2);
     b.image(Vec::new(), 1.0 / 60.0);
     let z = zone(&b, 1, Sorte::Nom).unwrap();
     cliquer(&mut b, z.zone.center(), PointerButton::Primary);
-    assert_eq!(b.app.doc.numero_de_version(plan), 1);
-    assert_eq!(b.app.depli.liste, vec![(plan, 2)], "la V2, devenue rangée, est dépliée à sa place");
+    assert_eq!(b.app.doc.numero_de_version(plan), 1, "la V1 dépliée devient la version en cours");
+    assert_eq!(b.app.depli.liste, vec![(plan, 2)], "elle se replie, la V3 ne se déplie pas à sa place, la V2 reste dépliée");
+}
+
+/// Un son constant de `n` images (à 24 i/s) au niveau `v`, ajouté au document.
+fn son(doc: &mut Document, nom: &str, n: usize, v: i16) -> u64 {
+    let echantillons = n * 2000;
+    let mut b = Vec::new();
+    let len = (echantillons * 2) as u32;
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&(36 + len).to_le_bytes());
+    b.extend_from_slice(b"WAVEfmt ");
+    b.extend_from_slice(&16u32.to_le_bytes());
+    b.extend_from_slice(&1u16.to_le_bytes());
+    b.extend_from_slice(&1u16.to_le_bytes());
+    b.extend_from_slice(&48_000u32.to_le_bytes());
+    b.extend_from_slice(&96_000u32.to_le_bytes());
+    b.extend_from_slice(&2u16.to_le_bytes());
+    b.extend_from_slice(&16u16.to_le_bytes());
+    b.extend_from_slice(b"data");
+    b.extend_from_slice(&len.to_le_bytes());
+    for _ in 0..echantillons {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    let pcm = crate::audio::decode(&b, "wav").expect("WAV fabriqué");
+    doc.add_sound(nom.into(), "wav".into(), std::sync::Arc::new(b), std::sync::Arc::new(pcm))
+}
+
+#[test]
+fn an_unfolded_version_plays_the_sound_as_it_was_laid_under_it() {
+    let travail = crate::fiabilite_fixture::dossier("versions-sons-167");
+    let m = travail.join("Film").join("Film.pelure");
+    let mut doc = film(3, 48);
+    let voix_v1 = son(&mut doc, "voix V1.wav", 20, 8000);
+    let voix_v2 = son(&mut doc, "voix V2.wav", 30, 16000);
+    // Plan 2 (images 48 à 95) en V1 : la voix V1 posée 6 images après son début.
+    doc.place_sound(voix_v1, 54, None).unwrap();
+    doc.nouvelle_version(1, 1);
+    let plan = doc.panels[1].id;
+    assert_eq!(doc.son_de_version(plan, 1).map(<[_]>::to_vec), Some(vec![crate::planvers::SonPose { piste: doc.audio_tracks[0].id, debut: 6, son: voix_v1, decalage: 0, duree: 20 }]), "le son posé sous la V1 est gardé avec elle");
+    // En V2, le son est posé autrement : la voix V1 part, la voix V2 arrive au début du plan.
+    doc.audio_tracks[0].clips.clear();
+    doc.place_sound(voix_v2, 48, None).unwrap();
+    let mut b = banc_film(doc);
+    b.app.sound_on = true;
+    b.app.depli_basculer(1, 1);
+    b.image(Vec::new(), 1.0 / 60.0);
+    // La partie dépliée joue le son de sa version, là où il était posé ; le film garde le sien.
+    let pistes = b.app.depli_pistes(plan, 1).expect("la V1 a son son");
+    let c = &pistes[0].clips;
+    assert_eq!(c.len(), 1);
+    assert_eq!((c[0].sound, c[0].start, c[0].length), (voix_v1, 54, 20), "6 images après le début du plan, comme posé");
+    assert_eq!(b.app.doc.audio_tracks[0].clips.len(), 1);
+    assert_eq!(b.app.doc.audio_tracks[0].clips[0].sound, voix_v2, "le son du film ne bouge pas");
+    let carte = b.app.depli_carte();
+    b.app.depli_cliquer(&carte, carte.debut(0) + 10);
+    let mix = b.app.depli_mix().expect("la tête est dans la V1 dépliée : son mélange à elle");
+    assert_eq!(mix.len(), 1);
+    assert!(std::sync::Arc::ptr_eq(&mix[0].pcm, &b.app.doc.sounds[&voix_v1].pcm), "on entend la voix V1, pas la voix V2");
+    assert_eq!(b.app.depli_son_global(), Some(48 + 10), "à l'image 10 de la version, le son du film à l'image 10 du plan");
+    // Une version sans son gardé rejoue le son du film depuis le début du plan.
+    assert!(b.app.depli_pistes(plan, 2).is_none());
+    // Enregistré et rouvert : le son de la V1 et son fichier restent, même si plus aucun extrait du film ne le cite.
+    crate::project::prepare_save(&b.app.doc, &m, &mut std::collections::HashMap::new(), None).expect("préparation").run().expect("écriture");
+    let ouvert = crate::project::load(&m).expect("réouverture");
+    assert!(ouvert.warnings.is_empty(), "{:?}", ouvert.warnings);
+    assert_eq!(ouvert.doc.son_de_version(plan, 1).map(<[_]>::len), Some(1));
+    assert!(ouvert.doc.sounds.contains_key(&voix_v1), "le son de la V1 est gardé dans le projet");
+}
+
+#[test]
+fn the_soft_label_tints_are_distinct_and_readable() {
+    use crate::versiondeplieeui::{couleur, PALETTE};
+    assert_eq!(PALETTE.len(), 10);
+    for k in 0..PALETTE.len() as u8 {
+        let c = couleur(k);
+        let encre = if crate::theme::contraste(eframe::egui::Color32::from_gray(24), c) >= crate::theme::contraste(eframe::egui::Color32::WHITE, c) { eframe::egui::Color32::from_gray(24) } else { eframe::egui::Color32::WHITE };
+        assert!(crate::theme::contraste(encre, c) >= 4.5, "{} : texte lisible", PALETTE[k as usize].0);
+        // Douces : ni trop saturées, ni sombres.
+        let (mx, mn) = (c.r().max(c.g()).max(c.b()) as i32, c.r().min(c.g()).min(c.b()) as i32);
+        assert!(mx - mn <= 110 && mx >= 140, "{} : douce", PALETTE[k as usize].0);
+        for j in 0..k {
+            let d = couleur(j);
+            let dist = (c.r() as i32 - d.r() as i32).abs() + (c.g() as i32 - d.g() as i32).abs() + (c.b() as i32 - d.b() as i32).abs();
+            assert!(dist >= 40, "{} et {} se distinguent", PALETTE[k as usize].0, PALETTE[j as usize].0);
+        }
+    }
 }
 
 #[test]
