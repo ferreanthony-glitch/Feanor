@@ -181,3 +181,71 @@ fn the_animation_timeline_keeps_its_own_line_untouched() {
     assert_eq!(vus::ou("Mode suivant").len(), 1);
     assert!(texte_dans(&b, "Normal", ou("Mode de fusion")).is_some());
 }
+
+/// Les images de la partie 173, à taille réelle (un pixel de l'écran du banc pour un point, aucun agrandissement), dans le dossier
+/// `SHOT_CAPTURE_DIR` : la piste avec « Normal ▾ », avec un mode long, la liste ouverte, le clic droit ouvert sur Apparence. Le projet
+/// est `SHOT_CAPTURE_PROJET` (une copie : le banc n'enregistre rien). Sans carte graphique : rien.
+#[test]
+#[ignore]
+fn piste_mode_capture() {
+    let dossier = std::env::var_os("SHOT_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let doc = match std::env::var_os("SHOT_CAPTURE_PROJET") {
+        Some(p) => crate::project::load(std::path::Path::new(&p)).expect("le projet").doc,
+        None => doc_with(&[&["Décor", "Perso", "Ombre"], &["Seul"]]),
+    };
+    let mut b = crate::perf_tests::banc_taille(doc, true, 1920, 1080);
+    b.app.set_espace(Espace::Storyboard);
+    b.chauffer(10);
+    b.garder_formes = true;
+    let sauver = |b: &mut Banc, nom: &str, zone: Rect| {
+        b.chauffer(4);
+        let Some(rgba) = b.capturer() else { return println!("CAPTURE pas de carte graphique : {nom}") };
+        let img = image::RgbaImage::from_raw(1920, 1080, rgba).expect("image");
+        let z = zone.intersect(Rect::from_min_size(Pos2::ZERO, eframe::egui::vec2(1920.0, 1080.0)));
+        let crop = image::imageops::crop_imm(&img, z.left() as u32, z.top() as u32, z.width() as u32, z.height() as u32).to_image();
+        crop.save(dossier.join(nom)).expect("png");
+        println!("CAPTURE {nom} {}x{}", crop.width(), crop.height());
+    };
+    // Autour de la piste active : la colonne des calques et le début des pistes.
+    let autour = |b: &Banc| {
+        let l = ou("Mode de fusion");
+        let _ = b;
+        Rect::from_min_max(pos2(0.0, l.top() - 120.0), pos2(640.0, l.bottom() + 90.0))
+    };
+    b.chauffer(2);
+    let z = autour(&b);
+    sauver(&mut b, "173-1-piste-normal.png", z);
+    let li = b.app.cur_layer;
+    b.app.regler_mode_calques(li, BlendMode::Screen);
+    b.chauffer(3);
+    let z = autour(&b);
+    sauver(&mut b, "173-2-piste-superposition.png", z);
+    // La liste ouverte (elle monte au-dessus de la piste, en bas de l'écran).
+    clic(&mut b, ou("Mode de fusion").center(), Modifiers::NONE);
+    let z = autour(&b);
+    sauver(&mut b, "173-3-liste-ouverte.png", Rect::from_min_max(pos2(0.0, (z.top() - 560.0).max(0.0)), pos2(z.right(), 1080.0)));
+    b.app.regler_mode_calques(li, BlendMode::Normal);
+    // (Échap ferme la liste, sans cliquer dans le dessin.)
+    b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.chauffer(3);
+    // Le clic droit sur la piste, Apparence ouvert : la pelure d'oignon du calque et son raccourci.
+    let nom = b.app.layers()[li].name.clone();
+    let liste = ou("Mode de fusion");
+    let p = textes(&b).into_iter().filter(|(t, r)| *t == nom && (r.center().y - liste.center().y).abs() < 40.0).map(|(_, r)| r.center()).next().unwrap_or(pos2(liste.left() + 10.0, liste.top() - 12.0));
+    clic_droit(&mut b, p);
+    if let Some(a) = textes(&b).into_iter().filter(|(t, _)| t.contains("Apparence")).map(|(_, r)| r).last() {
+        survoler(&mut b, a.center());
+    }
+    let z = autour(&b);
+    sauver(&mut b, "173-4-clic-droit-apparence.png", Rect::from_min_max(pos2(0.0, (z.top() - 120.0).max(0.0)), pos2(900.0, 1080.0)));
+    // La colonne la plus étroite (espace Montage, 104 points), un mode long : le nom raccourci dans sa case.
+    b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.chauffer(3);
+    b.app.set_espace(Espace::Montage);
+    b.app.montage_head_w = crate::montagehead::HEAD_MIN;
+    b.app.regler_mode_calques(li, BlendMode::Screen);
+    b.chauffer(8);
+    let l = ou("Mode de fusion");
+    sauver(&mut b, "173-5-colonne-etroite-superposition.png", Rect::from_min_max(pos2(0.0, l.top() - 60.0), pos2(420.0, l.bottom() + 40.0)));
+}
