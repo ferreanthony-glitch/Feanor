@@ -234,12 +234,19 @@ mod blocscamera;
 #[cfg(test)]
 mod blocscamera_tests;
 mod panneauprereglages;
+// Les plans types du montage (lot 4 des préréglages, partie 176) : cartons, titres, génériques, écran partagé, inserts.
+pub mod planstypes;
+mod planstypesui;
 // La flèche ou la cible d'un effet de caméra vivant, dans le cadre, avec l'outil Caméra (partie 171).
 mod effetpoignee;
 #[cfg(test)]
 mod camfx_lot2_tests;
 #[cfg(test)]
 mod camfx_lot3_tests;
+#[cfg(test)]
+mod transitions_lot4_tests;
+#[cfg(test)]
+mod planstypes_tests;
 // Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
 // proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
 // ligne, les tâches, l'interface et les Préférences.

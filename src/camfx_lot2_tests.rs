@@ -213,7 +213,7 @@ fn le_format_58_garde_la_fleche_l_angle_et_les_paliers() {
     ];
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 59"));
+    assert!(texte.contains("\"version\": 60"));
     for bout in ["\"pano_plat\"", "\"tonneau\"", "\"zoom_paliers\"", "\"seisme\"", "\"vers\"", "\"degres\": -720", "\"paliers\": 5"] {
         assert!(texte.contains(bout), "{bout} dans le projet");
     }

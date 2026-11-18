@@ -2888,6 +2888,31 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "transition.poussee"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.raccord_file"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.flash"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.couleur"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.objet"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "transition.apercu"
 touches = []
 source = "FEANOR (sans touche)"

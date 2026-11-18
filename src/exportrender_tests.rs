@@ -239,8 +239,8 @@ fn the_transitions_are_mixed_like_before() {
     let mut doc = doc_with_drawing(3, 8);
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     doc.transitions = vec![
-        crate::transitions::Transition { id: 1001, out: Some(ids[0]), inn: Some(ids[1]), kind: crate::transitions::Kind::Dissolve, frames: 4, align: Default::default() },
-        crate::transitions::Transition { id: 1002, out: Some(ids[1]), inn: Some(ids[2]), kind: crate::transitions::Kind::Wipe, frames: 3, align: Default::default() },
+        crate::transitions::Transition { id: 1001, out: Some(ids[0]), inn: Some(ids[1]), kind: crate::transitions::Kind::Dissolve, frames: 4, align: Default::default(), couleur: None },
+        crate::transitions::Transition { id: 1002, out: Some(ids[1]), inn: Some(ids[2]), kind: crate::transitions::Kind::Wipe, frames: 3, align: Default::default(), couleur: None },
     ];
     let zones = crate::transitions::zones(&doc);
     assert!(!zones.is_empty());

@@ -323,6 +323,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
                 marge: 2.5,
                 quand: crate::incrustation::Quand::ExportSeulement,
                 police: "Ubuntu Light".into(),
+                lettre_a_lettre: 0,
             },
             "Timecode et incrustations",
         ),

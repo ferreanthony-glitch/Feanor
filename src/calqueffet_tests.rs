@@ -359,6 +359,7 @@ fn effect_layers_survive_the_manifest_and_a_damaged_one_is_brought_back_to_sane_
         marge: 4.0,
         quand: Quand::EcranSeulement,
         police: "Arial".into(),
+        lettre_a_lettre: 3,
     };
     for effet in [CalqueEffet::ajustement("Lueur (glow)"), CalqueEffet::incrustation(incrustation.clone(), "Timecode"), CalqueEffet::incrustation(Incrustation::default(), "")] {
         let entry = Entree::from(&effet);

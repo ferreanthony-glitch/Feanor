@@ -291,7 +291,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// et `vise` d'une trajectoire de caméra (les trajectoires toutes faites : le point de l'espace, en mètres, que la caméra garde à
 /// sa place dans l'image en suivant son chemin). Une version précédente laisserait de côté ces effets et cette visée : elle le
 /// refuse donc. **Un projet de version 58 ou moins s'ouvre tel quel**, avec les mêmes images.
-pub const VERSION: u32 = 59;
+/// 60 (2026-11-18, `docs/INTERFACE.md` parties 175 et 176) : **le montage, lot 4 des préréglages** — `lettre_a_lettre` d'une
+/// incrustation (images par lettre : le texte s'écrit lettre à lettre depuis le début du plan, le plan type « Lieu et date »),
+/// écrit seulement quand il sert. Une version précédente montrerait le texte d'un coup, et le perdrait en enregistrant : elle le
+/// refuse donc. Les plans types eux-mêmes ne sont faits que de calques d'avant ; les cinq transitions de plus sont dans
+/// `transitions.json` (version 2 de ce fichier quand l'une d'elles y est). **Un projet de version 59 ou moins s'ouvre tel
+/// quel**, avec les mêmes images.
+pub const VERSION: u32 = 60;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est

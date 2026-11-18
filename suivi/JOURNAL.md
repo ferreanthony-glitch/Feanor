@@ -5,6 +5,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **Préréglages dans la timeline, lot 4 : les transitions et les plans types** (parties 175 et 176, branche
+  `prereglages-montage` partie de main 93ad4fd, **format 60**), sur son « Ok continue ». Cinq transitions de plus (poussée T3,
+  raccord filé T4, flash de coupe T6, fondu par une couleur T7, volet par un objet T8), à l'écran comme à l'export ; le panneau
+  Préréglages a deux onglets, Caméra et Montage ; dans Montage, les dix transitions (glissées sur une coupe) et dix-huit plans
+  types (P1, P2, P3, P5, P6, P7, P8, P13, P14, P16, P17, P18) qui posent un plan neuf tout prêt entre deux plans, fait de calques
+  ordinaires ; le lieu et la date (une incrustation qui s'écrit lettre à lettre, réglage neuf « Lettre à lettre ») et le
+  générique de début se posent sur un plan. Numérotées 175 et 176 : la session de la branche `piste-mode-liste` a pris la partie
+  173 et `Tests\essai 173` (rien touché de son côté). Vérificateur : sans avertissement, 4 880 réussis, 0 échec, les dix groupes OK (un premier passage avait 8 échecs : le format 60 dans d'anciens essais, les commandes neuves absentes de keymap.toml, le menu d'une transition trop long, ses sortes passées dans un sous-menu). Contrôle de lancement de l'exe du chantier sur une copie de « dd » avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 20 h 39, pas touché). Dossier
+  d'essai pour lui : `Tests\essai 175` (copie de « dd » au format 59, copie de ses réglages, `Lancer essai 175.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 176.4). Restent sans réponse : T1, T2, T5, P4, P9, P10, P11, P12, P15.
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-travellings` (environ 2,5 Go) et sa branche locale retirés
   (elle n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 172` mis à la corbeille (il n'avait pas
   servi : la copie de « dd » était encore au format 58).
