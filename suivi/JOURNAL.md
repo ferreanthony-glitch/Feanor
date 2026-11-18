@@ -5,6 +5,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-camera` (environ 2,5 Go) et sa branche locale retirés (elle
+  n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 171` mis à la corbeille (il n'avait pas servi).
 - **`prereglages-camera` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (ac390e6, exe de 13 h 56), sur son
   « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (1070912), ni ici ni sur
   GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 846 réussis, 0 échec, les dix groupes OK) ; le
