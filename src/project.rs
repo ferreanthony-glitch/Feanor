@@ -280,7 +280,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// après l'autre dans l'ordre de la liste. Une version précédente qui ouvrirait le projet ne verrait aucun de ces effets et les
 /// perdrait à l'enregistrement : elle le refuse donc. **Un projet de version 56 ou moins s'ouvre tel quel** : son `effet_camera`
 /// devient le premier (et seul) effet de la liste, avec la même image ; il est écrit en `effets_camera` au premier enregistrement.
-pub const VERSION: u32 = 57;
+/// 58 (2026-11-18, `docs/INTERFACE.md` partie 171) : **la caméra 2D du lot 2 des préréglages** — vingt-deux préréglages de plus
+/// dans `effets_camera` (leurs noms : `camfx::Preset::nom`) et trois réglages facultatifs d'un effet, écrits seulement quand ils
+/// servent : `vers` (la flèche ou la cible, en part de la largeur du cadre), `degres` (l'angle) et `paliers`. Une version
+/// précédente laisserait de côté, sans rien dire, un effet au nom inconnu et perdrait ces réglages : elle le refuse donc. **Un
+/// projet de version 57 ou moins s'ouvre tel quel**, avec les mêmes images.
+pub const VERSION: u32 = 58;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -668,6 +673,31 @@ struct EffetCameraEntry {
     zoom: f32,
     #[serde(default)]
     coup_de_zoom: bool,
+    /// La flèche ou la cible (format 58).
+    #[serde(default, skip_serializing_if = "est_nul_2")]
+    vers: [f32; 2],
+    /// L'angle, en degrés (format 58).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    degres: f32,
+    /// Le nombre de paliers (format 58) ; absent : `camfx::PALIERS`.
+    #[serde(default = "paliers_d_origine", skip_serializing_if = "sont_les_paliers_d_origine")]
+    paliers: u32,
+}
+
+fn est_nul(v: &f32) -> bool {
+    *v == 0.0
+}
+
+fn est_nul_2(v: &[f32; 2]) -> bool {
+    v[0] == 0.0 && v[1] == 0.0
+}
+
+fn paliers_d_origine() -> u32 {
+    crate::camfx::PALIERS
+}
+
+fn sont_les_paliers_d_origine(v: &u32) -> bool {
+    *v == crate::camfx::PALIERS
 }
 
 fn un() -> f32 {
@@ -2633,6 +2663,9 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 graine: v.params.seed,
                 zoom: v.params.zoom_factor,
                 coup_de_zoom: v.params.punch,
+                vers: v.params.vers,
+                degres: v.params.degres,
+                paliers: v.params.paliers,
             })
             .collect(),
         marques: panel
@@ -3556,6 +3589,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                                 seed: e.graine,
                                 zoom_factor: e.zoom,
                                 punch: e.coup_de_zoom,
+                                vers: e.vers,
+                                degres: e.degres,
+                                paliers: e.paliers,
                             };
                             Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
                         })

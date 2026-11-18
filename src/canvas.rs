@@ -819,6 +819,7 @@ impl App {
                 Some(crate::camtools::CamHandle::Move) => CursorIcon::Move,
                 Some(crate::camtools::CamHandle::Zoom) => CursorIcon::ResizeNwSe,
                 Some(crate::camtools::CamHandle::Rotate) => CursorIcon::Alias,
+                Some(crate::camtools::CamHandle::Effet) => CursorIcon::Grab,
                 None => CursorIcon::Default,
             });
             return;

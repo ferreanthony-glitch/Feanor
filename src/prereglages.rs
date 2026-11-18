@@ -386,6 +386,7 @@ pub fn build(r: &Reglages, ctx: &Contexte) -> Option<Construit> {
                 seed: r.graine,
                 zoom_factor: 1.0,
                 punch: r.style == camfx::Preset::Explosion,
+                ..camfx::Params::new(r.style, ctx.fps)
             };
             let g = camfx::Generator::new(&params, ctx.fps);
             let width = ctx.cadre[0] as f32;

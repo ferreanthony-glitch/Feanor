@@ -2120,6 +2120,20 @@ impl Document {
         }
     }
 
+    /// La caméra du plan `index` à l'image `frame` **avant son effet vivant de rang `rang`** : ses clés, avec les effets qui
+    /// le précèdent dans la liste cuits dedans (ni lui ni ceux d'après). C'est le cadre dans lequel la flèche ou la cible de
+    /// cet effet se tire (partie 171) : l'effet part de cette caméra-là.
+    pub fn camera_avant_l_effet(&self, index: usize, rang: usize, frame: usize) -> Camera {
+        let default = self.default_camera();
+        let Some(p) = self.panels.get(index) else { return default };
+        let base = |f: usize| self.panel_camera_douce(index, f);
+        let avant = &p.effets_camera[..rang.min(p.effets_camera.len())];
+        match crate::camfx::cuire_tous(avant, self.fps, self.frame, p.frame_count(), &p.camera, &base, default) {
+            Some(k) => camera::camera_at(&k, frame, default),
+            None => base(frame),
+        }
+    }
+
     /// Écrit l'effet vivant du plan `index` dans ses clés et le retire, **sans changer aucune image** : les clés écrites
     /// sont celles que l'effet montrait (`cles_montrees`). Les gestes qui coupent, réunissent, rognent ou décalent les
     /// images d'un plan le font d'abord (partie 129) : ils savent garder l'image avec des clés, pas avec un effet vivant.

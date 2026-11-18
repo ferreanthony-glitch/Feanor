@@ -14351,3 +14351,105 @@ Les essais : `src/blocscamera_tests.rs` ; ceux de la partie 129 (`camera_retours
    blocs deviennent des clés, l'image ne change pas.
 8. Enregistrer, rouvrir : les blocs reviennent. (Attention : le projet passe au format 57, refusé par son FEANOR habituel tant
    que ce n'est pas fusionné.)
+
+## 171. Les préréglages dans la timeline, lot 2 : la caméra 2D (2026-11-18, branche `prereglages-camera`)
+
+Anthony : « Oui, le lot 2 ». C'est le lot 2 de la liste de la partie 170 : C1 à C12 et C18 à C27, la caméra 2D. Vingt-deux
+préréglages de plus (C5 en deux : avant et arrière), en blocs vivants comme ceux du lot 1. **C11 (panoramique de suivi d'un
+calque) n'est pas fait**, et le flou de vitesse du zip pan non plus (171.3).
+
+Le code : `src/camfx.rs` (les préréglages, leurs familles, leurs courbes, leur flèche), `src/effetpoignee.rs` (la flèche ou la
+cible dans le cadre, avec l'outil Caméra), `src/camfxui.rs` (les réglages, le petit cadre de la flèche), `src/panneauprereglages.rs`
+(les familles, la profondeur de la petite scène), `src/blocscamera.rs` (le menu « Ajouter un effet »), `src/document.rs`
+(`camera_avant_l_effet`), `src/camtools.rs` et `src/canvas.rs` (`CamHandle::Effet`), `src/project.rs` (format 58). Les essais :
+`src/camfx_lot2_tests.rs` ; les essais qui citaient le format 57 passent à 58 ; celui de la liste des effets (partie 129) la fait
+défiler, ceux du panneau (partie 170) prennent des vignettes du haut.
+
+### 171.1 Ce qui change pour lui
+
+Les vingt-deux, par famille (son numéro, son nom, ce qu'il fait, ce qui se règle en plus de la durée) :
+
+| | Nom | Ce qu'il fait | Se règle |
+|---|---|---|---|
+| C1 | Dézoom choc | Part serré sur la cible, le cadre s'ouvre d'un coup et ralentit | Zoom, cible |
+| C2 | Zoom par paliers | À-coups secs vers la cible, tenus entre deux | Zoom, paliers, cible |
+| C3 | Zoom lent de tension | Zoom presque imperceptible vers la cible | Zoom, cible |
+| C4 | Zoom vers un point | La cible arrive au centre en zoomant | Zoom, cible |
+| C5 | Travelling avant / arrière | La caméra avance (recule) : le près passe vite, le loin à peine | Avancée |
+| C6 | Ken Burns | Glissement et zoom lents, réguliers | Zoom, flèche |
+| C7 | Panoramique à plat | La caméra glisse dans le sens de la flèche | Flèche |
+| C8 | Zip pan | Panoramique éclair, petit rebond à l'arrivée | Flèche |
+| C9 | Panoramique avec dépassement | Va 12 % plus loin, revient se poser | Flèche |
+| C10 | Panoramique de découverte | Part du bout de la flèche, se pose sur le cadre du plan | Flèche (départ) |
+| C12 | Panoramique en rotation | La caméra tourne sur elle-même, en perspective | Angle |
+| C18 | Plan penché progressif | Le cadre penche peu à peu, puis garde l'angle | Angle |
+| C19 | Tonneau | Un tour complet qui accélère, avec un peu de zoom | Rotation, zoom |
+| C20 | Tremblement de terre | Long, grave : monte, gronde, s'éteint | Intensité, fréquence, graine |
+| C21 | Pas lourds | Une secousse verticale amortie par pas | Intensité, pas par seconde |
+| C22 | Caméra qui marche | Avance avec le balancement de la marche | Intensité, pas, avancée |
+| C23 | Véhicule | Vibration, bosses, et la caméra glisse | Intensité, fréquence, graine, flèche |
+| C24 | Houle | Roulis lent d'un bateau | Intensité, rythme |
+| C25 | Respiration | Dérive infime, un souffle | Intensité, rythme, graine |
+| C26 | Recadrage sec | Saut de cadre sur une image, vers la cible | Zoom, cible |
+| C27 | Arrêt net | Glisse à vitesse constante, se fige d'un coup | Flèche |
+
+- **Rangés par famille** partout : le panneau Préréglages (« CAMÉRA · ZOOMS ET AVANCÉES », « PANORAMIQUES », « ROTATIONS »,
+  « SECOUSSES », « COUPES DANS LE PLAN », les titres de la page de choix), la liste du panneau Caméra, le menu « Ajouter un effet »
+  (un sous-menu par famille).
+- **La flèche ou la cible se tire dans le cadre, avec l'outil Caméra.** Le bloc qu'on règle (choisi dans la timeline, sinon le
+  dernier posé) montre sa flèche (le chemin de la caméra), sa flèche de départ (d'où elle vient) ou sa cible (le point de l'image
+  qu'elle vise), avec un cadre en pointillés là où la caméra arrive (ou d'où elle part, zoom compris). On tire la prise ronde du
+  bout : l'image suit aussitôt, sans clé ; Maj garde la flèche droite ou verticale ; un geste, une étape d'annulation. La caméra
+  du plan ne bouge pas. Ailleurs dans le cadre, l'outil Caméra fait comme avant.
+- **La même flèche dans le panneau Caméra**, section « Effets de caméra » : un petit cadre où on la clique ou la tire, sous les
+  champs. Les champs nouveaux : « Angle » (« Rotation » pour le tonneau), « Paliers », « Avancée » (au lieu de « Zoom » pour les
+  travellings et la marche : la caméra avance, la focale ne change pas), « Pas » et « Rythme » (la fréquence des pas lourds, de la
+  marche, de la houle, du souffle).
+- **Les vignettes** visent le visage du personnage (la maison pour le zoom vers un point), et la petite scène a de la profondeur :
+  au travelling avant, le rocher passe vite et les montagnes bougent à peine.
+- Comme au lot 1 : chacun est un bloc vivant, sans clé, et « Convertir en clés » donne exactement la même image (essai sur les
+  trente préréglages, avec et sans clés de caméra, avec et sans paliers de caméra). Aucune boîte de dialogue.
+
+### 171.2 Comment c'est fait
+
+- **Les préréglages qui posent peu de clés suivent une courbe** (`camfx::courbe_de`) : à quelques images, l'avancement du
+  mouvement (0 : la caméra du plan, 1 : l'arrivée, au-delà : un dépassement) avec ses adoucis en images. Entre deux clés, la
+  caméra suit la même loi que deux clés ordinaires (`camera::ease`) : l'effet vivant et ses clés converties sont la même chose,
+  et les clés converties se règlent ensuite comme les autres (deux clés pour un panoramique, trois pour un dépassement, deux par
+  palier). Les secousses posent une clé par image (toutes les 2 ou 4 images pour la marche, la houle, le souffle).
+- **`Params::vers`** : la flèche ou la cible, en part de la largeur du cadre, **dans l'image** ; `plan` la tourne avec le cadre
+  (un cadre tourné d'un quart de tour glisse vers le bas de la feuille quand la flèche va à droite). Les secousses d'avant gardent
+  leur décalage sur la feuille, au pixel près. La poignée se pose dans la caméra du plan au début de l'effet, sans lui ni ceux
+  d'après (`Document::camera_avant_l_effet`).
+- **L'avancée** (travellings, marche) divise la distance de la caméra au plan de référence (`Sample::avance`, la borne de
+  `Camera::distance` respectée) ; **le panoramique en rotation** tourne `Camera::pan` (ramené comme toujours par `limited` si le
+  cadre ne voyait plus la feuille). `Params::degres` porte l'angle, `Params::paliers` le nombre d'à-coups.
+- **Format 58** : les noms des vingt-deux préréglages, et `vers`, `degres`, `paliers` écrits seulement quand ils servent. Un
+  projet 57 ou moins s'ouvre tel quel ; une version précédente refuse un projet 58 (elle laisserait de côté, sans rien dire, un
+  effet au nom inconnu).
+
+### 171.3 Ce qui n'est pas fait
+
+- **C11, le panoramique de suivi d'un calque** : il faut suivre le dessin d'un calque image par image (son centre à chaque image)
+  et le rendre à la caméra avec un léger retard ; le calcul de la caméra n'a pas encore accès aux dessins. Proposé ensuite.
+- **Le flou de vitesse du zip pan (C8)** : le mouvement est là, pas le flou « posé en même temps ». Il demande un flou de bougé de
+  la caméra dans la composition de l'image (écran, export, vignettes). En attendant, le préréglage d'effet « Flou de vitesse » (un
+  calque d'effet) se pose à la main par-dessus.
+- C28 (bascule de point) attend un flou par calque selon la profondeur ; le lot 3 (C13 à C17, l'Espace 3D) ; les plans types, les
+  transitions et le reste. Les blocs ne se voient toujours pas dans le Montage.
+
+### 171.4 À tester (sa checklist)
+
+1. Panneau Préréglages : les cinq familles ; survoler « Travelling avant » (le rocher passe vite), « Zip pan », « Tonneau »,
+   « Houle ».
+2. Poser « Panoramique à plat » sur un plan, prendre l'outil Caméra : la flèche dans le cadre ; tirer son bout (Maj : droite),
+   l'image suit ; Ctrl+Z défait le geste.
+3. « Zoom vers un point » : tirer la cible sur un visage ; à la fin du bloc, le visage est au centre, serré.
+4. « Panoramique de découverte » : la flèche part d'où vient la caméra (le ciel), le bloc finit sur le cadre du plan.
+5. « Zoom par paliers » : Paliers 2, puis 4.
+6. « Plan penché progressif » et « Panoramique en rotation » : le champ Angle.
+7. Les secousses : tremblement de terre, pas lourds (Pas : 1), caméra qui marche, véhicule (avec sa flèche), houle, respiration.
+8. « Recadrage sec » et « Arrêt net ».
+9. « Convertir en clés » sur un plan à plusieurs blocs : l'image ne change pas.
+10. Enregistrer, rouvrir : les blocs et leurs flèches reviennent. (Le projet passe au format 58, refusé par son FEANOR habituel
+    tant que ce n'est pas fusionné.)

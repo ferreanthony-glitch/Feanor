@@ -5,6 +5,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **Préréglages dans la timeline, lot 2 : la caméra 2D** (partie 171, branche `prereglages-camera` partie de main 1070912,
+  **format 58**), sur son « Oui, le lot 2 ». Vingt-deux préréglages de plus en blocs vivants (C1 à C10, C12, C18 à C27 ; C5 en
+  avant et arrière), rangés en cinq familles (panneau Préréglages, liste du panneau Caméra, menu « Ajouter un effet »). La flèche
+  ou la cible se tire dans le cadre avec l'outil Caméra, et dans un petit cadre du panneau Caméra ; champs Angle, Paliers,
+  Avancée, Pas, Rythme. « Convertir en clés » donne la même image pour les trente (essai). **Pas faits** : C11 (suivi d'un
+  calque) et le flou de vitesse du zip pan (171.3). Vérificateur : sans avertissement, 4 846 réussis, 0 échec, les dix groupes
+  OK. Contrôle de lancement sur une copie de « dd » avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » (57)
+  intact. Dossier d'essai pour lui : `Tests\essai 171` (copie de « dd », lanceur aux réglages à part). **Pas fusionné, pas essayé
+  sur son écran** (liste 171.4).
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-socle` (environ 2 Go) et sa branche locale retirés (elle n'avait
+  jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 170` mis à la corbeille.
 - **`vue-reduite` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (baf6476, exe de 11 h 39), sur son
   « Oui, fusionne » (écrit dans la session principale, qui l'a transmis mot pour mot ; relu dans son fil avant d'agir ; sans essai
   sur son écran avant). Main n'avait pas bougé depuis la vérification de 10 h 14 (fc908db) : l'arbre fusionné est exactement

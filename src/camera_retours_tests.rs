@@ -275,7 +275,8 @@ fn choisir_un_effet_dans_le_panneau_le_montre_tout_de_suite_sans_cle() {
     let liste = ecran.ou(&mut app, "Aucun effet");
     let etapes = app.history.undo_len();
     ecran.cliquer(&mut app, liste.center());
-    let choix = ecran.ou(&mut app, "Tremblement léger");
+    // (Trente préréglages rangés par famille depuis la partie 171 : les secousses sont plus bas, on fait défiler la liste.)
+    let choix = dans_la_liste(&mut ecran, &mut app, "Tremblement léger", true);
     ecran.cliquer(&mut app, choix.center());
     let v = app.doc.panels[0].effets_camera.first().copied().expect("un effet vivant sur le plan");
     assert_eq!((v.params.preset, v.start), (Preset::LightShake, 0));
@@ -328,9 +329,40 @@ fn choisir_un_effet_dans_le_panneau_le_montre_tout_de_suite_sans_cle() {
     assert!(!app.doc.panels[0].effets_camera.is_empty());
     let liste = ecran.ou(&mut app, "Tremblement léger");
     ecran.cliquer(&mut app, liste.center());
-    let aucun = ecran.ou(&mut app, "Aucun effet");
+    let aucun = dans_la_liste(&mut ecran, &mut app, "Aucun effet", false);
     ecran.cliquer(&mut app, aucun.center());
     assert!(app.doc.panels[0].effets_camera.is_empty());
+}
+
+/// Le texte `quoi` de la liste des effets ouverte, en la faisant défiler au besoin (`vers_le_bas` : vers les derniers), puis en
+/// attendant que le défilement d'egui, qui glisse en douceur, se pose.
+fn dans_la_liste(ecran: &mut Panneau, app: &mut App, quoi: &str, vers_le_bas: bool) -> Rect {
+    const TITRES: [&str; 5] = ["ZOOMS ET AVANCÉES", "PANORAMIQUES", "ROTATIONS", "SECOUSSES", "COUPES DANS LE PLAN"];
+    let mut ancre = None;
+    for _ in 0..16 {
+        let textes = ecran.chauffer(app, 2);
+        let ouverte = textes.iter().any(|(t, _)| TITRES.contains(&t.as_str()));
+        if ouverte && textes.iter().any(|(t, _)| t == quoi) {
+            break;
+        }
+        // (Le repère où faire tourner la molette : un titre de famille, ou le nom d'un préréglage de la liste ouverte.)
+        let dans_la_liste = |t: &str| TITRES.contains(&t) || (ouverte && Preset::ALL.iter().any(|p| p.label() == t));
+        // (Celui du milieu : ceux des bords sont à moitié coupés, la molette n'y fait rien.)
+        let visibles: Vec<Pos2> = textes.iter().filter(|(t, _)| dans_la_liste(t)).map(|(_, r)| r.center()).collect();
+        if let Some(a) = visibles.get(visibles.len() / 2) {
+            ancre = Some(*a);
+        }
+        let Some(a) = ancre else { continue };
+        ecran.image(app, vec![Event::PointerMoved(a)]);
+        let delta = vec2(0.0, if vers_le_bas { -120.0 } else { 120.0 });
+        ecran.image(app, vec![Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, modifiers: Modifiers::NONE }]);
+    }
+    ecran.chauffer(app, 40);
+    let textes = ecran.chauffer(app, 2);
+    // (Le texte de la liste fermée peut être le même : on prend le plus bas, celui de la liste ouverte.)
+    let mut trouves: Vec<Rect> = textes.iter().filter(|(t, _)| t == quoi).map(|(_, r)| *r).collect();
+    trouves.sort_by(|a, b| a.top().total_cmp(&b.top()));
+    *trouves.last().unwrap_or_else(|| panic!("« {quoi} » dans la liste ouverte"))
 }
 
 /// Toutes les caméras montrées du plan 0, image par image.
@@ -403,13 +435,13 @@ fn l_effet_vivant_s_enregistre_et_les_anciens_projets_gardent_leurs_cles() {
     doc.panels[1].camera = cles(&[0, 1, 2, 3, 4]);
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 57"), "format 57 (partie 170 : une liste d'effets)");
+    assert!(texte.contains("\"version\": 58"), "format 58 (partie 170 : une liste d'effets ; 171 : la caméra 2D)");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effets_camera, doc.panels[0].effets_camera, "l'effet revient tel quel");
     assert!(lu.panels[1].effets_camera.is_empty());
     assert_eq!((0..30).map(|f| lu.panel_camera(0, f)).collect::<Vec<_>>(), (0..30).map(|f| doc.panel_camera(0, f)).collect::<Vec<_>>());
     // Un projet du format 51 (sans le champ) : ses clés d'effet restent des clés, aucun effet vivant n'apparaît.
-    let ancien = texte.replace("\"version\": 57", "\"version\": 51");
+    let ancien = texte.replace("\"version\": 58", "\"version\": 51");
     let sans_effet: serde_json::Value = {
         let mut v: serde_json::Value = serde_json::from_str(&ancien).unwrap();
         fn retirer(v: &mut serde_json::Value) {
