@@ -24,8 +24,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   sessions compilant sans arrêt (processeur à 100 %, moins de 1,2 Go de mémoire libre). Premier passage : sans avertissement,
   suite complète 4 801 réussis et 0 échec, neuf groupes OK, deux essais de temps d'image du groupe Espace 3D en échec. Second : sans
   avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
-  essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. À refaire au calme avant la fusion. Pas
-  fusionnée : sa décision.
+  essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. **Refait après avoir repris main dans la
+  branche** (87db1b0, le panneau Pinceau ; f603c82) : à 3 h 44, la machine plus calme, compilation sans avertissement, **4 802
+  réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
 - **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
   « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
   `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,

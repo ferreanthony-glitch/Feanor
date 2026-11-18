@@ -13953,7 +13953,10 @@ n'est pas arrivé »). Relancés seuls : le groupe Espace 3D passe trois fois su
 100 %, ce sont trois autres essais de temps d'image qui échouent, 33 ms par image au lieu de 5) ; l'essai de l'aplat passe en moins
 d'une seconde quand le processeur n'est pas saturé, et attend trente secondes en vain quand il l'est (son calcul se fait sur un fil
 de fond). Aucun de ces essais n'appelle le code changé ici : ce sont des essais de temps, sensibles à la charge de la machine.
-**À refaire sur une machine calme avant la fusion.**
+Refait une fois main repris dans la branche (`87db1b0`, le panneau Pinceau de la partie 45 ; `f603c82`) : un troisième passage
+encore sous la charge (4 802 réussis, 0 échec, neuf groupes OK, un essai de temps d'image du groupe Espace 3D en échec ; ce groupe
+relancé seul : 180 réussis, quatre fois sur quatre), puis, la machine plus calme, à 3 h 44 : **compilation sans avertissement,
+4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**.
 
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 
