@@ -14020,7 +14020,13 @@ relancé seul : 180 réussis, quatre fois sur quatre), puis, la machine plus cal
 4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**. Refait encore une fois main repris de nouveau
 (`60f002e`, la trajectoire de la partie 119 ; `d55ffd5`), six essais à la fois (`RUST_TEST_THREADS=6`, pour ne pas dépendre des
 compilations des autres sessions), à 4 h 17 : **compilation sans avertissement, 4 806 réussis, 0 échec, les dix groupes OK,
-« RESULTAT : OK »**.
+« RESULTAT : OK »**. Main a encore avancé dans la nuit (les versions de plan de la partie 168, puis le Cutter de la partie 169) :
+repris à chaque fois. Avec les versions de plan (`d9f72dd`), à 4 h 44, sous la charge : dix groupes OK, 4 818 réussis et 1 échec
+dans la suite (`traits_continus_tests::thirty_drawn_plans_rest_without_repainting_and_a_frame_stays_cheap`, la planche des
+Vignettes à trente plans : un essai qui touche à ce chantier ; relancé seul, trois fois sur trois, et cinq fois sur cinq au milieu
+de ses 331 voisins en parallèle : il passe, 0,9 ms par image, 3 ms par vignette ; le message de l'échec n'a pas été gardé par le
+vérificateur). Avec le Cutter (`bed74af` ; `a57da20`), le 18 novembre à 9 h 55, la machine calme, sans limite de fils :
+**compilation sans avertissement, 4 830 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. C'est l'arbre à fusionner.
 
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 

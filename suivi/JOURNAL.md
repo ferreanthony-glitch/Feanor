@@ -27,7 +27,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. **Refait après avoir repris main dans la
   branche** (87db1b0, le panneau Pinceau ; f603c82) : à 3 h 44, la machine plus calme, compilation sans avertissement, **4 802
   réussis, 0 échec, les dix groupes OK**. Et encore après la trajectoire (60f002e ; d55ffd5), six essais à la fois : à 4 h 17,
-  sans avertissement, **4 806 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
+  sans avertissement, **4 806 réussis, 0 échec, les dix groupes OK**. Main a encore avancé dans la nuit (versions de plan, puis
+  Cutter) : repris à chaque fois. Avec les versions de plan, à 4 h 44, sous la charge, un échec dans la suite : l'essai de la
+  planche des Vignettes à trente plans, qui touche à ce chantier ; relancé seul et au milieu de ses voisins, il passe à chaque
+  fois (huit passages), sans que le message de l'échec ait pu être retrouvé. Avec le Cutter (bed74af ; a57da20), à 9 h 55, la
+  machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
 - **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
   « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
   167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
