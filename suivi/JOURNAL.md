@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`prereglages-camera` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (ac390e6, exe de 13 h 56), sur son
+  « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (1070912), ni ici ni sur
+  GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 846 réussis, 0 échec, les dix groupes OK) ; le
+  vérificateur n'a pas été relancé. Son FEANOR était ouvert sur « dd » (depuis 11 h 54) : l'exe, déjà à jour dans le dossier du
+  chantier, a été copié après l'arrêt de son FEANOR sans enregistrer (même empreinte aux deux chemins). Contrôle de lancement
+  avec ce nouvel exe sur une copie de « dd » (format 57) et de faux réglages : vivant après 30 s, aucun rapport de plantage, son
+  vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets passent au format 58 quand il les ouvre** (une version
+  précédente les refuserait). **Pas regardé sur son écran** : liste 171.4. Gardés, retrait proposé (sa décision) : le dossier
+  `Chantiers\prereglages-camera` et `Tests\essai 171`.
 - **Préréglages dans la timeline, lot 2 : la caméra 2D** (partie 171, branche `prereglages-camera` partie de main 1070912,
   **format 58**), sur son « Oui, le lot 2 ». Vingt-deux préréglages de plus en blocs vivants (C1 à C10, C12, C18 à C27 ; C5 en
   avant et arrière), rangés en cinq familles (panneau Préréglages, liste du panneau Caméra, menu « Ajouter un effet »). La flèche
