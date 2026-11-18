@@ -1,4 +1,4 @@
-//! Les versions dépliées dans la timeline (partie 167, Anthony, 2026-11-17 : « un clic sur une flèche vers la droite la déploie à
+//! Les versions dépliées dans la timeline (partie 168, Anthony, 2026-11-17 : « un clic sur une flèche vers la droite la déploie à
 //! côté dans la timeline pour la lire et la comparer directement à l'autre version »).
 //!
 //! Une version rangée d'un plan (`planvers.rs`) peut se **déplier** juste après la version en cours : un bloc de plus dans la

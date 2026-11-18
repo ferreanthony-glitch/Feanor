@@ -484,7 +484,7 @@ pub fn build_mix_where(doc: &Document, wait: bool, keep: impl Fn(usize, &AudioTr
     build_mix_of(doc, &doc.audio_tracks, wait, keep)
 }
 
-/// Le mélange de pistes qui ne sont pas celles du film : le son gardé d'une version dépliée (partie 167, `versiondeplieeui.rs`),
+/// Le mélange de pistes qui ne sont pas celles du film : le son gardé d'une version dépliée (partie 168, `versiondeplieeui.rs`),
 /// posé sur des copies des pistes du film (mêmes réglages, muettes et solo compris).
 pub fn build_mix_pistes(doc: &Document, tracks: &[AudioTrack], wait: bool) -> Vec<MixClip> {
     build_mix_of(doc, tracks, wait, |_, t| audible(doc, t))

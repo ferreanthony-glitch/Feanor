@@ -1281,7 +1281,7 @@ fn used_sounds(doc: &Document) -> BTreeSet<u64> {
     doc.audio_tracks
         .iter()
         .flat_map(|t| t.clips.iter().map(|c| c.sound))
-        // (Et ceux du son gardé des versions rangées des plans, partie 167 : la version dépliée les rejoue.)
+        // (Et ceux du son gardé des versions rangées des plans, partie 168 : la version dépliée les rejoue.)
         .chain(doc.sons_des_versions())
         .filter(|id| doc.sounds.contains_key(id))
         .collect()

@@ -1,4 +1,4 @@
-//! Les versions d'un plan dans la timeline (partie 167, `versiondepliee.rs` pour la carte film ↔ écran).
+//! Les versions d'un plan dans la timeline (partie 168, `versiondepliee.rs` pour la carte film ↔ écran).
 //!
 //! Sur le bloc d'un plan qui a plusieurs versions, à côté de son nom « Plan 1 · V1 », les **autres versions** en étiquettes texte
 //! (« V2 », « V3 »…), chacune suivie d'une flèche :
@@ -285,7 +285,7 @@ impl App {
         }
     }
 
-    /// Les pistes du film portant le son gardé de la version `numero` du plan `plan` (partie 167), posé à la place du plan dans le
+    /// Les pistes du film portant le son gardé de la version `numero` du plan `plan` (partie 168), posé à la place du plan dans le
     /// film : ce qu'on entend sous la version dépliée. Rien si la version n'a pas de son gardé (on rejoue alors le son du film depuis
     /// le début du plan). Les extraits d'une piste retirée depuis, ou d'un son qui n'est plus là, sont oubliés.
     pub(crate) fn depli_pistes(&self, plan: u64, numero: u32) -> Option<Vec<crate::document::AudioTrack>> {

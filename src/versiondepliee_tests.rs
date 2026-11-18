@@ -1,4 +1,4 @@
-//! Partie 167 : les versions d'un plan dans la timeline (`versiondepliee.rs`, `versiondeplieeui.rs`).
+//! Partie 168 : les versions d'un plan dans la timeline (`versiondepliee.rs`, `versiondeplieeui.rs`).
 
 use crate::document::{Cel, Document, Layer, LayerKind};
 use crate::versiondepliee::{Carte, Lieu};
@@ -101,7 +101,7 @@ fn a_version_colour_is_kept_by_its_number_and_saved_in_the_versions_file() {
 
 #[test]
 fn an_old_versions_file_without_colours_still_loads() {
-    // Un fichier écrit avant la partie 167 : pas de champ « couleurs ».
+    // Un fichier écrit avant la partie 168 : pas de champ « couleurs ».
     let ancien = r#"{"format":"shot-plans-versions","version":1,"plans":[{"plan":4,"actuelle":2,"date_actuelle":0,"prochaine":3,"autres":[{"numero":1,"date":0,"entree":{}}]}]}"#;
     let lu = crate::planvers::parse(ancien).expect("un fichier d'avant se lit");
     assert_eq!(lu.plans.len(), 1);
@@ -451,12 +451,12 @@ fn a_label_colour_is_one_undo_step_shows_on_the_plan_name_and_survives_save_and_
         p.as_object_mut().unwrap().remove("couleurs");
     }
     std::fs::write(&fichier, serde_json::to_vec_pretty(&v).unwrap()).unwrap();
-    let ancien = crate::project::load(&m).expect("un fichier d'avant la partie 167 s'ouvre");
+    let ancien = crate::project::load(&m).expect("un fichier d'avant la partie 168 s'ouvre");
     assert!(ancien.warnings.is_empty(), "{:?}", ancien.warnings);
     assert_eq!(ancien.doc.nombre_de_versions(plan), 2);
     assert_eq!(ancien.doc.couleur_de_version(plan, 1), None);
 }
-/// Les captures de la partie 167 dans `FEANOR_CAPTURE_DIR`, sur la COPIE de projet que donne `FEANOR_PROJET_ESSAI` (son premier
+/// Les captures de la partie 168 dans `FEANOR_CAPTURE_DIR`, sur la COPIE de projet que donne `FEANOR_PROJET_ESSAI` (son premier
 /// plan à plusieurs versions) : la version dépliée, la palette ouverte, l'étiquette colorée. Sans carte graphique : rien.
 #[test]
 #[ignore = "écrit des captures : FEANOR_CAPTURE_DIR, FEANOR_PROJET_ESSAI"]

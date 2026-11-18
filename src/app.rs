@@ -669,7 +669,7 @@ pub struct App {
     /// La pile des versions d'un plan, ouverte en survolant « V2 » sur son bloc du montage, et la
     /// confirmation de « Supprimer les versions non affichées » (`pileversui.rs`).
     pub(crate) pile_versions: crate::pilevers::Pile,
-    /// Les versions dépliées dans la timeline et la tête posée dans l'une d'elles (partie 167 : de l'affichage, jamais enregistré).
+    /// Les versions dépliées dans la timeline et la tête posée dans l'une d'elles (partie 168 : de l'affichage, jamais enregistré).
     pub(crate) depli: crate::versiondeplieeui::Depli,
     /// Quand le projet change, le plan dont on propose de supprimer les versions non affichées : le
     /// plan seul (`Some`) ou tout le film (`None`) ; rien : pas de confirmation en cours.
@@ -2070,7 +2070,7 @@ impl App {
     }
 
     pub(crate) fn step_global(&mut self, delta: i64) {
-        // Des versions dépliées dans la timeline (partie 167) : les flèches passent aussi par leurs images.
+        // Des versions dépliées dans la timeline (partie 168) : les flèches passent aussi par leurs images.
         self.depli_nettoyer();
         if self.depli_actif() {
             let carte = self.depli_carte();
@@ -2218,7 +2218,7 @@ impl App {
         }
         self.end_stroke();
         self.play_speed = 1.0;
-        // La tête dans une version dépliée (partie 167) : c'est le film qu'on lit, avec ses versions dépliées.
+        // La tête dans une version dépliée (partie 168) : c'est le film qu'on lit, avec ses versions dépliées.
         self.depli_nettoyer();
         self.play_montage = montage || self.depli.tete.is_some();
         // Dans le plan : entre les points d'entrée et de sortie (13d).
@@ -2272,7 +2272,7 @@ impl App {
         self.depli_nettoyer();
         while self.play_accum >= frame_duration {
             self.play_accum -= frame_duration;
-            // Des versions dépliées (partie 167) : le film se lit avec elles, image d'écran après image d'écran.
+            // Des versions dépliées (partie 168) : le film se lit avec elles, image d'écran après image d'écran.
             if self.play_montage && self.depli_actif() {
                 if !self.depli_pas(if vitesse < 0.0 { -1 } else { 1 }, self.looping) {
                     self.playing = false;

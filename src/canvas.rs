@@ -24,7 +24,7 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
-            // La tête de lecture dans une version dépliée de la timeline (partie 167) : son image, en lecture seule.
+            // La tête de lecture dans une version dépliée de la timeline (partie 168) : son image, en lecture seule.
             if self.depli_vue(ui, rect) {
                 return;
             }

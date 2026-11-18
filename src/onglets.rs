@@ -234,7 +234,7 @@ etat_projet! {
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),
     comparaison: Option<crate::comparerui::Comparaison> = None,
     pile_versions: crate::pilevers::Pile = Default::default(),
-    // Les versions dépliées dans la timeline (partie 167) : de l'affichage de ce projet.
+    // Les versions dépliées dans la timeline (partie 168) : de l'affichage de ce projet.
     depli: crate::versiondeplieeui::Depli = Default::default(),
     purge_versions: Option<Option<u64>> = None,
     variantes_ui: crate::variantesui::VariantesUi = Default::default(),

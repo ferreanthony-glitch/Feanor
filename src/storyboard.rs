@@ -753,7 +753,7 @@ impl App {
     }
 
     fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {
-        // Les versions dépliées (partie 167, `versiondepliee.rs`) : la carte des images du film vers celles de l'écran. Sans version
+        // Les versions dépliées (partie 168, `versiondepliee.rs`) : la carte des images du film vers celles de l'écran. Sans version
         // dépliée, elle ne change rien (`d_of(g) == g`).
         self.depli_nettoyer();
         let carte = self.depli_carte();
@@ -867,7 +867,7 @@ impl App {
         let mut notes_zones: Vec<(Rect, crate::fildecision::PlanMark)> = Vec::new();
         // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
-        // Les étiquettes des autres versions, à côté du nom des plans (partie 167, `versiondeplieeui.rs`).
+        // Les étiquettes des autres versions, à côté du nom des plans (partie 168, `versiondeplieeui.rs`).
         let mut zones_versions: Vec<crate::versiondeplieeui::ZoneVersion> = Vec::new();
         let mut start = 0;
         // (La souris tenue : un geste change peut-être un plan sans étape d'historique, les clés du bloc se recalculent alors.)
@@ -940,7 +940,7 @@ impl App {
                 FontId::monospace(10.0),
                 visuals.weak_text_color(),
             );
-            // Le nom du plan ; s'il a plusieurs versions, « Plan 1 · V1 » puis les autres en étiquettes « V2 ▸ » (partie 167). La durée
+            // Le nom du plan ; s'il a plusieurs versions, « Plan 1 · V1 » puis les autres en étiquettes « V2 ▸ » (partie 168). La durée
             // n'est affichée que si elle tient à côté.
             let gauche = if bandeau { rect.left() + 3.0 + thumb_h * aspect + 5.0 } else { rect.left() + 5.0 };
             let titre = crate::storyboard::panel_title_n(&self.doc, &numeros, i);
@@ -1106,7 +1106,7 @@ impl App {
                 }
             }
         }
-        // Les versions dépliées : leur bloc et leur colonne (partie 167).
+        // Les versions dépliées : leur bloc et leur colonne (partie 168).
         let (colonnes, zones_depliees) = if carte.vide() {
             (Vec::new(), Vec::new())
         } else {
@@ -1215,7 +1215,7 @@ impl App {
 
         // Une étiquette de version « V2 » prend le geste qui part d'elle : un clic ouvre la pile (pour un stylet
         // qui ne survole pas), ni glissement ni double-clic ne traversent jusqu'au plan dessous.
-        // De même pour les étiquettes des versions à côté du nom des plans et pour les colonnes des versions dépliées (partie 167) :
+        // De même pour les étiquettes des versions à côté du nom des plans et pour les colonnes des versions dépliées (partie 168) :
         // un clic y passe, y déplie ou y pose la tête ; rien d'autre de la bande ne part de là.
         let sur_colonne = |p: Pos2| colonnes.iter().any(|(c, _)| c.contains(p));
         let on_label = |p: Option<Pos2>| p.is_some_and(|p| etiquettes.iter().any(|e| e.zone.contains(p)) || zones_versions.iter().any(|z| z.zone.contains(p)) || sur_colonne(p));
@@ -1724,7 +1724,7 @@ impl App {
         } else if resp.secondary_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 self.menu_target = if let Some(z) = crate::versiondeplieeui::zone_sous(&zones_versions, p) {
-                    // L'étiquette d'une version (partie 167) : sa couleur, y passer, la déplier ; « +2 » : toutes celles qui n'ont pas
+                    // L'étiquette d'une version (partie 168) : sa couleur, y passer, la déplier ; « +2 » : toutes celles qui n'ont pas
                     // trouvé de place (numéro 0).
                     let numero = if z.sorte == crate::versiondeplieeui::Sorte::Plus { 0 } else { z.numero };
                     Some(MenuTarget::Version { plan: z.plan, numero })

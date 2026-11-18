@@ -64,11 +64,11 @@ pub struct VersionsDuPlan {
     pub prochaine: u32,
     /// Les autres, par numéro.
     pub autres: Vec<Rangee>,
-    /// La couleur de repère de l'étiquette de chaque version (partie 167 : clic droit sur l'étiquette « V2 » de la timeline), par
+    /// La couleur de repère de l'étiquette de chaque version (partie 168 : clic droit sur l'étiquette « V2 » de la timeline), par
     /// numéro : un rang de `versiondeplieeui::PALETTE` (enregistré par numéro de teinte, pas en valeur). Elle suit le numéro, donc la
     /// version (passer de l'une à l'autre ne la change pas).
     pub couleurs: BTreeMap<u32, u8>,
-    /// Le son tel qu'il était posé sous le plan quand chaque version a cessé d'être la version en cours (partie 167 : « si le son a
+    /// Le son tel qu'il était posé sous le plan quand chaque version a cessé d'être la version en cours (partie 168 : « si le son a
     /// été posé différemment que la version active, la version dépliée garde le son tel qu'il a été posé »), par numéro. Seulement
     /// pour la lecture d'une version dépliée : le son du film, lui, reste où il est quand on change de version.
     pub sons: BTreeMap<u32, Vec<SonPose>>,
@@ -435,11 +435,11 @@ pub(crate) struct PlanFichier {
     pub prochaine: u32,
     #[serde(default)]
     pub autres: Vec<VersionFichier>,
-    /// Les couleurs de repère des étiquettes, par numéro de version (partie 167). Absent d'un fichier d'avant : aucune couleur ;
+    /// Les couleurs de repère des étiquettes, par numéro de version (partie 168). Absent d'un fichier d'avant : aucune couleur ;
     /// une version d'avant qui relit ce fichier l'ignore (le format du fichier ne change pas).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub couleurs: BTreeMap<u32, u8>,
-    /// Le son posé sous chaque version rangée quand elle a cessé d'être en cours (partie 167), même règle.
+    /// Le son posé sous chaque version rangée quand elle a cessé d'être en cours (partie 168), même règle.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sons: BTreeMap<u32, Vec<SonPose>>,
 }

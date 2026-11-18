@@ -78,7 +78,7 @@ pub(crate) enum MenuTarget {
     /// Une transition (son id) du montage, ou une coupe entre deux plans (`transitionsui.rs`).
     Transition(u64),
     Cut(usize),
-    /// L'étiquette d'une version d'un plan (ou le bloc d'une version dépliée) : sa couleur, y passer, la déplier (partie 167).
+    /// L'étiquette d'une version d'un plan (ou le bloc d'une version dépliée) : sa couleur, y passer, la déplier (partie 168).
     Version { plan: u64, numero: u32 },
 }
 
@@ -109,7 +109,7 @@ impl App {
     /// Image de départ et plage jouée (en images du montage) : tout le montage, ou le panneau.
     fn play_range(&self) -> (usize, (usize, usize)) {
         if self.play_montage {
-            // La tête dans une version dépliée (partie 167) : le son du film à la même place dans le plan.
+            // La tête dans une version dépliée (partie 168) : le son du film à la même place dans le plan.
             (self.depli_son_global().unwrap_or_else(|| self.global_frame()), (0, self.doc.total_frames()))
         } else {
             // Entre les points d'entrée et de sortie du plan (13d).
@@ -126,7 +126,7 @@ impl App {
         if !self.sound_on {
             return;
         }
-        // (La tête dans une version dépliée qui a son son gardé : c'est lui qu'on entend, partie 167.)
+        // (La tête dans une version dépliée qui a son son gardé : c'est lui qu'on entend, partie 168.)
         let clips = self.depli_mix().unwrap_or_else(|| audio::mix_clips(&self.doc));
         if clips.is_empty() {
             return;
@@ -173,7 +173,7 @@ impl App {
         let pos = engine.position();
         let still_playing = engine.is_playing();
         let g = (pos / spf).floor().max(0.0) as usize;
-        // Des versions dépliées dans la timeline (partie 167) : elles prennent la main quand le son passe par elles.
+        // Des versions dépliées dans la timeline (partie 168) : elles prennent la main quand le son passe par elles.
         if self.play_montage && self.depli_actif() && self.depli_suivre_le_son(g) {
             // (Le son a pu repartir d'ailleurs : seul un son vraiment fini compte. Fini pendant une version dépliée, sa suite se lit à
             // l'horloge de l'ordinateur.)
@@ -579,7 +579,7 @@ impl App {
         self.paint_lanes_of(painter, r, left, ppf, lanes_top, select, &self.doc.audio_tracks);
     }
 
-    /// `paint_lanes` pour d'autres pistes que celles du film, rangée pour rangée : le son gardé d'une version dépliée (partie 167).
+    /// `paint_lanes` pour d'autres pistes que celles du film, rangée pour rangée : le son gardé d'une version dépliée (partie 168).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_lanes_of(&self, painter: &Painter, r: Rect, left: f32, ppf: f32, lanes_top: f32, select: Color32, tracks: &[crate::document::AudioTrack]) {
         let fps = self.doc.fps;
