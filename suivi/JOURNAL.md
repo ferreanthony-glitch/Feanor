@@ -3,6 +3,29 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-18
+
+- **La vue réduite : son verdict, son choix, et les vignettes** (branche `vue-reduite`, sections 166.9 et 166.10). L'image de
+  démonstration de la veille ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image
+  d'après semble encore plus détériorée. » Il avait raison sur l'image (agrandie neuf fois, et pas la même image du plan des deux
+  côtés) ; refaite à l'identique, la comparaison montrait des traits continus mais plus pâles. Rien n'a été fusionné. **L'essai à
+  trois façons** (branche `vue-reduite-essai`, pas pour main ; F8 dans la vue du dessin ; lanceur dans `Tests\essai vue-reduite`) :
+  comme avant, lissée trait pâle, lissée trait plein. **Son choix, l'essai ouvert : « La 3, trait plein », puis « Pardon, la 2 »** :
+  la 166.9 telle qu'elle était. (Claude recommandait la 3 : c'est son œil, sur son écran, qui a tranché.) **Les vignettes ensuite**
+  (166.10) : les cases des Vignettes qu'on ne dessine pas et les vignettes de plans, calculées par le processeur, lisaient 4 à 16
+  points par pixel pour 25 à 100 pixels couverts ; l'encre d'un trait fin y allait de 0 à 1,8 fois la normale d'une ligne à
+  l'autre. Maintenant : la moyenne exacte de tous les pixels couverts (caméra droite, jusqu'à 12 pixels par axe : les cases à six
+  par ligne), des lectures en grille sinon ; un raccourci saute les pixels sans encre. Même espace de moyenne qu'avant (lumière
+  linéaire pour les cases, comme la case qu'on dessine). **Coût mesuré** : cases à six par ligne, de 0,6 à 1,6 fois le temps
+  d'avant selon le projet ; le plan le plus lourd, 0,3 s au lieu de 0,1 ; sur les fils de fond. Un essai existant vérifiait
+  « quatre points par pixel » (l'ancien défaut) : son attendu est maintenant la moyenne de tous les pixels couverts. Capture de
+  contrôle de l'onglet Vignettes sur une copie de « dd », regardée : dans une case voisine les traits fins sont continus, du même
+  poids que dans la case qu'on dessine. Pas regardé sur son écran. **Vérificateur : aucun passage entièrement vert**, trois autres
+  sessions compilant sans arrêt (processeur à 100 %, moins de 1,2 Go de mémoire libre). Premier passage : sans avertissement,
+  suite complète 4 801 réussis et 0 échec, neuf groupes OK, deux essais de temps d'image du groupe Espace 3D en échec. Second : sans
+  avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
+  essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. À refaire au calme avant la fusion. Pas
+  fusionnée : sa décision.
 ## 2026-11-17
 
 - **La vue réduite : tous les pixels du dessin comptent** (branche `vue-reduite`, section 166.9). Son retour : « Est-ce qu'on peut
