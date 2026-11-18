@@ -102,6 +102,13 @@ pub struct IncrustationEntree {
     pub visible: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub police: String,
+    /// Images par lettre (partie 176, format 60) ; absent : d'un coup.
+    #[serde(default, skip_serializing_if = "est_zero")]
+    pub lettre_a_lettre: u32,
+}
+
+fn est_zero(v: &u32) -> bool {
+    *v == 0
 }
 
 impl From<&CalqueEffet> for Entree {
@@ -122,6 +129,7 @@ impl From<&CalqueEffet> for Entree {
                     marge: i.marge,
                     visible: i.quand.name().into(),
                     police: i.police.clone(),
+                    lettre_a_lettre: i.lettre_a_lettre,
                 }),
             },
         }
@@ -151,6 +159,7 @@ impl Entree {
                             marge: finite(e.marge, 0.0, 40.0, d.marge),
                             quand: crate::incrustation::Quand::from_name(&e.visible).unwrap_or(d.quand),
                             police: e.police,
+                            lettre_a_lettre: e.lettre_a_lettre.min(crate::incrustation::LETTRE_A_LETTRE_MAX),
                         }
                     }
                 })

@@ -331,7 +331,7 @@ fn in_space_ctrl_click_lays_a_handle_and_its_y_arrow_lifts_the_path_the_card_and
     std::fs::create_dir_all(&dir).expect("dossier d'essai");
     let manifest = dir.join("P.shot");
     project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
-    assert!(project::VERSION == 59);
+    assert!(project::VERSION == 60);
     let relu = project::load(&manifest).expect("relu").doc;
     assert_eq!(relu.panels[0].layers[0].trajectoire.as_ref(), Some(&t));
     assert_eq!(relu.panels[0].trajectoire_camera, b.app.doc.panels[0].trajectoire_camera);

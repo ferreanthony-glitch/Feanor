@@ -23,6 +23,26 @@ const BADGE_MIN_W: f32 = 18.0;
 /// Distance de la souris à une coupe pour que le clic droit vise la coupe, en points.
 const CUT_REACH: f32 = 4.0;
 
+/// Une transition glissée depuis le panneau Préréglages (partie 175) : elle se pose sur la coupe du montage où on la lâche.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TransitionDrag {
+    pub kind: Kind,
+}
+
+/// La coupe (0 à `blocks.len()`) la plus proche de l'abscisse `x`, d'après les blocs des plans, et son abscisse.
+pub(crate) fn coupe_la_plus_proche(blocks: &[Rect], x: f32) -> Option<(usize, f32)> {
+    (0..=blocks.len())
+        .map(|c| {
+            let cx = match blocks.get(c) {
+                Some(b) => b.left() - 1.0,
+                None => blocks.last().map_or(f32::NAN, |b| b.right() + 1.0),
+            };
+            (c, cx)
+        })
+        .filter(|(_, cx)| cx.is_finite())
+        .min_by(|a, b| (a.1 - x).abs().total_cmp(&(b.1 - x).abs()))
+}
+
 /// État de l'interface des transitions (un seul champ dans `App`).
 #[derive(Default)]
 pub(crate) struct TransUi {
@@ -141,8 +161,12 @@ pub(crate) fn paint_badge(painter: &Painter, b: &Badge, selected: bool) {
             poly(vec![pos2(x0, y0), pos2(xc, ym), pos2(x0, y1)], fill);
             poly(vec![pos2(x1, y0), pos2(xc, ym), pos2(x1, y1)], fill);
         }
-        Kind::Black | Kind::White => {
-            let fill = if b.kind == Kind::Black { Color32::from_rgb(10, 10, 12) } else { Color32::from_rgb(245, 245, 245) };
+        Kind::Black | Kind::White | Kind::Colour => {
+            let fill = match b.kind {
+                Kind::Black => Color32::from_rgb(10, 10, 12),
+                Kind::White => Color32::from_rgb(245, 245, 245),
+                _ => Color32::from_rgb(b.zone.couleur[0], b.zone.couleur[1], b.zone.couleur[2]),
+            };
             if !edge {
                 poly(vec![pos2(x0, ym), pos2(xc, y0), pos2(x1, ym), pos2(xc, y1)], fill);
             } else if b.zone.out.is_none() {
@@ -159,6 +183,33 @@ pub(crate) fn paint_badge(painter: &Painter, b: &Badge, selected: bool) {
         }
         Kind::CutBlack => {
             painter.rect_filled(r, 2.0, Color32::from_rgb(10, 10, 12));
+            painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
+        }
+        // (Partie 175.) La poussée : le plan entrant à droite, une flèche vers la gauche.
+        Kind::Push | Kind::Whip => {
+            painter.rect_filled(Rect::from_min_max(pos2(x0, y0), pos2(xc, y1)), 2.0, with_alpha(theme::accent_texte(), 70));
+            painter.rect_filled(Rect::from_min_max(pos2(xc, y0), pos2(x1, y1)), 2.0, with_alpha(theme::accent_texte(), 215));
+            let fleche = Color32::from_rgb(250, 250, 250);
+            painter.add(Shape::convex_polygon(vec![pos2(xc - 5.0, ym), pos2(xc + 1.0, ym - 4.0), pos2(xc + 1.0, ym + 4.0)], fleche, Stroke::NONE));
+            if b.kind == Kind::Whip {
+                // Le raccord filé : des traînées.
+                for dy in [-4.0, 0.0, 4.0] {
+                    painter.line_segment([pos2(x0 + 2.0, ym + dy), pos2(x1 - 2.0, ym + dy)], Stroke::new(1.0_f32, with_alpha(ink, 150)));
+                }
+            }
+            painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
+        }
+        // Le flash : un trait blanc sur la coupe, qui rayonne.
+        Kind::Flash => {
+            let cx = (x0 + (b.zone.cut as f32 - b.zone.start as f32) / b.zone.len().max(1) as f32 * (x1 - x0)).clamp(x0 + 2.0, x1 - 2.0);
+            painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 60));
+            poly(vec![pos2(cx, y0), pos2(cx + 4.0, ym), pos2(cx, y1), pos2(cx - 4.0, ym)], Color32::from_rgb(255, 255, 255));
+        }
+        // Le volet par un objet : le tronc sombre, au milieu.
+        Kind::Objet => {
+            painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 90));
+            let o = crate::transitions::OBJET_COULEUR;
+            poly(vec![pos2(xc - 3.0, y0), pos2(xc + 3.0, y0), pos2(xc + 4.5, y1), pos2(xc - 4.5, y1)], Color32::from_rgb(o[0], o[1], o[2]));
             painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
         }
     }
@@ -333,6 +384,11 @@ impl App {
             "transition.fondu_blanc" => Kind::White,
             "transition.volet" => Kind::Wipe,
             "transition.noir" => Kind::CutBlack,
+            "transition.poussee" => Kind::Push,
+            "transition.raccord_file" => Kind::Whip,
+            "transition.flash" => Kind::Flash,
+            "transition.couleur" => Kind::Colour,
+            "transition.objet" => Kind::Objet,
             _ => return false,
         };
         let cut = self.target_cut();
@@ -341,6 +397,36 @@ impl App {
     }
 
     // (Le bouton « Ajouter une transition » de la barre du montage est une ligne de `barres.rs`.)
+
+    /// Clic sur une vignette de transition du panneau Préréglages (partie 175) : sur la coupe de la transition choisie, sinon
+    /// sur la plus proche de la tête de lecture.
+    pub(crate) fn poser_transition_a_la_tete(&mut self, kind: Kind) {
+        let cut = self.target_cut();
+        self.set_transition(cut, kind);
+    }
+
+    /// Une transition glissée depuis le panneau Préréglages, au-dessus du montage : la coupe la plus proche du pointeur
+    /// s'éclaire (en rouge si cette sorte n'y est pas permise, au bord du film) ; au lâcher, la transition s'y pose.
+    pub(crate) fn transition_depot(&mut self, ui: &egui::Ui, zone: Rect, blocks: &[Rect], top: f32, bottom: f32) {
+        let ctx = ui.ctx().clone();
+        let Some(drag) = egui::DragAndDrop::payload::<TransitionDrag>(&ctx) else { return };
+        let Some(p) = ctx.pointer_latest_pos() else { return };
+        if !zone.contains(p) {
+            return;
+        }
+        let Some((cut, x)) = coupe_la_plus_proche(blocks, p.x) else { return };
+        let (o, i) = transitions::cut_plans(&self.doc, cut);
+        let permise = drag.kind.allowed(o.is_some() && i.is_some());
+        let couleur = if permise { theme::contour() } else { ui.visuals().error_fg_color };
+        let painter = ui.painter_at(zone);
+        painter.line_segment([pos2(x, top - 4.0), pos2(x, bottom + 4.0)], Stroke::new(3.0_f32, couleur));
+        painter.circle_filled(pos2(x, top - 4.0), 4.0, couleur);
+        if ctx.input(|i| i.pointer.any_released()) {
+            if let Some(d) = egui::DragAndDrop::take_payload::<TransitionDrag>(&ctx) {
+                self.set_transition(cut, d.kind);
+            }
+        }
+    }
 
     // ------------------------------------------------------------------ menus
 
@@ -359,13 +445,16 @@ impl App {
             return;
         };
         self.trans.sel = Some(id);
-        for kind in Kind::ALL.into_iter().filter(|k| k.allowed(t.between_plans())) {
-            let resp = ui.selectable_label(t.kind == kind, kind.name());
-            if crate::bulles::bulle(resp, kind.name(), kind.description(), "").clicked() {
-                ui.close_menu();
-                self.set_transition(cut, kind);
+        // (Partie 175 : dix sortes, un sous-menu ; le menu reste court.)
+        ui.menu_button(format!("Sorte : {}", t.kind.name()), |ui| {
+            for kind in Kind::ALL.into_iter().filter(|k| k.allowed(t.between_plans())) {
+                let resp = ui.selectable_label(t.kind == kind, kind.name());
+                if crate::bulles::bulle(resp, kind.name(), kind.description(), "").clicked() {
+                    ui.close_menu();
+                    self.set_transition(cut, kind);
+                }
             }
-        }
+        });
         ui.separator();
         let mut frames = t.frames;
         let resp = ui.add(egui::DragValue::new(&mut frames).range(1..=MAX_FRAMES).suffix(" images").prefix("Durée "));
@@ -377,6 +466,21 @@ impl App {
             if edited {
                 if let Some(t) = self.doc.transitions.iter_mut().find(|t| t.id == id) {
                     t.frames = frames.clamp(1, MAX_FRAMES);
+                }
+            }
+        }
+        // La couleur du fondu par une couleur (partie 175) : une seule étape d'annulation tant que la fenêtre de choix est ouverte.
+        if t.kind == Kind::Colour {
+            let mut c = t.couleur.unwrap_or(transitions::COULEUR_DEFAUT);
+            let resp = ui
+                .horizontal(|ui| {
+                    ui.label("Couleur");
+                    crate::champcouleur::srgb(ui, &mut c)
+                })
+                .inner;
+            if self.edited_as(&resp, "Couleur de la transition") {
+                if let Some(t) = self.doc.transitions.iter_mut().find(|t| t.id == id) {
+                    t.couleur = Some(c);
                 }
             }
         }
@@ -590,6 +694,8 @@ impl App {
         };
         let fr = self.doc.frame_rect();
         let sheet = self.doc.width.max(1) as f32;
+        // Le cadre filmé à l'écran (partie 175) : celui de la caméra du plan courant, tel que la vue le montre.
+        let cadre = self.current_camera().corners(self.doc.frame).map(|c| self.view.to_screen(rect, size, c));
         MixSetup {
             first: first.0,
             first_corners: first.1,
@@ -598,9 +704,15 @@ impl App {
             display: crate::gpu::DisplayMix {
                 wipe: mix.wipe,
                 m: mix.m,
-                grey: mix.color[0] as f32 / 255.0,
+                couleur: mix.color,
                 k: mix.k,
                 wipe_u: [fr.left() / sheet, fr.right() / sheet],
+                glisse: mix.glisse,
+                shift_a: mix.shift_a,
+                shift_b: mix.shift_b,
+                blur: mix.blur,
+                objet: mix.objet,
+                cadre,
             },
         }
     }

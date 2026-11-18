@@ -193,7 +193,13 @@ pub struct Incrustation {
     pub quand: Quand,
     /// Police (voir `text::font_names`) ; vide : la police intégrée.
     pub police: String,
+    /// Lettre à lettre (partie 176, plan type « Lieu et date ») : le texte apparaît une lettre toutes les `lettre_a_lettre`
+    /// images, depuis le début du plan ; 0 : d'un coup.
+    pub lettre_a_lettre: u32,
 }
+
+/// Le plus d'images par lettre (un fichier abîmé ne fait pas attendre une heure la deuxième lettre).
+pub const LETTRE_A_LETTRE_MAX: u32 = 48;
 
 impl Default for Incrustation {
     fn default() -> Self {
@@ -208,8 +214,18 @@ impl Default for Incrustation {
             marge: 3.0,
             quand: Quand::Toujours,
             police: String::new(),
+            lettre_a_lettre: 0,
         }
     }
+}
+
+/// Ce qui se voit du texte `text` à l'image `frame` du plan, lettre à lettre (une lettre toutes les `n` images ; 0 : tout).
+pub fn lettres_visibles(text: &str, frame: usize, n: u32) -> String {
+    if n == 0 {
+        return text.to_string();
+    }
+    let visibles = frame / n as usize + 1;
+    text.chars().take(visibles).collect()
 }
 
 // ---------------------------------------------------------------------- le texte
@@ -250,6 +266,11 @@ pub fn now_secs() -> u64 {
 /// Le texte de l'incrustation `inc` pour l'image `frame` du plan `panel`, à la date `now` (secondes
 /// depuis 1970).
 pub fn text_for(inc: &Incrustation, doc: &Document, panel: usize, frame: usize, now: u64) -> String {
+    lettres_visibles(&text_entier(inc, doc, panel, frame, now), frame, inc.lettre_a_lettre)
+}
+
+/// Le texte entier de l'incrustation `inc` pour l'image `frame` du plan `panel` (sans le lettre à lettre).
+fn text_entier(inc: &Incrustation, doc: &Document, panel: usize, frame: usize, now: u64) -> String {
     let counted = match inc.portee {
         Portee::Montage => doc.panel_start(panel) + frame,
         Portee::Plan => frame,
