@@ -31,7 +31,7 @@ pub(crate) const ROW_FOLDER: f32 = 40.0;
 /// Décalage des lignes des calques rangés dans un dossier.
 const INDENT: f32 = 12.0;
 /// Largeur d'une icône de réglage.
-const ICON_W: f32 = 19.0;
+pub(crate) const ICON_W: f32 = 19.0;
 
 /// Une ligne de calque de la timeline : le calque, le haut de la ligne (depuis le haut des
 /// lignes) et sa hauteur.

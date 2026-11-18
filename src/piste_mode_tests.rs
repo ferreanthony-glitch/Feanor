@@ -313,6 +313,41 @@ fn the_options_added_to_the_track_do_what_the_timeline_line_does() {
     assert!(textes(&b).len() > avant, "le menu des groupes s'ouvre");
 }
 
+/// Partie 173.6 (Anthony : « les icônes au-dessus des options de fusion et opacité peuvent être plus espacées pour être plus
+/// lisibles ») : à la largeur `w` de la colonne, toutes les options de la rangée du milieu sont là, dans la colonne, dans leurs cases
+/// de la largeur de celles de la timeline (au moins 17 points, les icônes à la même taille), séparées d'au moins 2 points, d'au
+/// moins `ICON_W` de centre à centre. Rend l'écart moyen d'un centre au suivant.
+fn icones_espacees(b: &mut Banc, w: f32, quoi: &str) -> f32 {
+    b.app.montage_head_w = w;
+    b.chauffer(6);
+    let colonne = ou("Largeur de la colonne");
+    let mut icones: Vec<(String, Rect)> = ICONES_DE_LA_PISTE.iter().map(|n| (n.to_string(), icone(n).unwrap_or_else(|| panic!("{quoi} : « {n} » manque sur la piste : {:?}", vus::noms())))).collect();
+    icones.sort_by(|a, c| a.1.left().total_cmp(&c.1.left()));
+    for (k, (n, r)) in icones.iter().enumerate() {
+        assert!(r.right() <= colonne.right() + 0.5, "{quoi} : « {n} » sort de la colonne : {r:?} / {colonne:?}");
+        assert!(r.width() >= 19.0 - 2.0 - 0.5, "{quoi} : « {n} » dans une case presque aussi large que dans la timeline (19) : {r:?}");
+        if k > 0 {
+            let (m, p) = &icones[k - 1];
+            assert!(r.left() - p.right() >= 1.5, "{quoi} : « {m} » et « {n} » à moins de 2 points : {p:?} {r:?}");
+            assert!(r.center().x - p.center().x >= 19.0 - 0.5, "{quoi} : « {m} » et « {n} » trop serrés : {p:?} {r:?}");
+        }
+    }
+    (icones.last().unwrap().1.center().x - icones[0].1.center().x) / (icones.len() - 1) as f32
+}
+
+#[test]
+fn the_option_icons_of_the_track_are_spaced_like_the_timeline_line_at_every_width() {
+    let mut b = banc_dans(Espace::Storyboard);
+    let min = crate::montagehead::largeur_min_colonne(crate::barres::Barre::Montage);
+    let a_min = icones_espacees(&mut b, min, "minimum");
+    let a_defaut = icones_espacees(&mut b, crate::montagehead::LARGEUR_STORYBOARD, "défaut");
+    let a_large = icones_espacees(&mut b, 480.0, "480");
+    assert!(a_defaut >= a_min - 0.5 && a_large >= a_defaut - 0.5, "plus large, plus espacées : {a_min} {a_defaut} {a_large}");
+    assert!(a_defaut >= 19.0 + 6.0, "à la largeur d'origine, nettement plus espacées que les 13 points de 173.5 : {a_defaut}");
+    // Le minimum n'a pas eu à remonter : toutes tiennent à 250 points.
+    assert!((min - crate::pistes::LARGEUR_PISTE_MIN).abs() < 0.5, "{min}");
+}
+
 /// Les images de la partie 173, à taille réelle (un pixel de l'écran du banc pour un point, aucun agrandissement), dans le dossier
 /// `SHOT_CAPTURE_DIR` : la piste avec « Normal ▾ », avec un mode long, la liste ouverte, le clic droit ouvert sur Apparence. Le projet
 /// est `SHOT_CAPTURE_PROJET` (une copie : le banc n'enregistre rien). Sans carte graphique : rien.
@@ -390,13 +425,18 @@ fn piste_mode_capture() {
         sauver(b, nom, Rect::from_min_max(pos2(0.0, g.top() - 2.0), pos2(g.right() + 260.0, g.bottom())));
     };
     bande(&mut b, "173-6-storyboard-largeur-origine.png");
-    let piste = {
+    // Le gros plan de la piste du calque actif (partie 173.6 : à 340 points, au minimum, à 480).
+    let gros_plan = |b: &mut Banc, nom: &str| {
+        b.chauffer(6);
         let (h, o) = (ou("Commandes du calque"), ou("Opacité du calque"));
-        Rect::from_min_max(pos2(40.0, h.top() - 4.0), pos2(ou("Largeur de la colonne").right() + 4.0, o.bottom() + 6.0))
+        let piste = Rect::from_min_max(pos2(40.0, h.top() - 4.0), pos2(ou("Largeur de la colonne").right() + 4.0, o.bottom() + 6.0));
+        sauver(b, nom, piste);
     };
-    sauver(&mut b, "173-9-gros-plan-piste.png", piste);
+    gros_plan(&mut b, "173-9-gros-plan-piste-340.png");
     b.app.montage_head_w = 0.0;
     bande(&mut b, "173-7-storyboard-largeur-minimale.png");
+    gros_plan(&mut b, "173-10-gros-plan-piste-minimum.png");
     b.app.montage_head_w = 480.0;
     bande(&mut b, "173-8-storyboard-largeur-480.png");
+    gros_plan(&mut b, "173-11-gros-plan-piste-480.png");
 }

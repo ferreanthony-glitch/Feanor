@@ -14557,3 +14557,22 @@ essais : `src/piste_mode_tests.rs` ; changés : `avantapres165_tests` (deux lign
 2. La piste du calque actif : la rangée des options ; cliquer l'aplat, la transparence, le pochoir et son sens, la punaise, le
    groupe, la pelure : comme sur la ligne de la timeline (Ctrl+Z défait chacun).
 3. En bas : ‹ Normal ▾ ›, la barre, le losange à sa droite ; à 250 points, « Superposition » raccourci, rien ne déborde.
+
+### 173.6 Les icônes des options plus espacées
+
+Anthony, sur le gros plan de la piste : « les icônes au-dessus des options de fusion et opacité peuvent être plus espacées pour être
+plus lisibles ».
+
+- La rangée du milieu de la piste active (effets, accroche à la caméra, aplat, transparence, pochoir, son sens, position, groupe,
+  pelure, maillon) prend des **cases de la largeur de celles de la ligne du calque de la timeline** (`layerheads::ICON_W`, 19
+  points ; 13 en 173.5), les icônes à la même taille (13), **au moins 2 points entre deux**.
+- **L'écart se répartit sur la largeur de la colonne** : la place de la rangée (moins la vignette et le maillon) divisée par le
+  nombre d'options, de 19 à 30 points de centre à centre (`PAS_MAX`). À 340 points : 30 ; au minimum, 250 : environ 23 ; à 480 :
+  30, le reste de la rangée vide à droite.
+- **Toutes tiennent au minimum, qui ne bouge pas** (250 points) : aucune option n'est cachée, ni à 340 ni à 250. (Dans l'espace
+  Montage, sous 250 points, une icône qui ne tient plus n'est pas posée, comme avant.)
+- La case du groupe se clique tout entière, comme les autres.
+
+Essai : `piste_mode_tests::the_option_icons_of_the_track_are_spaced_like_the_timeline_line_at_every_width` (rouge sur la 173.5, vert
+ensuite) : au minimum, à 340 et à 480, chaque option est là, dans la colonne, dans une case d'au moins 17 points, à 2 points au moins
+de sa voisine et à 19 au moins de centre à centre ; l'écart grandit avec la colonne ; le minimum reste 250.

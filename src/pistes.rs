@@ -68,6 +68,11 @@ const FLECHE: f32 = 14.0;
 /// Partie 173.5 : la colonne la plus étroite où la piste du calque actif montre toutes ses options (la rangée des icônes, la
 /// vignette comprise) : le minimum de la colonne hors de l'espace Montage (`montagehead::largeur_min_colonne`).
 pub(crate) const LARGEUR_PISTE_MIN: f32 = 250.0;
+/// Partie 173.6 : la place de la vignette au début de la rangée des options (26 points et son écart), celle du maillon de la
+/// planche-mère à sa fin (« ⛓ 2 »), et l'écart le plus grand d'une icône à l'autre quand la colonne est large.
+const VIGNETTE_W: f32 = 29.0;
+const MAILLON_W: f32 = 28.0;
+const PAS_MAX: f32 = 30.0;
 
 /// Ce qu'une ligne des pistes est.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -639,8 +644,14 @@ impl App {
         let y = milieu.center().y;
         let fin = milieu.right() - 2.0;
         let mut x = milieu.left() + 2.0 + retrait;
-        const PAS: f32 = 13.0;
-        let case = |x: f32| Rect::from_center_size(pos2(x + PAS * 0.5, y), vec2(PAS, RANGEE_ACTIVE - 4.0));
+        // Partie 173.6 (Anthony : « les icônes … peuvent être plus espacées pour être plus lisibles ») : des cases de la largeur de
+        // celles de la ligne du calque de la timeline (`layerheads::ICON_W`, 19 points), les icônes à la même taille (13), un écart
+        // d'au moins 2 points entre deux ; une colonne plus large les écarte, jusqu'à `PAS_MAX` de l'une à l'autre.
+        let partage = self.doc.plans_du_partage(self.cur_panel, li).iter().any(|&i| i != self.cur_panel);
+        let combien = [self.fx_switch_shown(li), accrochable, crate::fondui::takes_fond(&self.layers()[li]), true, true, true, true, groupe.is_some(), true].iter().filter(|b| **b).count() as f32;
+        let place_des_icones = fin - x - if large { VIGNETTE_W } else { 0.0 } - if partage { MAILLON_W } else { 0.0 };
+        let pas = (place_des_icones / combien).clamp(crate::layerheads::ICON_W, PAS_MAX);
+        let case = |x: f32| Rect::from_center_size(pos2(x + pas * 0.5, y), vec2(crate::layerheads::ICON_W.min(pas - 2.0), RANGEE_ACTIVE - 4.0));
         let tient = |x: f32, w: f32| x + w <= fin + 0.5;
         // La vignette (ou la couleur unie) : seulement si la colonne est assez large pour tout le reste.
         if large {
@@ -660,26 +671,26 @@ impl App {
                 }
                 ui.painter().rect_stroke(v, 0.0, Stroke::new(1.0_f32, theme::bord()), egui::StrokeKind::Inside);
             }
-            x = v.right() + 3.0;
+            x += VIGNETTE_W;
         }
-        if self.fx_switch_shown(li) && tient(x, PAS) {
+        if self.fx_switch_shown(li) && tient(x, pas) {
             if let Some(resp) = self.fx_switch(ui, li, Some(case(x)), fg) {
                 if resp.clicked() {
                     self.toggle_layer_fx(li);
                 }
             }
-            x += PAS;
+            x += pas;
         }
-        if accrochable && tient(x, PAS) {
+        if accrochable && tient(x, pas) {
             let resp = crate::layerheads::icon_at(ui, case(x), ph::VIDEO_CAMERA, shade(accroche));
             if self.aide(resp, crate::accroche::NOM, crate::accroche::PHRASE, crate::accroche::ACTION).clicked() {
                 self.basculer_accroche(li);
             }
-            x += PAS;
+            x += pas;
         }
         // L'aplat sous le trait (le même bouton que sur la ligne de la timeline ; seulement pour un calque qui en prend un).
-        if crate::fondui::takes_fond(&self.layers()[li]) && tient(x, 18.0) {
-            let place = Rect::from_min_size(pos2(x, y - 8.0), vec2(18.0, 16.0));
+        if crate::fondui::takes_fond(&self.layers()[li]) && tient(x, pas) {
+            let place = Rect::from_center_size(pos2(x + pas * 0.5, y), vec2(18.0, 16.0));
             let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("aplat_piste", id)));
             c.spacing_mut().interact_size = vec2(18.0, 16.0);
             c.spacing_mut().button_padding = vec2(1.0, 0.0);
@@ -687,24 +698,24 @@ impl App {
                 if resp.clicked() {
                     self.toggle_fond(li);
                 }
-                x += resp.rect.width().max(18.0) + 1.0;
+                x += pas;
             }
         }
-        if tient(x, PAS) {
+        if tient(x, pas) {
             let resp = crate::layerheads::icon_at(ui, case(x), ph::CHECKERBOARD, shade(keep_alpha));
             let resp = crate::bulles::bulle(resp, "Préserver la transparence", "Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide. La gomme gomme normalement.", "");
             if resp.clicked() {
                 self.set_layer_flag(li, |l| l.keep_alpha = !l.keep_alpha);
             }
-            x += PAS;
+            x += pas;
         }
-        if tient(x, 2.0 * PAS) {
+        if tient(x, 2.0 * pas) {
             let resp = crate::layerheads::icon_at(ui, case(x), if negative { ph::EXCLUDE } else { ph::INTERSECT }, shade(stencil));
             let resp = crate::bulles::bulle(resp, "Pochoir", "Le dessin de ce calque limite où l'on peint sur les autres calques (pinceau, crayon, gomme bitmap).", "");
             if resp.clicked() {
                 self.basculer_calques(li, "Pochoir", |l| l.stencil, |l, v| l.stencil = v, false);
             }
-            x += PAS;
+            x += pas;
             let resp = crate::layerheads::icon_at(ui, case(x), if negative { ph::MINUS } else { ph::PLUS }, shade(stencil));
             let resp = crate::bulles::bulle(
                 resp,
@@ -715,25 +726,28 @@ impl App {
             if resp.clicked() {
                 self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
             }
-            x += PAS;
+            x += pas;
         }
-        if tient(x, PAS) {
+        if tient(x, pas) {
             let resp = crate::layerheads::icon_at(ui, case(x), ph::PUSH_PIN, shade(fixe));
             let resp = crate::bulles::bulle(resp, "Verrouiller la position", "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.", "");
             if resp.clicked() {
                 self.set_layer_flag(li, |l| l.position_locked = !l.position_locked);
             }
-            x += PAS;
+            x += pas;
         }
-        if let Some(g) = groupe.filter(|_| tient(x, PAS)) {
-            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(case(x)).id_salt(("groupe_piste", id)));
-            let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(crate::layerheads::group_color(g.color))).frame(false);
+        if let Some(g) = groupe.filter(|_| tient(x, pas)) {
+            let place = case(x);
+            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("groupe_piste", id)));
+            c.spacing_mut().button_padding = vec2(0.0, 0.0);
+            // (La case entière se clique, comme les autres icônes de la rangée.)
+            let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(crate::layerheads::group_color(g.color))).frame(false).min_size(place.size());
             let resp = egui::menu::menu_custom_button(&mut c, button, |ui| self.group_menu(ui, li)).response;
             crate::bulles::bulle(resp, &format!("Groupe : {}", g.name), "Ranger le calque dans un groupe de couleur.", "");
-            x += PAS;
+            x += pas;
         }
         // La pelure d'oignon du calque (elle reste aussi au clic droit, Apparence, avec Ctrl+L).
-        if tient(x, PAS) {
+        if tient(x, pas) {
             let resp = crate::layerheads::icon_at(ui, case(x), ph::CIRCLES_THREE, shade(onion));
             let resp = crate::bulles::bulle(
                 resp,
@@ -747,7 +761,7 @@ impl App {
             if resp.secondary_clicked() {
                 self.onion_window = true;
             }
-            x += PAS;
+            x += pas;
         }
         // Le maillon de la planche-mère (rien si le calque n'est dans aucun autre plan).
         if tient(x, 16.0) {
