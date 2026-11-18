@@ -5,6 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
+  « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
+  `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,
+  qui a l'arbre vérifié sur la branche (4 795 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas ouvert :
+  rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après 22 s,
+  aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place.
+  Worktree et branche gardés (retrait proposé, sa décision).
 - **Le panneau Pinceau : les réglages d'abord, la liste des brosses tout en bas** (branche `panneau-pinceau`, la section du
   2026-11-18 de la partie 45). Sa demande : « revoir la disposition du panneau », sur une capture annotée de sa main : 1 les
   réglages, 2 les trois boutons, 3 la liste, les réglages remontés sous l'aperçu, la liste descendue en bas. **Ce qui est fait** :
