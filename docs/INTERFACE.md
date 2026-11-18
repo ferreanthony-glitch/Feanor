@@ -13900,3 +13900,13 @@ passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il
 Essais (`src/versiondepliee_tests.rs`, treize) : la V1 dépliée choisie devient la version en cours, se replie, la V3 ne se déplie
 pas, la V2 dépliée le reste ; deux versions au son posé différemment : la partie dépliée joue celui de sa version, à sa place, le
 film garde le sien, et tout se retrouve après enregistrement et réouverture ; les teintes douces.
+
+Vérificateur après ces retours (18 novembre, vers 1 h 45, `-Repetitions 2`) : compilation sans avertissement ; passage 1 : **4 809
+réussis, 0 échec** ; passage 2 : 4 808 réussis, un échec, `effets_debord_tests::a_reserve_too_small_does_not_compute_without_end`
+(intermittent, sans lien avec les versions : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Captures
+refaites sur le banc sans fenêtre (essai ignoré `versions_depliees_captures`, sur une copie de projet) : la fenêtre de l'exe de
+branche, derrière le FEANOR d'Anthony, ne se redessinait pas.
+
+Note de journal : le message du commit `ab1c03f` (« teintes orange et jaune plus distinctes ; captures sur banc ») est inexact sur
+les teintes : leur réglage est déjà dans `b0f7b4f` ; `ab1c03f` n'ajoute que l'essai des captures.
+
