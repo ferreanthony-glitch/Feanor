@@ -7,6 +7,10 @@
 //! dessus pour la poser à la tête de lecture : un bloc de plus, vivant, sans clé (`blocscamera.rs`).
 //!
 //! Les vignettes ne s'animent qu'au survol : un panneau ouvert ne fait pas redessiner FEANOR sans cesse.
+//!
+//! Depuis le lot 2 (partie 171), les vignettes sont rangées par famille (`camfx::Famille`), et la petite scène a de la
+//! profondeur : un travelling y fait passer le rocher vite et les montagnes à peine. Une cible y vise le visage du
+//! personnage (la maison pour le zoom vers un point), comme sur la page de choix.
 
 use std::sync::OnceLock;
 
@@ -33,17 +37,28 @@ struct Trait {
     teinte: Option<Color32>,
     /// Rempli jusqu'à cette hauteur, en bandes verticales (une crête de montagnes, qui n'est pas convexe).
     jusqu_a: Option<f32>,
+    /// Profondeur : la distance à la caméra, en part de celle du plan de référence, moins 1 (0 : au plan de référence ; 4 : cinq
+    /// fois plus loin ; négative : plus près). Un travelling fait grandir chacun à sa vitesse.
+    profondeur: f32,
 }
+
+/// Les profondeurs des traits de la scène, dans l'ordre de `scene` : les montagnes et l'horizon au loin, la route, la maison,
+/// l'arbre, le personnage au plan de référence, le poteau, le rocher devant.
+const PROFONDEURS: [f32; 15] = [4.0, 4.0, 0.4, 0.4, 0.8, 0.8, 0.8, 0.6, 0.6, 0.0, 0.0, 0.0, 0.0, 0.3, -0.5];
+
+/// Le visage du personnage et la maison, là où visent les cibles des vignettes (en part de la largeur du cadre).
+const VISAGE: [f32; 2] = [0.08, -0.075];
+const MAISON: [f32; 2] = [-0.29, -0.01];
 
 /// La petite scène : un sol, des montagnes, une maison, un arbre, un personnage et un rocher devant.
 fn scene() -> &'static [Trait] {
     static SCENE: OnceLock<Vec<Trait>> = OnceLock::new();
     SCENE.get_or_init(|| {
-        let ligne = |p: &[(f32, f32)]| Trait { points: p.to_vec(), ferme: false, teinte: None, jusqu_a: None };
-        let forme = |p: Vec<(f32, f32)>, t: Color32| Trait { points: p, ferme: true, teinte: Some(t), jusqu_a: None };
+        let ligne = |p: &[(f32, f32)]| Trait { points: p.to_vec(), ferme: false, teinte: None, jusqu_a: None, profondeur: 0.0 };
+        let forme = |p: Vec<(f32, f32)>, t: Color32| Trait { points: p, ferme: true, teinte: Some(t), jusqu_a: None, profondeur: 0.0 };
         let rond = |cx: f32, cy: f32, rx: f32, ry: f32, n: usize| (0..n).map(|i| i as f32 / n as f32 * std::f32::consts::TAU).map(|a| (cx + a.cos() * rx, cy + a.sin() * ry)).collect::<Vec<_>>();
         let crete: Vec<(f32, f32)> = (0..=40).map(|i| -1.6 + i as f32 * 0.08).map(|x| (x, 0.055 - (0.06 + 0.03 * (x * 7.0).sin() + 0.02 * (x * 13.0).cos()))).collect();
-        let mut v = vec![Trait { points: crete, ferme: false, teinte: Some(Color32::from_rgb(230, 227, 220)), jusqu_a: Some(0.06) }];
+        let mut v = vec![Trait { points: crete, ferme: false, teinte: Some(Color32::from_rgb(230, 227, 220)), jusqu_a: Some(0.06), profondeur: 0.0 }];
         v.push(ligne(&[(-1.6, 0.06), (1.6, 0.06)]));
         v.push(ligne(&[(0.02, 0.28), (-0.12, 0.12), (-0.24, 0.07)]));
         v.push(ligne(&[(0.14, 0.28), (-0.06, 0.12), (-0.2, 0.07)]));
@@ -58,13 +73,26 @@ fn scene() -> &'static [Trait] {
         v.push(forme(rond(0.08, -0.075, 0.022, 0.025, 14), Color32::from_rgb(246, 244, 239)));
         v.push(ligne(&[(0.6, 0.06), (0.6, -0.1), (0.63, -0.1)]));
         v.push(forme(rond(-0.33, 0.24, 0.12, 0.08, 18), Color32::from_rgb(171, 166, 157)));
+        for (t, z) in v.iter_mut().zip(PROFONDEURS) {
+            t.profondeur = z;
+        }
         v
     })
 }
 
+/// Les réglages que joue la vignette de `preset` : ceux d'origine, la cible sur le visage (ou la maison).
+fn reglages_de_vignette(preset: Preset, fps: u32) -> Params {
+    let p = Params::new(preset, fps);
+    match (preset.poignee(), preset) {
+        (_, Preset::ZoomPoint) => Params { vers: MAISON, ..p },
+        (crate::camfx::Poignee::Cible, _) => Params { vers: VISAGE, ..p },
+        _ => p,
+    }
+}
+
 /// La vignette de `preset` à l'instant `t` (secondes depuis le début du passage ; `None` : l'image arrêtée), peinte dans `r`.
 fn peindre_vignette(painter: &egui::Painter, r: Rect, preset: Preset, fps: u32, t: Option<f32>) {
-    let params = Params::new(preset, fps);
+    let params = reglages_de_vignette(preset, fps);
     let g = Generator::new(&params, fps);
     let duree = params.duration.max(1);
     let rel = match t {
@@ -77,13 +105,21 @@ fn peindre_vignette(painter: &egui::Painter, r: Rect, preset: Preset, fps: u32, 
     painter.rect_filled(r, 2.0, PAPIER);
     let w = r.width();
     let (ca, sa) = ((-s.angle).to_radians().cos(), (-s.angle).to_radians().sin());
-    let vers = |(x, y): (f32, f32)| -> Pos2 {
-        let (x, y) = ((x - s.dx) * s.zoom, (y - s.dy) * s.zoom);
-        let (x, y) = (x * ca - y * sa, x * sa + y * ca);
-        pos2(r.center().x + x * w, r.center().y + y * w)
-    };
+    // (Le panoramique en perspective fait glisser toute la scène d'autant, à peu près : la caméra tourne sur elle-même.)
+    let dx = s.dx + s.pan.to_radians().tan() * crate::camera::REF_FOCAL / 36.0;
     let trait_w = (w / 110.0).max(1.0);
     for t in scene() {
+        // Une avancée fait grandir chaque trait selon sa profondeur (le plan de référence d'autant que l'avancée).
+        let reste = t.profondeur + 1.0 / s.avance.max(1e-3);
+        if reste < 0.05 {
+            continue;
+        }
+        let k = s.zoom * (1.0 + t.profondeur) / reste;
+        let vers = |(x, y): (f32, f32)| -> Pos2 {
+            let (x, y) = ((x - dx) * k, (y - s.dy) * k);
+            let (x, y) = (x * ca - y * sa, x * sa + y * ca);
+            pos2(r.center().x + x * w, r.center().y + y * w)
+        };
         let pts: Vec<Pos2> = t.points.iter().copied().map(vers).collect();
         match (t.teinte, t.jusqu_a) {
             (Some(c), Some(bas)) => {
@@ -108,50 +144,61 @@ fn peindre_vignette(painter: &egui::Painter, r: Rect, preset: Preset, fps: u32, 
     painter.rect_stroke(r, 2.0, Stroke::new(2.0_f32, theme::camera()), StrokeKind::Inside);
 }
 
+/// Les vignettes de `presets`, côte à côte : chacune joue son mouvement au survol, se glisse vers la timeline (charge
+/// `PresetDrag`) ; rend le préréglage cliqué.
+fn vignettes(ui: &mut egui::Ui, presets: impl Iterator<Item = Preset>, fps: u32, maintenant: f32) -> Option<Preset> {
+    let mut pose = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(8.0, 10.0);
+        for pr in presets {
+            let h = VIGNETTE_W * 9.0 / 16.0;
+            // (Sous l'image, le nom sur deux lignes au plus : « Caméra à l'épaule (found footage) » ne déborde pas sur la voisine.)
+            let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 30.0), Sense::click_and_drag());
+            let img = Rect::from_min_size(rect.min, vec2(VIGNETTE_W, h));
+            let id = resp.id.with("survol");
+            // Au survol, le mouvement joue en boucle depuis le moment où le pointeur est arrivé.
+            let t = if resp.hovered() && !resp.dragged() {
+                let debut = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(id, || maintenant));
+                let duree = Params::new(pr, fps).duration.max(1) as f32 / fps.max(1) as f32;
+                ui.ctx().request_repaint();
+                Some((maintenant - debut) % (duree + PAUSE))
+            } else {
+                ui.ctx().data_mut(|d| d.remove::<f32>(id));
+                None
+            };
+            if ui.is_rect_visible(rect) {
+                peindre_vignette(ui.painter(), img, pr, fps, t);
+                if resp.hovered() {
+                    ui.painter().rect_stroke(img.expand(1.5), 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Outside);
+                }
+                let nom = ui.painter().layout(pr.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
+                ui.painter().with_clip_rect(rect).galley(pos2(rect.left() + 2.0, img.bottom() + 3.0), nom, ui.visuals().text_color());
+            }
+            if resp.drag_started() {
+                egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset: pr });
+            }
+            let resp = crate::bulles::bulle(resp, pr.label(), &format!("{} Glisse-le sur la piste Caméra de la timeline, ou clique pour le poser à la tête de lecture.", pr.note()), "");
+            if resp.clicked() {
+                pose = Some(pr);
+            }
+        }
+    });
+    pose
+}
+
 impl App {
     /// Le panneau Préréglages.
     pub(crate) fn prereglages_panel(&mut self, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Glisse un préréglage sur la piste Caméra de la timeline, ou clique dessus pour le poser à la tête de lecture.").small().weak());
-        ui.add_space(4.0);
-        ui.label(egui::RichText::new("CAMÉRA").small().strong());
         let fps = self.doc.fps;
         let maintenant = ui.input(|i| i.time) as f32;
         let mut pose = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(8.0, 10.0);
-            for pr in Preset::ALL {
-                let h = VIGNETTE_W * 9.0 / 16.0;
-                // (Sous l'image, le nom sur deux lignes au plus : « Caméra à l'épaule (found footage) » ne déborde pas sur la voisine.)
-                let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 30.0), Sense::click_and_drag());
-                let img = Rect::from_min_size(rect.min, vec2(VIGNETTE_W, h));
-                let id = resp.id.with("survol");
-                // Au survol, le mouvement joue en boucle depuis le moment où le pointeur est arrivé.
-                let t = if resp.hovered() && !resp.dragged() {
-                    let debut = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(id, || maintenant));
-                    let duree = Params::new(pr, fps).duration.max(1) as f32 / fps.max(1) as f32;
-                    ui.ctx().request_repaint();
-                    Some((maintenant - debut) % (duree + PAUSE))
-                } else {
-                    ui.ctx().data_mut(|d| d.remove::<f32>(id));
-                    None
-                };
-                if ui.is_rect_visible(rect) {
-                    peindre_vignette(ui.painter(), img, pr, fps, t);
-                    if resp.hovered() {
-                        ui.painter().rect_stroke(img.expand(1.5), 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Outside);
-                    }
-                    let nom = ui.painter().layout(pr.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
-                    ui.painter().with_clip_rect(rect).galley(pos2(rect.left() + 2.0, img.bottom() + 3.0), nom, ui.visuals().text_color());
-                }
-                if resp.drag_started() {
-                    egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset: pr });
-                }
-                let resp = crate::bulles::bulle(resp, pr.label(), &format!("{} Glisse-le sur la piste Caméra de la timeline, ou clique pour le poser à la tête de lecture.", pr.note()), "");
-                if resp.clicked() {
-                    pose = Some(pr);
-                }
-            }
-        });
+        // Une famille après l'autre (partie 171), sous le titre de la caméra.
+        for famille in crate::camfx::Famille::ALL {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(format!("CAMÉRA · {}", famille.label().to_uppercase())).small().strong());
+            pose = vignettes(ui, famille.presets(), fps, maintenant).or(pose);
+        }
         if let Some(pr) = pose {
             self.ajouter_effet_camera_a_la_tete(pr);
         }

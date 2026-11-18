@@ -234,6 +234,10 @@ mod blocscamera;
 #[cfg(test)]
 mod blocscamera_tests;
 mod panneauprereglages;
+// La flèche ou la cible d'un effet de caméra vivant, dans le cadre, avec l'outil Caméra (partie 171).
+mod effetpoignee;
+#[cfg(test)]
+mod camfx_lot2_tests;
 // Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
 // proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
 // ligne, les tâches, l'interface et les Préférences.

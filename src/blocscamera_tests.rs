@@ -108,7 +108,7 @@ fn le_format_57_garde_la_liste_et_un_ancien_effet_seul_se_relit() {
     doc.panels[0].effets_camera = vec![effet(Preset::ZoomIn, 0, 20), Vivant { params: Params { seed: 77, ..effet(Preset::Explosion, 12, 10).params }, start: 12 }];
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 57"), "format 57");
+    assert!(texte.contains("\"version\": 58"), "format 58");
     assert!(texte.contains("\"effets_camera\"") && !texte.contains("\"effet_camera\""), "la liste, plus l'ancien champ");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effets_camera, doc.panels[0].effets_camera, "les deux effets reviennent, dans l'ordre");
@@ -124,7 +124,7 @@ fn le_format_57_garde_la_liste_et_un_ancien_effet_seul_se_relit() {
                 if let Some(serde_json::Value::Array(mut liste)) = m.remove("effets_camera") {
                     m.insert("effet_camera".into(), liste.remove(0));
                 }
-                if m.get("version").and_then(|x| x.as_u64()) == Some(57) {
+                if m.get("version").and_then(|x| x.as_u64()) == Some(58) {
                     m.insert("version".into(), 56.into());
                 }
                 m.values_mut().for_each(vers_l_ancien);
@@ -308,7 +308,8 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     b.chauffer(8);
     let bloc = blocs_peints(&b)[0];
     let cell = bloc.width() / 20.0;
-    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::LightShake.label()).map(|(_, r)| r).expect("la vignette « Tremblement léger » dans le panneau");
+    // (Les vignettes du haut du panneau, partie 171 : la famille des zooms vient en premier, les secousses sont plus bas.)
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::ZoomOut.label()).map(|(_, r)| r).expect("la vignette « Zoom arrière » dans le panneau");
     let vignette = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
     // Lâché sur la rangée des clés de caméra, à l'image 5.
     let cible = pos2(bloc.left() - 25.0 * cell + 0.5 * cell, bloc.top() - 10.0);
@@ -316,7 +317,7 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     glisser(&mut b, vignette, cible);
     let effets = &b.app.doc.panels[0].effets_camera;
     assert_eq!(effets.len(), 2, "un bloc de plus : {}", b.app.status);
-    assert_eq!((effets[1].params.preset, effets[1].start), (Preset::LightShake, 5));
+    assert_eq!((effets[1].params.preset, effets[1].start), (Preset::ZoomOut, 5));
     assert_eq!(effets[0], effet(Preset::ZoomIn, 30, 20), "l'autre bloc ne bouge pas");
     assert_eq!(b.app.history.undo_len(), etapes + 1, "une étape d'annulation");
     assert_eq!(b.app.bloc_camera_choisi(), Some(1), "le bloc posé est choisi");
@@ -324,7 +325,7 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     // Un clic sur une vignette pose le préréglage à la tête de lecture.
     b.app.cur_frame = 12;
     b.chauffer(2);
-    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::Jolt.label()).map(|(_, r)| r).expect("la vignette « Secousse rapide »");
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::CrashZoom.label()).map(|(_, r)| r).expect("la vignette « Zoom choc »");
     let p = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
     b.image(vec![Event::PointerMoved(p)], DT);
     b.image(vec![bouton(p, true)], DT);
@@ -332,7 +333,7 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     b.chauffer(2);
     let effets = &b.app.doc.panels[0].effets_camera;
     assert_eq!(effets.len(), 3);
-    assert_eq!((effets[2].params.preset, effets[2].start), (Preset::Jolt, 12));
+    assert_eq!((effets[2].params.preset, effets[2].start), (Preset::CrashZoom, 12));
 }
 
 /// Images de contrôle (partie 170), dans `FEANOR_CAPTURE_DIR` : le panneau Préréglages ouvert, une vignette survolée qui joue son
@@ -358,7 +359,7 @@ fn blocs_camera_captures() {
     b.garder_formes = true;
     b.chauffer(8);
     b.app.choisir_bloc_camera(Some(1));
-    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::Explosion.label()).map(|(_, r)| r).expect("la vignette « Explosion »");
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::CrashZoom.label()).map(|(_, r)| r).expect("la vignette « Zoom choc »");
     let survol = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
     b.image(vec![Event::PointerMoved(survol)], DT);
     for _ in 0..14 {
@@ -368,7 +369,7 @@ fn blocs_camera_captures() {
     // Une vignette prise et glissée au-dessus de la rangée des clés, sans la lâcher.
     let bloc = blocs_peints(&b)[0];
     let cell = bloc.width() / 40.0;
-    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::Jolt.label()).map(|(_, r)| r).expect("la vignette « Secousse rapide »");
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::ZoomOut.label()).map(|(_, r)| r).expect("la vignette « Zoom arrière »");
     let de = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
     let vers = pos2(bloc.left() + 44.0 * cell, bloc.top() - 10.0);
     b.image(vec![Event::PointerMoved(de)], DT);

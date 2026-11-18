@@ -438,11 +438,16 @@ impl App {
         }
         let mut ajoute = None;
         ui.menu_button(format!("{} Ajouter un effet", egui_phosphor::regular::PLUS), |ui| {
-            for pr in Preset::ALL {
-                if ui.button(pr.label()).on_hover_text(pr.note()).clicked() {
-                    ajoute = Some(pr);
-                    ui.close_menu();
-                }
+            // (Une famille par sous-menu, comme le panneau Préréglages : partie 171.)
+            for famille in crate::camfx::Famille::ALL {
+                ui.menu_button(famille.label(), |ui| {
+                    for pr in famille.presets() {
+                        if ui.button(pr.label()).on_hover_text(pr.note()).clicked() {
+                            ajoute = Some(pr);
+                            ui.close_menu();
+                        }
+                    }
+                });
             }
         })
         .response
