@@ -100,7 +100,7 @@ pub(crate) static GESTES: &[Anim] = &[
         dessin: cutter,
         texte: "Glisse en travers des bouts de traits à enlever, ou clique sur l'un d'eux. \
                 Calque vectoriel : chaque trait touché est coupé là où il croise les autres traits (et lui-même) ; seuls les morceaux touchés partent. \
-                Un trait qui ne croise rien part en entier. Ctrl+Z annule.",
+                Un trait qui ne croise rien part en entier. Ctrl+Z annule.                 Réglages : un écart toléré (un trait qui s'arrête juste avant un autre compte comme un croisement), des bouts effilés,                 le lasso, le nettoyage des petits dépassements d'une zone, et les traits de tous les calques visibles comme lignes de coupe.",
     },
     Anim {
         id: "camera.paliers",
