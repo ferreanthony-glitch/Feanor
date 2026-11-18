@@ -202,20 +202,21 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
 fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    // La piste du calque actif : deux rangées de 22.
-    assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
+    // La piste du calque actif : trois rangées de 22 (partie 173.5 ; deux depuis la partie 160).
+    assert_eq!(crate::montagerows::LAYER_H, 3.0 * crate::pistes::RANGEE_ACTIVE);
     let fusion = vus::ou("Mode de fusion");
     assert_eq!(fusion.len(), 1, "seule la piste du calque actif : {fusion:?}");
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)
     let colonne = ou("Largeur de la colonne").right();
-    // Les options de la piste active sont dans la colonne, sur deux rangées.
-    // (La pelure d'oignon du calque est au clic droit de la piste depuis la partie 173.)
-    for nom in ["Mode de fusion", "Créer une clé", "Opacité du calque", "Commandes du calque", "Verrouiller / déverrouiller"] {
+    // Les options de la piste active sont dans la colonne, sur trois rangées (partie 173.5 : le nom, les options, le mode et
+    // l'opacité).
+    for nom in ["Pelure d'oignon du calque", "Mode de fusion", "Créer une clé", "Opacité du calque", "Commandes du calque", "Verrouiller / déverrouiller"] {
         let r = ou(nom);
         assert!(r.right() <= colonne + 2.0, "« {nom} » dans la colonne : {r:?} / {colonne}");
     }
-    let (haut, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
-    assert!(bas.center().y - haut.center().y > 12.0 && bas.center().y - haut.center().y < 30.0, "deux rangées : {haut:?} {bas:?}");
+    let (haut, milieu, bas) = (ou("Commandes du calque"), ou("Pelure d'oignon du calque"), ou("Opacité du calque"));
+    let pas = crate::pistes::RANGEE_ACTIVE;
+    assert!((milieu.center().y - haut.center().y - pas).abs() < 3.0 && (bas.center().y - milieu.center().y - pas).abs() < 3.0, "trois rangées : {haut:?} {milieu:?} {bas:?}");
     // (La barre du bas de la bande part de son bord gauche, à gauche des en-têtes de la colonne.)
     la_colonne_porte_tout(0.0, colonne, fusion[0]);
     // La barre d'actions est à gauche du zoom de la bande.

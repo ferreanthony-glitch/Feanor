@@ -61,21 +61,47 @@ fn survoler(b: &mut Banc, p: Pos2) {
     b.chauffer(12);
 }
 
-/// Sur la deuxième rangée de la piste active, la liste du mode, le losange et la barre d'opacité se suivent sans se toucher, le nom
-/// du mode `label` est écrit dans la liste sans en sortir, et rien ne passe le bord droit de la colonne.
+/// Partie 173.5 : sur la rangée du bas de la piste active, comme sur la ligne de la timeline : la liste du mode (et ses flèches s'il y
+/// a la place), la barre d'opacité, puis le losange à sa droite ; ils se suivent sans se toucher, le nom du mode `label` est écrit dans
+/// la liste sans en sortir, et rien ne passe le bord droit de la colonne. Les icônes de la rangée du milieu ne se touchent pas et
+/// restent dans la colonne.
 fn rien_ne_deborde(b: &Banc, label: &str, quoi: &str) {
     let (liste, losange, barre) = (ou("Mode de fusion"), ou("Créer une clé"), ou("Opacité du calque"));
     let colonne = ou("Largeur de la colonne");
-    assert!(liste.right() <= losange.left() + 0.5, "{quoi} : la liste touche le losange : {liste:?} / {losange:?}");
-    assert!(losange.right() <= barre.left() + 0.5, "{quoi} : le losange touche la barre : {losange:?} / {barre:?}");
-    assert!(barre.right() <= colonne.right() + 0.5, "{quoi} : la barre sort de la colonne : {barre:?} / {colonne:?}");
-    assert!(barre.width() >= 20.0, "{quoi} : la barre d'opacité reste lisible : {barre:?}");
-    if let Some(camera) = vus::ou(crate::accroche::NOM).first() {
-        assert!(camera.right() <= liste.left() + 0.5, "{quoi} : la caméra touche la liste : {camera:?} / {liste:?}");
+    let mut avant_la_barre = liste;
+    if let (Some(p), Some(s)) = (vus::ou("Mode précédent").first(), vus::ou("Mode suivant").first()) {
+        assert!(p.right() <= liste.left() + 0.5 && liste.right() <= s.left() + 0.5, "{quoi} : ‹ liste › : {p:?} {liste:?} {s:?}");
+        avant_la_barre = *s;
     }
+    assert!(avant_la_barre.right() <= barre.left() + 0.5, "{quoi} : la liste touche la barre : {avant_la_barre:?} / {barre:?}");
+    assert!(barre.right() <= losange.left() + 0.5, "{quoi} : la barre touche le losange : {barre:?} / {losange:?}");
+    assert!(losange.right() <= colonne.right() + 0.5, "{quoi} : le losange sort de la colonne : {losange:?} / {colonne:?}");
+    assert!(barre.width() >= 30.0, "{quoi} : la barre d'opacité reste lisible : {barre:?}");
+    assert!((liste.center().y - barre.center().y).abs() < 3.0 && (losange.center().y - barre.center().y).abs() < 3.0, "{quoi} : une rangée");
     let t = texte_dans(b, label, liste).unwrap_or_else(|| panic!("{quoi} : « {label} » n'est pas écrit dans la liste {liste:?} : {:?}", textes(b).into_iter().filter(|(_, r)| liste.intersects(*r)).collect::<Vec<_>>()));
     assert!(t.left() >= liste.left() - 0.5 && t.right() <= liste.right() + 0.5, "{quoi} : « {label} » sort de la liste : {t:?} / {liste:?}");
-    assert!(t.right() <= losange.left(), "{quoi} : « {label} » passe sur le losange : {t:?} / {losange:?}");
+    // La rangée des icônes, au-dessus : dans la colonne, sans chevauchement.
+    let mut icones: Vec<Rect> = ICONES_DE_LA_PISTE.iter().filter_map(|n| icone(n)).collect();
+    icones.sort_by(|a, c| a.left().total_cmp(&c.left()));
+    for (k, r) in icones.iter().enumerate() {
+        assert!(r.right() <= colonne.right() + 0.5, "{quoi} : une icône sort de la colonne : {r:?} / {colonne:?}");
+        assert!(r.bottom() <= liste.top() + 1.0, "{quoi} : les icônes au-dessus de la rangée du mode : {r:?} / {liste:?}");
+        if k > 0 {
+            assert!(r.left() >= icones[k - 1].right() - 0.5, "{quoi} : deux icônes se touchent : {icones:?}");
+        }
+    }
+}
+
+/// Partie 173.5 : les options de la ligne du calque de la timeline qui manquaient sur la piste (nom de leur bulle ; « Groupe : … »
+/// commence ainsi), dans leur ordre sur la piste, après l'accroche à la caméra.
+const ICONES_DE_LA_PISTE: &[&str] = &[crate::accroche::NOM, "Aplat sous le trait", "Préserver la transparence", "Pochoir", "Pochoir positif", "Verrouiller la position", "Groupe : ", "Pelure d'oignon du calque"];
+
+/// Le rectangle de l'icône de la piste dont la bulle est `nom` (ou commence par `nom` pour le groupe).
+fn icone(nom: &str) -> Option<Rect> {
+    if nom.ends_with(": ") {
+        return vus::noms().into_iter().find(|n| n.starts_with(nom)).and_then(|n| vus::ou(&n).first().copied());
+    }
+    vus::ou(nom).first().copied()
 }
 
 #[test]
@@ -142,8 +168,7 @@ fn choosing_a_mode_in_the_track_list_changes_every_chosen_layer_in_one_undo() {
 #[test]
 fn the_onion_of_the_layer_left_the_track_for_its_right_click_menu() {
     let mut b = banc_dans(Espace::Storyboard);
-    // Plus d'icône de la pelure du calque sur la piste : la place va à la liste du mode.
-    assert!(vus::ou("Pelure d'oignon du calque").is_empty(), "l'icône est partie de la piste : {:?}", vus::ou("Pelure d'oignon du calque"));
+    // (Partie 173.5 : la pelure est aussi revenue en icône sur la piste, au bout des options ; le menu la garde.)
     choisir(&mut b, &[2]);
     let avant: Vec<bool> = b.app.doc.panels[0].layers.iter().map(|l| l.onion).collect();
     let n0 = etapes(&b);
@@ -180,6 +205,112 @@ fn the_animation_timeline_keeps_its_own_line_untouched() {
     assert_eq!(vus::ou("Mode précédent").len(), 1);
     assert_eq!(vus::ou("Mode suivant").len(), 1);
     assert!(texte_dans(&b, "Normal", ou("Mode de fusion")).is_some());
+}
+
+// ------------------------------------------------------------------------------------ 173.5 : la colonne, les options de la piste
+
+/// Les boutons de la barre du montage, en tête de la colonne du Storyboard (noms de leurs bulles).
+const BOUTONS_DE_LA_COLONNE: &[&str] = &["Début du montage", "Lire le montage / pause", "Lecture en boucle", "Nouveau plan", "Nouvelle séquence", "Plans"];
+
+/// Chaque bouton de la barre du montage est entier dans la colonne, au-dessus de « Caméra » (rien ne passe sous « Plus… » faute
+/// de place).
+fn les_boutons_tiennent(quoi: &str) {
+    let colonne = ou("Largeur de la colonne");
+    for nom in BOUTONS_DE_LA_COLONNE {
+        let r = *vus::ou(nom).iter().find(|r| r.top() < colonne.top() + 80.0).unwrap_or_else(|| panic!("{quoi} : « {nom} » n'est pas en tête de la colonne : {:?}", vus::ou(nom)));
+        assert!(r.right() <= colonne.right() + 0.5, "{quoi} : « {nom} » sort de la colonne : {r:?} / {colonne:?}");
+    }
+}
+
+#[test]
+fn the_storyboard_column_is_narrower_by_default_and_everything_still_fits() {
+    let b = banc_dans(Espace::Storyboard);
+    let w = b.app.montage_head_w;
+    // Avant : au moins 474 points (la barre du montage sur une ligne). Maintenant, la largeur d'origine, plus étroite.
+    assert!((w - crate::montagehead::LARGEUR_STORYBOARD).abs() < 0.5, "la largeur d'origine : {w}");
+    assert!(w < 400.0, "plus étroite qu'avant : {w}");
+    assert!(w >= crate::montagehead::largeur_min_colonne(crate::barres::Barre::Montage) - 0.5);
+    les_boutons_tiennent("défaut");
+    rien_ne_deborde(&b, "Normal", "défaut");
+    // Toutes les options ajoutées sont à l'écran, sur la piste.
+    for nom in ICONES_DE_LA_PISTE {
+        assert!(icone(nom).is_some(), "« {nom} » sur la piste : {:?}", vus::noms());
+    }
+    // La piste du calque actif a trois rangées.
+    assert_eq!(crate::montagerows::LAYER_H, 3.0 * crate::pistes::RANGEE_ACTIVE);
+}
+
+#[test]
+fn the_grip_changes_the_width_keeps_it_and_stops_at_its_bounds() {
+    use crate::montagehead::{largeur_min_colonne, HEAD_MAX};
+    let mut b = banc_dans(Espace::Storyboard);
+    let w0 = b.app.montage_head_w;
+    let g = ou("Largeur de la colonne").center();
+    crate::pistes_tests::glisser(&mut b, g, g + eframe::egui::vec2(60.0, 0.0));
+    let w1 = b.app.montage_head_w;
+    assert!((w1 - (w0 + 60.0)).abs() < 2.0, "la poignée élargit : {w0} → {w1}");
+    assert!((b.app.settings.storyboard_head_w - w1).abs() < 0.5, "gardée dans les réglages : {}", b.app.settings.storyboard_head_w);
+    let relu = crate::settings::Settings::load();
+    assert!((relu.storyboard_head_w - w1).abs() < 0.5, "enregistrée : {}", relu.storyboard_head_w);
+    // L'espace Montage garde sa propre largeur (sa barre est au-dessus de la bande) ; revenir au Storyboard rend la sienne.
+    let montage = b.app.settings.montage_head_w;
+    b.app.set_espace(Espace::Montage);
+    b.chauffer(4);
+    assert!((b.app.montage_head_w - crate::montagehead::clamp_head_w(montage)).abs() < 0.5, "Montage : {}", b.app.montage_head_w);
+    b.app.set_espace(Espace::Storyboard);
+    b.chauffer(4);
+    assert!((b.app.montage_head_w - w1).abs() < 0.5, "Storyboard : {}", b.app.montage_head_w);
+    // Tirée loin à gauche : elle s'arrête au minimum, tout reste lisible.
+    let g = ou("Largeur de la colonne").center();
+    crate::pistes_tests::glisser(&mut b, g, g - eframe::egui::vec2(700.0, 0.0));
+    b.chauffer(4);
+    let min = largeur_min_colonne(crate::barres::Barre::Montage);
+    assert!((b.app.montage_head_w - min).abs() < 1.0, "au minimum : {} / {min}", b.app.montage_head_w);
+    assert!(min < crate::montagehead::LARGEUR_STORYBOARD, "le minimum est sous la largeur d'origine : {min}");
+    les_boutons_tiennent("minimum");
+    b.app.regler_mode_calques(0, BlendMode::Screen);
+    b.chauffer(3);
+    rien_ne_deborde(&b, "Superposition", "minimum");
+    // Loin à droite : au plus `HEAD_MAX`.
+    let g = ou("Largeur de la colonne").center();
+    crate::pistes_tests::glisser(&mut b, g, g + eframe::egui::vec2(900.0, 0.0));
+    assert!(b.app.montage_head_w <= HEAD_MAX + 0.5, "{}", b.app.montage_head_w);
+    b.chauffer(3);
+    rien_ne_deborde(&b, "Superposition", "large");
+}
+
+#[test]
+fn the_options_added_to_the_track_do_what_the_timeline_line_does() {
+    let mut b = banc_dans(Espace::Storyboard);
+    choisir(&mut b, &[2]);
+    let calque = |b: &Banc, li: usize| b.app.doc.panels[0].layers[li].clone();
+    let pas = |b: &mut Banc, nom: &str| {
+        let n0 = etapes(b);
+        let r = icone(nom).unwrap_or_else(|| panic!("« {nom} » : {:?}", vus::noms()));
+        clic(b, r.center(), Modifiers::NONE);
+        assert_eq!(etapes(b), n0 + 1, "« {nom} » : une étape d'annulation ({})", b.app.status);
+    };
+    pas(&mut b, "Préserver la transparence");
+    assert!(calque(&b, 0).keep_alpha);
+    pas(&mut b, "Pochoir");
+    assert!(calque(&b, 0).stencil && calque(&b, 2).stencil, "le pochoir va aux calques choisis, comme dans la timeline");
+    pas(&mut b, "Pochoir positif");
+    assert!(calque(&b, 0).stencil_negative);
+    b.chauffer(2);
+    assert!(icone("Pochoir négatif").is_some(), "la bulle suit le sens du pochoir");
+    pas(&mut b, "Verrouiller la position");
+    assert!(calque(&b, 0).position_locked);
+    pas(&mut b, "Pelure d'oignon du calque");
+    assert_eq!(calque(&b, 0).onion, calque(&b, 2).onion);
+    pas(&mut b, crate::accroche::NOM);
+    assert!(b.app.est_accroche(0), "{}", b.app.status);
+    pas(&mut b, "Aplat sous le trait");
+    assert!(calque(&b, 0).fond.is_some(), "{}", b.app.status);
+    // Le groupe : son menu s'ouvre au clic, comme sur la ligne de la timeline.
+    let r = icone("Groupe : ").expect("le groupe");
+    let avant = textes(&b).len();
+    clic(&mut b, r.center(), Modifiers::NONE);
+    assert!(textes(&b).len() > avant, "le menu des groupes s'ouvre");
 }
 
 /// Les images de la partie 173, à taille réelle (un pixel de l'écran du banc pour un point, aucun agrandissement), dans le dossier
@@ -248,4 +379,24 @@ fn piste_mode_capture() {
     b.chauffer(8);
     let l = ou("Mode de fusion");
     sauver(&mut b, "173-5-colonne-etroite-superposition.png", Rect::from_min_max(pos2(0.0, l.top() - 60.0), pos2(420.0, l.bottom() + 40.0)));
+    // Partie 173.5 : le Storyboard, la colonne à sa largeur d'origine, à sa plus petite, plus grande ; un gros plan de la piste.
+    b.app.set_espace(Espace::Storyboard);
+    b.app.regler_mode_calques(li, BlendMode::Normal);
+    b.chauffer(8);
+    let bande = |b: &mut Banc, nom: &str| {
+        b.chauffer(6);
+        let g = ou("Largeur de la colonne");
+        println!("CAPTURE {nom} : colonne de {:.0} points, barre sur {} ligne(s)", b.app.montage_head_w, if b.app.barre_montage_sur_deux_lignes() { 2 } else { 1 });
+        sauver(b, nom, Rect::from_min_max(pos2(0.0, g.top() - 2.0), pos2(g.right() + 260.0, g.bottom())));
+    };
+    bande(&mut b, "173-6-storyboard-largeur-origine.png");
+    let piste = {
+        let (h, o) = (ou("Commandes du calque"), ou("Opacité du calque"));
+        Rect::from_min_max(pos2(40.0, h.top() - 4.0), pos2(ou("Largeur de la colonne").right() + 4.0, o.bottom() + 6.0))
+    };
+    sauver(&mut b, "173-9-gros-plan-piste.png", piste);
+    b.app.montage_head_w = 0.0;
+    bande(&mut b, "173-7-storyboard-largeur-minimale.png");
+    b.app.montage_head_w = 480.0;
+    bande(&mut b, "173-8-storyboard-largeur-480.png");
 }

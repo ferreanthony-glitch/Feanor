@@ -110,6 +110,11 @@ pub struct Settings {
     /// voir les réglages des calques (Anthony, 2026-10-17).
     #[serde(default = "default_head_w", rename = "largeur_entetes_montage")]
     pub montage_head_w: f32,
+    /// Partie 173.5 (Anthony : « Plus petite et ajustable ») : la largeur de la colonne de gauche de la bande hors de l'espace
+    /// Montage (Storyboard, Vignettes, Animation), où la barre du montage est en tête de la colonne. L'espace Montage garde la sienne
+    /// (`montage_head_w`).
+    #[serde(default = "default_storyboard_head_w", rename = "largeur_colonne_storyboard")]
+    pub storyboard_head_w: f32,
     /// Pistes repliables du montage (`pistes.rs`) : le calque courant déplie sa piste tout seul
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
@@ -368,6 +373,10 @@ fn default_head_w() -> f32 {
     crate::soundtrack::HEADERS_W
 }
 
+fn default_storyboard_head_w() -> f32 {
+    crate::montagehead::LARGEUR_STORYBOARD
+}
+
 fn yes() -> bool {
     true
 }
@@ -406,6 +415,7 @@ impl Default for Settings {
             key_filter: Default::default(),
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
+            storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
             montage_plans: Default::default(),
             montage_grands: default_grands(),

@@ -35,6 +35,9 @@ thread_local! {
 pub(crate) const RULER_H: f32 = 18.0;
 const SEQ_H: f32 = 17.0;
 pub(crate) const BANDS_H: f32 = SEQ_H + 2.0;
+/// Partie 173.5 : la barre du montage sur deux lignes en tête de la colonne : la lecture et le temps (groupe 0) sur la première, les
+/// plans, les calques, le son… sur la seconde, avec « Plus… » et la légende des clés.
+const DERNIER_GROUPE_LIGNE1: u8 = 0;
 
 pub fn timecode(frames: usize, fps: u32) -> String {
     let fps = fps.max(1) as usize;
@@ -454,10 +457,9 @@ impl App {
         let barre = crate::barres::Barre::du_montage_dans(self.espace);
         let dans_la_colonne = barre == crate::barres::Barre::Montage;
         if dans_la_colonne {
+            // (Partie 173.5 : entre le minimum, la plus longue des deux lignes de boutons, et la plus grande largeur.)
             let min = crate::montagehead::largeur_min_colonne(barre);
-            if self.montage_head_w < min {
-                self.montage_head_w = min;
-            }
+            self.montage_head_w = self.montage_head_w.clamp(min, crate::montagehead::HEAD_MAX.max(min));
         } else {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
@@ -497,7 +499,13 @@ impl App {
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
                         let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + BANDS_H));
-                        if dans_la_colonne {
+                        // Partie 173.5 (Anthony : « Plus petite et ajustable ») : une colonne trop étroite pour la barre sur une ligne
+                        // la reçoit sur deux, comme la timeline (partie 165.6) : la lecture et le temps, puis le reste, « Plus… » et la
+                        // légende ; l'en-tête de la bande gagne la hauteur de la seconde (`Rows::entete`).
+                        if dans_la_colonne && rows.entete > 0.0 {
+                            let ligne2 = Rect::from_min_size(egui::pos2(ligne.left(), ligne.bottom()), egui::vec2(ligne.width(), rows.entete));
+                            self.barre_dans_la_colonne_deux_lignes(&mut column, ligne, ligne2, barre, DERNIER_GROUPE_LIGNE1);
+                        } else if dans_la_colonne {
                             self.barre_dans_la_colonne(&mut column, ligne, barre);
                         }
                         self.head_width_grip(&mut column, headers);

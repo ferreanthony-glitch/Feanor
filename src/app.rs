@@ -1114,7 +1114,9 @@ impl App {
         egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
-        let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
+        // (Partie 173.5 : on ouvre dans le Storyboard, avec la largeur de colonne qui est la sienne ; l'espace Montage a la sienne,
+        // reprise par `set_espace`.)
+        let montage_head_w = crate::montagehead::clamp_head_w(settings.storyboard_head_w);
         // (« Peindre derrière » et « Peint sur l'aplat » sont exclusifs : un fichier de réglages qui aurait les deux garde le premier.)
         let paint_behind = settings.paint_behind;
         let paint_on_aplat = settings.paint_on_aplat && !paint_behind;
@@ -2129,6 +2131,17 @@ impl App {
     pub(crate) fn set_espace(&mut self, espace: crate::workspace::Espace) {
         use crate::workspace::Espace;
         let avant = self.espace;
+        // Partie 173.5 : la colonne de la bande a deux largeurs, celle de l'espace Montage (sa barre au-dessus de la bande) et celle
+        // des autres espaces (la barre en tête de la colonne) ; passer de l'un aux autres reprend la sienne.
+        if (avant == Espace::Montage) != (espace == Espace::Montage) {
+            if avant == Espace::Montage {
+                self.settings.montage_head_w = self.montage_head_w;
+                self.montage_head_w = crate::montagehead::clamp_head_w(self.settings.storyboard_head_w);
+            } else {
+                self.settings.storyboard_head_w = self.montage_head_w;
+                self.montage_head_w = crate::montagehead::clamp_head_w(self.settings.montage_head_w);
+            }
+        }
         self.cancel_montage_drag();
         self.poser_le_geste_de_camera();
         self.poser_la_creation();

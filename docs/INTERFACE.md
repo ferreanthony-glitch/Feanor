@@ -14499,3 +14499,61 @@ Storyboard (ils la cherchent toujours sur la ligne de la timeline).
 4. Clic droit sur la piste ▸ Apparence ▸ « Pelure d'oignon du calque » (Ctrl+L écrit à droite) ; « Panneau de la pelure
    d'oignon » l'ouvre.
 5. La colonne à sa plus petite largeur, un calque avec des effets (case fx) : rien ne déborde.
+
+### 173.5 Une colonne plus étroite et ajustable, les options de la ligne du calque sur la piste
+
+Anthony, sur la capture de la piste avec « Superposition » (un trait vertical vers 72 % de la colonne, l'accroche à la caméra
+entourée, une flèche vers « ?? + APLAT + AUTRES… ») : « Reviens sur la taille de la barre latérale. Plus petite et ajustable.
+Rajoute les options de calques manquantes, l'aplat et le reste. Tu peux élargir un peu le calque si besoin. Trouve le bon
+équilibre. »
+
+**La colonne de la bande (Storyboard, et partout où la barre du montage est en tête de la colonne)**
+
+- **Largeur d'origine : 340 points** (là où il a tracé son trait ; au moins 474 avant). Elle se règle à la poignée de son bord droit
+  (le trait vertical, le curseur de redimensionnement), comme avant ; le double-clic va de 340 à 520 et retour.
+- **Bornes : de 250 à 520 points.** 250 : la place de toutes les options de la piste active (`pistes::LARGEUR_PISTE_MIN`), et au
+  moins la plus longue des deux lignes de boutons, mesurée à son dessin. 520 : `HEAD_MAX`, comme avant.
+- **Gardée dans les réglages du poste**, à part : `largeur_colonne_storyboard` (`Settings::storyboard_head_w`). L'espace Montage
+  garde la sienne (`largeur_entetes_montage`, de 104 à 520, sa barre restant au-dessus de la bande) ; passer d'un espace à l'autre
+  reprend la largeur de chacun (`App::set_espace`). Rien dans le projet.
+- **La barre du montage passe sur deux lignes quand la colonne est trop étroite pour une** (comme la timeline, partie 165.6) : la
+  lecture et le temps sur la première, en face de la règle ; les plans, les calques, le son, « Plus… » et la légende des clés sur la
+  seconde. L'en-tête de la bande gagne alors 28 points sous la ligne des séquences (`Rows::entete`), dans la colonne comme dans la
+  bande : tout reste aligné. Une colonne assez large (480 points dans les essais) la reprend sur une ligne, et l'en-tête redevient
+  celui d'avant. Rien ne passe sous « Plus… » faute de place.
+
+**La piste du calque actif : trois rangées au lieu de deux (66 points au lieu de 44)**
+
+C'est l'équilibre choisi : la colonne étroite ne peut pas porter toutes les options sur deux rangées ; une rangée de plus (22
+points) les montre toutes à 250 points, et le mode, l'opacité et son losange gardent une rangée entière. (Les pistes dépliées sont
+aussi plus hautes de 22 points dans l'espace Montage.)
+
+1. En haut, comme avant : le filet, l'œil, la pastille de la sorte, le nom, le cadenas, le ⋮.
+2. **Au milieu, les options de la ligne du calque de la timeline**, mêmes icônes, mêmes bulles, mêmes gestes : la vignette, les
+   effets (fx, s'il y en a), l'accroche à la caméra (gardée : c'est elle qu'il a entourée), puis, ajoutés : **l'aplat sous le
+   trait** (le même bouton, avec le raccourci de `pinceau.fond`), **préserver la transparence**, **le pochoir** et **son sens**
+   (+ / −), **verrouiller la position**, **le groupe** (son menu de couleurs), **la pelure d'oignon du calque** (clic droit : le
+   panneau de la pelure ; elle reste aussi au clic droit de la piste, Apparence, avec Ctrl+L) et le **maillon de la planche-mère**
+   (si le calque est dans d'autres plans). Une icône qui ne tient pas n'est pas posée (seulement dans l'espace Montage, sous 250
+   points).
+3. En bas : **la liste « Normal ▾ »**, avec ses **flèches ‹ ›** (mode précédent / suivant) quand il y a la place, **la barre
+   d'opacité, puis le losange des clés d'opacité à sa droite**, comme sur la ligne de la timeline.
+
+**L'inventaire** (la ligne du calque courant de la timeline, `layerheads.rs`, contre la piste d'avant) : manquaient sur la piste
+l'aplat, préserver la transparence, le pochoir, son sens, verrouiller la position, le groupe, la pelure d'oignon (retirée en 173),
+le maillon de la planche-mère et les flèches ‹ › du mode ; tous y sont. Reste seulement sur la ligne de la timeline ce qu'elle écrit
+après le nom (« sous <trait> », ou le nombre de couleurs d'un calque de trait).
+
+Le code : `src/pistes.rs` (`piste_active_head`, les trois rangées), `src/montagehead.rs` (`LARGEUR_STORYBOARD`,
+`largeur_min_colonne`, `barre_sur_deux_lignes`, la poignée), `src/barres.rs` (`largeur_une_ligne`), `src/montagerows.rs`
+(`LAYER_H` = 66, `Rows::entete`), `src/storyboard.rs` (les deux lignes en tête de la colonne), `src/settings.rs`, `src/app.rs`. Les
+essais : `src/piste_mode_tests.rs` ; changés : `avantapres165_tests` (deux lignes au plus étroit, une au plus large),
+`panneaux_fins_tests` (trois rangées), `calquesplace_tests` (l'en-tête).
+
+À tester :
+
+1. Storyboard : la colonne à 340 points, les boutons sur deux lignes ; tirer la poignée : de 250 à 520, les boutons repassent sur une
+   ligne vers 480 ; rouvrir FEANOR : la largeur est gardée ; l'espace Montage garde la sienne.
+2. La piste du calque actif : la rangée des options ; cliquer l'aplat, la transparence, le pochoir et son sens, la punaise, le
+   groupe, la pelure : comme sur la ligne de la timeline (Ctrl+Z défait chacun).
+3. En bas : ‹ Normal ▾ ›, la barre, le losange à sa droite ; à 250 points, « Superposition » raccourci, rien ne déborde.

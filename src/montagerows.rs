@@ -30,7 +30,7 @@ pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
 /// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
 /// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7).
-pub(crate) const LAYER_H: f32 = 44.0;
+pub(crate) const LAYER_H: f32 = 66.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
@@ -74,11 +74,14 @@ pub(crate) struct Rows {
     /// Les pistes de calques visibles, de haut en bas : dépliées ou repliées, sans celles d'un
     /// dossier fermé (`pistes.rs`).
     pub lanes: Vec<Lane>,
+    /// Partie 173.5 : la hauteur que l'en-tête gagne sous la ligne des séquences quand la barre du montage est sur deux lignes en
+    /// tête de la colonne (`montagehead::barre_sur_deux_lignes`) ; 0 sinon.
+    pub entete: f32,
 }
 
 impl Rows {
     pub fn camera_top(&self) -> f32 {
-        RULER_H + BANDS_H
+        RULER_H + BANDS_H + self.entete
     }
     pub fn blocks_top(&self) -> f32 {
         self.camera_top() + CAM_H
@@ -125,13 +128,20 @@ impl App {
         // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
         // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »).
         let block_h = self.settings.montage_plans.points();
+        let entete = if self.barre_montage_sur_deux_lignes() { crate::montagehead::ENTETE_DEUX_LIGNES } else { 0.0 };
         if self.settings.montage_grands {
             // Ce que la bande montre en plus des pistes de calques : la règle, les séquences, la caméra, les plans, les pistes son,
             // et la barre de défilement horizontale sous la bande. Le reste est aux calques.
-            let sans_calques = Rows { block_h, lanes: Vec::new() }.height(self.doc.audio_tracks.len());
+            let sans_calques = Rows { block_h, lanes: Vec::new(), entete }.height(self.doc.audio_tracks.len());
             crate::pistes::agrandir(&mut lanes, available - sans_calques - SOUS_LA_BANDE);
         }
-        Rows { block_h, lanes }
+        Rows { block_h, lanes, entete }
+    }
+
+    /// Partie 173.5 : la barre du montage est en tête de la colonne (hors de l'espace Montage) et la colonne est trop étroite pour
+    /// qu'elle tienne sur une ligne : elle est sur deux.
+    pub(crate) fn barre_montage_sur_deux_lignes(&self) -> bool {
+        crate::barres::Barre::du_montage_dans(self.espace) == crate::barres::Barre::Montage && crate::montagehead::barre_sur_deux_lignes(self.montage_head_w)
     }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
@@ -281,7 +291,7 @@ impl App {
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
             // La piste du calque actif porte toutes ses options sur deux rangées (partie 160) ; les autres, l'œil, la pastille, le nom.
-            if current && !track.folded && track.h >= 2.0 * crate::pistes::RANGEE_ACTIVE {
+            if current && !track.folded && track.h >= 3.0 * crate::pistes::RANGEE_ACTIVE {
                 self.piste_active_head(ui, r, k, color);
             } else {
                 self.montage_head(ui, r, k, color, track.folded);

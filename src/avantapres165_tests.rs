@@ -356,9 +356,12 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     let haut_des_pistes = camera.map_or(grip.top() + 40.0, |c| c.top());
     let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes);
     assert!(boutons.len() >= 7, "{boutons:?}");
-    // Une seule ligne, en haut de la colonne, en face de la règle : la barre du haut n'existe plus.
+    // En haut de la colonne, en face de la règle : la barre du haut n'existe plus. (Partie 173.5 : la colonne réglée au plus étroit,
+    // la barre est sur deux lignes, la lecture et le temps sur la première ; une colonne assez large la reprend sur une ligne, plus
+    // bas.)
     let y = boutons[0].1.center().y;
-    assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {boutons:?}");
+    let y2 = boutons.iter().map(|(_, r)| r.center().y).fold(y, f32::max);
+    assert!(y2 - y > 20.0 && boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0 || (r.center().y - y2).abs() < 2.0), "deux lignes : {boutons:?}");
     assert!(boutons.iter().all(|(_, r)| r.top() >= grip.top() - 1.0), "aucun bouton au-dessus de la colonne (plus de barre en haut) : {boutons:?} / {grip:?}");
     let min = crate::montagehead::largeur_min_colonne(Barre::Montage);
     assert!(b.app.montage_head_w >= min - 0.5 && min >= crate::barres::largeur_mesuree(Barre::Montage) - 0.5, "{} / {min}", b.app.montage_head_w);
@@ -373,6 +376,15 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     let boucle = b.app.looping;
     clic(&mut b, ou("Lecture en boucle").center(), Modifiers::NONE);
     assert_ne!(b.app.looping, boucle, "la boucle répond au clic");
+    // Partie 173.5 : la colonne élargie au plus (si la fenêtre le permet, la ligne entière tient) : une seule ligne.
+    b.app.montage_head_w = crate::montagehead::HEAD_MAX;
+    b.chauffer(6);
+    if !crate::montagehead::barre_sur_deux_lignes(b.app.montage_head_w) {
+        let grip = ou("Largeur de la colonne");
+        let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), grip.top() + 80.0);
+        let y = boutons[0].1.center().y;
+        assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {boutons:?}");
+    }
 }
 
 /// Le haut de la première ligne de calque dans la colonne de la timeline, à la dernière image.

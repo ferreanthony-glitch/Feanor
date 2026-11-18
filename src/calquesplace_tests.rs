@@ -104,7 +104,7 @@ fn the_rows_of_the_strip_use_the_height_of_the_panel_when_the_setting_is_on() {
     let (mut app, base) = lignes("V5");
     let n_son = app.doc.audio_tracks.len();
     // Ce que la bande montre sans les pistes de calques, et la place gardée sous elle.
-    let sans = Rows { block_h: app.settings.montage_plans.points(), lanes: Vec::new() }.height(n_son);
+    let sans = Rows { block_h: app.settings.montage_plans.points(), lanes: Vec::new(), entete: app.montage_rows(0.0).entete }.height(n_son);
     let haut = sans + SOUS_LA_BANDE + total(&base) + 2.0 * (LAYER_H - FOLDED_H);
     // Dans les essais, le réglage est éteint d'office : les hauteurs fixes d'avant.
     assert!(!app.settings.montage_grands);
