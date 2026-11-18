@@ -4227,6 +4227,44 @@ liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
 
+### Les réglages d'abord, la liste tout en bas (2026-11-18, branche `panneau-pinceau`)
+
+Demande d'Anthony : « revoir la disposition du panneau », sur une capture du panneau Pinceau annotée de sa main : **1** sur les réglages
+(« Peindre derrière », « Peint sur l'aplat », l'aplat du calque, « Plus de réglages » et la catégorie dépliée), **2** sur la rangée des
+trois boutons (importer, nouvelle brosse, supprimer), **3** sur la liste des brosses, une flèche qui fait monter les réglages sous l'aperçu
+et une autre qui fait descendre la liste dans le vide du bas du panneau. Le défaut : dépliée juste sous l'aperçu, la liste repoussait de
+300 points les réglages qu'on tourne en regardant l'aperçu du trait.
+
+Ce qui change (`pinceauxui.rs`, `panels.rs`) :
+
+- **1. Les réglages restent sous l'aperçu**, liste dépliée ou non : « Peindre derrière », « Peint sur l'aplat », l'aplat du calque, puis
+  « Plus de réglages » et ses catégories.
+- **2. Les trois boutons** (importer des pinceaux, nouvelle brosse, supprimer la brosse) sont **au-dessus de la liste**, sur leur ligne,
+  hors du cadre (`brush_list_buttons`). Ils étaient en bas de la liste, dans le cadre.
+- **3. La liste des brosses est la dernière chose du panneau** (`brush_list_ui`, appelée par `tool_options_panel` après les réglages et le
+  mode « Griffonner » d'un calque de couleur) : dans son cadre, la recherche, liste ou vignettes, la saisie d'un nom, les dossiers. Pinceau,
+  crayon et gomme.
+
+Ce qui ne change pas : le bouton « livres » à droite de l'aperçu la déplie et la replie, l'état est retenu ; la liste fait toujours 300
+points de haut au plus et défile au-delà (`LIST_H`) ; ce qu'elle offre (recherche, vignettes, clic droit, « Mes brosses » en tête) ; la
+fenêtre des réglages au clic droit montre le même panneau, dans le même ordre.
+
+Un seul texte visible change, la fin de la bulle du bouton « Liste des pinceaux » : « Un clic déplie la liste **en bas du panneau**, un
+autre la replie. » (avant : « sous l'aperçu »). Aucun texte ajouté.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Outil Pinceau, liste dépliée : sous l'aperçu, d'abord les trois icônes puis « Plus de réglages » ; ensuite la rangée importer / + /
+   corbeille ; ensuite la recherche et la liste.
+2. Déplier « Plus de réglages », tourner un réglage : l'aperçu du trait est juste au-dessus, on le voit changer sans faire défiler.
+3. Le « + » : la saisie du nom apparaît en tête de la liste, juste sous lui.
+4. Crayon et gomme : même ordre. Les autres outils : rien ne change.
+5. Clic droit dans le dessin (la fenêtre des réglages) : même ordre.
+
+Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintenant que « Plus de réglages » est au-dessus des boutons et de
+la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
+boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
+le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques

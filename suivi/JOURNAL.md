@@ -26,6 +26,24 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
   essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. À refaire au calme avant la fusion. Pas
   fusionnée : sa décision.
+- **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
+  « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
+  `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,
+  qui a l'arbre vérifié sur la branche (4 795 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas ouvert :
+  rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après 22 s,
+  aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place.
+  Worktree et branche gardés (retrait proposé, sa décision).
+- **Le panneau Pinceau : les réglages d'abord, la liste des brosses tout en bas** (branche `panneau-pinceau`, la section du
+  2026-11-18 de la partie 45). Sa demande : « revoir la disposition du panneau », sur une capture annotée de sa main : 1 les
+  réglages, 2 les trois boutons, 3 la liste, les réglages remontés sous l'aperçu, la liste descendue en bas. **Ce qui est fait** :
+  sous l'aperçu du trait, « Peindre derrière », « Peint sur l'aplat », l'aplat du calque et « Plus de réglages » ; puis la rangée
+  importer / nouvelle brosse / supprimer ; puis la liste dans son cadre, dernière chose du panneau (pinceau, crayon, gomme). Dépliée,
+  la liste ne repousse plus les réglages loin de l'aperçu. Rien d'autre ne change (le bouton « livres », la hauteur de la liste, ce
+  qu'elle offre). Un seul texte visible changé : la fin de la bulle du bouton (« en bas du panneau »). Essais du panneau : 8 réussis,
+  dont un nouveau sur l'ordre ; vérificateur complet (01 h 17) : compilation sans avertissement, **4 795 réussis, 0 échec**, les dix
+  groupes OK. Image de contrôle faite sur le banc (le panneau, replié et déplié), regardée : l'ordre du schéma. Pas regardé sur son
+  écran. Pas fusionnée : sa décision. (Le chantier de la vue réduite est passé le même soir à une session à part.)
+
 ## 2026-11-17
 
 - **La vue réduite : tous les pixels du dessin comptent** (branche `vue-reduite`, section 166.9). Son retour : « Est-ce qu'on peut
