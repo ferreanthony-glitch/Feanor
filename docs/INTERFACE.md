@@ -14026,7 +14026,9 @@ dans la suite (`traits_continus_tests::thirty_drawn_plans_rest_without_repaintin
 Vignettes à trente plans : un essai qui touche à ce chantier ; relancé seul, trois fois sur trois, et cinq fois sur cinq au milieu
 de ses 331 voisins en parallèle : il passe, 0,9 ms par image, 3 ms par vignette ; le message de l'échec n'a pas été gardé par le
 vérificateur). Avec le Cutter (`bed74af` ; `a57da20`), le 18 novembre à 9 h 55, la machine calme, sans limite de fils :
-**compilation sans avertissement, 4 830 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. C'est l'arbre à fusionner.
+**compilation sans avertissement, 4 830 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. Puis, main ayant reçu les
+préréglages de la partie 170 (`fc908db`, format 57 ; `a4c6368`), à 10 h 14, la machine calme : **compilation sans avertissement,
+4 840 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. C'est l'arbre à fusionner.
 
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 

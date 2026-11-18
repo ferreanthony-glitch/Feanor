@@ -31,7 +31,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   Cutter) : repris à chaque fois. Avec les versions de plan, à 4 h 44, sous la charge, un échec dans la suite : l'essai de la
   planche des Vignettes à trente plans, qui touche à ce chantier ; relancé seul et au milieu de ses voisins, il passe à chaque
   fois (huit passages), sans que le message de l'échec ait pu être retrouvé. Avec le Cutter (bed74af ; a57da20), à 9 h 55, la
-  machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
+  machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Puis avec les préréglages (fc908db,
+  format 57 ; a4c6368), à 10 h 14 : sans avertissement, **4 840 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa
+  décision.
 - **`prereglages-socle` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (d43ea27, exe de 09 h 50), sur
   son « Fusionne maintenant » (sans essai sur son écran avant). Main avait avancé deux fois pendant le chantier
   (trajectoire-exposition et versions-plan, puis cutter-reglages) : main ramené dans la branche à chaque fois, seuls
