@@ -55,6 +55,8 @@ impl App {
                 (None, Some(v)) => p.effets_camera.push(v.sanitized(fps)),
                 (None, None) => return,
             }
+            // (Un effet du lot 3 déplace la caméra dans l'espace : le plan retient qu'elle est libre, partie 172.)
+            p.camera_libre |= !p.espace && p.a_un_effet_dans_l_espace();
             self.modified = true;
         }
         match (v, pid) {
@@ -285,14 +287,36 @@ impl App {
                 ui.end_row();
             }
             if p.preset.a_degres() {
-                ui.label(if p.preset == Preset::Tonneau { "Rotation" } else { "Angle" });
+                ui.label(match p.preset {
+                    Preset::Tonneau => "Rotation",
+                    Preset::Survol => "Bascule",
+                    _ => "Angle",
+                });
                 let r = ui
                     .add(egui::DragValue::new(&mut p.degres).range(-camfx::DEGRES_MAX..=camfx::DEGRES_MAX).speed(0.5).max_decimals(1).suffix("°"))
                     .on_hover_text(match p.preset {
                         Preset::PanoRotation => "De combien la caméra tourne sur elle-même : positif vers la droite, négatif vers la gauche.",
                         Preset::Penche => "L'angle du cadre à l'arrivée : positif, il penche dans le sens des aiguilles d'une montre.",
+                        Preset::Orbite => "De combien la caméra tourne autour du sujet : positif, elle passe à sa droite ; 90°, elle le voit de côté ; 180°, de dos.",
+                        Preset::Survol => "De combien la caméra bascule vers le sol en avançant.",
                         _ => "360° : un tour complet ; négatif : dans l'autre sens.",
                     });
+                changed |= self.edited_as(&r, &name);
+                ui.end_row();
+            }
+            if p.preset.a_hauteur() {
+                ui.label("Hauteur");
+                let r = ui
+                    .add(egui::DragValue::new(&mut p.hauteur).range(-camfx::HAUTEUR_MAX..=camfx::HAUTEUR_MAX).speed(0.02).max_decimals(2).suffix(" × le cadre"))
+                    .on_hover_text("De combien la caméra monte, en hauteurs du cadre (1 : la hauteur de l'image) ; négatif, elle descend.");
+                changed |= self.edited_as(&r, &name);
+                ui.end_row();
+            }
+            if p.preset.a_avancee() {
+                ui.label("Avancée");
+                let r = ui
+                    .add(egui::DragValue::new(&mut p.avancee).range(0.0..=camfx::AVANCEE_MAX).speed(0.02).max_decimals(2).prefix("× "))
+                    .on_hover_text("De combien la caméra avance au-dessus du sol : 1, elle arrive au-dessus des dessins ; plus, elle les dépasse.");
                 changed |= self.edited_as(&r, &name);
                 ui.end_row();
             }
@@ -375,6 +399,7 @@ impl App {
         let hauteur = (cadre_w * ratio * 2.2).max(60.0);
         ui.label(match poignee {
             camfx::Poignee::Cible => "Cible",
+            camfx::Poignee::Sujet => "Sujet",
             camfx::Poignee::Depart => "Départ",
             _ => "Flèche",
         });
@@ -408,9 +433,12 @@ impl App {
         let bout = c + vec2(p.vers[0], p.vers[1]) * cadre_w;
         // Le cadre d'arrivée (ou de départ), en pointillés, avec le zoom de l'effet.
         let zoom = if p.preset.a_zoom() && !p.preset.est_une_avancee() { p.zoom_factor.max(0.05) } else { 1.0 };
-        let fantome = Rect::from_center_size(bout, cadre.size() / zoom);
-        let coins = [fantome.left_top(), fantome.right_top(), fantome.right_bottom(), fantome.left_bottom(), fantome.left_top()];
-        painter.extend(Shape::dashed_line(&coins, Stroke::new(1.0_f32, couleur), 5.0, 3.0));
+        // (Le sujet d'une orbite ou d'une grue reste à sa place : pas de cadre d'arrivée, partie 172.)
+        if poignee != camfx::Poignee::Sujet {
+            let fantome = Rect::from_center_size(bout, cadre.size() / zoom);
+            let coins = [fantome.left_top(), fantome.right_top(), fantome.right_bottom(), fantome.left_bottom(), fantome.left_top()];
+            painter.extend(Shape::dashed_line(&coins, Stroke::new(1.0_f32, couleur), 5.0, 3.0));
+        }
         let trait_ = Stroke::new(2.0_f32, couleur);
         match poignee {
             camfx::Poignee::Fleche => crate::effetpoignee::fleche(&painter, c, bout, trait_, 9.0),
@@ -418,6 +446,9 @@ impl App {
             camfx::Poignee::Cible => {
                 painter.line_segment([bout - vec2(7.0, 0.0), bout + vec2(7.0, 0.0)], trait_);
                 painter.line_segment([bout - vec2(0.0, 7.0), bout + vec2(0.0, 7.0)], trait_);
+            }
+            camfx::Poignee::Sujet => {
+                painter.circle_stroke(bout, 9.0, trait_);
             }
             _ => {}
         }
@@ -427,6 +458,7 @@ impl App {
         }
         let quoi = match poignee {
             camfx::Poignee::Cible => "Où va la caméra : le point de l'image qui arrive au centre du cadre.",
+            camfx::Poignee::Sujet => "Le sujet : le point de l'image que la caméra garde à sa place pendant qu'elle tourne autour ou monte.",
             camfx::Poignee::Depart => "D'où part la caméra : elle vient se poser sur le cadre du plan.",
             _ => "Le chemin de la caméra : elle va du centre du cadre au bout de la flèche.",
         };

@@ -337,7 +337,7 @@ fn choisir_un_effet_dans_le_panneau_le_montre_tout_de_suite_sans_cle() {
 /// Le texte `quoi` de la liste des effets ouverte, en la faisant défiler au besoin (`vers_le_bas` : vers les derniers), puis en
 /// attendant que le défilement d'egui, qui glisse en douceur, se pose.
 fn dans_la_liste(ecran: &mut Panneau, app: &mut App, quoi: &str, vers_le_bas: bool) -> Rect {
-    const TITRES: [&str; 5] = ["ZOOMS ET AVANCÉES", "PANORAMIQUES", "ROTATIONS", "SECOUSSES", "COUPES DANS LE PLAN"];
+    const TITRES: [&str; 6] = ["ZOOMS ET AVANCÉES", "PANORAMIQUES", "TRAVELLINGS", "ROTATIONS", "SECOUSSES", "COUPES DANS LE PLAN"];
     let mut ancre = None;
     for _ in 0..16 {
         let textes = ecran.chauffer(app, 2);
@@ -435,13 +435,13 @@ fn l_effet_vivant_s_enregistre_et_les_anciens_projets_gardent_leurs_cles() {
     doc.panels[1].camera = cles(&[0, 1, 2, 3, 4]);
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 58"), "format 58 (partie 170 : une liste d'effets ; 171 : la caméra 2D)");
+    assert!(texte.contains("\"version\": 59"), "format 59 (partie 170 : une liste d'effets ; 171 : la caméra 2D ; 172 : la caméra dans l'espace)");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effets_camera, doc.panels[0].effets_camera, "l'effet revient tel quel");
     assert!(lu.panels[1].effets_camera.is_empty());
     assert_eq!((0..30).map(|f| lu.panel_camera(0, f)).collect::<Vec<_>>(), (0..30).map(|f| doc.panel_camera(0, f)).collect::<Vec<_>>());
     // Un projet du format 51 (sans le champ) : ses clés d'effet restent des clés, aucun effet vivant n'apparaît.
-    let ancien = texte.replace("\"version\": 58", "\"version\": 51");
+    let ancien = texte.replace("\"version\": 59", "\"version\": 51");
     let sans_effet: serde_json::Value = {
         let mut v: serde_json::Value = serde_json::from_str(&ancien).unwrap();
         fn retirer(v: &mut serde_json::Value) {

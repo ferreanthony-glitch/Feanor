@@ -5,6 +5,28 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-travellings` (environ 2,5 Go) et sa branche locale retirés
+  (elle n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 172` mis à la corbeille (il n'avait pas
+  servi : la copie de « dd » était encore au format 58).
+- **`prereglages-travellings` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (cd23311, exe de 19 h 21),
+  sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (603851a), ni ici
+  ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 855 réussis, 0 échec, les dix groupes
+  OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 15 h 17) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 58) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 59 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  172.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-travellings` et `Tests\essai 172`.
+- **Préréglages dans la timeline, lot 3 : la caméra dans l'espace** (partie 172, branche `prereglages-travellings` partie de
+  main 603851a, **format 59**), sur son « Oui, le lot 3 ». Quatre préréglages de plus en blocs vivants, qui déplacent vraiment
+  la caméra (travelling latéral C13, orbite C14, grue C15, survol C16, famille « Travellings ») : l'œil bouge, chaque calque
+  glisse à sa vitesse, la caméra peut passer à côté, au-dessus, derrière ; le plan retient que sa caméra est libre. L'orbite et
+  la grue gardent leur sujet à sa place dans l'image (viseur « Sujet » avec l'outil Caméra). Les trajectoires toutes faites
+  (C17 : ligne droite, arc, spirale, en S) deviennent le chemin de la caméra du plan, qui garde son sujet dans le cadre et se
+  retouche avec l'outil Trajectoire dans la vue Espace 3D ; le chemin a sa barre dans la timeline. Les vignettes du panneau
+  Préréglages sont filmées par la vraie caméra. « Convertir en clés » donne la même image pour les trente-quatre (essai).
+  **À juger** : le sujet est pris au plan de référence, pas à la profondeur d'un calque (172.3). Vérificateur : sans avertissement, 4 855 réussis, 0 échec, les dix groupes OK.
+  Contrôle de lancement sur une copie de « dd » (format 58) avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert sur « dd », n'a pas été touché). Dossier d'essai pour lui : `Tests\essai 172` (copie de « dd » au format 58, copie de ses
+  réglages, `Lancer essai 172.cmd`). **Pas fusionné, pas essayé sur son écran** (liste 172.4).
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-camera` (environ 2,5 Go) et sa branche locale retirés (elle
   n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 171` mis à la corbeille (il n'avait pas servi).
 - **`prereglages-camera` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (ac390e6, exe de 13 h 56), sur son

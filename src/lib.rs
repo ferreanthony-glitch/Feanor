@@ -238,6 +238,8 @@ mod panneauprereglages;
 mod effetpoignee;
 #[cfg(test)]
 mod camfx_lot2_tests;
+#[cfg(test)]
+mod camfx_lot3_tests;
 // Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
 // proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
 // ligne, les tâches, l'interface et les Préférences.
@@ -502,6 +504,7 @@ mod regle_cadrage_tests;
 mod camera;
 #[cfg(test)]
 mod camera_tests;
+mod camespace;
 mod camfx;
 #[cfg(test)]
 mod camfx_tests;
@@ -559,6 +562,8 @@ mod styletlien_tests;
 // La trajectoire d'un calque (Anthony, 2026-11-07) : le chemin, ses marques et les clés qu'ils posent (`trajectoire`), l'outil à
 // l'écran (`trajectoireui`).
 pub mod trajectoire;
+// Les trajectoires toutes faites de la caméra (partie 172).
+mod trajformes;
 #[cfg(test)]
 mod trajectoire_tests;
 mod trajectoireui;
