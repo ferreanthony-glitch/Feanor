@@ -8466,6 +8466,67 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   à cheval sur un jalon le ramène à l'image du retrait. Recalculer d'après la trajectoire repose alors les clés et les dessins là où ils
   sont déjà. Sans fin posée (un projet du 7 novembre), seul le départ suit.
 
+### Une marque qu'on glisse emporte son temps (2026-11-18, branche `trajectoire-exposition`)
+
+Anthony : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés sur la trajectoire. »
+Dans son projet « dd », plan 10 : sept marques à 4, 7, 11, 21, 38, 65 et 71 % du chemin, serrées au départ, et pourtant chaque dessin
+exposé 8 ou 9 images. Glisser une marque le long du chemin changeait sa place, jamais son temps : le temps restait partagé en parts
+égales entre les jalons.
+
+Ce qui change, **en clés d'images** (les dessins posés aux jalons) :
+
+- **Glisser une marque le long du chemin emporte son temps.** Entre ses deux jalons voisins (une marque, le départ ou l'arrivée),
+  elle prend l'image qui correspond à sa place : à mi-chemin d'eux, à mi-temps ; aux deux tiers du chemin, aux deux tiers du temps.
+  Le dessin d'avant est tenu plus longtemps quand elle avance, moins quand elle recule ; les autres marques ne changent pas d'image.
+  Son temps ne dépend que de sa place : la glisser puis la remettre rend la même image. Elle reste à une image au moins de ses
+  voisines. La timeline change au lâcher, comme les dessins (une étape, « Glisser une marque ») ; pendant le geste, le numéro
+  d'image au-dessus de la marque suit, et la barre d'état dit « Marque à 70 % du chemin, image 17. »
+  (`Trajectoire::deplacer_marque_et_son_temps`, `temps_a_sa_place`). Les temps des marques deviennent explicites, comme après un
+  recalage sur la timeline.
+- **Poser une marque** quand des temps sont déjà posés : elle prend le temps de sa place entre ses voisines, et non plus le milieu de
+  leur temps (`ajouter_marque_a_son_temps`). Tant que le temps est en parts égales, une marque de plus le repartage, comme avant.
+- **« Temps selon le chemin »**, un bouton des réglages de l'outil, à côté de « Temps égaux entre les marques » : toutes les marques
+  d'un coup au temps de leur place sur le chemin (à 30 % du chemin, à 30 % du temps). Chaque dessin est alors exposé selon la distance
+  jusqu'au suivant ; des marques serrées gardent chacune leur image (`temps_selon_le_chemin`). Le bouton ne se montre que s'il a
+  quelque chose à changer (`est_selon_le_chemin`). Une étape d'annulation, du même nom. « Temps égaux entre les marques » revient aux
+  parts égales.
+
+Ce qui ne change pas : en **clés d'interpolation**, glisser une marque ne touche pas au temps (les marques sont l'espacement :
+serrées, lent ; espacées, vite) ; **arracher** une marque, **recaler** un jalon sur la timeline (il change de temps sans changer de
+place), le départ et la fin. **Aucun projet ne change à l'ouverture** : une trajectoire garde ses temps tant qu'on ne glisse pas une de
+ses marques ou qu'on n'appuie pas sur le bouton ; le format de projet ne change pas (les temps posés existaient déjà). Dans la vue
+**Espace 3D**, une carte en clés d'images suit la même règle (glisser, poser, le bouton) ; la trajectoire de la caméra, non.
+
+Textes visibles ajoutés ou changés : la barre d'état pendant le geste, en clés d'images (« Marque à N % du chemin, image M. ») ; le
+bouton « Temps selon le chemin » et sa bulle (« Chaque dessin est exposé selon la distance jusqu'au suivant : des marques serrées,
+des dessins brefs ; le calque avance à vitesse constante. ») ; le nom de l'étape d'annulation « Temps selon le chemin ».
+
+À vérifier à l'écran (par Anthony) :
+
+1. Projet « dd », plan 10, calque « Vectoriel 2 », outil Trajectoire : glisse une marque le long du chemin vers la suivante. Au
+   lâcher, dans la timeline, le dessin d'avant s'allonge et le sien raccourcit ; ramène-la : l'exposition revient. Ctrl+Z aussi.
+2. Réglages de l'outil : « Temps selon le chemin ». Les dessins du début, serrés, deviennent brefs ; ceux qui sont loin du suivant,
+   longs. « Temps égaux entre les marques » : tous pareils de nouveau.
+3. Glisser une clé de dessin dans la timeline : elle change de temps, sa marque ne bouge pas sur le chemin (comme avant).
+4. Une trajectoire en « Clés d'interpolation » : glisser une marque change la vitesse, pas les images des jalons (comme avant).
+
+Essais : `trajectoire_tests.rs`, trois de plus (la marque glissée prend l'image de sa place entre ses voisines, revient à la même en
+revenant, garde une image d'écart, laisse les temps recalés des autres ; une marque posée prend le temps de sa place dès que des
+temps sont posés ; « Temps selon le chemin », marques serrées et plan trop court compris) ; `trajectoireui_tests.rs`, un de plus (le
+vrai geste : l'exposition change dans la timeline, la barre d'état dit l'image, Ctrl+Z la rend, les deux boutons ; en clés
+d'interpolation rien ne bouge) et un essai ignoré qui écrit la timeline avant et après sur une copie de projet. Quatre essais
+d'avant décrivaient l'ancien comportement (une marque glissée gardait son image) et sont mis à jour : deux de
+`trajectoireui_tests.rs`, un de `trajectoire3d_images_tests.rs`, et les deux longs scénarios des clés posées à la main de
+`trajectoire_main_tests.rs`, où « Temps égaux entre les marques » est appliqué après les glissés pour que la suite parte du même
+état qu'avant.
+Résultats (18 novembre, 03 h 17) : les 95 essais de la trajectoire réussis ; vérificateur complet : compilation sans avertissement,
+**4 799 réussis, 0 échec**, les dix groupes de fiabilité OK. Deux passages d'avant avaient échoué sur des essais chronométrés sans
+rapport (budgets de temps par image de l'Espace 3D, annulation et export vidéo : 1 puis 6 échecs), la machine étant saturée par les
+suites d'essais d'autres sessions ; relancés seuls ils passent tous, et le passage propre a été fait avec six essais à la fois
+(`RUST_TEST_THREADS=6`) au lieu de tous les cœurs. Image de contrôle (l'essai ignoré sur une copie de « dd », plan 10) : la
+timeline avant (9, 9, 8, 9, 9, 9, 8, 9 images) et après « Temps selon le chemin » (3, 2, 2, 8, 11, 19, 5, 20). Pas regardé sur son
+écran.
+
 ### Comment (le modèle, `trajectoire.rs`)
 
 Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois points, les bouts gardés) et repris tous les 2 pixels de la

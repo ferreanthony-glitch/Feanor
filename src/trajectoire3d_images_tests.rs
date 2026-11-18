@@ -142,13 +142,18 @@ fn sliding_a_mark_or_retiming_it_moves_its_key_and_keeps_what_was_redrawn_on_its
     assert!((glissee.marques[0] - 0.6).abs() < 0.03, "{}", glissee.marques[0]);
     assert_eq!((derniere_etape(&b), b.app.history.undo_len()), ("Glisser une marque".to_string(), etapes + 1));
     assert_eq!((glissee.dessins.clone(), b.app.doc.cels.len()), (dessins.clone(), tous), "au lâcher non plus : les mêmes dessins, aucune copie de plus");
-    assert_eq!((images(&b, 0)[11], images(&b, 0)[12], images(&b, 0)[23]), (Some(source), Some(d1), Some(d2)));
+    // (2026-11-18 : la marque glissée a emporté son temps. Sa clé de dessin est à l'image de sa place sur le chemin : à 60 % du
+    // chemin, vers l'image 14 ; le dessin du départ est tenu jusque-là.)
+    let k = glissee.images_des_jalons(24)[1];
+    assert_eq!(k, (glissee.marques[0] * 23.0).round() as usize, "l'image de sa place sur le chemin");
+    assert!(k > 12, "{k}");
+    assert_eq!((images(&b, 0)[k - 1], images(&b, 0)[k], images(&b, 0)[23]), (Some(source), Some(d1), Some(d2)));
     assert!(encre(&b, d1, 305, 205), "ce qu'on a redessiné sur la pose de la marque est toujours là");
-    assert!(proche(carte(&b, 0, 12).pos, m::add(depart.pos, m::scale(AU_BOUT, glissee.marques[0])), 0.05), "sa clé de position tenue a suivi la marque");
-    // Sur la timeline (le montage des clés), glisser la clé de dessin de la marque de l'image 12 à l'image 6 la recale.
+    assert!(proche(carte(&b, 0, k).pos, m::add(depart.pos, m::scale(AU_BOUT, glissee.marques[0])), 0.05), "sa clé de position tenue a suivi la marque");
+    // Sur la timeline (le montage des clés), glisser la clé de dessin de la marque de son image à l'image 6 la recale.
     let (plan, calque) = (b.app.doc.panels[0].id, b.app.layers()[0].id);
-    b.app.key_sel = vec![crate::montagekeys::KeyRef { panel: plan, layer: calque, start: 12 }];
-    assert!(b.app.begin_keys_drag(12));
+    b.app.key_sel = vec![crate::montagekeys::KeyRef { panel: plan, layer: calque, start: k }];
+    assert!(b.app.begin_keys_drag(k));
     b.app.drag_keys_mode(6, crate::handles::KeyMove::Single);
     b.app.end_keys_drag();
     let recalee = trajectoire(&b, 0);

@@ -318,7 +318,9 @@ fn image_keys_put_a_drawing_at_each_mark_that_splits_the_timeline_and_moves_with
     let milieu2 = t.dessins[1].dessin;
     let cm2 = centre_du_dessin(&b, milieu2);
     assert!((cm2.x - c0.x - 210.0).abs() < 4.0, "à 70 % du chemin : {cm2:?}");
-    assert_eq!(b.app.layers()[0].cel_at(12), Some(milieu2));
+    // (2026-11-18 : la marque emporte son temps. À 70 % du chemin, à 70 % du temps : l'image 16 ; le départ est tenu jusque-là.)
+    assert_eq!(jalons(&b), [0, 16, 23]);
+    assert_eq!((b.app.layers()[0].cel_at(15), b.app.layers()[0].cel_at(16)), (Some(source), Some(milieu2)));
     // La clé de dessin de l'arrivée, glissée sur la timeline (montage des clés) de 23 à 18 : la fin recule.
     let (plan, calque) = (b.app.doc.panels[0].id, b.app.layers()[0].id);
     b.app.key_sel = vec![crate::montagekeys::KeyRef { panel: plan, layer: calque, start: 23 }];
@@ -326,11 +328,11 @@ fn image_keys_put_a_drawing_at_each_mark_that_splits_the_timeline_and_moves_with
     b.app.drag_keys_mode(18, crate::handles::KeyMove::Single);
     b.app.end_keys_drag();
     let t = b.app.layers()[0].trajectoire.clone().unwrap();
-    // (La marque est à 70 % du chemin, mais au milieu du temps : à l'image 9 sur 18.)
-    assert_eq!((t.fin, jalons(&b)), (Some(18), vec![0, 9, 18]));
+    // (La marque est à 70 % du chemin et, depuis le 2026-11-18, à 70 % du temps : à l'image 13 sur 18.)
+    assert_eq!((t.fin, jalons(&b)), (Some(18), vec![0, 13, 18]));
     assert_eq!(b.app.layers()[0].cel_at(18), Some(t.dessins[2].dessin));
-    assert_eq!(b.app.layers()[0].cel_at(9), Some(t.dessins[1].dessin));
-    assert_eq!(b.app.layers()[0].cel_at(8), Some(source));
+    assert_eq!(b.app.layers()[0].cel_at(13), Some(t.dessins[1].dessin));
+    assert_eq!(b.app.layers()[0].cel_at(12), Some(source));
     // Retour aux clés d'interpolation : les dessins posés s'en vont, le dessin du départ tient, les clés reviennent.
     let snap = b.app.snapshot();
     b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = Cles::Interpolation;
@@ -805,7 +807,8 @@ fn each_redrawn_pose_stays_with_its_milestone_when_marks_are_added_removed_or_sl
     assert!(b.app.begin_keys_drag(12));
     b.app.drag_keys_mode(10, crate::handles::KeyMove::Single);
     b.app.end_keys_drag();
-    assert_eq!(jalons(&b), [0, 6, 10, 17, 23], "{}", b.app.status);
+    // (La première marque, glissée à 30 % du chemin, a emporté son temps : l'image 7, 2026-11-18.)
+    assert_eq!(jalons(&b), [0, 7, 10, 17, 23], "{}", b.app.status);
     assert_eq!(dessins_des_jalons(&b), vec![source, n1, dm, n2, da], "recaler ne change pas qui a quel dessin");
     assert_eq!(b.app.layers()[0].cel_at(10), Some(dm));
     // « Temps égaux entre les marques » (ce que fait le bouton des réglages) : de même.
@@ -852,4 +855,102 @@ fn each_redrawn_pose_stays_with_its_milestone_when_marks_are_added_removed_or_sl
     let fin = dessins_des_jalons(&b);
     assert_eq!((fin.len(), fin[0], fin[1]), (2, source, d[2]), "l'arrivée garde sa pose retouchée");
     assert_eq!(b.app.layers()[0].cel_at(23), Some(d[2]));
+}
+
+/// Anthony, 2026-11-18 : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés sur
+/// la trajectoire. » En clés d'images, une marque glissée le long du chemin emporte son temps : le dessin d'avant est tenu plus
+/// longtemps quand elle avance, moins quand elle recule. En clés d'interpolation, le temps reste : c'est l'espacement qui change.
+#[test]
+fn sliding_a_mark_along_the_path_adjusts_the_exposure_of_the_drawings_in_the_timeline() {
+    let mut b = banc();
+    b.app.traj.cles_propose = Cles::Images;
+    let source = dessiner_le_depart(&mut b);
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    assert_eq!(jalons(&b), [0, 12, 23], "posée, la marque partage le temps en parts égales");
+    let milieu = dessins_des_jalons(&b)[1];
+    // De 50 à 70 % du chemin : son dessin commence à l'image 16 (70 % de 23) ; celui du départ est tenu 16 images au lieu de 12.
+    glisser(&mut b, &[(200.0, 150.0), (230.0, 151.0), (260.0, 150.0)]);
+    assert_eq!(derniere_etape(&b), "Glisser une marque");
+    assert_eq!(jalons(&b), [0, 16, 23]);
+    let pose = dessins_des_jalons(&b)[1];
+    let l = &b.app.layers()[0];
+    assert_eq!((l.cel_at(0), l.cel_at(15), l.cel_at(16), l.cel_at(22), l.cel_at(23)), (Some(source), Some(source), Some(pose), Some(pose), Some(dessins_des_jalons(&b)[2])));
+    assert!(b.app.status.contains("70 % du chemin, image 17"), "la barre d'état dit l'image : {}", b.app.status);
+    // Une seule étape : Ctrl+Z rend l'exposition d'avant, rétablir la reprend.
+    b.app.undo();
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    assert_eq!((b.app.layers()[0].cel_at(11), b.app.layers()[0].cel_at(12)), (Some(source), Some(milieu)));
+    b.app.redo();
+    assert_eq!(jalons(&b), [0, 16, 23]);
+    // Ramenée à 30 % du chemin : l'image 7. Son temps ne dépend que de sa place.
+    glisser(&mut b, &[(260.0, 150.0), (200.0, 151.0), (140.0, 150.0)]);
+    assert_eq!(jalons(&b), [0, 7, 23]);
+    let pose = dessins_des_jalons(&b)[1];
+    assert_eq!((b.app.layers()[0].cel_at(6), b.app.layers()[0].cel_at(7)), (Some(source), Some(pose)));
+    // « Temps égaux entre les marques », puis « Temps selon le chemin » (ce que font les deux boutons des réglages).
+    assert!(b.app.layers()[0].trajectoire.as_ref().unwrap().est_selon_le_chemin(24), "déjà selon le chemin : le bouton n'a rien à proposer");
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().temps_egaux();
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Temps égaux entre les marques");
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    assert!(!b.app.layers()[0].trajectoire.as_ref().unwrap().est_selon_le_chemin(24));
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().temps_selon_le_chemin(24);
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, crate::trajectoireui::TEMPS_SELON_LE_CHEMIN);
+    assert_eq!(jalons(&b), [0, 7, 23]);
+    assert_eq!((b.app.layers()[0].cel_at(6), b.app.layers()[0].cel_at(7)), (Some(source), Some(dessins_des_jalons(&b)[1])));
+    // Clés d'interpolation : la marque glisse, son temps reste (serrées, lent ; espacées, vite).
+    let mut b = banc();
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    glisser(&mut b, &[(200.0, 150.0), (230.0, 151.0), (260.0, 150.0)]);
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    assert!((t.marques[0] - 0.7).abs() < 0.02 && t.temps.is_none(), "la marque a glissé, le temps n'est pas posé");
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    assert!(b.app.status.ends_with("% du chemin."), "{}", b.app.status);
+}
+
+/// Des images à regarder (essai ignoré), dans le dossier `FEANOR_CAPTURE_DIR` : sur une COPIE de projet (`FEANOR_PROJET_ESSAI` : son
+/// manifeste ; `FEANOR_PLAN_ESSAI` : le numéro du plan, le dernier sinon), le premier calque à trajectoire en clés d'images du plan,
+/// tel qu'il est puis après « Temps selon le chemin ». Sans projet ou sans carte graphique : rien.
+#[test]
+#[ignore = "écrit des captures : FEANOR_CAPTURE_DIR"]
+fn trajectoire_exposition_captures() {
+    let dossier = std::env::var_os("FEANOR_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    std::fs::create_dir_all(&dossier).unwrap();
+    let Some(projet) = std::env::var_os("FEANOR_PROJET_ESSAI") else { return println!("CAPTURE pas de projet : rien") };
+    let doc = crate::project::load(std::path::Path::new(&projet)).expect("le projet s'ouvre").doc;
+    let plans = doc.panels.len().max(1);
+    let plan = std::env::var("FEANOR_PLAN_ESSAI").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(plans).clamp(1, plans) - 1;
+    let mut b = crate::perf_tests::banc(doc, true);
+    if b.capturer().is_none() {
+        return println!("CAPTURE pas de carte graphique : rien");
+    }
+    b.app.set_mode(Mode::Animation);
+    let Some(calque) = b.app.doc.panels[plan].layers.iter().position(|l| l.trajectoire.as_ref().is_some_and(|t| t.cles == Cles::Images)) else {
+        return println!("CAPTURE pas de trajectoire en clés d'images au plan {} : rien", plan + 1);
+    };
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (plan, calque, 0);
+    b.app.set_tool(Tool::Trajectoire);
+    let sauver = |b: &mut Banc, nom: &str| {
+        b.chauffer(12);
+        b.attendre_vignettes();
+        let rgba = b.capturer().expect("carte graphique");
+        image::save_buffer(dossier.join(nom), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        let l = &b.app.layers()[calque];
+        let t = l.trajectoire.as_ref().expect("la trajectoire");
+        let images = t.images_des_jalons(b.app.frame_count());
+        let expositions: Vec<usize> = images.windows(2).map(|w| w[1] - w[0]).collect();
+        println!("CAPTURE {nom} : marques {:?}, jalons aux images {images:?}, expositions {expositions:?}", t.marques.iter().map(|m| (m * 100.0).round() as i32).collect::<Vec<_>>());
+    };
+    sauver(&mut b, "trajectoire-avant.png");
+    let duree = b.app.frame_count();
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[calque].trajectoire.as_mut().expect("la trajectoire").temps_selon_le_chemin(duree);
+    b.app.trajectoire_recalculer(calque);
+    b.app.commit_named(snap, crate::trajectoireui::TEMPS_SELON_LE_CHEMIN);
+    sauver(&mut b, "trajectoire-apres.png");
 }
