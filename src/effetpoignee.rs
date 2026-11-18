@@ -105,6 +105,7 @@ impl App {
         self.modified = true;
         let quoi = match v.params.preset.poignee() {
             Poignee::Cible => "cible",
+            Poignee::Sujet => "sujet",
             Poignee::Depart => "départ",
             _ => "flèche",
         };
@@ -130,13 +131,16 @@ impl App {
         let trait_ = Stroke::new(2.0_f32, couleur);
         let halo = Stroke::new(4.0_f32, Color32::from_black_alpha(110));
         let poignee = v.params.preset.poignee();
-        // Le cadre de l'arrivée (ou du départ) : la caméra centrée sur le bout, avec le zoom de l'effet s'il en a un.
-        let zoom = if v.params.preset.a_zoom() && !v.params.preset.est_une_avancee() { v.params.zoom_factor } else { 1.0 };
-        let fantome = Camera { x: cam.x + (bout.x - centre.x), y: cam.y + (bout.y - centre.y), zoom: (cam.zoom * zoom).clamp(0.05, 50.0), ..cam };
-        let coins: Vec<Pos2> = fantome.corners(self.doc.frame).iter().map(|p| to_s(*p)).collect();
-        let mut boucle = coins.clone();
-        boucle.push(coins[0]);
-        painter.extend(Shape::dashed_line(&boucle, Stroke::new(1.5_f32, couleur), 6.0, 4.0));
+        // Le cadre de l'arrivée (ou du départ) : la caméra centrée sur le bout, avec le zoom de l'effet s'il en a un. (Le sujet
+        // d'une orbite ou d'une grue reste où il est dans le cadre : pas de cadre d'arrivée, partie 172.)
+        if poignee != Poignee::Sujet {
+            let zoom = if v.params.preset.a_zoom() && !v.params.preset.est_une_avancee() { v.params.zoom_factor } else { 1.0 };
+            let fantome = Camera { x: cam.x + (bout.x - centre.x), y: cam.y + (bout.y - centre.y), zoom: (cam.zoom * zoom).clamp(0.05, 50.0), ..cam };
+            let coins: Vec<Pos2> = fantome.corners(self.doc.frame).iter().map(|p| to_s(*p)).collect();
+            let mut boucle = coins.clone();
+            boucle.push(coins[0]);
+            painter.extend(Shape::dashed_line(&boucle, Stroke::new(1.5_f32, couleur), 6.0, 4.0));
+        }
         // La flèche : du centre au bout (le chemin), ou du bout au centre (le départ) ; la cible n'a qu'un trait discret.
         let tirer = |de: Pos2, a: Pos2| {
             for s in [halo, trait_] {
@@ -151,11 +155,20 @@ impl App {
                 painter.line_segment([b - vec2(9.0, 0.0), b + vec2(9.0, 0.0)], trait_);
                 painter.line_segment([b - vec2(0.0, 9.0), b + vec2(0.0, 9.0)], trait_);
             }
+            // (Le sujet : un viseur, deux cercles et une croix, sans trait depuis le centre.)
+            Poignee::Sujet => {
+                painter.circle_stroke(b, 14.0, trait_);
+                painter.line_segment([b - vec2(20.0, 0.0), b - vec2(9.0, 0.0)], trait_);
+                painter.line_segment([b + vec2(9.0, 0.0), b + vec2(20.0, 0.0)], trait_);
+                painter.line_segment([b - vec2(0.0, 20.0), b - vec2(0.0, 9.0)], trait_);
+                painter.line_segment([b + vec2(0.0, 9.0), b + vec2(0.0, 20.0)], trait_);
+            }
             Poignee::Aucune => {}
         }
         painter.circle(b, 6.0, Color32::WHITE, Stroke::new(2.0_f32, couleur));
         let nom = match poignee {
             Poignee::Cible => "Cible",
+            Poignee::Sujet => "Sujet",
             Poignee::Depart => "Départ",
             _ => "Flèche",
         };

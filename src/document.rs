@@ -1162,6 +1162,13 @@ impl Panel {
         self.ordre_distance || self.espace
     }
 
+    /// L'un de ses effets de caméra vivants déplace la caméra dans l'espace (le lot 3 des préréglages, partie 172,
+    /// `camfx::Preset::dans_l_espace`) : comme une caméra posée dans la vue de la scène, elle peut sortir des anciennes
+    /// limites, et l'image passe alors par le changement de repère (`Document::repere_du_plan`).
+    pub fn a_un_effet_dans_l_espace(&self) -> bool {
+        self.effets_camera.iter().any(|v| v.params.preset.dans_l_espace())
+    }
+
     pub fn frame_count(&self) -> usize {
         self.layers
             .iter()
@@ -1968,9 +1975,29 @@ impl Document {
 
     fn camera_sur_la_trajectoire_de(&self, p: &Panel, cam: Camera, frame: usize) -> Camera {
         match self.deplacement_de_la_camera(p, frame) {
-            Some(d) => self.camera_deplacee(cam, d, 1.0),
-            None => cam,
+            // (Sans déplacement, avant le départ du chemin : la caméra des clés, au bit près.)
+            Some(d) if d != [0.0; 3] => self.viser_le_sujet(p, &cam, self.camera_deplacee(cam, d, 1.0)),
+            _ => cam,
         }
+    }
+
+    /// Le sujet que vise la trajectoire de caméra du plan `p` (`Trajectoire::vise`, partie 172), en pixels de la feuille dans
+    /// l'espace (`camespace`) ; rien sans visée.
+    fn sujet_vise(&self, p: &Panel) -> Option<crate::camespace::V3> {
+        let v = p.trajectoire_camera.as_ref()?.vise?;
+        let m = crate::espace3d::Monde::of(self);
+        let k = m.k.max(1e-12);
+        Some([v[0] / k + m.stage[0] / 2.0, v[1] / k - m.stage[1] / 2.0, v[2] / k])
+    }
+
+    /// La caméra `apres` (portée par le chemin), tournée pour voir le sujet visé de la trajectoire du plan `p` là où la caméra
+    /// `avant` le voit (partie 172) : c'est elle, sans le chemin, qui dit où il est dans l'image. Sans visée, ou si le sujet
+    /// est derrière la caméra : `apres` telle quelle. Le chemin inverse (`camera_hors_de_sa_trajectoire`) fait la même chose
+    /// dans l'autre sens : la caméra vue, ramenée à ses clés, garde le sujet au même endroit.
+    fn viser_le_sujet(&self, p: &Panel, avant: &Camera, apres: Camera) -> Camera {
+        let Some(sujet) = self.sujet_vise(p) else { return apres };
+        let Some([u, v]) = crate::camespace::image_de(avant, self.frame, sujet) else { return apres };
+        crate::camespace::viser(&apres, self.frame, sujet, u, v).unwrap_or(apres)
     }
 
     /// La caméra `cam` du plan `index` (celle de ses clés à l'image `frame`), portée là où sa trajectoire la met à cette image.
@@ -1983,9 +2010,10 @@ impl Document {
     /// ramenée à ce que ses clés doivent dire. Régler la caméra à n'importe quelle image (`App::set_current_camera`) écrit donc
     /// la clé qui, une fois portée par le chemin, donne la caméra voulue.
     pub fn camera_hors_de_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
-        match self.panels.get(index).and_then(|p| self.deplacement_de_la_camera(p, frame)) {
-            Some(d) => self.camera_deplacee(cam, d, -1.0),
-            None => cam,
+        let Some(p) = self.panels.get(index) else { return cam };
+        match self.deplacement_de_la_camera(p, frame) {
+            Some(d) if d != [0.0; 3] => self.viser_le_sujet(p, &cam, self.camera_deplacee(cam, d, -1.0)),
+            _ => cam,
         }
     }
 
@@ -2088,7 +2116,8 @@ impl Document {
         let par_la_camera = if p.espace {
             *cam != self.default_camera()
         } else {
-            p.camera_libre && !self.camera_dans_les_anciennes_limites(cam)
+            // (Un effet du lot 3, partie 172, déplace la caméra dans l'espace : sa caméra est libre, comme posée dans la vue.)
+            (p.camera_libre || p.a_un_effet_dans_l_espace()) && !self.camera_dans_les_anciennes_limites(cam)
         };
         (par_la_camera || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }
@@ -2158,6 +2187,12 @@ impl Document {
             p.effets_camera.clear();
         }
         !cuites.is_empty()
+    }
+
+    /// La caméra du plan `index` à l'image `frame` sans sa trajectoire de caméra : ses clés, ses paliers et ses effets vivants
+    /// (partie 172 : c'est d'elle que part une trajectoire toute faite, qui remplace celle d'avant).
+    pub(crate) fn camera_sans_trajectoire(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, true, true)
     }
 
     fn panel_camera_selon(&self, index: usize, frame: usize, paliers: bool, effet: bool) -> Camera {

@@ -11,6 +11,10 @@
 //! Depuis le lot 2 (partie 171), les vignettes sont rangées par famille (`camfx::Famille`), et la petite scène a de la
 //! profondeur : un travelling y fait passer le rocher vite et les montagnes à peine. Une cible y vise le visage du
 //! personnage (la maison pour le zoom vers un point), comme sur la page de choix.
+//!
+//! Depuis le lot 3 (partie 172), la petite scène est **filmée par la vraie caméra** de l'effet (`camfx::cuire_vite` sur une
+//! caméra de base, puis `camespace::image_de`) : un panoramique, une orbite, une grue ou un survol s'y voient en perspective,
+//! chaque trait à sa profondeur. Les trajectoires toutes faites (`trajformes`) ont leur famille, à la fin.
 
 use std::sync::OnceLock;
 
@@ -18,8 +22,11 @@ use eframe::egui::{self, pos2, vec2, Color32, FontId, Pos2, Rect, Sense, Stroke,
 
 use crate::app::App;
 use crate::blocscamera::PresetDrag;
-use crate::camfx::{Generator, Params, Preset};
+use crate::camera::{self, Camera};
+use crate::camespace;
+use crate::camfx::{self, Params, Preset, Vivant};
 use crate::theme;
+use crate::trajformes::{self, Forme, FormeDrag};
 
 /// Largeur d'une vignette, en points.
 const VIGNETTE_W: f32 = 132.0;
@@ -90,96 +97,196 @@ fn reglages_de_vignette(preset: Preset, fps: u32) -> Params {
     }
 }
 
-/// La vignette de `preset` à l'instant `t` (secondes depuis le début du passage ; `None` : l'image arrêtée), peinte dans `r`.
-fn peindre_vignette(painter: &egui::Painter, r: Rect, preset: Preset, fps: u32, t: Option<f32>) {
+/// Le cadre des vignettes : une image de 1600 × 900 pixels, filmée d'une feuille de la même taille (partie 172 : la petite
+/// scène est vue par une vraie caméra, celle que l'effet donne, comme dans le plan).
+const CADRE: [usize; 2] = [1600, 900];
+
+/// La caméra des vignettes au repos : au centre de la feuille, de face.
+fn camera_de_base() -> Camera {
+    Camera::centered(CADRE[0], CADRE[1])
+}
+
+/// Le point de l'espace (`camespace`, pixels de la feuille) du point (`x`, `y`) d'un trait à la profondeur `z` : posé comme
+/// un calque en profondeur, que la caméra de base voit tel qu'il est dessiné.
+fn point_de_la_scene(x: f32, y: f32, z: f32) -> camespace::V3 {
+    let (w, h) = (CADRE[0] as f32, CADRE[1] as f32);
+    let d0 = camera::ref_distance(CADRE);
+    [w / 2.0 + x * w * (1.0 + z), -(h / 2.0) - y * w * (1.0 + z), -d0 * z]
+}
+
+/// La caméra de la vignette de `preset` à l'image `rel` de son mouvement : celle que montrerait l'effet vivant posé sur un plan
+/// à la caméra de base (`camfx::cuire_vite`).
+fn camera_de_vignette(preset: Preset, fps: u32, rel: usize) -> Camera {
     let params = reglages_de_vignette(preset, fps);
-    let g = Generator::new(&params, fps);
-    let duree = params.duration.max(1);
-    let rel = match t {
-        Some(t) => ((t * fps as f32).floor().max(0.0) as usize).min(duree),
-        // (À l'arrêt : un instant parlant, aux deux tiers du mouvement.)
-        None => duree * 2 / 3,
-    };
-    let s = g.at(rel);
+    let base = camera_de_base();
+    let v = Vivant { params, start: 0 };
+    let keys = camfx::cuire_vite(&v, fps, CADRE, params.duration + 1, &[], &|_| base).unwrap_or_default();
+    camera::camera_at(&keys, rel, base)
+}
+
+/// La caméra de la vignette de `forme` à l'avancement `t` (0 à 1) de son chemin : elle part de la caméra de base et garde le
+/// visage du personnage à sa place, comme une trajectoire toute faite garde son sujet (`trajformes`).
+fn camera_de_forme(forme: Forme, t: f32) -> Camera {
+    let base = camera_de_base();
+    let d0 = camera::ref_distance(CADRE);
+    let (fw, fh) = (CADRE[0] as f32, CADRE[1] as f32);
+    let (u, v) = (fw / 2.0 + VISAGE[0] * fw, fh / 2.0 + VISAGE[1] * fw);
+    let sujet = camespace::point_vu(&base, CADRE, u, v);
+    let oeil = camespace::oeil(&base, d0);
+    let (dx, dz) = (sujet[0] - oeil[0], sujet[2] - oeil[2]);
+    let e = dx.hypot(dz).max(1.0);
+    let devant = [dx / e, 0.0, dz / e];
+    let droite = [-devant[2], 0.0, devant[0]];
+    let p = forme.point(camera::ease(t, 1.0, 0.5, 0.5));
+    let d = [0, 1, 2].map(|i| (p[0] * droite[i] + p[1] * devant[i]) * e + if i == 1 { p[2] * e } else { 0.0 });
+    let portee = camespace::deplacer(&base, CADRE, d);
+    camespace::viser(&portee, CADRE, sujet, u, v).unwrap_or(portee)
+}
+
+/// La petite scène filmée par `cam`, peinte dans `r`.
+fn peindre_scene(painter: &egui::Painter, r: Rect, cam: &Camera) {
     let painter = painter.with_clip_rect(r.intersect(painter.clip_rect()));
     painter.rect_filled(r, 2.0, PAPIER);
     let w = r.width();
-    let (ca, sa) = ((-s.angle).to_radians().cos(), (-s.angle).to_radians().sin());
-    // (Le panoramique en perspective fait glisser toute la scène d'autant, à peu près : la caméra tourne sur elle-même.)
-    let dx = s.dx + s.pan.to_radians().tan() * crate::camera::REF_FOCAL / 36.0;
-    let trait_w = (w / 110.0).max(1.0);
+    let (cx, cy) = (CADRE[0] as f32 / 2.0, CADRE[1] as f32 / 2.0);
+    let echelle = w / CADRE[0] as f32;
+    // (Un point derrière la caméra, ou si près d'elle qu'il partirait à l'infini, n'est pas dessiné.)
+    let ecran = |x: f32, y: f32, z: f32| -> Option<Pos2> {
+        let [u, v] = camespace::image_de(cam, CADRE, point_de_la_scene(x, y, z))?;
+        let q = pos2(r.center().x + (u - cx) * echelle, r.center().y + (v - cy) * echelle);
+        (q.x.abs() < 1e5 && q.y.abs() < 1e5).then_some(q)
+    };
+    let stroke = Stroke::new((w / 110.0).max(1.0), ENCRE);
     for t in scene() {
-        // Une avancée fait grandir chaque trait selon sa profondeur (le plan de référence d'autant que l'avancée).
-        let reste = t.profondeur + 1.0 / s.avance.max(1e-3);
-        if reste < 0.05 {
-            continue;
-        }
-        let k = s.zoom * (1.0 + t.profondeur) / reste;
-        let vers = |(x, y): (f32, f32)| -> Pos2 {
-            let (x, y) = ((x - dx) * k, (y - s.dy) * k);
-            let (x, y) = (x * ca - y * sa, x * sa + y * ca);
-            pos2(r.center().x + x * w, r.center().y + y * w)
-        };
-        let pts: Vec<Pos2> = t.points.iter().copied().map(vers).collect();
+        let z = t.profondeur;
+        let pts: Vec<Option<Pos2>> = t.points.iter().map(|&(x, y)| ecran(x, y, z)).collect();
         match (t.teinte, t.jusqu_a) {
             (Some(c), Some(bas)) => {
                 for w2 in t.points.windows(2) {
                     let (a, b) = (w2[0], w2[1]);
-                    painter.add(egui::Shape::convex_polygon(vec![vers(a), vers(b), vers((b.0, bas)), vers((a.0, bas))], c, Stroke::NONE));
+                    if let (Some(p1), Some(p2), Some(p3), Some(p4)) = (ecran(a.0, a.1, z), ecran(b.0, b.1, z), ecran(b.0, bas, z), ecran(a.0, bas, z)) {
+                        painter.add(egui::Shape::convex_polygon(vec![p1, p2, p3, p4], c, Stroke::NONE));
+                    }
                 }
             }
             (Some(c), None) => {
-                painter.add(egui::Shape::convex_polygon(pts.clone(), c, Stroke::NONE));
+                if let Some(tous) = pts.iter().copied().collect::<Option<Vec<Pos2>>>() {
+                    painter.add(egui::Shape::convex_polygon(tous, c, Stroke::NONE));
+                }
             }
             _ => {}
         }
-        let stroke = Stroke::new(trait_w, ENCRE);
-        if t.ferme {
-            painter.add(egui::Shape::closed_line(pts, stroke));
-        } else {
-            painter.add(egui::Shape::line(pts, stroke));
+        if t.ferme && pts.iter().all(|p| p.is_some()) {
+            painter.add(egui::Shape::closed_line(pts.iter().flatten().copied().collect(), stroke));
+            continue;
+        }
+        // Le trait, en morceaux là où il passe derrière la caméra.
+        let mut morceau: Vec<Pos2> = Vec::new();
+        let boucle = if t.ferme { pts.first() } else { None };
+        for p in pts.iter().chain(boucle) {
+            match p {
+                Some(q) => morceau.push(*q),
+                None => {
+                    if morceau.len() >= 2 {
+                        painter.add(egui::Shape::line(std::mem::take(&mut morceau), stroke));
+                    }
+                    morceau.clear();
+                }
+            }
+        }
+        if morceau.len() >= 2 {
+            painter.add(egui::Shape::line(morceau, stroke));
         }
     }
     // Le bord du cadre, à la couleur de la caméra.
     painter.rect_stroke(r, 2.0, Stroke::new(2.0_f32, theme::camera()), StrokeKind::Inside);
 }
 
-/// Les vignettes de `presets`, côte à côte : chacune joue son mouvement au survol, se glisse vers la timeline (charge
-/// `PresetDrag`) ; rend le préréglage cliqué.
-fn vignettes(ui: &mut egui::Ui, presets: impl Iterator<Item = Preset>, fps: u32, maintenant: f32) -> Option<Preset> {
+/// Une vignette du panneau : un préréglage d'effet de caméra, ou une trajectoire toute faite (partie 172).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Tuile {
+    Effet(Preset),
+    Forme(Forme),
+}
+
+impl Tuile {
+    fn label(self) -> &'static str {
+        match self {
+            Tuile::Effet(p) => p.label(),
+            Tuile::Forme(f) => f.label(),
+        }
+    }
+
+    fn note(self) -> String {
+        match self {
+            Tuile::Effet(p) => format!("{} Glisse-le sur la piste Caméra de la timeline, ou clique pour le poser à la tête de lecture.", p.note()),
+            Tuile::Forme(f) => format!(
+                "{} Glisse-la sur la piste Caméra de la timeline, ou clique pour la poser à la tête de lecture : elle devient le chemin de la caméra du plan, que l'outil Trajectoire retouche dans la vue Espace 3D (poignées, flèches x, y, z).",
+                f.note()
+            ),
+        }
+    }
+
+    /// La durée de son mouvement, en images.
+    fn duree(self, fps: u32) -> usize {
+        match self {
+            Tuile::Effet(p) => Params::new(p, fps).duration.max(1),
+            Tuile::Forme(_) => ((trajformes::SECONDES * fps.max(1) as f32).round() as usize).max(1),
+        }
+    }
+
+    /// Peinte dans `r` à l'image `rel` de son mouvement.
+    fn peindre(self, painter: &egui::Painter, r: Rect, fps: u32, rel: usize) {
+        let cam = match self {
+            Tuile::Effet(p) => camera_de_vignette(p, fps, rel),
+            Tuile::Forme(f) => camera_de_forme(f, rel as f32 / self.duree(fps) as f32),
+        };
+        peindre_scene(painter, r, &cam);
+    }
+}
+
+/// Les vignettes de `tuiles`, côte à côte : chacune joue son mouvement au survol, se glisse vers la timeline (charge
+/// `PresetDrag` ou `FormeDrag`) ; rend celle qui est cliquée.
+fn vignettes(ui: &mut egui::Ui, tuiles: &[Tuile], fps: u32, maintenant: f32) -> Option<Tuile> {
     let mut pose = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(8.0, 10.0);
-        for pr in presets {
+        for &tuile in tuiles {
             let h = VIGNETTE_W * 9.0 / 16.0;
             // (Sous l'image, le nom sur deux lignes au plus : « Caméra à l'épaule (found footage) » ne déborde pas sur la voisine.)
             let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 30.0), Sense::click_and_drag());
             let img = Rect::from_min_size(rect.min, vec2(VIGNETTE_W, h));
             let id = resp.id.with("survol");
+            let duree = tuile.duree(fps);
             // Au survol, le mouvement joue en boucle depuis le moment où le pointeur est arrivé.
-            let t = if resp.hovered() && !resp.dragged() {
+            let rel = if resp.hovered() && !resp.dragged() {
                 let debut = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(id, || maintenant));
-                let duree = Params::new(pr, fps).duration.max(1) as f32 / fps.max(1) as f32;
+                let secondes = duree as f32 / fps.max(1) as f32;
                 ui.ctx().request_repaint();
-                Some((maintenant - debut) % (duree + PAUSE))
+                let t = (maintenant - debut) % (secondes + PAUSE);
+                ((t * fps as f32).floor().max(0.0) as usize).min(duree)
             } else {
                 ui.ctx().data_mut(|d| d.remove::<f32>(id));
-                None
+                // (À l'arrêt : un instant parlant, aux deux tiers du mouvement.)
+                duree * 2 / 3
             };
             if ui.is_rect_visible(rect) {
-                peindre_vignette(ui.painter(), img, pr, fps, t);
+                tuile.peindre(ui.painter(), img, fps, rel);
                 if resp.hovered() {
                     ui.painter().rect_stroke(img.expand(1.5), 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Outside);
                 }
-                let nom = ui.painter().layout(pr.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
+                let nom = ui.painter().layout(tuile.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
                 ui.painter().with_clip_rect(rect).galley(pos2(rect.left() + 2.0, img.bottom() + 3.0), nom, ui.visuals().text_color());
             }
             if resp.drag_started() {
-                egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset: pr });
+                match tuile {
+                    Tuile::Effet(preset) => egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset }),
+                    Tuile::Forme(forme) => egui::DragAndDrop::set_payload(ui.ctx(), FormeDrag { forme }),
+                }
             }
-            let resp = crate::bulles::bulle(resp, pr.label(), &format!("{} Glisse-le sur la piste Caméra de la timeline, ou clique pour le poser à la tête de lecture.", pr.note()), "");
+            let resp = crate::bulles::bulle(resp, tuile.label(), &tuile.note(), "");
             if resp.clicked() {
-                pose = Some(pr);
+                pose = Some(tuile);
             }
         }
     });
@@ -197,17 +304,26 @@ impl App {
         for famille in crate::camfx::Famille::ALL {
             ui.add_space(6.0);
             ui.label(egui::RichText::new(format!("CAMÉRA · {}", famille.label().to_uppercase())).small().strong());
-            pose = vignettes(ui, famille.presets(), fps, maintenant).or(pose);
+            let tuiles: Vec<Tuile> = famille.presets().map(Tuile::Effet).collect();
+            pose = vignettes(ui, &tuiles, fps, maintenant).or(pose);
         }
-        if let Some(pr) = pose {
-            self.ajouter_effet_camera_a_la_tete(pr);
+        // Les trajectoires toutes faites (C17, partie 172) : le chemin de la caméra du plan, à retoucher dans la vue Espace 3D.
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("CAMÉRA · TRAJECTOIRES").small().strong());
+        let formes: Vec<Tuile> = Forme::ALL.into_iter().map(Tuile::Forme).collect();
+        pose = vignettes(ui, &formes, fps, maintenant).or(pose);
+        match pose {
+            Some(Tuile::Effet(pr)) => self.ajouter_effet_camera_a_la_tete(pr),
+            Some(Tuile::Forme(f)) => self.poser_trajectoire_toute_faite_a_la_tete(f),
+            None => {}
         }
         // Le préréglage glissé suit le pointeur.
-        if let Some(drag) = egui::DragAndDrop::payload::<PresetDrag>(ui.ctx()) {
+        let glisse = egui::DragAndDrop::payload::<PresetDrag>(ui.ctx()).map(|d| d.preset.label()).or_else(|| egui::DragAndDrop::payload::<FormeDrag>(ui.ctx()).map(|d| d.forme.label()));
+        if let Some(nom) = glisse {
             if let Some(p) = ui.ctx().pointer_latest_pos() {
                 egui::Area::new(egui::Id::new("prereglage_glisse")).order(egui::Order::Tooltip).fixed_pos(p + vec2(14.0, 10.0)).interactable(false).show(ui.ctx(), |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.label(format!("{} {}", egui_phosphor::regular::VIDEO_CAMERA, drag.preset.label()));
+                        ui.label(format!("{} {nom}", egui_phosphor::regular::VIDEO_CAMERA));
                     });
                 });
             }
