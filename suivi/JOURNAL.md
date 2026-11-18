@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
+  n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
+  ouvert : rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après
+  22 s, aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa
+  place. Worktree et branche gardés (retrait proposé, sa décision).
 - **Trajectoire : une marque qu'on glisse emporte son temps** (branche `trajectoire-exposition`, la section du 2026-11-18 de la
   partie 119). Sa demande : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés
   sur la trajectoire. » Son plan 10 de « dd » (lu sans y toucher) : sept marques serrées au départ, chaque dessin exposé 8 ou 9
