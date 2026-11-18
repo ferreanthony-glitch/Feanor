@@ -623,7 +623,7 @@ fn both_kinds_of_paths_in_space_survive_a_save_and_a_reload_and_a_format_54_proj
     project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
     let texte = std::fs::read_to_string(&manifest).expect("manifeste");
     assert!(texte.contains("\"support\"") && texte.contains("\"trajectoire_camera\""), "les deux champs sont écrits");
-    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 58, "sous le format 58 (partie 171), celui de tout projet d'aujourd'hui");
+    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 59, "sous le format 59 (partie 172), celui de tout projet d'aujourd'hui");
     let relu = project::load(&manifest).expect("relu").doc;
     assert_eq!(relu.panels[0].layers[1].trajectoire.as_ref(), Some(&carte_avant), "la trajectoire de la carte revient telle quelle");
     assert_eq!(relu.panels[0].trajectoire_camera.as_ref(), Some(&camera_avant), "celle de la caméra aussi");

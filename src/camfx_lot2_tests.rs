@@ -36,7 +36,7 @@ fn run(p: &Params, start: usize, len: usize, base: Camera) -> (Plan, Vec<CameraK
 }
 
 fn lot2() -> Vec<Preset> {
-    Preset::ALL.into_iter().filter(|p| *p as u8 >= Preset::DezoomChoc as u8).collect()
+    Preset::ALL.into_iter().filter(|p| (Preset::DezoomChoc as u8..=Preset::ArretNet as u8).contains(&(*p as u8))).collect()
 }
 
 fn proche(a: f32, b: f32, ctx: &str) {
@@ -213,7 +213,7 @@ fn le_format_58_garde_la_fleche_l_angle_et_les_paliers() {
     ];
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 58"));
+    assert!(texte.contains("\"version\": 59"));
     for bout in ["\"pano_plat\"", "\"tonneau\"", "\"zoom_paliers\"", "\"seisme\"", "\"vers\"", "\"degres\": -720", "\"paliers\": 5"] {
         assert!(texte.contains(bout), "{bout} dans le projet");
     }

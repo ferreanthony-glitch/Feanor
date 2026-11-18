@@ -285,7 +285,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// servent : `vers` (la flèche ou la cible, en part de la largeur du cadre), `degres` (l'angle) et `paliers`. Une version
 /// précédente laisserait de côté, sans rien dire, un effet au nom inconnu et perdrait ces réglages : elle le refuse donc. **Un
 /// projet de version 57 ou moins s'ouvre tel quel**, avec les mêmes images.
-pub const VERSION: u32 = 58;
+/// 59 (2026-11-18, `docs/INTERFACE.md` partie 172) : **la caméra dans l'espace, lot 3 des préréglages** — quatre préréglages de
+/// plus dans `effets_camera` (`travelling_lateral`, `orbite`, `grue`, `survol`) et deux réglages facultatifs d'un effet, écrits
+/// seulement quand ils servent : `hauteur` (en hauteurs du cadre) et `avancee` (en distances de la caméra au plan de référence) ;
+/// et `vise` d'une trajectoire de caméra (les trajectoires toutes faites : le point de l'espace, en mètres, que la caméra garde à
+/// sa place dans l'image en suivant son chemin). Une version précédente laisserait de côté ces effets et cette visée : elle le
+/// refuse donc. **Un projet de version 58 ou moins s'ouvre tel quel**, avec les mêmes images.
+pub const VERSION: u32 = 59;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -682,6 +688,12 @@ struct EffetCameraEntry {
     /// Le nombre de paliers (format 58) ; absent : `camfx::PALIERS`.
     #[serde(default = "paliers_d_origine", skip_serializing_if = "sont_les_paliers_d_origine")]
     paliers: u32,
+    /// La hauteur, en hauteurs du cadre (format 59 : la grue, le survol).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    hauteur: f32,
+    /// L'avancée au-dessus du sol, en distances de la caméra au plan de référence (format 59 : le survol).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    avancee: f32,
 }
 
 fn est_nul(v: &f32) -> bool {
@@ -2666,6 +2678,8 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 vers: v.params.vers,
                 degres: v.params.degres,
                 paliers: v.params.paliers,
+                hauteur: v.params.hauteur,
+                avancee: v.params.avancee,
             })
             .collect(),
         marques: panel
@@ -3592,6 +3606,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                                 vers: e.vers,
                                 degres: e.degres,
                                 paliers: e.paliers,
+                                hauteur: e.hauteur,
+                                avancee: e.avancee,
                             };
                             Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
                         })

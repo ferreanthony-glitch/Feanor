@@ -25,8 +25,14 @@
 //! véhicule, houle, respiration, recadrage sec, arrêt net. Ceux qui posent peu de clés suivent une courbe (`courbe_de`) aux
 //! adoucis de clés ordinaires ; ceux qui vont quelque part ont une flèche ou une cible (`Params::vers`), tirée dans le cadre
 //! avec l'outil Caméra (`effetpoignee.rs`).
+//!
+//! Le lot 3 (partie 172, Anthony, 2026-11-18 : « Oui, le lot 3 ») fait bouger la caméra **dans l'espace** : travelling
+//! latéral (C13), orbite (C14), grue (C15), survol (C16). Leur œil se déplace pour de bon (`camespace.rs`) : chaque calque
+//! glisse à sa vitesse selon sa profondeur, la caméra peut passer à côté d'un dessin, au-dessus, derrière. Ils ne sont pas
+//! bridés à ce qui voit la feuille (`Preset::dans_l_espace`) ; leur plan le retient (`Panel::camera_libre`).
 
 use crate::camera::{self, Camera, CameraKey};
+use crate::camespace;
 
 /// Les préréglages proposés.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,6 +99,15 @@ pub enum Preset {
     Recadrage,
     /// Arrêt net (C27) : la caméra glisse à vitesse constante et se fige.
     ArretNet,
+    // Lot 3 (partie 172, 2026-11-18) : la caméra dans l'espace.
+    /// Travelling latéral (C13) : l'œil se déplace de côté, chaque calque glisse à sa vitesse.
+    TravellingLateral,
+    /// Orbite (C14) : la caméra tourne autour du sujet, qui reste à sa place dans l'image.
+    Orbite,
+    /// Grue (C15) : la caméra monte en basculant, le sujet reste à sa place dans l'image.
+    Grue,
+    /// Survol (C16) : la caméra s'élève, bascule vers le sol et avance.
+    Survol,
 }
 
 /// Les familles du panneau Préréglages et des listes (les titres de la page de choix du 18 novembre 2026).
@@ -100,18 +115,21 @@ pub enum Preset {
 pub enum Famille {
     Zooms,
     Panoramiques,
+    /// Le lot 3 (partie 172) : la caméra se déplace dans l'espace.
+    Travellings,
     Rotations,
     Secousses,
     Coupes,
 }
 
 impl Famille {
-    pub const ALL: [Famille; 5] = [Famille::Zooms, Famille::Panoramiques, Famille::Rotations, Famille::Secousses, Famille::Coupes];
+    pub const ALL: [Famille; 6] = [Famille::Zooms, Famille::Panoramiques, Famille::Travellings, Famille::Rotations, Famille::Secousses, Famille::Coupes];
 
     pub fn label(self) -> &'static str {
         match self {
             Famille::Zooms => "Zooms et avancées",
             Famille::Panoramiques => "Panoramiques",
+            Famille::Travellings => "Travellings",
             Famille::Rotations => "Rotations",
             Famille::Secousses => "Secousses",
             Famille::Coupes => "Coupes dans le plan",
@@ -135,11 +153,13 @@ pub enum Poignee {
     Depart,
     /// La caméra va vers ce point de l'image.
     Cible,
+    /// Le sujet : le point de l'image que la caméra garde à sa place pendant qu'elle bouge (orbite, grue, partie 172).
+    Sujet,
 }
 
 impl Preset {
     /// Tous les préréglages, rangés par famille (`Famille`).
-    pub const ALL: [Preset; 30] = [
+    pub const ALL: [Preset; 34] = [
         Preset::ZoomIn,
         Preset::ZoomOut,
         Preset::CrashZoom,
@@ -156,6 +176,10 @@ impl Preset {
         Preset::PanoDepassement,
         Preset::PanoDecouverte,
         Preset::PanoRotation,
+        Preset::TravellingLateral,
+        Preset::Orbite,
+        Preset::Grue,
+        Preset::Survol,
         Preset::Penche,
         Preset::Tonneau,
         Preset::Shoulder,
@@ -204,6 +228,10 @@ impl Preset {
             Preset::Respiration => "Respiration",
             Preset::Recadrage => "Recadrage sec",
             Preset::ArretNet => "Arrêt net",
+            Preset::TravellingLateral => "Travelling latéral",
+            Preset::Orbite => "Orbite",
+            Preset::Grue => "Grue",
+            Preset::Survol => "Survol",
         }
     }
 
@@ -216,6 +244,7 @@ impl Preset {
             Penche | Tonneau => Famille::Rotations,
             Shoulder | LightShake | Explosion | Jolt | Seisme | PasLourds | Marche | Vehicule | Houle | Respiration => Famille::Secousses,
             Recadrage | ArretNet => Famille::Coupes,
+            TravellingLateral | Orbite | Grue | Survol => Famille::Travellings,
         }
     }
 
@@ -224,8 +253,9 @@ impl Preset {
         use Preset::*;
         match self {
             DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | Recadrage => Poignee::Cible,
-            KenBurns | PanoPlat | ZipPan | PanoDepassement | Vehicule | ArretNet => Poignee::Fleche,
+            KenBurns | PanoPlat | ZipPan | PanoDepassement | Vehicule | ArretNet | TravellingLateral => Poignee::Fleche,
             PanoDecouverte => Poignee::Depart,
+            Orbite | Grue => Poignee::Sujet,
             _ => Poignee::Aucune,
         }
     }
@@ -253,7 +283,25 @@ impl Preset {
 
     /// Se règle par un angle (`Params::degres`).
     pub fn a_degres(self) -> bool {
-        matches!(self, Preset::PanoRotation | Preset::Penche | Preset::Tonneau)
+        matches!(self, Preset::PanoRotation | Preset::Penche | Preset::Tonneau | Preset::Orbite | Preset::Survol)
+    }
+
+    /// Se règle par une hauteur (`Params::hauteur`, partie 172) : la grue et le survol.
+    pub fn a_hauteur(self) -> bool {
+        matches!(self, Preset::Grue | Preset::Survol)
+    }
+
+    /// Se règle par une avancée au-dessus du sol (`Params::avancee`, partie 172) : le survol.
+    pub fn a_avancee(self) -> bool {
+        self == Preset::Survol
+    }
+
+    /// **Déplace la caméra dans l'espace** (le lot 3, partie 172) : son œil va de côté, autour du sujet, en hauteur, au-dessus
+    /// du sol. Elle n'est pas bridée à ce qui voit la feuille (`Camera::limited`), et le plan qui porte l'effet passe par le
+    /// changement de repère aux images où elle en sort (`Document::repere_du_plan`), comme une caméra posée dans la vue de la
+    /// scène.
+    pub fn dans_l_espace(self) -> bool {
+        self.famille() == Famille::Travellings
     }
 
     /// Se règle par un nombre de paliers.
@@ -318,6 +366,11 @@ impl Preset {
             Preset::Respiration => "respiration",
             Preset::Recadrage => "recadrage",
             Preset::ArretNet => "arret_net",
+            // (Format 59, partie 172.)
+            Preset::TravellingLateral => "travelling_lateral",
+            Preset::Orbite => "orbite",
+            Preset::Grue => "grue",
+            Preset::Survol => "survol",
         }
     }
 
@@ -359,6 +412,10 @@ impl Preset {
             Preset::Respiration => "Une dérive infime, à peine un souffle, pour qu'un plan fixe ne soit pas mort. Une clé toutes les 4 images.",
             Preset::Recadrage => "Un saut de cadre sur une seule image, vers la cible, dans le même plan. Deux clés, et une calme juste avant.",
             Preset::ArretNet => "La caméra glisse à vitesse constante dans le sens de la flèche et se fige d'un coup. Deux clés.",
+            Preset::TravellingLateral => "La caméra se déplace de côté, dans le sens de la flèche : ce qui est près passe vite, le lointain à peine. Elle suit ses propres axes, même tournée. Deux clés.",
+            Preset::Orbite => "La caméra tourne autour du sujet, qui reste à sa place dans l'image : on voit les dessins de biais, puis de côté. Positif : elle passe à sa droite. Une clé par image.",
+            Preset::Grue => "La caméra monte en basculant vers le bas : le sujet reste à sa place dans l'image, on le découvre d'en haut. Une hauteur négative la fait descendre. Une clé par image.",
+            Preset::Survol => "La caméra s'élève, bascule vers le sol et avance au-dessus des dessins, comme un drone. Deux clés.",
         }
     }
 
@@ -401,6 +458,8 @@ impl Preset {
             Preset::Respiration => 8.0,
             Preset::Recadrage => 1.0,
             Preset::ArretNet => 2.0,
+            Preset::TravellingLateral | Preset::Grue => 3.6,
+            Preset::Orbite | Preset::Survol => 4.5,
         }
     }
 
@@ -444,6 +503,8 @@ impl Preset {
             Preset::PanoRotation => 35.0,
             Preset::Penche => 14.0,
             Preset::Tonneau => 360.0,
+            Preset::Orbite => 40.0,
+            Preset::Survol => 20.0,
             _ => 0.0,
         }
     }
@@ -460,8 +521,23 @@ impl Preset {
             Preset::PanoDecouverte => [0.0, -0.45],
             Preset::Vehicule => [0.3, 0.0],
             Preset::ArretNet => [0.4, 0.0],
+            Preset::TravellingLateral => [0.5, 0.0],
             _ => [0.0, 0.0],
         }
+    }
+
+    /// Hauteur proposée (`a_hauteur`), en hauteurs du cadre filmé au plan de référence.
+    pub fn default_hauteur(self) -> f32 {
+        match self {
+            Preset::Grue => 1.5,
+            Preset::Survol => 0.8,
+            _ => 0.0,
+        }
+    }
+
+    /// Avancée proposée (`a_avancee`), en distances de la caméra au plan de référence (1 : elle arrive au-dessus des dessins).
+    pub fn default_avancee(self) -> f32 {
+        if self == Preset::Survol { 1.6 } else { 0.0 }
     }
 
     /// Écart entre deux clés, en images, avant le plafond du nombre de clés (`usize::MAX` : les clés de sa courbe, ou les
@@ -471,6 +547,8 @@ impl Preset {
             Preset::Shoulder | Preset::Marche | Preset::Houle => 2,
             Preset::LightShake | Preset::Explosion | Preset::Jolt | Preset::Seisme | Preset::PasLourds | Preset::Vehicule => 1,
             Preset::Respiration => 4,
+            // (L'orbite et la grue tournent la caméra autour du sujet : une courbe, qu'une clé par image suit exactement.)
+            Preset::Orbite | Preset::Grue => 1,
             _ => usize::MAX,
         }
     }
@@ -500,6 +578,11 @@ pub struct Params {
     pub degres: f32,
     /// Nombre d'à-coups du zoom par paliers.
     pub paliers: u32,
+    /// De combien la caméra monte (`Preset::a_hauteur`, partie 172), en hauteurs du cadre filmé au plan de référence ;
+    /// négatif : elle descend.
+    pub hauteur: f32,
+    /// De combien elle avance au-dessus du sol (`Preset::a_avancee`), en distances de la caméra au plan de référence.
+    pub avancee: f32,
 }
 
 /// Plafond du nombre de clés posées d'un coup (un effet très long espace ses clés).
@@ -523,6 +606,8 @@ impl Params {
             vers: preset.default_vers(),
             degres: preset.default_degres(),
             paliers: PALIERS,
+            hauteur: preset.default_hauteur(),
+            avancee: preset.default_avancee(),
         }
     }
 
@@ -544,6 +629,8 @@ impl Params {
             vers: [ok(self.vers[0], -VERS_MAX, VERS_MAX, d[0]), ok(self.vers[1], -VERS_MAX, VERS_MAX, d[1])],
             degres: ok(self.degres, -DEGRES_MAX, DEGRES_MAX, self.preset.default_degres()),
             paliers: self.paliers.clamp(1, PALIERS_MAX),
+            hauteur: ok(self.hauteur, -HAUTEUR_MAX, HAUTEUR_MAX, self.preset.default_hauteur()),
+            avancee: ok(self.avancee, 0.0, AVANCEE_MAX, self.preset.default_avancee()),
             ..*self
         }
     }
@@ -552,6 +639,9 @@ impl Params {
 /// Bornes de la flèche (en largeurs de cadre) et de l'angle (en degrés : trois tours).
 pub const VERS_MAX: f32 = 4.0;
 pub const DEGRES_MAX: f32 = 1080.0;
+/// Bornes de la hauteur (en hauteurs de cadre) et de l'avancée au-dessus du sol (en distances de la caméra), partie 172.
+pub const HAUTEUR_MAX: f32 = 50.0;
+pub const AVANCEE_MAX: f32 = 50.0;
 
 /// Une clé d'effet : le décalage ajouté à la caméra de base à l'image `frame` (comptée depuis le
 /// début de l'effet).
@@ -573,6 +663,24 @@ pub struct Sample {
     /// Avancée de la caméra : sa distance au plan de référence est divisée par ce facteur (1 : inchangée ; plus grand : elle
     /// avance, le plan de référence grandit d'autant).
     pub avance: f32,
+    // La caméra dans l'espace (partie 172, `Preset::dans_l_espace`) ; `plan` les applique à la caméra de chaque image.
+    /// L'œil se déplace de côté (travelling latéral) : dans l'image, en part de la largeur du cadre filmé.
+    pub lateral: [f32; 2],
+    /// L'œil tourne autour du sujet, en degrés (orbite).
+    pub orbite: f32,
+    /// L'œil monte, en hauteurs du cadre filmé (grue, survol).
+    pub monte: f32,
+    /// L'œil avance au-dessus du sol, en distances de la caméra au plan de référence (survol).
+    pub avant: f32,
+    /// Bascule ajoutée, en degrés (survol : négative, vers le sol).
+    pub bascule: f32,
+}
+
+impl Sample {
+    /// Rien d'ajouté à la caméra, à l'image `frame` de l'effet.
+    pub fn neutre(frame: usize) -> Sample {
+        Sample { frame, dx: 0.0, dy: 0.0, angle: 0.0, zoom: 1.0, ease_in: 0.0, ease_out: 0.0, pan: 0.0, avance: 1.0, lateral: [0.0, 0.0], orbite: 0.0, monte: 0.0, avant: 0.0, bascule: 0.0 }
+    }
 }
 
 /// Les bornes de ce qu'un effet peut ajouter à la caméra.
@@ -716,7 +824,9 @@ fn courbe_de(p: &Params, fps: f32) -> Vec<Cle> {
         // (Le dézoom choc part serré et ralentit en arrivant, comme le zoom choc à l'envers.)
         DezoomChoc => deux(1.0, 0.0, 0.0, df),
         ZoomTension => deux(0.0, 1.0, 0.3 * df, 0.3 * df),
-        ZoomPoint | TravellingAvant | TravellingArriere | PanoPlat | PanoRotation | Penche => deux(0.0, 1.0, 0.5 * df, 0.5 * df),
+        ZoomPoint | TravellingAvant | TravellingArriere | PanoPlat | PanoRotation | Penche | TravellingLateral => deux(0.0, 1.0, 0.5 * df, 0.5 * df),
+        // (Le survol décolle doucement, puis file à vitesse constante jusqu'au bout.)
+        Survol => deux(0.0, 1.0, 0.4 * df, 0.0),
         KenBurns => deux(0.0, 1.0, 0.15 * df, 0.15 * df),
         PanoDecouverte => deux(1.0, 0.0, 0.3 * df, 0.6 * df),
         // (Le tonneau accélère jusqu'au bout.)
@@ -857,7 +967,7 @@ impl Generator {
         let p = &self.p;
         let [vx, vy] = p.vers;
         let f = p.zoom_factor;
-        let mut s = Sample { frame, dx: 0.0, dy: 0.0, angle: 0.0, zoom: 1.0, ease_in: 0.0, ease_out: 0.0, pan: 0.0, avance: 1.0 };
+        let mut s = Sample::neutre(frame);
         match p.preset {
             // (Le centre va vers la cible pendant que le cadre se resserre : à l'arrivée, la cible est au centre.)
             DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | Recadrage | KenBurns => {
@@ -876,6 +986,14 @@ impl Generator {
             Tonneau => {
                 s.angle = p.degres * e;
                 s.zoom = f.powf(e);
+            }
+            TravellingLateral => s.lateral = [vx * e, vy * e],
+            Orbite => s.orbite = p.degres * e,
+            Grue => s.monte = p.hauteur * e,
+            Survol => {
+                s.monte = p.hauteur * e;
+                s.avant = p.avancee * e;
+                s.bascule = -p.degres * e;
             }
             _ => {}
         }
@@ -915,7 +1033,7 @@ impl Generator {
         let last = frame == self.p.duration;
         let t = frame as f32 / self.fps;
         let total = self.p.duration as f32 / self.fps;
-        let neutral = Sample { frame, dx: 0.0, dy: 0.0, angle: 0.0, zoom: 1.0, ease_in: 0.0, ease_out: 0.0, pan: 0.0, avance: 1.0 };
+        let neutral = Sample::neutre(frame);
         if !self.courbe.is_empty() {
             return self.sur_la_courbe(frame);
         }
@@ -930,6 +1048,12 @@ impl Generator {
         // Où en est l'effet, de 0 à 1.
         let u = frame as f32 / self.p.duration.max(1) as f32;
         match self.p.preset {
+            // (L'orbite et la grue : adoucies au départ et à l'arrivée, une clé par image le long de leur courbe.)
+            Preset::Orbite | Preset::Grue => {
+                let dur = self.p.duration.max(1) as f32;
+                let e = if last { 1.0 } else { camera::ease(frame as f32 / dur, dur, 0.5 * dur, 0.5 * dur) };
+                self.pose(e, frame)
+            }
             Preset::Seisme => {
                 if last {
                     return neutral;
@@ -1187,7 +1311,12 @@ pub fn plan(g: &Generator, frame: [usize; 2], start: usize, plan_len: usize, ext
         } else {
             (s.dx, s.dy)
         };
-        let cam = Camera { x: b.x + ox * width, y: b.y + oy * width, angle: b.angle + s.angle, zoom, dolly, pan: b.pan + s.pan, ..b }.limited(frame);
+        let cam = if g.params().preset.dans_l_espace() {
+            // (La caméra dans l'espace, partie 172 : ni bridée à ce qui voit la feuille, ni à la borne de `distance`.)
+            dans_l_espace(g.params(), &s, &b, frame)
+        } else {
+            Camera { x: b.x + ox * width, y: b.y + oy * width, angle: b.angle + s.angle, zoom, dolly, pan: b.pan + s.pan, ..b }.limited(frame)
+        };
         out.keys.push(PlannedKey { frame: at, cam, ease_in: (s.ease_in > 0.0).then_some(s.ease_in), ease_out: (s.ease_out > 0.0).then_some(s.ease_out) });
     }
     if g.abrupt() && start > 0 {
@@ -1197,6 +1326,40 @@ pub fn plan(g: &Generator, frame: [usize; 2], start: usize, plan_len: usize, ext
         out.home = Some((0, base(0)));
     }
     out
+}
+
+/// La caméra `b` d'une image, déplacée dans l'espace par l'avancement `s` d'un préréglage du lot 3 (`Preset::dans_l_espace`,
+/// partie 172). Le sujet de l'orbite et de la grue est le point de l'image `p.vers`, au plan de référence, vu par `b` : il
+/// reste à cette place dans l'image.
+pub(crate) fn dans_l_espace(p: &Params, s: &Sample, b: &Camera, frame: [usize; 2]) -> Camera {
+    let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+    let mag = b.magnification(frame).max(1e-3);
+    // Le cadre filmé au plan de référence, en pixels de la feuille.
+    let (largeur, hauteur) = (fw / mag, fh / mag);
+    let (u0, v0) = (fw / 2.0 + p.vers[0] * fw, fh / 2.0 + p.vers[1] * fw);
+    match p.preset {
+        Preset::TravellingLateral => {
+            let (droite, bas) = camespace::axes_de_l_image(b);
+            let d = [0, 1, 2].map(|i| (s.lateral[0] * droite[i] + s.lateral[1] * bas[i]) * largeur);
+            camespace::deplacer(b, frame, d)
+        }
+        Preset::Orbite => {
+            let sujet = camespace::point_vu(b, frame, u0, v0);
+            camespace::tourner_autour(b, frame, sujet, s.orbite)
+        }
+        Preset::Grue => {
+            let sujet = camespace::point_vu(b, frame, u0, v0);
+            let montee = camespace::deplacer(b, frame, [0.0, s.monte * hauteur, 0.0]);
+            camespace::viser(&montee, frame, sujet, u0, v0).unwrap_or(montee)
+        }
+        Preset::Survol => {
+            let devant = camespace::devant_a_plat(b);
+            let pas = s.avant * b.distance(frame);
+            let c = camespace::deplacer(b, frame, [devant[0] * pas, s.monte * hauteur, devant[2] * pas]);
+            Camera { tilt: b.tilt + s.bascule, ..c }
+        }
+        _ => *b,
+    }
 }
 
 // ---------------------------------------------------------------------- l'effet vivant
@@ -1255,7 +1418,7 @@ pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys
     };
     let p = &v.params;
     (p.preset as u8, p.intensity.to_bits(), p.duration, p.freq.to_bits(), p.seed, p.zoom_factor.to_bits(), p.punch, v.start).hash(&mut h);
-    (p.vers[0].to_bits(), p.vers[1].to_bits(), p.degres.to_bits(), p.paliers).hash(&mut h);
+    (p.vers[0].to_bits(), p.vers[1].to_bits(), p.degres.to_bits(), p.paliers, p.hauteur.to_bits(), p.avancee.to_bits()).hash(&mut h);
     (fps, frame, plan_len, keys.len()).hash(&mut h);
     for k in keys {
         (k.frame, k.smooth, k.ease_in.to_bits(), k.ease_out.to_bits()).hash(&mut h);

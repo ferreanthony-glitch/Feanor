@@ -363,6 +363,12 @@ pub struct Trajectoire {
     /// Les hauteurs des points du chemin brut (`brut`), quand le chemin est lissé : lissées avec lui.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hauteurs_brut: Vec<f32>,
+    /// **La caméra garde son sujet dans le cadre** (partie 172, format 59 ; les trajectoires toutes faites du lot 3) : le point
+    /// de l'espace (mètres) que la caméra qui suit ce chemin voit toujours à la même place de l'image, celle où elle le voit
+    /// sans le chemin. Elle tourne donc (panoramique et bascule) en avançant. Rien : elle garde son orientation, comme toujours.
+    /// Seule une trajectoire de caméra s'en sert.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vise: Option<[f32; 3]>,
 }
 
 /// À lissage 1, la demi-fenêtre de la moyenne glissante (`lissage_de`), en fraction de la longueur du chemin.
@@ -413,6 +419,7 @@ impl Trajectoire {
             poignees: Vec::new(),
             hauteurs: Vec::new(),
             hauteurs_brut: Vec::new(),
+            vise: None,
         })
     }
 
@@ -475,6 +482,10 @@ impl Trajectoire {
     /// Le plan porteur vu dans un miroir dressé en x = `x` (`Support::miroir_x`) : la normale du plan s'y retourne, les
     /// hauteurs changent de signe pour que le chemin reste du même côté.
     pub fn miroir_x(&mut self, x: f32) {
+        // (Le sujet visé passe de l'autre côté avec le reste, partie 172.)
+        if let Some(v) = self.vise.as_mut() {
+            v[0] = 2.0 * x - v[0];
+        }
         if let Some(s) = self.support {
             self.support = Some(s.miroir_x(x));
             for h in self.hauteurs.iter_mut().chain(self.hauteurs_brut.iter_mut()) {
@@ -700,6 +711,8 @@ impl Trajectoire {
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
     /// bornes, ses temps dans les leurs. Rien si le chemin ne tient pas debout.
     pub fn assainie(mut self) -> Option<Trajectoire> {
+        // (Un sujet visé abîmé est laissé : la caméra garde alors son orientation, partie 172.)
+        self.vise = self.vise.filter(|v| v.iter().all(|x| x.is_finite() && x.abs() < 1e6));
         // (Les hauteurs hors du plan, partie 154, suivent leurs points ; une par point, finies, ou aucune.)
         (self.points, self.hauteurs) = filtrer3(&self.points, &self.hauteurs);
         if self.points.len() < 2 || longueur_de(&self.points) < LONGUEUR_MIN {

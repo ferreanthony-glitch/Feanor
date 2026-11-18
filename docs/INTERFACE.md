@@ -14453,3 +14453,108 @@ Les vingt-deux, par famille (son numéro, son nom, ce qu'il fait, ce qui se règ
 9. « Convertir en clés » sur un plan à plusieurs blocs : l'image ne change pas.
 10. Enregistrer, rouvrir : les blocs et leurs flèches reviennent. (Le projet passe au format 58, refusé par son FEANOR habituel
     tant que ce n'est pas fusionné.)
+
+## 172. Les préréglages dans la timeline, lot 3 : la caméra dans l'espace (2026-11-18, branche `prereglages-travellings`)
+
+Anthony : « Oui, le lot 3 ». C'est le lot 3 de la liste de la partie 170 : C13 à C17, les mouvements de caméra dans l'espace.
+Quatre préréglages de plus en blocs vivants (C13 à C16) et quatre trajectoires toutes faites (C17), qui deviennent le chemin
+de la caméra du plan.
+
+Le code : `src/camespace.rs` (nouveau : l'œil de la caméra, ses axes, le rayon d'un point de l'image, la visée), `src/camfx.rs`
+(les quatre préréglages, leur famille, leur calcul dans l'espace), `src/trajformes.rs` (nouveau : les trajectoires toutes
+faites), `src/trajectoire.rs` (`Trajectoire::vise`), `src/document.rs` (la caméra libérée par un effet, la visée du sujet sur
+le chemin), `src/blocscamera.rs` (la barre du chemin de la caméra dans la timeline), `src/panneauprereglages.rs` (les vignettes
+filmées par la vraie caméra, la famille Trajectoires), `src/camfxui.rs` et `src/effetpoignee.rs` (les champs, la poignée du
+sujet), `src/trajectoire3d.rs` (le sujet dans la vue Espace 3D), `src/project.rs` (format 59). Les essais :
+`src/camfx_lot3_tests.rs` ; ceux qui citaient le format 58 passent à 59.
+
+### 172.1 Ce qui change pour lui
+
+| | Nom | Ce qu'il fait | Se règle |
+|---|---|---|---|
+| C13 | Travelling latéral | La caméra se déplace de côté dans le sens de la flèche : ce qui est près passe vite, le lointain à peine. Elle suit ses propres axes, même tournée | Flèche |
+| C14 | Orbite | La caméra tourne autour du sujet, qui reste à sa place dans l'image : les dessins se voient de biais, puis de côté | Sujet, Angle (positif : elle passe à sa droite) |
+| C15 | Grue | La caméra monte en basculant vers le bas, le sujet reste à sa place dans l'image | Sujet, Hauteur (négative : elle descend) |
+| C16 | Survol | La caméra s'élève, bascule vers le sol et avance au-dessus des dessins, comme un drone | Hauteur, Bascule, Avancée |
+| C17 | Trajectoires toutes faites | Ligne droite, Arc, Spirale, En S : le chemin de la caméra du plan, qui garde son sujet dans le cadre ; il se retouche avec l'outil Trajectoire dans la vue Espace 3D | Tout ce que règle l'outil Trajectoire |
+
+- **La famille « Travellings »** partout où sont les autres (panneau Préréglages, liste du panneau Caméra, menu « Ajouter un
+  effet ») ; **la famille « Trajectoires »** dans le panneau Préréglages seulement (ce ne sont pas des effets).
+- **Ils bougent vraiment la caméra dans l'espace** : elle peut passer à côté d'un dessin, au-dessus, derrière, comme une
+  caméra posée dans la vue de la scène. Le plan le retient (sa caméra est libre) : aux images où elle sort de ce que voyait la
+  feuille, l'image passe par le changement de repère (partie 159) ; aux autres, rien ne change. Aucun mot de 3D hors de la vue
+  de la scène : « travelling », « orbite », « grue », « survol » sont des mots de tournage.
+- **La poignée**, avec l'outil Caméra : la flèche du travelling latéral, comme au lot 2 ; pour l'orbite et la grue, un viseur
+  « Sujet » à tirer sur ce que la caméra doit garder à sa place (un visage), sans cadre d'arrivée. Le même dans le petit cadre
+  du panneau Caméra. Champs nouveaux : « Hauteur » (en hauteurs du cadre), « Avancée » du survol (en distances de la caméra aux
+  dessins : 1, elle arrive au-dessus d'eux), « Bascule » du survol, « Angle » de l'orbite.
+- **Une trajectoire toute faite** (glissée sur la piste Caméra, ou cliquée : à la tête de lecture) devient le chemin de la
+  caméra du plan, de la tête de lecture à 4 secondes plus loin (ou la fin du plan), et remplace celui d'avant (Ctrl+Z le rend).
+  Elle est posée à plat, à la hauteur de l'œil, mesurée à la distance du sujet : l'arc fait un sixième de tour autour de lui, la
+  spirale tourne en se rapprochant et en montant, le S avance vers lui en ondulant, la ligne droite passe de côté. Cinq marques,
+  plus serrées aux deux bouts, la font partir et arriver doucement. **La caméra garde son sujet dans le cadre** : le point
+  qu'elle voit au centre du cadre au départ reste au centre, elle tourne en avançant.
+- **Dans la timeline, la barre « Chemin de la caméra »** sous les blocs, en contour : son corps glisse le chemin dans le temps,
+  ses bords recalent son départ ou sa fin (le temps des marques suit) ; clic droit : « La caméra garde son sujet dans le
+  cadre » (à cocher ou non) et « Retirer le chemin de la caméra ». Un chemin tracé à la main dans la vue Espace 3D y a sa barre
+  aussi.
+- **Dans la vue Espace 3D**, avec l'outil Trajectoire et la caméra choisie : la même case « La caméra garde son sujet dans le
+  cadre » dans les réglages, et un viseur « Sujet de la caméra » à sa place dans l'espace. Retracer le chemin garde le sujet.
+- **Les vignettes sont filmées par la vraie caméra** de l'effet, en perspective, chaque trait à sa profondeur : l'orbite, la
+  grue et le survol s'y voient tels que le plan les filmera. Celles des lots 1 et 2 aussi : un panoramique à plat y montre
+  désormais la parallaxe qu'il a dans le plan (le rocher passe plus vite que les montagnes).
+- Comme aux lots 1 et 2 : chacun est un bloc vivant, sans clé, et « Convertir en clés » donne exactement la même image (l'essai
+  de la partie 129 passe sur les trente-quatre). L'orbite et la grue posent une clé par image (leur courbe), le travelling
+  latéral et le survol deux.
+
+### 172.2 Comment c'est fait
+
+- **`camespace.rs`** compte la caméra du plan dans l'espace, en pixels de la feuille, avec les conventions de
+  `Camera::homography` et de `Monde::repere_camera` : l'œil en (x, −y, d0 − avancée), sans la borne de `Camera::distance` ; ses
+  axes (droite, haut, arrière) ; le rayon d'un point de l'image ; `image_de` (où elle voit un point) ; `point_vu` (le point du
+  plan de référence qu'elle voit en un point de l'image) ; `viser` (le panoramique et la bascule qui montrent un point à une
+  place donnée de l'image, la bascule la plus proche de la sienne) ; `tourner_autour` (la caméra entière tournée autour d'une
+  verticale).
+- **`camfx::dans_l_espace`** applique l'avancement d'un préréglage du lot 3 à la caméra de chaque image : l'œil déplacé selon
+  les axes de l'image (travelling latéral), tourné autour du sujet (orbite), monté puis visé sur le sujet (grue), monté et
+  avancé à plat, bascule ajoutée (survol). Le sujet est le point du plan de référence vu à `Params::vers`. Ces préréglages ne
+  passent pas par `Camera::limited` (`Preset::dans_l_espace`). `Params::hauteur` et `Params::avancee` sont nouveaux.
+- **La caméra libérée** : `Panel::a_un_effet_dans_l_espace` compte comme `camera_libre` dans `Document::repere_d_un_plan`, et
+  poser un tel effet (bloc, liste, menu) met `camera_libre` au plan, comme la vue de la scène.
+- **La visée du chemin** : `Trajectoire::vise` (mètres) ; `Document::camera_sur_la_trajectoire_de` tourne la caméra portée par le
+  chemin pour voir le sujet là où la caméra des clés le voit, `camera_hors_de_sa_trajectoire` fait le même chemin en sens
+  inverse (régler la caméra à une image écrit toujours la bonne clé). Sans déplacement (avant le départ), la caméra des clés au
+  bit près. Le miroir gauche-droite retourne le sujet ; un sujet abîmé dans un fichier est laissé.
+- **`trajformes.rs`** : la forme en points dans un plan à plat porté par l'œil, axes vers la droite et vers le sujet, une unité
+  par pixel de la feuille (`Support`), les hauteurs de la spirale le long de sa longueur, cinq marques, des clés d'interpolation.
+- **Format 59** : les noms `travelling_lateral`, `orbite`, `grue`, `survol` ; `hauteur`, `avancee` d'un effet et `vise` d'une
+  trajectoire de caméra, écrits seulement quand ils servent. Un projet 58 ou moins s'ouvre tel quel ; une version précédente
+  refuse un projet 59.
+
+### 172.3 Ce qui n'est pas fait, ou à juger
+
+- **Le sujet est pris au plan de référence**, là où les dessins sont tels qu'ils sont dessinés : un personnage posé sur un calque
+  en profondeur n'est pas pris à sa profondeur (le calcul de la caméra ne lit pas les dessins ; c'est aussi ce qui manque à C11).
+  Une orbite autour d'un tel calque tourne autour d'un point devant ou derrière lui.
+- **Le sujet d'une trajectoire toute faite** est le centre du cadre au départ ; il ne se déplace pas encore à la main dans la vue
+  Espace 3D (la case seulement : le garder ou non).
+- **Le survol** s'élève et bascule sur toute la durée du bloc (il décolle doucement depuis la caméra du plan) : ce n'est pas une
+  caméra déjà en l'air au départ.
+- Une orbite de plus de 80° voit les dessins par la tranche : ce sont des cartes plates.
+- Toujours pas faits : C11 (suivi d'un calque), le flou de vitesse du zip pan (C8), C28 (bascule de point) ; les plans types,
+  les transitions et le reste ; les blocs dans le Montage.
+
+### 172.4 À tester (sa checklist)
+
+1. Panneau Préréglages : la famille Travellings (survoler « Orbite », « Grue », « Survol ») et la famille Trajectoires.
+2. « Travelling latéral » sur un plan qui a des calques en profondeur : le proche passe vite, le loin à peine ; tirer la flèche.
+3. « Orbite » : prendre l'outil Caméra, tirer le viseur « Sujet » sur un visage ; Angle 90 ; le visage reste à sa place.
+4. « Grue » : Hauteur 2, puis −1 (elle descend).
+5. « Survol » : Hauteur, Bascule, Avancée ; elle passe au-dessus des dessins.
+6. Glisser « Arc » sur la piste Caméra : la barre « Chemin de la caméra · garde son sujet » ; lire le plan ; ouvrir la vue
+   Espace 3D : le chemin, ses marques, le viseur du sujet ; avec l'outil Trajectoire, Ctrl+clic sur le chemin pour une poignée,
+   la tirer.
+7. La barre du chemin : la glisser, tirer ses bords ; clic droit : décocher « garde son sujet », puis « Retirer » ; Ctrl+Z.
+8. « Convertir en clés » sur une orbite : l'image ne change pas (une clé par image).
+9. Enregistrer, rouvrir : les blocs, le chemin et son sujet reviennent. (Le projet passe au format 59, refusé par son FEANOR
+   habituel tant que ce n'est pas fusionné.)
