@@ -13836,3 +13836,31 @@ n'est pas coupé » est dans celle de l'écart).
 
 L'aide de la barre de la vue, l'aide des touches (les gestes du Cutter), la description de l'outil et le texte de l'animation
 « Le Cutter coupe aux croisements » parlent des réglages.
+
+### 168.3 Les essais, la vitesse, ce qui reste à juger
+
+Les essais (`src/cutter_tests.rs`, neuf de plus ; `src/cutter_reglages_tests.rs`, trois) : un presque-croisement compte à 4 px et
+pas à 2 px (écart de 3), et à 0 l'horizontale part en entier comme avant ; les réglages d'origine coupent exactement comme avant ;
+l'effilé réduit le rayon au bout coupé (12 %) et pas ailleurs ; le nettoyage enlève les sept bouts de 5 px d'un dièse au lasso comme
+au balayage, garde la queue de 50 px et les morceaux entre croisements, ne touche pas un trait seul ; le lasso n'enlève que le
+morceau entièrement entouré ; une ligne d'un autre calque coupe sans rien ajouter ; les réglages s'écrivent seulement changés et se
+relisent (une valeur absurde est ramenée) ; sur le banc, la portée « Calques visibles » coupe contre l'autre calque sans le
+modifier (et plus quand il est caché) ; trois calques choisis : trois traits coupés, une seule étape d'annulation, « 3 calques » et
+« 3 bouts » dans la barre d'état ; le panneau montre ses contrôles et la ligne des dépassements en mode Dépassements seulement.
+
+Sans latence : les croisements sont filtrés par la boîte de l'autre trait au niveau de chaque segment (avant : au niveau du trait
+entier, 72 ms). Un dessin de 300 longs traits denses (150 × 150, 40 points chacun, 22 500 croisements) et 100 lignes d'un autre
+calque, un geste qui en traverse une soixantaine : 7 ms (couper), 9 ms (écart toléré de 3 px), 7 ms (dépassements), sur ce poste.
+
+Vérificateur (18 novembre, nuit) : compilation sans avertissement ; passage 2 : 4 807 réussis, 0 échec ; passage 1 (machine très
+chargée, 1 242 s) : deux échecs de minutage, `a_big_drawing_cuts_fast` (rendu depuis plus robuste : le meilleur de cinq mesures) et
+`retours_aplat_tests::a_fill_stays_on_screen…` (sans lien avec le Cutter) ; relancés seuls trois fois : réussis. Les dix groupes de
+fiabilité OK.
+
+Regardé à l'écran (par Claude, exe de la branche, réglages isolés, copie du projet sous `Tests\essai 168`) : le panneau tient sans
+défiler au-dessus de la Couleur, dans les deux modes ; les réglages changés sont retrouvés au lancement suivant. Le nettoyage sur le
+vrai dessin n'a pas pu être montré (le calque courant de la copie est verrouillé).
+
+À juger par Anthony : la valeur d'origine de l'écart toléré (0 aujourd'hui, pour que rien ne change sans lui ; 2 ou 3 px seraient
+plus utiles au quotidien) ; la longueur d'origine des dépassements (12 px du dessin) ; le dessin de la pointe effilée (jusqu'à 12 %
+du rayon) ; un trait effilé perd ses appuis enregistrés (le rendu les reprend des rayons) : à regarder sur un trait texturé.
