@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`prereglages-socle` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (d43ea27, exe de 09 h 50), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main avait avancé deux fois pendant le chantier
+  (trajectoire-exposition et versions-plan, puis cutter-reglages) : main ramené dans la branche à chaque fois, seuls
+  INTERFACE.md et le journal en conflit (les deux parties gardées), puis vérificateur complet sur l'ensemble : compilation sans
+  avertissement, **4 833 réussis, 0 échec**, les groupes de fiabilité OK. Son FEANOR était ouvert (depuis 09 h 48) : arrêté
+  sans enregistrer juste avant de remplacer le fichier (la nouvelle version avait été construite et contrôlée à côté). Contrôle de
+  lancement sur une copie de « dd » avec de faux réglages : vivant, aucun plantage ; son vrai « dd » est resté au format 56. Il
+  n'a pas été rouvert à sa place. **Ses projets passent au format 57 dès qu'il les ouvre** avec ce FEANOR. Worktree et branche
+  gardés (retrait proposé, sa décision).
 - **`cutter-reglages` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (bed74af, exe de 04 h 53), sur son
   « fusionne le cutter ». Partie 169 de docs/INTERFACE.md (numérotée 168 sur la branche ; les versions de plan avaient pris le
   168) : le Cutter a cinq réglages, réglages du poste (clé `[cutter]` de reglages.toml), format inchangé (56) : écart toléré (0
