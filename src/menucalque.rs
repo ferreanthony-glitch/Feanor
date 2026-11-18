@@ -13,7 +13,8 @@
 //! ```
 //!
 //! - **Organiser** : monter, descendre, aller à un calque, dossiers, groupes.
-//! - **Apparence** : afficher, verrouiller, opacité, mode de fusion, couleur d'étiquette, pelure d'oignon.
+//! - **Apparence** : afficher, verrouiller, opacité, mode de fusion, couleur d'étiquette, pelure d'oignon du calque (Ctrl+L) et
+//!   panneau de la pelure (partie 173 : l'icône de la pelure a quitté la piste du Storyboard pour ici).
 //! - **Plus** : ce qui est rare ou propre à une sorte de calque (presse-papiers, retourner, réglages avancés, calque de
 //!   couleur, vidéo, avant / après les images, propagation, choisir, afficher, pochoirs, nettoyer, fusions en masse…).
 //!
@@ -225,8 +226,17 @@ impl App {
             });
         }
         ui.menu_button("Couleur d'étiquette", |ui| self.group_menu(ui, li));
-        if !folder && ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
-            self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
+        // La pelure d'oignon du calque, avec son raccourci (partie 173 : son icône a quitté la piste du Storyboard pour ici), et le
+        // panneau de la pelure, qu'ouvrait le clic droit de cette icône.
+        if !folder {
+            let case = if onion { ph::CHECK_SQUARE } else { ph::SQUARE };
+            let aide = "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant.";
+            if self.entree(ui, case, "Pelure d'oignon du calque", "calque.pelure", None, aide) {
+                self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
+            }
+            if self.entree(ui, ph::CIRCLES_THREE, "Panneau de la pelure d'oignon", "pelure.panneau", None, "Combien d'images avant et après, leurs couleurs, leur mode.") {
+                self.onion_window = true;
+            }
         }
     }
 

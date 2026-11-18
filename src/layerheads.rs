@@ -207,6 +207,44 @@ pub(crate) fn blend_combo(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: BlendM
     (mode != blend).then_some(mode)
 }
 
+/// Partie 173 : la liste des modes de fusion de la piste du calque actif (Storyboard), posée exactement dans `rect` : le même
+/// aspect que celle de la timeline (`blend_combo`), mais un nom trop long est raccourci (« Superpos… ») sans sortir de `rect`, et la
+/// liste ouverte reste celle de la piste d'avant (les modes en texte, cochés, par familles). Le mode choisi, s'il a changé.
+pub(crate) fn liste_des_modes(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: BlendMode) -> Option<BlendMode> {
+    const MARGE: f32 = 4.0;
+    let mut mode = blend;
+    // La case : un bouton encadré de la taille de `rect`, comme la case d'une liste ; le nom et la flèche sont peints dessus (le
+    // nom raccourci à la place qui reste). Le menu est celui de la piste d'avant : il se place de lui-même, sans défiler.
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(salt.with("cadre")));
+    child.set_clip_rect(rect.intersect(ui.clip_rect()));
+    child.spacing_mut().button_padding = vec2(0.0, 0.0);
+    let case = egui::Button::new("").min_size(rect.size());
+    let resp = egui::menu::menu_custom_button(&mut child, case, |ui| {
+        for m in BlendMode::ALL {
+            if BlendMode::FAMILY_STARTS.contains(&m) {
+                ui.separator();
+            }
+            if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
+                ui.close_menu();
+                mode = m;
+            }
+        }
+    })
+    .response;
+    let case = resp.rect;
+    let encre = child.style().interact(&resp).text_color();
+    let fleche = child.spacing().icon_width.min(12.0);
+    let place = (case.width() - 2.0 * MARGE - fleche - 2.0).max(1.0);
+    let nom = egui::WidgetText::from(RichText::new(blend.label()).size(11.0)).into_galley(&child, Some(egui::TextWrapMode::Truncate), place, egui::TextStyle::Button);
+    let painter = child.painter();
+    painter.galley(pos2(case.left() + MARGE, case.center().y - nom.size().y * 0.5), nom, encre);
+    // La flèche ▾, comme celle des listes.
+    let f = Rect::from_center_size(pos2(case.right() - MARGE - fleche * 0.5, case.center().y), vec2(fleche * 0.7, fleche * 0.45));
+    painter.add(egui::Shape::convex_polygon(vec![f.left_top(), f.right_top(), f.center_bottom()], encre, Stroke::NONE));
+    bulle(resp, "Mode de fusion", &format!("{} : {}", blend.label(), blend.hint()), "");
+    (mode != blend).then_some(mode)
+}
+
 /// Ce que la ligne d'un calque montre (copié pour ne pas garder le calque emprunté).
 struct Head {
     id: u64,

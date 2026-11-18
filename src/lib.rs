@@ -272,6 +272,9 @@ mod barrepanneaux_tests;
 mod barrecalques;
 #[cfg(test)]
 mod panneaux_fins_tests;
+// La liste du mode de fusion sur la piste du calque actif, la pelure du calque au clic droit (partie 173).
+#[cfg(test)]
+mod piste_mode_tests;
 // Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
 mod panneauxvisuels;
 mod panneauxvisuelsui;

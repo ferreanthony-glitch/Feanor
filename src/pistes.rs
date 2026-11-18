@@ -56,6 +56,11 @@ pub(crate) const RANGEE_ACTIVE: f32 = 22.0;
 /// La colonne doit avoir au moins cette largeur pour que la piste du calque actif montre aussi la vignette de son dessin (à la
 /// largeur d'origine, 104 points, les réglages prennent toute la rangée du bas).
 pub(crate) const LARGEUR_VIGNETTE: f32 = 150.0;
+/// La liste du mode de fusion de la piste active (partie 173) : sa largeur au plus (« Superposition ▾ » en entier) et au moins
+/// (la flèche et deux lettres), et ce qu'elle laisse au moins à la barre d'opacité (« 100 % » lisible).
+const LISTE_MAX: f32 = 96.0;
+const LISTE_MIN: f32 = 26.0;
+const BARRE_MIN: f32 = 34.0;
 
 /// Ce qu'une ligne des pistes est.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -546,12 +551,13 @@ impl App {
     /// La piste du calque actif `li`, dans `r` (deux rangées de 22 points, partie 160 : elle porte toutes les options qui étaient au
     /// panneau Calques et au clic droit). En haut : le filet du dossier, l'œil, la pastille de la sorte, le nom (et celui du dossier),
     /// le cadenas, le ⋮ du menu du calque. En bas : la vignette du dessin (ou la couleur d'un calque Couleur unie) quand la colonne est
-    /// assez large, la pelure d'oignon du calque, les effets, l'accroche à la caméra, le mode de fusion, le losange des clés
-    /// d'opacité et l'opacité. Le fond de la rangée (clic, glissé, clic droit) est déjà posé.
+    /// assez large, les effets, l'accroche à la caméra, la liste du mode de fusion (« Normal ▾ », partie 173), le losange des clés
+    /// d'opacité et l'opacité. La pelure d'oignon du calque est au clic droit (Apparence). Le fond de la rangée (clic, glissé, clic
+    /// droit) est déjà posé.
     pub(crate) fn piste_active_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32) {
         let layers = self.layers();
         let Some(l) = layers.get(li) else { return };
-        let (id, name, visible, dot, locked, onion, accroche, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.locked, l.onion, l.accroche, l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
+        let (id, name, visible, dot, locked, accroche, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.locked, l.accroche, l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
         let opacity = l.opacity_at(self.cur_frame);
         let accrochable = !l.folder && l.effet.is_none() && !l.keys_follow_line();
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
@@ -640,15 +646,8 @@ impl App {
             }
             x = v.right() + 3.0;
         }
-        let resp = crate::layerheads::icon_at(ui, case(x), ph::CIRCLES_THREE, shade(onion));
-        let resp = crate::bulles::bulle(resp, "Pelure d'oignon du calque", "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant. Clic droit : le panneau de la pelure.", "");
-        if resp.clicked() {
-            self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
-        }
-        if resp.secondary_clicked() {
-            self.onion_window = true;
-        }
-        x += PAS;
+        // (La pelure d'oignon du calque n'est plus ici, partie 173 : elle est au clic droit de la piste et au ⋮, Apparence ▸
+        // « Pelure d'oignon du calque » (Ctrl+L), avec le panneau de la pelure juste dessous ; sa place va à la liste du mode.)
         if let Some(resp) = self.fx_switch(ui, li, Some(case(x)), fg) {
             if resp.clicked() {
                 self.toggle_layer_fx(li);
@@ -662,23 +661,17 @@ impl App {
             }
             x += PAS;
         }
-        // Le mode de fusion : une icône, la liste au clic (le nom du mode dans la bulle).
-        let mut f = ui.new_child(egui::UiBuilder::new().max_rect(case(x)).id_salt(("fusion_piste", id)));
-        let button = egui::Button::new(RichText::new(ph::CIRCLE_HALF).size(12.0).color(shade(blend != crate::blend::BlendMode::ALL[0]))).frame(false);
-        let resp = egui::menu::menu_custom_button(&mut f, button, |ui| {
-            for m in crate::blend::BlendMode::ALL {
-                if crate::blend::BlendMode::FAMILY_STARTS.contains(&m) {
-                    ui.separator();
-                }
-                if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
-                    ui.close_menu();
-                    self.regler_mode_calques(li, m);
-                }
-            }
-        })
-        .response;
-        crate::bulles::bulle(resp, "Mode de fusion", &format!("{} : {}", blend.label(), blend.hint()), "");
-        x += PAS;
+        // Le mode de fusion (partie 173) : une liste qui écrit le nom du mode, « Normal ▾ », comme dans la timeline. Elle prend la
+        // place qui reste, moins le losange et une barre d'opacité lisible ; un nom trop long y est raccourci.
+        let losange = if li == self.cur_layer { PAS } else { 0.0 };
+        let reste = (bas.right() - 2.0 - x - losange - 1.0).max(0.0);
+        let largeur = (reste - BARRE_MIN).clamp(LISTE_MIN, LISTE_MAX).min(reste);
+        let liste = Rect::from_min_max(pos2(x, y - 9.0), pos2(x + largeur, y + 9.0));
+        if let Some(m) = crate::layerheads::liste_des_modes(ui, liste, egui::Id::new(("fusion_piste", id)), blend) {
+            // (Plusieurs calques choisis : tous prennent ce mode, une étape d'annulation, partie 136.)
+            self.regler_mode_calques(li, m);
+        }
+        x += largeur;
         // (Le losange vise le calque courant : sur la piste du trait d'un calque de couleur courant, il n'y est pas.)
         if li == self.cur_layer {
             self.losange_opacite(ui, case(x), fg, off);

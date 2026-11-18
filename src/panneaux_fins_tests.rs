@@ -142,7 +142,8 @@ const DU_PANNEAU: &[&str] = &[
     "Afficher / cacher",
     "Verrouiller / déverrouiller",
     "Commandes du calque",
-    "Pelure d'oignon du calque",
+    // (« Pelure d'oignon du calque » : sur la ligne de la timeline ; sur la piste du Storyboard, elle est au clic droit depuis la
+    // partie 173, `piste_mode_tests.rs`.)
     crate::accroche::NOM,
     "Aplat sous le trait",
 ];
@@ -181,6 +182,7 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
     // (La colonne commence au bord gauche de la bande, après la barre d'outils : la barre d'actions part de là.)
     let debut = vus::ou(crate::barrecalques::NOMS[0]).last().copied().expect("la barre d'actions").left();
     la_colonne_porte_tout(debut, debut + crate::layerheads::HEAD_W + 2.0, fusion[0]);
+    assert!(present("Pelure d'oignon du calque"), "la pelure reste sur la ligne de la timeline");
     // L'en-tête de la colonne n'a plus ses boutons (ils sont dans la barre d'actions) ni « Tout réduire ».
     let haut_des_lignes = fusion[0].top() - crate::layerheads::ROW_FULL;
     for nom in ["Nouveau dossier", "Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
@@ -207,7 +209,8 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)
     let colonne = ou("Largeur de la colonne").right();
     // Les options de la piste active sont dans la colonne, sur deux rangées.
-    for nom in ["Pelure d'oignon du calque", "Mode de fusion", "Créer une clé", "Opacité du calque", "Commandes du calque", "Verrouiller / déverrouiller"] {
+    // (La pelure d'oignon du calque est au clic droit de la piste depuis la partie 173.)
+    for nom in ["Mode de fusion", "Créer une clé", "Opacité du calque", "Commandes du calque", "Verrouiller / déverrouiller"] {
         let r = ou(nom);
         assert!(r.right() <= colonne + 2.0, "« {nom} » dans la colonne : {r:?} / {colonne}");
     }

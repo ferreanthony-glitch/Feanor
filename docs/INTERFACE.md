@@ -14453,3 +14453,49 @@ Les vingt-deux, par famille (son numéro, son nom, ce qu'il fait, ce qui se règ
 9. « Convertir en clés » sur un plan à plusieurs blocs : l'image ne change pas.
 10. Enregistrer, rouvrir : les blocs et leurs flèches reviennent. (Le projet passe au format 58, refusé par son FEANOR habituel
     tant que ce n'est pas fusionné.)
+
+## 173. La piste du calque actif : la liste « Normal ▾ » du mode de fusion (2026-11-18, branche `piste-mode-liste`)
+
+(La partie 172 est prise par la branche `prereglages-travellings`, les préréglages du lot 3.)
+
+Anthony a choisi : sur la deuxième rangée de la piste du calque actif (vue Storyboard), **l'icône ◐ devient une vraie liste qui
+écrit le nom du mode**, comme la liste du mode de la timeline. Pour lui faire de la place, l'icône aux trois ronds de cette rangée
+(la pelure d'oignon du calque) passe dans le menu du clic droit de la piste. Rien d'autre ne change ; l'affichage seulement, pas
+le format du projet.
+
+Le code : `src/pistes.rs` (`piste_active_head`), `src/layerheads.rs` (`liste_des_modes`), `src/menucalque.rs` (Apparence). Les
+essais : `src/piste_mode_tests.rs` ; ceux de la partie 160 (`panneaux_fins_tests.rs`) ne cherchent plus la pelure sur la piste du
+Storyboard (ils la cherchent toujours sur la ligne de la timeline).
+
+### 173.1 Ce qui change pour lui
+
+- **La liste du mode** : « Normal ▾ », « Produit ▾ »… Elle a l'aspect de celle de la timeline (même texte, même flèche, mêmes
+  noms). Un nom long est raccourci dans la liste (« Superpos… ▾ ») sans passer sur le losange ni sur la barre « 100 % » ; la
+  bulle donne le nom entier et ce que fait le mode. Ouverte, c'est la liste des modes en texte d'avant (cochée, par familles).
+  Les flèches ‹ › de la timeline ne sont pas sur la piste (elles n'y tiennent pas).
+- Choisir un mode le donne à **tous les calques choisis**, une seule étape d'annulation (Ctrl+Z), comme avant.
+- La liste prend la place qui reste sur la rangée, en laissant au moins 34 points à la barre d'opacité ; elle va de 26 points
+  (la colonne la plus étroite, dans l'espace Montage : la flèche et deux lettres) à 96 (« Superposition » en entier).
+- **La pelure d'oignon du calque** : clic droit sur la piste (ou ⋮) ▸ Apparence ▸ « Pelure d'oignon du calque », une case avec
+  son raccourci (Ctrl+L), la même action qu'avant (tous les calques choisis, une étape). Juste dessous, « Panneau de la pelure
+  d'oignon », que donnait le clic droit de l'ancienne icône. C'est le même menu partout : la timeline l'a aussi. La ligne du
+  calque courant de la timeline (Animation) garde son icône de pelure, ses flèches et sa liste.
+
+### 173.2 Comment c'est fait
+
+- `layerheads::liste_des_modes` : une case encadrée exactement de la taille donnée, le nom du mode (texte de 11, comme
+  `blend_combo`) et la flèche ▾ peints dessus, le nom raccourci à la place qui reste ; au clic, le menu de la piste d'avant
+  (`menu_custom_button`), qui se place de lui-même et montre tous les modes sans défiler. (Une `ComboBox` de egui s'ouvrait sous
+  la piste en défilant, et sa case grandissait au-delà du rectangle à 26 points.) La largeur vient de `pistes.rs` (`LISTE_MIN`,
+  `LISTE_MAX`, `BARRE_MIN`).
+- Apparence : l'entrée de la pelure passe par `entree` (case cochée en icône, raccourci écrit, clic droit pour assigner un
+  raccourci), comme l'accroche à la caméra.
+
+### 173.3 À tester (sa checklist)
+
+1. Storyboard, la piste du calque actif : « Normal ▾ » entre la caméra et le losange.
+2. Choisir « Superposition » : raccourci dans la liste, rien ne passe sur « 100 % » ; élargir la colonne : le nom entier.
+3. Ctrl + clic sur deux autres calques, choisir « Produit » : les trois ; un Ctrl+Z les remet tous.
+4. Clic droit sur la piste ▸ Apparence ▸ « Pelure d'oignon du calque » (Ctrl+L écrit à droite) ; « Panneau de la pelure
+   d'oignon » l'ouvre.
+5. La colonne à sa plus petite largeur, un calque avec des effets (case fx) : rien ne déborde.
