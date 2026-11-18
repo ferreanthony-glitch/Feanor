@@ -766,6 +766,8 @@ pub struct App {
     /// Choix au rectangle des clés de caméra en cours (glisser depuis un espace vide de la piste).
     pub(crate) cam_rect: Option<crate::camkeys::CamRect>,
     pub(crate) cam_fx: crate::camfx::Params,
+    /// Les blocs de la piste Caméra : le bloc choisi, celui qu'on fait glisser (`blocscamera.rs`, partie 170).
+    pub(crate) blocs: crate::blocscamera::Etat,
     /// Aides au cadrage de la caméra (tiers, grille d'or, spirale…, `cadrage.rs`) : les choix,
     /// retenus dans `reglages.toml`, et leur géométrie du dernier cadre.
     pub(crate) cadrage: crate::cadrage::FramingAids,
@@ -1389,6 +1391,7 @@ impl App {
             ease_drag: None,
             cam_rect: None,
             cam_fx: crate::camfx::Params::new(crate::camfx::Preset::Shoulder, 24),
+            blocs: Default::default(),
             cadrage_cache: Default::default(),
             handle_drag: None,
             grid_menu: None,
@@ -4621,6 +4624,8 @@ impl App {
             "calque.cle_opacite_supprimer" => self.op_keys_delete(),
             "calque.cles_opacite_supprimer" => self.op_keys_clear(),
             "calque.nouveau_couleur_unie" => self.nouveau_calque_couleur_unie(),
+            // Un bloc de la piste Caméra choisi (partie 170), et aucune clé de caméra choisie.
+            "edition.supprimer" if self.bloc_camera_a_le_focus() => self.supprimer_bloc_camera(),
             "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
             "camera.cles_copier" => self.copy_cam_keys(),
             "camera.cles_coller" => self.paste_cam_keys(),

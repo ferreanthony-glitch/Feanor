@@ -275,7 +275,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// la borne sont ramenées à la borne si l'image n'en change à aucune image, sinon le calque est marqué `profondeur_bornee` ; un
 /// plan en Espace 3D garde `espace` (et donc son chemin d'image et l'ordre par la distance). Une trajectoire tracée dans l'espace
 /// d'un plan ordinaire d'un projet d'avant reste écartée comme alors ; au format 56 elle vaut pour tout plan.
-pub const VERSION: u32 = 56;
+/// 57 (2026-11-18, `docs/INTERFACE.md` partie 170) : **plusieurs effets de caméra vivants par plan** — `effets_camera` d'un plan,
+/// une liste (les blocs de la piste Caméra de la timeline), à la place du seul `effet_camera` du format 52. Ils se cuisent l'un
+/// après l'autre dans l'ordre de la liste. Une version précédente qui ouvrirait le projet ne verrait aucun de ces effets et les
+/// perdrait à l'enregistrement : elle le refuse donc. **Un projet de version 56 ou moins s'ouvre tel quel** : son `effet_camera`
+/// devient le premier (et seul) effet de la liste, avec la même image ; il est écrit en `effets_camera` au premier enregistrement.
+pub const VERSION: u32 = 57;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -595,9 +600,14 @@ pub(crate) struct PanelEntry {
     /// Postérisation temporelle de la caméra (format 37 ; absente : éteinte, cadence 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     saccade: Option<SaccadeEntry>,
-    /// Effet de caméra vivant du plan (format 52, partie 129 ; absent : aucun). Un effet déjà converti est dans `camera`.
+    /// Effet de caméra vivant du plan, tel que l'écrivaient les formats 52 à 56 (partie 129 ; absent : aucun) : relu comme le
+    /// premier de `effets_camera`, jamais écrit depuis le format 57.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     effet_camera: Option<EffetCameraEntry>,
+    /// Effets de caméra vivants du plan (format 57, partie 170 ; absent : aucun), dans l'ordre où ils se cuisent. Un effet déjà
+    /// converti est dans `camera`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    effets_camera: Vec<EffetCameraEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -2610,16 +2620,21 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             })
             .collect(),
         saccade: (panel.saccade != crate::camera::Saccade::default()).then(|| SaccadeEntry { actif: panel.saccade.actif, cadence: panel.saccade.cadence }),
-        effet_camera: panel.effet_camera.map(|v| EffetCameraEntry {
-            preset: v.params.preset.nom().into(),
-            debut: v.start,
-            duree: v.params.duration,
-            intensite: v.params.intensity,
-            frequence: v.params.freq,
-            graine: v.params.seed,
-            zoom: v.params.zoom_factor,
-            coup_de_zoom: v.params.punch,
-        }),
+        effet_camera: None,
+        effets_camera: panel
+            .effets_camera
+            .iter()
+            .map(|v| EffetCameraEntry {
+                preset: v.params.preset.nom().into(),
+                debut: v.start,
+                duree: v.params.duration,
+                intensite: v.params.intensity,
+                frequence: v.params.freq,
+                graine: v.params.seed,
+                zoom: v.params.zoom_factor,
+                coup_de_zoom: v.params.punch,
+            })
+            .collect(),
         marques: panel
             .marks
             .iter()
@@ -3525,20 +3540,26 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     notes: p.notes,
                     camera,
                     saccade: p.saccade.map_or_else(crate::camera::Saccade::default, |s| crate::camera::Saccade { actif: s.actif, cadence: s.cadence }.normalise()),
-                    // (Un préréglage inconnu, d'une version plus récente, est laissé de côté.)
-                    effet_camera: p.effet_camera.and_then(|e| {
-                        let preset = crate::camfx::Preset::du_nom(&e.preset)?;
-                        let params = crate::camfx::Params {
-                            preset,
-                            intensity: e.intensite,
-                            duration: e.duree,
-                            freq: e.frequence,
-                            seed: e.graine,
-                            zoom_factor: e.zoom,
-                            punch: e.coup_de_zoom,
-                        };
-                        Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
-                    }),
+                    // (Le seul effet des formats 52 à 56 vient en premier, puis ceux du format 57. Un préréglage inconnu, d'une
+                    // version plus récente, est laissé de côté.)
+                    effets_camera: p
+                        .effet_camera
+                        .into_iter()
+                        .chain(p.effets_camera)
+                        .filter_map(|e| {
+                            let preset = crate::camfx::Preset::du_nom(&e.preset)?;
+                            let params = crate::camfx::Params {
+                                preset,
+                                intensity: e.intensite,
+                                duration: e.duree,
+                                freq: e.frequence,
+                                seed: e.graine,
+                                zoom_factor: e.zoom,
+                                punch: e.coup_de_zoom,
+                            };
+                            Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
+                        })
+                        .collect(),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {

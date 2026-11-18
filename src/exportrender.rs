@@ -83,7 +83,7 @@ pub(crate) fn plan_leger(p: &Panel) -> Panel {
         notes: p.notes.clone(),
         camera: p.camera.clone(),
         saccade: p.saccade,
-        effet_camera: p.effet_camera,
+        effets_camera: p.effets_camera.clone(),
         marks: p.marks.clone(),
         cues: p.cues.clone(),
         color: p.color,

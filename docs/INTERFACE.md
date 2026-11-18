@@ -14120,3 +14120,85 @@ vrai dessin n'a pas pu être montré (le calque courant de la copie est verrouil
 À juger par Anthony : la valeur d'origine de l'écart toléré (0 aujourd'hui, pour que rien ne change sans lui ; 2 ou 3 px seraient
 plus utiles au quotidien) ; la longueur d'origine des dépassements (12 px du dessin) ; le dessin de la pointe effilée (jusqu'à 12 %
 du rayon) ; un trait effilé perd ses appuis enregistrés (le rendu les reprend des rayons) : à regarder sur un trait texturé.
+
+## 170. Les préréglages dans la timeline, lot 1 : le socle (2026-11-18, branche `prereglages-socle`)
+
+Anthony : « Il faut qu'on crée des présets d'animation de caméra à intégrer directement dans la timeline. Par exemple : krash
+zoom/dézoom, zip pan, panoramique, travelling. Pareil pour des présets de plan type Color Card, Titre, Crédits… » Une liste
+numérotée lui a été proposée (C1–C28 caméra, P1–P18 plans types, T1–T8 transitions, A adoucis, V valeurs de plan, E effets,
+S son, D décors 3D, R les siens, M mouvements de calque), puis une page où chacun joue en boucle. Son verdict : 64 Oui (tous
+les C, P1 P2 P3 P5 P6 P7 P8 P13 P14 P16 P17 P18, T3 T4 T6 T7 T8, A1 A2, V1 V2, E1–E8, S1 S2, D1, R1–R3, M1), aucun Non ; sans
+réponse : P4, P9, P10, P11, P12, P15, T1, T2, T5. L'ordre de travail proposé, en lots : **1 le socle**, 2 la caméra 2D (C1–C12,
+C18–C27), 3 la caméra dans l'Espace 3D (C13–C17), 4 le montage (plans types et transitions), 5 le reste ; C28 attend un flou par
+calque selon la profondeur, M1 l'onglet Animation (le tout dernier chantier). Sa réponse : « Oui, le lot 1 ».
+
+Le code : `src/blocscamera.rs` (les blocs dans la timeline), `src/panneauprereglages.rs` (le panneau), `src/camfx.rs`
+(`cuire_tous`) ; ce qu'il a fallu ailleurs : `src/document.rs` (`Panel::effets_camera`, `cles_montrees`), `src/project.rs` (format
+57), `src/camfxui.rs` (la section « Effets de caméra »), `src/timeline.rs` (la rangée des blocs sous les clés), `src/dock.rs`,
+`src/dockui.rs`, `src/barrepanneaux.rs`, `src/keymap.rs` et `keymap.toml` (le panneau), `src/app.rs` (l'état, Suppr), et quelques
+lectures du champ (`xsheet.rs`, `exportcamera.rs`, `exportrender.rs`, `planannule.rs`, `planvers.rs`, `espace3ddirect.rs`, `io.rs`).
+Les essais : `src/blocscamera_tests.rs` ; ceux de la partie 129 (`camera_retours_tests.rs`) passent à la liste.
+
+### 170.1 Ce qui change pour lui
+
+- **Un plan porte autant d'effets de caméra vivants qu'on veut.** Avant, un seul (partie 129). Chacun est un **bloc jaune** sous la
+  rangée des clés de caméra de la timeline, de son image de départ à sa fin ; quand deux blocs se chevauchent, le second va sur un
+  rang en dessous. Ils **s'ajoutent** : un tremblement posé sur un zoom tremble autour du zoom.
+- **Le panneau Préréglages** (icône pellicule dans la barre des panneaux, en Storyboard et en Animation ; action
+  `vue.prereglages`, sans touche) : les huit préréglages de caméra en vignettes, une petite scène de storyboard vue par la caméra.
+  **Au survol, la vignette joue le vrai mouvement du préréglage** (celui que posera le bloc, avec ses réglages d'origine) ; elle ne
+  bouge pas sinon, pour ne pas faire redessiner FEANOR sans cesse.
+- **Glisser une vignette sur la timeline** (sur la rangée de la caméra ou sur celle des blocs) : un repère jaune montre où le bloc
+  se posera et sa durée ; au lâcher, le bloc est posé, vivant, sans clé. Pendant le glisser, une rangée « Lâche le préréglage ici »
+  s'ouvre sous les clés si le plan n'a encore aucun bloc. **Un clic sur la vignette** pose le bloc à la tête de lecture.
+  Un bloc qui déborderait de la fin du plan recule juste assez pour tenir dedans (s'il est plus long que le plan, il part où l'on
+  vise et la fin du plan le coupe : la partie coupée est pâle).
+- **Le bloc à la souris** : son corps le fait glisser ; un bord change sa durée (l'autre bord ne bouge pas) ; un clic le choisit
+  (contour) ; le clic droit ouvre son menu (« Retirer cet effet », « Convertir les effets en clés ») ; **Suppr** enlève le bloc
+  choisi. Le curseur dit ce que fera la prise. Chaque geste est une étape d'annulation. Un clic dans la grille, ou dans le dessin,
+  lâche le bloc choisi (Suppr revient au dessin).
+- **La section « Effets de caméra » du panneau Caméra** règle le bloc choisi (sinon le dernier posé) : la liste du haut change son
+  préréglage, « Aucun effet » le retire, les champs (intensité, durée, fréquence, graine, zoom) le règlent comme avant. Avec deux
+  blocs ou plus, la liste des effets du plan est au-dessus, chacun se choisit d'un clic. « Ajouter un effet » en pose un de plus à la
+  tête de lecture.
+- **« Convertir en clés » convertit tous les blocs du plan d'un coup**, en une étape : les clés écrites donnent exactement l'image
+  que montraient les blocs, puis les blocs s'en vont ; les clés nouvelles ou changées sont choisies.
+- Aucune boîte de dialogue.
+
+### 170.2 Comment c'est fait
+
+- `Panel::effets_camera: Vec<camfx::Vivant>` remplace `effet_camera: Option<Vivant>`. Un bloc **est** un `Vivant` : préréglage,
+  départ, durée, réglages. Aucune notion nouvelle dans le document.
+- `camfx::cuire_tous` cuit les effets **l'un après l'autre**, dans l'ordre de la liste : le premier part des clés du plan et de sa
+  caméra sans effet (continuité comprise), chacun des suivants part des clés que le précédent a écrites. C'est exactement ce que
+  feraient des « Convertir en clés » successifs : convertir ne change donc aucune image (essai). Chaque cuisson passe par la mémoire
+  de `cuire_vite`. `Document::cles_montrees` et `camera_reelle_du_plan_range` l'appellent ; tout ce qui lisait l'effet unique lit la
+  liste (la feuille d'exposition marque les images de chaque bloc, l'export de la caméra nomme tous les effets).
+- Les gestes qui coupent, réunissent, rognent ou décalent les images d'un plan cuisaient l'effet avant d'agir (partie 129) : ils
+  cuisent maintenant tous les blocs, par le même `cuire_effet_vivant`.
+- **Format 57** : le plan écrit `effets_camera` (une liste) et plus `effet_camera`. Un projet du format 52 à 56 s'ouvre tel quel, son
+  effet devenant le premier (et seul) bloc, avec la même image (essai) ; une version précédente refuse un projet 57.
+- La timeline : `blocscamera::blocs_camera_bande`, appelée juste après la rangée des clés, a sa propre zone de clic posée sur la
+  grille (elle passe devant). La hauteur de la rangée des blocs (`blocs_camera_h`) entre dans celle de la timeline et de la colonne
+  des noms. Le glisser-déposer est celui d'egui, comme les bruitages (`PresetDrag`).
+- Le bloc choisi est `App::blocs.choisi` (id du plan, rang) ; Suppr le vise quand le dernier clic était dans la timeline
+  (`key_focus`) et qu'aucune clé de caméra n'est choisie (choisir un bloc lâche les clés choisies).
+
+### 170.3 Ce qui n'est pas fait (lots suivants)
+
+- Les autres préréglages de la liste (C1 à C27 : le lot 2 et le lot 3) ; les plans types, les transitions, le reste.
+- Les blocs ne se voient pas dans le Montage (seulement dans la timeline du plan) ; ils ne se copient pas d'un plan à l'autre.
+- L'intensité se règle dans le panneau Caméra, pas en tirant le bloc vers le haut (proposé sur la page, à juger).
+
+### 170.4 À tester (sa checklist)
+
+1. Ouvrir le panneau Préréglages (icône pellicule) : passer le pointeur sur chaque vignette, elle joue son mouvement.
+2. Glisser « Zoom avant » sur la timeline d'un plan : le repère jaune suit, le bloc se pose au lâcher, l'image zoome tout de suite.
+3. Glisser « Tremblement léger » par-dessus : un second rang, le tremblement s'ajoute au zoom.
+4. Tirer le bord droit d'un bloc, puis son corps : durée, puis place ; Ctrl+Z défait chaque geste.
+5. Cliquer un bloc, Suppr : il part, les clés de caméra ne bougent pas.
+6. Cliquer une vignette : un bloc à la tête de lecture.
+7. Panneau Caméra, « Effets de caméra » : la liste des effets, choisir l'un, changer son intensité ; « Convertir en clés » : les
+   blocs deviennent des clés, l'image ne change pas.
+8. Enregistrer, rouvrir : les blocs reviennent. (Attention : le projet passe au format 57, refusé par son FEANOR habituel tant
+   que ce n'est pas fusionné.)

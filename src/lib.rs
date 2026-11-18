@@ -229,6 +229,11 @@ mod biblio_tests;
 #[cfg(test)]
 mod bruitages_tests;
 mod bruitagesui;
+// Les blocs de la piste Caméra (plusieurs effets de caméra vivants par plan) et le panneau Préréglages (partie 170).
+mod blocscamera;
+#[cfg(test)]
+mod blocscamera_tests;
+mod panneauprereglages;
 // Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
 // proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
 // ligne, les tâches, l'interface et les Préférences.

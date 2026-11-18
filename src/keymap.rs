@@ -716,6 +716,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("son.defilement", "Son au défilement (activer / couper)", true, false),
     act("son.lecture", "Son pendant la lecture (activer / couper)", true, false),
     act("vue.bruitages", "Panneau Bruitages (ouvrir / fermer)", true, false),
+    act("vue.prereglages", "Panneau Préréglages (ouvrir / fermer)", true, false),
     act("bruitage.inserer", "Poser le bruitage choisi à la tête de lecture", true, false),
     act("bruitage.ecouter", "Écouter (ou arrêter) le bruitage choisi", true, false),
     act("vue.suggestions_sonores", "Panneau Suggestions sonores (fonction expérimentale ; ouvrir / fermer)", true, false),
