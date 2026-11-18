@@ -10,7 +10,7 @@
 
 use std::sync::OnceLock;
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind};
 
 use crate::app::App;
 use crate::blocscamera::PresetDrag;
@@ -121,7 +121,8 @@ impl App {
             ui.spacing_mut().item_spacing = vec2(8.0, 10.0);
             for pr in Preset::ALL {
                 let h = VIGNETTE_W * 9.0 / 16.0;
-                let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 18.0), Sense::click_and_drag());
+                // (Sous l'image, le nom sur deux lignes au plus : « Caméra à l'épaule (found footage) » ne déborde pas sur la voisine.)
+                let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 30.0), Sense::click_and_drag());
                 let img = Rect::from_min_size(rect.min, vec2(VIGNETTE_W, h));
                 let id = resp.id.with("survol");
                 // Au survol, le mouvement joue en boucle depuis le moment où le pointeur est arrivé.
@@ -139,7 +140,8 @@ impl App {
                     if resp.hovered() {
                         ui.painter().rect_stroke(img.expand(1.5), 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Outside);
                     }
-                    ui.painter().text(pos2(rect.left() + 2.0, img.bottom() + 9.0), Align2::LEFT_CENTER, pr.label(), FontId::proportional(11.5), ui.visuals().text_color());
+                    let nom = ui.painter().layout(pr.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
+                    ui.painter().with_clip_rect(rect).galley(pos2(rect.left() + 2.0, img.bottom() + 3.0), nom, ui.visuals().text_color());
                 }
                 if resp.drag_started() {
                     egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset: pr });

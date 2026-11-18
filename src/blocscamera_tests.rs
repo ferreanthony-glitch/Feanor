@@ -334,3 +334,52 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     assert_eq!(effets.len(), 3);
     assert_eq!((effets[2].params.preset, effets[2].start), (Preset::Jolt, 12));
 }
+
+/// Images de contrôle (partie 170), dans `FEANOR_CAPTURE_DIR` : le panneau Préréglages ouvert, une vignette survolée qui joue son
+/// mouvement, deux blocs sous les clés de caméra (le second choisi) ; puis une vignette glissée au-dessus de la timeline, avec son
+/// repère. Sans carte graphique : rien.
+#[test]
+#[ignore = "écrit des captures : FEANOR_CAPTURE_DIR"]
+fn blocs_camera_captures() {
+    let dossier = std::env::var_os("FEANOR_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    std::fs::create_dir_all(&dossier).unwrap();
+    let sauver = |b: &Banc, nom: &str| {
+        let Some(rgba) = b.capturer() else { return println!("BLOCS pas de carte graphique : {nom} ignorée") };
+        image::save_buffer(dossier.join(nom), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        println!("BLOCS {nom}");
+    };
+    let mut doc = crate::export_tests::doc_with_drawing(1, 72);
+    doc.panels[0].effets_camera = vec![effet(Preset::ZoomIn, 0, 40), effet(Preset::LightShake, 18, 40)];
+    let mut b = crate::perf_tests::banc(doc, true);
+    b.app.set_mode(crate::app::Mode::Animation);
+    b.app.timeline_cell = 14.0;
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 30);
+    b.app.show_pane(crate::dock::Pane::Prereglages);
+    b.garder_formes = true;
+    b.chauffer(8);
+    b.app.choisir_bloc_camera(Some(1));
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::Explosion.label()).map(|(_, r)| r).expect("la vignette « Explosion »");
+    let survol = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    b.image(vec![Event::PointerMoved(survol)], DT);
+    for _ in 0..14 {
+        b.image(Vec::new(), DT);
+    }
+    sauver(&b, "blocs-1-panneau-et-blocs.png");
+    // Une vignette prise et glissée au-dessus de la rangée des clés, sans la lâcher.
+    let bloc = blocs_peints(&b)[0];
+    let cell = bloc.width() / 40.0;
+    let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::Jolt.label()).map(|(_, r)| r).expect("la vignette « Secousse rapide »");
+    let de = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    let vers = pos2(bloc.left() + 44.0 * cell, bloc.top() - 10.0);
+    b.image(vec![Event::PointerMoved(de)], DT);
+    b.image(vec![bouton(de, true)], DT);
+    for k in 1..=10 {
+        b.image(vec![Event::PointerMoved(de + (vers - de) * (k as f32 / 10.0))], DT);
+    }
+    b.image(Vec::new(), DT);
+    sauver(&b, "blocs-2-glisser-sur-la-timeline.png");
+    b.image(vec![bouton(vers, false)], DT);
+    b.chauffer(3);
+    sauver(&b, "blocs-3-pose.png");
+    println!("BLOCS effets : {:?}", b.app.doc.panels[0].effets_camera.iter().map(|v| (v.params.preset.label(), v.start)).collect::<Vec<_>>());
+}
