@@ -5,6 +5,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-travellings` (environ 2,5 Go) et sa branche locale retirés
+  (elle n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 172` mis à la corbeille (il n'avait pas
+  servi : la copie de « dd » était encore au format 58).
 - **`prereglages-travellings` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (cd23311, exe de 19 h 21),
   sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (603851a), ni ici
   ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 855 réussis, 0 échec, les dix groupes
