@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`vue-reduite` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (baf6476, exe de 11 h 39), sur son
+  « Oui, fusionne » (écrit dans la session principale, qui l'a transmis mot pour mot ; relu dans son fil avant d'agir ; sans essai
+  sur son écran avant). Main n'avait pas bougé depuis la vérification de 10 h 14 (fc908db) : l'arbre fusionné est exactement
+  celui vérifié (sans avertissement, 4 840 réussis, 0 échec, les dix groupes OK) ; le vérificateur n'a pas été relancé. Son
+  FEANOR était ouvert sur « dd » (dernière écriture du projet à 11 h 30) : la compilation s'est faite pendant qu'il restait
+  ouvert (4 min 40, sans avertissement), puis il a été arrêté sans enregistrer à 11 h 39, pour les quelques secondes du
+  remplacement du fichier. Contrôle de lancement sur des copies de « dd » (format 56) et de « afa » (format 52), avec de faux
+  réglages, fenêtre réduite : vivant et répondant après 30 s, titres « dd.shot — FEANOR » et « afa.shot — FEANOR », aucun rapport
+  de plantage ; ses vrais réglages et ses vrais projets n'ont pas été touchés. Il n'a pas été rouvert à sa place. **Pas regardé
+  sur son écran** : à lui de juger (listes « À vérifier à l'écran » des sections 166.9 et 166.10). Le dossier
+  `Chantiers\vue-reduite` et les dossiers `Tests\essai vue-reduite` et `Tests\vue-reduite` sont gardés (retrait proposé, sa
+  décision) ; la branche d'essai `vue-reduite-essai` ne se fusionne pas.
 - **La vue réduite : son verdict, son choix, et les vignettes** (branche `vue-reduite`, sections 166.9 et 166.10). L'image de
   démonstration de la veille ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image
   d'après semble encore plus détériorée. » Il avait raison sur l'image (agrandie neuf fois, et pas la même image du plan des deux
