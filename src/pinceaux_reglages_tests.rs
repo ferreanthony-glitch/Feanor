@@ -1,6 +1,7 @@
 //! La liste des pinceaux dans le panneau Réglages de l'outil (2026-10-24) : le panneau « Pinceaux » n'existe plus, sa
-//! liste se déplie sous l'aperçu du trait, par un bouton à l'extrême droite de l'aperçu. Ces essais peignent le
-//! panneau image après image, lisent les textes et les aperçus peints (avec leur place) et cliquent dedans.
+//! liste se déplie par un bouton à l'extrême droite de l'aperçu du trait. Depuis le 2026-11-18 elle est **tout en bas** :
+//! les réglages d'abord, juste sous l'aperçu, puis les trois boutons, puis la liste (le schéma d'Anthony). Ces essais
+//! peignent le panneau image après image, lisent les textes et les aperçus peints (avec leur place) et cliquent dedans.
 //! (Les anciennes dispositions : `dock_tests`, `barrepanneaux_tests` ; l'ordre des dossiers : `pinceaux_tests`.)
 
 use std::time::Duration;
@@ -102,8 +103,10 @@ impl Ecran {
     }
 }
 
+/// Les réglages du pinceau puis la liste des brosses, dans l'ordre où `tool_options_panel` les pose.
 fn reglages(a: &mut App, ui: &mut egui::Ui) {
     a.brush_settings_ui(ui);
+    a.brush_list_ui(ui);
 }
 
 #[test]
@@ -140,12 +143,12 @@ fn the_button_unfolds_and_folds_the_list_under_the_preview() {
         let r = p.texte(attendu).unwrap_or_else(|| panic!("« {attendu} » dans la liste : {:?}", p.textes));
         assert!(r.top() > apercu.bottom(), "« {attendu} » est sous l'aperçu : {r:?} / {apercu:?}");
     }
-    // Les trois boutons du bas : importer, garder le réglage courant, supprimer.
+    // Les trois boutons : importer, garder le réglage courant, supprimer.
     for icone in [ph::FILE_ARROW_DOWN, ph::PLUS, ph::TRASH] {
-        assert!(p.contient(icone), "le bouton {icone:?} est en bas de la liste : {:?}", p.textes);
+        assert!(p.contient(icone), "le bouton {icone:?} est là : {:?}", p.textes);
     }
-    // « Plus de réglages » reste là, sous la liste.
-    assert!(p.texte("Plus de réglages").is_some_and(|r| r.top() > p.texte("Mes brosses").unwrap().bottom()));
+    // « Plus de réglages » reste là, au-dessus des boutons et de la liste (2026-11-18).
+    assert!(p.texte("Plus de réglages").is_some_and(|r| r.bottom() < p.texte(ph::FILE_ARROW_DOWN).unwrap().top() && r.bottom() < p.texte("Rechercher").unwrap().top()));
     // Le bouton reste au même endroit (l'aperçu ne bouge pas), et un second clic replie la liste.
     let bouton2 = p.texte(ph::BOOKS).expect("le bouton");
     assert!((bouton2.center() - bouton.center()).length() < 1.0, "{bouton:?} -> {bouton2:?}");
@@ -268,4 +271,71 @@ fn the_old_open_brushes_action_opens_the_settings_with_the_list_unfolded() {
     assert!(app.pinceaux.liste_ouverte);
     // L'action est toujours dans la palette (et garde le raccourci qu'on lui avait donné).
     assert!(crate::keymap::action_info("vue.pinceaux").is_some_and(|a| a.implemented));
+}
+
+/// Le schéma d'Anthony (2026-11-18) : 1 les réglages, juste sous l'aperçu ; 2 les trois boutons ; 3 la liste des brosses, tout en
+/// bas. « Plus de réglages » replié ou déplié, la liste dépliée ne repousse plus les réglages loin de l'aperçu.
+#[test]
+fn the_settings_come_first_then_the_three_buttons_then_the_list() {
+    let mut app = app("ordre");
+    app.set_tool(Tool::Brush);
+    app.pinceaux.liste_ouverte = true;
+    let mut ecran = Ecran::new();
+    for deplie in [false, true] {
+        app.pinceaux.reglages_ouverts = deplie;
+        let p = ecran.chauffer(&mut app, &mut reglages);
+        let r = |t: &str| p.texte(t).unwrap_or_else(|| panic!("« {t} » est peint (réglages dépliés : {deplie}) : {:?}", p.textes));
+        let apercu = p.apercus[0];
+        // 1. Les réglages : « Peindre derrière » et « Plus de réglages », tout de suite sous l'aperçu.
+        let (derriere, plus) = (r(ph::SELECTION_BACKGROUND), r("Plus de réglages"));
+        assert!(derriere.top() > apercu.bottom() && derriere.top() < apercu.bottom() + 20.0, "les réglages sont juste sous l'aperçu : {derriere:?} / {apercu:?}");
+        assert!(plus.top() > derriere.top(), "{plus:?} / {derriere:?}");
+        // 2. Les trois boutons, sur une ligne, sous les réglages.
+        let boutons = [ph::FILE_ARROW_DOWN, ph::PLUS, ph::TRASH].map(r);
+        assert!(boutons.iter().all(|b| b.top() > plus.bottom() && (b.center().y - boutons[0].center().y).abs() < 1.0), "les trois boutons sont sur une ligne, sous « Plus de réglages » : {boutons:?} / {plus:?}");
+        if deplie {
+            // (Déplié : les réglages de la catégorie sont entre « Plus de réglages » et les boutons.)
+            let categorie = r(app.pinceaux.categorie.label());
+            assert!(categorie.top() > plus.bottom() && categorie.bottom() < boutons[0].top(), "les réglages dépliés sont au-dessus des boutons : {categorie:?} / {boutons:?}");
+            assert!(boutons[0].top() > plus.bottom() + 60.0, "les boutons sont repoussés sous les réglages dépliés : {boutons:?} / {plus:?}");
+        }
+        // 3. La liste, sous les boutons : la recherche, puis « Mes brosses » et les dossiers.
+        let (recherche, mes) = (r("Rechercher"), r("Mes brosses"));
+        assert!(recherche.top() > boutons[0].bottom() && mes.top() > recherche.bottom() && r("Crayons").top() > mes.bottom(), "la liste est sous les boutons : {recherche:?} / {mes:?} / {boutons:?}");
+    }
+    // Dans le vrai panneau, pinceau, crayon et gomme : même ordre.
+    app.pinceaux.reglages_ouverts = false;
+    for tool in [Tool::Brush, Tool::Pencil, Tool::Eraser] {
+        app.set_tool(tool);
+        let p = ecran.chauffer(&mut app, &mut |a, ui| a.tool_options_panel(ui));
+        let r = |t: &str| p.texte(t).unwrap_or_else(|| panic!("« {t} » est peint avec {tool:?} : {:?}", p.textes));
+        assert!(r("Plus de réglages").bottom() < r(ph::FILE_ARROW_DOWN).top() && r(ph::FILE_ARROW_DOWN).bottom() < r("Rechercher").top(), "{tool:?} : réglages, boutons, liste");
+    }
+}
+
+/// Des images du panneau à regarder (essai ignoré), dans le dossier `FEANOR_CAPTURE_DIR` : l'outil Pinceau, la liste dépliée,
+/// « Plus de réglages » replié puis déplié sur la Dispersion. Sans carte graphique : rien.
+/// `FEANOR_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc panneau_pinceau_captures -- --ignored --nocapture`
+#[test]
+#[ignore = "écrit des captures : FEANOR_CAPTURE_DIR"]
+fn panneau_pinceau_captures() {
+    let dossier = std::env::var_os("FEANOR_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    std::fs::create_dir_all(&dossier).unwrap();
+    let mut b = crate::perf_tests::banc(crate::document::Document::new(1920, 1080, 24), true);
+    if b.capturer().is_none() {
+        return println!("CAPTURE pas de carte graphique : rien");
+    }
+    b.app.set_mode(crate::app::Mode::Animation);
+    b.app.set_tool(Tool::Brush);
+    b.app.pinceaux.liste_ouverte = true;
+    b.app.pinceaux.categorie = crate::pinceaux::Categorie::Dispersion;
+    b.app.show_pane(Pane::ToolOptions);
+    for (nom, deplie) in [("panneau-replie.png", false), ("panneau-deplie.png", true)] {
+        b.app.pinceaux.reglages_ouverts = deplie;
+        b.chauffer(12);
+        b.attendre_vignettes();
+        let rgba = b.capturer().expect("carte graphique");
+        image::save_buffer(dossier.join(nom), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        println!("CAPTURE {nom}");
+    }
 }
