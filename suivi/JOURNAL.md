@@ -3,6 +3,17 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-19
+
+- **`prereglages-montage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (23efd4c, exe du 19 novembre à
+  0 h 01), sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (93ad4fd),
+  ni ici ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 880 réussis, 0 échec, les dix
+  groupes OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 20 h 39) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 59) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 60 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  176.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-montage` et `Tests\essai 175`.
+
 ## 2026-11-18
 
 - **Préréglages dans la timeline, lot 4 : les transitions et les plans types** (parties 175 et 176, branche
