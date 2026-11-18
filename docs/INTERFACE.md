@@ -14690,3 +14690,81 @@ après le plan courant. Le plan neuf devient le plan courant ; Ctrl+Z le retire.
 10. « Logo studio » : choisir une image ; elle apparaît en douceur.
 11. Exporter une vidéo du passage : l'export montre les mêmes transitions que l'écran.
 12. Enregistrer, rouvrir (le projet passe au format 60).
+
+## 177. Les préréglages : ses neuf réponses, trois transitions et six plans types de plus (2026-11-19, branche `prereglages-reponses`)
+
+Anthony, sur les neuf numéros restés sans réponse (T1, T2, T5, P4, P9, P10, P11, P12, P15) : « Oui ok pour tout ». Avec T2, la
+poussée et le raccord filé gagnent les quatre sens (ils allaient de droite à gauche seulement, partie 175.3). Le reste de la
+partie 175.3 et de 176.3 (un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire) n'est pas
+fait ici.
+
+Le code : `src/transitions.rs` (les trois sortes, le sens, le centre, le fichier), `src/gpu.rs` (leur affichage : deux modes de
+plus dans le shader d'affichage, un réglage de plus par image posée), `src/transitionsui.rs` (formes, sous-menu du sens, cadre du
+centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), `src/incrustation.rs` (quatre mots de plus),
+`src/panneauprereglages.rs` (vignettes), `src/keymap.rs` et `keymap.toml`. Les essais : `src/reponses_tests.rs`.
+
+### 177.1 Ce qui change pour lui
+
+| | Nom | Ce que c'est |
+|---|---|---|
+| T1 | Iris | Le rond de cartoon se ferme sur un point choisi, puis se rouvre sur le plan suivant. Au début du film il s'ouvre seulement, à la fin il se ferme. 16 images |
+| T2 | Volet en horloge | Le plan suivant balaie le cadre comme l'aiguille d'une montre, depuis midi |
+| T2 | Les volets dans les quatre sens | Le volet, la poussée et le raccord filé : « Sens : de la gauche, de la droite, du haut, du bas » au clic droit |
+| T5 | Zoom traversant | On plonge dans le plan (il grossit jusqu'à quatre fois), on ressort du suivant (il arrive de quatre fois et se pose), fondus au milieu |
+| P4 | Titre de séquence | Un carton noir et le nom de la séquence qui commence, rempli tout seul (il ouvre la séquence du plan d'après) ; 3 s |
+| P9 | Plan manquant | « Plan 12 — À VENIR » et sa durée sur un carton gris barré, remplis tout seuls (allonger le plan change la durée écrite) ; 3 s |
+| P10 | Ardoise d'en-tête | Titre, série, épisode, version, date et durée du film, remplis depuis le projet (Fichier > Propriétés) ; la version se tape ; 4 s |
+| P11 | Compte à rebours | 8, 7, 6, 5, 4, 3 (une seconde chacun, l'aiguille fait un tour), le 2 une seule image avec le bip à 1 kHz, puis du noir ; 8 s |
+| P12 | Mire de couleur | Les barres, et un son à 1 kHz sur tout le plan (à −20 dB) ; 5 s |
+| P15 | Fin d'acte | « Fin de l'acte 1 » sur un carton noir, en fondu ; le numéro suit les fins d'acte d'avant ; 3 s |
+
+- **Le centre** d'un iris ou d'un zoom traversant se choisit au clic droit sur la transition : un petit cadre où l'on clique (ou
+  tire) le point. Une étape d'annulation par geste.
+- Les textes du titre de séquence, du plan manquant et de l'ardoise sont des **incrustations** : ils se mettent à jour tout seuls
+  (renommer la séquence, allonger le plan, changer le titre du projet), et se retouchent dans les réglages du calque. Les
+  incrustations libres connaissent quatre mots de plus : `{duree}` (la durée du plan), `{duree_film}`, `{serie}`, `{episode}`.
+- **Les sons** du compte à rebours et de la mire sont des extraits du montage (piste son), posés au temps du plan neuf, faits par
+  FEANOR (pas de fichier à chercher) ; Ctrl+Z les retire avec leur plan.
+- Comme les autres : glissés depuis l'onglet Montage du panneau Préréglages (sur une coupe, ou entre deux plans), ou cliqués ;
+  la palette (Ctrl+K : « Transition : iris »…).
+
+### 177.2 Comment c'est fait
+
+- `transitions::Mix` dit en plus : l'**iris** (centre, rayon), l'angle balayé de l'**horloge**, les grossissements du **zoom**
+  et son centre, le glissement **vertical** d'une poussée, le côté d'où vient un **volet**. Le processeur (export) et la carte
+  graphique (écran) font la même image : l'iris est un aplat hors d'un rond (mode 5 du shader d'affichage), l'horloge une image
+  vue seulement dans un angle (mode 6), le zoom et les volets des images grossies ou coupées au cadre. Chaque image posée a un
+  réglage de plus (`extra`, 16 octets), pour ces deux modes.
+- `Transition::depuis` (le côté) et `Transition::centre` (en parts du cadre) ; sans eux, les sens d'avant (le volet de la gauche,
+  la poussée de la droite) et le milieu du cadre. `transitions.json` passe à la **version 3 seulement quand l'une des trois
+  sortes, un sens ou un centre y est** ; un centre abîmé revient dans le cadre.
+- Les plans types neufs sont faits des mêmes calques qu'à la partie 176 (Couleur unie, dessins vectoriels, clés d'opacité et de
+  position, incrustations) ; le son à 1 kHz est un WAV fait en mémoire (`planstypes::wav_1khz`), rangé dans le projet comme un
+  son importé.
+- **Pas de changement du format des projets** (60).
+- Corrigé en chemin : sur la carte graphique, le volet en horloge passait par le flou du raccord filé et montrait tout le plan
+  suivant (l'essai sur la carte graphique l'a trouvé).
+
+### 177.3 Ce qui n'est pas fait, ou à juger
+
+- Le compte à rebours suppose le cadre au milieu de la feuille (l'aiguille tourne autour du milieu de la feuille).
+- Dans les vignettes du montage, les cartons faits d'incrustations (titre de séquence, plan manquant, ardoise) se voient
+  noirs, sans leur texte : une incrustation est posée sur l'image finale, pas dans le dessin.
+- L'horloge part de midi et tourne dans le sens des aiguilles seulement ; l'iris n'a pas de forme autre que le rond.
+- Toujours pas faits : un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire ; C11, le flou
+  de vitesse du zip pan (C8), C28 ; le lot 5 (A, V, E, S, D, R).
+
+### 177.4 À tester (sa checklist)
+
+1. Onglet Montage du panneau Préréglages : survoler « Iris », « Volet en horloge », « Zoom traversant ».
+2. Glisser « Iris » sur une coupe ; clic droit sur la transition : cliquer dans le petit cadre sur un visage ; lire.
+3. « Iris » au début du film, puis à la fin : il s'ouvre, il se ferme.
+4. Un volet, une poussée : clic droit, « Sens : du haut », « du bas » ; lire.
+5. « Zoom traversant » : le point du centre, puis lire.
+6. « Titre de séquence » entre deux séquences ; renommer la séquence : le carton suit.
+7. « Plan manquant » : allonger le plan, la durée écrite suit.
+8. « Ardoise d'en-tête » : remplir le titre, la série, l'épisode dans les propriétés du projet ; changer la version dans les
+   réglages du calque « Ardoise ».
+9. « Compte à rebours » : lire avec le son, le bip sur le 2.
+10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
+11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.

@@ -582,6 +582,12 @@ fn gpu_mix(rs: &eframe::egui_wgpu::RenderState, gpu: &mut crate::gpu::GpuCanvas,
         shift_b: mix.shift_b,
         blur: mix.blur,
         objet: mix.objet,
+        vertical: mix.vertical,
+        wipe_depuis: mix.wipe_depuis,
+        iris: mix.iris,
+        horloge: mix.horloge,
+        zoom: mix.zoom,
+        zoom_centre: mix.zoom_centre,
         cadre: {
             let fr = doc.frame_rect();
             [fr.left_top(), fr.right_top(), fr.right_bottom(), fr.left_bottom()]

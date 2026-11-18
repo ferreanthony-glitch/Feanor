@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Préréglages : ses neuf réponses** (partie 177, branche `prereglages-reponses` partie de main e561eff, format 60
+  inchangé), sur son « Oui ok pour tout » aux neuf numéros restés sans réponse. Trois transitions de plus : l'iris (T1, sur un
+  centre choisi au clic droit ; il s'ouvre au début du film, se ferme à la fin), le volet en horloge (T2) et le zoom traversant
+  (T5) ; le volet, la poussée et le raccord filé viennent de chacun des quatre côtés (« Sens » au clic droit). Six plans types
+  de plus : titre de séquence (P4), plan manquant (P9), ardoise d'en-tête (P10), compte à rebours avec son bip (P11), mire de
+  couleur et son 1 kHz (P12), fin d'acte (P15) ; les incrustations libres connaissent `{duree}`, `{duree_film}`, `{serie}`,
+  `{episode}`. `transitions.json` passe à la version 3 seulement quand il le faut. Vérificateur : sans avertissement, 4 897
+  réussis, 0 échec, les dix groupes OK (l'essai sur la carte graphique avait trouvé, avant, le volet en horloge pris par le
+  flou du raccord filé : corrigé). Contrôle de lancement de l'exe du chantier sur une copie de « dd » (format 60) avec de faux
+  réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 0 h 09, pas touché).
+  Dossier d'essai pour lui : `Tests\essai 177` (copie de « dd », copie de ses réglages, `Lancer essai 177.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 177.4).
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-montage` et sa branche locale retirés (elle n'avait jamais
   été poussée ; tout est dans main, sur GitHub), `Tests\essai 175` mis à la corbeille (il n'avait pas servi : la copie de
   « dd » était encore au format 59). `Chantiers\piste-mode` et `Tests\essai 173`, à l'autre session, pas touchés.

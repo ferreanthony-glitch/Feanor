@@ -24,7 +24,7 @@ pub enum Source {
     Titre,
     Date,
     /// Le texte de l'incrustation, avec ces mots remplacés : {timecode} {image} {plan} {sequence}
-    /// {titre} {date}.
+    /// {titre} {date} ; depuis la partie 177, {duree} (la durée du plan), {duree_film}, {serie}, {episode}.
     Libre,
 }
 
@@ -219,6 +219,22 @@ impl Default for Incrustation {
     }
 }
 
+/// « 3 s », « 2 s 12 images » : la durée d'un plan de `frames` images à `fps` images par seconde (partie 177, `{duree}`).
+pub fn duree_du_plan(frames: usize, fps: u32) -> String {
+    let fps = fps.max(1) as usize;
+    match (frames / fps, frames % fps) {
+        (0, i) => format!("{i} image{}", if i > 1 { "s" } else { "" }),
+        (s, 0) => format!("{s} s"),
+        (s, i) => format!("{s} s {i} image{}", if i > 1 { "s" } else { "" }),
+    }
+}
+
+/// « 1:42 » : la durée du film, en minutes et secondes (partie 177, `{duree_film}`).
+pub fn duree_du_film(frames: usize, fps: u32) -> String {
+    let s = frames / fps.max(1) as usize;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
 /// Ce qui se voit du texte `text` à l'image `frame` du plan, lettre à lettre (une lettre toutes les `n` images ; 0 : tout).
 pub fn lettres_visibles(text: &str, frame: usize, n: u32) -> String {
     if n == 0 {
@@ -295,7 +311,11 @@ fn text_entier(inc: &Incrustation, doc: &Document, panel: usize, frame: usize, n
             .replace("{plan}", &plan())
             .replace("{sequence}", &sequence())
             .replace("{titre}", &title())
-            .replace("{date}", &date()),
+            .replace("{date}", &date())
+            .replace("{duree_film}", &duree_du_film(doc.total_frames(), doc.fps))
+            .replace("{duree}", &duree_du_plan(doc.panels.get(panel).map_or(0, |p| p.frame_count()), doc.fps))
+            .replace("{serie}", doc.properties.serie.trim())
+            .replace("{episode}", doc.properties.episode.trim()),
     }
 }
 

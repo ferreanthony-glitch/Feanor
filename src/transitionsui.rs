@@ -205,6 +205,34 @@ pub(crate) fn paint_badge(painter: &Painter, b: &Badge, selected: bool) {
             painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 60));
             poly(vec![pos2(cx, y0), pos2(cx + 4.0, ym), pos2(cx, y1), pos2(cx - 4.0, ym)], Color32::from_rgb(255, 255, 255));
         }
+        // (Partie 177.) L'iris : un rond qui se ferme dans du noir.
+        Kind::Iris => {
+            painter.rect_filled(r, 2.0, Color32::from_rgb(10, 10, 12));
+            painter.circle_filled(pos2(xc, ym), (y1 - y0) * 0.32, with_alpha(theme::accent_texte(), 230));
+            painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
+        }
+        // Le volet en horloge : un quart balayé et l'aiguille.
+        Kind::Horloge => {
+            painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 70));
+            let rr = (y1 - y0) * 0.42;
+            let c = pos2(xc, ym);
+            let pts: Vec<Pos2> = std::iter::once(c).chain((0..=8).map(|k| {
+                let a = -std::f32::consts::FRAC_PI_2 + k as f32 / 8.0 * std::f32::consts::FRAC_PI_2 * 1.5;
+                pos2(c.x + rr * a.cos(), c.y + rr * a.sin())
+            })).collect();
+            painter.add(Shape::convex_polygon(pts, with_alpha(theme::accent_texte(), 215), Stroke::NONE));
+            painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
+        }
+        // Le zoom traversant : des cadres emboîtés.
+        Kind::ZoomTraversant => {
+            painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 70));
+            for k in 1..=3 {
+                let f = k as f32 / 3.0;
+                let q = Rect::from_center_size(pos2(xc, ym), vec2((x1 - x0) * 0.8 * f, (y1 - y0) * 0.8 * f));
+                painter.rect_stroke(q, 1.0, Stroke::new(1.0_f32, with_alpha(ink, 210)), StrokeKind::Inside);
+            }
+            painter.rect_stroke(r, 2.0, line, StrokeKind::Inside);
+        }
         // Le volet par un objet : le tronc sombre, au milieu.
         Kind::Objet => {
             painter.rect_filled(r, 2.0, with_alpha(theme::accent_texte(), 90));
@@ -389,6 +417,9 @@ impl App {
             "transition.flash" => Kind::Flash,
             "transition.couleur" => Kind::Colour,
             "transition.objet" => Kind::Objet,
+            "transition.iris" => Kind::Iris,
+            "transition.horloge" => Kind::Horloge,
+            "transition.zoom_traversant" => Kind::ZoomTraversant,
             _ => return false,
         };
         let cut = self.target_cut();
@@ -430,6 +461,30 @@ impl App {
 
     // ------------------------------------------------------------------ menus
 
+    /// Le petit cadre où l'on choisit le centre de la transition `id` (partie 177) : clic ou glisser ; une étape d'annulation par
+    /// geste.
+    fn centre_de_transition_ui(&mut self, ui: &mut egui::Ui, id: u64, centre: [f32; 2]) {
+        let aspect = self.doc.frame[1].max(1) as f32 / self.doc.frame[0].max(1) as f32;
+        let (rect, mut resp) = ui.allocate_exact_size(vec2(150.0, 150.0 * aspect), egui::Sense::click_and_drag());
+        let p = ui.painter_at(rect);
+        p.rect_filled(rect, 2.0, Color32::from_rgb(30, 30, 34));
+        p.rect_stroke(rect, 2.0, Stroke::new(1.5_f32, theme::camera()), StrokeKind::Inside);
+        let point = pos2(rect.left() + centre[0] * rect.width(), rect.top() + centre[1] * rect.height());
+        p.circle_stroke(point, 7.0, Stroke::new(2.0_f32, theme::contour()));
+        p.circle_filled(point, 2.5, theme::contour());
+        if let Some(q) = resp.interact_pointer_pos().filter(|_| resp.clicked() || resp.dragged()) {
+            let neuf = [((q.x - rect.left()) / rect.width()).clamp(0.0, 1.0), ((q.y - rect.top()) / rect.height()).clamp(0.0, 1.0)];
+            if neuf != centre {
+                resp.mark_changed();
+                if self.edited_as(&resp, "Centre de la transition") {
+                    if let Some(t) = self.doc.transitions.iter_mut().find(|t| t.id == id) {
+                        t.centre = Some(neuf);
+                    }
+                }
+            }
+        }
+    }
+
     /// Le menu du clic droit sur une transition.
     pub(crate) fn transition_menu(&mut self, ui: &mut egui::Ui, id: u64) {
         let Some(t) = self.doc.transition(id).cloned() else {
@@ -468,6 +523,29 @@ impl App {
                     t.frames = frames.clamp(1, MAX_FRAMES);
                 }
             }
+        }
+        // (Partie 177.) D'où arrive le plan entrant : un sous-menu de quatre côtés.
+        if let Some(origine) = t.kind.cote_d_origine() {
+            let actuel = t.depuis.unwrap_or(origine);
+            ui.menu_button(format!("Sens : {}", actuel.name().to_lowercase()), |ui| {
+                for cote in transitions::Cote::ALL {
+                    if ui.selectable_label(actuel == cote, cote.name()).clicked() {
+                        ui.close_menu();
+                        self.trans_op("Sens de la transition", |d| match d.transitions.iter_mut().find(|t| t.id == id) {
+                            Some(t) if t.depuis.unwrap_or(origine) != cote => {
+                                t.depuis = Some(cote);
+                                true
+                            }
+                            _ => false,
+                        });
+                    }
+                }
+            });
+        }
+        // Le centre d'un iris, d'un zoom traversant : un petit cadre où l'on clique (ou tire) le point.
+        if t.kind.a_un_centre() {
+            ui.label(egui::RichText::new("Centre : clique dans le cadre").small().weak());
+            self.centre_de_transition_ui(ui, id, t.centre.unwrap_or([0.5, 0.5]));
         }
         // La couleur du fondu par une couleur (partie 175) : une seule étape d'annulation tant que la fenêtre de choix est ouverte.
         if t.kind == Kind::Colour {
@@ -712,6 +790,12 @@ impl App {
                 shift_b: mix.shift_b,
                 blur: mix.blur,
                 objet: mix.objet,
+                vertical: mix.vertical,
+                wipe_depuis: mix.wipe_depuis,
+                iris: mix.iris,
+                horloge: mix.horloge,
+                zoom: mix.zoom,
+                zoom_centre: mix.zoom_centre,
                 cadre,
             },
         }
