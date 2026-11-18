@@ -5,6 +5,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`cutter-reglages` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (bed74af, exe de 04 h 53), sur son
+  « fusionne le cutter ». Partie 169 de docs/INTERFACE.md (numérotée 168 sur la branche ; les versions de plan avaient pris le
+  168) : le Cutter a cinq réglages, réglages du poste (clé `[cutter]` de reglages.toml), format inchangé (56) : écart toléré (0
+  d'origine, comme avant), bouts effilés (0 = net), mode « Dépassements » (bouts libres plus courts que 12 px d'origine ; jamais un
+  morceau entre deux croisements), portée « Calques visibles » (les autres calques coupent sans être modifiés), geste « Lasso » ;
+  plusieurs calques ou clés choisis : tous coupés, une seule étape d'annulation. Panneau sobre validé par lui (segments texte,
+  dessins-curseurs pour l'écart et l'effilé, curseur des dépassements, Précis), après deux essais refusés (tuiles « trop grosses
+  et peu professionnelles »). main fusionnée dans la branche avec --no-ff, le conflit de docs/INTERFACE.md résolu en gardant les
+  deux parties ; les accents de `cutter_tests.rs`, abîmés par une réécriture sous PowerShell, réparés. Vérificateur sur l'arbre
+  fusionné : compilation sans avertissement, passage 2 : 4 823 réussis, 0 échec ; passage 1 : un échec intermittent connu
+  (`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`, relancé seul trois fois,
+  trois réussites) ; dix groupes de fiabilité OK. Son FEANOR (lancé depuis Source) n'était pas ouvert : rien à arrêter. Contrôle de
+  lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main bed74af`) avec de faux réglages, vivant après
+  22 s, aucun plantage nouveau, puis arrêté. À juger par lui : l'écart d'origine (0 ou 2 à 3 px), les 12 px des dépassements, la
+  pointe effilée (un trait effilé perd ses appuis enregistrés). Worktree `trajectoire-3d` et branche gardés.
 - **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
   « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
   167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
