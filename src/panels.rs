@@ -509,11 +509,14 @@ impl App {
                 self.brush_settings_ui(ui);
                 // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
                 self.griffonner_options_ui(ui);
+                // La liste des brosses, si elle est dépliée : tout en bas, après les réglages (`pinceauxui.rs`).
+                self.brush_list_ui(ui);
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
+                self.brush_list_ui(ui);
             }
             Tool::Eraser => {
                 self.brush_summary_ui(ui);
@@ -529,6 +532,7 @@ impl App {
                 }
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
+                self.brush_list_ui(ui);
             }
             // Le pot de peinture : la tolérance et d'où viennent les contours en haut ; le débord et le
             // mode d'emploi dans « Plus de réglages ».

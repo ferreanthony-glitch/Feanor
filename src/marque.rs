@@ -5,13 +5,12 @@
 //! ExtraBold pour le mot, IBM Plex Sans Medium pour la devise. Elles sont embarquées dans l'exécutable. Pour changer de
 //! police de marque, on ne touche qu'aux trois constantes `MOT_*` / `DEVISE_*` de ce fichier.
 //!
-//! **Le lockup** (livre de marque) : le mot « FEANOR » en capitales, interlettrage 0,02 em. Le lockup principal met le Joyau jade
-//! devant le mot (devise alignée à droite sur le R) ; le moment fort (l'accueil) met le Joyau irisé à la place du O (devise
-//! à partir du F). Dans les deux cas la taille du Joyau
-//! taille vient de la hauteur réelle des capitales de la police (lue dans la table `OS/2`) : la pierre fait exactement la
-//! hauteur des capitales, soit un Joyau de `cap × 64 / 39`, enfoncé sous la ligne de base de `taille × 12 / 64`, et il
-//! mord de `taille × 7 / 64` sur chaque lettre voisine. Sous 24 pixels de capitales, le Joyau est seul ; la devise
-//! « FORGE YOUR STORY » (capitales espacées de 0,18 em) disparaît sous 24 pixels de hauteur de logo.
+//! **Le lockup** (charte du 17/11/2026) : le mot « FEANOR » en capitales. Le lockup principal met l'étoile devant le mot
+//! (l'étoile fait 1,87 fois la hauteur des capitales, centrée sur elles ; devise alignée à droite sur le R) ; le moment
+//! fort (l'accueil) met l'étoile à la place du O (elle fait 1,18 fois la hauteur des capitales, centrée sur elles,
+//! avec un petit écart de chaque côté ; devise à partir du F). Les tailles viennent de la hauteur réelle des capitales de
+//! la police (lue dans la table `OS/2`) et de la place réelle de l'étoile dans son carré (`logo::PIERRE_*`). Sous
+//! 24 pixels de capitales, le joyau est seul ; la devise « FORGE YOUR STORY » disparaît sous 24 pixels de hauteur de logo.
 //!
 //! **L'animation d'ouverture** (`logo::etat_animation`) n'est jouée qu'une fois par lancement, sur l'accueil, sans
 //! bloquer l'interface ; l'écran n'est repeint que pendant qu'elle court, puis le Joyau reste figé.
@@ -130,9 +129,28 @@ pub fn taille_pour_capitales(m: &Metriques, capitales: f32) -> f32 {
     capitales * m.unites_par_em / m.hauteur_capitales
 }
 
-/// Côté du Joyau dont la pierre a la hauteur des capitales (la pierre fait 39 des 64 unités).
+/// La hauteur de l'étoile dans son carré (0,96).
+fn part_pierre() -> f32 {
+    (logo::PIERRE_BAS - logo::PIERRE_HAUT) / logo::DESSIN
+}
+/// La pierre à la place du O : 1,18 fois la hauteur des capitales.
+pub const PIERRE_SUR_CAPITALES_O: f32 = 1.18;
+/// L'étoile devant le mot : 1,87 fois la hauteur des capitales.
+pub const PIERRE_SUR_CAPITALES_DEVANT: f32 = 1.87;
+
+/// Côté du joyau à la place du O (accueil) pour des capitales de `capitales` points.
 pub fn cote_joyau(capitales: f32) -> f32 {
-    capitales * 64.0 / 39.0
+    capitales * PIERRE_SUR_CAPITALES_O / part_pierre()
+}
+
+/// Côté du joyau devant le mot (lockup principal) pour des capitales de `capitales` points.
+pub fn cote_devant(capitales: f32) -> f32 {
+    capitales * PIERRE_SUR_CAPITALES_DEVANT / part_pierre()
+}
+
+/// L'écart entre la pierre et les lettres voisines quand elle remplace le O.
+fn ecart_o(capitales: f32) -> f32 {
+    capitales * 0.06
 }
 
 // ------------------------------------------------------------------------------------------- le mot
@@ -179,10 +197,10 @@ pub struct Lockup {
 /// Place le lockup dont l'angle haut gauche des capitales est `haut_gauche` (ligne de base = `haut_gauche.y + capitales`).
 pub fn disposer(ctx: &egui::Context, haut_gauche: Pos2, capitales: f32, avec_devise: bool, mise: Mise) -> Lockup {
     let base = haut_gauche.y + capitales;
-    let cote = cote_joyau(capitales);
-    let enfonce = cote * 12.0 / 64.0;
-    let morsure = cote * 7.0 / 64.0;
-    let haut_joyau = base + enfonce - cote;
+    let cote = if mise == Mise::Devant { cote_devant(capitales) } else { cote_joyau(capitales) };
+    // La pierre est centrée sur la hauteur des capitales (elle est au milieu de son carré).
+    let haut_joyau = haut_gauche.y + capitales / 2.0 - cote / 2.0;
+    let (g, d) = (logo::PIERRE_GAUCHE / logo::DESSIN, logo::PIERRE_DROITE / logo::DESSIN);
     if capitales < MOT_CAPITALES_MIN {
         let joyau = Rect::from_min_size(pos2(haut_gauche.x, haut_joyau), vec2(cote, cote));
         return Lockup { rect: joyau, joyau, base, mot_gauche: joyau.left(), mot_droite: joyau.right() };
@@ -191,21 +209,21 @@ pub fn disposer(ctx: &egui::Context, haut_gauche: Pos2, capitales: f32, avec_dev
         Mise::RemplaceLeO => {
             let gauche = mot(ctx, "FEAN", capitales, Color32::WHITE);
             let droite = mot(ctx, "R", capitales, Color32::WHITE);
-            let x_joyau = haut_gauche.x + gauche.size().x - morsure;
-            let x_r = x_joyau + cote - morsure;
+            let x_joyau = haut_gauche.x + gauche.size().x + ecart_o(capitales) - cote * g;
+            let x_r = x_joyau + cote * d + ecart_o(capitales);
             (Rect::from_min_size(pos2(x_joyau, haut_joyau), vec2(cote, cote)), haut_gauche.x, x_r + droite.size().x)
         }
         Mise::Devant => {
             let entier = mot(ctx, "FEANOR", capitales, Color32::WHITE);
-            // (Le mot commence juste après la pointe droite de l'étoile : 60 sur 64.)
-            let x_mot = haut_gauche.x + cote * 61.0 / 64.0;
+            // (Le mot commence après la pointe droite de la pierre, à un écart de 0,37 capitale.)
+            let x_mot = haut_gauche.x + cote * d + capitales * 0.37;
             (Rect::from_min_size(pos2(haut_gauche.x, haut_joyau), vec2(cote, cote)), x_mot, x_mot + entier.size().x)
         }
     };
     let gauche = if mise == Mise::Devant { joyau.left() } else { haut_gauche.x };
     let mut rect = Rect::from_min_max(pos2(gauche, joyau.top().min(haut_gauche.y)), pos2(mot_droite, joyau.bottom().max(base)));
     if avec_devise && cote >= DEVISE_HAUTEUR_MIN {
-        rect.max.y += capitales * 0.28 + capitales * 0.34;
+        rect.max.y = rect.max.y.max(base + capitales * 0.22 + capitales * 0.34 * 1.2);
     }
     Lockup { rect, joyau, base, mot_gauche, mot_droite }
 }
@@ -216,8 +234,9 @@ pub fn ajuster(ctx: &egui::Context, largeur: f32, capitales: f32, mise: Mise) ->
     let w = disposer(ctx, pos2(0.0, 0.0), capitales, false, mise).rect.width();
     let mut c = if w > largeur && w > 0.0 { capitales * largeur.max(1.0) / w } else { capitales };
     if c < MOT_CAPITALES_MIN {
-        // (Le Joyau seul : sa largeur est `cote_joyau(c)`.)
-        c = c.min(largeur.max(1.0) * 39.0 / 64.0);
+        // (Le joyau seul : sa largeur est `cote_joyau(c)`.)
+        let rapport = if mise == Mise::Devant { PIERRE_SUR_CAPITALES_DEVANT } else { PIERRE_SUR_CAPITALES_O } / part_pierre();
+        c = c.min(largeur.max(1.0) / rapport);
     }
     // (Les tailles de police sont arrondies : on resserre jusqu'à ce que ça tienne.)
     for _ in 0..12 {
@@ -246,7 +265,7 @@ pub fn peindre(painter: &egui::Painter, ctx: &egui::Context, texture: &TextureHa
                 let gauche = mot(ctx, "FEAN", capitales, encre);
                 let droite = mot(ctx, "R", capitales, encre);
                 let cote = l.joyau.width();
-                let x_r = l.joyau.left() + cote - cote * 7.0 / 64.0;
+                let x_r = l.joyau.left() + cote * logo::PIERRE_DROITE / logo::DESSIN + ecart_o(capitales);
                 painter.galley(pos2(haut_gauche.x, haut_ligne), gauche, encre);
                 painter.galley(pos2(x_r, haut_ligne), droite, encre);
             }
@@ -258,7 +277,7 @@ pub fn peindre(painter: &egui::Painter, ctx: &egui::Context, texture: &TextureHa
         if l.joyau.width() >= DEVISE_HAUTEUR_MIN && capitales >= MOT_CAPITALES_MIN {
             let corps = (capitales * 0.34).max(7.0);
             let t = galley(ctx, DEVISE, DEVISE_FAMILLE, corps, DEVISE_INTERLETTRAGE, couleur);
-            let y = l.base + l.joyau.height() * 12.0 / 64.0 + capitales * 0.12;
+            let y = l.base + capitales * 0.22;
             let x = match mise {
                 Mise::RemplaceLeO => haut_gauche.x,
                 // Alignée à droite sur le R (l'espace laissé après la dernière lettre par l'interlettrage est rendu).

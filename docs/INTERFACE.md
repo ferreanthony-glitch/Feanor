@@ -4227,6 +4227,44 @@ liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
 
+### Les réglages d'abord, la liste tout en bas (2026-11-18, branche `panneau-pinceau`)
+
+Demande d'Anthony : « revoir la disposition du panneau », sur une capture du panneau Pinceau annotée de sa main : **1** sur les réglages
+(« Peindre derrière », « Peint sur l'aplat », l'aplat du calque, « Plus de réglages » et la catégorie dépliée), **2** sur la rangée des
+trois boutons (importer, nouvelle brosse, supprimer), **3** sur la liste des brosses, une flèche qui fait monter les réglages sous l'aperçu
+et une autre qui fait descendre la liste dans le vide du bas du panneau. Le défaut : dépliée juste sous l'aperçu, la liste repoussait de
+300 points les réglages qu'on tourne en regardant l'aperçu du trait.
+
+Ce qui change (`pinceauxui.rs`, `panels.rs`) :
+
+- **1. Les réglages restent sous l'aperçu**, liste dépliée ou non : « Peindre derrière », « Peint sur l'aplat », l'aplat du calque, puis
+  « Plus de réglages » et ses catégories.
+- **2. Les trois boutons** (importer des pinceaux, nouvelle brosse, supprimer la brosse) sont **au-dessus de la liste**, sur leur ligne,
+  hors du cadre (`brush_list_buttons`). Ils étaient en bas de la liste, dans le cadre.
+- **3. La liste des brosses est la dernière chose du panneau** (`brush_list_ui`, appelée par `tool_options_panel` après les réglages et le
+  mode « Griffonner » d'un calque de couleur) : dans son cadre, la recherche, liste ou vignettes, la saisie d'un nom, les dossiers. Pinceau,
+  crayon et gomme.
+
+Ce qui ne change pas : le bouton « livres » à droite de l'aperçu la déplie et la replie, l'état est retenu ; la liste fait toujours 300
+points de haut au plus et défile au-delà (`LIST_H`) ; ce qu'elle offre (recherche, vignettes, clic droit, « Mes brosses » en tête) ; la
+fenêtre des réglages au clic droit montre le même panneau, dans le même ordre.
+
+Un seul texte visible change, la fin de la bulle du bouton « Liste des pinceaux » : « Un clic déplie la liste **en bas du panneau**, un
+autre la replie. » (avant : « sous l'aperçu »). Aucun texte ajouté.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Outil Pinceau, liste dépliée : sous l'aperçu, d'abord les trois icônes puis « Plus de réglages » ; ensuite la rangée importer / + /
+   corbeille ; ensuite la recherche et la liste.
+2. Déplier « Plus de réglages », tourner un réglage : l'aperçu du trait est juste au-dessus, on le voit changer sans faire défiler.
+3. Le « + » : la saisie du nom apparaît en tête de la liste, juste sous lui.
+4. Crayon et gomme : même ordre. Les autres outils : rien ne change.
+5. Clic droit dans le dessin (la fenêtre des réglages) : même ordre.
+
+Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintenant que « Plus de réglages » est au-dessus des boutons et de
+la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
+boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
+le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
@@ -13782,7 +13820,36 @@ Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte
 vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
 l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
 
-## 167. Les versions d'un plan dans la timeline : « V2 ▸ », la version dépliée à côté, la couleur de repère (2026-11-17, branche `versions-plan`)
+## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
+
+**Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
+charte du 17/11/2026 : une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, pointes très
+légèrement arrondies (`ARRONDI_POINTES`), sans facettes,
+au dégradé vertical jade `#2FD4C0` → turquoise `#2FCCDB` → bleu ciel `#86C7EF` → bleu `#B4C1F4` et lilas pâles
+`#D6C3EC`. En une couleur (encre, blanc), c'est un aplat. La charte complète (couleurs, polices, règles d'usage) est dans
+la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-site/logo/silmaril/` (`fabrique.mjs`).
+
+**Dans le code.** `logo.rs` dessine l'étoile sur 100 unités (`DESSIN`) puis la ramène sur la grille de 64 de l'animation
+et de l'icône ; ses fonctions (`image`, `icone`, `ico`, `dessiner`, l'animation d'ouverture) ne changent pas de forme,
+donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. L'icône
+est l'icône de base de la charte : carré arrondi au dégradé du logo, étoile blanche (`feanor-icone.svg` ; les autres
+icônes de la charte sont `feanor-icone-noire`, `-blanche` et `-jade`). Les variantes
+`Jade`, `JadePetit` et `Iris` dessinent la même étoile en dégradé (elle tient à 16 px) ; `Mono` est l'aplat. L'animation
+d'ouverture garde ses images clés : l'étoile s'ouvre en tourbillon, une seconde étoile plus petite s'efface.
+`marque.rs` : l'étoile fait 1,18 fois la hauteur des capitales à la place du O (accueil, centrée sur les capitales, petit
+écart de chaque côté) et 1,87 fois devant le mot (À propos ; `cote_devant`). `assets/feanor-viseur-*.svg` sont remplacés
+par `assets/feanor-logo*.svg`, `feanor-icone*.svg`, `feanor-mot-*.svg`, `feanor-empile-*.svg`. Les barres de chargement
+gardent l'irisé (`barre.rs`).
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : l'accueil montre FEAN, l'étoile à la place du O (un peu plus haute que les lettres, centrée
+   sur elles), R, et la devise dessous ; l'étoile s'ouvre une fois puis reste figée.
+2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
+3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
+4. Thème Papier : l'accueil et À propos restent lisibles.
+
+## 168. Les versions d'un plan dans la timeline : « V2 ▸ », la version dépliée à côté, la couleur de repère (2026-11-17, branche `versions-plan` ; numérotée 167 sur la branche, 168 à la fusion : le nouveau logo avait pris le 167)
 
 Anthony, sur une capture de la timeline en vue Storyboard (en-têtes « Plan 1 · V1 », « Plan 2 »…) : « Je veux que la V2 d'un plan
 apparaisse sur le plan et qu'un clic sur une flèche vers la droite la déploie à côté dans la timeline pour la lire et la comparer
@@ -13796,7 +13863,7 @@ déplié, palette, vue en lecture seule) ; ce qu'il a fallu ailleurs : `src/stor
 `src/app.rs` (lecture, flèches), `src/soundtrack.rs` (le son), `src/canvas.rs` (la vue), `src/planvers.rs` (la couleur des versions).
 Les essais : `src/versiondepliee_tests.rs` (onze).
 
-### 167.1 Les étiquettes sur le bloc du plan
+### 168.1 Les étiquettes sur le bloc du plan
 
 - Sur le bloc d'un plan qui a plusieurs versions, le nom reste « Plan 1 · V1 » (la version en cours), suivi des **autres versions en
   étiquettes texte** : « V2 », « V3 »…, chacune suivie d'une flèche ▸. Du texte, pas de pastille ni de miniature. Un plan à une seule
@@ -13810,7 +13877,7 @@ Les essais : `src/versiondepliee_tests.rs` (onze).
 - La durée du plan n'est écrite que s'il reste de la place après les étiquettes.
 - L'étiquette « V2 » au milieu du haut du bloc (la pile au survol, 2026-10-30) reste telle quelle.
 
-### 167.2 La version dépliée
+### 168.2 La version dépliée
 
 - **Un clic sur ▸** déplie la V2 **juste après la V1** : un bloc à part, bordé (à la couleur de la version, sinon du contour), hachuré
   légèrement, avec son aperçu, « V2 ◂ dépliée » et sa durée ; sous lui, une colonne hachurée (pas de pistes : rien ne s'y modifie).
@@ -13825,7 +13892,7 @@ Les essais : `src/versiondepliee_tests.rs` (onze).
   alors l'image de la version, composée sur les fils des vignettes, avec « Plan 1 · V2 dépliée · lecture seule · image 12 » écrit
   dessus. On n'y dessine pas ; le clic droit sur le bloc donne la palette, « Passer à la V2 », « Replier la V2 ».
 - **La lecture** traverse la V1, puis chaque version dépliée, puis le plan suivant ; les flèches (image précédente / suivante) aussi.
-- **Le son pendant une version dépliée** (revu le 18, voir 167.7) : le son **tel qu'il était posé sous cette version** quand elle a
+- **Le son pendant une version dépliée** (revu le 18, voir 168.7) : le son **tel qu'il était posé sous cette version** quand elle a
   cessé d'être la version en cours, à la même place dans le plan ; une version sans son gardé rejoue le son du film **depuis le début
   du plan**. Après elle, le son reprend au début du plan suivant. Sans son, la lecture suit l'horloge comme d'habitude.
 - **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée, revu le 18) : elle devient la version en cours et se
@@ -13833,7 +13900,7 @@ Les essais : `src/versiondepliee_tests.rs` (onze).
 - Le dépliage est de l'affichage de la séance : il ne survit pas à la fermeture du projet, et se défait de lui-même si la version
   disparaît (supprimée, annulée).
 
-### 167.3 La couleur de repère
+### 168.3 La couleur de repère
 
 - **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles **douces** (revu le 18 :
   bleu, vert, cyan, rouge, rose, orange, violet, brun, jaune doux et gris bleu, moins saturées et plus claires que les couleurs de
@@ -13848,21 +13915,21 @@ Les essais : `src/versiondepliee_tests.rs` (onze).
   (essai : le champ retiré à la main, le projet se rouvre sans avertissement), et une version d'avant qui ouvre un projet de cette
   branche l'ignore. Seule limite : une version d'avant qui **enregistre** ce projet perd les couleurs (rien d'autre).
 
-### 167.4 Les bulles
+### 168.4 Les bulles
 
 - Sur « V2 » : « Passer à la V2 » — le clic en fait la version en cours, Ctrl+Z revient, clic droit = couleur. Sur la version en
   cours : ce qu'elle est, clic = la pile. Sur ▸ : « Déplier la V2 » (après la V1, lecture seule, les plans suivants glissent à l'écran
   seulement) ; sur ◂ : « Replier la V2 ». Sur « +2 » : la pile, et le clic droit. Sur la colonne dépliée et sur sa vue : lecture seule.
   Toutes au délai habituel (`bulles.rs`, une seconde).
 
-### 167.5 Ce qui reste à juger (par Anthony)
+### 168.5 Ce qui reste à juger (par Anthony)
 
 - Le bloc déplié est-il assez distinct d'un plan du film (bord, hachures, « dépliée ») sans être trop chargé ?
 - Le son sous une version dépliée : repris au début du plan (choix fait pour comparer à son égal) ; préfère-t-il le silence ?
 - La palette : dix teintes des couleurs de plan ; les veut-il plus douces (pastel) pour des étiquettes ?
 - Passer à une version dépliée déplie l'ancienne à sa place : est-ce ce qu'il attend ?
 
-### 167.6 Regardé à l'écran (par Claude, le 17 novembre au soir)
+### 168.6 Regardé à l'écran (par Claude, le 17 novembre au soir)
 
 Exe de la branche, réglages à part, sur une copie de « retakes brawlydays » (`Tests\essai 167`), fenêtre capturée seule. Le plan 1
 (V2 en cours, V1 rangée) montre « Plan 1 · V2 » puis « V1 ▸ » ; un clic sur ▸ pose le bloc « V1 ◂ dépliée » (2 s 13) après lui, les
@@ -13876,7 +13943,7 @@ passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_
 (intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
 passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
 
-### 167.7 Ses réponses (18 novembre) et ce qui a changé
+### 168.7 Ses réponses (18 novembre) et ce qui a changé
 
 1. **Le son** : « Sur la version dépliée le son se rejoue. Si le son a été posé différemment que la version active, la version
    dépliée garde le son tel qu'il a été posé. »
@@ -13891,9 +13958,9 @@ passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il
      du film à partir du début du plan). Les sons qu'écoutent seulement des versions restent dans le projet (`used_sounds`).
    - Une version qui avait été rangée **avant** ce changement n'a pas de son gardé : elle rejoue le son du film. Une version sous
      laquelle rien n'était posé non plus.
-2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 167.2.
+2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 168.2.
 3. Le dépliage n'est pas gardé à la fermeture : inchangé.
-4. Les teintes « plus douces » : voir 167.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
+4. Les teintes « plus douces » : voir 168.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
    avait prend les nouvelles teintes. Essai : chaque teinte garde un contraste d'au moins 4,5 avec son texte, et toutes se
    distinguent.
 
