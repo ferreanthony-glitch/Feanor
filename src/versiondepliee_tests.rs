@@ -456,3 +456,42 @@ fn a_label_colour_is_one_undo_step_shows_on_the_plan_name_and_survives_save_and_
     assert_eq!(ancien.doc.nombre_de_versions(plan), 2);
     assert_eq!(ancien.doc.couleur_de_version(plan, 1), None);
 }
+/// Les captures de la partie 167 dans `FEANOR_CAPTURE_DIR`, sur la COPIE de projet que donne `FEANOR_PROJET_ESSAI` (son premier
+/// plan à plusieurs versions) : la version dépliée, la palette ouverte, l'étiquette colorée. Sans carte graphique : rien.
+#[test]
+#[ignore = "écrit des captures : FEANOR_CAPTURE_DIR, FEANOR_PROJET_ESSAI"]
+fn versions_depliees_captures() {
+    let (Some(dossier), Some(projet)) = (std::env::var_os("FEANOR_CAPTURE_DIR"), std::env::var_os("FEANOR_PROJET_ESSAI")) else { return };
+    let dossier = std::path::PathBuf::from(dossier);
+    let doc = crate::project::load(std::path::Path::new(&projet)).expect("le projet s'ouvre").doc;
+    let index = (0..doc.panels.len()).find(|&i| doc.nombre_de_versions(doc.panels[i].id) > 1).expect("un plan à plusieurs versions");
+    let plan = doc.panels[index].id;
+    let numero = doc.versions_du_plan(plan).unwrap().autres[0].numero;
+    let mut b = crate::perf_tests::banc_taille(doc, true, 1920, 1080);
+    b.app.set_espace(crate::workspace::Espace::Storyboard);
+    b.app.montage_zoom = 6.0;
+    b.chauffer(10);
+    let sauver = |b: &mut Banc, nom: &str| {
+        b.chauffer(12);
+        let Some(rgba) = b.capturer() else { return println!("167 pas de carte graphique : {nom} ignorée") };
+        image::RgbaImage::from_raw(1920, 1080, rgba).expect("image").save(dossier.join(nom)).expect("png");
+    };
+    b.app.depli_basculer(index, numero);
+    b.chauffer(4);
+    let carte = b.app.depli_carte();
+    b.app.depli_cliquer(&carte, carte.debut(0) + carte.inserts[0].len / 2);
+    for _ in 0..200 {
+        b.image(Vec::new(), 1.0 / 60.0);
+        if !b.app.thumbs.busy() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    sauver(&mut b, "167-deplie.png");
+    let z = zone(&b, numero, Sorte::Nom).expect("l'étiquette de la version");
+    cliquer(&mut b, z.zone.center(), PointerButton::Secondary);
+    sauver(&mut b, "167-palette.png");
+    b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.app.colorer_la_version(index, numero, Some(5));
+    sauver(&mut b, "167-couleur.png");
+}
