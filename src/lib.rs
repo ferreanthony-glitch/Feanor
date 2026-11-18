@@ -1311,6 +1311,8 @@ mod view;
 mod vuenette;
 #[cfg(test)]
 mod vuenette_tests;
+#[cfg(test)]
+mod vuereduite_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;

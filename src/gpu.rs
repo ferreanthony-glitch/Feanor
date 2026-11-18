@@ -3,8 +3,9 @@
 //! Deux temps, comme le calcul sur processeur qu'il remplace à l'écran :
 //! 1. **composer** : le papier puis les calques (opacité, teinte de la pelure d'oignon) sont
 //!    empilés dans une image à la taille du projet, pixel pour pixel ;
-//! 2. **afficher** : cette image est posée à l'écran avec la vue (zoom, rotation, miroir), lissée
-//!    comme egui lisse ses images.
+//! 2. **afficher** : cette image est posée à l'écran avec la vue (zoom, rotation, miroir). Réduite,
+//!    chaque pixel d'écran est la moyenne de tout ce qu'il couvre de l'image (`fs_display`) ; à
+//!    100 % et au-delà, ses pixels tels quels (ou lissés : `GpuCanvas::lisser`, `pose_nette`).
 //!
 //! Chaque dessin affiché est une texture, **à la taille de son contenu** (la boîte des tuiles
 //! dessinées, avec un pixel transparent de marge, `texture_rect`) et non de la feuille entière :
@@ -277,9 +278,21 @@ fn gamma_from_linear_rgb(rgb: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, cutoff);
 }
 
-// En réduisant fort (vignette, vue très éloignée), une seule lecture par pixel d'écran sauterait
-// des pixels de l'image et les traits fins disparaîtraient : on moyenne n×n lectures réparties
-// sur ce que couvre le pixel (n selon la réduction, 8 au plus).
+// Le plus de lectures par axe et par pixel d'écran, en réduisant.
+const LECTURES_MAX: i32 = 12;
+
+// En réduisant (la vue en dessous de 100 %, une vignette), un pixel d'écran couvre plusieurs pixels de
+// l'image : **tous doivent compter**, sinon un trait fin se casse en pointillés et son épaisseur change
+// d'une ligne à l'autre (partie 166.9). L'image est alors lue lissée (l'échantillonneur bilinéaire,
+// choisi par `pose_nette` : une lecture pèse deux pixels de l'image par axe) :
+// - vue droite : la moyenne exacte de ce que couvre le pixel d'écran. Chaque lecture, posée entre deux
+//   pixels de l'image, plus près de celui qui compte le plus, les pèse tous les deux comme il faut :
+//   (e + 1) / 2 lectures par axe pour e pixels couverts ;
+// - vue tournée ou en perspective : n × n lectures réparties sur ce que couvre le pixel, n = e.
+// Sans réduction (100 % et au-delà) : une seule lecture, comme toujours.
+// (Les lectures se font au niveau 0 demandé, `textureSampleLevel` : la carte y applique le filtre du
+// **grossissement** de l'échantillonneur. Avec celui de l'affichage, qui ne lisse pas en grossissant,
+// chaque lecture ne prenait qu'un point : à 37 %, 4 points lus sur plus de 7 couverts.)
 // Transitions (`transitions.rs`) : params.x est l'opacité de l'image posée ; params.y le mode
 // (1 : image, 0 : aplat de gris params.z, par exemple le noir d'un fondu au noir, 2 : volet, l'image
 // ne se voit qu'à gauche de la colonne params.z de la feuille). Une image seule : x = 1, y = 1.
@@ -291,16 +304,47 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
     let dx = dpdx(v.uv);
     let dy = dpdy(v.uv);
     let size = vec2<f32>(textureDimensions(tex));
-    let texels = max(length(dx * size), length(dy * size));
-    let n = i32(clamp(ceil(texels / 1.5), 1.0, 8.0));
-    var acc = vec4<f32>(0.0);
-    for (var j = 0; j < n; j++) {
-        for (var i = 0; i < n; i++) {
-            let o = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(n) - 0.5;
-            acc += textureSampleLevel(tex, samp, v.uv + dx * o.x + dy * o.y, 0.0);
+    // Ce que couvre un pixel d'écran, en pixels de l'image : ses deux côtés, et son étendue par axe de l'image.
+    let cx = dx * size;
+    let cy = dy * size;
+    let texels = max(length(cx), length(cy));
+    let e = abs(cx) + abs(cy);
+    var lin = vec4<f32>(0.0);
+    if (texels <= 1.01) {
+        lin = textureSampleLevel(tex, samp, v.uv, 0.0);
+    } else if (min(abs(cx.y) + abs(cy.x), abs(cx.x) + abs(cy.y)) <= 0.002 * texels && max(e.x, e.y) <= f32(2 * LECTURES_MAX - 1)) {
+        // Vue droite (ou tournée d'un quart de tour, retournée) : les pixels de l'image de `lo` à `hi`, chacun pour la part
+        // de lui que le pixel d'écran couvre, lus deux par deux.
+        let c = v.uv * size;
+        let lo = c - 0.5 * e;
+        let hi = c + 0.5 * e;
+        let premier = floor(lo);
+        let nx = i32(ceil((hi.x - premier.x) * 0.5));
+        let ny = i32(ceil((hi.y - premier.y) * 0.5));
+        for (var j = 0; j < ny; j++) {
+            let ty = premier.y + 2.0 * f32(j);
+            let ya = clamp(min(hi.y, ty + 1.0) - max(lo.y, ty), 0.0, 1.0);
+            let yb = clamp(min(hi.y, ty + 2.0) - max(lo.y, ty + 1.0), 0.0, 1.0);
+            let py = ty + 0.5 + yb / max(ya + yb, 1e-6);
+            for (var i = 0; i < nx; i++) {
+                let tx = premier.x + 2.0 * f32(i);
+                let xa = clamp(min(hi.x, tx + 1.0) - max(lo.x, tx), 0.0, 1.0);
+                let xb = clamp(min(hi.x, tx + 2.0) - max(lo.x, tx + 1.0), 0.0, 1.0);
+                let px = tx + 0.5 + xb / max(xa + xb, 1e-6);
+                lin += textureSampleLevel(tex, samp, vec2<f32>(px, py) / size, 0.0) * ((xa + xb) * (ya + yb));
+            }
         }
+        lin = lin / (e.x * e.y);
+    } else {
+        let n = i32(clamp(ceil(texels), 1.0, f32(LECTURES_MAX)));
+        for (var j = 0; j < n; j++) {
+            for (var i = 0; i < n; i++) {
+                let o = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(n) - 0.5;
+                lin += textureSampleLevel(tex, samp, v.uv + dx * o.x + dy * o.y, 0.0);
+            }
+        }
+        lin = lin / f32(n * n);
     }
-    let lin = acc / f32(n * n);
     // (Le volet écarte les pixels après les dérivées : elles se calculent en flot uniforme.)
     if (item.params.y > 1.5 && v.uv.x > item.params.z) {
         discard;
@@ -1529,7 +1573,8 @@ struct CanvasPaint {
     split: usize,
     /// Ce qu'on pose à l'écran, dans l'ordre.
     shows: Vec<Show>,
-    /// Poser l'image lissée quand la vue la grossit (`GpuCanvas::lisser`).
+    /// Poser l'image lissée quand la vue la grossit (`GpuCanvas::lisser`). Réduite, tournée à 100 % ou en perspective, elle se pose
+    /// lissée de toute façon (`pose_nette`).
     lisser: bool,
 }
 
@@ -1762,10 +1807,29 @@ impl CallbackTrait for CanvasPaint {
         for (k, show) in self.shows.iter().enumerate() {
             let Some(frame) = (if show.second { &res.frame2 } else { &res.frame }) else { continue };
             pass.set_bind_group(0, &res.uniform_group, &[((self.items.len() + k) as u64 * res.stride) as u32]);
-            pass.set_bind_group(1, if self.lisser { &frame.display_group_lisse } else { &frame.display_group }, &[]);
+            let lisse = self.lisser || !pose_nette(&show.screen, show.ws.is_some(), info.pixels_per_point, frame.size);
+            pass.set_bind_group(1, if lisse { &frame.display_group_lisse } else { &frame.display_group }, &[]);
             pass.draw(0..6, 0..1);
         }
     }
+}
+
+/// L'image composée se pose-t-elle en **pixels nets** (l'échantillonneur de l'affichage, qui ne lisse pas en grossissant) ? Seulement
+/// si la vue ne la réduit pas, et si elle est droite ou la grossit. Réduite, `fs_display` moyenne ce que couvre chaque pixel d'écran,
+/// et ses lectures doivent être lissées pour que tous les pixels de l'image comptent ; tournée à 100 %, ou en perspective, elle se pose
+/// lissée plutôt qu'en marches (partie 166.9). `coins` : les coins de l'image à l'écran, en points (haut-gauche, haut-droite,
+/// bas-droite, bas-gauche) ; `taille` : celle de l'image, en pixels.
+pub(crate) fn pose_nette(coins: &[[f32; 4]; 4], perspective: bool, ppp: f32, taille: (u32, u32)) -> bool {
+    if perspective {
+        return false;
+    }
+    let (haut, gauche) = ([coins[1][0] - coins[0][0], coins[1][1] - coins[0][1]], [coins[3][0] - coins[0][0], coins[3][1] - coins[0][1]]);
+    let longueur = |v: [f32; 2]| v[0].hypot(v[1]);
+    let (lh, lg) = (longueur(haut), longueur(gauche));
+    // Pixels d'écran par pixel de l'image.
+    let echelle = (lh * ppp / taille.0.max(1) as f32).min(lg * ppp / taille.1.max(1) as f32);
+    let droite = (haut[1].abs() <= 1e-3 * lh && gauche[0].abs() <= 1e-3 * lg) || (haut[0].abs() <= 1e-3 * lh && gauche[1].abs() <= 1e-3 * lg);
+    echelle >= 0.99 && (droite || echelle > 1.02)
 }
 
 /// Une image composée neuve, à la taille du projet.
@@ -1786,7 +1850,8 @@ fn make_frame(device: &wgpu::Device, texture_layout: &wgpu::BindGroupLayout, smo
         ..Default::default()
     });
     let display_group = texture_group(device, texture_layout, &srgb, smooth);
-    // (L'échantillonneur « composer » est bilinéaire dans les deux sens : c'est celui qu'il faut pour lisser en grossissant.)
+    // (L'échantillonneur « composer » est bilinéaire dans les deux sens : c'est celui qu'il faut pour lisser en grossissant, et pour
+    // les lectures de `fs_display` quand la vue réduit l'image.)
     let display_group_lisse = texture_group(device, texture_layout, &srgb, nearest);
     let backdrop = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("fond des modes de fusion"),

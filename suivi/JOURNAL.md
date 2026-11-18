@@ -5,6 +5,35 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **La vue réduite : son verdict, son choix, et les vignettes** (branche `vue-reduite`, sections 166.9 et 166.10). L'image de
+  démonstration de la veille ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image
+  d'après semble encore plus détériorée. » Il avait raison sur l'image (agrandie neuf fois, et pas la même image du plan des deux
+  côtés) ; refaite à l'identique, la comparaison montrait des traits continus mais plus pâles. Rien n'a été fusionné. **L'essai à
+  trois façons** (branche `vue-reduite-essai`, pas pour main ; F8 dans la vue du dessin ; lanceur dans `Tests\essai vue-reduite`) :
+  comme avant, lissée trait pâle, lissée trait plein. **Son choix, l'essai ouvert : « La 3, trait plein », puis « Pardon, la 2 »** :
+  la 166.9 telle qu'elle était. (Claude recommandait la 3 : c'est son œil, sur son écran, qui a tranché.) **Les vignettes ensuite**
+  (166.10) : les cases des Vignettes qu'on ne dessine pas et les vignettes de plans, calculées par le processeur, lisaient 4 à 16
+  points par pixel pour 25 à 100 pixels couverts ; l'encre d'un trait fin y allait de 0 à 1,8 fois la normale d'une ligne à
+  l'autre. Maintenant : la moyenne exacte de tous les pixels couverts (caméra droite, jusqu'à 12 pixels par axe : les cases à six
+  par ligne), des lectures en grille sinon ; un raccourci saute les pixels sans encre. Même espace de moyenne qu'avant (lumière
+  linéaire pour les cases, comme la case qu'on dessine). **Coût mesuré** : cases à six par ligne, de 0,6 à 1,6 fois le temps
+  d'avant selon le projet ; le plan le plus lourd, 0,3 s au lieu de 0,1 ; sur les fils de fond. Un essai existant vérifiait
+  « quatre points par pixel » (l'ancien défaut) : son attendu est maintenant la moyenne de tous les pixels couverts. Capture de
+  contrôle de l'onglet Vignettes sur une copie de « dd », regardée : dans une case voisine les traits fins sont continus, du même
+  poids que dans la case qu'on dessine. Pas regardé sur son écran. **Vérificateur : aucun passage entièrement vert**, trois autres
+  sessions compilant sans arrêt (processeur à 100 %, moins de 1,2 Go de mémoire libre). Premier passage : sans avertissement,
+  suite complète 4 801 réussis et 0 échec, neuf groupes OK, deux essais de temps d'image du groupe Espace 3D en échec. Second : sans
+  avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
+  essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. **Refait après avoir repris main dans la
+  branche** (87db1b0, le panneau Pinceau ; f603c82) : à 3 h 44, la machine plus calme, compilation sans avertissement, **4 802
+  réussis, 0 échec, les dix groupes OK**. Et encore après la trajectoire (60f002e ; d55ffd5), six essais à la fois : à 4 h 17,
+  sans avertissement, **4 806 réussis, 0 échec, les dix groupes OK**. Main a encore avancé dans la nuit (versions de plan, puis
+  Cutter) : repris à chaque fois. Avec les versions de plan, à 4 h 44, sous la charge, un échec dans la suite : l'essai de la
+  planche des Vignettes à trente plans, qui touche à ce chantier ; relancé seul et au milieu de ses voisins, il passe à chaque
+  fois (huit passages), sans que le message de l'échec ait pu être retrouvé. Avec le Cutter (bed74af ; a57da20), à 9 h 55, la
+  machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Puis avec les préréglages (fc908db,
+  format 57 ; a4c6368), à 10 h 14 : sans avertissement, **4 840 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa
+  décision.
 - **`prereglages-socle` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (d43ea27, exe de 09 h 50), sur
   son « Fusionne maintenant » (sans essai sur son écran avant). Main avait avancé deux fois pendant le chantier
   (trajectoire-exposition et versions-plan, puis cutter-reglages) : main ramené dans la branche à chaque fois, seuls
@@ -90,8 +119,22 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   dont un nouveau sur l'ordre ; vérificateur complet (01 h 17) : compilation sans avertissement, **4 795 réussis, 0 échec**, les dix
   groupes OK. Image de contrôle faite sur le banc (le panneau, replié et déplié), regardée : l'ordre du schéma. Pas regardé sur son
   écran. Pas fusionnée : sa décision. (Le chantier de la vue réduite est passé le même soir à une session à part.)
+
 ## 2026-11-17
 
+- **La vue réduite : tous les pixels du dessin comptent** (branche `vue-reduite`, section 166.9). Son retour : « Est-ce qu'on peut
+  rajouter une passe d'antialiasing dans le logiciel ? Je vois toujours de la pixelisation de l'image, même avec le vecto propre. »
+  Sa fenêtre lue telle quelle : la vue à 37 %, sa vue ordinaire (le cadre ne tient pas dans la zone du dessin de son écran), où la
+  vue nette ne fait rien. **La cause** : réduite, l'image était lue par points (le filtre de grossissement de l'affichage, qui ne
+  lisse pas) : 4 points pour plus de 7 pixels couverts à 37 %, un seul de 67 à 100 %. Les traits fins se cassaient en pointillés.
+  **Ce qui est fait** : réduite, chaque pixel d'écran est la moyenne exacte de tout ce qu'il couvre du dessin (vue droite), ou de
+  n × n lectures lissées (vue tournée, perspective) ; tournée à 100 %, l'image est lissée ; à 100 % vue droite et au-delà, rien ne
+  change. Tout sur la carte graphique, rien à attendre. **Pas fait** : les cases des Vignettes qu'on ne dessine pas et les
+  vignettes de plans (calcul du processeur, même faiblesse, chantier à part) ; le hors-feuille ; l'affichage sans carte graphique.
+  Mesuré par un essai écrit avant la correction et vu échouer (à 80 %, l'encre d'un trait fin de 0 à 1,25 fois la normale ; après,
+  de 0,94 à 1,04 à tous les zooms). Image de contrôle faite sur une copie de « dd » (plan 10 à 37 %), regardée agrandie : traits
+  continus. Pas regardé sur son écran. Vérificateur complet (20 h 49) : compilation sans avertissement, **4 800 réussis, 0 échec**,
+  les dix groupes de fiabilité OK. Pas fusionnée : sa décision.
 - **`avant-apres-reel` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (0073f65, exe de 20 h 15), sur son
   « vas y ». Contenu : partie 165.6 (deux lignes de boutons en tête de la colonne des calques de l'Animation, colonne à 410 points
   au lieu de 757, règle et en-tête à 58 points), 165.7 (le mode « Trois calques » retiré : toute la pile, toujours ; un réglage
@@ -101,7 +144,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   Vérificateur complet : compilation sans avertissement, 4 796 réussis aux deux passages, 0 échec, aucun intermittent, dix groupes
   OK. Son FEANOR (lancé par la jonction Work\tvpaint-rs) a été arrêté sans enregistrer avant la reconstruction. Contrôle de
   lancement : l'exe ouvert sur une copie de « retakes brawlydays » (Tests\lancement main 0073f65) avec de faux réglages, vivant
-  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.
+- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
   fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
   été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;

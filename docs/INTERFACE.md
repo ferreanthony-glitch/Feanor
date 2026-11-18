@@ -13881,6 +13881,155 @@ Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte
 vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
 l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
 
+### 166.9 La vue réduite : tous les pixels du dessin comptent (le même jour, branche `vue-reduite`)
+
+Son retour, le soir, le lissage dans son FEANOR habituel : « Est-ce qu'on peut rajouter une passe d'antialiasing dans le logiciel ?
+Je vois toujours de la pixelisation de l'image, même avec le vecto propre. » Sa fenêtre, lue telle quelle (une copie de l'image de
+la fenêtre, sans y toucher) : l'onglet Storyboard, le plan 10 de « dd », **la vue à 37 %**. C'est la vue ordinaire : sur son écran, un
+cadre de 1920 × 1080 ne tient pas dans la zone du dessin, la vue cadrée d'origine est toujours en dessous de 100 %. Les traits y sont
+en pointillés, d'épaisseur inégale, avec des trous blancs dans les hachures. La vue nette (166.2) n'y fait rien : elle ne travaille
+qu'au-dessus de 100 %.
+
+**La cause.** Réduite, l'image composée est posée par `fs_display` (`gpu.rs`), qui moyenne plusieurs lectures par pixel d'écran. Mais
+ces lectures se font au niveau 0 demandé (`textureSampleLevel`), et la carte y applique le filtre de **grossissement** de
+l'échantillonneur de l'affichage, qui ne lisse pas : chaque lecture ne prenait qu'**un point** de l'image. À 37 %, un pixel d'écran
+couvre 2,7 × 2,7 pixels du dessin (plus de 7) et n'en lisait que 4 ; de 67 à 100 %, un seul. Les pixels sautés sont des morceaux de
+trait qui manquent. Mesuré avant de corriger (l'essai ci-dessous, sur le code d'avant) : à 80 %, l'encre d'un trait d'un pixel va, d'une
+ligne d'écran à l'autre, **de 0 à 1,25 fois** ce qu'elle doit être ; tournée à 37 %, de 0,56 à 1,35 fois.
+
+**Ce qui change** (`fs_display`, `pose_nette`) :
+
+- **Réduite, vue droite** : chaque pixel d'écran est la **moyenne exacte** de tout ce qu'il couvre du dessin, en lumière linéaire.
+  L'image est lue lissée (l'échantillonneur bilinéaire) ; chaque lecture, posée entre deux pixels du dessin, plus près de celui qui
+  compte le plus, les pèse tous les deux comme il faut : (e + 1) / 2 lectures par axe pour e pixels couverts (4 lectures à 37 %,
+  qui en pèsent 16). Exact jusqu'à 23 pixels couverts par axe (la vue à 4,3 %), 12 lectures par axe au plus.
+- **Réduite, vue tournée ou en perspective** : n × n lectures lissées réparties sur ce que couvre le pixel d'écran, n = le nombre de
+  pixels couverts (12 au plus).
+- **À 100 %, vue tournée** (jusqu'à 102 %), **et en perspective** : l'image se pose lissée au lieu de marches.
+- **Rien d'autre ne change** : à 100 % vue droite (retournée ou tournée d'un quart de tour aussi), les pixels de la feuille tels
+  quels ; au-delà, la vue nette et son lissage (166.2, 166.8), ou les pixels nets d'un dessin bitmap grossi.
+
+Aucun calcul de plus sur le processeur, rien à attendre : c'est la carte graphique qui lit, à chaque image d'écran, pendant le trait
+comme pendant un déplacement. La case vivante des Vignettes passe par le même affichage : elle en profite.
+
+**Ce qui ne change pas, et reste à faire si Anthony le veut** :
+
+- **Les cases des Vignettes qu'on ne dessine pas, et les vignettes de plans** : calculées par le processeur, même faiblesse, autre
+  calcul. Faites ensuite : 166.10.
+- Ce qui est dessiné **hors de la feuille** (`monde.rs`) et l'affichage **sans carte graphique** : une lecture lissée par pixel
+  d'écran, comme avant.
+- Un calque **réduit dans la composition** (un calque rétréci par sa transformation, ou éloigné dans l'Espace 3D) : une lecture
+  lissée par pixel du cadre, à l'écran comme à l'export.
+
+À juger par lui : la vue ordinaire (cadrée, vers 35 à 50 %) est-elle propre, traits continus, sans pointillés ? Les traits fins y
+paraissent-ils trop pâles (ils ont maintenant leur vraie valeur : un trait d'un pixel réduit à 37 % est un gris à 37 %, plus
+jamais un point plein sur deux) ? La vue tournée ?
+
+Les essais (`src/vuereduite_tests.rs`, quatre, plus un qui écrit des images à regarder) : sur la carte graphique, une feuille de
+traits d'un pixel, l'écran peint relu. Vue droite à 80, 50, 37, 20 et 11 % : l'encre de chaque trait, à chaque ligne d'écran, vaut
+le zoom (de 0,94 à 1,04 fois, 1,00 en moyenne ; avant : de 0 à 1,25 fois à 80 %). Vue tournée à 37, 60 et 25 % : l'encre le long
+d'un trait reste régulière (de 0,83 à 1,10 fois sa moyenne ; avant : de 0,56 à 1,35 à 37 %) ; tournée à 100 % : lissée (2 818
+pixels intermédiaires pour 29 noirs). À 100 % vue droite : un pixel noir par ligne entre des blancs, comme avant. Et la règle
+`pose_nette`, cas par cas (droite, retournée, quart de tour, tournée, perspective, 1,5 pixel par point).
+Résultats (17 novembre, 20 h 49) : `vuereduite` 4 réussis (les essais sur la carte graphique ont bien tourné) ; vérificateur complet :
+compilation sans avertissement, **4 800 réussis, 0 échec**, les dix groupes de fiabilité OK. Image de contrôle (l'essai ignoré
+`vue_reduite_captures` sur une copie de « dd », plan 10 à 37 %), regardée agrandie neuf fois à côté de la copie de sa fenêtre : les
+traits sont continus, à bords gradués, plus de pointillés ni de trous blancs dans les hachures. Pas regardé sur son écran.
+
+**Son verdict (le même soir).** L'image de démonstration envoyée avec ce compte rendu (sa fenêtre et la capture du banc, agrandies
+neuf fois, côte à côte) ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image d'après
+semble encore plus détériorée. » Il avait raison sur l'image : agrandie neuf fois, elle montre de gros carrés des deux côtés, et
+les deux moitiés n'étaient pas la même image du plan. Refaite à l'identique (même image du plan, même zoom, taille réelle), la
+comparaison dit ce qui change vraiment : les traits sont continus, mais plus fins et plus pâles qu'avant, parce que la moyenne se
+fait en lumière linéaire. Rien n'a été fusionné sur ce verdict.
+
+**L'essai à trois façons.** Pour qu'il juge sur son écran et non sur une image : une branche d'essai (`vue-reduite-essai`, pas pour
+main) où F8, dans la vue du dessin, passe d'une façon à l'autre, une étiquette disant laquelle. 1, comme avant (lue par points) ;
+2, lissée, trait pâle (la moyenne en lumière linéaire : le code de cette section) ; 3, lissée, trait plein (la moyenne des valeurs
+telles quelles, sans passer en lumière linéaire : le trait garde sa force). Un lanceur dans `Documents\SHOT\Tests\essai vue-reduite`,
+sur une copie de « dd », avec des réglages à part. **Son choix, l'essai ouvert : « La 3, trait plein », puis « Pardon, la 2 ».** La 2
+est le code de cette section, sans changement. (Claude recommandait la 3 d'après ses captures : c'est son œil, sur son écran, qui a
+tranché.) Pour les démonstrations à venir : la même image dans chaque case, à taille réelle, jamais d'agrandissement en gros
+carrés ; et pour une question de rendu, un essai à bascule sur son écran.
+
+### 166.10 Les vignettes : la même moyenne (le 18 novembre, même branche)
+
+Les cases des Vignettes qu'on ne dessine pas, et les vignettes de plans, sont calculées par le processeur
+(`render::thumbnail_marges_until`, sur les fils de fond de `thumbs.rs`). Même faiblesse que l'affichage avant la 166.9 : 2 à 4
+lectures par axe et par pixel (4 à 16 points), alors qu'un pixel d'une case couvre 5 × 5 pixels du dessin à trois cases par ligne,
+10 × 10 à six par ligne. Mesuré (l'essai ci-dessous, le calcul d'avant rallumé par un interrupteur d'essai) : l'encre d'un trait
+d'un pixel va, d'une ligne à l'autre, **de 0 à 1,8 fois** la normale dans une case de 300 pixels, de 0 à 10 fois dans une vignette
+de 80 pixels. Et depuis la 166.9, la case qu'on dessine (carte graphique) était plus lisse que ses voisines.
+
+**Ce qui change** :
+
+- **Caméra droite** (ni roulis ni bascule) : chaque pixel de la vignette est la **moyenne exacte** de tous les pixels de la feuille
+  qu'il couvre, chacun pour sa part (`axes_droits`, `pixels_de_l_axe`, `Moyenne`), jusqu'à 12 pixels couverts par axe (`EXACT_MAX`).
+- **Caméra en roulis ou basculée** : des lectures en grille, une par pixel couvert et par axe (`lectures_en_grille`).
+- **Plus petit** (une vignette de plan de la timeline couvre 20 pixels par axe) : en grille, une lecture pour deux pixels couverts,
+  6 par axe au plus (36 lectures au lieu de 4). Tout y lire coûtait vingt fois plus, pour un trait d'un vingtième de pixel.
+- **L'espace de la moyenne ne change pas** : la lumière linéaire sur le papier pour une case avec sa marge (comme la case vivante,
+  partie 111, et c'est son choix « la 2 »), le gamma pour les autres vignettes. À l'échelle 1 et au demi, les mêmes valeurs qu'avant.
+- **Le raccourci des pixels sans encre** (`sans_encre`) : là où aucun dessin n'a de tuile dessinée, le fond tel quel, sans rien
+  lire. Sur un dessin au trait, c'est la plus grande part de la vignette : c'est ce qui paie les lectures de plus.
+
+**Le coût** (mesuré par l'essai ignoré `cout_des_vignettes` sur des copies de « dd » et de « retakes brawlydays », le meilleur de
+trois passages, pendant que d'autres sessions compilaient : à lire en proportions). Cases à six par ligne : les 10 plans de « dd »,
+316 ms avant, 507 ms maintenant (1,6 fois) ; les 11 de « retakes brawlydays », 329 ms avant, 199 ms maintenant (0,6 fois). Cases
+à trois par ligne : 558 puis 619 ms, et 527 puis 527 ms. Le plan le plus lourd (le plan 1 de « dd » : un calque transformé, lu
+lissé) : 91 puis 289 ms à six par ligne. Vignettes de plan de 96 pixels : 1,4 puis 5 ms en moyenne. Sans le raccourci, ce serait
+2,5 à 4 fois plus. Tout se fait sur les fils de fond, jamais sur celui de l'interface.
+
+**Ce qui ne change pas** : la marge des cases dans l'export de la planche (`marge_seule_until`, quatre lectures par pixel) et les
+images de l'export (le rendu de l'export) ; ce qui est dessiné hors de la feuille à l'écran (`monde.rs`) ; l'affichage sans carte
+graphique ; un calque réduit dans la composition.
+
+**À vérifier à l'écran (par Anthony)** :
+
+1. La vue de dessin réduite (vers 35 à 50 %) : les traits continus, sans pointillés, comme la façon 2 de l'essai.
+2. L'onglet Vignettes : les cases qu'on ne dessine pas ont des traits continus, du même aspect que la case qu'on dessine ; en
+   passant d'une case à l'autre, pas de saut d'aspect.
+3. La planche se remplit-elle assez vite, à l'ouverture d'un projet et après un zoom de la planche ?
+4. Les vignettes de plans de la timeline.
+
+Les essais (`src/vuereduite_tests.rs`, trois de plus, sept en tout, et deux ignorés de plus) : l'encre d'un trait d'un pixel dans
+une vignette, à chaque ligne, vaut ce qu'elle doit, avec marge (lumière linéaire) et sans (gamma), du tiers au dixième (de 0,96 à
+1,02 fois la normale ; le calcul d'avant, rallumé : de 0 à 1,79 et de 0 à 2,68) ; au vingtième, juste en moyenne (1,03 ; avant : de
+0 à 10 fois). Le raccourci ne change aucun pixel (caméra droite, caméra qui zoome et se décale, caméra en roulis, un calque
+transformé, avec et sans marge). Au demi, la moyenne des quatre pixels, tronquée, comme avant. `perf_tests`,
+`the_thumbnail_samples_the_full_composition` : la vignette, à la taille d'une case, est la moyenne de tous les pixels couverts de
+la composition entière (elle vérifiait quatre points par pixel : l'ancien défaut). Les essais ignorés : `cout_des_vignettes`
+(les temps ci-dessus) et `vignettes_captures` (l'onglet Vignettes d'une copie de projet, vignettes comme avant puis maintenant).
+
+Résultats (18 novembre, de 2 h à 3 h ; trois autres sessions compilaient sans arrêt : le processeur à 100 %, moins de 1,2 Go de
+mémoire libre par moments). `vuereduite` : 7 réussis, 3 ignorés. Les 453 essais existants des vignettes, de la planche, des exports
+voisins et de l'Espace 3D : 0 échec. Capture de contrôle de l'onglet Vignettes (copie de « dd », six cases par ligne), regardée :
+dans une case voisine les traits fins sont continus, du même poids que dans la case qu'on dessine ; avec le calcul d'avant ils sont
+pâles et en pointillés. Pas regardé sur son écran.
+Vérificateur complet, deux passages, **aucun entièrement vert** : au premier, compilation sans avertissement, suite complète
+**4 801 réussis, 0 échec**, neuf groupes OK, et dans le groupe Espace 3D deux essais de temps d'image en échec ; au second,
+compilation sans avertissement, les **dix groupes OK** (Espace 3D : 180 essais), et dans la suite complète 4 800 réussis, 1 échec
+(`retours_aplat_tests::a_fill_stays_on_screen_while_it_is_recomputed_even_after_many_other_fills_were_shown`, « le remplissage
+n'est pas arrivé »). Relancés seuls : le groupe Espace 3D passe trois fois sur quatre (180 réussis ; la quatrième, le processeur à
+100 %, ce sont trois autres essais de temps d'image qui échouent, 33 ms par image au lieu de 5) ; l'essai de l'aplat passe en moins
+d'une seconde quand le processeur n'est pas saturé, et attend trente secondes en vain quand il l'est (son calcul se fait sur un fil
+de fond). Aucun de ces essais n'appelle le code changé ici : ce sont des essais de temps, sensibles à la charge de la machine.
+Refait une fois main repris dans la branche (`87db1b0`, le panneau Pinceau de la partie 45 ; `f603c82`) : un troisième passage
+encore sous la charge (4 802 réussis, 0 échec, neuf groupes OK, un essai de temps d'image du groupe Espace 3D en échec ; ce groupe
+relancé seul : 180 réussis, quatre fois sur quatre), puis, la machine plus calme, à 3 h 44 : **compilation sans avertissement,
+4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**. Refait encore une fois main repris de nouveau
+(`60f002e`, la trajectoire de la partie 119 ; `d55ffd5`), six essais à la fois (`RUST_TEST_THREADS=6`, pour ne pas dépendre des
+compilations des autres sessions), à 4 h 17 : **compilation sans avertissement, 4 806 réussis, 0 échec, les dix groupes OK,
+« RESULTAT : OK »**. Main a encore avancé dans la nuit (les versions de plan de la partie 168, puis le Cutter de la partie 169) :
+repris à chaque fois. Avec les versions de plan (`d9f72dd`), à 4 h 44, sous la charge : dix groupes OK, 4 818 réussis et 1 échec
+dans la suite (`traits_continus_tests::thirty_drawn_plans_rest_without_repainting_and_a_frame_stays_cheap`, la planche des
+Vignettes à trente plans : un essai qui touche à ce chantier ; relancé seul, trois fois sur trois, et cinq fois sur cinq au milieu
+de ses 331 voisins en parallèle : il passe, 0,9 ms par image, 3 ms par vignette ; le message de l'échec n'a pas été gardé par le
+vérificateur). Avec le Cutter (`bed74af` ; `a57da20`), le 18 novembre à 9 h 55, la machine calme, sans limite de fils :
+**compilation sans avertissement, 4 830 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. Puis, main ayant reçu les
+préréglages de la partie 170 (`fc908db`, format 57 ; `a4c6368`), à 10 h 14, la machine calme : **compilation sans avertissement,
+4 840 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. C'est l'arbre à fusionner.
+
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 
 **Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
