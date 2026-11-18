@@ -22,6 +22,7 @@ fn the_bar_has_the_twelve_side_panels_in_order() {
             Pane::Effects,
             Pane::Sheet,
             Pane::XSheet,
+            Pane::Prereglages,
             Pane::Scenario,
             Pane::Comments,
             Pane::History,
@@ -34,7 +35,8 @@ fn the_bar_has_the_twelve_side_panels_in_order() {
     // scénario, les commentaires, l'historique, les bruitages, les références et la bibliothèque de fichiers. (Les
     // suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
     // (Partie 160 : plus d'icône Calques, le panneau n'existe plus.)
-    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 3, 6]);
+    // (Partie 170 : les préréglages dans le groupe du plan, après la feuille d'exposition.)
+    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 4, 6]);
     assert!(!panes().contains(&Pane::Layers));
     assert_eq!(pane_de_action("vue.calques"), None, "l'action reste (palette, raccourci) : elle montre la colonne des calques");
     assert!(crate::keymap::action_info("vue.calques").is_some_and(|a| a.implemented));
@@ -93,12 +95,12 @@ fn the_exposure_sheet_icon_is_only_there_in_animation() {
     let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
     assert_eq!(panes(true), self::panes(), "en animation : toutes les icônes");
     let storyboard = panes(false);
-    assert_eq!(storyboard.len(), 12);
+    assert_eq!(storyboard.len(), 13);
     assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
     assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History) && storyboard.contains(&Pane::Comments));
     // Les trois groupes restent là (aucun ne s'est vidé).
     assert_eq!(icones(false).len(), 3);
-    assert_eq!(icones(false)[1].len(), 2);
+    assert_eq!(icones(false)[1].len(), 3, "les effets, la fiche et les préréglages (partie 170)");
     // L'action reste enregistrée (palette, raccourci) : elle répond d'un mot en storyboard.
     assert!(crate::keymap::action_info("vue.feuille_exposition").is_some_and(|a| a.implemented));
 }
@@ -119,7 +121,7 @@ fn each_workspace_shows_only_the_panels_useful_for_its_work() {
     // (Et le panneau Espace 3D, dans le Storyboard et l'Animation : il est dans leur disposition d'origine. Partie 160 : plus de
     // panneau Calques.)
     let storyboard = icones_de(Espace::Storyboard, false, &[]);
-    assert_eq!(storyboard.len(), 9, "{storyboard:?}");
+    assert_eq!(storyboard.len(), 10, "{storyboard:?} (partie 170 : les préréglages)");
     for e in Espace::TOUS {
         assert_eq!(icones_de(e, true, &[]).contains(&Pane::Espace3d), matches!(e, Espace::Storyboard | Espace::Animation), "{e:?}");
     }

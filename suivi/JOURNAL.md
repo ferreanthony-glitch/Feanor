@@ -5,6 +5,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **Préréglages dans la timeline, lot 1 : le socle** (branche `prereglages-socle`, partie 170, format 57). Sa demande : « des
+  présets d'animation de caméra à intégrer directement dans la timeline » (crash zoom, zip pan, panoramique, travelling) et des
+  présets de plan (color card, titre, crédits). Une liste numérotée lui a été faite, puis une page où chaque préréglage joue en
+  boucle (https://claude.ai/artifact/RaFTcminkjKeDWxMUFVi6J, ses choix gardés dans la page) : 64 Oui, 9 sans réponse (P4, P9,
+  P10, P11, P12, P15, T1, T2, T5). À l'ordre en lots, il a répondu « Oui, le lot 1 ». **Ce qui est fait** : un plan porte
+  plusieurs effets de caméra vivants, des blocs jaunes sous les clés de caméra de la timeline, qui s'ajoutent l'un à l'autre ; on
+  les glisse, on tire leurs bords pour leur durée, Suppr enlève le bloc choisi ; le panneau Préréglages (vignettes qui jouent le
+  vrai mouvement au survol) se glisse sur la timeline ou se clique pour poser à la tête de lecture ; « Convertir en clés » cuit
+  tous les blocs d'un coup, avec la même image. Les huit préréglages de caméra existants seulement : les autres sont les lots
+  suivants.
+
 - **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
   « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
   `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,

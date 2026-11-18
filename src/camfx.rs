@@ -644,6 +644,31 @@ pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys
 /// Nombre de cuissons gardées par fil (`cuire_vite`).
 pub const MEMOIRE_MAX: usize = 4096;
 
+/// Tous les effets vivants d'un plan, **cuits l'un après l'autre** dans l'ordre de la liste (partie 170 : les blocs de la piste
+/// Caméra). Le premier part des clés du plan (`keys`) et de sa caméra sans effet (`base`, continuité comprise) ; chacun des
+/// suivants part des clés que le précédent a écrites, et de la caméra qu'elles donnent : un tremblement posé sur un zoom tremble
+/// autour du zoom. C'est exactement ce que ferait « Convertir en clés » sur chaque effet à tour de rôle : convertir ne change
+/// donc aucune image. Rien si aucun effet ne pose de clé (liste vide, ou tous commencent après la fin du plan).
+pub fn cuire_tous(effets: &[Vivant], fps: u32, frame: [usize; 2], plan_len: usize, keys: &[CameraKey], base: &dyn Fn(usize) -> Camera, default: Camera) -> Option<Vec<CameraKey>> {
+    let mut cuites: Option<Vec<CameraKey>> = None;
+    for v in effets {
+        let suivantes = {
+            let k: &[CameraKey] = cuites.as_deref().unwrap_or(keys);
+            if cuites.is_none() || k.is_empty() {
+                // (Rien n'a encore été écrit : la base est la caméra du plan sans effet, continuité comprise.)
+                cuire_vite(v, fps, frame, plan_len, k, base)
+            } else {
+                let deja = |f: usize| camera::camera_at(k, f, default);
+                cuire_vite(v, fps, frame, plan_len, k, &deja)
+            }
+        };
+        if suivantes.is_some() {
+            cuites = suivantes;
+        }
+    }
+    cuites
+}
+
 /// Écrit `plan` dans les clés d'un plan : les clés posées remplacent celles de la même image (en
 /// gardant leurs adoucis, sauf ceux que l'effet pose), les autres restent.
 pub fn write(keys: &mut Vec<CameraKey>, plan: &Plan) {

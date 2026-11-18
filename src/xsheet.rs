@@ -76,12 +76,13 @@ pub fn camera_cells(panel: &Panel, len: usize) -> Vec<CamCell> {
     let keys: Vec<usize> = panel.camera.iter().map(|k| k.frame).collect();
     let (first, last) = (keys.iter().min().copied(), keys.iter().max().copied());
     // Un effet de caméra vivant (partie 129) n'a pas de clé, mais la caméra bouge sur ses images.
-    let effet = panel.effet_camera.map(|v| (v.start, v.last_frame(len)));
+    // (Plusieurs effets vivants, partie 170 : chacun sur ses images.)
+    let effets: Vec<(usize, usize)> = panel.effets_camera.iter().map(|v| (v.start, v.last_frame(len))).collect();
     (0..len)
         .map(|f| {
             if keys.contains(&f) {
                 CamCell::Key
-            } else if (first.is_some_and(|a| a < f) && last.is_some_and(|b| f < b)) || effet.is_some_and(|(a, b)| a <= f && f <= b) {
+            } else if (first.is_some_and(|a| a < f) && last.is_some_and(|b| f < b)) || effets.iter().any(|&(a, b)| a <= f && f <= b) {
                 CamCell::Between
             } else {
                 CamCell::None
