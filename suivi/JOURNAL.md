@@ -5,6 +5,26 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
+  n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
+  ouvert : rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après
+  22 s, aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa
+  place. Worktree et branche gardés (retrait proposé, sa décision).
+- **Trajectoire : une marque qu'on glisse emporte son temps** (branche `trajectoire-exposition`, la section du 2026-11-18 de la
+  partie 119). Sa demande : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés
+  sur la trajectoire. » Son plan 10 de « dd » (lu sans y toucher) : sept marques serrées au départ, chaque dessin exposé 8 ou 9
+  images. **Ce qui est fait**, en clés d'images : glisser une marque le long du chemin lui fait prendre l'image de sa place entre
+  ses deux voisines (le dessin d'avant tient plus longtemps quand elle avance, moins quand elle recule ; les autres ne bougent pas ;
+  la barre d'état dit l'image) ; une marque posée quand des temps sont déjà posés prend le temps de sa place ; un bouton « Temps
+  selon le chemin » met toutes les marques d'un coup au temps de leur place (son plan 10 : 3, 2, 2, 8, 11, 19, 5 et 20 images).
+  Sur la feuille et pour les cartes de l'Espace 3D. **Ce qui ne change pas** : les clés d'interpolation (les marques y sont
+  l'espacement), la caméra, les projets à l'ouverture, le format. **Ma lecture, à confirmer par lui** : une marque glissée ne
+  recale qu'elle (le bouton recale tout) ; une marque posée sur un chemin en parts égales repartage le temps comme avant. Quatre
+  essais d'avant, qui décrivaient l'ancien comportement, mis à jour. Vérificateur complet (03 h 17) : compilation sans
+  avertissement, **4 799 réussis, 0 échec**, dix groupes OK, au troisième passage : les deux premiers avaient échoué sur des essais
+  chronométrés sans rapport, la machine étant saturée par les essais d'autres sessions (ils passent seuls). Image de contrôle de la
+  timeline faite sur une copie. Pas regardé sur son écran. Pas fusionnée : sa décision.
 - **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
   « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
   `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,

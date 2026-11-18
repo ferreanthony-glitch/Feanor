@@ -677,6 +677,9 @@ impl App {
                         if *i < t.marques.len() {
                             if loin {
                                 t.retirer_marque(*i);
+                            } else if matches!(a.sujet, Sujet::Carte(_)) && t.cles == Cles::Images {
+                                // (Une carte en clés d'images : la marque emporte son temps, comme sur la feuille, 2026-11-18.)
+                                t.deplacer_marque_et_son_temps(*i, f, self.e3_traj_duree(a.sujet));
                             } else {
                                 t.deplacer_marque(*i, f);
                             }
@@ -771,7 +774,8 @@ impl App {
             let mut posees = 0;
             for &s in &sujets {
                 let Some(mut t) = self.e3_traj_de(s).cloned() else { continue };
-                if t.ajouter_marque(f).is_some() {
+                let posee = if matches!(s, Sujet::Carte(_)) && t.cles == Cles::Images { t.ajouter_marque_a_son_temps(f, self.e3_traj_duree(s)) } else { t.ajouter_marque(f) };
+                if posee.is_some() {
                     self.e3_traj_poser(s, t);
                     posees += 1;
                 }
@@ -1149,6 +1153,14 @@ impl App {
             if recales && ui.button("Temps égaux entre les marques").on_hover_text("Oublie les marques recalées à la main : le temps est de nouveau partagé en parts égales.").clicked() {
                 self.e3_traj_pour_tous(&avec, "Temps égaux entre les marques", |t, _| {
                     t.temps_egaux();
+                    true
+                });
+            }
+            // Les cartes en clés d'images : toutes leurs marques au temps de leur place sur le chemin (2026-11-18).
+            let cartes: Vec<Sujet> = avec.iter().copied().filter(|&s| matches!(s, Sujet::Carte(_)) && self.e3_traj_de(s).is_some_and(|t| t.cles == Cles::Images && !t.marques.is_empty() && !t.est_selon_le_chemin(self.e3_traj_duree(s)))).collect();
+            if !cartes.is_empty() && ui.button(crate::trajectoireui::TEMPS_SELON_LE_CHEMIN).on_hover_text(crate::trajectoireui::TEMPS_SELON_LE_CHEMIN_AIDE).clicked() {
+                self.e3_traj_pour_tous(&cartes, crate::trajectoireui::TEMPS_SELON_LE_CHEMIN, |t, duree| {
+                    t.temps_selon_le_chemin(duree);
                     true
                 });
             }
