@@ -14017,7 +14017,10 @@ de fond). Aucun de ces essais n'appelle le code changé ici : ce sont des essais
 Refait une fois main repris dans la branche (`87db1b0`, le panneau Pinceau de la partie 45 ; `f603c82`) : un troisième passage
 encore sous la charge (4 802 réussis, 0 échec, neuf groupes OK, un essai de temps d'image du groupe Espace 3D en échec ; ce groupe
 relancé seul : 180 réussis, quatre fois sur quatre), puis, la machine plus calme, à 3 h 44 : **compilation sans avertissement,
-4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**.
+4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**. Refait encore une fois main repris de nouveau
+(`60f002e`, la trajectoire de la partie 119 ; `d55ffd5`), six essais à la fois (`RUST_TEST_THREADS=6`, pour ne pas dépendre des
+compilations des autres sessions), à 4 h 17 : **compilation sans avertissement, 4 806 réussis, 0 échec, les dix groupes OK,
+« RESULTAT : OK »**.
 
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 

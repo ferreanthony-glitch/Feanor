@@ -26,7 +26,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
   essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. **Refait après avoir repris main dans la
   branche** (87db1b0, le panneau Pinceau ; f603c82) : à 3 h 44, la machine plus calme, compilation sans avertissement, **4 802
-  réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
+  réussis, 0 échec, les dix groupes OK**. Et encore après la trajectoire (60f002e ; d55ffd5), six essais à la fois : à 4 h 17,
+  sans avertissement, **4 806 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
 - **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
   n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
