@@ -1,12 +1,13 @@
 //! Le pinceau dans le panneau Réglages de l'outil : la taille et l'opacité, le nom de la brosse, l'aperçu
-//! du trait et, à l'extrême droite de cet aperçu, un bouton qui déplie la liste des brosses juste dessous
-//! (`brush_list_ui`), puis les réglages détaillés (`brush_settings_ui`).
+//! du trait et, à l'extrême droite de cet aperçu, un bouton qui déplie la liste des brosses ; sous l'aperçu,
+//! les réglages détaillés (`brush_settings_ui`) ; tout en bas, les trois boutons puis la liste (`brush_list_ui`).
 //!
 //! La liste des brosses était un panneau à part (« Pinceaux », en onglet avec la couleur) : depuis le
-//! 2026-10-24 elle est là, sous l'aperçu (Anthony : « le panneau Pinceaux disparaît, il rejoint les
-//! réglages du pinceau »). Elle garde tout ce que le panneau offrait : recherche, liste ou vignettes, « Mes
-//! brosses » en premier, les dossiers de SHOT et des fichiers importés, clic droit (renommer, dupliquer,
-//! remplacer, supprimer), et en bas importer, garder le réglage courant, supprimer.
+//! 2026-10-24 elle est dans ce panneau (Anthony : « le panneau Pinceaux disparaît, il rejoint les
+//! réglages du pinceau »), et depuis le 2026-11-18 tout en bas, sous les réglages (son schéma : 1 les réglages,
+//! 2 les trois boutons, 3 la liste). Elle garde tout ce que le panneau offrait : recherche, liste ou vignettes,
+//! « Mes brosses » en premier, les dossiers de SHOT et des fichiers importés, clic droit (renommer, dupliquer,
+//! remplacer, supprimer), et au-dessus d'elle importer, garder le réglage courant, supprimer.
 //!
 //! La taille de l'outil courant (curseur et champ en px) est en tête du panneau (`brush_summary_ui`).
 //! Les réglages du pinceau (les catégories à gauche, les réglages de la catégorie à droite) sont sous
@@ -184,13 +185,56 @@ impl App {
 
     // ------------------------------------------------------------------ la liste des brosses
 
-    /// La liste des brosses, dépliée sous l'aperçu du trait : dans un cadre, recherche, liste ou vignettes,
-    /// dossiers repliables (« Mes brosses » en premier), trois boutons en bas.
-    fn brush_list_ui(&mut self, ui: &mut egui::Ui) {
+    /// La liste des brosses, dépliée **tout en bas du panneau**, sous les réglages (Anthony, 2026-11-18, sur un schéma : 1 les
+    /// réglages, 2 les trois boutons, 3 la liste) : les trois boutons (importer, garder le réglage courant, supprimer), puis, dans
+    /// un cadre, la recherche, liste ou vignettes, et les dossiers repliables (« Mes brosses » en premier). Rien si elle est repliée.
+    /// (Avant, elle se dépliait juste sous l'aperçu et repoussait les réglages de 300 points, loin de l'aperçu qu'on règle.)
+    pub(crate) fn brush_list_ui(&mut self, ui: &mut egui::Ui) {
+        if !self.pinceaux.liste_ouverte {
+            return;
+        }
+        ui.add_space(6.0);
+        self.brush_list_buttons(ui);
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             self.brush_list_content(ui);
         });
+    }
+
+    /// Les trois boutons de la liste des brosses, au-dessus d'elle : importer des pinceaux, garder le réglage courant sous un nom,
+    /// supprimer la brosse choisie.
+    fn brush_list_buttons(&mut self, ui: &mut egui::Ui) {
+        let target = self.panel_target();
+        let current = match target {
+            Target::Eraser => self.eraser,
+            Target::Brush => self.brush,
+        };
+        let selected = choisi(&self.brushes.presets, target, &current);
+        let can_delete = selected.is_some_and(|i| supprimable(&self.brushes.presets[i]));
+        let (mut import, mut nouvelle, mut supprimer) = (false, false, false);
+        ui.horizontal(|ui| {
+            import = icone(ui, ph::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked();
+            nouvelle = icone(ui, ph::PLUS, "Nouvelle brosse", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un pinceau : renommer, dupliquer, remplacer, supprimer).", "").clicked();
+            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de FEANOR restent).", "").clicked();
+        });
+        ui.add_space(2.0);
+        if import {
+            let before: Vec<String> = self.brushes.presets.iter().map(|p| p.source.clone()).collect();
+            self.import_brushes();
+            // Le dossier d'un fichier qu'on vient d'importer s'ouvre : c'est ce qu'on veut voir.
+            let nouveaux: Vec<String> = self.brushes.presets.iter().filter(|p| !before.contains(&p.source)).map(dossier_de).collect();
+            for nom in nouveaux {
+                self.pinceaux.regler(&nom, true);
+            }
+        }
+        if nouvelle {
+            self.start_save_preset(target);
+        }
+        if supprimer {
+            if let Some(i) = selected {
+                self.apply_preset_menu(i, crate::brushui::PresetMenu::Delete, target, current);
+            }
+        }
     }
 
     fn brush_list_content(&mut self, ui: &mut egui::Ui) {
@@ -213,7 +257,6 @@ impl App {
         let search = self.brush_previews.search.clone();
         let searching = !search.trim().is_empty();
         let folders = ranger(&self.brushes.presets, target, &search);
-        let selected = choisi(&self.brushes.presets, target, &current);
         let mut pick = None;
         let mut menu = None;
         let mut toggles: Vec<(String, bool)> = Vec::new();
@@ -276,16 +319,6 @@ impl App {
             self.pinceaux.regler(&nom, ouvert);
         }
 
-        // Les trois boutons du bas.
-        let (mut import, mut nouvelle, mut supprimer) = (false, false, false);
-        let can_delete = selected.is_some_and(|i| supprimable(&self.brushes.presets[i]));
-        ui.add_space(2.0);
-        ui.horizontal(|ui| {
-            import = icone(ui, ph::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked();
-            nouvelle = icone(ui, ph::PLUS, "Nouvelle brosse", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un pinceau : renommer, dupliquer, remplacer, supprimer).", "").clicked();
-            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de FEANOR restent).", "").clicked();
-        });
-
         if let Some(i) = pick {
             let settings = self.brushes.presets[i].settings;
             match target {
@@ -304,23 +337,6 @@ impl App {
         }
         if let Some((i, a)) = menu {
             self.apply_preset_menu(i, a, target, current);
-        }
-        if import {
-            let before: Vec<String> = self.brushes.presets.iter().map(|p| p.source.clone()).collect();
-            self.import_brushes();
-            // Le dossier d'un fichier qu'on vient d'importer s'ouvre : c'est ce qu'on veut voir.
-            let nouveaux: Vec<String> = self.brushes.presets.iter().filter(|p| !before.contains(&p.source)).map(dossier_de).collect();
-            for nom in nouveaux {
-                self.pinceaux.regler(&nom, true);
-            }
-        }
-        if nouvelle {
-            self.start_save_preset(target);
-        }
-        if supprimer {
-            if let Some(i) = selected {
-                self.apply_preset_menu(i, crate::brushui::PresetMenu::Delete, target, current);
-            }
         }
     }
 
@@ -381,7 +397,7 @@ impl App {
     // ------------------------------------------------------------------ réglages du pinceau
 
     /// Dans le panneau Réglages de l'outil, sous le résumé : l'aperçu du trait courant (on le voit
-    /// changer pendant qu'on règle), puis les catégories (à gauche, ou en liste déroulante si le
+    /// changer pendant qu'on règle), puis, juste dessous, les catégories (à gauche, ou en liste déroulante si le
     /// panneau est étroit) et les réglages de la catégorie choisie. Le panneau défile lui-même.
     pub(crate) fn brush_settings_ui(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
@@ -389,11 +405,8 @@ impl App {
         let wide = ui.available_width() >= NARROW;
         ui.add_space(4.0);
         self.current_preview(ui);
-        // La liste des brosses (l'ancien panneau Pinceaux), dépliée par le bouton à droite de l'aperçu.
-        if self.pinceaux.liste_ouverte {
-            ui.add_space(4.0);
-            self.brush_list_ui(ui);
-        }
+        // (La liste des brosses, dépliée par le bouton à droite de l'aperçu, est tout en bas du panneau, après ces réglages :
+        // `brush_list_ui`, appelée par `tool_options_panel`.)
         // Pinceau et crayon : « Peint sur l'aplat » et l'aplat du calque, toujours à portée, sous l'aperçu (Anthony,
         // 2026-10-23 ; avant, dans « Plus de réglages »).
         if matches!(self.tool, Tool::Brush | Tool::Pencil) {
@@ -413,6 +426,7 @@ impl App {
             return;
         }
         ui.add_space(4.0);
+        // (Replié, on s'arrête là ; la liste des brosses, elle, est posée par `tool_options_panel` dans les deux cas.)
         if wide {
             ui.horizontal_top(|ui| {
                 let left = ui
@@ -589,7 +603,7 @@ impl App {
                         ouverte,
                         ph::BOOKS,
                         "Liste des pinceaux",
-                        "Les brosses de FEANOR, « Mes brosses » et celles importées : en choisir une, en importer, garder le réglage courant, renommer, supprimer. Un clic déplie la liste sous l'aperçu, un autre la replie.",
+                        "Les brosses de FEANOR, « Mes brosses » et celles importées : en choisir une, en importer, garder le réglage courant, renommer, supprimer. Un clic déplie la liste en bas du panneau, un autre la replie.",
                         "vue.pinceaux",
                     )
                     .clicked();
