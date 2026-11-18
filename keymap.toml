@@ -2709,6 +2709,12 @@ action = "vue.bruitages"
 touches = []
 source = "FEANOR (sans touche)"
 
+# Panneau Préréglages, les mouvements de caméra à glisser sur la timeline (partie 170 ; sans touche : à choisir).
+[[raccourci]]
+action = "vue.prereglages"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "bruitage.inserer"
 touches = []

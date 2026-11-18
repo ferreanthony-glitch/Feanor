@@ -51,7 +51,7 @@ impl Document {
     pub(crate) fn pile_dans_l_ordre_des_distances(&self, index: usize) -> bool {
         let Some(p) = self.panels.get(index) else { return true };
         let n = p.frame_count().max(1);
-        let images = if p.layers.iter().any(|l| !l.pos_keys.is_empty() || l.trajectoire.is_some()) || p.camera.len() > 1 || p.trajectoire_camera.is_some() || p.effet_camera.is_some() { n } else { 1 };
+        let images = if p.layers.iter().any(|l| !l.pos_keys.is_empty() || l.trajectoire.is_some()) || p.camera.len() > 1 || p.trajectoire_camera.is_some() || !p.effets_camera.is_empty() { n } else { 1 };
         let world = crate::espace3d::Monde::du_plan(self, index);
         let pile = crate::calqueannot::ordre(&p.layers, true);
         // (Les dossiers ne posent rien eux-mêmes : seul l'ordre de leurs calques compte.)

@@ -153,7 +153,9 @@ impl App {
         let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups, self.cur_layer));
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
-        let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
+        // (Les blocs de la piste Caméra, sous ses clés : partie 170.)
+        let blocs_h = self.blocs_camera_h(ui.ctx());
+        let r = self.timeline_heads(ui, HEADER_H, CAM_H + blocs_h + notes_h + sound_h);
         let painter = ui.painter_at(r);
         let visuals = ui.visuals().clone();
         // Clic droit sur le nom d'une ligne : son menu (passe interface).
@@ -162,7 +164,7 @@ impl App {
             resp.context_menu(|ui| app.grid_menu_ui(ui, m));
         };
         if notes_h > 0.0 {
-            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(r.width(), notes_h)).shrink2(vec2(0.0, 1.0));
+            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H + blocs_h), vec2(r.width(), notes_h)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
             menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
@@ -196,6 +198,8 @@ impl App {
                 self.e3_piste_camera_cliquee();
             }
             resp.context_menu(|ui| self.grid_menu_ui(ui, GridMenu::Camera));
+            let bande = Rect::from_min_size(pos2(r.left(), y + CAM_H), vec2(r.width(), blocs_h));
+            self.blocs_camera_nom(ui, &painter, bande);
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
@@ -228,7 +232,8 @@ impl App {
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
-        let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + notes_h + sound_h);
+        let blocs_h = self.blocs_camera_h(ui.ctx());
+        let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + blocs_h + notes_h + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
         if let Some((a, b)) = fit {
@@ -294,6 +299,10 @@ impl App {
                 let plain = Stroke::new(1.0_f32, Color32::from_black_alpha(140));
                 self.paint_cam_diamond(&painter, c, chosen, cam_key(), 5.0, plain);
             }
+            // Les blocs de la piste Caméra, sous les clés (`blocscamera.rs`, partie 170) : effets vivants qu'on prend à la
+            // souris, et où se lâche un préréglage glissé depuis le panneau Préréglages.
+            let bande = Rect::from_min_size(pos2(r.left(), y + CAM_H), vec2(size.x, blocs_h));
+            self.blocs_camera_bande(ui, &painter, bande, row, r.left(), cell, &resp);
         }
 
         // Le son du montage pendant ce panneau (toutes pistes superposées), en lecture seule.
@@ -854,7 +863,7 @@ impl App {
 
         // Notes dessinées (13e) : leur rangée sous la caméra ; un geste qui y commence ne bouge
         // ni la tête de lecture ni les images.
-        let notes_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h + CAM_H), vec2(size.x, notes_h));
+        let notes_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h + CAM_H + blocs_h), vec2(size.x, notes_h));
         let in_notes = notes_h > 0.0 && ui.input(|i| i.pointer.press_origin()).is_some_and(|p| notes_row.contains(p));
         if notes_h > 0.0 {
             self.notes_row(ui, &painter, notes_row.shrink2(vec2(0.0, 1.0)), r.left(), cell, &resp);

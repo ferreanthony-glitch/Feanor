@@ -2,8 +2,12 @@
 //! caméra » (préréglage, intensité, durée, fréquence, graine, « Convertir en clés ») et la liste des
 //! objectifs à côté de la focale. La logique est dans `camfx.rs` (effet vivant, clés) et `camera.rs` (focales).
 //!
-//! Depuis le 8 novembre 2026 (partie 129), l'effet choisi est **vivant** : un réglage du plan (`Panel::effet_camera`),
+//! Depuis le 8 novembre 2026 (partie 129), l'effet choisi est **vivant** : un réglage du plan (`Panel::effets_camera`),
 //! visible tout de suite, que chaque champ change aussitôt, sans clé. « Convertir en clés » le cuit en clés.
+//!
+//! Depuis la partie 170, un plan porte **plusieurs** effets vivants : les blocs de la piste Caméra de la timeline
+//! (`blocscamera.rs`), posés depuis le panneau Préréglages ou d'ici. La section règle l'effet choisi dans la timeline (sinon
+//! le dernier posé) ; « Convertir en clés » les cuit tous.
 
 use eframe::egui::{self, RichText};
 
@@ -23,17 +27,40 @@ impl App {
         }
     }
 
-    /// L'effet de caméra vivant du plan courant (partie 129).
-    pub(crate) fn effet_vivant(&self) -> Option<Vivant> {
-        self.doc.panels.get(self.cur_panel).and_then(|p| p.effet_camera)
+    /// Le rang, dans le plan courant, de l'effet vivant que règle cette section : le bloc choisi dans la timeline (partie
+    /// 170), sinon le dernier posé ; rien si le plan n'a aucun effet vivant.
+    pub(crate) fn rang_effet_vivant(&self) -> Option<usize> {
+        let n = self.doc.panels.get(self.cur_panel)?.effets_camera.len();
+        (n > 0).then(|| self.bloc_camera_choisi().unwrap_or(n - 1))
     }
 
-    /// Range l'effet vivant du plan courant (l'appelant a enregistré l'étape d'annulation).
+    /// L'effet de caméra vivant du plan courant que règle cette section (partie 129 ; voir `rang_effet_vivant`).
+    pub(crate) fn effet_vivant(&self) -> Option<Vivant> {
+        let i = self.rang_effet_vivant()?;
+        self.doc.panels.get(self.cur_panel).and_then(|p| p.effets_camera.get(i).copied())
+    }
+
+    /// Range l'effet vivant que règle cette section (l'appelant a enregistré l'étape d'annulation) : `Some` le remplace (ou
+    /// l'ajoute, si le plan n'en a aucun), `None` le retire ; les autres effets du plan ne bougent pas.
     fn set_effet_vivant(&mut self, v: Option<Vivant>) {
         let fps = self.doc.fps;
+        let rang = self.rang_effet_vivant();
+        let pid = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         if let Some(p) = self.doc.panels.get_mut(self.cur_panel) {
-            p.effet_camera = v.map(|v| v.sanitized(fps));
+            match (rang, v) {
+                (Some(i), Some(v)) => p.effets_camera[i] = v.sanitized(fps),
+                (Some(i), None) => {
+                    p.effets_camera.remove(i);
+                }
+                (None, Some(v)) => p.effets_camera.push(v.sanitized(fps)),
+                (None, None) => return,
+            }
             self.modified = true;
+        }
+        match (v, pid) {
+            (None, _) => self.blocs.choisi = None,
+            (Some(_), Some(pid)) if rang.is_none() => self.blocs.choisi = Some((pid, 0)),
+            _ => {}
         }
         if let Some(v) = v {
             // (Le prochain effet repart de ces réglages.)
@@ -96,6 +123,11 @@ impl App {
     pub(crate) fn apply_camera_effect(&mut self) {
         let fps = self.doc.fps;
         let pi = self.cur_panel;
+        // Des effets vivants sur le plan (partie 170) : ils deviennent tous des clés, celles qu'ils montraient.
+        if self.doc.panels.get(pi).is_some_and(|p| !p.effets_camera.is_empty()) {
+            self.convertir_effets_en_cles(pi);
+            return;
+        }
         let vivant = self.effet_vivant();
         let v = vivant.unwrap_or_else(|| {
             let (start, duration, _) = self.camera_effect_range();
@@ -114,7 +146,7 @@ impl App {
         self.playing = false;
         let snap = self.snapshot();
         self.doc.panels[pi].camera = keys;
-        self.doc.panels[pi].effet_camera = None;
+        self.doc.panels[pi].effets_camera.clear();
         let panel = self.doc.panels[pi].id;
         let n = plan.keys.len();
         let chosen: Vec<CamKeyRef> = plan.keys.iter().map(|k| CamKeyRef { panel, frame: k.frame }).collect();
@@ -141,6 +173,8 @@ impl App {
         use egui_phosphor::regular as ph;
         let fps = self.doc.fps;
         let current = self.effet_vivant();
+        // Plusieurs effets sur le plan (partie 170) : leur liste, pour choisir celui qu'on règle, et de quoi en ajouter un.
+        self.liste_des_effets_ui(ui);
         // La liste : « Aucun effet », puis les préréglages. Choisir, c'est voir tout de suite (sans clé).
         let mut picked: Option<Option<Preset>> = None;
         let resp = egui::ComboBox::from_id_salt("effet_camera")

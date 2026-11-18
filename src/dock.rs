@@ -77,6 +77,11 @@ pub enum Pane {
     /// dans la colonne de droite, en onglet avec les calques.
     #[serde(rename = "bruitages")]
     Bruitages,
+    /// Les préréglages (`panneauprereglages.rs`, partie 170) : les mouvements de caméra tout faits, en vignettes animées, à
+    /// glisser sur la piste Caméra de la timeline. Fermé dans la disposition par défaut ; il s'ouvre dans la colonne de
+    /// droite, en onglet avec les calques.
+    #[serde(rename = "prereglages")]
+    Prereglages,
     /// Les suggestions sonores (`suggestionsui.rs`) : SHOT lit le storyboard et propose des bruitages,
     /// des ambiances et des voix témoins, qu'on écoute, accepte ou supprime. Fermé dans la disposition
     /// par défaut ; il s'ouvre dans la colonne de droite, en onglet avec les calques.
@@ -133,7 +138,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 19] = [
+    pub const ALL: [Pane; 20] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -146,6 +151,7 @@ impl Pane {
         Pane::History,
         Pane::Comments,
         Pane::Bruitages,
+        Pane::Prereglages,
         Pane::SuggestionsSonores,
         Pane::References,
         Pane::Personnages,
@@ -161,7 +167,7 @@ impl Pane {
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
         )
     }
 
@@ -190,6 +196,7 @@ impl Pane {
             Pane::History => "Historique",
             Pane::Comments => "Commentaires",
             Pane::Bruitages => "Bruitages",
+            Pane::Prereglages => "Préréglages",
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
             Pane::Personnages => "Brosses dédiées",
@@ -231,6 +238,7 @@ impl Pane {
             Pane::History => ph::CLOCK_COUNTER_CLOCKWISE,
             Pane::Comments => ph::CHAT_TEXT,
             Pane::Bruitages => ph::WAVEFORM,
+            Pane::Prereglages => ph::FILM_STRIP,
             Pane::SuggestionsSonores => ph::SPARKLE,
             Pane::References => ph::IMAGES,
             Pane::Personnages => ph::USERS_THREE,
@@ -253,6 +261,7 @@ impl Pane {
             | Pane::History
             | Pane::Comments
             | Pane::Bruitages
+            | Pane::Prereglages
             | Pane::SuggestionsSonores
             | Pane::MonPanneau
             | Pane::Scenario

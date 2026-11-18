@@ -32,6 +32,30 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   planche des Vignettes à trente plans, qui touche à ce chantier ; relancé seul et au milieu de ses voisins, il passe à chaque
   fois (huit passages), sans que le message de l'échec ait pu être retrouvé. Avec le Cutter (bed74af ; a57da20), à 9 h 55, la
   machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa décision.
+- **`prereglages-socle` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (d43ea27, exe de 09 h 50), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main avait avancé deux fois pendant le chantier
+  (trajectoire-exposition et versions-plan, puis cutter-reglages) : main ramené dans la branche à chaque fois, seuls
+  INTERFACE.md et le journal en conflit (les deux parties gardées), puis vérificateur complet sur l'ensemble : compilation sans
+  avertissement, **4 833 réussis, 0 échec**, les groupes de fiabilité OK. Son FEANOR était ouvert (depuis 09 h 48) : arrêté
+  sans enregistrer juste avant de remplacer le fichier (la nouvelle version avait été construite et contrôlée à côté). Contrôle de
+  lancement sur une copie de « dd » avec de faux réglages : vivant, aucun plantage ; son vrai « dd » est resté au format 56. Il
+  n'a pas été rouvert à sa place. **Ses projets passent au format 57 dès qu'il les ouvre** avec ce FEANOR. Worktree et branche
+  gardés (retrait proposé, sa décision).
+- **`cutter-reglages` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (bed74af, exe de 04 h 53), sur son
+  « fusionne le cutter ». Partie 169 de docs/INTERFACE.md (numérotée 168 sur la branche ; les versions de plan avaient pris le
+  168) : le Cutter a cinq réglages, réglages du poste (clé `[cutter]` de reglages.toml), format inchangé (56) : écart toléré (0
+  d'origine, comme avant), bouts effilés (0 = net), mode « Dépassements » (bouts libres plus courts que 12 px d'origine ; jamais un
+  morceau entre deux croisements), portée « Calques visibles » (les autres calques coupent sans être modifiés), geste « Lasso » ;
+  plusieurs calques ou clés choisis : tous coupés, une seule étape d'annulation. Panneau sobre validé par lui (segments texte,
+  dessins-curseurs pour l'écart et l'effilé, curseur des dépassements, Précis), après deux essais refusés (tuiles « trop grosses
+  et peu professionnelles »). main fusionnée dans la branche avec --no-ff, le conflit de docs/INTERFACE.md résolu en gardant les
+  deux parties ; les accents de `cutter_tests.rs`, abîmés par une réécriture sous PowerShell, réparés. Vérificateur sur l'arbre
+  fusionné : compilation sans avertissement, passage 2 : 4 823 réussis, 0 échec ; passage 1 : un échec intermittent connu
+  (`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`, relancé seul trois fois,
+  trois réussites) ; dix groupes de fiabilité OK. Son FEANOR (lancé depuis Source) n'était pas ouvert : rien à arrêter. Contrôle de
+  lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main bed74af`) avec de faux réglages, vivant après
+  22 s, aucun plantage nouveau, puis arrêté. À juger par lui : l'écart d'origine (0 ou 2 à 3 px), les 12 px des dépassements, la
+  pointe effilée (un trait effilé perd ses appuis enregistrés). Worktree `trajectoire-3d` et branche gardés.
 - **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
   « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
   167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
@@ -65,6 +89,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   avertissement, **4 799 réussis, 0 échec**, dix groupes OK, au troisième passage : les deux premiers avaient échoué sur des essais
   chronométrés sans rapport, la machine étant saturée par les essais d'autres sessions (ils passent seuls). Image de contrôle de la
   timeline faite sur une copie. Pas regardé sur son écran. Pas fusionnée : sa décision.
+- **Préréglages dans la timeline, lot 1 : le socle** (branche `prereglages-socle`, partie 170, format 57). Sa demande : « des
+  présets d'animation de caméra à intégrer directement dans la timeline » (crash zoom, zip pan, panoramique, travelling) et des
+  présets de plan (color card, titre, crédits). Une liste numérotée lui a été faite, puis une page où chaque préréglage joue en
+  boucle (https://claude.ai/artifact/RaFTcminkjKeDWxMUFVi6J, ses choix gardés dans la page) : 64 Oui, 9 sans réponse (P4, P9,
+  P10, P11, P12, P15, T1, T2, T5). À l'ordre en lots, il a répondu « Oui, le lot 1 ». **Ce qui est fait** : un plan porte
+  plusieurs effets de caméra vivants, des blocs jaunes sous les clés de caméra de la timeline, qui s'ajoutent l'un à l'autre ; on
+  les glisse, on tire leurs bords pour leur durée, Suppr enlève le bloc choisi ; le panneau Préréglages (vignettes qui jouent le
+  vrai mouvement au survol) se glisse sur la timeline ou se clique pour poser à la tête de lecture ; « Convertir en clés » cuit
+  tous les blocs d'un coup, avec la même image. Les huit préréglages de caméra existants seulement : les autres sont les lots
+  suivants.
+
 - **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
   « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
   `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,
