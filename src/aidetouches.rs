@@ -138,6 +138,13 @@ pub fn gestes_de_l_outil(tool: Tool) -> &'static [(&'static str, &'static str)] 
         Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => &[("Choisir le calque du dessin cliqué", "Alt + clic")],
         Tool::Text => &[("Valider le texte", "Ctrl + Entrée")],
         Tool::SelectColor => &[("Ajouter à la sélection", "Maj + clic")],
+        Tool::Cutter => &[
+            ("Enlever des bouts jusqu'aux croisements", "glisser en travers"),
+            ("Enlever un bout", "clic"),
+            ("Enlever ce qui est entièrement entouré", "geste Lasso (Réglages)"),
+            ("Nettoyer les petits dépassements d'une zone", "mode Dépassements (Réglages), puis balayer ou entourer"),
+            ("Retirer la zone fermée de l'aplat", "clic sur la sous-ligne de l'aplat choisie"),
+        ],
         Tool::Trajectoire => &[
             ("Tracer le chemin du calque", "un trait"),
             ("Poser une marque", "un petit trait en travers du chemin"),

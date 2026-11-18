@@ -174,7 +174,7 @@ impl Tool {
             Tool::Mixer => "Mélanger ce qui est déjà peint : la brosse courante entraîne et étale les couleurs qu'elle traverse, sans en poser de neuve. Sur un calque bitmap.",
             Tool::Pencil => "Dessiner au crayon.",
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
-            Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
+            Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever (ou les entourer au lasso) : ils sont coupés là où ils croisent les autres traits. Réglages : écart toléré, bouts effilés, nettoyer les dépassements, tous les calques visibles.",
             Tool::Fill => "Remplir une zone avec la couleur courante.",
             Tool::Gradient => "Glisser pour tracer l'axe d'un dégradé, de la couleur d'avant-plan à celle d'arrière-plan : dans la sélection, dans la zone fermée où l'on appuie, ou (Alt) sur tout le calque. Sur un calque vectoriel, il reste un réglage de la zone.",
             Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",

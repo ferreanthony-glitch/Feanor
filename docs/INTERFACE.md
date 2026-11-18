@@ -14179,3 +14179,85 @@ branche, derrière le FEANOR d'Anthony, ne se redessinait pas.
 Note de journal : le message du commit `ab1c03f` (« teintes orange et jaune plus distinctes ; captures sur banc ») est inexact sur
 les teintes : leur réglage est déjà dans `b0f7b4f` ; `ab1c03f` n'ajoute que l'essai des captures.
 
+## 169. Le Cutter a des réglages : écart toléré, bouts effilés, dépassements, portée, lasso (2026-11-18, branche `cutter-reglages` ; numérotée 168 sur la branche, 169 à la fusion : les versions de plan avaient pris le 168)
+
+Anthony : le Cutter n'avait aucun réglage (« Le Cutter, la pipette et la main n'ont pas de réglages »). Cinq réglages lui ont été
+proposés ; sa réponse : « On peut tout mettre ? » Les cinq y sont (`src/cutter.rs` pour le calcul, `src/cutterui.rs` pour le panneau).
+Ce sont des réglages du poste (`reglages.toml`, clé `[cutter]`, écrite seulement si l'on a changé quelque chose) : rien n'est écrit
+dans le projet, le format de projet ne change pas (56).
+
+### 169.1 Ce que fait chaque réglage
+
+- **Écart toléré** (0 d'origine, jusqu'à 30 px du dessin) : un trait qui s'arrête à moins de cet écart d'un autre trait compte comme
+  s'il le croisait. Le bout est prolongé dans sa direction jusqu'à l'autre trait (sinon, le point le plus proche) : l'autre trait est
+  coupé là, et ce bout n'est plus un « bout libre » pour le nettoyage des dépassements. Un trait qui revient presque sur lui-même (une
+  boucle pas tout à fait fermée) compte aussi. 0 : seuls les vrais croisements, comme avant. *Défaut 0* : c'est le Cutter d'avant,
+  aucun geste d'Anthony ne change de résultat sans qu'il l'ait choisi.
+- **Bouts effilés** (0 = net d'origine, jusqu'à 80 px) : le bout laissé par une coupe (là où le morceau voisin est parti) s'affine sur
+  cette longueur, jusqu'à 12 % du rayon du trait. Les morceaux qui restent côte à côte ne s'affinent pas. Un trait effilé perd ses
+  appuis enregistrés (les points ajoutés n'en ont pas) : le rendu reprend l'appui d'après les rayons.
+- **Mode** : « Couper » (comme avant) ou « Nettoyer les dépassements » : dans la zone que le geste touche ou entoure, les bouts
+  d'extrémité (entre le bout libre d'un trait et son dernier croisement) plus courts que « Dépassements enlevés jusqu'à » (12 px
+  d'origine, de 1 à 100) partent. Un morceau entre deux croisements ne part jamais ; un trait qui ne croise rien non plus.
+- **Geste** : « Glisser en travers » (comme avant ; un clic prend toujours le bout le plus proche) ou « Lasso » : on entoure, et les
+  morceaux (après la coupe aux croisements) entièrement dans le lasso partent. En mode Dépassements, le lasso délimite la zone.
+- **Portée** : « Calque actif » (comme avant) ou « Tous les calques visibles » : les traits des autres calques vectoriels visibles du
+  plan, à la même image, servent aussi de lignes de coupe (ramenés dans le repère du dessin coupé) ; ils ne sont jamais modifiés. Dans
+  une case des Vignettes, seul le calque actif compte.
+- **La sélection agit sur tout** : plusieurs calques choisis, ou plusieurs clés, et le geste coupe tous les dessins choisis là où on les
+  voit (chacun dans son repère, comme la gomme sur plusieurs calques), en **une seule étape d'annulation** (« Cutter ») ; la barre
+  d'état dit « Cutter sur 3 calques : 5 bouts enlevés dans 3 dessins. » (et les calques laissés de côté). Le dessin qu'on voit coupe
+  toujours, choisi ou non.
+
+Les zones remplies et les textes ne bougent toujours pas ; le clic « retirer la zone fermée de l'aplat » (`fondui.rs`) reste.
+
+### 169.2 Le panneau
+
+Le dessin validé par Anthony le 18 novembre, après deux essais refusés (de grandes tuiles dessinées : « trop grosses et peu
+professionnelles. Revois le design pour rendre ça moins gadget, plus pro » ; puis des segments à icônes). Il tient au-dessus du bloc
+Couleur sans défiler.
+
+- **Mode**, **Geste**, **Portée** : le libellé à gauche (gris discret, colonne de 62 px), un bouton segmenté d'une ligne à droite
+  (20 px, texte seul, filet de 1 px, coins de 4 px) : « Couper » | « Dépassements » ; « Glisser » | « Lasso » ; « Calque actif » |
+  « Calques visibles ». Le segment choisi a un gris un peu plus clair, le texte clair et un trait turquoise (le rehaut) de 2 px
+  dessous ; les autres restent sans fond.
+- Un filet, puis **Écart toléré** et **Bouts effilés** : le libellé et la valeur (« 3 px » ; « net » à 0) sur une ligne, dessous le
+  dessin sur toute la largeur, qui est lui-même le curseur. Écart : un trait horizontal s'arrête avant un vertical, on glisse son
+  bout (la poignée) ; l'écart toléré en pointillés turquoise. Effilé : un trait plein dont le bout droit s'affine, la poignée au début
+  de la pointe, un repère rouge en pointillés au bout (la coupe).
+- En mode Dépassements seulement : **Dépassements enlevés jusqu'à** et sa valeur, puis un curseur ordinaire sur toute la largeur.
+- Un filet, puis le repli « ▸ Précis » : les trois longueurs en chiffres.
+
+Aucune légende sous les contrôles : chaque segment, dessin et curseur a sa bulle (nom et effet ; « à 0, un trait qui ne touche pas
+n'est pas coupé » est dans celle de l'écart).
+
+L'aide de la barre de la vue, l'aide des touches (les gestes du Cutter), la description de l'outil et le texte de l'animation
+« Le Cutter coupe aux croisements » parlent des réglages.
+
+### 169.3 Les essais, la vitesse, ce qui reste à juger
+
+Les essais (`src/cutter_tests.rs`, neuf de plus ; `src/cutter_reglages_tests.rs`, trois) : un presque-croisement compte à 4 px et
+pas à 2 px (écart de 3), et à 0 l'horizontale part en entier comme avant ; les réglages d'origine coupent exactement comme avant ;
+l'effilé réduit le rayon au bout coupé (12 %) et pas ailleurs ; le nettoyage enlève les sept bouts de 5 px d'un dièse au lasso comme
+au balayage, garde la queue de 50 px et les morceaux entre croisements, ne touche pas un trait seul ; le lasso n'enlève que le
+morceau entièrement entouré ; une ligne d'un autre calque coupe sans rien ajouter ; les réglages s'écrivent seulement changés et se
+relisent (une valeur absurde est ramenée) ; sur le banc, la portée « Calques visibles » coupe contre l'autre calque sans le
+modifier (et plus quand il est caché) ; trois calques choisis : trois traits coupés, une seule étape d'annulation, « 3 calques » et
+« 3 bouts » dans la barre d'état ; le panneau montre ses contrôles et la ligne des dépassements en mode Dépassements seulement.
+
+Sans latence : les croisements sont filtrés par la boîte de l'autre trait au niveau de chaque segment (avant : au niveau du trait
+entier, 72 ms). Un dessin de 300 longs traits denses (150 × 150, 40 points chacun, 22 500 croisements) et 100 lignes d'un autre
+calque, un geste qui en traverse une soixantaine : 7 ms (couper), 9 ms (écart toléré de 3 px), 7 ms (dépassements), sur ce poste.
+
+Vérificateur (18 novembre, nuit) : compilation sans avertissement ; passage 2 : 4 807 réussis, 0 échec ; passage 1 (machine très
+chargée, 1 242 s) : deux échecs de minutage, `a_big_drawing_cuts_fast` (rendu depuis plus robuste : le meilleur de cinq mesures) et
+`retours_aplat_tests::a_fill_stays_on_screen…` (sans lien avec le Cutter) ; relancés seuls trois fois : réussis. Les dix groupes de
+fiabilité OK.
+
+Regardé à l'écran (par Claude, exe de la branche, réglages isolés, copie du projet sous `Tests\essai 168`) : le panneau tient sans
+défiler au-dessus de la Couleur, dans les deux modes ; les réglages changés sont retrouvés au lancement suivant. Le nettoyage sur le
+vrai dessin n'a pas pu être montré (le calque courant de la copie est verrouillé).
+
+À juger par Anthony : la valeur d'origine de l'écart toléré (0 aujourd'hui, pour que rien ne change sans lui ; 2 ou 3 px seraient
+plus utiles au quotidien) ; la longueur d'origine des dépassements (12 px du dessin) ; le dessin de la pointe effilée (jusqu'à 12 %
+du rayon) ; un trait effilé perd ses appuis enregistrés (le rendu les reprend des rayons) : à regarder sur un trait texturé.
