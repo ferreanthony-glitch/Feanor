@@ -5,6 +5,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
+  « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
+  167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
+  version à côté, en lecture seule, à l'écran seulement ; le son gardé de chaque version est rejoué sous elle (le son du film ne
+  bouge pas quand on change de version ; fondus et volume ne sont pas gardés) ; clic droit = dix teintes douces. Format inchangé (56).
+  main avait avancé deux fois (panneau Pinceau et logo, puis trajectoire-exposition) : fusionnée deux fois dans la branche avec
+  --no-ff, un conflit de docs/INTERFACE.md résolu en gardant les deux parties. Vérificateur sur l'arbre fusionné : compilation sans
+  avertissement, 4 812 réussis au passage 1 ; un échec intermittent au passage 2 (`espace3d_tests::the_view_with_ten_cards_stays_within_the_frame_budget`,
+  relancé seul trois fois, trois réussites). Au passage d'avant, deux essais de temps de l'Espace 3D avaient échoué pendant que le
+  poste était chargé : mesurés tour à tour sur main et sur la branche, mêmes temps. Son FEANOR (lancé depuis Source) n'était pas
+  ouvert : rien à arrêter. Contrôle de lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main b3059ec`)
+  avec de faux réglages, vivant après 22 s, aucun plantage nouveau, puis arrêté. Le message du commit `ab1c03f` est inexact (les
+  teintes étaient déjà dans `b0f7b4f`). Worktree `aide-animee` et branche gardés.
 - **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
   n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
