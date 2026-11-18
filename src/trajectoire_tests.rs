@@ -518,3 +518,118 @@ fn each_drawing_of_image_keys_follows_its_milestone_when_marks_are_added_removed
     sans.retirer_marque(0);
     assert!(sans.dessins.is_empty() && sans.marques.is_empty());
 }
+
+/// Anthony, 2026-11-18 : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés sur
+/// la trajectoire. » Une marque qu'on glisse emporte son temps : entre ses deux jalons voisins, elle prend l'image de sa place.
+#[test]
+fn a_mark_that_slides_takes_its_time_with_it_between_its_two_neighbours() {
+    // 41 images : le chemin dure de l'image 0 à l'image 40. Trois marques à 20, 50 et 80 % du chemin, en parts égales.
+    let mut t = droite();
+    for f in [0.2, 0.5, 0.8] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    assert_eq!(t.images_des_jalons(41), [0, 10, 20, 30, 40]);
+    assert!(t.temps.is_none());
+    // Celle du milieu glissée à 70 % : aux 5/6 du chemin entre ses voisines (images 10 et 30), donc à l'image 10 + 5/6 × 20 ≈ 27.
+    let f = t.deplacer_marque_et_son_temps(1, 0.7, 41);
+    assert!((f - 0.7).abs() < 1e-6);
+    assert_eq!(t.images_des_jalons(41), [0, 10, 27, 30, 40], "seule la marque glissée change d'image");
+    assert!(t.temps.is_some(), "les temps sont posés");
+    // Remise à 50 % : à mi-chemin de ses voisines, à mi-temps. Son temps ne dépend que de sa place.
+    t.deplacer_marque_et_son_temps(1, 0.5, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 10, 20, 30, 40]);
+    // Tout contre une voisine (la fraction est bornée à 1 % d'elle) : une image d'écart au moins, de chaque côté.
+    t.deplacer_marque_et_son_temps(1, 0.799, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 10, 29, 30, 40]);
+    t.deplacer_marque_et_son_temps(1, 0.0, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 10, 11, 30, 40]);
+    // Une marque recalée à la main sur la timeline (la première, à l'image 4) garde son temps quand une autre glisse.
+    let mut t = droite();
+    for f in [0.2, 0.5, 0.8] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    assert_eq!(t.recaler(1, 4, 41), Some(4));
+    t.deplacer_marque_et_son_temps(1, 0.4, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 4, 13, 30, 40], "au tiers du chemin entre les images 4 et 30");
+    // La première et la dernière marque : leurs voisins sont le départ et l'arrivée.
+    t.deplacer_marque_et_son_temps(0, 0.1, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 3, 13, 30, 40]);
+    t.deplacer_marque_et_son_temps(2, 0.85, 41);
+    assert_eq!(t.images_des_jalons(41), [0, 3, 13, 33, 40]);
+    // Une marque qui n'existe pas : rien ne change.
+    let avant = t.clone();
+    t.deplacer_marque_et_son_temps(7, 0.5, 41);
+    assert_eq!(t, avant);
+    // Un plan trop court pour le chemin (aucune image après le départ) : la fraction bouge, sans panique.
+    let mut t = droite();
+    t.ajouter_marque(0.5).expect("une marque");
+    t.deplacer_marque_et_son_temps(0, 0.7, 1);
+    assert!((t.marques[0] - 0.7).abs() < 1e-6);
+}
+
+/// Une marque qu'on pose : tant que le temps est en parts égales, il est repartagé comme avant ; dès que des temps sont posés, elle
+/// prend le temps de sa place entre ses deux voisines (et non plus le milieu de leur temps).
+#[test]
+fn a_new_mark_takes_the_time_of_its_place_once_times_are_set_and_shares_them_equally_before() {
+    let mut t = droite();
+    t.ajouter_marque(0.5).expect("une marque");
+    assert_eq!(t.ajouter_marque_a_son_temps(0.9, 41), Some(1));
+    assert!(t.temps.is_none(), "parts égales : rien n'est posé");
+    assert_eq!(t.images_des_jalons(41), [0, 13, 27, 40]);
+    // La première marque recalée à l'image 10 : les temps sont posés.
+    assert_eq!(t.recaler(1, 10, 41), Some(10));
+    assert_eq!(t.images_des_jalons(41), [0, 10, 27, 40]);
+    // Une marque à 60 % : au quart du chemin entre ses voisines (50 % à l'image 10, 90 % à l'image 27) → vers l'image 14.
+    assert_eq!(t.ajouter_marque_a_son_temps(0.6, 41), Some(1));
+    assert_eq!(t.images_des_jalons(41), [0, 10, 14, 27, 40]);
+    // (Avec `ajouter_marque`, elle prenait le milieu du temps de ses voisines : l'image 18.)
+    let mut u = droite();
+    u.ajouter_marque(0.5).expect("une marque");
+    u.ajouter_marque(0.9).expect("une marque");
+    u.recaler(1, 10, 41);
+    u.ajouter_marque(0.6).expect("une marque");
+    assert_eq!(u.images_des_jalons(41), [0, 10, 18, 27, 40]);
+    // Sur une marque existante : refusée, comme `ajouter_marque`.
+    assert_eq!(t.ajouter_marque_a_son_temps(0.6, 41), None);
+}
+
+/// « Temps selon le chemin » : chaque marque prend le temps de sa place sur le chemin ; en clés d'images, chaque dessin est exposé
+/// selon la distance jusqu'au suivant.
+#[test]
+fn times_along_the_path_expose_each_drawing_for_the_distance_to_the_next() {
+    let mut t = droite();
+    for f in [0.1, 0.15, 0.5, 0.9] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    assert_eq!(t.images_des_jalons(41), [0, 8, 16, 24, 32, 40], "en parts égales");
+    assert!(!t.est_selon_le_chemin(41));
+    t.temps_selon_le_chemin(41);
+    assert_eq!(t.images_des_jalons(41), [0, 4, 6, 20, 36, 40], "10 % du chemin : l'image 4 ; 15 % : l'image 6…");
+    assert!(t.est_selon_le_chemin(41));
+    // « Temps égaux entre les marques » revient aux parts égales.
+    t.temps_egaux();
+    assert_eq!(t.images_des_jalons(41), [0, 8, 16, 24, 32, 40]);
+    // Des marques serrées : chacune garde son image, au début comme à la fin du chemin.
+    let mut t = droite();
+    for f in [0.5, 0.515, 0.53] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    t.temps_selon_le_chemin(41);
+    assert_eq!(t.images_des_jalons(41), [0, 20, 21, 22, 40]);
+    let mut t = droite();
+    for f in [0.01, 0.03, 0.96, 0.98] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    t.temps_selon_le_chemin(41);
+    assert_eq!(t.images_des_jalons(41), [0, 1, 2, 38, 39, 40]);
+    // Moins d'images que de marques : les fractions telles quelles, sans panique ; aucune marque : rien de posé.
+    let mut t = droite();
+    for f in [0.2, 0.4, 0.6, 0.8] {
+        t.ajouter_marque(f).expect("une marque");
+    }
+    t.temps_selon_le_chemin(4);
+    assert_eq!(t.temps.as_deref(), Some(&[0.2, 0.4, 0.6, 0.8][..]));
+    let mut t = droite();
+    t.temps_selon_le_chemin(41);
+    assert!(t.temps.is_none() && t.est_selon_le_chemin(41));
+}

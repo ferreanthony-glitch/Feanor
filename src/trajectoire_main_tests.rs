@@ -172,7 +172,9 @@ fn on_the_sheet_a_drawing_key_placed_by_hand_between_two_marks_stays_at_its_imag
     glisser_la_marque(&mut b, 200.0, 260.0, 150.0);
     tel_quel(&b, "une marque glissée");
     let d = des_jalons(&b, 0);
-    assert_eq!((expositions(&b, 0, source), expositions(&b, 0, x), expositions(&b, 0, d[1]), expositions(&b, 0, d[2])), (vec![(0, 10)], vec![(10, 12)], vec![(12, 23)], vec![(23, 24)]), "le dessin du départ est exposé jusqu'à elle");
+    // (2026-11-18 : la marque glissée a emporté son temps, à 70 % du chemin elle est à l'image 16 ; la clé posée à la main tient
+    // jusqu'à elle.)
+    assert_eq!((expositions(&b, 0, source), expositions(&b, 0, x), expositions(&b, 0, d[1]), expositions(&b, 0, d[2])), (vec![(0, 10)], vec![(10, 16)], vec![(16, 23)], vec![(23, 24)]), "le dessin du départ est exposé jusqu'à elle");
     assert!(b.app.status.starts_with(&gardes_dit(1, "image 11")), "{}", b.app.status);
     // Ce que la barre d'état montre vraiment (le début d'un message long) : la phrase entière, l'image comprise.
     assert!(crate::messages::resume(&b.app.status).starts_with("Trajectoire : 1 dessin posé à la main gardé à l'image 11, entre les marques"), "{}", crate::messages::resume(&b.app.status));
@@ -180,6 +182,12 @@ fn on_the_sheet_a_drawing_key_placed_by_hand_between_two_marks_stays_at_its_imag
     glisser_la_marque(&mut b, 260.0, 230.0, 150.0);
     tel_quel(&b, "la marque glissée de nouveau");
     assert!(!b.app.status.contains("posé à la main"), "les mêmes clés ne se redisent pas : {}", b.app.status);
+    // (À 60 % du chemin, la marque est à l'image 14. « Temps égaux entre les marques » rend les parts égales : la suite part de
+    // là, comme avant le 2026-11-18.)
+    assert_eq!((jalons(&b, 0), expositions(&b, 0, x)), (vec![0, 14, 23], vec![(10, 14)]));
+    regler(&mut b, "Temps égaux entre les marques", |t| t.temps_egaux());
+    assert_eq!(jalons(&b, 0), [0, 12, 23]);
+    tel_quel(&b, "les temps remis en parts égales");
 
     // Une marque posée après elle (à 80 % du chemin), puis une avant (à 20 %).
     feuille::glisser(&mut b, &[(290.0, 135.0), (290.0, 165.0)]);
@@ -456,18 +464,32 @@ fn in_space_hand_placed_keys_of_two_chosen_cards_stay_at_their_images_and_a_reti
     tels_quels(&b, "une marque glissée dans la vue");
     let (d0, d1) = (des_jalons(&b, 0), des_jalons(&b, 1));
     assert_eq!((d0[0], d1[0]), (source0, source1));
-    assert_eq!((expositions(&b, 0, source0), expositions(&b, 0, x), expositions(&b, 0, d0[1]), expositions(&b, 0, d0[2])), (vec![(0, 10)], vec![(10, 12)], vec![(12, 23)], vec![(23, 24)]));
-    assert_eq!((expositions(&b, 1, source1), expositions(&b, 1, y1), expositions(&b, 1, d1[1]), expositions(&b, 1, y2)), (vec![(0, 5)], vec![(5, 12)], vec![(12, 16)], vec![(16, 23)]));
+    // (2026-11-18 : la marque glissée a emporté son temps, pour les deux cartes : à 60 % du chemin, vers l'image 14.)
+    let k = jalons(&b, 0)[1];
+    assert_eq!((k, jalons(&b, 1)[1]), ((trajectoire(&b, 0).marques[0] * 23.0).round() as usize, k), "l'image de sa place sur le chemin");
+    assert!((13..=15).contains(&k), "{k}");
+    assert_eq!((expositions(&b, 0, source0), expositions(&b, 0, x), expositions(&b, 0, d0[1]), expositions(&b, 0, d0[2])), (vec![(0, 10)], vec![(10, k)], vec![(k, 23)], vec![(23, 24)]));
+    assert_eq!((expositions(&b, 1, source1), expositions(&b, 1, y1), expositions(&b, 1, d1[1]), expositions(&b, 1, y2)), (vec![(0, 5)], vec![(5, k)], vec![(k, 16)], vec![(16, 23)]));
     assert!(b.app.status.starts_with("Trajectoire : 3 dessins posés à la main gardés entre les marques (« Carte 0 » : image 11 ; « Carte 1 » : images 6 et 17)."), "{}", b.app.status);
     assert_eq!(crate::messages::resume(&b.app.status), "Trajectoire : 3 dessins posés à la main gardés entre les marques…", "ce que la barre d'état montre");
     // Les clés de position tenues ne changent pas : une par jalon ; le dessin posé à la main se voit là où la carte est tenue.
-    assert_eq!((cles_tenues(&b, 0), cles_tenues(&b, 1)), (vec![0, 12, 23], vec![0, 12, 23]));
-    let poses = (exposes(&b, 0), exposes(&b, 1));
+    assert_eq!((cles_tenues(&b, 0), cles_tenues(&b, 1)), (vec![0, k, 23], vec![0, k, 23]));
     b.app.status.clear();
-    glisser_la_marque_dans_la_vue(&mut b, 0.4);
+    // (Vers le milieu du chemin : la marque revient vers l'image 12, sans tomber sur une clé posée à la main.)
+    glisser_la_marque_dans_la_vue(&mut b, 0.5);
     tels_quels(&b, "la marque glissée de nouveau");
-    assert_eq!((exposes(&b, 0), exposes(&b, 1)), poses);
     assert!(!b.app.status.contains("posé à la main"), "les mêmes clés ne se redisent pas : {}", b.app.status);
+    // « Temps égaux entre les marques » pour les deux cartes : les jalons reviennent aux images 0, 12 et 23, d'où part la suite.
+    let snap = b.app.snapshot();
+    for li in 0..2 {
+        b.app.layers_mut()[li].trajectoire.as_mut().expect("un chemin").temps_egaux();
+        b.app.trajectoire_recalculer_dans(0, li);
+    }
+    b.app.commit_named(snap, "Temps égaux entre les marques");
+    b.chauffer(2);
+    tels_quels(&b, "les temps remis en parts égales");
+    assert_eq!((jalons(&b, 0), jalons(&b, 1), cles_tenues(&b, 0), cles_tenues(&b, 1)), (vec![0, 12, 23], vec![0, 12, 23], vec![0, 12, 23], vec![0, 12, 23]), "{}", b.app.status);
+    let poses = (exposes(&b, 0), exposes(&b, 1));
 
     // Le jalon de la marque recalé sur la timeline par sa clé de position, un calcul à chaque image du geste. Sur l'image de la
     // clé posée à la main de la carte 0 (l'image 11) : il est posé à l'image d'après, sa clé de position avec lui, et c'est dit.
