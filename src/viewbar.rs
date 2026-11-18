@@ -19,7 +19,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Mixer => "Glisser : étaler et mêler ce qui est peint (bitmap) · Alt + clic : choisir le calque du dessin cliqué · ^ $ : taille",
         Tool::Fill => "Clic : remplir · Alt + clic : choisir le calque du dessin cliqué",
         Tool::Gradient => "Glisser : tracer l'axe (Maj : par 15°) · dans la sélection, sinon dans la zone fermée · Alt : tout le calque",
-        Tool::Cutter => "Glisser en travers des bouts à enlever · clic : un bout",
+        Tool::Cutter => "Glisser en travers des bouts à enlever (ou les entourer : geste Lasso) · clic : un bout · Réglages : écart toléré, bouts effilés, dépassements, tous les calques",
         Tool::Select => "Lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
         Tool::SelectColor => "Clic : une couleur (Maj : ajouter) · la boîte se manie comme avec la Sélection",
         Tool::Line => "Glisser : tracer · Maj : par 15°",

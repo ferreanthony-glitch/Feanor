@@ -653,7 +653,11 @@ mod plantage;
 mod plantage_tests;
 #[cfg(test)]
 mod pasteimage_tests;
+// Les réglages du Cutter (partie 168) : écart toléré, bouts effilés, dépassements, portée, lasso ; leur panneau.
 mod cutter;
+mod cutterui;
+#[cfg(test)]
+mod cutter_reglages_tests;
 #[cfg(test)]
 mod cutter_tests;
 mod sculpt;

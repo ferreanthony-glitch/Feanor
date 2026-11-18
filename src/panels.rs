@@ -553,8 +553,10 @@ impl App {
             Tool::Grab | Tool::Pull => self.sculpt_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
-            // Le Cutter, la pipette et la main n'ont pas de réglages : leur animation les montre.
-            Tool::Cutter | Tool::Picker | Tool::Pan => {}
+            // Le Cutter (partie 168) : mode, geste, écart toléré, bouts effilés, dépassements, portée (`cutterui.rs`).
+            Tool::Cutter => self.cutter_options_ui(ui),
+            // La pipette et la main n'ont pas de réglages : leur animation les montre.
+            Tool::Picker | Tool::Pan => {}
             Tool::Transform => {
                 let peers = self.transform_peers().len();
                 if peers >= 2 {
