@@ -5,6 +5,39 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
+  « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
+  167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
+  version à côté, en lecture seule, à l'écran seulement ; le son gardé de chaque version est rejoué sous elle (le son du film ne
+  bouge pas quand on change de version ; fondus et volume ne sont pas gardés) ; clic droit = dix teintes douces. Format inchangé (56).
+  main avait avancé deux fois (panneau Pinceau et logo, puis trajectoire-exposition) : fusionnée deux fois dans la branche avec
+  --no-ff, un conflit de docs/INTERFACE.md résolu en gardant les deux parties. Vérificateur sur l'arbre fusionné : compilation sans
+  avertissement, 4 812 réussis au passage 1 ; un échec intermittent au passage 2 (`espace3d_tests::the_view_with_ten_cards_stays_within_the_frame_budget`,
+  relancé seul trois fois, trois réussites). Au passage d'avant, deux essais de temps de l'Espace 3D avaient échoué pendant que le
+  poste était chargé : mesurés tour à tour sur main et sur la branche, mêmes temps. Son FEANOR (lancé depuis Source) n'était pas
+  ouvert : rien à arrêter. Contrôle de lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main b3059ec`)
+  avec de faux réglages, vivant après 22 s, aucun plantage nouveau, puis arrêté. Le message du commit `ab1c03f` est inexact (les
+  teintes étaient déjà dans `b0f7b4f`). Worktree `aide-animee` et branche gardés.
+- **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
+  n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
+  ouvert : rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après
+  22 s, aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa
+  place. Worktree et branche gardés (retrait proposé, sa décision).
+- **Trajectoire : une marque qu'on glisse emporte son temps** (branche `trajectoire-exposition`, la section du 2026-11-18 de la
+  partie 119). Sa demande : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés
+  sur la trajectoire. » Son plan 10 de « dd » (lu sans y toucher) : sept marques serrées au départ, chaque dessin exposé 8 ou 9
+  images. **Ce qui est fait**, en clés d'images : glisser une marque le long du chemin lui fait prendre l'image de sa place entre
+  ses deux voisines (le dessin d'avant tient plus longtemps quand elle avance, moins quand elle recule ; les autres ne bougent pas ;
+  la barre d'état dit l'image) ; une marque posée quand des temps sont déjà posés prend le temps de sa place ; un bouton « Temps
+  selon le chemin » met toutes les marques d'un coup au temps de leur place (son plan 10 : 3, 2, 2, 8, 11, 19, 5 et 20 images).
+  Sur la feuille et pour les cartes de l'Espace 3D. **Ce qui ne change pas** : les clés d'interpolation (les marques y sont
+  l'espacement), la caméra, les projets à l'ouverture, le format. **Ma lecture, à confirmer par lui** : une marque glissée ne
+  recale qu'elle (le bouton recale tout) ; une marque posée sur un chemin en parts égales repartage le temps comme avant. Quatre
+  essais d'avant, qui décrivaient l'ancien comportement, mis à jour. Vérificateur complet (03 h 17) : compilation sans
+  avertissement, **4 799 réussis, 0 échec**, dix groupes OK, au troisième passage : les deux premiers avaient échoué sur des essais
+  chronométrés sans rapport, la machine étant saturée par les essais d'autres sessions (ils passent seuls). Image de contrôle de la
+  timeline faite sur une copie. Pas regardé sur son écran. Pas fusionnée : sa décision.
 - **Préréglages dans la timeline, lot 1 : le socle** (branche `prereglages-socle`, partie 170, format 57). Sa demande : « des
   présets d'animation de caméra à intégrer directement dans la timeline » (crash zoom, zip pan, panoramique, travelling) et des
   présets de plan (color card, titre, crédits). Une liste numérotée lui a été faite, puis une page où chaque préréglage joue en

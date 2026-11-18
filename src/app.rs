@@ -669,6 +669,8 @@ pub struct App {
     /// La pile des versions d'un plan, ouverte en survolant « V2 » sur son bloc du montage, et la
     /// confirmation de « Supprimer les versions non affichées » (`pileversui.rs`).
     pub(crate) pile_versions: crate::pilevers::Pile,
+    /// Les versions dépliées dans la timeline et la tête posée dans l'une d'elles (partie 168 : de l'affichage, jamais enregistré).
+    pub(crate) depli: crate::versiondeplieeui::Depli,
     /// Quand le projet change, le plan dont on propose de supprimer les versions non affichées : le
     /// plan seul (`Some`) ou tout le film (`None`) ; rien : pas de confirmation en cours.
     pub(crate) purge_versions: Option<Option<u64>>,
@@ -1340,6 +1342,7 @@ impl App {
             envois_ui: Default::default(),
             comparaison: None,
             pile_versions: Default::default(),
+            depli: Default::default(),
             purge_versions: None,
             variantes_ui: Default::default(),
             sfx: Default::default(),
@@ -2070,6 +2073,15 @@ impl App {
     }
 
     pub(crate) fn step_global(&mut self, delta: i64) {
+        // Des versions dépliées dans la timeline (partie 168) : les flèches passent aussi par leurs images.
+        self.depli_nettoyer();
+        if self.depli_actif() {
+            let carte = self.depli_carte();
+            let n = carte.total(self.doc.total_frames().max(1)) as i64;
+            let d = (self.depli_d(&carte) as i64 + delta).clamp(0, n - 1);
+            self.depli_cliquer(&carte, d as usize);
+            return;
+        }
         let total = self.doc.total_frames() as i64;
         let g = (self.global_frame() as i64 + delta).clamp(0, total - 1);
         self.goto_global(g as usize);
@@ -2209,9 +2221,22 @@ impl App {
         }
         self.end_stroke();
         self.play_speed = 1.0;
-        self.play_montage = montage;
+        // La tête dans une version dépliée (partie 168) : c'est le film qu'on lit, avec ses versions dépliées.
+        self.depli_nettoyer();
+        self.play_montage = montage || self.depli.tete.is_some();
         // Dans le plan : entre les points d'entrée et de sortie (13d).
         let (start, end) = self.plan_play_range();
+        if self.play_montage && self.depli_actif() {
+            if self.depli_au_bout() {
+                let carte = self.depli_carte();
+                self.depli_aller(&carte, 0);
+            }
+            self.playing = true;
+            self.last_time = None;
+            self.play_accum = 0.0;
+            self.start_audio_playback();
+            return;
+        }
         let at_end = if self.play_montage {
             self.global_frame() + 1 >= self.doc.total_frames()
         } else {
@@ -2247,8 +2272,18 @@ impl App {
         let vitesse = self.play_speed;
         self.play_accum += (now - last).min(0.25) * vitesse.abs() as f64;
         let frame_duration = 1.0 / self.doc.fps.max(1) as f64;
+        self.depli_nettoyer();
         while self.play_accum >= frame_duration {
             self.play_accum -= frame_duration;
+            // Des versions dépliées (partie 168) : le film se lit avec elles, image d'écran après image d'écran.
+            if self.play_montage && self.depli_actif() {
+                if !self.depli_pas(if vitesse < 0.0 { -1 } else { 1 }, self.looping) {
+                    self.playing = false;
+                    break;
+                }
+                self.follow_frame = true;
+                continue;
+            }
             let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
             if vitesse < 0.0 {
                 // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
