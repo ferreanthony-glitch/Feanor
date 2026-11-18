@@ -164,6 +164,12 @@ mod pilevers;
 #[cfg(test)]
 mod pilevers_tests;
 mod pileversui;
+// Les versions d'un plan dans la timeline (partie 168) : étiquettes « V2 ▸ », version dépliée à côté (affichage seulement), couleur
+// de repère. La carte film ↔ écran (`versiondepliee`) et l'interface (`versiondeplieeui`).
+mod versiondepliee;
+#[cfg(test)]
+mod versiondepliee_tests;
+mod versiondeplieeui;
 // Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) : le calcul (`comparer`),
 // la fenêtre (`comparerui`).
 mod comparer;
@@ -653,7 +659,7 @@ mod plantage;
 mod plantage_tests;
 #[cfg(test)]
 mod pasteimage_tests;
-// Les réglages du Cutter (partie 168) : écart toléré, bouts effilés, dépassements, portée, lasso ; leur panneau.
+// Les réglages du Cutter (partie 169) : écart toléré, bouts effilés, dépassements, portée, lasso ; leur panneau.
 mod cutter;
 mod cutterui;
 #[cfg(test)]

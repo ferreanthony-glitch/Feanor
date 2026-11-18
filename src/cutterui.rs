@@ -1,4 +1,4 @@
-//! Le panneau du Cutter (partie 168), dans le dessin validé par Anthony le 2026-11-18 (une première version en grandes tuiles
+//! Le panneau du Cutter (partie 169), dans le dessin validé par Anthony le 2026-11-18 (une première version en grandes tuiles
 //! était « trop grosse et peu professionnelle… moins gadget, plus pro ») : le libellé à gauche en gris discret, le contrôle à
 //! droite. Mode, geste et portée en boutons segmentés d'une ligne, texte seul ; un filet ; l'écart toléré et les bouts effilés,
 //! dont le petit dessin sur toute la largeur est lui-même le curseur (on glisse la poignée sur le trait) ; en mode Dépassements

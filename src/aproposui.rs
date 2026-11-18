@@ -81,7 +81,7 @@ impl App {
                 let capitales = marque::ajuster(ctx, ui.available_width() - 8.0, CAPITALES, Mise::Devant);
                 let mesure = marque::disposer(ctx, pos2(0.0, 0.0), capitales, true, Mise::Devant).rect;
                 let (zone, _) = ui.allocate_exact_size(vec2(mesure.width(), mesure.height()), Sense::hover());
-                let texture = marque::texture_joyau(ctx, "apropos", marque::cote_joyau(capitales), Joyau::Jade, None);
+                let texture = marque::texture_joyau(ctx, "apropos", marque::cote_devant(capitales), Joyau::Jade, None);
                 let origine = pos2(zone.left() - mesure.min.x, zone.top() - mesure.min.y);
                 marque::peindre(ui.painter(), ctx, &texture, origine, capitales, p.texte_fort, Some(p.texte_doux), Mise::Devant);
                 ui.add_space(14.0);

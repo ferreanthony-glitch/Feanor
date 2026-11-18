@@ -188,6 +188,9 @@ fn liste_d_images(images: &[usize], max: usize) -> String {
 }
 
 /// Le texte du réglage « le dessin tourne avec le chemin ».
+/// « Temps selon le chemin » (clés d'images) : chaque marque prend le temps de sa place sur le chemin (`Trajectoire::temps_selon_le_chemin`).
+pub(crate) const TEMPS_SELON_LE_CHEMIN: &str = "Temps selon le chemin";
+pub(crate) const TEMPS_SELON_LE_CHEMIN_AIDE: &str = "Chaque dessin est exposé selon la distance jusqu'au suivant : des marques serrées, des dessins brefs ; le calque avance à vitesse constante.";
 pub(crate) const TOURNE: &str = "Le dessin tourne avec le chemin";
 const TOURNE_AIDE: &str = "Le dessin pivote, autour du point qui suit le chemin, pour regarder où va le chemin, comme une voiture dans un virage ; au départ il garde son orientation. Clés d'images : chaque copie est tournée.";
 
@@ -296,15 +299,26 @@ impl App {
                 let (f, d) = avant.plus_proche(p);
                 let loin = d > ARRACHE_ECRAN / self.trajectoire_echelle(stage);
                 let mut t = avant.clone();
+                // Clés d'images : la marque emporte son temps, l'exposition des dessins suit sa place (2026-11-18). Clés
+                // d'interpolation : le temps reste, c'est l'espacement qui change (serrées, lent ; espacées, vite).
+                let duree = self.frame_count();
+                let mut image = None;
                 if loin {
                     t.retirer_marque(*i);
+                } else if t.cles == Cles::Images {
+                    t.deplacer_marque_et_son_temps(*i, f, duree);
+                    image = t.images_des_jalons(duree).get(*i + 1).copied();
                 } else {
                     t.deplacer_marque(*i, f);
                 }
                 *arrachee = loin;
                 *bouge = true;
                 self.trajectoire_poser_en_direct(li, t);
-                self.status = if loin { "Marque arrachée : lâcher la retire.".into() } else { format!("Marque à {} % du chemin.", (f * 100.0).round()) };
+                self.status = match (loin, image) {
+                    (true, _) => "Marque arrachée : lâcher la retire.".into(),
+                    (false, Some(image)) => format!("Marque à {} % du chemin, image {}.", (f * 100.0).round(), image + 1),
+                    (false, None) => format!("Marque à {} % du chemin.", (f * 100.0).round()),
+                };
             }
             Geste::Chemin { depart, fraction, bloc, avant, bouge, .. } => {
                 let mut t = avant.clone();
@@ -385,7 +399,9 @@ impl App {
         if let Some(t) = &existante {
             if let Some(f) = t.marque_de(points) {
                 let snap = self.snapshot();
-                let posee = self.layers_mut()[li].trajectoire.as_mut().and_then(|t| t.ajouter_marque(f)).is_some();
+                // (Clés d'images, temps déjà posés : la marque prend le temps de sa place entre ses voisines, 2026-11-18.)
+                let duree = self.frame_count();
+                let posee = self.layers_mut()[li].trajectoire.as_mut().and_then(|t| if t.cles == Cles::Images { t.ajouter_marque_a_son_temps(f, duree) } else { t.ajouter_marque(f) }).is_some();
                 if posee {
                     self.trajectoire_recalculer(li);
                     self.trajectoire_valider(snap, "Marque de trajectoire");
@@ -1145,6 +1161,15 @@ impl App {
                 }
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, "Temps égaux entre les marques");
+            }
+            // Clés d'images : toutes les marques d'un coup au temps de leur place sur le chemin (2026-11-18).
+            if t.cles == Cles::Images && n > 0 && !t.est_selon_le_chemin(duree) && ui.button(TEMPS_SELON_LE_CHEMIN).on_hover_text(TEMPS_SELON_LE_CHEMIN_AIDE).clicked() {
+                let snap = self.snapshot();
+                if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
+                    tr.temps_selon_le_chemin(duree);
+                }
+                self.trajectoire_recalculer(li);
+                self.trajectoire_valider(snap, TEMPS_SELON_LE_CHEMIN);
             }
         });
         let mut cles = t.cles;

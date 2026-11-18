@@ -6,7 +6,7 @@
 //! et seuls les morceaux que le geste touche disparaissent. Un trait qui ne croise rien part en
 //! entier. Les zones remplies et les textes ne bougent pas.
 //!
-//! **Partie 168** (2026-11-18, Anthony : « On peut tout mettre ? ») : cinq réglages, retenus avec les réglages du poste
+//! **Partie 169** (2026-11-18, Anthony : « On peut tout mettre ? ») : cinq réglages, retenus avec les réglages du poste
 //! (`Settings::cutter`, jamais dans le projet) :
 //! - **Écart toléré** : un trait qui s'arrête à moins de N pixels du dessin d'un autre trait compte comme s'il le croisait
 //!   (le bout prolongé jusqu'à l'autre trait ; l'autre trait est coupé au point d'approche). 0 : comme avant.
@@ -68,7 +68,7 @@ pub enum Geste {
     Lasso,
 }
 
-/// Les réglages du Cutter (partie 168), réglages du poste.
+/// Les réglages du Cutter (partie 169), réglages du poste.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Reglages {

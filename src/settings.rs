@@ -322,7 +322,7 @@ pub struct Settings {
     /// clic droit, le stylet retourné prend la Gomme. Allumé d'origine ; à éteindre si une tablette s'en trouve mal.
     #[serde(default = "yes", rename = "stylet_lu_aupres_de_windows", skip_serializing_if = "is_true")]
     pub stylet_windows: bool,
-    /// Les réglages du Cutter (`cutter.rs`, partie 168) : écart toléré, bouts effilés, mode, longueur des dépassements, portée,
+    /// Les réglages du Cutter (`cutter.rs`, partie 169) : écart toléré, bouts effilés, mode, longueur des dépassements, portée,
     /// geste. Un réglage du poste, jamais écrit dans le projet. Absent : ceux d'origine (le Cutter d'avant).
     #[serde(default, rename = "cutter", skip_serializing_if = "crate::cutter::Reglages::est_defaut")]
     pub cutter: crate::cutter::Reglages,

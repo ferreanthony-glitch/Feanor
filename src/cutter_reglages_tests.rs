@@ -1,4 +1,4 @@
-//! Partie 168 : les réglages du Cutter dans l'application, au vrai geste sur le banc (`perf_tests::Banc`) : la portée « tous les
+//! Partie 169 : les réglages du Cutter dans l'application, au vrai geste sur le banc (`perf_tests::Banc`) : la portée « tous les
 //! calques visibles » coupe contre un autre calque sans le modifier ; plusieurs calques choisis, une seule étape d'annulation ; le
 //! panneau (ses dessins, le bloc des dépassements en mode Dépassements seulement) écrit les réglages du poste.
 

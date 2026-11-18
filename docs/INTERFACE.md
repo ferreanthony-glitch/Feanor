@@ -4227,6 +4227,44 @@ liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
 
+### Les réglages d'abord, la liste tout en bas (2026-11-18, branche `panneau-pinceau`)
+
+Demande d'Anthony : « revoir la disposition du panneau », sur une capture du panneau Pinceau annotée de sa main : **1** sur les réglages
+(« Peindre derrière », « Peint sur l'aplat », l'aplat du calque, « Plus de réglages » et la catégorie dépliée), **2** sur la rangée des
+trois boutons (importer, nouvelle brosse, supprimer), **3** sur la liste des brosses, une flèche qui fait monter les réglages sous l'aperçu
+et une autre qui fait descendre la liste dans le vide du bas du panneau. Le défaut : dépliée juste sous l'aperçu, la liste repoussait de
+300 points les réglages qu'on tourne en regardant l'aperçu du trait.
+
+Ce qui change (`pinceauxui.rs`, `panels.rs`) :
+
+- **1. Les réglages restent sous l'aperçu**, liste dépliée ou non : « Peindre derrière », « Peint sur l'aplat », l'aplat du calque, puis
+  « Plus de réglages » et ses catégories.
+- **2. Les trois boutons** (importer des pinceaux, nouvelle brosse, supprimer la brosse) sont **au-dessus de la liste**, sur leur ligne,
+  hors du cadre (`brush_list_buttons`). Ils étaient en bas de la liste, dans le cadre.
+- **3. La liste des brosses est la dernière chose du panneau** (`brush_list_ui`, appelée par `tool_options_panel` après les réglages et le
+  mode « Griffonner » d'un calque de couleur) : dans son cadre, la recherche, liste ou vignettes, la saisie d'un nom, les dossiers. Pinceau,
+  crayon et gomme.
+
+Ce qui ne change pas : le bouton « livres » à droite de l'aperçu la déplie et la replie, l'état est retenu ; la liste fait toujours 300
+points de haut au plus et défile au-delà (`LIST_H`) ; ce qu'elle offre (recherche, vignettes, clic droit, « Mes brosses » en tête) ; la
+fenêtre des réglages au clic droit montre le même panneau, dans le même ordre.
+
+Un seul texte visible change, la fin de la bulle du bouton « Liste des pinceaux » : « Un clic déplie la liste **en bas du panneau**, un
+autre la replie. » (avant : « sous l'aperçu »). Aucun texte ajouté.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Outil Pinceau, liste dépliée : sous l'aperçu, d'abord les trois icônes puis « Plus de réglages » ; ensuite la rangée importer / + /
+   corbeille ; ensuite la recherche et la liste.
+2. Déplier « Plus de réglages », tourner un réglage : l'aperçu du trait est juste au-dessus, on le voit changer sans faire défiler.
+3. Le « + » : la saisie du nom apparaît en tête de la liste, juste sous lui.
+4. Crayon et gomme : même ordre. Les autres outils : rien ne change.
+5. Clic droit dans le dessin (la fenêtre des réglages) : même ordre.
+
+Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintenant que « Plus de réglages » est au-dessus des boutons et de
+la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
+boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
+le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
@@ -8427,6 +8465,67 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   l'intervalle où elle tombe : le temps des marques devient explicite pour cela (« Temps égaux entre les marques » le rend). Un retrait
   à cheval sur un jalon le ramène à l'image du retrait. Recalculer d'après la trajectoire repose alors les clés et les dessins là où ils
   sont déjà. Sans fin posée (un projet du 7 novembre), seul le départ suit.
+
+### Une marque qu'on glisse emporte son temps (2026-11-18, branche `trajectoire-exposition`)
+
+Anthony : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés sur la trajectoire. »
+Dans son projet « dd », plan 10 : sept marques à 4, 7, 11, 21, 38, 65 et 71 % du chemin, serrées au départ, et pourtant chaque dessin
+exposé 8 ou 9 images. Glisser une marque le long du chemin changeait sa place, jamais son temps : le temps restait partagé en parts
+égales entre les jalons.
+
+Ce qui change, **en clés d'images** (les dessins posés aux jalons) :
+
+- **Glisser une marque le long du chemin emporte son temps.** Entre ses deux jalons voisins (une marque, le départ ou l'arrivée),
+  elle prend l'image qui correspond à sa place : à mi-chemin d'eux, à mi-temps ; aux deux tiers du chemin, aux deux tiers du temps.
+  Le dessin d'avant est tenu plus longtemps quand elle avance, moins quand elle recule ; les autres marques ne changent pas d'image.
+  Son temps ne dépend que de sa place : la glisser puis la remettre rend la même image. Elle reste à une image au moins de ses
+  voisines. La timeline change au lâcher, comme les dessins (une étape, « Glisser une marque ») ; pendant le geste, le numéro
+  d'image au-dessus de la marque suit, et la barre d'état dit « Marque à 70 % du chemin, image 17. »
+  (`Trajectoire::deplacer_marque_et_son_temps`, `temps_a_sa_place`). Les temps des marques deviennent explicites, comme après un
+  recalage sur la timeline.
+- **Poser une marque** quand des temps sont déjà posés : elle prend le temps de sa place entre ses voisines, et non plus le milieu de
+  leur temps (`ajouter_marque_a_son_temps`). Tant que le temps est en parts égales, une marque de plus le repartage, comme avant.
+- **« Temps selon le chemin »**, un bouton des réglages de l'outil, à côté de « Temps égaux entre les marques » : toutes les marques
+  d'un coup au temps de leur place sur le chemin (à 30 % du chemin, à 30 % du temps). Chaque dessin est alors exposé selon la distance
+  jusqu'au suivant ; des marques serrées gardent chacune leur image (`temps_selon_le_chemin`). Le bouton ne se montre que s'il a
+  quelque chose à changer (`est_selon_le_chemin`). Une étape d'annulation, du même nom. « Temps égaux entre les marques » revient aux
+  parts égales.
+
+Ce qui ne change pas : en **clés d'interpolation**, glisser une marque ne touche pas au temps (les marques sont l'espacement :
+serrées, lent ; espacées, vite) ; **arracher** une marque, **recaler** un jalon sur la timeline (il change de temps sans changer de
+place), le départ et la fin. **Aucun projet ne change à l'ouverture** : une trajectoire garde ses temps tant qu'on ne glisse pas une de
+ses marques ou qu'on n'appuie pas sur le bouton ; le format de projet ne change pas (les temps posés existaient déjà). Dans la vue
+**Espace 3D**, une carte en clés d'images suit la même règle (glisser, poser, le bouton) ; la trajectoire de la caméra, non.
+
+Textes visibles ajoutés ou changés : la barre d'état pendant le geste, en clés d'images (« Marque à N % du chemin, image M. ») ; le
+bouton « Temps selon le chemin » et sa bulle (« Chaque dessin est exposé selon la distance jusqu'au suivant : des marques serrées,
+des dessins brefs ; le calque avance à vitesse constante. ») ; le nom de l'étape d'annulation « Temps selon le chemin ».
+
+À vérifier à l'écran (par Anthony) :
+
+1. Projet « dd », plan 10, calque « Vectoriel 2 », outil Trajectoire : glisse une marque le long du chemin vers la suivante. Au
+   lâcher, dans la timeline, le dessin d'avant s'allonge et le sien raccourcit ; ramène-la : l'exposition revient. Ctrl+Z aussi.
+2. Réglages de l'outil : « Temps selon le chemin ». Les dessins du début, serrés, deviennent brefs ; ceux qui sont loin du suivant,
+   longs. « Temps égaux entre les marques » : tous pareils de nouveau.
+3. Glisser une clé de dessin dans la timeline : elle change de temps, sa marque ne bouge pas sur le chemin (comme avant).
+4. Une trajectoire en « Clés d'interpolation » : glisser une marque change la vitesse, pas les images des jalons (comme avant).
+
+Essais : `trajectoire_tests.rs`, trois de plus (la marque glissée prend l'image de sa place entre ses voisines, revient à la même en
+revenant, garde une image d'écart, laisse les temps recalés des autres ; une marque posée prend le temps de sa place dès que des
+temps sont posés ; « Temps selon le chemin », marques serrées et plan trop court compris) ; `trajectoireui_tests.rs`, un de plus (le
+vrai geste : l'exposition change dans la timeline, la barre d'état dit l'image, Ctrl+Z la rend, les deux boutons ; en clés
+d'interpolation rien ne bouge) et un essai ignoré qui écrit la timeline avant et après sur une copie de projet. Quatre essais
+d'avant décrivaient l'ancien comportement (une marque glissée gardait son image) et sont mis à jour : deux de
+`trajectoireui_tests.rs`, un de `trajectoire3d_images_tests.rs`, et les deux longs scénarios des clés posées à la main de
+`trajectoire_main_tests.rs`, où « Temps égaux entre les marques » est appliqué après les glissés pour que la suite parte du même
+état qu'avant.
+Résultats (18 novembre, 03 h 17) : les 95 essais de la trajectoire réussis ; vérificateur complet : compilation sans avertissement,
+**4 799 réussis, 0 échec**, les dix groupes de fiabilité OK. Deux passages d'avant avaient échoué sur des essais chronométrés sans
+rapport (budgets de temps par image de l'Espace 3D, annulation et export vidéo : 1 puis 6 échecs), la machine étant saturée par les
+suites d'essais d'autres sessions ; relancés seuls ils passent tous, et le passage propre a été fait avec six essais à la fois
+(`RUST_TEST_THREADS=6`) au lieu de tous les cœurs. Image de contrôle (l'essai ignoré sur une copie de « dd », plan 10) : la
+timeline avant (9, 9, 8, 9, 9, 9, 8, 9 images) et après « Temps selon le chemin » (3, 2, 2, 8, 11, 19, 5, 20). Pas regardé sur son
+écran.
 
 ### Comment (le modèle, `trajectoire.rs`)
 
@@ -13782,14 +13881,171 @@ Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte
 vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
 l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
 
-## 168. Le Cutter a des réglages : écart toléré, bouts effilés, dépassements, portée, lasso (2026-11-18, branche `cutter-reglages`)
+## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
+
+**Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
+charte du 17/11/2026 : une étoile à quatre branches aux flancs creusés, la branche verticale plus longue, pointes très
+légèrement arrondies (`ARRONDI_POINTES`), sans facettes,
+au dégradé vertical jade `#2FD4C0` → turquoise `#2FCCDB` → bleu ciel `#86C7EF` → bleu `#B4C1F4` et lilas pâles
+`#D6C3EC`. En une couleur (encre, blanc), c'est un aplat. La charte complète (couleurs, polices, règles d'usage) est dans
+la station FEANOR, secteur Marketing ; les fichiers sources sont dans `feanor-site/logo/silmaril/` (`fabrique.mjs`).
+
+**Dans le code.** `logo.rs` dessine l'étoile sur 100 unités (`DESSIN`) puis la ramène sur la grille de 64 de l'animation
+et de l'icône ; ses fonctions (`image`, `icone`, `ico`, `dessiner`, l'animation d'ouverture) ne changent pas de forme,
+donc l'accueil, À propos, l'icône de la fenêtre et `feanor.ico` (`build.rs`) suivent sans autre retouche. L'icône
+est l'icône de base de la charte : carré arrondi au dégradé du logo, étoile blanche (`feanor-icone.svg` ; les autres
+icônes de la charte sont `feanor-icone-noire`, `-blanche` et `-jade`). Les variantes
+`Jade`, `JadePetit` et `Iris` dessinent la même étoile en dégradé (elle tient à 16 px) ; `Mono` est l'aplat. L'animation
+d'ouverture garde ses images clés : l'étoile s'ouvre en tourbillon, une seconde étoile plus petite s'efface.
+`marque.rs` : l'étoile fait 1,18 fois la hauteur des capitales à la place du O (accueil, centrée sur les capitales, petit
+écart de chaque côté) et 1,87 fois devant le mot (À propos ; `cote_devant`). `assets/feanor-viseur-*.svg` sont remplacés
+par `assets/feanor-logo*.svg`, `feanor-icone*.svg`, `feanor-mot-*.svg`, `feanor-empile-*.svg`. Les barres de chargement
+gardent l'irisé (`barre.rs`).
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : l'accueil montre FEAN, l'étoile à la place du O (un peu plus haute que les lettres, centrée
+   sur elles), R, et la devise dessous ; l'étoile s'ouvre une fois puis reste figée.
+2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
+3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
+4. Thème Papier : l'accueil et À propos restent lisibles.
+
+## 168. Les versions d'un plan dans la timeline : « V2 ▸ », la version dépliée à côté, la couleur de repère (2026-11-17, branche `versions-plan` ; numérotée 167 sur la branche, 168 à la fusion : le nouveau logo avait pris le 167)
+
+Anthony, sur une capture de la timeline en vue Storyboard (en-têtes « Plan 1 · V1 », « Plan 2 »…) : « Je veux que la V2 d'un plan
+apparaisse sur le plan et qu'un clic sur une flèche vers la droite la déploie à côté dans la timeline pour la lire et la comparer
+directement à l'autre version. Un clic direct sur le mot V2 (ou V3) change la version en cours pour celle cliquée. » Puis : « Les
+étiquettes V2 peuvent être colorées pour donner un repère visuel avec un clic droit dessus. » À la question posée : la V2 dépliée
+décale les plans suivants **pour l'affichage seulement**, la lecture enchaîne V1 puis V2, le montage et les exports ne changent pas,
+un clic sur ◂ replie.
+
+Le code : `src/versiondepliee.rs` (la carte des images du film vers celles de l'écran), `src/versiondeplieeui.rs` (étiquettes, bloc
+déplié, palette, vue en lecture seule) ; ce qu'il a fallu ailleurs : `src/storyboard.rs` (la bande du montage passe par la carte),
+`src/app.rs` (lecture, flèches), `src/soundtrack.rs` (le son), `src/canvas.rs` (la vue), `src/planvers.rs` (la couleur des versions).
+Les essais : `src/versiondepliee_tests.rs` (onze).
+
+### 168.1 Les étiquettes sur le bloc du plan
+
+- Sur le bloc d'un plan qui a plusieurs versions, le nom reste « Plan 1 · V1 » (la version en cours), suivi des **autres versions en
+  étiquettes texte** : « V2 », « V3 »…, chacune suivie d'une flèche ▸. Du texte, pas de pastille ni de miniature. Un plan à une seule
+  version n'a rien de plus.
+- **Un clic sur « V2 »** : la V2 devient la version en cours. C'est le « Passer à la version » de toujours : une étape d'annulation
+  (« Passer à la version V2 »), le même message dans la barre d'état (« Le plan est maintenant en V2 ; la V1 est gardée. … »).
+  Aucune boîte de dialogue. Un clic sur la version en cours (« V1 » dans le nom) ouvre la pile des versions (`pileversui.rs`).
+- **Faute de place** (plan court, zoom arrière) : les étiquettes qui ne tiennent pas se résument en « +2 » ; un clic dessus ouvre la
+  pile des versions, un clic droit un menu avec chacune (passer, déplier, colorer). Plus étroit encore, il ne reste que le nom. Une
+  étiquette coupée par le bord du bloc ne se pose pas : jamais deux étiquettes l'une sur l'autre, jamais sur la poignée de fin.
+- La durée du plan n'est écrite que s'il reste de la place après les étiquettes.
+- L'étiquette « V2 » au milieu du haut du bloc (la pile au survol, 2026-10-30) reste telle quelle.
+
+### 168.2 La version dépliée
+
+- **Un clic sur ▸** déplie la V2 **juste après la V1** : un bloc à part, bordé (à la couleur de la version, sinon du contour), hachuré
+  légèrement, avec son aperçu, « V2 ◂ dépliée » et sa durée ; sous lui, une colonne hachurée (pas de pistes : rien ne s'y modifie).
+  Les plans suivants, leurs pistes, le son, les transitions, les commentaires glissent **à l'écran** de la durée de la V2. La flèche
+  devient ◂ (dans le nom du plan et sur le bloc déplié) : un clic replie.
+- **Rien n'est écrit** : pas d'étape d'annulation, rien à enregistrer, pas de changement du format du projet. Le montage, les durées,
+  l'export, l'animatique exportée, les envois ne voient que le film. (Essai : l'empreinte du projet, du fichier des versions et de
+  l'export est la même avant, pendant et après.)
+- **Plusieurs versions dépliées** se suivent dans l'ordre de leurs numéros (V1 puis V2 après la V3 en cours, par exemple) ; d'autres
+  plans peuvent avoir les leurs.
+- **Lecture seule** : un clic dans le bloc ou la colonne pose seulement la tête de lecture (un glisser la fait courir) ; la vue montre
+  alors l'image de la version, composée sur les fils des vignettes, avec « Plan 1 · V2 dépliée · lecture seule · image 12 » écrit
+  dessus. On n'y dessine pas ; le clic droit sur le bloc donne la palette, « Passer à la V2 », « Replier la V2 ».
+- **La lecture** traverse la V1, puis chaque version dépliée, puis le plan suivant ; les flèches (image précédente / suivante) aussi.
+- **Le son pendant une version dépliée** (revu le 18, voir 168.7) : le son **tel qu'il était posé sous cette version** quand elle a
+  cessé d'être la version en cours, à la même place dans le plan ; une version sans son gardé rejoue le son du film **depuis le début
+  du plan**. Après elle, le son reprend au début du plan suivant. Sans son, la lecture suit l'horloge comme d'habitude.
+- **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée, revu le 18) : elle devient la version en cours et se
+  replie ; aucune version ne se déplie à la place de l'ancienne ; les autres versions dépliées le restent.
+- Le dépliage est de l'affichage de la séance : il ne survit pas à la fermeture du projet, et se défait de lui-même si la version
+  disparaît (supprimée, annulée).
+
+### 168.3 La couleur de repère
+
+- **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles **douces** (revu le 18 :
+  bleu, vert, cyan, rouge, rose, orange, violet, brun, jaune doux et gris bleu, moins saturées et plus claires que les couleurs de
+  plan) et « Aucune ». Une étape
+  d'annulation par changement (« Couleur de la V2 »), rien si la couleur ne change pas ; la barre d'état le dit.
+- La couleur colore le fond de l'étiquette « V2 » (le texte passe en clair ou en sombre selon la teinte) ; elle se voit aussi sur
+  « V1 » dans le nom du plan quand cette version est la version en cours, sur le bord et l'étiquette du bloc déplié, et autour de
+  son image dans la vue.
+- Elle **suit le numéro** de la version : passer de l'une à l'autre ne la change pas ; une version supprimée ne laisse pas la sienne.
+- **Fichier** : un champ `couleurs` (numéro → rang de couleur) dans chaque plan de `plans_versions.json`, écrit seulement s'il y a
+  une couleur. **Le format du projet ne change pas** (56), ni celui du fichier des versions (1) : un projet d'avant s'ouvre tel quel
+  (essai : le champ retiré à la main, le projet se rouvre sans avertissement), et une version d'avant qui ouvre un projet de cette
+  branche l'ignore. Seule limite : une version d'avant qui **enregistre** ce projet perd les couleurs (rien d'autre).
+
+### 168.4 Les bulles
+
+- Sur « V2 » : « Passer à la V2 » — le clic en fait la version en cours, Ctrl+Z revient, clic droit = couleur. Sur la version en
+  cours : ce qu'elle est, clic = la pile. Sur ▸ : « Déplier la V2 » (après la V1, lecture seule, les plans suivants glissent à l'écran
+  seulement) ; sur ◂ : « Replier la V2 ». Sur « +2 » : la pile, et le clic droit. Sur la colonne dépliée et sur sa vue : lecture seule.
+  Toutes au délai habituel (`bulles.rs`, une seconde).
+
+### 168.5 Ce qui reste à juger (par Anthony)
+
+- Le bloc déplié est-il assez distinct d'un plan du film (bord, hachures, « dépliée ») sans être trop chargé ?
+- Le son sous une version dépliée : repris au début du plan (choix fait pour comparer à son égal) ; préfère-t-il le silence ?
+- La palette : dix teintes des couleurs de plan ; les veut-il plus douces (pastel) pour des étiquettes ?
+- Passer à une version dépliée déplie l'ancienne à sa place : est-ce ce qu'il attend ?
+
+### 168.6 Regardé à l'écran (par Claude, le 17 novembre au soir)
+
+Exe de la branche, réglages à part, sur une copie de « retakes brawlydays » (`Tests\essai 167`), fenêtre capturée seule. Le plan 1
+(V2 en cours, V1 rangée) montre « Plan 1 · V2 » puis « V1 ▸ » ; un clic sur ▸ pose le bloc « V1 ◂ dépliée » (2 s 13) après lui, les
+plans suivants glissent, la barre de la séquence reste entière ; un clic dans le bloc montre la V1 dans la vue avec « lecture
+seule ». Premier essai : la vue restait sombre (l'image était rangée dans la file des vignettes sous un numéro que son élagage ne
+connaît pas, et lâchée aussitôt) ; corrigé en la rangeant sous le numéro du plan rangé de la version. Le clic droit sur « V1 » ouvre
+la palette ; l'orange colore l'étiquette du nom, celle du bloc déplié, son bord et le cadre de la vue.
+
+Vérificateur (17 novembre, vers 22 h 50, `-Repetitions 2`) : compilation sans avertissement ; passage 2 : **4 807 réussis, 0 échec** ;
+passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`
+(intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
+passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
+
+### 168.7 Ses réponses (18 novembre) et ce qui a changé
+
+1. **Le son** : « Sur la version dépliée le son se rejoue. Si le son a été posé différemment que la version active, la version
+   dépliée garde le son tel qu'il a été posé. »
+   - **Ce qui existait** : une version de plan ne gardait **aucun son**. Les sons sont des extraits sur les pistes du film, en
+     images du montage ; changer de version laisse le son en place (« le son reste en place », message de « Passer à la version »).
+   - **Ce qui est ajouté** : quand une version cesse d'être la version en cours (nouvelle version, passer à une autre, restaurer),
+     les extraits posés sous le plan à ce moment (ceux qui touchent ses images : piste, début par rapport au plan, son, décalage,
+     durée ; pas leurs fondus ni leurs clés de volume) sont **gardés avec elle** (`SonPose`, champ `sons` du plan dans
+     `plans_versions.json`, facultatif, format inchangé). Le son du film, lui, ne change toujours pas.
+   - **À la lecture** : sous une version dépliée qui a son son gardé, on entend **ce son-là, là où il était posé** ; sinon, le son du
+     film depuis le début du plan. La forme d'onde des pistes son sous le bloc déplié montre ce qu'on entend (le son gardé, ou celui
+     du film à partir du début du plan). Les sons qu'écoutent seulement des versions restent dans le projet (`used_sounds`).
+   - Une version qui avait été rangée **avant** ce changement n'a pas de son gardé : elle rejoue le son du film. Une version sous
+     laquelle rien n'était posé non plus.
+2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 168.2.
+3. Le dépliage n'est pas gardé à la fermeture : inchangé.
+4. Les teintes « plus douces » : voir 168.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
+   avait prend les nouvelles teintes. Essai : chaque teinte garde un contraste d'au moins 4,5 avec son texte, et toutes se
+   distinguent.
+
+Essais (`src/versiondepliee_tests.rs`, treize) : la V1 dépliée choisie devient la version en cours, se replie, la V3 ne se déplie
+pas, la V2 dépliée le reste ; deux versions au son posé différemment : la partie dépliée joue celui de sa version, à sa place, le
+film garde le sien, et tout se retrouve après enregistrement et réouverture ; les teintes douces.
+
+Vérificateur après ces retours (18 novembre, vers 1 h 45, `-Repetitions 2`) : compilation sans avertissement ; passage 1 : **4 809
+réussis, 0 échec** ; passage 2 : 4 808 réussis, un échec, `effets_debord_tests::a_reserve_too_small_does_not_compute_without_end`
+(intermittent, sans lien avec les versions : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Captures
+refaites sur le banc sans fenêtre (essai ignoré `versions_depliees_captures`, sur une copie de projet) : la fenêtre de l'exe de
+branche, derrière le FEANOR d'Anthony, ne se redessinait pas.
+
+Note de journal : le message du commit `ab1c03f` (« teintes orange et jaune plus distinctes ; captures sur banc ») est inexact sur
+les teintes : leur réglage est déjà dans `b0f7b4f` ; `ab1c03f` n'ajoute que l'essai des captures.
+
+## 169. Le Cutter a des réglages : écart toléré, bouts effilés, dépassements, portée, lasso (2026-11-18, branche `cutter-reglages` ; numérotée 168 sur la branche, 169 à la fusion : les versions de plan avaient pris le 168)
 
 Anthony : le Cutter n'avait aucun réglage (« Le Cutter, la pipette et la main n'ont pas de réglages »). Cinq réglages lui ont été
 proposés ; sa réponse : « On peut tout mettre ? » Les cinq y sont (`src/cutter.rs` pour le calcul, `src/cutterui.rs` pour le panneau).
 Ce sont des réglages du poste (`reglages.toml`, clé `[cutter]`, écrite seulement si l'on a changé quelque chose) : rien n'est écrit
 dans le projet, le format de projet ne change pas (56).
 
-### 168.1 Ce que fait chaque réglage
+### 169.1 Ce que fait chaque réglage
 
 - **Écart toléré** (0 d'origine, jusqu'à 30 px du dessin) : un trait qui s'arrête à moins de cet écart d'un autre trait compte comme
   s'il le croisait. Le bout est prolongé dans sa direction jusqu'à l'autre trait (sinon, le point le plus proche) : l'autre trait est
@@ -13814,7 +14070,7 @@ dans le projet, le format de projet ne change pas (56).
 
 Les zones remplies et les textes ne bougent toujours pas ; le clic « retirer la zone fermée de l'aplat » (`fondui.rs`) reste.
 
-### 168.2 Le panneau
+### 169.2 Le panneau
 
 Le dessin validé par Anthony le 18 novembre, après deux essais refusés (de grandes tuiles dessinées : « trop grosses et peu
 professionnelles. Revois le design pour rendre ça moins gadget, plus pro » ; puis des segments à icônes). Il tient au-dessus du bloc
@@ -13837,7 +14093,7 @@ n'est pas coupé » est dans celle de l'écart).
 L'aide de la barre de la vue, l'aide des touches (les gestes du Cutter), la description de l'outil et le texte de l'animation
 « Le Cutter coupe aux croisements » parlent des réglages.
 
-### 168.3 Les essais, la vitesse, ce qui reste à juger
+### 169.3 Les essais, la vitesse, ce qui reste à juger
 
 Les essais (`src/cutter_tests.rs`, neuf de plus ; `src/cutter_reglages_tests.rs`, trois) : un presque-croisement compte à 4 px et
 pas à 2 px (écart de 3), et à 0 l'horizontale part en entier comme avant ; les réglages d'origine coupent exactement comme avant ;
