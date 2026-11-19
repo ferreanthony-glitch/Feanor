@@ -267,6 +267,10 @@ impl App {
             self.entree_action(ui, li, "", "De gauche à droite", "calque.miroir_h");
             self.entree_action(ui, li, "", "De haut en bas", "calque.miroir_v");
         });
+        // L'origine du calque (partie 182) : le point du dessin autour duquel il se déplace, s'agrandit et tourne.
+        if !folder && self.layers().get(li).is_some_and(|l| l.effet.is_none()) {
+            ui.menu_button("Origine", |ui| self.origine_menu(ui, li));
+        }
         if !folder {
             ui.menu_button("Réglages avancés", |ui| self.reglages_avances_menu(ui, li));
             ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
@@ -341,6 +345,36 @@ impl App {
             self.basculer_accroche(li);
         }
         self.depth_item(ui, li);
+        // Aimanté au sol (partie 182) : l'origine de la carte repose sur le sol de l'Espace 3D.
+        if let Some(l) = self.layers().get(li).filter(|l| crate::espace3d::is_card(l)) {
+            let on = l.aimante_au_sol;
+            let raison = (l.accroche && !on).then(|| "Un calque accroché à la caméra garde sa place dans l'image : il ne se pose pas au sol.".to_string());
+            let case = if on { egui_phosphor::regular::CHECK_SQUARE } else { egui_phosphor::regular::SQUARE };
+            if self.entree(ui, case, crate::origine::AIMANT, crate::origine::AIMANT_ACTION, raison, crate::origine::AIMANT_PHRASE) {
+                self.basculer_aimant(li);
+            }
+        }
+        // Toujours devant le décor 3D (partie 183) : la carte n'est jamais cachée par les objets du décor de la séquence.
+        if let Some(l) = self.layers().get(li).filter(|l| crate::espace3d::is_card(l)) {
+            let on = l.devant_decor;
+            let raison = (l.accroche && !on).then(|| "Un calque accroché à la caméra est dans le cadre, pas dans le décor : il passe toujours devant lui.".to_string());
+            let case = if on { egui_phosphor::regular::CHECK_SQUARE } else { egui_phosphor::regular::SQUARE };
+            if self.entree(ui, case, crate::profondeur::NOM, crate::profondeur::ACTION, raison, crate::profondeur::PHRASE) {
+                self.basculer_devant_decor(li);
+            }
+        }
+        // Porte une ombre, reçoit les ombres (partie 185) : sous le soleil du décor 3D de la séquence.
+        if let Some(l) = self.layers().get(li).filter(|l| crate::ombres::concerne(l) || (crate::espace3d::is_card(l) && l.accroche)) {
+            let (porte, recoit, accroche) = (l.porte_ombre, l.recoit_ombres, l.accroche);
+            let raison = accroche.then(|| "Un calque accroché à la caméra est dans le cadre, pas dans le décor : il n'a pas d'ombre.".to_string());
+            let case = |on: bool| if on { egui_phosphor::regular::CHECK_SQUARE } else { egui_phosphor::regular::SQUARE };
+            if self.entree(ui, case(porte), crate::ombres::NOM_PORTE, crate::ombres::ACTION_PORTE, raison.clone(), crate::ombres::PHRASE_PORTE) {
+                self.basculer_porte_ombre(li);
+            }
+            if self.entree(ui, case(recoit), crate::ombres::NOM_RECOIT, crate::ombres::ACTION_RECOIT, raison, crate::ombres::PHRASE_RECOIT) {
+                self.basculer_recoit_ombres(li);
+            }
+        }
         // La grille de repère d'un calque Sol, Mur ou Ciel (`espace3ddecor.rs`, partie 157) : jamais dans le dessin.
         if let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) {
             if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille de repère sur ce calque, à l'écran. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {

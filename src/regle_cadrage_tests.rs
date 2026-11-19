@@ -375,8 +375,10 @@ fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing
 #[test]
 fn the_pastilles_scroll_instead_of_wrapping_when_the_bar_is_too_narrow() {
     use crate::personnages::Personnage;
-    // (Partie 160 : 820 points de large, 700 avant : ajuster, zoom, rotation et miroir sont montés dans la barre, avant les pastilles.)
-    let mut b = banc_taille(Document::new(400, 300, 24), false, 820, 600);
+    // (Partie 160 : 820 points de large, 700 avant : ajuster, zoom, rotation et miroir sont montés dans la barre, avant les pastilles.
+    // Fusion du main de GitHub avec la timeline resserrée : 860, la case « Espace 3D à côté » de la partie 187 prend sa place dans la
+    // même barre ; la rangée ne tient toujours pas, elle défile.)
+    let mut b = banc_taille(Document::new(400, 300, 24), false, 860, 600);
     b.app.tool = Tool::Brush;
     // Beaucoup de personnages : la rangée ne tient plus dans la barre.
     for k in 0..14 {

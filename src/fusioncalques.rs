@@ -232,7 +232,7 @@ pub(crate) fn merge_down_ctl(doc: &mut Document, index: usize, layer: usize, ctl
                 }
             }
         } else {
-            let plan = Plan { paper: None, items: items_de(&below, cb, f, true).into_iter().chain(items_de(&above, ca, f, false)).collect() };
+            let plan = Plan { paper: None, items: items_de(&below, cb, f, true, doc.stage_center()).into_iter().chain(items_de(&above, ca, f, false, doc.stage_center())).collect() };
             match vus_plans.iter().find(|(p, _)| *p == plan) {
                 Some((_, c)) => *c,
                 None => {
@@ -264,6 +264,9 @@ pub(crate) fn merge_down_ctl(doc: &mut Document, index: usize, layer: usize, ctl
         transform: LayerTransform::default(),
         pos_keys: Vec::new(),
         trajectoire: None,
+        // (Les poses sont cuites dans les dessins : le calque obtenu repart sans origine ni aimant, partie 182.)
+        origine: None,
+        aimante_au_sol: false,
         frames,
         // Les effets, l'aplat et les images avant / après sont cuits dans les dessins.
         fx: Vec::new(),
@@ -287,9 +290,10 @@ pub(crate) fn merge_down_ctl(doc: &mut Document, index: usize, layer: usize, ctl
 /// Les éléments du plan d'un calque à l'image `f` (son aplat sous son dessin, puis son dessin), tels que l'écran les
 /// pose pour une caméra au centre. `bas` : le calque du dessous, composé en mode normal (son propre mode de fusion
 /// reste celui du calque obtenu).
-fn items_de(l: &Layer, cel: Option<CelId>, f: usize, bas: bool) -> Vec<PlanItem> {
+fn items_de(l: &Layer, cel: Option<CelId>, f: usize, bas: bool, centre: eframe::egui::Pos2) -> Vec<PlanItem> {
     let Some(cel) = cel else { return Vec::new() };
-    let t = l.pose(f);
+    // (Un élément de plan se pose autour du centre de la feuille : la pose y est rapportée, partie 182.)
+    let t = l.pose_au_centre(f, centre);
     let line = PlanItem {
         cel,
         opacity: (l.opacity_at(f) * 255.0).round() as u8,
@@ -300,6 +304,7 @@ fn items_de(l: &Layer, cel: Option<CelId>, f: usize, bas: bool) -> Vec<PlanItem>
         ctg: None,
         fond: None,
         pre: None,
+        profondeur: None, ombre: None,
     };
     render::fond_item(l, &line).into_iter().chain([line]).collect()
 }

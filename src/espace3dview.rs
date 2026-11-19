@@ -1,5 +1,6 @@
-//! La vue d'édition de l'Espace 3D : navigation (tourner, glisser, avancer), choix des cartes et de la caméra à la
-//! souris, manipulateurs (déplacer, tourner, échelle), caméra du plan, tracé. Tout est dessiné par egui : les cartes (les
+//! La vue d'édition de l'Espace 3D : navigation (tourner, glisser, avancer), choix des cartes, des objets du décor 3D
+//! (partie 184, `poignees3d.rs`) et de la caméra à la souris, manipulateurs (déplacer, tourner, échelle ; l'origine seule avec
+//! « Modifier l'origine »), caméra du plan, tracé. Tout est dessiné par egui : les cartes (les
 //! calques du plan, texturés par leur dessin) dans l'ordre de la pile des calques — ce que l'image compose
 //! (`docs/ESPACE3D.md`, « Ordre ») —, le quadrillage du sol, la caméra et les poignées.
 
@@ -117,6 +118,10 @@ pub(crate) fn traits_a_l_ecran(view: &View, center: [f32; 2], origine: Pos2, zon
     out
 }
 
+/// Un appui sur 1 ou 2 dans l'Espace 3D vaut ce nombre de points de molette : le même pas que la feuille (× 1,25), puisque la
+/// molette zoome de `exp(0,002 × points)`.
+pub(crate) const CRAN_CLAVIER: f32 = 111.571_77; // ln(1,25) / 0,002
+
 impl App {
     /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
     /// chaque vue (`espace3dvues.rs`).
@@ -150,7 +155,7 @@ impl App {
     }
 
     /// La vue d'édition, ou la vue de la caméra du plan.
-    fn e3_view(&self, draw: Rect) -> View {
+    pub(crate) fn e3_view(&self, draw: Rect) -> View {
         if self.espace3d.through_camera {
             self.e3_world().scene_cam(&self.current_camera()).view(draw.width())
         } else {
@@ -160,13 +165,18 @@ impl App {
 
     /// Le manipulateur de la sélection.
     pub(crate) fn e3_gizmo(&self, view: &View) -> Option<Gizmo> {
+        // « Modifier l'origine » (partie 184) : des flèches et des carrés posés sur l'origine de ce qui est choisi seul.
+        if self.espace3d.origine {
+            return self.e3_gizmo_origine(view);
+        }
         let mode = self.espace3d.mode;
         if mode == GizmoMode::Select || self.espace3d.sel.is_empty() {
             return None;
         }
         let xfs = self.e3_xfs(&self.espace3d.sel);
         let first = xfs.first()?;
-        let origin = gz::pivot_of(&xfs);
+        // (L'origine d'une carte seule, la moyenne de celles de plusieurs : partie 182.)
+        let origin = self.e3_pivot(&xfs);
         // (L'échelle se fait sur les axes de la carte : ses cubes suivent donc toujours la carte.)
         let local = (self.espace3d.local || mode == GizmoMode::Scale) && xfs.len() == 1;
         Some(Gizmo { origin, axes: gz::axes_for(local, &first.1), len: Gizmo::size_for(view, origin), mode })
@@ -196,9 +206,16 @@ impl App {
     /// La carte touchée par le rayon : la plus proche dont le dessin est touché, sinon la plus proche dont la feuille
     /// l'est (en dernier recours, pour attraper un calque vide).
     pub(crate) fn e3_pick(&mut self, ray: &Ray) -> Option<u64> {
+        let (drawn_card, sheet_card) = self.e3_pick_cartes(ray);
+        drawn_card.map(|(t, id, _)| (t, id)).or(sheet_card).map(|b| b.1)
+    }
+
+    /// Les cartes touchées par le rayon : la plus proche dont le dessin est touché (sa distance, son numéro de sélection, et
+    /// si elle partage la profondeur du décor 3D, `profondeur::partage`), et la plus proche dont la feuille l'est.
+    pub(crate) fn e3_pick_cartes(&self, ray: &Ray) -> (Option<(f32, u64, bool)>, Option<(f32, u64)>) {
         let world = self.e3_world();
         let frame = self.cur_frame;
-        let mut drawn_card: Option<(f32, u64)> = None;
+        let mut drawn_card: Option<(f32, u64, bool)> = None;
         let mut sheet_card: Option<(f32, u64)> = None;
         if self.espace3d.show_cards {
             for li in self.e3_visible_cards() {
@@ -206,15 +223,15 @@ impl App {
                 let xf = world.carte(layer, frame);
                 let Some((t, p)) = world.pick_card(&xf, ray) else { continue };
                 let key = espace3d::card_selection(layer.id);
-                if self.e3_card_drawn_at(li, p) && drawn_card.is_none_or(|(b, _)| t < b) {
-                    drawn_card = Some((t, key));
+                if self.e3_card_drawn_at(li, p) && drawn_card.is_none_or(|(b, _, _)| t < b) {
+                    drawn_card = Some((t, key, crate::profondeur::partage(layer)));
                 }
                 if sheet_card.is_none_or(|(b, _)| t < b) {
                     sheet_card = Some((t, key));
                 }
             }
         }
-        drawn_card.or(sheet_card).map(|b| b.1)
+        (drawn_card, sheet_card)
     }
 
     /// Le calque `li` a quelque chose de dessiné près du point `p` de son dessin (à l'image courante).
@@ -272,8 +289,13 @@ impl App {
         if through {
             self.e3_nav_camera(draw, response, scroll.y, delta);
         } else {
+            // (Le zoom au clavier vaut des crans de molette, la souris sur la vue ou non.)
+            let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
             if response.hovered() && scroll.y != 0.0 {
                 cam.dolly((-scroll.y * 0.002).exp());
+            }
+            if clavier != 0.0 {
+                cam.dolly((-clavier * 0.002).exp());
             }
             if response.dragged_by(PointerButton::Middle) {
                 cam.pan(delta.x, delta.y, draw.width());
@@ -295,7 +317,10 @@ impl App {
     /// Par la caméra du plan : la molette l'avance, le bouton du milieu la déplace, le clic droit la tourne (sa clé de
     /// l'image courante si elle est animée), en une étape d'annulation par geste.
     pub(crate) fn e3_nav_camera(&mut self, draw: Rect, response: &egui::Response, scroll_y: f32, delta: egui::Vec2) {
-        let moving_camera = response.hovered() && (scroll_y != 0.0 || response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary));
+        // Le zoom au clavier (`molette_clavier`) avance la caméra comme la molette, la souris sur la vue ou non.
+        let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
+        let scroll_y = if response.hovered() { scroll_y } else { 0.0 } + clavier;
+        let moving_camera = scroll_y != 0.0 || (response.hovered() && (response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary)));
         if moving_camera {
             self.gesture_change(GESTURE_CAMERA, |s| {
                 let snap = s.snapshot();
@@ -331,6 +356,8 @@ impl App {
     /// tourner : la vue seule, une des vues, `espace3dvues.rs`).
     pub(crate) fn e3_input_objets(&mut self, ctx: &egui::Context, view: &View, draw: Rect, response: &egui::Response) -> bool {
         let (mods, press, primary_down) = ctx.input(|i| (i.modifiers, i.pointer.press_origin(), i.pointer.primary_down()));
+        // (Maj tenue : l'origine qu'on tire s'accroche aux points de sa boîte, partie 184.)
+        self.espace3d.maj = mods.shift;
         let view = *view;
         let center = [draw.width() / 2.0, draw.height() / 2.0];
         let rel = |p: Pos2| [p.x - draw.left(), p.y - draw.top()];
@@ -377,8 +404,12 @@ impl App {
         if !primary_down {
             self.e3_finish_drag();
         }
-        // Survol d'une poignée (pour la mettre en évidence).
+        // Survol d'une poignée (pour la mettre en évidence ; la barre d'état dit ce qu'elle fait, ou pourquoi elle ne fait rien).
+        let avant = self.espace3d.hover;
         self.espace3d.hover = response.hover_pos().filter(|_| self.espace3d.drag.is_none() && !dessine).and_then(|p| self.e3_gizmo(&view)?.hit(&view, center, rel(p), GRAB));
+        if self.espace3d.hover != avant {
+            self.e3_survol_poignee();
+        }
         orbiting
     }
 
@@ -388,17 +419,24 @@ impl App {
     /// il est tracé par-dessus les cartes, et une carte passe presque toujours derrière lui (le sol, sous une caméra vue de
     /// haut). C'est la règle du Ctrl+clic de l'outil Trajectoire (`e3_traj_choisir`, partie 152) ; avant, un clic simple
     /// prenait la carte de derrière.
-    fn e3_click(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
+    pub(crate) fn e3_click(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
         let ray = view.ray(px, center);
         let additive = mods.shift || mods.command;
         if self.e3_gizmo(view).is_some_and(|g| g.hit(view, center, px, GRAB).is_some()) {
             return;
         }
         // (Une vue orthographique montre par la tranche les cartes qui lui font face de côté : leur trait s'attrape aussi ; la caméra d'abord.)
+        // (Les objets du décor 3D aussi, partie 184 : le plus proche de l'œil, carte ou objet, l'emporte.)
         let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
-        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let hit = if devant { None } else { self.e3_pick_tout(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
         let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
         match (hit, cam_hit) {
+            // Un objet du décor : choisi (Maj : ajouté, ou retiré), et choisi aussi dans la liste du panneau.
+            (Some(id), _) if crate::poignees3d::objet_of(id).is_some() => {
+                if let Some(oid) = crate::poignees3d::objet_of(id) {
+                    self.e3_choisir_objet(oid, additive);
+                }
+            }
             (Some(id), _) => {
                 if additive {
                     match self.espace3d.sel.iter().position(|s| *s == id) {
@@ -457,7 +495,7 @@ impl App {
     }
 
     /// Début d'un glisser : une poignée, une carte qu'on tire directement, ou la vue qu'on tourne.
-    fn e3_press(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
+    pub(crate) fn e3_press(&mut self, view: &View, center: [f32; 2], px: [f32; 2], mods: egui::Modifiers) {
         self.end_stroke();
         let ray = view.ray(px, center);
         if mods.alt {
@@ -467,8 +505,19 @@ impl App {
         // Une poignée du manipulateur.
         if let Some(gizmo) = self.e3_gizmo(view) {
             if let Some(mut handle) = gizmo.hit(view, center, px, GRAB) {
-                // Plusieurs cartes : échelle uniforme seulement.
-                if gizmo.mode == GizmoMode::Scale && (self.espace3d.sel.len() > 1 || self.espace3d.sel.contains(&CAMERA_ID)) {
+                // (Une poignée qui ne peut rien ici, partie 184 : la hauteur d'un objet aimanté, un objet du décor qu'on
+                // tournerait hors de la verticale, l'origine d'un calque hors de son dessin. La barre d'état dit pourquoi.)
+                if let Some(raison) = self.e3_poignee_refusee(gizmo.mode, handle) {
+                    self.status = raison;
+                    return;
+                }
+                // « Modifier l'origine » : le geste déplace l'origine seule.
+                if self.espace3d.origine {
+                    self.e3_begin(handle, GizmoMode::Move, gizmo, ray, px, "Déplacer l'origine");
+                    return;
+                }
+                // Plusieurs cartes, ou un objet du décor (son échelle est la même sur les trois axes) : échelle uniforme seulement.
+                if gizmo.mode == GizmoMode::Scale && (self.espace3d.sel.len() > 1 || self.espace3d.sel.contains(&CAMERA_ID) || !self.e3_objets_choisis().is_empty()) {
                     handle = Handle::Center;
                 }
                 if gizmo.mode == GizmoMode::Scale && self.espace3d.sel.contains(&CAMERA_ID) {
@@ -482,10 +531,14 @@ impl App {
                 if self.e3_frozen() {
                     return;
                 }
-                let name = match gizmo.mode {
-                    GizmoMode::Rotate => "Tourner le calque",
-                    GizmoMode::Scale => "Mettre le calque à l'échelle",
-                    _ => "Déplacer le calque",
+                let objets = !self.e3_objets_choisis().is_empty() && self.espace3d.sel.iter().all(|&s| crate::poignees3d::objet_of(s).is_some());
+                let name = match (gizmo.mode, objets) {
+                    (GizmoMode::Rotate, false) => "Tourner le calque",
+                    (GizmoMode::Scale, false) => "Mettre le calque à l'échelle",
+                    (_, false) => "Déplacer le calque",
+                    (GizmoMode::Rotate, true) => "Tourner un objet 3D",
+                    (GizmoMode::Scale, true) => "Mettre un objet 3D à l'échelle",
+                    (_, true) => "Déplacer un objet 3D",
                 };
                 self.e3_begin(handle, gizmo.mode, gizmo, ray, px, name);
                 return;
@@ -495,24 +548,46 @@ impl App {
         // à l'horizontale (Maj : en hauteur). (La caméra d'abord, comme au clic : tirer son dessin la déplace, elle, même
         // avec une carte derrière. Une vue orthographique attrape aussi une carte par sa tranche.)
         let devant = !self.espace3d.through_camera && self.e3_pick_camera_devant(view, px, center);
-        let hit = if devant { None } else { self.e3_pick(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
+        let hit = if devant { None } else { self.e3_pick_tout(&ray).or_else(|| self.e3_pick_tranche(view, center, px)) };
         let cam_hit = devant || (hit.is_none() && !self.espace3d.through_camera && self.e3_pick_camera(view, px, center));
+        // « Modifier l'origine » (partie 184) : un appui hors des poignées choisit ce qu'il touche, comme un clic, sans rien
+        // déplacer ; dans le vide, il tourne la vue comme d'habitude.
+        if self.espace3d.origine && (hit.is_some() || cam_hit) {
+            self.e3_click(view, center, px, mods);
+            return;
+        }
         if hit.is_some() || cam_hit {
             let id = hit.unwrap_or(CAMERA_ID);
             if !self.espace3d.sel.contains(&id) {
                 if cam_hit {
                     // (Seule, comme au clic : `e3_choisir_la_camera`.)
                     self.e3_choisir_la_camera(false);
+                } else if let Some(oid) = crate::poignees3d::objet_of(id) {
+                    self.e3_choisir_objet(oid, false);
                 } else {
                     self.espace3d.sel = vec![id];
                     self.e3_follow_card(id);
                 }
             }
+            // Un objet du décor tiré directement (partie 184) : il glisse sur le sol, l'aimant le repose ; Maj : en hauteur,
+            // s'il n'est pas aimanté (l'aimant tient sa hauteur, comme le champ grisé du panneau).
+            if let Some(oid) = crate::poignees3d::objet_of(id) {
+                let xfs = self.e3_xfs(&self.espace3d.sel);
+                let origin = self.e3_pivot(&xfs);
+                let gizmo = Gizmo { origin, axes: gz::axes_for(false, &Default::default()), len: 1.0, mode: GizmoMode::Move };
+                let aimante = self.e3_objet(oid).is_some_and(|o| o.aimante);
+                let handle = if mods.shift && !aimante { Handle::Axis(1) } else { Handle::Plane(1) };
+                if mods.shift && aimante {
+                    self.status = crate::poignees3d::HAUTEUR_TENUE.into();
+                }
+                self.e3_begin(handle, GizmoMode::Move, gizmo, ray, px, "Déplacer un objet 3D");
+                return;
+            }
             if self.e3_frozen() {
                 return;
             }
             let xfs = self.e3_xfs(&self.espace3d.sel);
-            let origin = gz::pivot_of(&xfs);
+            let origin = self.e3_pivot(&xfs);
             let gizmo = Gizmo { origin, axes: gz::axes_for(false, &xfs.first().map_or_else(Default::default, |x| x.1)), len: 1.0, mode: GizmoMode::Move };
             let is_card = espace3d::card_of(id).is_some();
             let handle = match (is_card, mods.shift) {
@@ -531,14 +606,29 @@ impl App {
     }
 
     pub(crate) fn e3_begin(&mut self, handle: Handle, mode: GizmoMode, gizmo: Gizmo, start: Ray, px: [f32; 2], name: &'static str) {
+        // (Une retouche du décor ouverte par le panneau se termine d'abord : son étape, puis celle du geste, partie 184.)
+        if !self.e3_objets_choisis().is_empty() {
+            self.decor3d_retouche_finir();
+        }
         let originals = self.e3_xfs(&self.espace3d.sel);
         let snap = self.snapshot();
-        self.espace3d.drag = Some(Drag::Handle { handle, mode, gizmo, start, start_px: px, originals, snap, changed: false, name });
+        let origine = if self.espace3d.origine { self.e3_geste_origine().map(Box::new) } else { None };
+        // (« Modifier l'origine » sans origine à déplacer : aucun geste, surtout pas celui qui déplacerait l'objet.)
+        if self.espace3d.origine && origine.is_none() {
+            self.espace3d.drag = None;
+            return;
+        }
+        self.espace3d.drag = Some(Drag::Handle { handle, mode, gizmo, start, start_px: px, originals, snap, changed: false, name, origine });
     }
 
     /// Le geste suit la souris : nouveaux placements, aimantés si l'aimantation est allumée.
     pub(crate) fn e3_drag(&mut self, view: &View, center: [f32; 2], px: [f32; 2]) {
         let ray = view.ray(px, center);
+        // « Modifier l'origine » (partie 184) : l'origine seule bouge.
+        if matches!(&self.espace3d.drag, Some(Drag::Handle { origine: Some(_), .. })) {
+            self.e3_drag_origine(view, center, px);
+            return;
+        }
         let Some(Drag::Handle { handle, mode, gizmo, start, start_px, originals, .. }) = &self.espace3d.drag else { return };
         let (handle, mode, gizmo, start, start_px, originals) = (*handle, *mode, *gizmo, *start, *start_px, originals.clone());
         let snap_on = self.espace3d.snap;
@@ -603,7 +693,11 @@ impl App {
                     angle = m::snap(angle, step_rot);
                 }
                 message = format!("Rotation {angle:+.0}°");
-                gz::rotate_xfs(&originals, gizmo.origin, gizmo.axes[k], angle)
+                let mut out = gz::rotate_xfs(&originals, gizmo.origin, gizmo.axes[k], angle);
+                // (Un objet du décor ne tourne qu'autour de la verticale : son angle suit le geste tel quel, sans repasser par
+                // des angles d'Euler qui le ramèneraient entre −180° et 180°.)
+                crate::poignees3d::tourner_les_objets(&originals, &mut out, gizmo.axes[k], angle);
+                out
             }
             (GizmoMode::Scale, Handle::Axis(k)) => {
                 let factor = m::drag_scale_axis(&start, &ray, gizmo.origin, gizmo.axes[k]);
@@ -614,6 +708,8 @@ impl App {
                         xf.size[k] = s * xf.size[k].signum();
                     }
                 }
+                // (Une carte qui a une origine s'étire autour d'elle, partie 182 : son origine reste où elle était.)
+                self.e3_garder_les_origines(&originals, &mut out);
                 message = format!("Taille ×{factor:.2}");
                 out
             }
@@ -657,7 +753,18 @@ impl App {
 
     /// Fin du geste : l'étape d'annulation, si quelque chose a bougé.
     pub(crate) fn e3_finish_drag(&mut self) {
-        if let Some(Drag::Handle { snap, changed: true, name, .. }) = self.espace3d.drag.take() {
+        if let Some(Drag::Handle { snap, changed: true, name, origine, originals, .. }) = self.espace3d.drag.take() {
+            // L'origine déplacée (partie 184) : l'aimant la repose ; une étape d'annulation.
+            if let Some(g) = origine {
+                self.e3_origine_lachee(*g, snap, name);
+                return;
+            }
+            // Un objet du décor a bougé : l'étape de la retouche du décor (le projet entier : l'annuler ramène l'objet et les
+            // cartes aimantées qui reposaient sur lui).
+            if originals.iter().any(|(id, _)| crate::poignees3d::objet_of(*id).is_some()) {
+                self.commit_named(snap, name);
+                return;
+            }
             let before = self.history.context.replace(name.to_string());
             self.history.push(snap);
             self.history.context = before;
@@ -669,6 +776,8 @@ impl App {
 
     /// La zone du dessin, en mode Espace 3D.
     pub(crate) fn espace3d_panel(&mut self, ui: &mut egui::Ui, rect: Rect, response: &egui::Response) {
+        // (Plein écran ou à côté de la feuille : `espace3d_fit` cadre dans cette zone.)
+        self.espace3d.rect = rect;
         if self.espace3d.cam.is_none() {
             self.espace3d_fit();
         }
@@ -707,8 +816,10 @@ impl App {
             Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
 
+        // Le décor 3D de la séquence (partie 180), dessous ; les cartes s'y cachent selon leur distance (partie 183).
+        let decor = self.e3_peindre_decor(&painter, draw, &view, 1).then_some((1, draw));
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
-        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
+        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
@@ -730,13 +841,8 @@ impl App {
                 crate::theme::camera(),
             );
         } else if !dessine {
-            painter.text(
-                rect.left_bottom() + vec2(8.0, -6.0),
-                Align2::LEFT_BOTTOM,
-                "Clic : choisir une carte ou la caméra · glisser : déplacer (Maj : en profondeur) · Alt+glisser ou clic droit : tourner la vue · milieu : glisser la vue · molette : avancer",
-                FontId::proportional(11.0),
-                Color32::from_gray(170),
-            );
+            let legende = if self.espace3d.origine { crate::poignees3d::LEGENDE_ORIGINE } else { "Clic : choisir une carte, un objet du décor ou la caméra · glisser : déplacer (Maj : en profondeur) · Alt+glisser ou clic droit : tourner la vue · milieu : glisser la vue · molette : avancer" };
+            painter.text(rect.left_bottom() + vec2(8.0, -6.0), Align2::LEFT_BOTTOM, legende, FontId::proportional(11.0), Color32::from_gray(170));
         }
         let label = format!("{} carte(s)", self.e3_visible_cards().len());
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
@@ -754,7 +860,10 @@ impl App {
         // Curseur.
         if response.hover_pos().is_some() && !dessine {
             let icon = match (&self.espace3d.drag, self.espace3d.hover) {
+                (Some(Drag::Handle { .. }), _) if self.espace3d.origine => CursorIcon::Crosshair,
                 (Some(_), _) => CursorIcon::Grabbing,
+                (None, Some(h)) if self.e3_poignee_refusee(self.e3_gizmo(&view).map_or(GizmoMode::Move, |g| g.mode), h).is_some() => CursorIcon::NotAllowed,
+                (None, Some(_)) if self.espace3d.origine => CursorIcon::Crosshair,
                 (None, Some(_)) => CursorIcon::Grab,
                 _ => CursorIcon::Default,
             };
@@ -764,12 +873,18 @@ impl App {
 
     /// Les cartes : pour chaque calque visible du plan, du fond vers le dessus de la pile (l'ordre de l'image), le voile
     /// de sa feuille, son dessin, son contour (en couleur de sélection si elle est choisie) et son nom.
-    pub(crate) fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2) {
+    ///
+    /// `decor` : la prise du décor 3D de cette vue et sa zone, si la carte graphique l'a dessiné. Chaque carte qui partage sa
+    /// profondeur (`profondeur::partage`) reçoit alors, juste après son dessin, le voile du décor qui est devant elle
+    /// (`decor3dgpu::VoileCarte`, partie 183).
+    pub(crate) fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, decor: Option<(u64, Rect)>) {
         if !self.espace3d.show_cards {
             return;
         }
         let world = self.e3_world();
         let frame = self.cur_frame;
+        let cible_egui = self.gpu.as_ref().map(|g| g.render_state().target_format);
+        let mut rang = 0u32;
         for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
             let xf = world.carte(layer, frame);
@@ -788,7 +903,18 @@ impl App {
                     Some(f) => Some(f.base),
                     None => cel,
                 };
-                if let Some(dessin) = image.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                // (Un nouveau dessin qui attend son image, `espace3dcote.rs` : la carte montre le dessin d'avant.)
+                let tex = image.and_then(|c| self.e3_card_texture(ctx, c)).or_else(|| {
+                    if flottante.is_some() {
+                        return None;
+                    }
+                    let avant = self.espace3d.vu_par_calque.get(&id)?;
+                    Some(self.espace3d.card_textures.get(avant)?.tex.id())
+                });
+                if let Some(c) = cel.filter(|c| self.espace3d.card_textures.get(c).is_some_and(|t| t.version == self.doc.cels.get(c).map_or(0, |d| d.version))) {
+                    self.espace3d.vu_par_calque.insert(id, c);
+                }
+                if let Some(dessin) = tex.and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
                     painter.add(Shape::mesh(dessin));
                 }
                 if let Some(f) = flottante {
@@ -800,6 +926,14 @@ impl App {
                     };
                     if let Some(feuille) = self.e3_card_texture(ctx, f.feuille).and_then(|tex| card_mesh(view, center, to_screen, &sur_la_carte, Some(tex), crate::viewbar::veil(opacity))) {
                         painter.add(Shape::mesh(feuille));
+                    }
+                }
+                // La profondeur partagée avec le décor 3D (partie 183) : là où le décor est plus près que la carte, il la recouvre.
+                if let (Some((cle, zone)), Some(cible_egui)) = (decor, cible_egui) {
+                    if crate::profondeur::partage(&self.layers()[li]) {
+                        let coins = world.card_corners(&xf);
+                        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(zone, crate::decor3dgpu::VoileCarte { cle, rang, coins, cible_egui }));
+                        rang += 1;
                     }
                 }
             }
@@ -817,6 +951,13 @@ impl App {
                     painter.line_segment([to_screen(a), to_screen(b)], stroke);
                 }
             }
+            // L'origine de la carte choisie (partie 182) : là où est sa place, et autour d'elle qu'elle tourne.
+            if selected {
+                let o = world.origine_monde(&xf, world.ecart(&self.layers()[li]));
+                if let Some(p) = view.project(o, center).map(to_screen) {
+                    crate::origine::peindre_repere(painter, p, ACCENT, false);
+                }
+            }
             if let Some(p) = view.project(corners[0], center).map(to_screen) {
                 let depth = world.profondeur(&self.layers()[li], frame);
                 let label = if depth == 0.0 { name } else { format!("{name}  ({depth:+.2})") };
@@ -826,28 +967,7 @@ impl App {
                 painter.galley(pos, galley, Color32::WHITE);
             }
         }
-    }
-
-    /// Texture du dessin `cel` (refaite quand il change).
-    fn e3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
-        // La carte sur laquelle on dessine : sa texture suit le trait, tuile par tuile (`espace3ddessin.rs`).
-        if let Some(id) = self.e3_texture_vive(ctx, cel) {
-            return Some(id);
-        }
-        let c = self.doc.cels.get(&cel)?;
-        if let Some((v, t)) = self.espace3d.card_textures.get(&cel) {
-            if *v == c.version {
-                return Some(t.id());
-            }
-        }
-        let image = crate::render::cel_image(&c.raster, 1024);
-        let tex = ctx.load_texture(format!("espace 3d {cel}"), image, egui::TextureOptions::LINEAR);
-        if self.espace3d.card_textures.len() > 256 {
-            self.espace3d.card_textures.clear();
-        }
-        let id = tex.id();
-        self.espace3d.card_textures.insert(cel, (c.version, tex));
-        Some(id)
+        self.e3_lacher_les_cliches(ctx.cumulative_pass_nr());
     }
 
     /// La caméra du plan : pyramide de vision, cadre, haut de l'image, et sa course pendant le plan si elle est animée.
@@ -887,7 +1007,8 @@ impl App {
     /// Les poignées du manipulateur.
     pub(crate) fn e3_paint_gizmo(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, g: &Gizmo) {
         let hot = |h: Handle| self.espace3d.hover == Some(h) || matches!(&self.espace3d.drag, Some(Drag::Handle { handle, .. }) if *handle == h);
-        let color = |h: Handle, k: usize| if hot(h) { HOT } else { AXIS_COLORS[k] };
+        // (Une poignée qui ne peut rien ici est grise, partie 184 : `e3_poignee_refusee`.)
+        let color = |h: Handle, k: usize| if self.e3_poignee_refusee(g.mode, h).is_some() { Color32::from_gray(105) } else if hot(h) { HOT } else { AXIS_COLORS[k] };
         let Some(o) = proj(g.origin) else { return };
         match g.mode {
             GizmoMode::Select => {}

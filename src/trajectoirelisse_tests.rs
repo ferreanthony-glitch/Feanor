@@ -212,6 +212,8 @@ fn dans_l_espace_le_lissage_agit_sur_les_cartes_choisies_et_la_camera() {
     doc.panels[0].layers = vec![Layer::new("Carte 0", LayerKind::Bitmap), Layer::new("Carte 1", LayerKind::Bitmap)];
     doc.panels[0].length = 24;
     let mut b = crate::perf_tests::banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
     // (Un plan venu du format 55 en Espace 3D, partie 159.)

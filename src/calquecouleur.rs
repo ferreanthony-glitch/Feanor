@@ -163,6 +163,8 @@ pub fn nouveau(line: &Layer, name: String) -> Layer {
     l.couleur = Some(CalqueCouleur::new(line.id));
     l.parent = line.parent;
     l.transform = line.transform;
+    // (La pose du trait se lit autour de son origine : la couleur a la même, partie 182.)
+    l.origine = line.origine;
     l.pos_keys = line.pos_keys.clone();
     l.depth = line.depth;
     // (Accroché à la caméra comme son trait : la couleur ne reste pas en arrière, `accroche.rs`.)
@@ -244,9 +246,9 @@ pub fn refleter(doc: &mut Document, pi: usize) -> bool {
         .collect();
     let mut changed = false;
     for (ci, li) in jobs {
-        let (frames_of_line, pre, post, transform, depth, pos_keys, accroche) = {
+        let (frames_of_line, pre, post, transform, depth, pos_keys, accroche, origine) = {
             let l = &doc.panels[pi].layers[li];
-            (l.frames.clone(), l.pre, l.post, l.transform, l.depth, l.pos_keys.clone(), l.accroche)
+            (l.frames.clone(), l.pre, l.post, l.transform, l.depth, l.pos_keys.clone(), l.accroche, l.origine)
         };
         let mut map = doc.panels[pi].layers[ci].couleur.as_ref().map(|c| c.dessins.clone()).unwrap_or_default();
         let old_frames = doc.panels[pi].layers[ci].frames.clone();
@@ -288,8 +290,9 @@ pub fn refleter(doc: &mut Document, pi: usize) -> bool {
             changed = true;
         }
         // (La couleur est accrochée à la caméra quand son trait l'est, `accroche.rs` : elle a la même pose, lue dans le même repère.)
-        if (layer.pre, layer.post, layer.transform, layer.depth, layer.accroche) != (pre, post, transform, depth, accroche) || layer.pos_keys != pos_keys {
-            (layer.pre, layer.post, layer.transform, layer.depth, layer.accroche) = (pre, post, transform, depth, accroche);
+        // (Et l'origine du trait, autour de laquelle sa pose se lit, partie 182.)
+        if (layer.pre, layer.post, layer.transform, layer.depth, layer.accroche, layer.origine) != (pre, post, transform, depth, accroche, origine) || layer.pos_keys != pos_keys {
+            (layer.pre, layer.post, layer.transform, layer.depth, layer.accroche, layer.origine) = (pre, post, transform, depth, accroche, origine);
             layer.pos_keys = pos_keys;
             changed = true;
         }

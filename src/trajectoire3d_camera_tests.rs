@@ -506,6 +506,8 @@ fn a_click_on_the_camera_track_of_the_montage_or_of_the_timeline_chooses_the_cam
 /// 1280 × 720, le second rang est sous le bord de la liste, et rien n'y est peint).
 fn ouvert_grand(doc: Document) -> Banc {
     let mut b = crate::perf_tests::banc_taille(doc, false, 1600, 1200);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");

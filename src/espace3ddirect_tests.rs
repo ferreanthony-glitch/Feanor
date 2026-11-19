@@ -235,7 +235,7 @@ fn enregistrer_au_format_55(doc: &Document, dir: &std::path::Path) -> std::path:
 
 #[test]
 fn un_projet_du_format_55_s_ouvre_au_format_56_sans_question_et_avec_les_memes_images_au_pixel_pres() {
-    assert_eq!(crate::project::VERSION, 60, "partie 159 : le format 56, puis 57 (partie 170), puis 58 (partie 171), puis 59 (partie 172), puis 60 (partie 176)");
+    assert_eq!(crate::project::VERSION, 61, "partie 159 : le format 56, puis 57 (partie 170), puis 58 (partie 171), puis 59 (partie 172), puis 60 (partie 176), puis 61 (partie 182)");
     let doc = projet_d_avant();
     let au_55 = comme_au_format_55(projet_d_avant());
     let avant = filmees(&au_55);
@@ -260,7 +260,7 @@ fn un_projet_du_format_55_s_ouvre_au_format_56_sans_question_et_avec_les_memes_i
     // Enregistré : au format 56, et l'aller-retour garde tout.
     crate::project::save(&lu.doc, &manifeste, &mut Default::default()).expect("enregistre");
     let texte = std::fs::read_to_string(&manifeste).expect("relu");
-    assert!(texte.contains("\"version\": 60") && texte.contains("\"profondeur_bornee\": true"), "le format 56 et le calque tenu");
+    assert!(texte.contains("\"version\": 61") && texte.contains("\"profondeur_bornee\": true"), "le format 56 et le calque tenu");
     let relu = crate::project::load(&manifeste).expect("relu au format 56");
     assert_eq!(ecarts(&avant, &filmees(&relu.doc)), Vec::<(usize, usize, usize)>::new(), "aller-retour au format 56");
     assert!(relu.doc.panels[0].layers.iter().any(|l| l.profondeur_bornee));
@@ -342,7 +342,7 @@ fn un_projet_neuf_du_format_56_garde_ses_choix_a_l_aller_retour() {
     let _ = avant;
     // Un projet d'un format plus récent est refusé, comme toujours.
     let texte = std::fs::read_to_string(&manifeste).expect("relu");
-    std::fs::write(&manifeste, texte.replace("\"version\": 60", "\"version\": 61")).expect("écrit");
+    std::fs::write(&manifeste, texte.replace("\"version\": 61", "\"version\": 62")).expect("écrit");
     assert!(crate::project::load(&manifeste).is_err_and(|e| e.contains("plus récente")));
     std::fs::remove_dir_all(&dir).ok();
 }

@@ -11,7 +11,7 @@ use crate::app::App;
 use crate::camera::Camera;
 use crate::document::LayerTransform;
 
-/// La transformation `t` (pivot : centre de la feuille) suivie d'un miroir autour de la verticale
+/// La transformation `t` (pivot : l'origine du calque, `Layer::pivot`) suivie d'un miroir autour de la verticale
 /// x = `axis` de la feuille : la rotation s'inverse, la largeur change de signe, et l'inclinaison d'une carte autour de
 /// la verticale (Espace 3D) aussi (celle autour de l'horizontale ne change pas).
 pub fn mirror_transform_x(t: LayerTransform, pivot: Pos2, axis: f32) -> LayerTransform {
@@ -59,7 +59,8 @@ impl App {
             return;
         }
         let center = self.layer_content_box(self.cur_layer, self.cur_frame).unwrap_or_else(|| self.doc.frame_rect()).center();
-        let pivot = self.doc.stage_center();
+        // (Autour de l'origine du calque, partie 182 : le centre de la feuille s'il n'en a pas.)
+        let pivot = self.layer().pivot(self.doc.stage_center());
         self.end_stroke();
         self.record_step();
         let li = self.cur_layer;
@@ -110,6 +111,8 @@ impl App {
                     shared += 1;
                     continue;
                 }
+                // (La pose se lit autour de l'origine du calque, partie 182.)
+                let pivot = l.pivot(pivot);
                 l.transform = mirror_transform_x(l.transform, pivot, axis);
                 for k in &mut l.pos_keys {
                     k.t = mirror_transform_x(k.t, pivot, axis);

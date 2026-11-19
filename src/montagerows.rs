@@ -434,7 +434,10 @@ impl App {
             };
             // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
             // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
-            painter.rect_filled(r, 3.0, teinte(Ligne::Calques, theme::etiquette()));
+            // (Fusion de la partie 179 de GitHub, « timeline plus claire », avec notre 189 : la couleur réglée de la ligne Calques en
+            // base, puis la teinte du rangement du calque par-dessus, `layerheads::fond_teinte`.)
+            let rangement = crate::folders::couleur_du_rangement(&self.doc.panels[self.cur_panel].layers, k, &self.doc.groups);
+            painter.rect_filled(r, 3.0, crate::layerheads::fond_teinte(teinte(Ligne::Calques, theme::etiquette()), rangement, false));
             // (La sorte du calque, vectoriel, bitmap…, est la pastille de couleur de l'en-tête : `montage_head`.)
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);

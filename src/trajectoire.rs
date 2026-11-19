@@ -80,11 +80,15 @@ pub enum Ancre {
     Droite,
     /// Un point du dessin choisi d'un clic, en coordonnées du dessin du calque.
     Point { x: f32, y: f32 },
+    /// **L'origine du calque** (partie 182, `Layer::origine` ; sans origine, le centre de la feuille) : c'est elle qui suit le
+    /// chemin, et le dessin qui tourne avec le chemin tourne autour d'elle. Sur la feuille comme dans l'Espace 3D, où elle se
+    /// pose sur le chemin. Ce que propose une trajectoire neuve ; un vieux fichier garde son ancrage (`Depart` s'il n'en dit rien).
+    Origine,
 }
 
 impl Ancre {
     /// Les ancrages tout faits, dans l'ordre des réglages (le point cliqué se choisit à part).
-    pub const CHOIX: [Ancre; 6] = [Ancre::Depart, Ancre::Bas, Ancre::Centre, Ancre::Haut, Ancre::Gauche, Ancre::Droite];
+    pub const CHOIX: [Ancre; 7] = [Ancre::Origine, Ancre::Depart, Ancre::Bas, Ancre::Centre, Ancre::Haut, Ancre::Gauche, Ancre::Droite];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -95,6 +99,7 @@ impl Ancre {
             Ancre::Gauche => "Le bord gauche",
             Ancre::Droite => "Le bord droit",
             Ancre::Point { .. } => "Un point choisi d'un clic",
+            Ancre::Origine => "L'origine du calque",
         }
     }
 
@@ -107,7 +112,7 @@ impl Ancre {
             Ancre::Haut => Some([milieu[0], min[1]]),
             Ancre::Gauche => Some([min[0], milieu[1]]),
             Ancre::Droite => Some([max[0], milieu[1]]),
-            Ancre::Depart | Ancre::Point { .. } => None,
+            Ancre::Depart | Ancre::Point { .. } | Ancre::Origine => None,
         }
     }
 }
@@ -766,7 +771,10 @@ impl Trajectoire {
         // feuille, la garder la ferait prendre pour une autre.
         if let Some(s) = self.support {
             self.support = Some(s.assaini()?);
-            (self.ancre, self.tourne, self.decalage_depart) = (Ancre::Depart, false, [0.0, 0.0]);
+            // (Dans l'espace : le déplacement relatif, ou l'origine de la carte posée sur le chemin, partie 182. La carte n'y
+            // tourne jamais avec le chemin : vue par la tranche, elle disparaîtrait.)
+            let ancre = if self.ancre == Ancre::Origine { Ancre::Origine } else { Ancre::Depart };
+            (self.ancre, self.tourne, self.decalage_depart) = (ancre, false, [0.0, 0.0]);
             // (Les dessins des clés d'images d'une carte sont gardés, avec leur dessin d'origine : sans eux, le calcul suivant
             // referait des copies et laisserait de côté ce qu'on y a redessiné. Dans l'espace ils ne sont ni déplacés ni
             // tournés : c'est la carte qui porte le mouvement. Partie 152.)
@@ -1059,10 +1067,13 @@ impl Trajectoire {
     }
 
     /// La pose qui met le point d'ancrage `ancre` (feuille, sous la pose `base`) sur le point `p` du chemin, le dessin tourné de `theta`
-    /// degrés autour de ce point. Un calque tourne autour du centre de la feuille (`pivot`, `LayerTransform::affine`) : le déplacement
-    /// compense pour que ce soit le point d'ancrage qui reste sur le chemin.
+    /// degrés autour de ce point. Un calque tourne autour de son origine (`pivot`, coordonnées du dessin : `Layer::pivot`, le centre de
+    /// la feuille sans origine ; `LayerTransform::affine`) : le déplacement compense pour que ce soit le point d'ancrage qui reste sur
+    /// le chemin. **Ancrage à l'origine** (`Ancre::Origine`, partie 182) : le point d'ancrage est l'origine elle-même, rien n'est à
+    /// compenser (`v` est nul) : la pose est le point du chemin moins l'origine, tournée de `theta`.
     fn pose_tournee(base: LayerTransform, ancre: [f32; 2], pivot: [f32; 2], p: [f32; 2], theta: f32) -> LayerTransform {
         let (s, c) = theta.to_radians().sin_cos();
+        // (Le point d'ancrage vu depuis l'image de l'origine sur la feuille : nul quand c'est l'origine qui suit le chemin.)
         let v = [ancre[0] - pivot[0] - base.x, ancre[1] - pivot[1] - base.y];
         let rv = [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
         LayerTransform { x: p[0] - pivot[0] - rv[0], y: p[1] - pivot[1] - rv[1], angle: base.angle + theta, ..base }
@@ -1091,8 +1102,8 @@ impl Trajectoire {
 
     /// Les clés de position qu'elle pose sur un calque de pose propre `base` dans un plan de `duree` images (**clés
     /// d'interpolation** : une clé par image que le chemin couvre, le déplacement qui met le point d'ancrage `ancre`, en pixels de la
-    /// feuille sous la pose `base`, sur le chemin ; le dessin tourné d'autant que le chemin s'il tourne avec lui, `pivot` étant le centre
-    /// de la feuille autour duquel un calque tourne). Aucune en **clés d'images** (ce sont des dessins, posés par l'application :
+    /// feuille sous la pose `base`, sur le chemin ; le dessin tourné d'autant que le chemin s'il tourne avec lui, `pivot` étant l'origine
+    /// du calque autour de laquelle il tourne, `Layer::pivot`, partie 182). Aucune en **clés d'images** (ce sont des dessins, posés par l'application :
     /// `trajectoireui.rs`), ni si le plan n'a pas au moins une image après le départ.
     pub fn cles(&self, duree: usize, base: LayerTransform, ancre: [f32; 2], pivot: [f32; 2]) -> Vec<PosKey> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };

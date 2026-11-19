@@ -15,6 +15,8 @@ mod accueil_tests;
 mod aidetouches;
 #[cfg(test)]
 mod aidetouches_tests;
+#[cfg(test)]
+mod raccourcis_muets_tests;
 // L'aide animée (partie 153) : les animations des outils à la place des textes gris, et le registre des explications.
 mod aideanim;
 #[cfg(test)]
@@ -311,6 +313,10 @@ mod piste_mode_tests;
 // La colonne des calques de la timeline dans la disposition validée par Anthony : en-tête, colonnes, comportements (partie 174).
 #[cfg(test)]
 mod colonne_calques_tests;
+// La couleur du rangement sur les lignes de la timeline, les dossiers en titres qui montrent les clés de leurs calques fermés
+// (partie 179, repris de la timeline plus claire).
+#[cfg(test)]
+mod timeline_claire_tests;
 // Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
 mod panneauxvisuels;
 mod panneauxvisuelsui;
@@ -380,6 +386,22 @@ mod nouvellescles;
 mod accroche;
 #[cfg(test)]
 mod accroche_tests;
+// L'origine d'un calque, son vrai pivot, et l'aimant au sol des cartes (partie 182).
+mod origine;
+#[cfg(test)]
+mod origine_tests;
+// La profondeur partagée entre le décor 3D et les cartes dessinées (partie 183).
+mod profondeur;
+#[cfg(test)]
+mod profondeur_tests;
+// Les poignées de l'Espace 3D sur les objets du décor 3D, et l'origine déplacée dans la vue (partie 184).
+mod poignees3d;
+#[cfg(test)]
+mod poignees3d_tests;
+// Les ombres des cartes sur le décor 3D, et du décor sur les cartes (partie 185).
+mod ombres;
+#[cfg(test)]
+mod ombres_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;
@@ -437,6 +459,23 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+// Le décor 3D d'une séquence (partie 180) : lecture glTF, simplification, rendus, budget de la machine.
+pub mod decor3d;
+pub mod decor3dbudget;
+pub mod decor3dgltf;
+pub mod decor3dgpu;
+pub mod decor3drendu;
+pub mod decor3dsimplifier;
+mod decor3dui;
+pub mod decor3daimant;
+// La banque 3D (partie 181) : 45 modèles CC0 de Kenney, rangés dans le programme, montrés dans la Bibliothèque.
+pub mod banque3d;
+mod banque3dfichiers;
+mod banque3dui;
+#[cfg(test)]
+mod banque3d_tests;
+#[cfg(test)]
+mod decor3d_tests;
 mod brossesdediees;
 mod calquespastilles;
 #[cfg(test)]
@@ -628,6 +667,9 @@ mod couleur;
 #[cfg(test)]
 mod couleur_tests;
 mod cues;
+mod plagefilm;
+#[cfg(test)]
+mod plagefilm_tests;
 #[cfg(test)]
 mod cues_tests;
 #[cfg(test)]
@@ -1289,6 +1331,10 @@ mod stencil;
 mod tabs_tests;
 // Espace 3D (`docs/ESPACE3D.md`) : les calques (cartes) et la caméra du plan dans un seul espace, sans objets 3D.
 mod espace3d;
+// La vue 3D à côté de la feuille (`docs/ESPACE3D.md`, partie 13).
+mod espace3dcote;
+#[cfg(test)]
+mod espace3dcote_tests;
 mod espace3dgizmo;
 mod espace3dmath;
 #[cfg(test)]

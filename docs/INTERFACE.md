@@ -1321,6 +1321,7 @@ l'Espace 3D tant qu'il est ouvert). Les identifiants d'avant (`vue.3d`, `scene3d
     « Repère 3D » ; le panneau Calques n'a plus « Nouveau calque de fond » (icône des montagnes).
 14. **Fluidité et thèmes** : 10 cartes, tourner la vue et tirer une carte restent fluides ; poignées, contours de cartes et
     pyramide lisibles dans les trois thèmes (l'espace a son fond sombre propre).
+
 ## 14. Espaces de travail liés aux modes, barres minces et « Plus… » (2026-10-19, branche `espaces-barres`)
 
 Les propositions 6.1 et 6.3, approuvées par Anthony. Rien n'a été regardé à l'écran dans cette séance (aucun
@@ -1756,6 +1757,7 @@ Règles et code : `src/numerotation.rs` (module en tête), interface `src/numero
 2. Supprimer le 3 : les autres gardent leur numéro ; un nouveau plan après le 2 se nomme 2A, pas 3.
 3. Glisser le plan 5 devant le 1 : il reste « 5 ». « Renuméroter les plans… » : confirmation, tout repart de 1 ; Ctrl+Z.
 4. Les titres (planche, fiche, PDF) disent « Plan 12A ».
+
 ## 17. Exporter pour le montage (2026-10-20, branche `numerotation-export`)
 
 Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/editorial.rs`, `src/editorialjob.rs`,
@@ -4265,6 +4267,7 @@ Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintena
 la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
 boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
 le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
+
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
@@ -5772,6 +5775,7 @@ pixel ne change, la première écriture dans une tuile partagée en fait une à 
 les décors faits d'aplats immenses passaient de 17,4 Go à 7,4 Go de mémoire vive.
 
 ---------------------------------------------------------------------------------------------------
+
 ## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)
 
 Demande d'Anthony : « On doit rajouter des clés d'opacité à SHOT dans ce cas. Et un calque color card, qui applique une couleur unie sur
@@ -6559,6 +6563,7 @@ Deux instabilités de la suite complète et cinq retouches de l'audit pratique. 
 - **Échap** ferme la fenêtre Exporter et la fenêtre d'un export choisi, sans rien lancer.
 - **Fin d'export** : la fenêtre d'un export réussi s'efface seule après 8 s (le pointeur dessus la garde) ; le message reste dans la barre d'état avec **Ouvrir le dossier**. Une erreur reste jusqu'au clic.
 - **`crayonnes.json`** (ancienne planche de crayonnés) : l'avis d'ouverture devient « Ouvert avec N remarque(s) » et propose **Mettre de côté** : le fichier est renommé `crayonnes.json.ancien` (jamais lu, jamais effacé) et un bouton **Annuler** le remet. Sans ce choix, rien n'est touché.
+
 ## 86. Numérotation verrouillée d'origine et montage redimensionnable (2026-10-30, branche `numerotation-montage`)
 
 Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs), réglages `src/settings.rs`. `project::VERSION` ne change pas (44).
@@ -6574,6 +6579,7 @@ Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs
 2. Ouvrir un ancien projet suivi : il reste suivi.
 3. Tirer le bord entre le dessin et le montage : la pastille s'allume, la bande ne passe pas sous 200 points ; changer d'espace de travail et revenir : la hauteur est gardée.
 4. Réduire la bande : la barre de défilement apparaît, la piste Son 1 s'atteint ; M, S et le verrou se lisent et se cliquent. Bouton de hauteur sous le montage : petite, moyenne, grande.
+
 ## 88. Fil de décision par plan (2026-10-30, branche `fil-decision`)
 
 Recommandation de l'audit (idée ★1) : le client ou le réalisateur renvoie beaucoup de notes, parfois contradictoires ; il faut savoir laquelle compte et ce qui a été traité. Code : `src/fildecision.rs` (modèle, sans interface), `src/fildecisionui.rs` (panneau, pastille, commandes), `src/fildecision_tests.rs`. Une note est un **commentaire** de la timeline : tout vit dans le panneau Commentaires, rien de nouveau à ouvrir.
@@ -8184,6 +8190,7 @@ Deux commentaires périmés corrigés (`vignettecam.rs`, `vignettecamui.rs`) : l
 6. Écarte tout : le Storyboard le dit, Fichier > Exporter refuse ; un trait dans une case pâle fait un plan.
 7. Enregistre, rouvre : les croix sont là ; reprends : dessins, versions, caméra, textes.
 8. Un plan à mouvement de caméra écarté : la case montre A et les cadres en gris, pas la grande tuile. Les textes sous une case écartée ne sont pas peints (ils sont gardés) : dis-moi s'ils te manquent.
+
 ## 116. Un cadre de plus sans le clic droit : le « + » de la peau de Maj (2026-11-06, branche `cadre-plus`)
 
 Demande du réalisateur : créer un cadre C (ou D, ou B) en Vignettes avec Maj, le plus simplement possible, sans le clic droit. Fichiers :
@@ -12048,6 +12055,7 @@ Le lasso dans la vue (152.4) :
     choisie). Ctrl+clic sans glisser : la carte sous le pointeur devient le calque courant.
 20. Alt+glisser, clic droit, bouton du milieu, molette, avec l'outil Sélection : la vue tourne, glisse, avance.
 21. Prendre un outil de la vue (déplacer) : ce qui était choisi est posé, le pointeur manipule de nouveau les cartes.
+
 ## 153. L'aide animée : des animations à la place des textes gris, et le registre des explications (2026-11-13, branche `aide-animee`)
 
 Demande d'Anthony, validée sur six essais montrés en boucle : les textes explicatifs gris (petits et pâles) quittent les
@@ -15079,7 +15087,1220 @@ glisser (repliée et dépliée) et par clic, comme `ajouter_effet_camera` de l'A
 7. ⊖ Calques (ou Maj+Alt+C) : une ligne de résumé ; ⊕ : les pistes ; rouvrir FEANOR : les deux états gardés.
 8. La plus petite fenêtre : rien ne déborde.
 
-## 179. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+## 179. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+
+### 179.0 Ce qui en reste après la fusion du `main` du 19 novembre (le choix d'Anthony)
+
+Le `main` du 19 novembre (9c422b9) apportait la colonne des calques de la partie 174, validée par Anthony le 18 novembre, qui prend
+l'autre chemin que celle-ci : une rangée d'en-tête et sept colonnes de réglages sur tous les calques, le calque courant déplié sur
+trois rangées. Les deux ne tenaient pas ensemble. Sur trois maquettes cliquables (A : celle-ci, B : la 174, C : la 174 plus ce qui ne la
+contredit pas d'ici), **Anthony a choisi C**. La partie, numérotée 168 sur la branche, devient la 179 (le `main` a pris le 168 pour les
+versions d'un plan, et la plage de lecture du film avait pris le 178 sur sa branche ; elle est devenue la 188 à la fusion dans `main`).
+
+- **Gardé** : la couleur du rangement (celle du dossier, sinon du groupe) sur toute la ligne, dans la colonne et dans la grille
+  (`layerheads::fond_teinte`) ; les dossiers en titres, l'icône de leur couleur et le nom en demi-gras ; un dossier fermé qui montre les
+  clés de ses calques en traits fins (`timeline.rs`). Ci-dessous, points 4 et 5 de 179.1.
+- **Pas gardé** : la barre du calque au-dessus des lignes (point 2), les lignes qui ne montrent que l'exception (point 3) et les lignes
+  toutes pareilles à 28 points (point 1, et 179.4) : les colonnes et la ligne dépliée du calque courant de la partie 174 les remplacent.
+- Essais : `timeline_claire_tests.rs` garde la teinte et ajoute la couleur d'un calque rangé ; ceux de la barre et des exceptions sont
+  retirés ; les essais de la colonne sont ceux de la partie 174.
+
+Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
+quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
+reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout seul. Sur deux séries de pistes en maquettes (page
+« Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
+se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
+
+### 179.1 Ce qui a changé
+
+1. **Toutes les lignes ont la même hauteur, 28 points** (`layerheads::ROW_FINE` ; 22 avant la partie 168.4), calque courant et dossiers compris. Avant
+   (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
+   fait plus bouger la timeline. Le calque courant garde son fond d'accent.
+2. **La barre du calque**, au-dessus de la timeline, sur toute sa largeur (`App::barre_du_calque`, 24 points, elle ne défile pas avec
+   les calques ; les boutons de la timeline sont en haut de la colonne des calques depuis la partie 165.5) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
+   pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets, accroche à la caméra, aplat
+   et planche-mère, la couleur d'un calque Couleur unie, l'opacité et son losange de clés, le mode de fusion (précédent, liste,
+   suivant). Depuis la partie 165.3 du `main` (Anthony préfère la version texte), l'opacité s'y règle
+   par la barre « 100 % » et le mode par la liste « Normal ▾ » ; la miniature du calque, devant, ne fait que montrer son dessin. Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
+   Mêmes bulles, mêmes gestes qu'avant ; seule la place change.
+3. **Une ligne ne montre que l'exception** (`App::exceptions_du_calque`). L'œil n'apparaît que si le calque est caché, le cadenas
+   que s'il est verrouillé ; sous la souris, leur case montre l'icône en pâle et un clic agit comme avant. À droite du nom, en
+   petit : l'opacité si elle est sous 100 %, le mode s'il n'est pas Normal, et une icône pour le pochoir, la transparence préservée,
+   la pelure d'oignon du calque, la position verrouillée, l'accroche à la caméra (la bulle dit ce que c'est ; on le change dans la
+   barre du calque). L'interrupteur des effets reste là quand le calque en a.
+4. **La couleur du rangement sur toute la ligne** (`layerheads::fond_teinte`) : la couleur du dossier du calque, sinon celle de
+   son groupe (la règle de `folders::couleur_du_rangement`, déjà celle du filet de gauche), teinte légèrement la ligne, dans
+   l'en-tête et dans la grille. Un calque sans dossier ni groupe garde le gris.
+5. **Les dossiers servent de titres** : leur ligne est plus teintée, l'icône du dossier prend sa couleur, le nom est en demi-gras
+   suivi du nombre de ses calques ; triangle pour ouvrir ou fermer (inchangé). **Un dossier fermé montre les clés de ses calques**
+   en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
+   caché, plus pâle). Avant : une rangée sombre et vide.
+
+### 179.2 Choix faits sans Anthony (à confirmer)
+
+- Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
+  que disent les données ; la question est restée ouverte sur la page des pistes).
+- La miniature dans les clés du calque courant (13d, « dans une ligne complète ») ne se voit plus : elle demandait une ligne d'au
+  moins 40 points. Les clés elles-mêmes ne changent pas.
+- La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
+
+### 179.4 Après la fusion du `main` du 18 novembre (parties 165 à 167)
+
+Le `main` avait pris l'autre chemin : la ligne complète du calque courant « toujours visible, jamais repliée » (165.4), les boutons
+de la timeline en haut de la colonne sur deux lignes (165.5, 165.6), « 100 % » et « Normal ▾ » en texte (165.3). Sur deux maquettes
+côte à côte, Anthony a choisi la barre du calque (« B mais la taille d'une ligne de calque est plus épaisse »). Ce qui en résulte :
+
+1. Les lignes passent de 22 à 28 points.
+2. Les boutons de la timeline restent en haut de la colonne des calques, sur deux lignes (165.6) ; la barre du calque est
+   au-dessus de la timeline, où était l'ancienne barre de boutons.
+3. Le calque courant garde toujours sa ligne, même dans un groupe caché ou un dossier fermé (165.4), mais une ligne fine comme les
+   autres, à sa place : elle ne flotte plus au bord de la vue (`ligne_toujours_visible` retirée), la barre suffit.
+4. Essais adaptés : `multicalques_tests` prend le « 37 % » de la barre (la ligne fine le dit aussi, l'exception) ;
+   `avantapres165_tests` trouve le bord de la colonne par la barre du calque ; l'essai de la ligne flottante est retiré.
+
+### 179.3 Comment Anthony teste (sur une copie de projet)
+
+1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
+   calques, rien ne bouge.
+2. Au-dessus de la timeline, la barre du calque : tous ses réglages. Change l'opacité, le mode, le pochoir : la ligne du calque le dit
+   à droite de son nom. Remets tout à la normale : la ligne redevient nue.
+3. Survole l'œil ou le cadenas d'une ligne : l'icône apparaît en pâle ; clique pour cacher ou verrouiller ; elle reste alors
+   affichée.
+4. Les lignes des calques d'un dossier ont sa couleur ; un calque rangé dans un groupe de couleur, celle du groupe.
+5. Ferme un dossier : sa ligne montre les clés de ses calques en petit. Rouvre-le.
+6. Un dossier courant : la barre montre son œil, son cadenas, son opacité et le nombre de ses calques.
+7. Dans les trois thèmes : la teinte reste lisible, le texte de la barre aussi. Dis si la teinte est trop forte ou trop faible.
+
+## 180. Le décor 3D d'une séquence (2026-11-19, branche `decor-3d`)
+
+Première étape du moteur de prévisualisation qu'Anthony a choisi le 2026-11-19 (`docs/ESPACE3D.md`, partie 14) : un **décor
+3D** (un modèle glTF 2.0, `.glb` ou `.gltf`) pour une **séquence**. Tous les plans de la séquence le montrent, filmé par la
+caméra de chaque plan, dans la vue Espace 3D et dans l'image du plan (à l'écran et dans les exports). Format du projet
+inchangé (60). **Rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR) ; compilé et essayé sur le Mac seulement.
+
+### 180.1 Ce qui change pour Anthony
+
+1. **Fichier > Importer > « Décor 3D de la séquence (glTF, .glb)… »** (`fichier.importer_decor3d`, sans touche). Le modèle est
+   posé pour la séquence du plan courant : le bas de sa boîte sur le sol (`Monde::sol_y`), centré, tout entier derrière la feuille
+   (z ≤ 0). Les mètres du glTF sont gardés ; la barre d'état dit sa taille (« 12,40 × 6,10 × 30,00 m, 84 000 triangles », et
+   « très grand / très petit : vérifie son échelle » au-delà de 500 m ou sous 5 cm). Un seul décor par séquence : en importer un
+   autre le remplace. Une étape d'annulation.
+2. **Derrière toutes les cartes.** Dans l'image du plan, le décor est l'élément le plus bas, juste au-dessus du papier ; chaque
+   calque se pose dessus. Il est juste en profondeur en lui-même (ses murs se cachent entre eux), **pas avec les cartes** : une carte
+   posée « derrière » un mur du décor passe quand même devant. La profondeur partagée entre le décor et les cartes est une étape
+   suivante.
+3. **Filmé comme une carte en profondeur** : vu de l'œil de la caméra du plan, aligné sur la feuille ; le panoramique, la bascule,
+   le zoom et la rotation de la caméra s'appliquent ensuite à tout le plan. Le décor défile donc avec la même parallaxe que les
+   cartes quand la caméra se déplace. Un plan « en Espace 3D » (`repere_du_plan`) le pose comme ses cartes (dans le repère de la
+   caméra, vu de l'œil de référence).
+4. **L'aspect « low poly doux »** (Anthony, « Dans l'étape 1 ») : facettes (normales par face, d'origine) ou lissé ; lumière
+   hémisphère (ambiance froide du ciel par-dessus, chaude du sol par-dessous) et soleil chaud ; **ciel** en dégradé pastel derrière
+   le décor (il couvre toute l'image du plan : c'est le fond le plus bas) ; **brume** vers la couleur de l'horizon avec la distance ;
+   **ombres douces** du soleil (une carte d'ombres filtrée), dont la qualité suit le budget de l'ordinateur (sans, basses, hautes).
+   Ni réflexions ni matières PBR : couleur de base × texture de couleur de base.
+5. **Le panneau Espace 3D**, sous les réglages de la vue : « Décor 3D : <nom> », le fichier d'origine, ce qui a été allégé, la
+   position (m), la rotation autour de la verticale, l'échelle, le soleil (autour, hauteur), les cases Facettes, Ciel, Brume,
+   Ombres, la qualité des ombres sur cet ordinateur, « Remettre au sol », « Enlever ». Une retouche (un glisser, une saisie) est
+   **une** étape d'annulation, posée au lâcher. Sans décor : un bouton « Importer le décor 3D de la séquence… ».
+6. **« Enlever le décor 3D de la séquence »** (`decor3d.enlever`, Fichier > Importer quand la séquence en a un, et le panneau) :
+   une étape d'annulation.
+7. **La vue Espace 3D** (plein écran, à côté, vues multiples) le montre entre le quadrillage et les cartes, dessiné par la carte
+   graphique, lissé (4 échantillons), avec facettes, lumière, brume et ombres (le ciel n'y est pas : le fond et le quadrillage de
+   la vue restent visibles). Sans carte graphique (OpenGL de secours, `PELURE_COMPOSITION=processeur`), la vue montre la boîte du
+   décor en fil de fer et une légende.
+8. **« Ce décor est lourd »** (une fenêtre de FEANOR, pas une boîte du système), quand le décor dépasse ce que **cet ordinateur**
+   dessine sans ralentir : les mesures (fichier, triangles, sommets, matières, textures et leur poids en mémoire, plus grand côté,
+   ce que FEANOR n'utilise pas, le temps d'une image sur la carte), ce qui dépasse, et deux propositions :
+   - **Alléger (la forme ne change pas)** : textures au plus 4096, 2048 ou 1024 px (JPEG pour une image opaque, PNG quand l'alpha
+     sert) ; retirer ce que le rendu de FEANOR n'utilise pas (cartes de normales, de rugosité, d'occlusion, d'émission, coordonnées
+     en plus, tangentes, couleurs de sommets, animations, squelettes, morphoses : elles compteront pour les personnages, étape 2,
+     et le fichier d'origine les garde) ; sommets soudés, indices sur 16 bits quand ils tiennent.
+   - **Simplifier la géométrie (modifie la forme)** : 50 %, 25 %, ou « jusqu'à N triangles » (le budget de l'ordinateur).
+   L'avant → après (fichier, mémoire des textures, triangles) est **calculé avant d'appliquer**, sur un autre fil, avec sa barre
+   d'avancement ; changer un choix relance le calcul. Boutons : « Alléger et importer » (« Simplifier, alléger et importer »),
+   « Importer tel quel » (seulement si ce qui dépasse ne ralentit pas : un fichier lourd de cartes inutiles), « Annuler ». Un
+   résultat encore au-delà du budget ne s'importe pas (« allège ou simplifie davantage »). **Le fichier d'origine n'est jamais
+   modifié** : seule la copie gardée dans le projet est allégée ; `decors3d.json` le note (« textures 4096 → 2048 », « cartes de
+   normales… retirées », « simplifié : 6,2 M → 1,9 M triangles ») et le panneau le dit.
+9. **Ouvert sur un autre ordinateur** : un décor du projet qui dépasse le budget de celui-ci est **masqué** (il ne ralentit
+   rien), la barre d'état le dit, et la même fenêtre propose de l'alléger (« Simplifier, alléger et remplacer », une étape
+   d'annulation) ou de le laisser masqué sur cet ordinateur (« Le masquer sur cet ordinateur », pour la séance).
+10. **Préférences > Performance** : « Décor 3D sur cet ordinateur : jusqu'à N triangles, M Mo de textures (mesuré le …) » et
+   **Remesurer** (aussi `decor3d.remesurer` dans la palette, et le diagnostic des performances le refait).
+
+### 180.2 Comment c'est fait
+
+- **Lecteur et écrivain glTF faits main** (`decor3dgltf.rs`, aucune dépendance neuve, `Cargo.lock` inchangé) : le lecteur de
+  l'ancien repère 3D (`model3d.rs`, retiré le 2026-10-21), étendu aux normales (plates quand le fichier n'en a pas, comme le
+  veut la norme), à `TEXCOORD_0` (flottants ou entiers normalisés), à la couleur de base et à sa texture (PNG ou JPEG, dans le
+  fichier ou en `data:`, décodée par `image`), au mode `MASK` (le seuil d'alpha ; `BLEND` est lu opaque). Refusés avec un message
+  en français : Draco, maillage quantifié, accesseurs clairsemés, toute extension exigée sauf `KHR_materials_unlit` (une matière
+  « sans éclairage », que les modèles low poly exigent souvent : le décor l'éclaire quand même, c'est l'aspect choisi) et
+  `KHR_materials_emissive_strength` (l'émission, que FEANOR ne montre pas).
+- **Données étrangères, aucun plantage** : chaque nombre, décalage et pas d'un accesseur est vérifié en arithmétique bornée contre la
+  longueur réelle du tampon **avant** toute réservation de mémoire ; la taille d'une texture est lue dans son en-tête et bornée
+  avant décodage ; des **plafonds de sûreté** (`decor3d::PLAFONDS` : fichier 1 Go, 16 millions de sommets, 48 millions d'indices,
+  16 384 px de côté, 2 Go de textures décodées) arrêtent un fichier énorme avant l'épuisement de la mémoire ; lecture, mesure,
+  allègement et simplification tournent sur d'autres fils, dans `catch_unwind` (une panique devient un message). Côté carte, une
+  primitive est coupée en morceaux d'un million de triangles au plus et une texture plus grande que la carte ne l'accepte y est
+  réduite.
+- **Le projet** : `decors3d.json` à côté du manifeste (séquence, numéro, nom, fichier d'origine, position, rotation, échelle,
+  aspect, ce qui a été allégé) et `decors/<id>.glb` (sans changer `VERSION` ; liste des fichiers dans `project.rs`). Le modèle est
+  **toujours un `.glb` autonome** : un `.gltf` texte est empaqueté à l'import (ses tampons et ses images, d'à côté ou en `data:`,
+  recopiés dans un seul tampon, sans rien décoder) ; le projet ne dépend jamais du dossier d'origine. `decors/` est parmi les
+  dossiers jamais modifiés sur place (jalons par liens physiques) et dans `check_target`. Un modèle manquant ou illisible n'empêche
+  pas d'ouvrir : on le dit, l'entrée est gardée telle quelle, rien n'est effacé. Une version de FEANOR qui ne connaît pas ces
+  fichiers les laisse en place et montre les plans sans décor. Projet partagé : écrit par le porteur du jeton du montage.
+- **Annuler** : `Structure::decors3d` (les modèles sont des `Arc` : une étape ne les recopie pas).
+- **L'image du plan** : `decor3d::item` pose un élément `FondPart::Decor(DecorCle)` tout en bas (`render::plan_with_camera_layers`,
+  après le rang de départ du premier calque : un calque d'ajustement sur toute la pile le couvre). La clé contient tout (le modèle,
+  sa pose dans le repère où on le regarde, l'œil, la feuille, le cadre, l'aspect).
+  - **À l'écran avec la carte graphique** (`gpu.rs`, `place_decor`, `decor3dgpu.rs`) : le décor est **dessiné par la carte**, dans
+    une texture de la taille de la feuille, redessinée seulement quand la clé change (la caméra a bougé), avant la composition ;
+    maillages et textures envoyés **une fois**. Le processeur ne refait jamais l'image du décor pendant qu'on joue ou qu'on glisse.
+  - **Sans carte graphique** : `decor3d::montre` rend sur un autre fil (la moitié des cœurs) et l'écran garde le rendu d'avant en
+    attendant ; sur le fil de l'interface, jamais d'attente.
+  - **À l'export** : l'image exacte, tout de suite — par la carte graphique si FEANOR en a une (`decor3d::poser_carte` : la même
+    image qu'à l'écran, ombres comprises), sinon par le processeur (`decor3drendu.rs` : facettes, lumière, ciel, brume ; **pas
+    d'ombres** dans ce rendu de secours).
+  - L'export des **calques séparés** n'écrit pas le décor (ce n'est pas un calque) ; les vignettes d'une version rangée de plan non
+    plus.
+- **La vue Espace 3D** : une commande de dessin d'egui (`VueDecor`) qui dessine le décor dans ses propres cibles (lissage 4×,
+  profondeur 32 bits), une par vue (les vues multiples ne s'écrasent pas), puis le pose sur la vue en transparence.
+- **Le budget de la machine** (`decor3dbudget.rs`) : un **étalonnage** de quelques secondes, sur une grille d'essai texturée
+  (2 et 200 000 triangles), à la taille de la feuille, pour chaque qualité d'ombres, par la carte graphique (`rendre_hors_ecran`,
+  quatre images, la première exclue) et par le processeur ; on en tire une droite de coût par qualité (coût fixe + coût par
+  million de triangles). **La règle** : tout le décor d'une image d'écran (l'image du plan et la vue, qui peuvent se montrer
+  ensemble) tient en **4 ms de carte**, soit 2 ms par passe, moins 20 % de marge : un quart d'une image à 60 Hz, le reste pour
+  ce que FEANOR dessine déjà ; la lecture à 24 i/s et les vitesses J/K/L gardent leur marge. Triangles du budget = ce que la droite
+  « sans ombres » permet en 1,6 ms ; la qualité des ombres d'un décor = la meilleure dont la droite tient pour ses triangles (sur une
+  machine faible, les ombres tombent avant que rien ne ralentisse). Mémoire des textures : un quart de la mémoire vidéo connue,
+  sinon (mémoire partagée d'un Mac, graphisme intégré) un dixième de la mémoire vive. Sans carte : un rendu par le processeur en
+  250 ms au plus (sur un autre fil). Gardé dans `reglages.toml` (`budget_decor_3d`) avec **la clé de la machine** (carte, API,
+  pilote, processeur) : une autre carte ou un autre pilote, et il se remesure tout seul, au premier décor importé ou ouvert.
+  À l'import, le décor lui-même est **aussi chronométré** sur la carte (trois images à la taille de la feuille) avant d'être
+  accepté.
+- **Simplifier** (`decor3dsimplifier.rs`, fait main) : contraction de demi-arêtes guidée par les quadriques d'erreur (Garland et
+  Heckbert) : chaque sommet gardé est un sommet du modèle, avec ses vraies coordonnées de texture. Primitive par primitive (les
+  frontières de matière ne se traversent pas), sommets soudés par position et coordonnées de texture (une couture de texture est un
+  bord), **tout sommet de bord gardé** ; pas de face retournée, pas de maillage non variété ; normales refaites (lissées sous
+  50°, cassées au-delà). Sur un autre fil, avec avancement, annulable. Limites : la cible est approchée, pas toujours atteinte (un
+  maillage fait surtout de bords se simplifie peu).
+
+### 180.3 Les mesures sur le Mac de développement (à valider sur le PC d'Anthony)
+
+Machine : Apple M5 Pro (Metal), essai `decor3d_perf` compilé en `--release`, trois passages. Méthode : la grille d'essai texturée
+(1024² pour l'étalonnage, 2048² pour l'essai), feuille 3840 × 2160 (cadre 1920 × 1080), ciel et brume, huit images enchaînées
+dans une seule soumission à la carte (comme à l'écran, où elle ne s'arrête pas pour attendre le processeur), la plus rapide de
+trois séries ; un premier essai qui attendait la fin de chaque image comptait 1 à 2 ms d'attente du pilote par image et donnait
+des droites incohérentes (des ombres « moins chères » que sans ombres) : abandonné.
+
+| Triangles | Processeur (export de secours, 1920 × 1080) | Carte, feuille 3840 × 2160 : sans / ombres basses / hautes |
+|---|---|---|
+| 20 000 | 7 ms | 0,29 / 0,58 / 0,58 ms |
+| 180 000 | 21 ms | 0,37 / 0,64 / 0,88 ms |
+| 980 000 | 83 ms | 1,05 / 1,32 / 1,81 ms |
+| 2 000 000 | 181 ms | 1,78 / 2,32 / 2,58 ms |
+
+Droites mesurées par l'étalonnage (coût fixe + par million de triangles) : sans ombres 0,18 à 0,28 ms + 0,73 à 1,29 ms ; ombres
+basses 0,48 à 0,67 + 0,87 à 1,29 ; hautes 0,53 à 0,68 + 1,29 à 1,59 ; processeur 5,4 à 6,5 ms + 77 à 79 ms. **Budget tiré :
+jusqu'à 1,1 à 1,8 million de triangles** selon le passage (le bruit de mesure de la carte, d'un passage à l'autre, fait ±25 %),
+ombres hautes jusqu'à 0,7 à 0,8 million environ ; **512 Mo de textures** : sur ce Mac, FEANOR ne connaît ni la mémoire vidéo
+(mémoire partagée) ni la mémoire vive (`materiel::memoire` ne répond que sous Windows), il prend donc la valeur prudente de repli.
+Le processeur, lui, n'entre pas dans le budget de l'écran (il ne sert qu'à l'export sans carte et au secours) ; avec la carte,
+l'export passe par elle.
+
+La règle de 4 ms par image d'écran (2 ms par passe, moins 20 %) vient de la cadence de l'écran (16,7 ms à 60 Hz) et de la
+lecture (41,7 ms à 24 i/s) ; le temps d'image actuel de FEANOR (`perf_tests`) n'a **pas** été remesuré ici, à faire sur son PC
+avec la superposition « Performance » ouverte et un décor au budget.
+
+Ces budgets **doivent être validés sur le PC d'Anthony** (Windows, i7-10700K) : l'essai ignoré `decor3d_perf` imprime les temps
+(`cargo test --lib decor3d_perf -- --ignored --nocapture`), et FEANOR mesure de toute façon sa machine tout seul au premier décor.
+
+### 180.4 Essais (`decor3d_tests.rs`, 29 essais dont un ignoré)
+
+Lecture : un carré coloré (positions, normales, coordonnées, couleur), un carré texturé (une PNG de 2 × 2), normales plates sans
+normales, Draco / quantifié / clairsemé refusés avec leur message ; fichiers abîmés refusés proprement (nombres qui mentent,
+décalage géant, `.glb` tronqué à plusieurs endroits, image qui annonce 100 000 × 100 000 pixels, n'importe quoi) ; un `.gltf`
+texte empaqueté en `.glb` qui se relit pareil. Projet : enregistré à côté du manifeste et relu identique (les octets copiés,
+le manifeste inchangé), enlevé puis enregistré (le fichier part), sans fichier (aucun décor), modèle manquant (ouvert, entrée
+gardée). Séquence : deux plans de la séquence le voient, un plan d'une autre non, et il est l'élément le plus bas. Image : à
+l'export, le carré au centre, transparent autour, un calque dessiné passe dessus ; à l'écran sans carte, aucune attente et le rendu
+arrivé est montré. Aspect : ciel en haut, brume au loin (processeur), facettes ≠ lissé, ombres de la boîte et ciel sur la carte
+graphique (sauté sans carte). Budget : il suit l'échelle des mesures injectées, la qualité des ombres suit le budget, gardé et
+relu dans les réglages, une autre clé de machine fait remesurer. Allègement : textures réduites, carte de normales et animation
+retirées, mêmes triangles, positions, coordonnées et couleurs, fichier d'origine intact ; simplification d'une grille dense en
+deux matières vers 25 % (boîte, matières, coordonnées gardées, relue en `.glb`), annulable. Interface : sous le budget, importé
+sans fenêtre en une étape d'annulation (posé au sol, derrière la feuille) ; au-delà, la fenêtre et rien de posé ; un fichier
+refusé le dit ; les trois commandes ont leur bloc dans `keymap.toml`. Et, s'il y a une banque de modèles dans
+`assets/banque3d/` (le dossier était là, non suivi par git, dans le dossier de travail de cette branche : il ne vient pas de cette
+partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banque) ; c'est lui qui a montré `KHR_materials_unlit`.
+`espace3d_tests::no_object_reference_model_or_background_layer_command_remains` laisse passer « Importer le décor 3D… (glTF…) »
+(la décision du 2026-10-21 sur le glTF est levée pour le décor).
+
+### 180.5 Ce qui n'est pas fait (ou limité)
+
+- **La profondeur partagée** décor / cartes (une carte derrière un mur) : étape suivante. Les cartes ne portent ni ne reçoivent
+  d'ombres.
+- **Le quadrillage du sol de la vue ne se perd pas dans la brume** du décor (il est dessiné par egui, avant le décor) ; le ciel
+  n'est pas dans la vue Espace 3D.
+- Le rendu par le processeur (sans carte graphique) n'a **pas d'ombres** ; ni profondeur de champ ni occlusion ambiante (plus tard).
+- Pas de cartes de niveaux (mipmaps) des textures : une texture très fine, vue de loin, peut scintiller.
+- `BLEND` lu comme opaque, couleurs de sommets ignorées, `KHR_texture_transform` et l'échantillonneur du fichier ignorés
+  (toujours répété), une seule texture de couleur de base par matière.
+- Pendant un mouvement de caméra **sans carte graphique**, le décor suit avec un temps de retard (rendu sur un autre fil).
+- Les nœuds sont cuits dans les sommets : un décor fait d'un même objet répété (instances) devient plus gros une fois allégé ou
+  simplifié (l'avant → après le montre).
+- Copier ou dupliquer une séquence n'emporte pas son décor ; la séquence supprimée garde son entrée (elle revient avec Ctrl+Z).
+- Pas de manipulateur du décor dans la vue (seulement les champs chiffrés du panneau).
+- Les couleurs du ciel, de la brume et de l'ambiance sont des constantes (`decor3drendu.rs`), pas encore des réglages.
+- L'export des calques séparés n'écrit pas le décor.
+
+### 180.6 À tester (sa checklist)
+
+1. Un projet de copie. Fichier > Importer > « Décor 3D de la séquence (glTF, .glb)… » : un `.glb` low poly (des arbres, des
+   rochers). La barre d'état dit sa taille ; le décor est sur le sol, derrière la feuille. Tous les plans de la séquence le
+   montrent ; un plan d'une autre séquence non.
+2. Ses calques passent devant le décor ; le ciel pastel couvre le fond ; au loin, la brume.
+3. Bouge la caméra du plan (déplacement, avancée) : le décor défile avec la parallaxe des cartes ; panoramique, bascule, zoom,
+   rotation : il suit comme le reste. **Rien ne doit saccader** — lecture à 24 i/s, J/K/L, glisser la caméra : dis-le au moindre
+   ralenti.
+4. Vue Espace 3D (plein écran, à côté, vues multiples) : le décor entre le quadrillage et les cartes, en facettes, avec ses ombres.
+5. Panneau Espace 3D : déplace, tourne, mets à l'échelle le décor ; coche/décoche Facettes, Ciel, Brume, Ombres ; tourne le
+   soleil. Ctrl+Z défait une retouche d'un coup. « Remettre au sol », « Enlever », Ctrl+Z.
+6. Exporte une image et un film : le décor y est, comme à l'écran (ombres comprises).
+7. Enregistre, ferme, rouvre : le décor est là ; le dossier du projet a `decors3d.json` et `decors/<id>.glb`.
+8. Un `.gltf` texte avec ses images à côté : il s'importe, et le projet ne dépend plus du dossier d'origine.
+9. Un fichier lourd (textures 8K, millions de triangles) : « Ce décor est lourd », les mesures, Alléger (2048, 1024), Simplifier
+   (50 %, 25 %, jusqu'au budget), l'avant → après, puis « Simplifier, alléger et importer ». Vérifie que **le fichier d'origine
+   n'a pas changé** et que le panneau dit ce qui a été allégé.
+10. Un fichier Draco : refusé avec un message clair.
+11. Préférences > Performance : la ligne « Décor 3D sur cet ordinateur : jusqu'à N triangles, M Mo de textures » et **Remesurer** ;
+   note les chiffres de ton PC.
+12. En `PELURE_AFFICHAGE=opengl` : la vue montre la boîte du décor en fil de fer ; l'image du plan le montre (rendu un instant
+   après).
+
+## 181. La banque 3D dans la Bibliothèque, et un décor fait de plusieurs objets (2026-11-19, branche `banque-3d`)
+
+Suite de la partie 180 (branche `banque-3d`, partie de `decor-3d` 319e817). Le décor 3D d'une séquence devient une **liste
+d'objets** (pour que la banque ait un sens : dix arbres, une route, des maisons), et les 45 modèles low poly choisis par Anthony
+(Kenney, CC0, `assets/banque3d/`) arrivent dans la Bibliothèque, onglet **3D**. En cours de route, deux demandes d'Anthony : une
+**origine** modifiable par objet, et **« Aimanté au sol »**. Format du projet inchangé (60) ; `decors3d.json` passe à sa
+version 2. **Rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR) ; compilé et essayé sur le Mac seulement.
+
+### 181.1 Ce qui change pour Anthony
+
+1. **Importer ajoute un objet** : Fichier > Importer > « Objet 3D pour le décor de la séquence (glTF, .glb)… »
+   (`fichier.importer_decor3d`) ne remplace plus le décor, il y ajoute un objet. Chaque objet a son modèle, son nom, sa place
+   (position, rotation autour de la verticale, échelle), son **origine** et sa case « Aimanté au sol ». Tous les objets d'une
+   séquence partagent l'aspect (facettes, ciel, brume, ombres, soleil) : une lumière, un ciel. Ils sont justes en profondeur
+   entre eux (un arbre derrière une maison est caché par elle) ; toujours derrière les cartes, comme à la partie 180.
+2. **Où il arrive** : son origine sur le sol, **devant la caméra du plan** (en face de son œil, le devant de l'objet contre la
+   feuille) ; lâché sur la vue Espace 3D, **au point du sol sous le pointeur**. Aimanté au sol d'office.
+3. **Le panneau Espace 3D**, « Décor 3D de la séquence (N objets) » : l'aspect et le poids de tout le décor (« 3 412 triangles en
+   tout · sur cet ordinateur : ombres douces (hautes) (jusqu'à …) ») ; **la liste des objets** (clic : le choisir ; un objet masqué
+   sur cet ordinateur le dit) ; **Ajouter…**, **Dupliquer** (une copie du même modèle, posée juste à sa droite), **Enlever** ;
+   puis les champs de l'objet choisi : **Nom** (renommer), fichier d'origine, ce qui a été allégé, **Position (m)** (celle de
+   l'origine ; la hauteur grisée avec « aimanté » quand la case est cochée), **Rotation (°)** et **Échelle** (autour de
+   l'origine), **Origine** (x, y, z dans le repère du modèle, et le menu ⌖ : « Au sol (centre du dessous) », « Au centre de la
+   boîte », quatre coins du bas, « Le point (0, 0, 0) du fichier »), **Aimanté au sol**, **Recentrer l'origine** (au milieu en
+   largeur et en profondeur, à sa hauteur : l'objet tourne alors sur lui-même), **Remettre au sol** (rotation et échelle
+   d'origine, l'origine au centre du dessous, posé au même endroit). Changer l'origine **ne bouge jamais l'objet** : sa position
+   est recalculée pour que rien ne se déplace (comme « origine vers la géométrie » d'un outil 3D). Une retouche (un glisser, une
+   saisie, un nom tapé) est une étape d'annulation, posée au lâcher ; Ajouter, Dupliquer, Enlever : une étape chacun.
+4. **Aimanté au sol** (Anthony : « Tout objet peut être aimanté dans la scène 3D pour se fixer directement au sol sans
+   pénétration ») : la hauteur de l'objet est calculée, il repose sur le sol ou sur le dessus des objets sous lui (un banc sur une
+   dalle de route, un arbre sur un morceau de terrain), sans y entrer, à 1 mm près. Recalculé à chaque retouche (déplacer, tourner,
+   mettre à l'échelle, changer l'origine, ajouter, dupliquer, enlever un objet : ceux qui reposaient dessus redescendent), jamais
+   à chaque image. **Décocher le laisse exactement où l'aimant l'avait mis** : la hauteur calculée est celle que le projet
+   garde, le champ Y se dégrise sur cette valeur ; une étape d'annulation ; elle reste après enregistrement et réouverture.
+5. **Ce qu'il fait quand plusieurs objets se touchent** : un objet prend, parmi les hauteurs où il ne rentre dans rien, **la plus
+   proche de là où il est** — glisser une dalle sous un banc fait monter le banc ; un feu de camp glissé sous la ramure d'un arbre
+   reste au sol ; sous un pont, un objet qui y était reste dessous. Les objets se posent les plus bas d'abord, à égalité la plus
+   grande empreinte (le terrain avant l'arbre, la dalle avant le banc) : pas de boucle, deux calculs de suite donnent la même chose.
+6. **La Bibliothèque a deux onglets** : « Fichiers » (l'explorateur de toujours) et **« 3D »** : les 45 modèles en vignettes,
+   par famille (Nature 21, Routes 8, Ville rétro 7, Banlieue 6, Commerces 3, repliables), une recherche (nom, famille, kit), une
+   bulle (nom, triangles, kit, « CC0 · Kenney »). **Un clic** pose le modèle dans le décor de la séquence du plan courant, devant
+   la caméra ; **le glisser** sur le dessin (devant la caméra) ou sur la vue Espace 3D (au point du sol). Les aperçus se décodent
+   sur un autre fil à la première ouverture de l'onglet.
+7. **Le même chemin qu'un fichier**, et le budget vaut pour **tout le décor** de la séquence (la somme de ses objets : chaque
+   objet compte ses triangles, un modèle partagé ses textures une fois) : un objet qui ferait dépasser ce que l'ordinateur dessine
+   sans ralentir ouvre « Ce décor est lourd » pour lui (alléger, simplifier jusqu'à ce qui reste du budget ; la fenêtre dit ce que
+   pèse déjà la séquence) ; une séquence déjà au bout du budget **refuse** l'objet, avec un message (« enlève ou simplifie un objet
+   avant d'en ajouter un autre »). Jamais de ralentissement.
+8. **À propos** : « Banque 3D : modèles de Kenney (www.kenney.nl), licence CC0 (domaine public) » (un clic ouvre le site). La
+   licence ne demande pas de crédit ; FEANOR le donne (`assets/banque3d/LICENCES.md`).
+9. « Enlever le décor 3D de la séquence » (`decor3d.enlever`) enlève tous ses objets (une étape).
+
+### 181.2 Comment c'est fait
+
+- **`decor3d.rs`** : `Decor3d { uid, aspect, objets: Vec<Objet3d> }` ; `Objet3d { id, nom, source, allege, place: Place3d,
+  origine, aimante, modele: Arc<Modele3d> }` ; la matrice d'un objet est `place.matrice() × translation(−origine)` (la position est
+  celle de l'origine, rotation et échelle autour d'elle) ; `changer_origine` recalcule la position. `Modele3d` porte son
+  **empreinte** (16 chiffres hexadécimaux du SHA-256 de ses octets, `sha256.rs`, stable d'une machine à l'autre) et sa boîte
+  (calculée une fois). Un modèle de même empreinte déjà dans le projet est **repris** (`Decors3d::modele_d_empreinte`) : un seul
+  `Arc`, un seul envoi à la carte. L'empreinte se calcule sur le fil de la lecture ou de l'allègement, jamais sur celui de
+  l'interface.
+- **Le fichier** : `decors3d.json` version 2 (`VERSION_FICHIER`), par séquence `{ sequence, aspect, objets: [{ id, nom,
+  fichier_d_origine, fichier, position, rotation_y, echelle, origine, aimante, allege }] }`, les modèles dans
+  `decors/<empreinte>.glb` : **dix objets du même contenu, un fichier** ; à la lecture, un fichier se lit une fois et ses objets
+  partagent le modèle. Une entrée de version 1 (partie 180) se lit comme un objet : origine au centre du dessous de sa boîte, la
+  position corrigée pour que la matrice soit **la même** (au 1e-5 près), pas aimanté (Anthony l'avait placé à la main). Au prochain
+  enregistrement, le fichier passe en version 2, le modèle est réécrit sous son empreinte et `decors/<id>.glb`, plus cité, est
+  effacé par le ménage (qui n'efface que les noms que FEANOR écrit : un numéro ou une empreinte). Un objet illisible est gardé tel
+  quel (un objet à la fois, les autres de la séquence se montrent) et le ménage n'efface alors rien. `project::VERSION` ne change
+  pas ; un FEANOR de la partie 180 voit la version 2 « plus récente », montre les plans sans décor et n'efface rien.
+- **Le rendu** : toujours **un** élément de décor par plan (`render::FondPart::Decor`) ; sa clé (`DecorCle`) porte le décor
+  (`uid`, qui nomme la texture de la carte : un objet qui bouge la redessine, il n'en crée pas), l'empreinte des objets vus et de
+  leurs matrices (`contenu`), le repère du plan en Espace 3D, l'œil, la feuille, l'aspect ; `objets_de` rend les objets d'une clé
+  (rien si le décor a changé depuis). Carte graphique : un `Dessin` par objet, le même `id` pour les objets d'un même modèle
+  (`decor3dgpu` l'envoie une fois ; une passe ne renvoie plus de la carte un modèle qu'elle dessine, même au-delà de huit) ;
+  `gpu.rs` (`DecorJob.dessins`), la vue Espace 3D, l'export par la carte. Processeur : `decor3drendu::rendre_objets`, tous les
+  objets dans le même tampon de profondeur. La qualité des ombres suit les triangles de tout le décor (`decor3d::qualite`).
+- **Le budget** : `Decor3d::poids`, `decor3d::verdict_sequence` (la somme), `decor3d::sequence_pleine` (le refus) ; la fenêtre
+  « Ce décor est lourd » garde ce que pèse déjà la séquence (`Lourd::deja`), simplifie « jusqu'à » ce qui en reste, et ne pose
+  qu'un résultat qui tient avec les autres. À l'ouverture sur un autre ordinateur, chaque modèle est jugé avec ce qui le précède
+  dans sa séquence ; celui qui fait dépasser est masqué (« Le masquer sur cet ordinateur » / « Simplifier, alléger et
+  remplacer », qui remplace le modèle dans tous les objets qui le montrent).
+- **L'import** (`decor3dui.rs`) : un seul chemin, `App::decor3d_lancer(cible, lire)` — un fichier (`decor3d::analyser`) ou un
+  modèle de la banque (`banque3d::analyser`) se lit sur un autre fil, le temps d'une image se mesure sur la carte, puis
+  `decor3d_juger` : posé (`decor3d_poser`), fenêtre, ou refus. La séquence visée est prise au début (`Cible3d`).
+- **L'aimant** (`decor3daimant.rs`) : le dessous de l'objet est le plus bas de ses sommets (la rotation n'est qu'autour de la
+  verticale et l'échelle uniforme : c'est le bas de la boîte du modèle, à l'échelle) ; neuf verticales à travers son empreinte
+  (coins, milieux des bords, centre, un peu rentrés) traversent les **triangles** des autres objets, dans leur propre repère (où
+  la verticale reste verticale : un point dans un triangle, à plat) ; une hauteur convient si aucune surface ne passe dans
+  l'épaisseur de l'objet sur aucune verticale et s'il n'est pas enfermé dans un autre (nombre pair de traversées au-dessus de son
+  milieu) ; parmi le sol et les surfaces traversées, la plus proche de là où il est. Une verticale hors de la boîte d'un objet ne
+  regarde pas ses triangles ; un objet de plus de 150 000 triangles (`TRIANGLES_EXACTS`) sert d'appui par sa boîte, et la barre
+  d'état le dit.
+- **La banque** (`banque3d.rs`, `banque3dfichiers.rs`, `banque3dui.rs`) : **rangée dans le programme** (`include_bytes!` de
+  chaque `.glb` et `.png` cité par `catalogue.json`, `include_str!` du catalogue). La bibliothèque de bruitages, à qui la consigne
+  renvoyait, ne livre aucun son : elle liste les dossiers d'Anthony (`bruitages.rs`). Ce que FEANOR livre avec lui (polices,
+  licence de ffmpeg, page de relecture) est déjà rangé ainsi : un seul `feanor.exe`, rien qui puisse manquer ou être d'une autre
+  version, la banque présente même lancée depuis une clé. Le prix : **1 278 471 octets** de données (1,22 Mio) ; mesuré
+  sur l'exécutable du Mac (version optimisée), 51 264 920 → 52 808 616 octets, **+1,47 Mio** (les données et le code de la partie). Le catalogue (`feanor-banque3d` v1) est vérifié : un autre format ou une version plus récente est refusé.
+  L'onglet est dans `BiblioUi` (`onglet`, `banque` : partagés entre les onglets de projet, comme le reste de la Bibliothèque) ;
+  l'objet choisi est dans `Etat3d::choisi` (par projet, déjà classé `decor3d`). Aucun champ neuf dans `App`.
+
+### 181.3 Essais
+
+`decor3d_tests` (mis à jour, et 19 de plus) : deux fichiers importés font deux objets, qui partagent le modèle, et Ctrl+Z
+retire le dernier puis le premier ; Dupliquer (à côté, le même modèle, la copie choisie) et Enlever, une étape chacun ; dix objets du
+même contenu font **un** fichier, relus identiques et partageant un modèle, rien de plus au second enregistrement ; un
+`decors3d.json` de la partie 180 se lit comme un objet à la même matrice, se réécrit en version 2 sous l'empreinte, l'ancien fichier
+effacé ; le budget de la somme (`verdict_sequence`, textures d'un modèle partagé comptées une fois, `sequence_pleine`, le poids d'un
+décor) ; par l'interface, le second carré ouvre « Ce décor est lourd » (budget de 3 triangles) ou est refusé (budget de 2) ;
+l'image exportée d'un plan à deux carrés les montre tous deux (rendu par le processeur), une seule entrée de décor dans le plan,
+une autre clé quand un objet bouge et la même texture ; sur la carte graphique, les deux carrés d'un même modèle et le poids d'un
+seul modèle dans la carte (sauté sans carte) ; rotation et échelle autour de l'origine ; changer l'origine ne bouge aucun sommet ;
+l'aimant : le plus bas sommet sur le sol (origine loin au-dessus), une boîte penchée dans son modèle puis tournée de 30° et agrandie
+touche le sol sans y entrer, un petit objet sur un grand repose sur son dessus, un banc qui dépasse d'une dalle reste dessus,
+l'objet du dessous qui monte ou s'en va fait suivre celui du dessus, décoché il garde sa hauteur, deux objets au même endroit
+s'empilent dans un ordre fixe et trois recalculs ne changent rien, un feu de camp sous une ramure reste au sol, un objet de
+180 000 triangles sert d'appui par sa boîte (et le dit) en moins de 100 ms ; **décocher « Aimanté »** : coché il repose sur le sol,
+décoché sa place ne change pas (une étape), enregistré et relu elle ne change pas, Ctrl+Z le rend aimanté à la même place.
+`banque3d_tests` (6) : le catalogue rangé est celui du disque, ses 45 modèles et 45 aperçus sont rangés identiques et se lisent
+(lecteur glTF de FEANOR, triangles du catalogue ; PNG), rien de plus ; un autre format ou une version plus récente refusé ; 45
+modèles en 5 familles dans l'ordre (21, 8, 7, 6, 3), la recherche, la bulle ; chaque modèle s'analyse comme un fichier importé ; un
+modèle de la banque se pose (nom lisible, « Banque 3D », aimanté, sur le sol, une étape), au point lâché, et au-delà du budget
+ouvre « Ce décor est lourd » ; le crédit Kenney est dans « À propos ».
+
+### 181.4 Ce qui n'est pas fait (ou limité)
+
+- Pas de manipulateur des objets dans la vue Espace 3D (ni pour l'origine : le chantier de l'origine des calques l'ajoutera,
+  partagé) ; l'objet choisi a seulement sa boîte en clair dans la vue quand le décor en a plusieurs. Pas de clic dans la vue pour
+  choisir un objet.
+- Sur le dessin, un modèle lâché se pose **devant la caméra**, pas au point lâché (seule la vue Espace 3D, une vue, sait le point
+  du sol sous le pointeur).
+- L'aimant échantillonne neuf verticales : une pointe fine d'un objet du dessous, entre deux verticales, peut entrer un peu dans
+  l'objet du dessus ; un dessous d'objet qui n'est pas plat peut flotter un peu au-dessus d'un appui irrégulier. Un objet ouvert
+  (une surface sans épaisseur) peut tromper le test « enfermé dedans ». Le sol de l'aimant est celui du cadre : changer la taille du
+  cadre ne repose pas les objets (une retouche le fait).
+- Copier, coller, glisser un objet d'une séquence à l'autre : pas encore. Copier ou dupliquer une séquence n'emporte toujours pas
+  son décor.
+- Pas de vignette de la banque dans les vignettes des plans (le décor y est, comme partie 180).
+- La recherche de la banque porte sur les noms anglais des fichiers (« tree », « road »), les familles et les kits.
+
+### 181.5 À tester (sa checklist)
+
+1. Un projet de copie. Bibliothèque > **3D** : les cinq familles, les vignettes, la recherche (« tree », « road »), la bulle.
+2. Clique un arbre : il apparaît dans le décor de la séquence, sur le sol, devant la caméra ; la barre d'état dit sa taille et
+   « N objets ». Clique-le encore deux fois, puis une route : quatre objets. Ctrl+Z les retire un par un.
+3. Glisse une maison sur la vue Espace 3D : elle se pose au point du sol sous le pointeur. Glisse-la sur le dessin : devant la
+   caméra. Lâchée ailleurs : la barre d'état le dit.
+4. Panneau Espace 3D : la liste ; choisis un objet, renomme-le, déplace-le, tourne-le, change son échelle ; **Dupliquer**,
+   **Enlever** ; Ctrl+Z à chaque fois (une étape par geste).
+5. **Origine** : menu ⌖ « Au centre de la boîte », puis tourne : l'objet tourne sur lui-même ; « Coin bas, gauche, arrière »,
+   puis tourne : autour du coin. Changer l'origine ne bouge jamais l'objet. « Recentrer l'origine », « Remettre au sol ».
+6. **Aimanté au sol** : la hauteur grisée « aimanté ». Pose une dalle de route, puis un banc dessus (glisse le banc sur la dalle) :
+   il monte dessus sans y entrer ; glisse la dalle ailleurs : le banc redescend. Un arbre sur un morceau de terrain. Un feu de camp
+   sous un arbre : il reste au sol. **Décoche « Aimanté »** sur le banc posé sur la dalle : il ne bouge pas, le champ Y montre sa
+   hauteur ; enregistre, rouvre : toujours là. Déplace-le : il garde sa hauteur.
+7. Tous les objets se cachent entre eux comme il faut (une maison devant un arbre), dans la vue Espace 3D et dans l'image du
+   plan ; exporte une image : pareil.
+8. Enregistre, rouvre : tout est là ; dans `decors/`, **un seul fichier** pour les trois arbres pareils.
+9. Un projet de la partie 180 (un décor importé avant) : il s'ouvre, le décor est **exactement à la même place**, comme un objet
+   (pas aimanté) ; enregistre : `decors3d.json` passe en version 2.
+10. Le budget : pose beaucoup de modèles (ou un gros fichier puis des modèles de la banque) jusqu'à la limite de ton PC :
+   « Ce décor est lourd » pour l'objet de trop, puis le refus quand la séquence est pleine. **Rien ne doit ralentir** (lecture à
+   24 i/s, J/K/L, glisser la caméra, glisser un champ de position d'un objet aimanté).
+11. À propos : la ligne « Banque 3D : modèles de Kenney… », un clic ouvre le site.
+12. La taille de `feanor.exe` : environ 1,5 Mo de plus que la partie 180 (mesuré sur le Mac : +1,47 Mio).
+
+## 182. L'origine d'un calque, son vrai pivot (2026-11-19, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**)
+
+Chaque calque dessiné a maintenant **une origine** : un point de son dessin que l'on place, et autour duquel le calque se déplace,
+s'agrandit, s'étire et tourne, à sa pose fixe comme à chacune de ses clés de position. Une tête tourne autour du cou ; un
+personnage dont l'origine est aux pieds se pose sur un chemin par les pieds, et dans l'Espace 3D, sur le sol. Sans origine
+choisie, l'origine est le centre de la feuille : **tout est comme avant, au bit près**. Compilé et essayé sur le Mac seulement ;
+**rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 182.1 Ce qui change pour Anthony
+
+1. **Outil Transformer** : l'origine du calque courant est toujours là, un petit cercle à croix (comme le pivot de la boîte de la
+   Sélection). **La tirer déplace l'origine, jamais le dessin** ; Maj l'aimante au centre, aux coins et aux milieux des côtés de
+   la boîte du dessin. Le lâcher est une étape d'annulation (« Déplacer l'origine »). Sa bulle le dit, le pointeur devient une croix.
+2. **Avec une origine**, la poignée ronde tourne le calque autour d'elle, et un coin ou un côté tiré avec le point fixe « au
+   centre » (réglage « Point fixe », ou Ctrl) garde l'origine en place. Sans origine, la poignée ronde et le point fixe au centre
+   restent ceux d'avant (le centre de la boîte). La rotation prise hors d'un coin ne change pas (centre ou coin opposé).
+3. **Les champs de l'outil** : sous x, y, largeur, hauteur et angle, une ligne « Origine » : x et y de l'origine en pixels du dessin
+   (les changer ne déplace pas le dessin), et le menu **« Origine ▾ »** : « Au centre du dessin », « En bas au centre », « En haut à
+   gauche », « En haut à droite », « En bas à gauche », « En bas à droite », « Ici » (le point de la feuille sous le dernier clic ou
+   le pointeur), « Au centre de la feuille » (plus d'origine à soi). Les points du dessin se lisent sur la boîte de ce qui est
+   dessiné à l'image courante. Chaque choix est une étape d'annulation.
+4. **Le menu du calque** : Plus > **Origine**, le même menu. Les huit commandes sont dans la palette (Ctrl+K), sans touche par défaut
+   (`origine.centre_dessin`, `origine.bas_centre`, `origine.haut_gauche`, `origine.haut_droite`, `origine.bas_gauche`,
+   `origine.bas_droite`, `origine.ici`, `origine.feuille`), à assigner au clic droit comme les autres.
+5. **Les clés** : entre deux clés, le calque tourne et grandit autour de son origine (elle reste immobile si seules l'échelle ou
+   l'angle changent entre les deux clés). Déplacer l'origine d'un calque animé recalcule sa pose fixe et chacune de ses clés pour
+   que **rien ne bouge à aucune clé** ; entre deux clés, le mouvement tourne désormais autour de la nouvelle origine.
+6. **Trajectoire** : « Ce qui suit le chemin » propose en tête **« L'origine du calque »** : c'est elle qui est posée sur le chemin,
+   et avec « Le dessin tourne avec le chemin », le dessin tourne autour d'elle (les copies des clés d'images aussi). **Une
+   trajectoire neuve part avec ce choix** ; le dernier ancrage choisi dans la liste est proposé à la suivante. Une trajectoire d'un
+   projet d'avant garde le sien (« Là où part le trait » quand le fichier n'en dit rien). Déplacer l'origine d'un calque dont
+   l'origine suit le chemin déplace le chemin avec elle : le dessin ne bouge pas, et un nouveau calcul redonne les mêmes clés.
+7. **Espace 3D** : la carte choisie montre son origine ; **le manipulateur tourne et met à l'échelle autour d'elle** (plusieurs
+   cartes : autour de la moyenne de leurs origines ; aucune origine choisie : le centre de la boîte, comme avant). « Position » du
+   panneau Précis est la place de l'origine dans l'espace, et la rotation saisie, comme « Comment il est posé », tourne la carte
+   autour d'elle. Une trajectoire tracée dans la vue pose l'origine de la carte sur le chemin (case **« L'origine du calque suit
+   le chemin »** dans les réglages de l'outil ; décochée, le déplacement relatif d'avant). La carte n'y tourne pas avec le chemin :
+   vue par la tranche, elle disparaîtrait.
+8. **« Aimanté au sol »** (panneau de la carte dans l'Espace 3D, sous « Taille dans le cadre » ; menu du calque, Plus > Réglages
+   avancés ; `calque.aimante_au_sol`, sans touche) : l'origine de la carte repose sur le sol de l'Espace 3D, ou sur le dessus
+   d'un objet du décor 3D de la séquence (partie 181) — de ses appuis possibles, le plus proche de là où elle est : une carte
+   glissée sur une dalle y monte, une carte sous la ramure d'un arbre reste au sol —, à sa pose fixe et à chacune de ses clés.
+   Un objet du décor ajouté, déplacé, tourné, agrandi, allégé ou enlevé repose les cartes aimantées de la séquence, dans la même
+   étape d'annulation que la retouche. Coché, la hauteur (Y de « Position », y de l'outil Transformer) est grisée : l'aimant la tient. L'aimant
+   est refait après chaque geste (manipulateur, champs, réglette de distance, taille, clé posée, trajectoire, origine déplacée,
+   profondeur), jamais pendant la lecture. **Décoché, la carte reste exactement où l'aimant l'avait posée**, maintenant et après
+   enregistrement ; la hauteur redevient réglable. Cocher et décocher sont chacun une étape d'annulation. Un calque accroché à la
+   caméra ne se pose pas au sol (l'entrée le dit).
+
+### 182.2 Comment c'est fait
+
+- **Les données** (`document.rs`) : `Layer::origine: Option<[f32; 2]>` (pixels du dessin : l'origine suit le dessin ; rien = le
+  centre de la feuille), `Layer::aimante_au_sol`. `Layer::pivot(centre)` donne le pivot effectif, `Layer::ecart_origine` son écart
+  au centre, `Layer::affine_at` l'affinité du dessin vers la feuille à une image.
+- **L'origine est le pivot** : la pose est l'affinité `affine(origine)` (étirement, échelle, rotation autour de l'origine, puis le
+  décalage). Tout ce qui fabrique une image (écran, carte graphique, vignettes, exports, pelure d'oignon, calques d'effet, vue
+  réduite, vue de dessus) passe par `Layer::pose_seen`, qui **rapporte la pose au centre de la feuille**
+  (`LayerTransform::au_centre`, x' = x + e − A·e, la même affinité) : les éléments de plan gardent leur sens (`affine(centre)`) et
+  le multiplan, l'accroche à la caméra, la profondeur s'appliquent comme avant. Écart nul : la pose elle-même, au bit près.
+  `CameraSeen` porte le centre de la feuille. Les gestes (outil Transformer, retourner, miroir des calques choisis, trajectoire)
+  travaillent autour de `Layer::pivot` ; l'accroche à la caméra repasse par le centre (`accrocher`, `decrocher`,
+  `poser_du_geste`). Deux plans réunis : les poses du second sont rendues à l'origine des calques du premier.
+- **Les cartes** (`espace3d.rs`, `docs/ESPACE3D.md` partie 15) : `Monde::card_xf_o` place l'origine, `card_from_xf_libre_o` en est
+  l'inverse exacte ; `Monde::carte`, `place_dans`, l'ordre par distance, la carte inclinée de la feuille, la trajectoire dans
+  l'espace passent par elles.
+- **Déplacer l'origine** (`origine::deplacer_origine`) : à plat, xy2 = xy1 + A·Δ − Δ à la pose fixe et à chaque clé ; une clé
+  inclinée garde son placement 3D (profondeur et échelle recalculées) ; le chemin d'une trajectoire ancrée à l'origine suit
+  l'origine (sur la feuille : sous la pose du départ ; dans l'espace : le plan porteur suit l'origine de la carte). L'outil repose
+  l'origine depuis le calque du début du geste à chaque pas (rien ne s'accumule) et refait l'aimant au lâcher.
+- **L'ancrage** `Ancre::Origine` (`trajectoire.rs`) : `pose_tournee` tourne autour de l'origine du calque (le pivot passé est
+  `Layer::pivot`) ; avec l'origine pour point d'ancrage, rien n'est à compenser. `assainie` le garde dans l'espace (« le dessin
+  tourne » y reste refusé).
+- **L'aimant** (`origine.rs`) : `hauteur_du_sol_sous(monde, decor, x, z, ici)` est la seule lecture du sol : le plan
+  `Monde::sol_y`, ou le dessus d'un objet du décor de la séquence (`decor3daimant::hauteur_sous`, la règle des objets aimantés
+  appliquée à un point : pas dedans un objet, le niveau le plus proche de `ici`) ; `aimanter_au_sol` ne change que `y` de la pose
+  fixe et de chaque clé ; `App::reposer_les_cartes_aimantees(seq)` après toute retouche du décor (la retouche en cours garde
+  l'instantané du projet entier : l'annuler ramène le décor et les cartes).
+- **Le format 61** (`project.rs`) : `origine` (absente sans origine) et `aimante_au_sol` (absent s'il est faux) d'un calque,
+  l'ancrage `"Origine"` d'une trajectoire. Une version précédente lirait la pose autour du centre de la feuille (un autre film) :
+  elle refuse. Un projet de version 60 ou moins s'ouvre tel quel, sans origine ni aimant, avec les mêmes images. Une origine
+  abîmée se relit au centre de la feuille. Dupliquer, copier-coller (même d'un projet d'une autre taille : l'origine suit le
+  dessin, `adaptation.rs`), les projets partagés, les calques de toute la scène emportent l'origine ; un calque de couleur a celle
+  de son trait ; l'exemplaire d'une planche-mère garde la sienne.
+
+### 182.3 Les essais
+
+`src/origine_tests.rs` (16) : sans origine, la pose vue, l'élément du plan et sa matrice sont ceux d'avant au bit près (poses
+variées, multiplan) et une carte se place comme avant ; déplacer l'origine garde l'affinité de la pose fixe et de chaque clé ; une
+carte inclinée garde ses coins dans l'espace et son point sur la feuille (aller-retour exact du placement) ; entre deux clés de
+rotation, l'origine reste immobile ; les origines toutes faites lues sur la boîte du dessin, « Ici », « Au centre de la feuille »,
+l'aimantation de Maj, les commandes ; une étape d'annulation qui s'annule ; la poignée ronde et le point fixe au centre ; l'ancrage
+à l'origine sur la feuille (tourné ou non) et un ancrage d'avant qui reste juste ; une origine déplacée sous une trajectoire ;
+l'origine sur le chemin dans l'espace ; le pivot du manipulateur ; l'aimant (pose fixe et clés au sol, décoché : affinités et cartes
+identiques à chaque clé, puis après enregistrement), l'aimant après un geste et une origine déplacée ; l'enregistrement, un projet
+60, un projet 62 refusé ; la copie, la couleur et la planche-mère ; une trajectoire neuve ancrée à l'origine. Les essais d'avant
+des trajectoires gardent le déplacement relatif (`ancre_propose`), et ceux du format passent à 61.
+
+### 182.4 À tester (sa checklist)
+
+1. Transformer sur un personnage : le cercle à croix au centre de la feuille. Le tirer aux pieds (Maj : il s'accroche au milieu
+   du bas de la boîte) : rien ne bouge. Tourner par la poignée ronde : il tourne autour des pieds. Ctrl+Z : l'origine revient.
+2. Deux clés d'angle sur une tête, origine au cou : entre les clés, le cou ne bouge pas.
+3. Menu du calque > Plus > Origine > « En bas au centre », puis « Au centre de la feuille » : le dessin ne bouge jamais.
+4. Trajectoire neuve sur ce personnage : les pieds sur le chemin ; « Le dessin tourne avec le chemin » : il tourne autour des pieds.
+   Déplacer l'origine ensuite : rien ne bouge, le chemin suit.
+5. Espace 3D : choisir la carte, l'origine s'y voit ; tourner avec le manipulateur : autour d'elle. Cocher « Aimanté au sol » : les
+   pieds sur le sol, à chaque clé ; le Y de Position est grisé. Décocher : rien ne bouge ; enregistrer, rouvrir : toujours là.
+   Avec un décor 3D : glisser une dalle de la banque sous la carte aimantée, elle monte dessus ; monter la dalle (champ Y),
+   elle suit ; annuler, les deux reviennent ; une carte sous un arbre reste au sol.
+6. Un projet d'avant : les mêmes images, les trajectoires gardent leur ancrage.
+
+
+## 183. La profondeur partagée entre le décor 3D et les cartes (2026-11-19, branche `profondeur-partagee` partie de `banque-3d` d3b7ab0, format 61 inchangé)
+
+Jusqu'ici le décor 3D d'une séquence (parties 180 à 182) était toujours derrière toutes les cartes : un personnage posé derrière
+un arbre passait quand même devant lui. Maintenant **les cartes et les objets du décor se cachent selon leur vraie distance** à
+la caméra du plan : un personnage passe derrière un arbre et devant un banc. Dans l'image du plan à l'écran, dans les exports,
+dans le rendu de secours sans carte graphique, et dans la vue Espace 3D. Format du projet inchangé (61). Compilé et essayé sur
+le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 183.1 Ce qui change pour Anthony
+
+1. **Une carte derrière un objet du décor est cachée par lui**, là où il la couvre ; devant, elle le couvre. Rien à régler :
+   c'est la distance de la carte (sa profondeur, sa place dans l'Espace 3D) qui décide, à chaque image. Une carte qui avance
+   pendant le plan passe d'abord derrière l'arbre, puis devant.
+2. **Une carte inclinée** (sol, mur, carte tournée dans l'Espace 3D) est juste en chaque point : la partie derrière un objet est
+   cachée, la partie devant se voit. Une carte qui traverse un objet en sort.
+3. **Aux pieds d'une carte aimantée** sur une dalle, un rocher, une marche du décor (« Aimanté au sol », partie 182) : rien n'est
+   rogné, rien ne scintille. Une petite tolérance (0,4 % de la distance, plus 1 cm) laisse devant ce qui touche le décor ; ce qui
+   du dessin descend sous l'origine, dans l'objet, est caché par lui, comme des pieds dans l'herbe.
+4. **Entre elles, les cartes gardent l'ordre de toujours** (la pile, ou la distance d'un plan dont « ce qui est devant cache ce
+   qui est derrière »). Le ciel et le vide du décor ne cachent jamais rien.
+5. **Jamais cachés par le décor** : un calque accroché à la caméra (il est dans le cadre, pas dans le décor), les calques d'effet
+   (ajustements, incrustations de texte), les dossiers, les calques d'annotation, la couleur unie d'un calque, les pelures
+   d'oignon et les silhouettes de la trajectoire.
+6. **« Toujours devant le décor 3D »**, une case par calque, décochée d'office : la carte de ce calque n'est jamais cachée par
+   le décor, comme avant, mais elle reste dans le monde : sa place, sa profondeur, sa parallaxe quand la caméra bouge, sa
+   trajectoire et l'aimant restent ceux d'une carte ordinaire. Pour un décor approximatif (une herbe ou une marche qui mangerait
+   les pieds du personnage), ou un personnage qu'on veut garder lisible même un peu derrière un poteau. Ce n'est pas
+   « Accroché à la caméra » : un calque accroché sort du monde et reste collé au cadre quoi que fasse la caméra (un titre, un
+   sous-titre, une salissure d'objectif) ; il n'est pas caché par le décor non plus, mais il ne le suit plus. Dans le menu du calque,
+   Plus > Réglages avancés, sous « Aimanté au sol » ; dans le panneau de la carte de l'Espace 3D, sous « Aimanté au sol » (quand
+   la séquence a un décor) ; et dans la palette (Ctrl+K), `calque.devant_decor_3d`, sans touche, à assigner au clic droit. Une
+   étape d'annulation. Un calque accroché à la caméra est devant de toute façon (l'entrée le dit).
+7. **La vue Espace 3D** (plein écran, à côté, vues multiples) montre la même chose : là où un objet du décor est plus près qu'une
+   carte, il la recouvre, de quelque côté qu'on regarde. Sans carte graphique, la vue montre toujours les boîtes du décor en fil
+   de fer, et ne cache rien.
+8. **Le décor se voit sur le dessin.** L'image de travail (la vue de dessin) ne montrait pas le décor 3D : seules les sorties
+   du film (exports, vignettes) et la vue Espace 3D le dessinaient. Il est maintenant sous les calques sur le dessin aussi, comme
+   dans les exports, et les cartes s'y cachent pareil. Du même coup, « Exporter l'image courante » l'a (elle passait par l'image
+   de travail), et la pipette prend la couleur du décor là où on le voit. Le pot de peinture, lui, ne le voit pas : ses bords ne
+   ferment pas une zone (comme avant).
+9. **Un plan sans décor ne change pas** : les mêmes images au bit près, par les mêmes chemins, au même coût.
+
+### 183.2 Comment c'est fait
+
+- **Le décor garde sa profondeur** (`profondeur.rs`). Il est rendu une fois par image, comme avant (la clé `DecorCle` et la
+  texture du décor sont celles de toujours : il n'est redessiné que quand la caméra ou un objet bouge), et reste l'élément le plus
+  bas du plan. Son rendu garde, à chaque pixel de la feuille, l'inverse de la distance à l'œil de la caméra (le long de son axe)
+  de ce que le décor y montre, 0 là où il n'y a rien.
+  - Carte graphique (`decor3dgpu.rs`) : une seconde cible de la passe de l'image du plan, `PROF` (`R16Float` : à 0,05 % près, deux octets à lire par pixel de carte), écrite par
+    `fs_main_feuille` et `fs_sky_feuille` (le ciel y écrit 0) ; dans `gpu.rs`, une texture de profondeur à côté de celle du décor
+    (`CelTexture::prof`), créée et dessinée avec elle, comptée dans la mémoire du cache.
+  - Processeur (`decor3drendu::rendre_objets_prof`) : le tampon de profondeur du rasteriseur, ramené au pixel (le plus proche
+    des échantillons, si au moins la moitié du pixel est couverte). Exports avec une carte graphique : relue d'elle
+    (`rendre_hors_ecran_prof`). Gardée avec le rendu (`decor3d::profondeur_du_rendu`, par le numéro du rendu : la profondeur est
+    toujours celle de l'image montrée, même du rendu d'avant qu'on montre en attendant le suivant).
+- **Le plan de chaque carte** : l'élément du plan d'une carte porte maintenant le plan où elle est posée, vu du même œil que le
+  décor (`PlanItem::profondeur`, `profondeur::plan_du_calque`, comme `espace3d::place_dans` : l'œil de la caméra, ou l'œil de
+  référence et le changement de repère d'un plan en Espace 3D) : trois nombres (a, b, c), l'inverse de la distance du point de la
+  carte vu au pixel (x, y) de la feuille étant a·x + b·y + c (le regard qui passe par ce pixel, coupé par le plan de la carte ;
+  pour un plan, l'inverse de la profondeur est linéaire sur l'image, une carte inclinée est donc juste partout). Son remplissage
+  au griffonnage et son fond sous le trait ont le même plan. Seulement quand le plan a un décor.
+- **À la composition**, un pixel de carte est caché si le décor y est plus près (`profondeur::cache`, la tolérance de 183.1.3) :
+  le décor, dessous, se voit à travers. Carte graphique : quatre composeurs de plus (`fs_compose_p`, `fs_blend_p`, à plat et par
+  maillage) qui lisent la profondeur du décor (groupe 3) ; les autres éléments passent par les composeurs de toujours, inchangés.
+  Processeur : `composite_tile_into`, `composite_world_tile` et `pixel_of` (vignettes, pipette) laissent ces pixels. L'image
+  composée gardée (`ItemKey`) compte le plan de la carte.
+- **La vue Espace 3D** : ses cartes sont dessinées par egui, par-dessus l'image du décor. Juste après chaque carte qui partage la
+  profondeur, un **voile** (`decor3dgpu::VoileCarte`) redessine sur le quadrilatère de la carte le décor là où il est plus près
+  qu'elle (la part des quatre échantillons du tampon de profondeur de la vue qui sont devant), lu dans les cibles de la passe du
+  décor de cette vue (sa couleur lissée et son tampon de profondeur, maintenant gardé).
+- **Ce qui n'est jamais caché** : `profondeur::partage` (une carte, ni accrochée, ni d'annotation, ni « Toujours devant le
+  décor 3D ») ; le reste ne porte pas de plan.
+- **Le dessin** (`App::build_plan_avec`) pose le décor sous les calques comme `render::panel_plan_at` (il y manquait depuis la
+  partie 180 ; l'essai qui compare les deux plans le vérifie maintenant avec un décor).
+- **Le fichier** : `devant_decor_3d` d'un calque, écrit seulement s'il est coché, **sans changer `VERSION`** (61). Une version
+  qui ne le connaît pas n'a pas de profondeur partagée : elle montre déjà toute carte devant le décor, c'est-à-dire l'image de la
+  case cochée ; elle perdrait la case en enregistrant. La règle du projet monte le numéro pour une perte en enregistrant, mais le
+  format 61 n'est encore sur aucune version distribuée (`main` est en 60, la partie 182 n'y est pas) : la case est notée sous le
+  numéro 61 (`project.rs`), comme les ajouts « sous ce même numéro » du format 55. Un projet de version 60 ou moins s'ouvre tel
+  quel, la case décochée.
+
+### 183.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai (`opt-level` 1, dépendances optimisées), la carte graphique
+étant ce qui compte. `profondeur_perf` (nouveau, ignoré) et `decor3d_perf` (partie 180), lancés seuls.
+
+- **La composition** (`profondeur_perf` : huit cartes, feuille 3840 × 2160, cadre 1920 × 1080, une image composée puis affichée,
+  la meilleure de trois séries de vingt, trois passages) :
+
+  | Huit cartes | sans décor | décor, cartes sans plan | décor, profondeur partagée | ce que coûte la profondeur |
+  |---|---|---|---|---|
+  | pleines (de l'encre sur toute la feuille : le pire cas) | 1,32 à 1,43 ms | 1,31 à 1,58 ms | 2,59 à 2,73 ms | **+1,0 à 1,4 ms** |
+  | de personnage (un huitième de la feuille chacune) | 1,32 à 1,39 ms | 1,33 à 1,39 ms | 1,32 à 1,34 ms | **non mesurable** (± 0,07 ms) |
+
+  Le coût est bien une lecture par pixel d'encre : la profondeur n'est lue que là où la carte n'est pas transparente, et une
+  lecture de plus par pixel coûte, sur cette carte, à peu près ce que coûte la lecture du dessin lui-même (l'essai l'a vérifié :
+  sans la lecture, les composeurs de la profondeur coûtent comme les autres, +0,01 à 0,06 ms). Huit cartes pleines d'encre sur
+  toute une feuille 4K sont un cas extrême ; des personnages, des accessoires, un décor dessiné de quelques cartes ne se voient
+  pas dans la mesure. La composition n'est refaite que quand l'image change (lecture, caméra qui bouge, trait) ; l'image gardée
+  reste gardée (son empreinte compte le plan des cartes).
+- **Le décor lui-même** (`decor3d_perf`, la grille d'essai à la feuille 3840 × 2160, la base d3b7ab0 et cette branche lancées
+  tour à tour, cinq passages chacune, le plus rapide gardé) : la seconde cible (deux octets par pixel) ne se voit pas dans le bruit
+  de mesure de la carte (± 25 %, partie 180.3) :
+
+  | Triangles | base : sans / basses / hautes | profondeur partagée : sans / basses / hautes |
+  |---|---|---|
+  | 20 000 | 0,52 / 0,30 / 0,55 ms | 0,29 / 0,31 / 0,52 ms |
+  | 180 000 | 0,37 / 0,63 / 0,63 ms | 0,37 / 0,63 / 0,62 ms |
+  | 980 000 | 1,06 / 1,26 / 1,52 ms | 1,02 / 1,27 / 1,75 ms |
+  | 2 000 000 | 1,76 / 2,04 / 2,54 ms | 1,77 / 2,03 / 2,49 ms |
+
+  Budget tiré par l'étalonnage : 1,5 à 4,1 M triangles sur la base, 1,4 à 2,0 M sur la branche (le même bruit). **La règle des
+  4 ms par image d'écran tient** : l'étalonnage de la machine mesure maintenant la passe avec sa seconde cible, le budget est donc
+  celui de ce que FEANOR dessine vraiment ; le décor n'est pas redessiné plus souvent qu'avant (la même clé `DecorCle`, la même
+  texture, la profondeur dessinée dans la même passe).
+- **L'export par le processeur** : la profondeur est le tampon que le rasteriseur avait déjà ; ramenée au pixel, sans calcul de plus
+  qui compte (`decor3d_perf` : 7 à 8 ms à 20 000 triangles, 152 à 173 ms à 2 millions, comme la base). Avec une carte graphique,
+  l'export relit en plus la profondeur (16 Mo à 3840 × 2160), une fois par image exportée où le décor a bougé.
+- L'essai de durée `espace3dcote_tests::a_stroke_with_the_side_view_open_stays_within_the_frame_budget`, seul, trois fois de
+  chaque côté : 3,09 à 3,21 ms sur la base, 3,15 à 5,51 ms sur la branche (une image lente sur trois, puis 3,15) ; il réussit, et
+  il a réussi dans le passage complet.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony** (`cargo test --lib profondeur_perf -- --ignored --nocapture`),
+avec la superposition « Performance » ouverte et un décor au budget.
+
+### 183.4 Essais (`src/profondeur_tests.rs`, 14 essais dont un ignoré)
+
+Le plan d'une carte donne l'inverse de sa distance en chaque pixel (à plat, inclinée), rien vue par la tranche, la tolérance ;
+les tolérances écrites dans les composeurs de la carte graphique sont celles du programme ; seules les cartes du monde portent un
+plan, et seulement avec un décor (accrochée, « Toujours devant », annotation : non), le dessin pose le décor comme les sorties.
+**Par le processeur** (l'image exportée) : une carte derrière la boîte est cachée là où la boîte la couvre et visible ailleurs,
+devant elle la couvre ; une carte inclinée qui traverse la boîte, cachée derrière, visible devant ; une carte aimantée sur une
+dalle, aucun pixel caché au-dessus de son origine, ses « pieds » rentrés dans la dalle cachés ; accrochée à la caméra et
+« Toujours devant le décor 3D », jamais cachées. **Par la carte graphique** (l'image composée de `GpuCanvas`, le décor dessiné par
+elle) : derrière, devant, inclinée, en mode de fusion, « Toujours devant » ; la profondeur du décor de la carte graphique est celle
+du processeur (à 0,1 % près, loin des bords). **Sans décor** : aucun plan, et la même image (processeur et carte graphique) qu'un
+plan dont les éléments porteraient un plan ; avec un décor et une carte toute devant, la même image que la case cochée. **La vue
+Espace 3D** : le voile d'une carte derrière la boîte remet la boîte là où elle couvre la carte, rien ailleurs ; devant, aucun
+voile. **La case** : une étape d'annulation, la commande de la palette, son bloc dans `keymap.toml` ; écrite pour le seul calque
+coché, relue, un fichier d'avant s'ouvre décochée, le format reste 61. Le pot de peinture prend les mêmes contours avec ou sans
+décor. `profondeur_perf` (ignoré) : les mesures de 183.3.
+
+### 183.5 Ce qui n'est pas fait (ou limité)
+
+- Un **calque d'ajustement résolu par le processeur** (sans carte graphique, ou dans un dossier) compose ce qu'il couvre sans la
+  profondeur partagée : les cartes qu'il couvre passent devant le décor dans son résultat. Sur la carte graphique, hors dossier,
+  il agit sur l'image déjà cachée.
+- Le bord du décor qui cache une carte est **net, au pixel** (pas lissé) : sur la feuille, deux fois plus fine que l'image, il
+  se voit peu ; dans la vue Espace 3D, il suit les quatre échantillons du décor.
+- **Dans la vue Espace 3D**, le voile d'une carte couvre tout son quadrilatère : là où elle est transparente et qu'une autre
+  carte, posée plus tôt dans la pile mais plus près que le décor, se voit à travers, le décor peut recouvrir cette autre carte
+  (seulement si l'ordre de la pile n'est pas celui des distances). L'image du plan, elle, est juste pixel par pixel.
+- Les cartes ne portent ni ne reçoivent d'**ombres** du décor (étape suivante) ; les **effets** d'une carte (lueur, flou)
+  sont cachés avec elle, sur son plan.
+
+### 183.6 À tester (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor : un arbre et un banc de la banque 3D. Un personnage sur une carte, entre les
+   deux : **derrière l'arbre, il est caché par le tronc** ; devant le banc, il le couvre. Le dessin le montre aussi (le décor est
+   maintenant sous les calques de la vue de dessin).
+2. Anime sa profondeur (deux clés) : il passe derrière l'arbre puis devant ; lecture à 24 i/s, J/K/L : **rien ne saccade**.
+3. Aimanté au sol sur une dalle de route : ses pieds touchent la dalle, **aucun bord rogné ni scintillement** quand la caméra
+   bouge.
+4. Une carte inclinée (un sol dessiné, un mur) qui traverse un objet : la partie derrière est cachée, l'autre se voit.
+5. Coche « Toujours devant le décor 3D » (menu du calque > Plus > Réglages avancés, ou le panneau de la carte) : il repasse
+   devant l'arbre ; Ctrl+Z. Un calque accroché à la caméra et un titre (incrustation) ne sont jamais cachés.
+6. Vue Espace 3D (plein écran, à côté, vues multiples) : tourne autour, la carte derrière l'arbre est cachée par lui de tous les
+   côtés.
+7. Exporte une image et un film : comme à l'écran.
+8. Un plan sans décor : les mêmes images qu'avant.
+9. Enregistre, ferme, rouvre : la case est restée cochée.
+
+
+## 184. Les poignées dans la vue : les objets du décor 3D et l'origine (2026-11-19, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé)
+
+Le manipulateur de la vue Espace 3D (Choisir, Déplacer, Tourner, Mettre à l'échelle) ne servait qu'aux cartes et à la caméra ;
+les objets du décor 3D de la séquence (parties 180 et 181) ne se plaçaient que par les champs du panneau, et l'origine (partie
+182) ne se déplaçait que sur le dessin, avec l'outil Transformer. Maintenant **un objet du décor se choisit et se manie dans la
+vue comme une carte**, et **« Modifier l'origine »** déplace dans la vue l'origine d'un calque ou d'un objet sans le bouger.
+Format du projet inchangé (61) ; l'image du plan, les exports et la profondeur partagée (partie 183) ne changent pas. Compilé et
+essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 184.1 Ce qui change pour Anthony
+
+1. **Un clic sur un objet du décor le choisit** dans la vue Espace 3D (plein écran, à côté, chacune des vues multiples) : sa
+   boîte s'allume à la couleur de la sélection, son origine s'y voit (le cercle à croix), et **il est choisi dans la liste du
+   panneau Espace 3D** du même coup (ses champs sont là, dessous). L'inverse aussi : une ligne de la liste choisie, l'objet l'est
+   dans la vue, et les poignées vont à lui. Le clic prend **ce qui est le plus près de l'œil**, carte ou objet, sur la vraie forme de
+   l'objet (ses triangles : le vide entre les branches d'un arbre ne le prend pas) ; une carte « Toujours devant le décor 3D »
+   passe devant l'objet, comme à l'écran. **Maj+clic** ajoute ou retire : cartes, objets et caméra se mêlent dans un même choix.
+2. **Déplacer, tourner, mettre à l'échelle** un objet : les mêmes flèches, carrés, anneaux et cubes, **autour de son origine** (son
+   vrai pivot). « Poignées dans le repère du calque » (menu Affichage de la vue) tourne les flèches avec l'objet. Un objet ne
+   tourne qu'autour de la verticale (l'anneau vert) et grandit d'un bloc : les anneaux rouge et bleu sont gris, un cube d'axe pris
+   donne l'échelle de tout l'objet. L'aimantation à la grille marche comme pour les cartes.
+3. **Un geste, une étape d'annulation** (« Déplacer un objet 3D », « Tourner un objet 3D », « Mettre un objet 3D à l'échelle ») :
+   les cartes aimantées posées sur l'objet le suivent pendant le geste, et **Ctrl+Z ramène l'objet et les cartes**.
+4. **Un objet aimanté au sol garde la hauteur que lui donne l'aimant** : sa flèche verte (Y) est grise, comme le champ de la hauteur
+   dans le panneau, et l'appui sur elle le dit dans la barre d'état. Un glisser dans un plan vertical (un carré) le déplace en
+   largeur ou en profondeur, et l'aimant le repose sur ce qui est sous lui (le sol, une dalle).
+5. **Tirer l'objet lui-même** (hors des poignées, quel que soit l'outil de la vue) le fait **glisser sur le sol**, l'aimant le
+   reposant ; Maj tenue : en hauteur, s'il n'est pas aimanté (aimanté, il reste sur le sol et la barre d'état le dit). Comme une
+   carte tirée glisse dans son plan.
+6. **« Modifier l'origine »** : une case de plus dans la colonne des outils de la vue (le viseur, sous « Mettre à l'échelle »), et la
+   commande `espace3d.modifier_origine` dans la palette (Ctrl+K), sans touche, à assigner au clic droit. Allumée, le manipulateur se
+   pose sur l'origine de ce qui est choisi **seul** (un calque, un objet du décor ; pas la caméra, pas plusieurs choses) et **déplace
+   l'origine seule : rien d'autre ne bouge**.
+   - Un **calque** : son origine est un point de son dessin, elle reste dans le plan de la carte (flèches rouge et verte, carré
+     bleu ; la flèche bleue et les autres carrés sont gris). L'image ne bouge à aucune clé, comme avec l'outil Transformer ; entre
+     deux clés, le calque tourne désormais autour de la nouvelle origine (la règle de la partie 182).
+   - Un **objet du décor** : son origine va où l'on veut dans l'espace (les trois flèches, les trois carrés), comme avec les champs
+     « Origine » du panneau : l'objet ne bouge pas, sa position devient celle de la nouvelle origine.
+   - **Maj** l'accroche au point le plus proche de la boîte : pour un calque, le centre, les coins et les milieux des côtés de la
+     boîte de ce qui est dessiné à l'image courante (comme Maj avec l'outil Transformer) ; pour un objet, le centre de sa boîte, le
+     centre de chacune de ses faces (le centre du dessous : « au sol ») et ses huit coins.
+   - Au lâcher, **une étape d'annulation** (« Déplacer l'origine »), et ce qui est aimanté se repose par sa nouvelle origine : une
+     carte aimantée au sol dont on met l'origine aux pieds monte jusqu'à poser les pieds sur le sol.
+   - Un outil de la vue (Choisir, Déplacer, Tourner, Mettre à l'échelle) éteint « Modifier l'origine » ; la case, ou la commande,
+     aussi. Pendant ce temps, un appui hors des poignées choisit ce qu'il touche sans rien déplacer.
+7. **La barre d'état et la légende** : au survol d'une poignée grise, la barre d'état dit pourquoi elle ne fait rien (« aimanté au
+   sol : sa hauteur est tenue par l'aimant », « un objet du décor ne tourne qu'autour de la verticale », « l'origine d'un calque est
+   un point de son dessin ») ; pendant « Modifier l'origine », ce que fait la poignée, et la légende du bas de la vue change. Le
+   pointeur : une croix pendant « Modifier l'origine », un sens interdit sur une poignée grise. Les bulles de Choisir, Tourner et
+   Mettre à l'échelle parlent des objets du décor.
+8. **Suppr ne supprime pas un objet choisi dans la vue**, et c'est voulu : dans la vue, Suppr ne supprime pas non plus une carte
+   (elle vise ce qui est choisi sur le dessin, ou ne fait rien) ; enlever un objet reste le bouton « Enlever » du panneau (une étape,
+   Ctrl+Z le rend). Un objet enlevé n'est plus choisi dans la vue.
+
+### 184.2 Comment c'est fait
+
+- **`poignees3d.rs`** (nouveau) porte tout ce qui est propre aux objets dans la vue ; `espace3dview.rs`, `espace3dui.rs` et
+  `decor3dui.rs` y passent la main par quelques appels.
+- **Le choix** : un objet a son numéro de sélection (`objet_selection`, marque `1 << 61`, à côté de celle des cartes, `1 << 62`, et
+  de la caméra) dans la même liste `Espace3dState::sel`. Le rayon de la souris passe dans le repère du modèle de chaque objet montré
+  sans être renormalisé (la distance y reste celle du monde), est essayé contre sa boîte, puis contre ses triangles (Möller–Trumbore,
+  des deux côtés) ; au-delà de 2 millions de triangles, la boîte seule (`toucher_objet`). `App::e3_pick_tout` compare la carte
+  dont le dessin est touché (`e3_pick_cartes`, l'ancien `e3_pick` en deux) et l'objet par leur distance ; sans dessin ni objet
+  touché, la feuille la plus proche, comme avant. Seuls le clic et le glisser de la vue s'en servent : l'outil Trajectoire et le
+  dessin dans la vue gardent `e3_pick` (les cartes seules). La liste du panneau et la vue se suivent par `App::e3_choisir_objet`
+  (`decor3d.choisi`).
+- **Le geste** : un objet est vu par le manipulateur comme une carte (`xf_de_l_objet` : la place de son origine, `[0, rotation_y,
+  0]`, l'échelle sur les trois axes : `Xf::matrix` est alors `Place3d::matrice`) ; `e3_xfs`, `e3_pivot`, `e3_gizmo` le servent
+  tels quels. `e3_set_xfs` pose d'abord les objets (`e3_poser_objets`), par **le chemin de la retouche du panneau** :
+  `decor3dui::decor3d_appliquer`, le cœur de `decor3d_retoucher` sans son instantané (l'aimant des objets, puis
+  `reposer_les_cartes_aimantees`), puis les cartes choisies, sur le décor tel qu'il est devenu. Le geste garde l'instantané du
+  projet pris à son début (comme pour les cartes) et le pose au lâcher par `commit_named` ; une retouche du panneau encore ouverte
+  est d'abord terminée (`decor3d_retouche_finir`), pour qu'aucune ne se mêle au geste. Tourner : `rotate_xfs`, puis l'angle de
+  l'objet est le sien plus celui du geste (`tourner_les_objets`, sans repasser par des angles d'Euler qui le ramèneraient entre
+  −180° et 180°).
+- **Les poignées refusées** : `App::e3_poignee_refusee(mode, poignée)` dit pourquoi une poignée ne peut rien (flèche Y d'un objet
+  aimanté ; anneaux X et Z d'un objet ; pendant « Modifier l'origine », hors du plan d'une carte, ou un calque verrouillé, de
+  position verrouillée, de couleur). Le dessin du manipulateur les grise, l'appui ne commence aucun geste, le survol le dit
+  (`e3_survol_poignee`).
+- **L'origine** : `Espace3dState::origine` ; `e3_gizmo` rend alors `e3_gizmo_origine` (des flèches et des carrés sur l'origine de
+  ce qui est choisi seul : dans le repère de la carte pour un calque). Le geste (`Drag::Handle::origine`, `GesteOrigine`) garde la
+  cible de son début et repose l'origine depuis elle à chaque pas (rien ne s'accumule) : pour un calque, le point du monde ramené
+  au carré unité de la carte puis aux pixels du dessin, et `origine::deplacer_origine` (Maj : `origine::aimanter_a_la_boite` sur
+  `layer_content_box`) ; pour un objet, le point ramené au repère du modèle et `Objet3d::changer_origine` (Maj :
+  `points_de_la_boite`). Au lâcher (`e3_origine_lachee`) : `aimanter_si` (un calque), `decor3d_appliquer` (un objet), puis une
+  étape. Maj est lue par la vue à chaque image (`Espace3dState::maj`).
+- **La boîte et l'origine des objets choisis** sont dessinées par `e3_peindre_decor` (la couleur de la sélection, deux points) ;
+  l'objet choisi dans la liste mais pas dans la vue garde sa boîte en clair d'avant.
+- **Rien d'autre ne change** : l'image du plan, les exports, la profondeur partagée, le fichier (aucun champ neuf : la sélection et
+  « Modifier l'origine » ne s'enregistrent pas).
+
+### 184.3 Essais (`src/poignees3d_tests.rs`, 15)
+
+Les numéros de sélection (objet, carte, caméra) ; le rayon sur les vrais triangles (dans la boîte mais hors du triangle : rien ; la
+distance du monde, objet agrandi compris) ; les quinze points de la boîte d'un objet ; le clic : la carte devant la boîte, la boîte
+devant la carte (et choisie dans la liste du panneau), Maj qui mêle et retire, « Toujours devant le décor 3D » qui l'emporte ; sans
+décor, le choix d'avant ; la liste du panneau qui choisit dans la vue, l'objet enlevé qui n'est plus choisi ; déplacer une dalle par
+la flèche Y (la carte aimantée posée dessus suit, une étape, Ctrl+Z ramène les deux) et par la flèche X ; tourner autour de la
+verticale (l'angle du geste, la position de l'origine gardée, les anneaux X et Z refusés) ; l'échelle d'un bloc par un cube d'axe ;
+l'objet aimanté (flèche Y refusée, le dire ; un carré vertical qui le laisse sur le sol ; tiré avec Maj, il glisse sur le sol) ;
+une carte et un objet déplacés ensemble en une étape ; la commande et son bloc dans `keymap.toml`, le manipulateur de l'origine (une
+seule chose choisie), un outil qui l'éteint ; l'origine d'une carte à deux clés déplacée (les coins identiques aux deux clés, la
+flèche Z refusée, une étape, Maj au milieu du bas de la boîte du dessin) ; l'origine d'un objet (sa boîte identique, sa position
+celle de la nouvelle origine, une étape, Maj au centre de la boîte ; un appui sur l'objet hors des poignées le choisit sans rien
+bouger) ; une carte aimantée dont l'origine passe aux pieds remonte
+jusqu'à les poser sur le sol, Ctrl+Z rend tout ; le survol d'une poignée grise et celui d'une poignée de l'origine.
+
+### 184.4 Ce qui n'est pas fait (ou limité)
+
+- **Plusieurs choses à la fois pour l'origine** : « Modifier l'origine » ne vise que ce qui est choisi seul (deux origines n'ont pas
+  de geste commun évident) ; la barre d'état le dit.
+- **Pas d'aimantation à la grille pour l'origine** : Maj l'accroche à la boîte de l'objet, pas au pas de la grille.
+- **Un objet ne s'incline pas** : le décor 3D ne garde que la rotation autour de la verticale (`Place3d`) ; les anneaux X et Z sont
+  gris. L'échelle est la même sur les trois axes.
+- **Le survol** n'éclaire que les poignées : un objet sous le pointeur ne s'éclaire qu'une fois choisi (le rayon contre les triangles
+  n'est lancé qu'au clic et à l'appui, pas à chaque image).
+- **Un objet masqué sur cet ordinateur** (« Ce décor est lourd », en attente du choix d'Anthony) ne se prend pas dans la vue (il
+  n'y est pas dessiné) ; il reste dans la liste du panneau.
+- **Suppr** n'enlève pas un objet choisi dans la vue (184.1.8).
+
+### 184.5 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D : une dalle, un banc posé dessus, un arbre. Vue Espace 3D, outil
+   Choisir : **clic sur le banc**, sa boîte s'allume et il est choisi dans la liste du panneau ; clic entre les branches de l'arbre :
+   ce qui est derrière est pris, pas l'arbre.
+2. Un personnage sur une carte devant le banc : le clic le prend ; derrière le banc : le clic prend le banc. Maj+clic sur l'autre :
+   les deux sont choisis.
+3. Outil Déplacer : tirer la flèche rouge du banc, il glisse ; **la flèche verte est grise** (aimanté) et le dit au survol. Décocher
+   « Aimanté au sol » dans le panneau : la flèche verte remonte le banc. Ctrl+Z : une étape par geste.
+4. Une carte aimantée au sol posée sur la dalle : déplacer la dalle (flèches, carré, ou en la tirant elle-même), **la carte suit** ;
+   Ctrl+Z ramène les deux.
+5. Outil Tourner : l'anneau vert tourne l'arbre autour de son origine ; les deux autres sont gris. Outil Mettre à l'échelle : un cube
+   agrandit tout l'arbre, autour de son origine.
+6. **« Modifier l'origine »** (le viseur dans la colonne des outils de la vue) sur le banc : tirer la flèche verte, l'origine monte, le
+   banc ne bouge pas ; avec Maj, elle s'accroche au centre de la boîte, à un coin. Remettre l'outil Tourner : le banc tourne autour de
+   la nouvelle origine.
+7. Sur le personnage : son origine glisse dans le plan de sa carte, son dessin ne bouge pas (vérifier aussi sur le dessin) ; Maj :
+   aux pieds (le milieu du bas). S'il est aimanté au sol, au lâcher ses pieds se posent sur le sol. Ctrl+Z.
+8. Vues multiples (4 vues) : choisir et tirer un objet dans chacune ; Regarder par la caméra : la même chose.
+9. Exporter une image : rien n'a changé dans l'image hors de ce qu'on a déplacé.
+
+
+## 185. Les ombres des cartes et du décor 3D (2026-11-19, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé)
+
+Jusqu'ici le décor 3D d'une séquence (parties 180 à 184) ne portait d'ombres que sur lui-même : un personnage debout sur une dalle
+n'y avait pas d'ombre, et passait au soleil sous un arbre. Maintenant, **sous le même soleil que le décor**, une carte porte son
+ombre sur le décor et sur les autres cartes, et le décor ombre les cartes. Dans l'image du plan à l'écran (la vue de dessin), dans
+les exports et les vignettes quand une carte graphique rend le décor. Format du projet inchangé (61). Compilé et essayé sur le Mac
+seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 185.1 Ce qui change pour Anthony
+
+1. **Une carte porte son ombre sur le décor** : le sol, les dalles, les objets. C'est l'ombre de **son encre** (là où le dessin est
+   au moins à moitié opaque, à l'opacité du calque), pas de son rectangle : un personnage a une ombre de personnage, le vide entre
+   ses jambes laisse passer le soleil. Debout sur le sol (« Aimanté au sol », partie 182), son ombre part de ses pieds. Elle suit le
+   soleil du décor (panneau Espace 3D : autour, hauteur) et se fond dans la brume comme les ombres du décor.
+2. **Le décor ombre les cartes** : là où un objet est entre le soleil et une carte, la carte s'assombrit comme une face du décor à
+   l'ombre (elle garde la lumière du ciel et du sol, perd celle du soleil). Un personnage qui passe à l'ombre d'un arbre s'assombrit,
+   puis ressort au soleil.
+3. **Une carte ombre les autres cartes** : la même chose entre cartes (un panneau peint entre le soleil et un personnage l'ombre).
+   Une carte n'est jamais dans sa propre ombre, même inclinée sous le soleil.
+4. **Deux cases par calque, cochées d'office** : **« Porte une ombre »** et **« Reçoit les ombres »**. Dans le menu du calque, Plus >
+   Réglages avancés, sous « Toujours devant le décor 3D » ; dans le panneau de la carte de l'Espace 3D, sous la même case (quand la
+   séquence a un décor avec ses ombres) ; et dans la palette (Ctrl+K), `calque.porte_ombre` et `calque.recoit_ombres`, sans touche,
+   à assigner au clic droit. Une étape d'annulation chacune. À décocher pour un fond peint, un ciel, une lueur, une carte de
+   brume : ce qui ne doit ni faire d'ombre ni s'assombrir.
+5. **« Toujours devant le décor 3D »** (partie 183) ne change que ce qui cache quoi : une carte toujours devant reste au soleil du
+   monde, elle porte et reçoit les ombres comme les autres (son ombre et celle des objets restent à leur place, la carte se voit
+   seulement par-dessus).
+6. **Jamais d'ombre** (ni portée ni reçue) : un calque accroché à la caméra (il est dans le cadre, pas dans le monde : un titre, une
+   salissure d'objectif), les calques d'effet, les dossiers, les calques d'annotation, la couleur unie d'un calque, les pelures
+   d'oignon. Le menu du calque grise les deux cases d'un calque accroché et dit pourquoi.
+7. **Les ombres du décor décident** : sans l'aspect « Ombres » du décor (panneau Espace 3D), ou sur un ordinateur dont le budget ne
+   permet pas d'ombres (« sans ombres », partie 180), les cartes n'ont pas d'ombres non plus, et rien ne coûte rien de plus. Leur
+   finesse suit celle du décor (basses, hautes).
+8. **À l'export**, avec une carte graphique (le décor y est rendu comme à l'écran, ombres comprises), les mêmes ombres. Le rendu de
+   secours **sans carte graphique** n'a pas d'ombres du décor (partie 180) : ni d'ombres de cartes.
+9. **Un plan sans décor, ou sans ses ombres, ne change pas** : les mêmes images au bit près, par les mêmes chemins, au même coût.
+
+### 185.2 Comment c'est fait
+
+- **`ombres.rs`** (nouveau) porte tout ; `decor3dgpu.rs`, `gpu.rs`, `render.rs` et `decor3d.rs` y passent la main par quelques appels.
+  Le rendu du décor reste **gardé** (`DecorCle` : redessiné seulement quand la caméra, un objet ou le soleil bouge) ; les cartes, qui
+  bougent à chaque image d'une animation, n'y entrent pas : tout se fait **à la composition**.
+- **Le soleil du décor gardé à chaque pixel.** Quand le décor a ses ombres, sa passe de l'image du plan a une troisième cible
+  (`decor3dgpu::SOLEIL`, `Rg8Unorm`, deux octets par pixel) : la part du soleil qu'il y a mise (`max(n·soleil, 0)` × ses propres
+  ombres) et le mélange de la lumière hémisphère (`n.y / 2 + 1/2`). Sa couleur étant `base × (hémisphère + soleil × part)` puis la
+  brume, on sait exactement ce qu'elle serait sans ce soleil-là : **une ombre de carte retire le soleil comme le décor le retire de
+  ses faces à l'ombre**, brume comprise (`Lumiere::assombrir_decor`), sans rien recalculer du décor. Le soleil et la brume d'une passe
+  (`decor3dgpu::eclairage` : la matrice de la carte d'ombres, son côté, son filtre) sont sortis de `dessiner_dans` pour servir aux deux.
+- **La carte d'ombres des cartes.** À chaque composition (elle n'est refaite que si l'image change), les cartes qui portent une ombre
+  sont dessinées **vues du soleil**, avec la matrice de la carte d'ombres du décor, dans une carte de profondeur de même côté (1024 ou
+  2048 selon la qualité) : chaque sommet de la carte (ses quatre coins, ou le maillage d'une carte inclinée) est relevé sur son plan
+  (le plan de la partie 183, `PlanItem::ombre`, aussi pour une carte « Toujours devant ») puis vu du soleil, et le fragment lit
+  **l'alpha de son dessin** déjà sur la carte graphique (`fs_ombre` : moins de la moitié, rien). Seulement avec un décor qui a ses
+  ombres et au moins une carte qui en porte une (`gpu.rs`, `ombres_des_cartes`).
+- **Sur le décor** (`fs_decor_o`) : chaque pixel retrouve son point du monde (sa profondeur de la partie 183 et le regard de l'œil,
+  `Lumiere::monde`), le projette dans la vue du soleil et lit la carte d'ombres des cartes avec le filtre du décor (3 × 3 lectures
+  comparées en basses, 5 × 5 en hautes), seulement s'il tombe dans la boîte des cartes et que le soleil l'éclaire.
+- **Sur une carte** (`fs_compose_p`, `fs_blend_p`, à plat et par maillage) : son point du monde vient de son plan ; on lit la carte
+  d'ombres **du décor** (la sienne, gardée de sa dernière passe : `Moteur::carte_ombres`) et celle **des cartes**, une lecture
+  filtrée chacune (quatre texels). Chaque lecture compare à la profondeur que **le plan de la carte** a à cet endroit de la carte
+  d'ombres (`Lumiere::gradient`) : une carte n'est jamais dans sa propre ombre, sans biais qui décolle les ombres des pieds. La
+  couleur perd ce que le décor perd à l'ombre pour une face tournée vers le soleil, sous la lumière hémisphère d'une face verticale
+  (`Lumiere::carte`, par canal, en lumière linéaire). Les drapeaux de la carte (cachée par le décor, partie 183 ; reçoit les
+  ombres) sont dans son réglage de plan ; le groupe des composeurs porte maintenant, à côté de la profondeur du décor, son soleil,
+  sa lumière et les deux cartes d'ombres (des textures vides d'un pixel quand il n'y a pas d'ombres).
+- **À l'export** (`decor3d::calculer`, carte graphique prêtée) : le rendu du décor relit aussi sa part du soleil et sa carte d'ombres
+  (`decor3dgpu::SortieOmbres`), gardées avec le rendu (`decor3d::soleil_du_rendu`, par le numéro du rendu, comme la profondeur).
+  La composition par le processeur fait le même calcul (`ombres::Contexte`, fait une fois par image et gardé par l'empreinte du plan :
+  les tuiles d'une image, sur plusieurs fils, n'en font qu'un) : la carte d'ombres des cartes y est tracée **depuis le soleil** (pour
+  chaque texel, le rayon coupe le plan de la carte, ce point vu de l'œil tombe sur un pixel de la feuille, et l'encre de la carte,
+  composée seule à l'opacité de son calque, y décide) ; puis les mêmes formules, le même filtre (une lecture comparée bilinéaire
+  comme celle de la carte graphique) — `composite_tile_into`, `composite_world_tile`, `pixel_of` (vignettes, pipette).
+- **Le fichier** : `porte_ombre` et `recoit_ombres` d'un calque, écrits seulement quand ils sont décochés, **sans changer `VERSION`**
+  (61, toujours sur aucune version distribuée, comme la case de la partie 183, note dans `project.rs`). Une version qui ne les
+  connaît pas n'a pas d'ombres de cartes, c'est-à-dire l'image des deux cases décochées ; elle les perdrait en enregistrant. Un projet
+  de version 60 ou moins s'ouvre tel quel, les deux cases cochées.
+
+### 185.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai, la carte graphique étant ce qui compte. `ombres_perf` (nouveau,
+ignoré : `cargo test --lib ombres_perf -- --ignored --nocapture`), lancé seul, cinq passages, chacun la meilleure de trois séries de
+vingt compositions (affichage compris). Feuille 3840 × 2160 (cadre 1920 × 1080), la grille d'essai du décor en sol (180 000 triangles,
+ciel, brume), huit cartes à des distances de 0,5 à 7,5 m :
+
+| Huit cartes, feuille 4K | sans décor | décor, cartes sans ombres | ombres des cartes | ce qu'elles coûtent |
+|---|---|---|---|---|
+| de personnage (un huitième de la feuille chacune), basses | 1,32 à 1,58 ms | 1,43 à 1,70 ms | 1,41 à 1,73 ms | **non mesurable** (± 0,06 ms) |
+| de personnage, hautes | 1,32 à 1,58 ms | 1,41 à 1,86 ms | 1,41 à 1,73 ms | **non mesurable** (un passage sur cinq : +1,1 ms, le bruit de la carte) |
+| pleines (de l'encre sur toute la feuille : le pire cas), basses | 1,30 à 1,58 ms | 2,70 à 3,23 ms | 4,19 à 4,84 ms | **+1,5 à 2,1 ms** |
+| pleines, hautes | 1,30 à 1,58 ms | 2,69 à 3,36 ms | 4,71 à 5,23 ms | **+1,5 à 2,5 ms** |
+
+- **Le filtre des cartes a été choisi sur ces mesures** : 3 × 3 lectures dans chacune des deux cartes d'ombres coûtaient +1,3 ms pour
+  huit personnages et +5,1 ms pour huit cartes pleines ; une lecture filtrée (quatre texels) chacune, rien de mesurable et +1,5 à
+  2,5 ms. Le filtre du décor sur lui-même (3 × 3 ou 5 × 5 selon la qualité) ne se voit pas dans la mesure pour les ombres des cartes
+  sur le décor : il est gardé, pour que l'ombre d'une carte sur le sol ait le flou des ombres du décor.
+- **Le décor lui-même** (sa troisième cible, deux octets par pixel) : dans le bruit (20 000 triangles : 0,37 à 1,24 ms avec ou
+  sans ; 980 000 : 1,70 à 2,11 ms avec ou sans). L'étalonnage de la machine mesure maintenant la passe avec la part du soleil quand le
+  décor a ses ombres (`rendre_hors_ecran`) : le budget reste celui de ce que FEANOR dessine vraiment. **La règle des 4 ms tient** :
+  le décor n'est pas redessiné plus souvent qu'avant.
+- **Huit cartes pleines d'encre sur une feuille 4K** sont un cas extrême (183.3 : +1,0 à 1,4 ms déjà pour la profondeur) ; un fond
+  peint sur toute la feuille gagne de toute façon à avoir ses deux cases décochées (il ne doit ni porter ni recevoir), et elles
+  retirent son coût. Les ombres des cartes suivent la qualité des ombres du décor : sur une machine dont le budget ne permet pas
+  d'ombres, elles disparaissent avant que rien ne ralentisse.
+- **L'export par le processeur** (le décor rendu par la carte prêtée, une image dont la carte d'ombres des cartes est refaite, cadre
+  1920 × 1080, profil d'essai) : huit personnages, 9 à 10 ms sans ombres, 31 à 32 ms avec ; huit cartes pleines, 15 ms et 143 à 146 ms.
+  Le décor est en plus relu de la carte graphique (sa part du soleil, 16 Mo, et sa carte d'ombres, 4 ou 16 Mo) quand il a bougé.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony**, avec la superposition « Performance » ouverte et un décor au budget.
+
+### 185.4 Essais (`src/ombres_tests.rs`, 13 essais dont un ignoré)
+
+Le calcul : seules les cartes du monde ont des ombres, seulement sur un décor qui a ses ombres (accrochée, annotation, les deux cases
+décochées : non ; « Toujours devant » : oui ; le même plan que la profondeur partagée ; le dessin et les sorties ont le même plan) ;
+la pente d'une carte inclinée dans la carte d'ombres suit son plan, le point du monde d'un pixel, le filtre (hors de la carte : au
+soleil ; la carte d'ombres de la carte elle-même ne l'ombre pas, une carte derrière elle si) ; les nombres du shader sont ceux du
+programme. **Par la carte graphique** (l'image composée de `GpuCanvas`, le décor dessiné par elle, sous un soleil de derrière à
+45°) : l'ombre d'un personnage tombe sur la dalle devant lui, à ses deux qualités, s'arrête à sa hauteur, rien à côté ni derrière, le
+haut de l'image identique au pixel près, la carte pas dans sa propre ombre ; deux barres d'encre font deux ombres, pas le vide entre
+elles ; une boîte haute derrière le personnage l'assombrit là où elle lui cache le soleil (« Reçoit les ombres » décoché : non) ; un
+panneau ombre un mur (le panneau sans ombre : non) ; sans ombres sur cet ordinateur, cases décochées, aspect sans ombres, accroché à
+la caméra : la même image que sans les ombres des cartes ; sans décor, la même image au bit près (processeur et carte graphique)
+qu'un plan dont les éléments porteraient des ombres. **L'export** (le décor rendu par la carte prêtée) : la même ombre sur la dalle
+qu'à l'écran (à quelques niveaux près, les pixels assombris presque les mêmes), la même ombre de la boîte sur la carte ; le rendu de
+secours sans carte : aucune ombre de carte. **Les cases** : une étape d'annulation chacune, les commandes de la palette, leurs blocs
+dans `keymap.toml` ; écrites pour le seul calque décoché, relues, un fichier d'avant s'ouvre cochées, le format reste 61.
+`ombres_perf` (ignoré) : les mesures de 185.3. Et `gpu_tests`, `profondeur_tests`, `decor3d_tests` passent toujours.
+
+### 185.5 Ce qui n'est pas fait (ou limité)
+
+- **La vue Espace 3D ne montre pas les ombres des cartes** : ses cartes sont dessinées par egui, et le décor de la vue a sa propre
+  passe ; elle garde les ombres du décor sur lui-même. Les ombres des cartes sont dans l'image du plan (la vue de dessin), les
+  exports et les vignettes.
+- **Le rendu de secours sans carte graphique** n'a ni ombres du décor ni ombres de cartes.
+- **Le bord d'une ombre sur une carte** est plus net que sur le décor (une lecture filtrée au lieu de 3 × 3 ou 5 × 5 : le coût,
+  185.3) ; une ombre qui passe du sol à une carte change donc un peu de flou.
+- **Ce qui est hors de la boîte du décor** ne porte ni ne reçoit d'ombre : la carte d'ombres couvre la boîte des objets du décor (et
+  ce qui tient dans sa sphère). Une carte posée loin de tout objet n'y est pas.
+- **À l'export par le processeur**, l'encre d'une carte qui sort de plus d'une demi-feuille de la feuille ne porte pas d'ombre (la
+  carte graphique, à l'écran, prend la carte entière) ; et une carte d'ombres des cartes est refaite par image exportée où une carte
+  bouge (31 ms pour huit personnages en 1920 × 1080 sur le Mac, 185.3). Les vignettes aussi la refont, une fois par vignette.
+- **Pas d'ombre colorée ni translucide** : une encre à moitié opaque porte une ombre pleine, moins de la moitié rien ; une carte à
+  l'opacité de 30 % ne porte pas d'ombre.
+- **L'ombre d'une carte est celle de ce qu'elle montre**, effets du calque compris (une lueur large fait une ombre large) : décocher
+  « Porte une ombre » sur un calque de lueur.
+- Un calque d'ajustement résolu par le processeur (183.5) compose ce qu'il couvre sans les ombres des cartes.
+
+### 185.6 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D : une dalle de route, un arbre. Un personnage sur une carte,
+   « Aimanté au sol » sur la dalle : **son ombre part de ses pieds** sur la dalle, du côté opposé au soleil ; tourne le soleil (panneau
+   Espace 3D : autour, hauteur), elle tourne avec.
+2. Une carte avec un trou dans l'encre (entre les jambes, sous un bras) : le trou laisse passer le soleil dans l'ombre.
+3. Fais passer le personnage (deux clés de position) à l'ombre de l'arbre : il s'assombrit, puis ressort au soleil ; lecture à 24 i/s,
+   J/K/L : **rien ne saccade**.
+4. Un fond peint en carte : décoche ses deux cases (menu du calque > Plus > Réglages avancés, ou le panneau de la carte) ; Ctrl+Z. Il
+   ne fait plus d'ombre sur le décor et ne s'assombrit plus.
+5. Deux personnages, l'un entre le soleil et l'autre : le premier ombre le second.
+6. Coche « Toujours devant le décor 3D » sur le personnage : il passe devant l'arbre, mais **garde son ombre** et l'ombre de l'arbre
+   sur lui.
+7. Un calque accroché à la caméra (un titre) : jamais d'ombre ; les deux cases sont grises dans son menu.
+8. Décoche « Ombres » dans l'aspect du décor : plus aucune ombre, ni du décor ni des cartes.
+9. Exporte une image et un film : les mêmes ombres qu'à l'écran.
+10. Un plan sans décor : les mêmes images qu'avant.
+11. Enregistre, ferme, rouvre : les cases décochées le sont restées.
+
+## 186. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets` ; numérotée 162, 186 à la fusion dans `main` du 19 novembre : le panneau Espace 3D qu'on manipule avait pris le 162)
+
+Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
+reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
+de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
+
+### 186.1 Ce qui change
+
+- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
+  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
+  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
+  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
+  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
+  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
+- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
+  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
+  où l'on écrit le garde, comme avant.
+- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
+  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
+  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
+  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
+  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
+- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
+  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
+  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
+  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
+  de la vue (sur un panneau).
+- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
+  du 2026-11-11).
+
+### 186.2 Essais
+
+`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
+(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
+où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
+la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
+sous la souris zoome, et la souris hors des vues, la vue active.
+
+### 186.3 Comment Anthony teste (sur une copie de projet)
+
+1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
+   Note la phrase (ou fais une capture) et ce que tu venais de faire.
+2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
+   venais de faire juste avant.
+3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
+4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
+   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).
+
+## 187. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2 ; numérotée 163, 187 à la fusion dans `main` du 19 novembre : les panneaux plus visuels avaient pris le 163)
+
+(Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
+
+Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
+calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
+Conception, mesures, essais et limites : `docs/ESPACE3D.md`, partie 13. **Rien de cette partie n'a été regardé à l'écran.**
+
+**Où ça se trouve.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Espace 3D à côté » (carré coupé en deux) | barre au-dessus du dessin, juste après le cube | `espace3d.a_cote` | ouvre ou ferme la vue 3D à droite de la feuille ; depuis le plein écran, y remet la vue |
+| Entrée « Espace 3D à côté du dessin » | menu Affichage > Plateau | `espace3d.a_cote` | la même chose |
+| Barre verticale entre la feuille et la vue | entre les deux | | la tirer règle la largeur de la vue (20 à 80 %) ; double-clic : moitié-moitié ; retenue |
+| Rangée d'outils de la vue | en haut de la vue 3D | `espace3d.outil_*`, `espace3d.cadrer`, `espace3d.vue_camera` | Choisir, Déplacer, Tourner, Échelle, Caméra · Recadrer, Regarder par la caméra · **Agrandir** (le plein écran d'avant ; le refermer rend le côte à côte) · **Fermer** |
+
+Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et `keymap.toml`.
+
+**Les gestes.** Un geste va à la vue où il commence, jusqu'au relâché.
+
+- Sur la feuille : tout comme d'habitude (stylet, outils, molette, bouton du milieu, clic droit). Un trait qui file dans
+  la vue 3D continue sur la feuille.
+- Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
+  droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
+  Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
+- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran. Le zoom 1 et 2
+  suit la souris : sur la vue 3D, il la rapproche ou l'éloigne (même pas que la feuille, × 1,25) ; ailleurs, la feuille zoome
+  (`App::souris_sur_la_vue_a_cote`, après la fusion de `raccourcis-muets` dans la branche, partie 186).
+- Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
+  caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
+  devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
+- Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
+
+**Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
+à côté : masqué. ».
+
+À vérifier à l'écran (par Anthony), dans les trois thèmes :
+
+1. Le bouton « Espace 3D à côté » après le cube : icône lisible, bulle à une seconde, couleur d'accent quand il est ouvert.
+2. Ouvert : feuille à gauche, vue 3D à droite, barre entre les deux ; la feuille est cadrée dans sa moitié. La rangée
+   d'outils de la vue tient sur une ligne ; trop étroite, elle est coupée (le dire si c'est gênant).
+3. Tirer la barre : la largeur suit, s'arrête à 20 % et 80 % ; double-clic : moitié-moitié ; fermer et rouvrir FEANOR :
+   la largeur est retenue.
+4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
+   trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
+5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
+6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
+   garde l'outil.
+7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
+   feuille : seule la feuille zoome. Touches 1 et 2, souris
+   sur la vue 3D : elle zoome seule ; souris sur la feuille : la feuille seule.
+8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
+   place avec le film.
+9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :
+   la feuille reprend toute la zone.
+10. Un pot de peinture ou une gomme sur toute une grande feuille, vue ouverte : signaler un à-coup.
+11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
+    sur la feuille par la caméra : la carte suit.
+12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
+
+## 188. La plage de lecture du film (2026-11-19, branche `plage-lecture`, partie de `main` 6b1b99c ; numérotée 178, 188 à la fusion dans `main` du 19 novembre : la timeline du Storyboard, déjà sur le `main` de GitHub, avait pris le 178)
+
+Anthony, en comparant la timeline de FEANOR à celle d'un autre logiciel de storyboard : il manquait une plage de lecture sur
+plusieurs plans. Les points d'entrée et de sortie (13d) ne valent que pour la lecture d'un plan seul ; la lecture du film entier
+allait toujours du début à la fin.
+
+### 188.1 Ce qui change pour lui
+
+- **La lecture du montage reste entre deux images du film**, qui peuvent être dans des plans différents (de l'image 12 du plan 3 à
+  l'image 5 du plan 7). Arrêt au bout, ou boucle si la lecture en boucle est allumée ; en arrière (J) de même ; le son suit.
+- **Clic droit sur la règle du montage** (la tête de lecture y va) : « Début de la plage de lecture ici », « Fin de la plage de
+  lecture ici », « Plage de lecture : ce plan » ou « les N plans choisis », « Enlever la plage de lecture ». Les quatre commandes
+  sont aussi dans la palette (Ctrl+K), sans touche par défaut (comme « Lecture en boucle »).
+- **Sur la règle** : un crochet à chaque bout, le film hors de la plage assombri (règle et plans).
+- Un bout seul suffit : sans fin, la plage va jusqu'au bout du film ; sans début, elle part de son début. Une fin posée avant le
+  début enlève le début (et inversement), la barre d'état le dit.
+- Les points d'entrée et de sortie d'un plan ne changent pas : ils bornent toujours la lecture du plan seul.
+
+### 188.2 Comment c'est fait
+
+- `src/plagefilm.rs` : chaque bout est accroché à un plan (son identifiant) et à une image de ce plan (`Ancre`), pas à un numéro
+  d'image du film : allonger, raccourcir, ajouter ou supprimer un plan avant la plage la déplace avec son contenu, comme les
+  signets. Un bout dont le plan a disparu ne compte plus ; un bout au-delà de la fin de son plan se pose sur sa dernière image ;
+  des bouts croisés ne bornent plus rien.
+- `App::tick_playback` lit le film image par image en images du film entre les bouts (`film_play_range`), `toggle_play_scope` part
+  du début de la plage quand la tête est dehors ; `soundtrack::play_range` donne la même plage au son. Les versions dépliées
+  (partie 168) se lisent sans la plage.
+- **Un réglage de la séance**, comme la boucle : ni dans le projet ni dans l'annulation ; rangé avec l'onglet de son projet
+  (`etat_projet!`), remis à zéro quand un autre projet est chargé (`load_doc` : les numéros de plans recommencent d'un projet à
+  l'autre). **Le format des projets ne change pas** (60).
+
+### 188.3 Les essais
+
+`src/plagefilm_tests.rs` (9) : les bornes (un bout, deux, croisés, tout le film), les bouts qui suivent leurs plans (plan allongé,
+raccourci, supprimé), la lecture une fois à travers trois plans puis l'arrêt, la boucle qui reste dedans, la lecture en arrière qui
+s'arrête au début de la plage, les plans choisis, la fin posée avant le début, un autre projet sans plage, la lecture sans plage
+inchangée. Compilé et essayé sur le Mac seulement (les mêmes 90 échecs que `main` sur ce Mac, aucun de plus) ; à l'écran sur le Mac :
+la commande dans la palette, le crochet et le voile sur la règle.
+
+### 188.4 À tester (sa checklist)
+
+1. Montage : clic droit sur la règle au milieu du plan 2, « Début de la plage de lecture ici » ; au milieu du plan 5, « Fin… ici ».
+   Le crochet, et le film assombri hors de la plage.
+2. Lire (Entrée) : la lecture part du début de la plage, traverse les plans, s'arrête à la fin ; boucle allumée, elle reprend au début.
+3. Allonger le plan 1 : la plage suit son contenu.
+4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
+5. « Enlever la plage de lecture » : la lecture reprend tout le film.
+
+## 189. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+
+(Partie 189, appelée 179 dans les commits de `timeline-serree` : le numéro 179 était pris par « Une timeline plus claire », venue du main de GitHub.)
 
 Anthony a annoté au feutre rouge une capture de la timeline du Storyboard (colonne de 432 points, la barre sur deux lignes) :
 « Bouge les éléments pour resserrer les choses et éviter les pertes d'espace. Réduis un peu l'épaisseur des calques. Justifie toutes
@@ -15088,7 +16309,7 @@ barre du bas de la colonne entourés, une flèche vers la ligne « ⊖ Calques �
 entourée, une flèche vers la place vide après le nom ; un trait vertical vers 347 points et toute la droite de la colonne hachurée.
 Rien dans le projet (format inchangé) ; l'espace Montage garde sa disposition.
 
-### 179.1 Ce qui change pour lui
+### 189.1 Ce qui change pour lui
 
 **Storyboard**
 
@@ -15129,7 +16350,7 @@ ligne, la moitié passerait sous « ⋯ ». À lui de dire s'il la veut aussi su
 **Ce qui ne change pas** : l'aspect des blocs de plans et de calques dans la bande (ils suivent seulement la hauteur de leur
 rangée), les couleurs, l'espace Montage (pistes de 66 et 17, sa barre au-dessus de la bande, sa barre des calques en bas).
 
-### 179.2 Le code
+### 189.2 Le code
 
 - `src/barres.rs` : `barre_dans_la_colonne_serree`, `qui_tient`, `rang_dans_la_barre` (le rang d'usage) ; retirés :
   `barre_dans_la_colonne` (la ligne à pleine largeur) et la mesure « sur une ligne ».
@@ -15156,7 +16377,7 @@ dire « la colonne pourrait s'arrêter là » (c'est à peu près la largeur d'o
 forcé : avec tout collé à droite et la barre sur une ligne, la colonne ramenée à 340 (double-clic sur sa poignée) ne perd plus de
 place ; à lui de dire s'il veut que sa largeur revienne d'office à 340.
 
-### 179.3 Les essais
+### 189.3 Les essais
 
 `src/timeline_serree_tests.rs` (lancés d'abord sur le code d'avant : 5 rouges sur 6, le Montage inchangé déjà vert ; verts
 ensuite) : la barre sur une seule ligne à 1920 × 1080 et 960 × 600, colonne d'origine, la plus étroite, 432 et 520, rien de perdu
@@ -15177,7 +16398,7 @@ mode sur la seconde rangée) ; `timelinesb_tests`, `calquesplace_tests` (plus de
 `poskeysmontage_tests`, `timeline_repliee_tests`, `calquesplace_tests` (les hauteurs du Montage, 66 et 17, quand l'essai est dans
 l'espace Montage).
 
-### 179.4 À tester (sa checklist)
+### 189.4 À tester (sa checklist)
 
 1. Storyboard, colonne à sa largeur : une seule ligne de boutons ; « ⋯ » : ce qui n'y tient pas (avec l'épingle). Plus de bande vide
    sous la règle.
@@ -15190,7 +16411,7 @@ l'espace Montage).
 6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
 7. Montage : rien n'a changé.
 
-### 179.5 Sa demande sur la capture d'après 179
+### 189.5 Sa demande sur la capture d'après 179
 
 Sur la capture du Storyboard après 179, Anthony a entouré, sur la ligne « ⊖ Calques », le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯, tracé une flèche vers la droite jusqu'aux icônes des colonnes (œil, verrou, pelure, transparence, pochoir, aplat,
@@ -15199,7 +16420,7 @@ taille que sur le reste des autres lignes. Pareil pour les icônes de l'interfac
 icônes doivent avoir cette taille. La taille des icônes et de l'interface doit être réglable dans les préférences. »
 Rien dans le projet (format inchangé, 60).
 
-### 179.6 Ce qui a bougé
+### 189.6 Ce qui a bougé
 
 **La ligne « ⊖ Calques »** (Storyboard et Animation) : ⊖ et « Calques » restent à gauche ; le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯ est **collé au bord droit**, à la place des icônes des colonnes, au même bord que le ⋯ des lignes Plans et Caméra. Le
@@ -15233,7 +16454,7 @@ réglage et quelques icônes de ses pistes (`layerheads::icon_at`, `case_de_regl
 Barre de lecture : les commandes qui passent sous « ⋯ » sont maintenant strictement les moins utilisées (avant, un trait de groupe
 pouvait faire entrer une commande moins utilisée à la place d'une plus utilisée).
 
-### 179.7 Les réglages
+### 189.7 Les réglages
 
 Préférences > Apparence > **Tailles** (le groupe s'appelait « Taille de l'interface ») :
 
@@ -15248,7 +16469,7 @@ Le code : `src/tailleicones.rs` (la taille en cours, `mesure`, `case_de_barre`, 
 droite) ; `layerheads::case_de_reglage_en` (l'icône pâle), `icon_w` ; `icones_des_colonnes` retirée ; `timeline::LIGNE1_H` /
 `LIGNE2_H` = 24.
 
-### 179.8 Les essais
+### 189.8 Les essais
 
 `src/tailleicones_tests.rs` (lancés d'abord sur le code d'avant : 8 rouges sur 9 ; le neuvième, l'écriture du réglage, était déjà
 vert, le champ ayant été ajouté avant ; verts ensuite) : la ligne « Calques » sans icônes des colonnes, ses commandes collées à droite
@@ -15268,7 +16489,7 @@ et le « ⋯ » des calques, collé à son bord, passait au-dessus de « Notes �
 Vérificateur (`-Repetitions 2`) : RESULTAT : OK, 4938 essais à chaque passage, aucun intermittent. Captures (banc headless, taille
 réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179b-6-preferences-tailles.png`.
 
-### 179.9 À tester (sa checklist)
+### 189.9 À tester (sa checklist)
 
 1. Storyboard : la ligne « ⊖ Calques » : « Calques » à gauche, +, dossier, effet, dupliquer, supprimer, ⋯ à droite ; plus d'icônes
    de colonnes dessus.
@@ -15281,7 +16502,7 @@ réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179
 6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
 7. Montage : rien n'a changé.
 
-### 179.10 Le repli du calque actif devient une option
+### 189.10 Le repli du calque actif devient une option
 
 Anthony : « Ok maintenant je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille que l'on
 soit sur le calque actif ou non. Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur effet
@@ -15290,7 +16511,7 @@ et opacité. »
 **D'origine**, le calque actif a la hauteur des autres : une ligne de 15 points dans le Storyboard, 18 dans l'Animation. Il reste
 surligné (son cadre) ; dans le Storyboard, ses réglages (verrou, pelure, transparence, pochoir, aplat, caméra) sont en icônes collées
 à droite, pâles quand ils sont éteints, un clic les bascule (mêmes bulles, Ctrl+Z) ; dans l'Animation, la ligne du calque courant
-les avait déjà (179.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
+les avait déjà (189.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
 que si le calque actif se déplie).
 
 **Où sont le mode et l'opacité** quand le calque est replié : clic droit sur sa piste (ou sa ligne dans l'Animation) > Apparence
@@ -15315,7 +16536,7 @@ Le code : `settings.rs` (`deplier_calque_actif`), `pistes.rs` (`pistes_auto_open
 rouges sur 6 ; l'essai d'alignement, mesuré d'abord à la boîte, était vert : il mesure maintenant l'encre). Le banc d'essai
 (`perf_tests::banc_taille`) allume le réglage pour les essais d'avant, qui décrivent le calque déplié.
 
-### 179.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
+### 189.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
 
 Anthony : « C'est vrai qu'il manque une ligne de séquence. La ligne des icônes de lecture se placerait au-dessus de tout dans ce
 cas. »
@@ -15338,7 +16559,7 @@ Le code : `montagerows.rs` (`SB_SEQ_H` = 20, `sb_regle_h`, `Rows::regle_h`), `st
 `timelinesb.rs` (`entete_sequences_sb`), `barres.rs` (`HORS_DE_LA_BARRE_DE_LECTURE`). Essais : `src/ligne_sequence_tests.rs` (5
 rouges sur le code d'avant, verts ensuite).
 
-### 179.12 À tester (sa checklist)
+### 189.12 À tester (sa checklist)
 
 1. Storyboard : tous les calques de la même hauteur ; le calque actif surligné, ses réglages en icônes à droite ; clic droit >
    Apparence pour le mode et l'opacité.
@@ -15349,7 +16570,7 @@ rouges sur le code d'avant, verts ensuite).
 5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
 6. Montage : rien n'a changé.
 
-### 179.13 Tous les calques épais d'origine, la hauteur de chaque ligne
+### 189.13 Tous les calques épais d'origine, la hauteur de chaque ligne
 
 Anthony, sur la capture du calque déplié (deux rangées de 20 points) : « Il faut que tous les calques aient cette épaisseur de base.
 Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan, caméra, calques. »
@@ -15363,7 +16584,7 @@ courant). **Les dossiers** gardent leur ligne fine (13 points dans le Storyboard
 mode ; leur opacité est au clic droit (Apparence). Dans l'Animation, un dossier courant avait avant sa ligne de 40 (son opacité) :
 il garde maintenant la ligne fine, comme les autres.
 
-**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 179.10, éteint d'origine, clé `replier_calques` ; un
+**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 189.10, éteint d'origine, clé `replier_calques` ; un
 ancien `deplier_calque_actif` n'est pas repris) met tous les calques sur une ligne fine (15 points dans le Storyboard, 18 dans
 l'Animation), le calque actif avec ses réglages en icônes à droite. Mêmes places : le ⋯ de la ligne « Calques », Préférences >
 Montage > Pistes du montage, ⊖ / ⊕ et Maj+Alt+C dans l'Animation.
@@ -15388,7 +16609,7 @@ Le code : `src/hauteurstimeline.rs` (hauteurs, couleurs, la page des Préférenc
 `sb_cam_h`, `calques_du_storyboard`), `pistes.rs` (la piste de chaque calque, `regler_replier_calques`), `layerheads.rs`,
 `opacitecleselui.rs` (`losange_opacite_de`), `settings.rs`.
 
-### 179.14 La couleur de chaque ligne
+### 189.14 La couleur de chaque ligne
 
 Anthony : « Ajoute aussi dans les réglages la possibilité de donner une couleur à chaque ligne. »
 
@@ -15402,9 +16623,9 @@ recalculé) : une couleur claire éclaircit un peu le fond, sans le rendre blanc
 couleur d'étiquette d'un calque et les teintes des versions de plan gardent les leurs. Dans l'espace Montage, rien n'est teinté (le
 code des en-têtes et des rangées est partagé : la teinte n'y joue que pour la disposition du Storyboard).
 
-Essais (179.13 et 179.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
+Essais (189.13 et 189.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
 
-### 179.15 À tester (sa checklist)
+### 189.15 À tester (sa checklist)
 
 1. Storyboard : tous les calques sur deux rangées ; changer de calque actif : rien ne bouge, il est surligné.
 2. Sur un calque qui n'est pas l'actif : son mode, son opacité ; avec deux calques choisis (Ctrl + clic) : les deux.
@@ -15414,7 +16635,7 @@ Essais (179.13 et 179.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calq
 5. Animation : tous les calques sur leur ligne complète, les dossiers fins.
 6. Montage : rien n'a changé.
 
-### 179.16 Trois indicateurs en moins sur la ligne des calques
+### 189.16 Trois indicateurs en moins sur la ligne des calques
 
 Anthony, sur les trois indicateurs de la rangée 1 d'un calque (le dossier du groupe de couleur, le + / − du sens du pochoir, la
 punaise de la position verrouillée) : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit ».
@@ -15432,10 +16653,10 @@ punaise de la position verrouillée) : « Non supprime les carrément. Ça sera 
 Essais : `src/indicateurs_tests.rs` (3 rouges sur le code d'avant, verts ensuite) ; adaptés : ceux qui cherchaient « Pochoir
 positif » ou « Verrouiller la position » sur la ligne du calque.
 
-(La checklist de la partie 179.15 ci-dessus vaut pour 179.13 et 179.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
+(La checklist de la partie 189.15 ci-dessus vaut pour 189.13 et 189.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
 de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)
 
-### 179.17 Des listes déroulantes, alignées
+### 189.17 Des listes déroulantes, alignées
 
 Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les » ; puis : « pour le choix des valeurs dans réglages,
 propose plutôt un menu déroulant plutôt que plusieurs boutons. on gagnera de l'espace ».

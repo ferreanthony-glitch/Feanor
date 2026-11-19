@@ -51,6 +51,11 @@
 //!                         contenu rogné, commentaires et transitions de chaque variante, de même sans changer
 //!                         `VERSION` ; leurs dessins sont dans dessins/ ; absent, aucune séquence n'a de variante
 //!                         (dans un projet partagé : annexe du montage, écrite par le porteur du jeton)
+//!   decors3d.json         les décors 3D des séquences (`decor3d.rs`, partie 180) : séquence, nom, fichier d'origine, place,
+//!                         aspect, ce qui a été allégé, de même sans changer `VERSION` ; absent, aucune séquence n'a de
+//!                         décor ; une version qui ne le connaît pas le laisse en place et montre les plans sans décor
+//!   decors/<id>.glb       leurs modèles, toujours en `.glb` autonome (un `.gltf` est empaqueté à l'import), jamais
+//!                         modifiés sur place ; ceux que plus rien ne cite partent à l'enregistrement
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -297,7 +302,27 @@ pub const FORMAT: &str = "pelure-projet";
 /// refuse donc. Les plans types eux-mêmes ne sont faits que de calques d'avant ; les cinq transitions de plus sont dans
 /// `transitions.json` (version 2 de ce fichier quand l'une d'elles y est). **Un projet de version 59 ou moins s'ouvre tel
 /// quel**, avec les mêmes images.
-pub const VERSION: u32 = 60;
+/// 61 (2026-11-19, `docs/INTERFACE.md` partie 182) : **l'origine d'un calque** — `origine` d'un calque (`origine.rs` : le point de son
+/// dessin, en pixels du dessin, autour duquel sa pose fixe et chacune de ses clés de position se lisent : elle se déplace, s'agrandit,
+/// s'étire et tourne autour de lui ; dans l'Espace 3D, c'est lui qui porte la place de la carte) ; l'ancrage `Origine` d'une
+/// trajectoire (l'origine du calque suit le chemin, sur la feuille comme dans l'espace) ; et `aimante_au_sol` d'un calque (l'origine
+/// de sa carte repose sur le sol de l'Espace 3D, refait à chaque modification). Écrits seulement quand ils servent. Une version
+/// précédente lirait la pose autour du centre de la feuille et laisserait de côté l'ancrage : elle montrerait un autre film, et
+/// perdrait ces réglages en enregistrant ; elle le refuse donc. **Un projet de version 60 ou moins s'ouvre tel quel**, sans
+/// origine, ni aimant, avec les mêmes images.
+/// Sous ce même numéro (2026-11-19, `docs/INTERFACE.md` partie 183) : **toujours devant le décor 3D** — `devant_decor_3d` d'un
+/// calque, écrit seulement quand il est vrai : sa carte n'est jamais cachée par le décor 3D de la séquence (la profondeur partagée
+/// de la partie 183 ne s'applique pas à lui). Une version qui ne le connaît pas n'a pas de profondeur partagée : elle montre déjà
+/// toute carte devant le décor, la même image que ce réglage ; elle le perdrait en enregistrant, et la carte redeviendrait
+/// cachable ici. Le numéro ne change pas pour autant : le format 61 n'est encore sur aucune version distribuée (`main` est en
+/// 60), et un projet de version 60 ou moins s'ouvre tel quel, la case décochée.
+/// Sous ce même numéro (2026-11-19, `docs/INTERFACE.md` partie 185) : **les ombres des cartes** — `porte_ombre` et
+/// `recoit_ombres` d'un calque, écrits seulement quand ils sont faux (cochés d'office) : la carte cache le soleil du décor 3D de la
+/// séquence (son ombre tombe sur le décor et les autres cartes) et s'assombrit là où on le lui cache. Une version qui ne les
+/// connaît pas n'a pas d'ombres de cartes : elle montre déjà l'image des deux cases décochées, et les perdrait en enregistrant
+/// (elles redeviendraient cochées ici). Le numéro ne change pas, pour la même raison que la case de la partie 183 ; un projet de
+/// version 60 ou moins s'ouvre tel quel, les deux cases cochées.
+pub const VERSION: u32 = 61;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -342,8 +367,8 @@ pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 /// place d'un renommage (`write_atomic`), un son, une texture, une image collée et une image de vidéo ne changent jamais
 /// sous le même nom. Un jalon (`jalons.rs`) peut donc en garder un second nom sur le disque (lien physique) au lieu d'une
 /// copie : ce que FEANOR écrit ensuite ne touche pas à ce que le jalon voit.
-pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 5] {
-    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER]
+pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 6] {
+    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER, crate::decor3d::DIR]
 }
 
 #[derive(Serialize, Deserialize)]
@@ -947,6 +972,24 @@ struct LayerEntry {
     /// Profondeur tenue à la borne d'autrefois (format 56, `Layer::profondeur_bornee` ; absent : faux).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     profondeur_bornee: bool,
+    /// L'origine du calque (format 61, `origine.rs`, partie 182) : le point de son dessin autour duquel sa pose et ses clés se lisent
+    /// (pixels du dessin) ; absente : le centre de la feuille, comme avant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origine: Option<[f32; 2]>,
+    /// Aimanté au sol (format 61, partie 182) : l'origine de la carte repose sur le sol de l'Espace 3D ; absent : faux.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    aimante_au_sol: bool,
+    /// Toujours devant le décor 3D (partie 183, `profondeur.rs`) : la carte n'est jamais cachée par le décor 3D de la séquence ;
+    /// absent : faux. Sous le format 61, sans changer `VERSION` (voir la note de 61) : une version qui ne le connaît pas n'a pas de
+    /// profondeur partagée et montre déjà toute carte devant le décor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    devant_decor_3d: bool,
+    /// Porte une ombre, reçoit les ombres (partie 185, `ombres.rs`) : la carte cache le soleil du décor 3D, et s'assombrit là où
+    /// on le lui cache ; absents : vrais. Écrits seulement quand ils sont décochés, sous le format 61 (voir la note de 61).
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    porte_ombre: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    recoit_ombres: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -1204,7 +1247,7 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             return Err(format!("un projet existe déjà à cet endroit ({}). Choisis un autre nom.", m.display()));
         }
     }
-    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR] {
+    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR, crate::decor3d::DIR] {
         if dir.join(sub).exists() {
             return Err(format!(
                 "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
@@ -1650,6 +1693,8 @@ pub struct SaveJob {
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
     /// qui peut s'effacer (`references.rs`).
     references: crate::references::SavePlan,
+    /// Les décors 3D : modèles à écrire dans `decors/`, `decors3d.json`, et ce qui peut s'effacer (`decor3d.rs`).
+    decors3d: crate::decor3d::SavePlan,
     /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
     envois: Option<Vec<u8>>,
     /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
@@ -2022,6 +2067,7 @@ impl SaveJob {
         self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
+        self.decors3d = crate::decor3d::plan_save(&doc, dir)?;
         self.envois = crate::envois::to_bytes(&doc)?;
         self.plans_versions = crate::planvers::to_bytes(&doc)?;
         self.variantes = if doc.variantes.is_empty() { None } else { crate::variantes::to_bytes(&doc, &hors_variantes)? };
@@ -2091,6 +2137,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
+        job.decors3d = crate::decor3d::plan_save(doc, dir)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.plans_versions = crate::planvers::to_bytes(doc)?;
         job.variantes = variantes_octets(doc)?;
@@ -2394,6 +2441,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
         count += self.references.write(dir)?;
+        // Les décors 3D : leurs modèles dans `decors/`, puis `decors3d.json`.
+        count += self.decors3d.write(dir)?;
         // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
         count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
@@ -2433,7 +2482,8 @@ impl SaveJob {
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) + crate::imagevec::effacer_inutiles(dir, &self.used_images) }
-            + self.references.cleanup(dir);
+            + self.references.cleanup(dir)
+            + self.decors3d.cleanup(dir);
         Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants) })
     }
 }
@@ -2647,6 +2697,11 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 accroche_camera: l.accroche,
                 calque_3d: l.calque_3d.and_then(|c| serde_json::to_value(c).ok()),
                 profondeur_bornee: l.profondeur_bornee,
+                origine: l.origine,
+                aimante_au_sol: l.aimante_au_sol,
+                devant_decor_3d: l.devant_decor,
+                porte_ombre: l.porte_ombre,
+                recoit_ombres: l.recoit_ombres,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3396,6 +3451,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         // Le scénario gardé : `scenario.json`, `scenariogarde::load`.
         scenario: None,
         frames_rangees: None,
+        // Les décors 3D : `decors3d.json`, `decor3d::load`.
+        decors3d: Default::default(),
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
@@ -3512,6 +3569,12 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         accroche: l.accroche_camera,
                         calque_3d: l.calque_3d.and_then(crate::espace3ddecor::Calque3d::lire),
                         profondeur_bornee: l.profondeur_bornee,
+                        // (Une origine abîmée redonne le centre de la feuille, partie 182 ; l'aimant n'est pas refait à la lecture.)
+                        origine: crate::origine::assainie(l.origine),
+                        aimante_au_sol: l.aimante_au_sol,
+                        devant_decor: l.devant_decor_3d,
+                        porte_ombre: l.porte_ombre,
+                        recoit_ombres: l.recoit_ombres,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -3710,6 +3773,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.transitions = load_transitions(dir, &mut warnings);
         // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
         structure.references = crate::references::load(dir, &mut warnings);
+        // Les décors 3D des séquences : `decors3d.json` et le dossier `decors/` (absents : aucun).
+        structure.decors3d = crate::decor3d::load(dir, &mut warnings);
         // Les personnages de la brosse par personnage (`personnages.json`, absent : aucun).
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).

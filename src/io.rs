@@ -211,6 +211,8 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         annotations: Default::default(),
         scenario: None,
         frames_rangees: None,
+        // Les décors 3D : `decors3d.json`, `decor3d::load`.
+        decors3d: Default::default(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

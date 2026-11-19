@@ -5,6 +5,97 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Les branches rangées dans `main`** (sur son « Ranger les branches ») : le `main` de GitHub (fa23204, la timeline du
+  Storyboard faite sur le PC, partie 178) réuni dans le `main` local (c9c24f6 : 162, 163, 178 la plage de lecture, 179), puis
+  `banque-3d` (parties 180 à 185 : décor 3D, banque, origine et aimant, profondeur partagée, poignées dans la vue, ombres). Seuls
+  INTERFACE.md et ce journal se contredisaient : les deux côtés gardés. Numéros en double renumérotés, déplacés à la fin
+  d'INTERFACE.md : 162 les raccourcis qui manquaient → **186**, 163 l'Espace 3D à côté → **187**, 178 la plage de lecture →
+  **188** (le 178 reste à la timeline du Storyboard, déjà sur GitHub). Essais sur le Mac seulement ; rien regardé à l'écran.
+- **Les ombres des cartes et du décor 3D** (partie 185, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé),
+  le choix d'Anthony (« Ombres cartes / décor »). Sous le soleil du décor : **une carte porte l'ombre de son encre** (pas de son
+  rectangle) sur le sol, les dalles, les objets et les autres cartes ; **le décor ombre les cartes** (un personnage s'assombrit à
+  l'ombre d'un arbre) ; une carte n'est jamais dans sa propre ombre. Le rendu du décor reste gardé : sa passe garde en plus la part
+  du soleil à chaque pixel (une troisième cible, seulement avec ses ombres), les cartes qui portent une ombre sont dessinées vues du
+  soleil dans une carte d'ombres à part, et tout se fait à la composition (sur le décor, retirer le soleil comme il le retire de ses
+  faces ; sur une carte, lire les deux cartes d'ombres le long de son plan). Image du plan à l'écran et exports (le décor rendu par
+  la carte prêtée ; le processeur fait le même calcul) ; pas dans la vue Espace 3D, ni dans le rendu de secours sans carte (qui n'a
+  pas d'ombres du tout). Deux cases par calque, **cochées d'office** : « Porte une ombre », « Reçoit les ombres » (menu du calque,
+  panneau de la carte, palette ; écrites seulement décochées, `VERSION` inchangée) ; jamais d'ombre pour un calque accroché, d'effet,
+  d'annotation ; « Toujours devant le décor 3D » garde ses ombres. Sans décor ou sans ses ombres, les mêmes images par les mêmes
+  chemins. Mesures (Mac, feuille 4K, huit cartes) : rien de mesurable pour huit personnages, +1,5 à 2,5 ms pour huit cartes pleines
+  (le pire cas) ; le filtre des cartes a été réduit à une lecture filtrée sur ces mesures. Essais : 13 nouveaux (dont un de mesure,
+  ignoré) ; les 90 échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de
+  commit** (liste 185.6).
+
+- **Les poignées dans la vue** (partie 184, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé), le choix
+  d'Anthony. Dans la vue Espace 3D, un **objet du décor 3D se choisit au clic** (sur ses vrais triangles ; le plus proche de l'œil,
+  carte ou objet, l'emporte ; Maj mêle cartes, objets et caméra), choisi aussi dans la liste du panneau et l'inverse, et **se manie
+  avec le même manipulateur** autour de son origine : déplacer, tourner (autour de la verticale seulement), mettre à l'échelle (d'un
+  bloc), ou le tirer lui-même sur le sol ; **une étape d'annulation par geste**, par le chemin de la retouche du panneau (les
+  cartes aimantées posées dessus suivent, Ctrl+Z ramène les deux). Un objet aimanté garde la hauteur de l'aimant : sa flèche Y est
+  grise, comme le champ du panneau. **« Modifier l'origine »** (une case de la colonne des outils de la vue,
+  `espace3d.modifier_origine` sans touche) : le manipulateur déplace l'origine seule d'un calque (dans le plan de sa carte, l'image
+  ne bouge à aucune clé) ou d'un objet (dans l'espace, l'objet ne bouge pas), Maj l'accroche aux points de la boîte, l'aimant
+  repose ensuite par la nouvelle origine. Poignées refusées grises, la barre d'état dit pourquoi. Suppr n'enlève pas un objet dans
+  la vue (elle n'enlève pas non plus une carte : le bouton « Enlever » du panneau reste le chemin). Essais : 15 nouveaux ; les 90
+  échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste
+  184.5).
+
+- **La profondeur partagée entre le décor 3D et les cartes** (partie 183, branche `profondeur-partagee` partie de `banque-3d`
+  d3b7ab0, format 61 inchangé), le chantier choisi par Anthony. Les cartes et les objets du décor se cachent selon leur vraie
+  distance à la caméra : un personnage passe derrière un arbre et devant un banc, une carte inclinée qui traverse un objet en sort,
+  rien n'est rogné aux pieds d'une carte aimantée sur une dalle. Le décor garde sa profondeur (une seconde cible de sa passe sur la
+  carte graphique, son tampon de profondeur sur le processeur et à l'export) ; chaque carte porte son plan, et un pixel de carte est
+  caché où le décor est plus près (une lecture par pixel d'encre). Image du plan à l'écran, exports, rendu de secours, et vue
+  Espace 3D (un voile du décor posé après chaque carte). Jamais cachés : calques accrochés à la caméra, d'effet, d'annotation, et
+  la case **« Toujours devant le décor 3D »** (menu du calque, panneau de la carte, palette ; `devant_decor_3d`, sans changer
+  `VERSION` : 61 n'est encore sur aucune version distribuée). Trouvé en route : la vue de dessin ne montrait pas le décor (seuls
+  les sorties et la vue Espace 3D) ; il y est maintenant. Sans décor, les mêmes images par les mêmes chemins. Essais : 13 nouveaux
+  (et un de mesure, ignoré) ; les 90 échecs connus du Mac, aucun neuf. Mesures (Mac) : la passe du décor avec sa seconde cible, comme avant dans le bruit ; la composition, +1,0 à 1,4 ms
+  pour huit cartes pleines d'encre sur une feuille 4K (le pire cas), rien de mesurable pour huit cartes de personnage ; à refaire
+  sur son PC. Compilé et essayé sur le Mac seulement ;
+  **rien regardé à l'écran, pas de commit** (liste 183.6).
+
+- **L'origine d'un calque, son vrai pivot** (partie 182, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**), sur
+  le plan qu'Anthony a validé. Un point du dessin que l'on place (outil Transformer : le cercle à croix, Maj s'aimante à la boîte ;
+  champs x, y ; menu « Origine » ; Plus > Origine) : la pose fixe et chaque clé tournent, grandissent et s'étirent autour de lui ;
+  le déplacer ne déplace jamais le dessin (sur la feuille, et dans l'Espace 3D pour une carte inclinée). Ancrage « L'origine du
+  calque » des trajectoires, d'office pour les nouvelles (sur la feuille et dans l'espace) ; le manipulateur de l'Espace 3D tourne
+  autour de l'origine ; « Aimanté au sol » pour les cartes, et sur sa règle : décoché, la carte reste où l'aimant l'a mise.
+  Sans origine, les mêmes images au bit près. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit**
+  (liste 182.4).
+
+- **La banque 3D dans la Bibliothèque, et un décor fait de plusieurs objets** (partie 181, branche `banque-3d` partie de
+  `decor-3d` 319e817, format 60 inchangé, aucune dépendance neuve). Le décor d'une séquence devient une liste d'objets (importer
+  **ajoute**) ; la Bibliothèque a un onglet **3D** : les 45 modèles Kenney (CC0) par famille, recherche, bulle ; clic ou
+  glisser (dessin : devant la caméra ; vue Espace 3D : au point du sol) les pose par le même chemin qu'un fichier ; budget de la
+  machine pour la somme des objets (fenêtre « Ce décor est lourd » ou refus, jamais de ralenti). Les objets d'un même contenu
+  partagent un fichier (`decors/<empreinte>.glb`) et un envoi à la carte ; `decors3d.json` en version 2, un fichier de la partie
+  180 se lit comme un objet à la même place. Sur ses demandes en cours de route : une **origine** par objet (changer l'origine ne
+  bouge pas l'objet) et **« Aimanté au sol »** (posé sur le sol ou sur les objets dessous, sans pénétration, calculé aux retouches
+  seulement ; décoché, il reste exactement où l'aimant l'avait mis, même après réouverture). Banque rangée dans le programme
+  (`include_bytes!`, 1,22 Mio de données, +1,47 Mio sur l'exécutable du Mac) ; essais : les 90 échecs connus, aucun neuf ; crédit Kenney dans « À propos ». Compilé et essayé sur le Mac seulement ; **rien regardé à
+  l'écran, pas de commit** (liste 181.5).
+
+- **Le décor 3D d'une séquence** (partie 180, branche `decor-3d` partie de `main` c9c24f6, format 60 inchangé, aucune dépendance
+  neuve), première étape du moteur de prévisualisation qu'Anthony a choisi. Un glTF (`.glb`, `.gltf` empaqueté) importé pour une
+  séquence : tous ses plans le montrent, derrière les calques, filmé par leur caméra (vue Espace 3D, image du plan, exports) ;
+  aspect low poly doux (facettes, lumière hémisphère, ciel, brume, ombres douces) ; `decors3d.json` et `decors/<id>.glb` à côté du
+  manifeste ; une étape d'annulation. Sur ses demandes en cours de route : barrière à l'entrée (« Ce décor est lourd » : alléger
+  sans toucher la forme, simplifier en le disant), budget **mesuré sur la machine** (étalonnage gardé dans les réglages avec la
+  clé de la carte et du processeur, « Remesurer » dans Préférences > Performance), règle « aucun ralentissement » (à l'écran, la
+  carte graphique dessine le décor ; jamais d'attente sur le fil de l'interface), aucun plantage sur un fichier abîmé.
+  Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste 180.6). Budgets à valider sur son PC
+  (`decor3d_perf`, ignoré).
+- **`main` du 19 novembre (9c422b9 : parties 168 à 177, dont la colonne des calques de la partie 174) fusionné dans
+  `timeline-claire`.** Première tentative annulée sans rien écrire : la colonne des calques de la 174 (en-tête, sept colonnes sur tous
+  les calques, calque courant sur trois rangées) et celle de la timeline plus claire (lignes égales, barre du calque, exception
+  seule) ne tenaient pas ensemble. Trois maquettes cliquables publiées (A : la timeline plus claire ; B : la 174 ; C : la 174 plus ce
+  qui ne la contredit pas) ; Anthony : « C, le mélange ». Gardé de la timeline plus claire : la couleur du rangement sur toute la
+  ligne (colonne et grille), les dossiers en titres, les clés des calques sur un dossier fermé. Retirés : la barre du calque, les
+  lignes « exception seule », les lignes à 28 points ; la colonne est celle de la 174. La partie devient la **179** (168 : les versions
+  d'un plan ; 178 : la plage de lecture du film, branche `plage-lecture`). Essais : ceux de la colonne sont ceux du `main` ;
+  `timeline_claire_tests` garde la teinte et vérifie la couleur d'un calque rangé. Compilé et essayé sur le Mac seulement.
 - **`timeline-storyboard` fusionnée dans main (ecaeeb5), poussée, et son FEANOR habituel reconstruit** (exe de 3 h 51), sur
   son « fusionne la timeline ». Partie 178 : la timeline du Storyboard dans l'organisation qu'il a dessinée (Séquence, Plans
   avec transitions sur les coupes et icônes, Caméra repliable avec la rangée des préréglages, Calques repliables, coupes qui
@@ -33,6 +124,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-reponses` et sa branche locale retirés (elle n'avait jamais
   été poussée ; tout est dans main, sur GitHub), `Tests\essai 177` mis à la corbeille (il n'avait pas servi). `Chantiers\piste-mode`
   et `Tests\essai 173`, à l'autre session, pas touchés.
+- **La plage de lecture du film** (partie 178, branche `plage-lecture` partie de main 6b1b99c, format 60 inchangé), sur son
+  « Plage de lecture » parmi trois écarts trouvés en comparant la timeline à celle d'un autre logiciel. La lecture du montage reste
+  entre deux images de plans différents, en boucle ou non ; les bouts sont accrochés à leurs plans ; clic droit sur la règle du
+  montage ; réglage de la séance, rangé avec l'onglet. 9 essais (`plagefilm_tests.rs`). Compilé et essayé sur le Mac seulement
+  (les mêmes 90 échecs que main sur ce Mac, aucun de plus). Commit 04599ac, poussé sur GitHub sur son « Oui, pousse ». **Pas
+  fusionné dans main, pas essayé sur son PC** (liste 178.4).
 - **`prereglages-reponses` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e859d56, exe de 1 h 10), sur
   son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (e561eff), ni ici ni
   sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 897 réussis, 0 échec, les dix groupes OK) ;
@@ -67,6 +164,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-18
 
+- **`main` (95dc93b : vue nette lissée 166.8, `avant-apres-reel` 165.3 à 165.8, nouveau logo 167) fusionné dans
+  `timeline-claire`.** Première tentative annulée sans rien écrire : le `main` avait pris l'autre chemin pour le calque courant (sa
+  ligne complète toujours visible, 165.4). Deux maquettes côte à côte (A : la ligne complète ; B : la barre du calque, lignes toutes
+  fines) ; Anthony : « B mais la taille d'une ligne de calque est plus épaisse ». Les lignes passent de 22 à 28 points ; les boutons
+  de la timeline restent en haut de la colonne (165.6), la barre du calque au-dessus de la timeline, avec « 100 % » et « Normal ▾ »
+  en texte (165.3) ; le calque courant garde sa ligne même dans un groupe caché (165.4) mais elle ne flotte plus. La timeline plus
+  claire devient la partie **168** (le logo a pris la 167). Deux essais du `main` adaptés, un retiré (la ligne flottante). Suite sur
+  le Mac : les mêmes 89 échecs propres au Mac qu'avant. Pas regardé à l'écran.
 - **Préréglages dans la timeline, lot 4 : les transitions et les plans types** (parties 175 et 176, branche
   `prereglages-montage` partie de main 93ad4fd, **format 60**), sur son « Ok continue ». Cinq transitions de plus (poussée T3,
   raccord filé T4, flash de coupe T6, fondu par une couleur T7, volet par un objet T8), à l'écran comme à l'export ; le panneau
@@ -330,6 +435,60 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   caméra libre, vue en perspective, lecture, cases des Vignettes ; et la caméra qui cadre serré, l'export, les vignettes ne changent
   pas. **À juger par lui** : les traits très fins (plus fins et plus francs au zoom qu'à 100 %), les brosses à grain, les dessins
   très chargés à fort zoom, la zone en pixels pendant le trait.
+- **Timeline plus claire** (INTERFACE partie 168, d'abord numérotée 164 puis 167, branche `timeline-claire`, partie d'`espace-a-cote`), à sa demande : repenser
+  l'interface autour des clés pour 15 calques. Deux séries de dix pistes en maquettes (page « Timeline de Feanor, dix pistes ») ;
+  la première écartée (« à côté du vrai problème », « trop compliquées »). Ses gênes : retrouver un calque, lire le timing, la
+  place, les en-têtes chargés ; ses règles : ordre de la pile, temps horizontal, rien d'automatique. Gardées : l'exception seule
+  sur les lignes, une barre de réglages du calque courant, la couleur du rangement sur toute la ligne, des dossiers-titres qui se
+  replient en montrant les clés de leurs calques. Toutes les lignes à 22 points (fin de la ligne complète de la partie 160).
+- **`main` (567c90c, parties 162 à 166 du `main`) fusionné dans `timeline-claire`**, à sa demande (« fusionne »). La partie 164 de
+  la branche devient la **167** (le `main` avait déjà sa 164 : la Couleur, les Effets et la ligne du calque plus visuels). Conflit
+  principal dans `layerheads.rs` : le `main` avait refait la ligne complète du calque courant, que cette branche supprime ; ses deux
+  apports passent dans la barre du calque : l'opacité en glissant sur la miniature (un dossier et un calque Couleur unie gardent la
+  barre) et le mode par ses pastilles. Deux essais de `visuels164_tests` adaptés : la miniature est dans la barre, à droite des
+  icônes ; le pointeur se pose un instant avant d'appuyer (à sa première image, egui pose la bulle par-dessus son élément, et un
+  appui immédiat allait à la bulle). Suite sur le Mac : les mêmes 89 échecs propres au Mac qu'avant, plus un essai de temps de la
+  vue 3D qui passe seul (trois fois sur trois). Pas regardé à l'écran.
+- Essais sur le Mac : `RUSTUP_TOOLCHAIN=stable`, `RUSTFLAGS="-Awarnings -L native=<remplaçants>"` ; les remplaçants vides de
+  kernel32 et psapi (six fonctions de mesure) sont hors du dépôt, dans le dossier de travail de la session.
+
+## 2026-11-16
+
+- **Zoom 1 et 2 dans la vue 3D à côté** (à sa demande) : `raccourcis-muets` fusionnée dans `espace-a-cote` (le zoom 3D au
+  clavier y est), puis la souris sur la vue d'à côté, 1 et 2 la zooment ; sur la feuille, la feuille. Essai
+  `the_zoom_keys_zoom_the_side_view_under_the_mouse_and_the_sheet_elsewhere`. Fusionner `espace-a-cote` dans `main`
+  y apportera aussi la partie 162. Mesure après remise sur `main` : trait 5,6 à 5,75 ms par image vue fermée, 5,9 à 6,3 ms
+  ouverte (médianes, essai seul ; l'interface du `main` à jour coûte plus que celle d'`espace-libre`, 2,07 ms).
+- **`espace-a-cote` remise sur le `main` à jour** (e1f18b2, parties 145 à 161), à sa demande : fusion du `main` dans la branche,
+  neuf fichiers en conflit réglés à la main. La partie 144 d'INTERFACE devient la **163** (le `main` avait déjà sa partie
+  144, les vues multiples). Le `main` refait déjà par morceaux la carte sur laquelle on dessine dans la 3D
+  (`render::cel_image_zone`, `espace3ddessin.rs`) : la vue d'à côté passe d'abord par lui, puis par ses propres morceaux pour
+  les dessins faits sur la feuille. Réglages montre toujours l'outil (sa décision de la partie 150) ; les réglages de la
+  vue d'à côté sont dans l'onglet « Espace 3D », qui ne passe pas devant à l'ouverture. Un essai cliquait au centre de la
+  vue, où la caméra du plan est désormais choisissable : il clique un peu à côté, sur la carte. Dessiner dans la 3D et tracer
+  une Trajectoire restent réservés au plein écran (la vue d'à côté ne dessine jamais, comme prévu) ; plusieurs vues 3D
+  (partie 144) s'affichent aussi dans la vue d'à côté, pas essayé.
+- Vue 3D à côté du dessin (INTERFACE partie 163, d’abord numérotée 144 ; ESPACE3D partie 13), demandée depuis la session de la page de vente :
+  aujourd'hui la vue Espace 3D remplace la feuille, la page de vente n'en parle donc pas tant que ce n'est pas fait et
+  essayé. Plan écrit et validé par Anthony le jour même : partage de la zone du dessin (feuille à gauche, 3D à droite, barre
+  à tirer) plutôt qu'un panneau ; un geste va à la vue où il commence ; Réglages de la dernière vue cliquée ; carte refaite
+  par morceaux pendant un trait, vue 3D refaite au plus 30 fois par seconde. Branche `espace-a-cote` partie d'`espace-libre`
+  (choix d'Anthony : elle se fusionne après elle), dans le dossier de travail `Feanor-a-cote` sur le Mac.
+- Fait : commande `espace3d.a_cote` (bouton après le cube, menu Affichage > Plateau, palette, sans touche), plein écran
+  inchangé (« Agrandir », et le refermer rend le côte à côte), lecture et trait non interrompus. Mesure sur le Mac
+  (1920 × 1080, 10 calques, trait à 240 images/s) : 2,07 ms par image vue fermée, 2,25 ms ouverte (médianes) ; une carte
+  refaite en entier 3,2 ms, un bout de trait 0,11 ms. À mesurer sur le PC Windows.
+- Rien regardé à l'écran (FEANOR ne se lance pas sur ce Mac comme sur le PC) : liste de 12 points dans la partie 163.
+- À savoir pour la page de vente : Storyboard Pro montre déjà ensemble une vue caméra et des vues de dessus et de côté de
+  son espace 3D (non revérifié) ; la vue côte à côte n'est donc sans doute pas une exclusivité.
+- **Les raccourcis qui manquaient parfois** (branche `raccourcis-muets`, partie 162, depuis `main` e1f18b2) : à sa remarque « les
+  raccourcis manquent parfois, notamment le zoom », sur la feuille aussi. Pas reproduit ; trois causes trouvées en lisant le code :
+  un glisser de la bande de montage dont le lâcher n'était pas vu restait en cours et mettait toutes les touches de côté (corrigé :
+  fini comme au lâcher dès qu'aucun bouton n'est appuyé) ; un bouton qui avait le clavier ne le rendait jamais (le code prévu ne
+  jouait pas, corrigé) ; et la barre d'état dit maintenant pourquoi une touche de raccourci n'a rien fait (glisser en cours, case où
+  l'on écrit, fenêtre ouverte). Et dans l'Espace 3D, 1 et 2 zooment la vue 3D (avant : la feuille cachée). 7 essais, rouges
+  avant pour les corrections ; suite complète sur le Mac : les mêmes 89 échecs que `main` (propres au Mac), aucun nouveau. Fait et essayé sur le Mac (bibliothèque seule,
+  sans le vrai exe) : pas regardé à l'écran, pas de version portable de cette branche. Non fusionné : attend son essai.
 
 ## 2026-11-13
 

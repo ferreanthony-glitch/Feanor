@@ -80,6 +80,9 @@ pub(crate) struct Etat {
     pub(crate) tourne_propose: bool,
     /// Le prochain appui sur le dessin choisit le point d'ancrage (bouton « Un point du dessin : cliquer »).
     pub(crate) choisir_ancre: bool,
+    /// Ce qui suit le chemin d'une prochaine trajectoire tracée : le dernier ancrage choisi ; rien (d'origine) : l'origine du
+    /// calque (`Ancre::Origine`, partie 182).
+    pub(crate) ancre_propose: Option<Ancre>,
     /// Le geste en cours dans la vue Espace 3D (`trajectoire3d.rs`, partie 149).
     pub(crate) espace: Option<crate::trajectoire3d::GesteEspace>,
     /// Le lissage du curseur « Lissage » (de 0 à 1, `trajectoirelisse.rs`, partie 151) : celui des prochains tracés.
@@ -437,6 +440,11 @@ impl App {
                         // posée suit les images insérées ou retirées, comme les clés ; sans fin posée, le chemin s'étirerait jusqu'à
                         // la nouvelle dernière image).
                         t.depart = self.cur_frame;
+                        // (Une trajectoire neuve fait suivre le chemin à l'origine du calque, partie 182 ; ou le dernier ancrage choisi.
+                        // Un calque sans origine posée suit le chemin depuis le début du trait, comme avant : son origine serait le
+                        // centre de la feuille, et le dessin sauterait dessus.)
+                        let a = self.traj.ancre_propose.unwrap_or(Ancre::Origine);
+                        t.ancre = if a == Ancre::Origine && self.layers()[li].origine.is_none() { Ancre::Depart } else { a };
                         let duree = self.frame_count();
                         t.fin = (duree >= t.depart + 2).then(|| duree - 1);
                         t.cles = self.traj.cles_propose;
@@ -472,6 +480,16 @@ impl App {
     /// base) ; en clés d'images, aucune clé de position, un dessin à chaque jalon. Le point d'ancrage choisi (`Ancre`) est ce qui
     /// suit le chemin. Un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
     pub(crate) fn trajectoire_recalculer_dans(&mut self, pi: usize, li: usize) {
+        self.trajectoire_recalculer_sans_aimant(pi, li);
+        // (Une carte aimantée au sol y revient, à chacune des clés que le chemin vient de poser : partie 182.)
+        let world = self.e3_world();
+        let decor = self.doc.decor_du_plan(pi).cloned();
+        if let Some(l) = self.doc.panels.get_mut(pi).and_then(|p| p.layers.get_mut(li)) {
+            crate::origine::aimanter_au_sol(l, &world, decor.as_ref());
+        }
+    }
+
+    fn trajectoire_recalculer_sans_aimant(&mut self, pi: usize, li: usize) {
         let Some(p) = self.doc.panels.get(pi) else { return };
         let duree = p.frame_count();
         let Some(t) = p.layers.get(li).and_then(|l| l.trajectoire.clone()) else { return };
@@ -483,7 +501,8 @@ impl App {
         let posee = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
         let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
         let ancre = self.trajectoire_point_d_ancrage(pi, li, &t, base);
-        let pivot = self.doc.stage_center();
+        // (Le calque tourne autour de son origine, partie 182 : le centre de la feuille s'il n'en a pas.)
+        let pivot = self.doc.panels[pi].layers[li].pivot(self.doc.stage_center());
         // (Plan en Espace 3D : un calque redevenu fixe garde sa profondeur, même derrière la caméra d'origine du plan.)
         let libre = true;
         let l = &mut self.doc.panels[pi].layers[li];
@@ -551,7 +570,9 @@ impl App {
     fn trajectoire_point_d_ancrage(&self, pi: usize, li: usize, t: &Trajectoire, base: LayerTransform) -> [f32; 2] {
         // (Le départ du trait, ou l'ancien départ d'un chemin prolongé par son début : `Trajectoire::point_de_reference`.)
         let depart = t.point_de_reference();
-        let affine = base.affine(self.doc.stage_center());
+        // (La pose se lit autour de l'origine du calque, partie 182.)
+        let origine = self.doc.panels.get(pi).and_then(|p| p.layers.get(li)).map_or(self.doc.stage_center(), |l| l.pivot(self.doc.stage_center()));
+        let affine = base.affine(origine);
         let sur_la_feuille = |p: [f32; 2]| {
             let q = affine.apply(pos2(p[0], p[1]));
             [q.x, q.y]
@@ -559,6 +580,8 @@ impl App {
         match t.ancre {
             Ancre::Depart => depart,
             Ancre::Point { x, y } => sur_la_feuille([x, y]),
+            // (L'origine du calque, mise sur la feuille par la pose : c'est elle qui suit le chemin, partie 182.)
+            Ancre::Origine => sur_la_feuille([origine.x, origine.y]),
             a => {
                 let Some(l) = self.doc.panels.get(pi).and_then(|p| p.layers.get(li)) else { return depart };
                 let Some(cel) = t.source.filter(|c| self.doc.cels.contains_key(c)).or_else(|| l.cel_at(t.depart)) else { return depart };
@@ -652,7 +675,7 @@ impl App {
         let poses = t.poses(ancre);
         // Une pose tournée, dans les coordonnées du dessin : sur la feuille, tourner autour du point d'ancrage puis déplacer, le tout
         // encadré par la pose propre du calque (sous une pose sans échelle ni rotation, ce sont les mêmes coordonnées).
-        let affine_base = base.affine(self.doc.stage_center());
+        let affine_base = base.affine(self.doc.panels[pi].layers[li].pivot(self.doc.stage_center()));
         let inverse = affine_base.inverse().unwrap_or(Affine::IDENTITY);
         let dans_le_dessin = |d: [f32; 2], angle: f32| -> Affine {
             let feuille = Affine::rotate_about(pos2(ancre[0], ancre[1]), angle.to_radians()).then(&Affine::translate(vec2(d[0], d[1])));
@@ -1210,6 +1233,8 @@ impl App {
                 if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
                     tr.ancre = ancre;
                 }
+                // (Proposé aux trajectoires suivantes, partie 182.)
+                self.traj.ancre_propose = Some(ancre);
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, "Ancrage de la trajectoire");
             }

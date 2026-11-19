@@ -726,6 +726,24 @@ impl App {
                 if !ctx.input(|inp| inp.pointer.primary_down()) {
                     self.e3_finish_drag();
                 }
+                // La souris hors des vues : le zoom au clavier va à la dernière vue active.
+                let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
+                let active = self.espace3d.vues.active;
+                if clavier != 0.0 && active < self.espace3d.vues.cadres.len() {
+                    let mut c = self.espace3d.vues.cadres[active];
+                    if c.point == PointDeVue::Camera {
+                        if let Some((_, r, resp)) = resps.iter().find(|x| x.0 == active) {
+                            let draw = self.e3_vues_draw(&c, *r);
+                            self.espace3d.molette_clavier = clavier;
+                            let ancien = std::mem::replace(&mut self.espace3d.through_camera, true);
+                            self.e3_nav_camera(draw, resp, 0.0, egui::Vec2::ZERO);
+                            self.espace3d.through_camera = ancien;
+                        }
+                    } else {
+                        c.zoomer(clavier);
+                        self.espace3d.vues.cadres[active] = c;
+                    }
+                }
             }
         }
         // (Le dessin et la Trajectoire retiennent le regard de la vue où va le geste : chaque vue se peint avec le sien,
@@ -766,6 +784,11 @@ impl App {
         } else {
             if resp.hovered() && scroll != 0.0 {
                 c.zoomer(scroll);
+            }
+            // Le zoom au clavier (1 et 2) : des crans de molette pour la vue où va le geste.
+            let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
+            if clavier != 0.0 {
+                c.zoomer(clavier);
             }
             if resp.dragged_by(PointerButton::Middle) {
                 c.glisser(delta.x, delta.y, draw.width());
@@ -816,7 +839,9 @@ impl App {
             };
             Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
-        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
+        // Le décor 3D de la séquence (partie 180), derrière les cartes ; une prise par vue.
+        let decor = self.e3_peindre_decor(&painter, draw, &view, 100 + i as u64).then_some((100 + i as u64, draw));
+        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
         if !camera {
             let cam_now = self.e3_world().scene_cam(&self.current_camera());
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);

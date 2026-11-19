@@ -155,7 +155,7 @@ fn the_card_is_the_flat_multiplan_layer_seen_from_the_eye() {
             let mut layer = Layer::new("L", LayerKind::Bitmap);
             layer.depth = depth;
             layer.transform = pose(30.0, -20.0);
-            let seen = CameraSeen { offset, dolly, d0: w.d0_px, grossissement: 1.0, angle: 0.0 };
+            let seen = CameraSeen { offset, dolly, d0: w.d0_px, grossissement: 1.0, angle: 0.0, centre: eframe::egui::Pos2::ZERO };
             let Some(flat) = layer.transform_seen_at(&seen, 0) else { continue };
             let affine = flat.affine(pivot);
             let xf = w.card_xf(&layer.pose(0), layer.depth_at(0));
@@ -959,7 +959,8 @@ fn no_object_reference_model_or_background_layer_command_remains() {
         assert!(crate::keymap::action_info(id).is_none(), "{id} ne doit plus exister");
         assert!(!crate::keymap::DEFAULT_KEYMAP.contains(&format!("\"{id}\"")), "{id} est encore dans keymap.toml");
     }
-    for (id, label) in crate::palette::palette_commands() {
+    // (Partie 180 : le décor 3D d'une séquence revient, par décision d'Anthony du 2026-11-19 ; son import parle de glTF.)
+    for (id, label) in crate::palette::palette_commands().into_iter().filter(|(id, _)| *id != "fichier.importer_decor3d") {
         let l = label.to_lowercase();
         assert!(!["cube", "mannequin", "cylindre", "sphère", "escalier", "gltf", "repère 3d"].iter().any(|w| l.contains(w)), "{id} « {label} » parle d'un objet 3D ou du repère");
     }

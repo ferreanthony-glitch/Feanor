@@ -297,7 +297,7 @@ fn a_saved_three_layers_setting_opens_as_the_whole_stack() {
         app.pistes_follow_current(false);
         assert_eq!(heights(&app)[0], (0, LAYER_HM), "« {valeur} »");
     }
-    assert_eq!(crate::project::VERSION, 60, "le format des projets ne change pas");
+    assert_eq!(crate::project::VERSION, 61, "le format des projets ne change pas");
 }
 // ------------------------------------------------------------------------------------ les hits
 

@@ -638,11 +638,16 @@ pub struct App {
     pub(crate) continu: crate::continu::Continu,
     /// La fenêtre « Jalons » du projet (`jalonsui.rs`).
     pub(crate) jalons_ui: Option<crate::jalonsui::Fenetre>,
+    /// Le décor 3D de la séquence (`decor3dui.rs`, partie 180) : l'import en cours, la fenêtre « Ce décor est lourd », la
+    /// retouche en cours de sa place.
+    pub(crate) decor3d: crate::decor3dui::Etat3d,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
     pub(crate) looping: bool,
+    /// Plage de lecture du film (`plagefilm.rs`) : la lecture du montage reste entre ses deux bouts.
+    pub(crate) plage_film: crate::plagefilm::PlageFilm,
     pub(crate) play_accum: f64,
     /// Vitesse de la lecture, signée (J, K, L du montage, jkl.rs) : 1 = la cadence du film, négative = en arrière.
     pub(crate) play_speed: f32,
@@ -1014,6 +1019,9 @@ pub struct App {
     pub(crate) following: bool,
 
     pub(crate) hover_canvas: Option<Pos2>,
+    /// Le dernier point de la feuille sous le pointeur (partie 182) : où l'origine « Ici » se pose, même quand le menu qui la
+    /// demande couvre la feuille.
+    pub(crate) origine_ici: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
     pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
     /// Raccourci en cours d'assignation, et la recherche de la liste des raccourcis
@@ -1326,10 +1334,12 @@ impl App {
             recovery,
             continu: Default::default(),
             jalons_ui: None,
+            decor3d: Default::default(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
             looping: true,
+            plage_film: Default::default(),
             play_accum: 0.0,
             play_speed: 1.0,
             last_time: None,
@@ -1526,6 +1536,7 @@ impl App {
             following: false,
 
             hover_canvas: None,
+            origine_ici: None,
             pending_keys: Vec::new(),
             assign: None,
             keys_filter: String::new(),
@@ -1558,6 +1569,15 @@ impl App {
         }
         crate::demarrage::marque("carte graphique : pipelines des calques (GpuCanvas::new)");
         app.renderer.set_gpu(app.gpu.is_some());
+        // Le décor 3D (partie 180) : le fil de l'interface n'attend jamais un rendu ; l'export emprunte la carte graphique ; le budget
+        // de cette machine, s'il a été mesuré ici.
+        if reel {
+            crate::decor3d::poser_fil_interface();
+            if let Some(rs) = wgpu_render_state {
+                crate::decor3d::poser_carte(rs);
+            }
+        }
+        app.decor3d_budget_au_demarrage();
         app.display_info.push_str(if app.gpu.is_some() {
             " · calques par la carte graphique"
         } else {
@@ -1635,7 +1655,13 @@ impl App {
     /// défilement multiplan si le calque est en profondeur et la caméra décalée.
     pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
         let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
-        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or(self.layer().pose(self.cur_frame))
+        // (Rapportée au centre de la feuille, comme ce que pose l'image : `affine(stage_center)`, partie 182.)
+        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or_else(|| self.layer().pose_au_centre(self.cur_frame, self.doc.stage_center()))
+    }
+
+    /// Comme `layer_seen`, autour de l'origine du calque (partie 182) : ce que les gestes comparent à sa pose (`Layer::pose`).
+    pub(crate) fn layer_seen_o(&self) -> crate::document::LayerTransform {
+        self.layer_seen().a_l_origine(self.layer().ecart_origine(self.doc.stage_center()))
     }
 
     /// Transformation du calque courant (de son dessin vers la feuille).
@@ -1658,7 +1684,7 @@ impl App {
         }
         // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
         let world = self.e3_world();
-        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
+        let xf = world.card_xf_de(l, &t, world.profondeur(l, self.cur_frame));
         match repere {
             Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
             None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
@@ -1927,10 +1953,17 @@ impl App {
         let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
         let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
         let mut portees = crate::calqueffet::Portees::new(par_distance);
+        // Le décor 3D de la séquence (partie 180), sous tous les calques comme dans les sorties (`render::panel_plan_at`), et la
+        // profondeur qu'il partage avec les cartes (partie 183, `profondeur.rs`) : sans décor, aucune carte ne porte de plan.
+        let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, &camera, repere.as_ref());
+        let avec_decor = decor.is_some();
+        // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
+        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres));
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
             portees.visiter(layers, li, items.len());
+            items.extend(decor.take());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1969,6 +2002,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: card_pre.clone(),
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -1991,6 +2025,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: pl.pre,
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -2019,6 +2054,8 @@ impl App {
                     ctg: None,
                     fond: None,
                     pre: card_pre.clone(),
+                    profondeur: if avec_decor { crate::profondeur::plan_du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
+                    ombre: if avec_ombres { crate::ombres::du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
                 };
                 // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
                 // (`fond.rs`), la peinture libre ou le trait par-dessus.
@@ -2035,12 +2072,14 @@ impl App {
                 // (c'est ce qu'on pose avec le pinceau ; le remplissage est dessous).
                 if onion && li == cur && !self.playing {
                     if let Some(g) = layer.couleur.as_ref().filter(|c| c.griffonner).and_then(|c| c.griffonnages.get(&cel).copied()) {
-                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
+                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone(), profondeur: None, ombre: None });
                     }
                 }
             }
             items.append(&mut onion_items);
         }
+        // (Une pile sans calque : le décor seul.)
+        items.extend(decor);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2250,15 +2289,17 @@ impl App {
             self.start_audio_playback();
             return;
         }
+        // Dans le film : entre les bouts de la plage de lecture du film (`plagefilm.rs`), tout le film sans elle.
+        let (film_a, film_b) = self.film_play_range();
         let at_end = if self.play_montage {
-            self.global_frame() + 1 >= self.doc.total_frames()
+            let g = self.global_frame();
+            g + 1 >= film_b || g < film_a
         } else {
             self.cur_frame + 1 >= end || self.cur_frame < start
         };
         if at_end {
             if self.play_montage {
-                self.set_panel(0);
-                self.cur_frame = 0;
+                self.place_global(film_a);
             } else {
                 self.cur_frame = start;
             }
@@ -2297,36 +2338,44 @@ impl App {
                 self.follow_frame = true;
                 continue;
             }
-            let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
+            if self.play_montage {
+                // Le film, image par image d'un plan à l'autre, entre les bouts de la plage de lecture du film (tout le film
+                // sans elle) ; en arrière (J) de même.
+                let (a, b) = self.film_play_range();
+                let g = self.global_frame();
+                let suivante = if vitesse < 0.0 {
+                    if g > a && g < b {
+                        Some(g - 1)
+                    } else {
+                        self.looping.then(|| b - 1)
+                    }
+                } else if g + 1 < b && g >= a {
+                    Some(g + 1)
+                } else {
+                    self.looping.then_some(a)
+                };
+                let Some(g) = suivante else {
+                    self.playing = false;
+                    break;
+                };
+                self.place_global(g);
+                self.follow_frame = true;
+                continue;
+            }
+            let (start, end) = self.plan_play_range();
             if vitesse < 0.0 {
-                // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
+                // En arrière (J) : image par image jusqu'au début du plan.
                 if self.cur_frame > start {
                     self.cur_frame -= 1;
-                } else if self.play_montage && self.cur_panel > 0 {
-                    let prev = self.cur_panel - 1;
-                    self.set_panel(prev);
-                    self.cur_frame = self.frame_count().saturating_sub(1);
                 } else if self.looping {
-                    if self.play_montage {
-                        let last = self.doc.panels.len() - 1;
-                        self.set_panel(last);
-                        self.cur_frame = self.frame_count().saturating_sub(1);
-                    } else {
-                        self.cur_frame = end.max(1) - 1;
-                    }
+                    self.cur_frame = end.max(1) - 1;
                 } else {
                     self.playing = false;
                     break;
                 }
             } else if self.cur_frame + 1 < end {
                 self.cur_frame += 1;
-            } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
-                let next = self.cur_panel + 1;
-                self.set_panel(next);
             } else if self.looping {
-                if self.play_montage {
-                    self.set_panel(0);
-                }
                 self.cur_frame = start;
             } else {
                 self.playing = false;
@@ -2884,7 +2933,11 @@ impl App {
         // (Un calque accroché à la caméra, `accroche.rs` : « transformé » se lit sur ce qu'on voit, la caméra comprise.)
         let a_plat = if self.layer().accroche { self.layer_seen().is_identity() } else { self.layer().pose(self.cur_frame).is_identity() };
         if self.fill.sample_all && a_plat {
-            return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
+            let mut plan = self.build_plan(self.cur_frame, false, false);
+            // (Le décor 3D de la séquence n'est pas un calque : ses bords ne ferment pas une zone ; sans lui, aucune carte n'est
+            // cachée, les contours sont ceux d'avant, partie 183.)
+            plan.items.retain(|i| !matches!(i.fond, Some(crate::render::FondPart::Decor(_))));
+            return render::composite_full(&self.doc, &plan);
         }
         match self.cel_here() {
             Some(id) => self.doc.cels[&id].raster.to_flat(),
@@ -3141,6 +3194,15 @@ impl App {
         if crate::fx::fond_poll() | crate::fx::griffon_poll() {
             self.renderer.invalidate_composed();
             ctx.request_repaint();
+        }
+        // Le décor 3D rendu par le processeur en arrière-plan (sans carte graphique, `decor3d.rs`).
+        if crate::decor3d::poll() {
+            self.renderer.invalidate_composed();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::decor3d::pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
@@ -3980,6 +4042,8 @@ impl App {
         // Ce qui était choisi ou visé l'était dans l'ancien projet, dont les numéros de plans et de calques reviennent dans le
         // nouveau (chaque projet compte depuis le début) : rien ne reste choisi, aucun menu ne vise plus rien.
         self.board_sel.clear();
+        // (La plage de lecture du film aussi : ses bouts sont accrochés à des numéros de plans, `plagefilm.rs`.)
+        self.plage_film = Default::default();
         self.board_notes.clear();
         self.board_text = None;
         self.layer_sel.clear();
@@ -4157,10 +4221,37 @@ impl App {
 
     // ------------------------------------------------------------------ clavier
 
+    /// Le raccourci de la première touche appuyée à cette image (pas une répétition), s'il y en a un : son action et son nom
+    /// (« Zoom avant »). Pour dire dans la barre d'état pourquoi il n'a rien fait (`handle_shortcuts`).
+    pub(crate) fn raccourci_tape(&self, ctx: &egui::Context) -> Option<(String, String)> {
+        let mode = self.key_mode();
+        let montage = self.espace == crate::workspace::Espace::Montage;
+        ctx.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                // (Échap, Entrée et Tab ferment ou valident une fenêtre ou une case : jamais un raccourci « manqué ».)
+                Event::Key { key, physical_key, pressed: true, repeat: false, modifiers, .. } if !matches!(key, Key::Escape | Key::Enter | Key::Tab) => {
+                    let action = self.keymap.find_in(*key, *physical_key, *modifiers, mode, montage)?;
+                    let nom = keymap::action_info(action).map_or(action, |a| a.label);
+                    Some((action.to_string(), nom.to_string()))
+                }
+                _ => None,
+            })
+        })
+    }
+
+    /// La souris est ailleurs que sur la case qui a le clavier : une touche tapée alors visait sans doute un raccourci.
+    fn souris_hors_de_la_saisie(&self, ctx: &egui::Context) -> bool {
+        let Some(id) = ctx.memory(|m| m.focused()) else { return false };
+        let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return false };
+        ctx.read_response(id).is_some_and(|r| !r.rect.contains(p))
+    }
+
     pub(crate) fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        // Un bouton cliqué garde le focus clavier : Entrée ou Espace le « recliqueraient ».
-        if !ctx.wants_keyboard_input() {
-            if let Some(id) = ctx.memory(|m| m.focused()) {
+        // Un bouton (tout ce qui a pris le clavier sans être une case où l'on écrit) le rend : Entrée ou Espace le
+        // « recliqueraient », et les raccourcis seraient muets tant qu'il le garde. (Avant le 2026-11-16, ce test demandait
+        // `!wants_keyboard_input()`, qui est faux dès que quelque chose a le clavier : il ne rendait jamais rien.)
+        if let Some(id) = ctx.memory(|m| m.focused()) {
+            if egui::text_edit::TextEditState::load(ctx, id).is_none() {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
         }
@@ -4173,12 +4264,25 @@ impl App {
         // Ctrl+N, Ctrl+W, F1, F11…, passent quand même ; `accueilfenetre::raccourci_hors_saisie`.)
         let saisie = ctx.wants_keyboard_input() && !(self.accueil_visible() && crate::accueilfenetre::raccourci_hors_saisie(ctx));
         if saisie || self.modal_open() {
+            // La barre d'état dit pourquoi la touche n'a rien fait (Anthony, 2026-11-16 : « les raccourcis manquent parfois,
+            // notamment le zoom »). Pendant une saisie, seulement quand la souris n'est pas sur la case : on y écrit, ce n'est
+            // pas un raccourci manqué.
+            if let Some((_, nom)) = self.raccourci_tape(ctx) {
+                if !saisie {
+                    self.status = format!("« {nom} » n'a pas été fait : une fenêtre attend une réponse.");
+                } else if self.souris_hors_de_la_saisie(ctx) {
+                    self.status = format!("« {nom} » n'a pas été fait : une case où l'on écrit a le clavier. Échap ou un clic sur la feuille le rend.");
+                }
+            }
             self.pending_keys.clear();
             return;
         }
         // Pendant un glisser (chantier 2) : Échap ou Ctrl+Z l'abandonnent, tout revient comme
         // avant ; les autres touches attendent la fin du geste.
         if self.dragging() {
+            if let Some((_, nom)) = self.raccourci_tape(ctx).filter(|(a, _)| a != "edition.annuler") {
+                self.status = format!("« {nom} » n'a pas été fait : un glisser est en cours. Lâche-le, ou Échap l'abandonne.");
+            }
             let mode = self.key_mode();
             let cancel = ctx.input(|i| {
                 i.events.iter().any(|e| match e {
@@ -4840,6 +4944,10 @@ impl App {
             // la bande. `bande.zoom_avant` / `bande.zoom_arriere` gardent leurs touches à elles, où que soit le pointeur.
             "vue.zoom_avant" if self.bande_survolee => self.zoom_strip(1.25),
             "vue.zoom_arriere" if self.bande_survolee => self.zoom_strip(1.0 / 1.25),
+            // Dans l'Espace 3D, le zoom est celui de la vue 3D, comme la molette (avant : la feuille cachée zoomait).
+            // (La vue 3D à côté du dessin, `espace3dcote.rs` : quand la souris est sur elle ; sur la feuille, la feuille zoome.)
+            "vue.zoom_avant" if self.espace3d_plein() || self.souris_sur_la_vue_a_cote() => self.espace3d.molette_clavier += crate::espace3dview::CRAN_CLAVIER,
+            "vue.zoom_arriere" if self.espace3d_plein() || self.souris_sur_la_vue_a_cote() => self.espace3d.molette_clavier -= crate::espace3dview::CRAN_CLAVIER,
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
             "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),
@@ -5125,6 +5233,10 @@ impl App {
                 self.looping = !self.looping;
                 self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
             }
+            "plage.debut" => self.plage_ici(false),
+            "plage.fin" => self.plage_ici(true),
+            "plage.plans_choisis" => self.plage_plans_choisis(),
+            "plage.enlever" => self.enlever_plage(),
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             // Rognage des plans (`rognageui.rs`).
             "montage.duree" => self.open_duration_dialog(),
@@ -5241,6 +5353,9 @@ impl App {
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
+            "fichier.importer_decor3d" => self.decor3d_importer(),
+            "decor3d.enlever" => self.decor3d_enlever(),
+            "decor3d.remesurer" => self.decor3d_remesurer(),
             "fichier.importer_scenario" => self.open_scenario_window(),
             "scenario.creer_plans" => self.open_plans_window(),
             "pinceau.enregistrer_traits" => {
@@ -5302,6 +5417,17 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             // Accrocher les calques choisis à la caméra, ou les décrocher (`accroche.rs`).
             "calque.accrocher_camera" => self.basculer_accroche(self.cur_layer),
+            // L'origine du calque et l'aimant au sol (`origine.rs`, partie 182).
+            a if crate::origine::Preset::de_l_action(a).is_some() => {
+                if let Some(p) = crate::origine::Preset::de_l_action(a) {
+                    self.origine_preset(p);
+                }
+            }
+            crate::origine::AIMANT_ACTION => self.basculer_aimant(self.cur_layer),
+            // Toujours devant le décor 3D (`profondeur.rs`, partie 183).
+            crate::profondeur::ACTION => self.basculer_devant_decor(self.cur_layer),
+            crate::ombres::ACTION_PORTE => self.basculer_porte_ombre(self.cur_layer),
+            crate::ombres::ACTION_RECOIT => self.basculer_recoit_ombres(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.
@@ -5751,6 +5877,7 @@ impl App {
         self.tick_aplat_couleur(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
+        self.decor3d_tick(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();
@@ -5857,6 +5984,7 @@ impl App {
             self.poll_brushes();
             self.poll_bruitages(ctx);
             self.poll_bibliotheque(ctx);
+            self.poll_banque3d(ctx);
             self.poll_suggestions(ctx);
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);

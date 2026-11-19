@@ -37,7 +37,7 @@ use crate::espace3dmath as m;
 use crate::espace3dui::Drag;
 use crate::history::Edit;
 use crate::poskeys::PosKey;
-use crate::trajectoire::{Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTION_MAX};
+use crate::trajectoire::{Ancre, Cles, DessinJalon, Support, Trajectoire, MARQUE_FRACTION_MAX};
 use crate::trajectoireui::{ARRACHE_ECRAN, COULEUR, TOL_ECRAN};
 
 pub(crate) const PRISE: &str = "Trajectoire dans l'espace : trace d'un trait, sur une carte ou sur le sol, le chemin de ce qui est choisi (cartes, caméra). Maj + un trait depuis un bout du chemin : le prolonger. Ctrl+clic sur le chemin : une poignée, qui se tire, ou par ses flèches x, y, z ; Ctrl+clic sur elle : la retirer. Ctrl+clic ailleurs : choisir une carte ou la caméra, seule ; Maj+Ctrl+clic : en ajouter une, ou la lâcher. Alt+glisser ou clic droit : tourner la vue.";
@@ -258,16 +258,25 @@ fn pose_propre(l: &Layer) -> (LayerTransform, f32) {
 /// tenues), la carte est sa pose propre déplacée, dans l'espace, du déplacement du chemin depuis son départ : sa place en
 /// largeur, en hauteur et en profondeur change, son orientation et sa taille dans l'espace restent (`Monde::card_from_xf_libre`
 /// règle son échelle pour cela : elle rapetisse en reculant, et l'ordre par distance la range toute seule).
+///
+/// **`Ancre::Origine`** (partie 182) : ce n'est plus un déplacement relatif, l'origine de la carte (`Layer::origine`, le
+/// centre de sa feuille sans origine) est posée sur le chemin dans l'espace, à chaque image ou jalon. La carte ne tourne
+/// pas avec le chemin dans l'espace (vue par la tranche, elle disparaîtrait) : seule sa place change.
 pub(crate) fn cles_dans_l_espace(world: &Monde, l: &Layer, t: &Trajectoire, duree: usize) -> Vec<PosKey> {
     let (base, profondeur) = pose_propre(l);
-    let propre = world.card_xf(&base, profondeur);
+    let e = world.ecart(l);
+    let propre = world.card_xf_o(&base, profondeur, e);
+    let origine = world.origine_monde(&propre, e);
     let tenue = t.cles == Cles::Images;
     t.images_et_fractions(duree)
         .into_iter()
         .filter_map(|(image, fraction)| {
-            let d = t.deplacement_a(fraction)?;
+            let d = match t.ancre {
+                Ancre::Origine => m::sub(t.monde_a(fraction)?, origine),
+                _ => t.deplacement_a(fraction)?,
+            };
             let xf = Xf { pos: m::add(propre.pos, d), ..propre };
-            let (mut pose, la) = world.card_from_xf_libre(&base, profondeur, &xf);
+            let (mut pose, la) = world.card_from_xf_libre_o(&base, profondeur, &xf, e);
             pose.dz = la - l.depth;
             Some(PosKey { tenue, ..PosKey::new(image, pose) })
         })
@@ -501,7 +510,11 @@ impl App {
         }
         let centre = match sujets.first()? {
             Sujet::Camera => world.eye(&self.current_camera()),
-            Sujet::Carte(id) => world.carte(self.layers().iter().find(|l| l.id == *id)?, frame).pos,
+            // (Par l'origine de la carte, qui suit le chemin : partie 182.)
+            Sujet::Carte(id) => {
+                let l = self.layers().iter().find(|l| l.id == *id)?;
+                world.origine_monde(&world.carte(l, frame), world.ecart(l))
+            }
         };
         Support::nouveau(centre, regard.view.right, m::scale(regard.view.up, -1.0), world.k)
     }
@@ -818,6 +831,11 @@ impl App {
                     // (Le lissage du curseur s'applique au nouveau tracé, partie 151.)
                     t.lisser_a(self.traj.lissage);
                     if let Sujet::Carte(id) = s {
+                        // (Une trajectoire neuve pose l'origine de la carte sur le chemin, partie 182 ; ou le déplacement relatif,
+                        // s'il a été choisi en dernier. La carte ne tourne pas avec le chemin dans l'espace.)
+                        // (Une carte sans origine posée garde le déplacement relatif : rien ne saute.)
+                        let sans_origine = self.traj_rang(id).is_some_and(|li| self.layers()[li].origine.is_none());
+                        t.ancre = if sans_origine || self.traj.ancre_propose.is_some_and(|a| a != Ancre::Origine) { Ancre::Depart } else { Ancre::Origine };
                         if let Some(li) = self.traj_rang(id) {
                             let l = &mut self.layers_mut()[li];
                             let (pose, profondeur) = (l.pose(image), l.depth_libre_at(image));
@@ -914,8 +932,13 @@ impl App {
         let duree = p.frame_count();
         let Some(l) = p.layers.get(li) else { return };
         let Some(t) = l.trajectoire.as_ref().filter(|t| t.support.is_some()) else { return };
-        let cles = cles_dans_l_espace(&Monde::du_plan(&self.doc, pi), l, t, duree);
-        self.doc.panels[pi].layers[li].pos_keys = cles;
+        let world = Monde::du_plan(&self.doc, pi);
+        let cles = cles_dans_l_espace(&world, l, t, duree);
+        let decor = self.doc.decor_du_plan(pi).cloned();
+        let l = &mut self.doc.panels[pi].layers[li];
+        l.pos_keys = cles;
+        // (Une carte aimantée au sol : chaque clé posée par le chemin y repose, partie 182.)
+        crate::origine::aimanter_au_sol(l, &world, decor.as_ref());
     }
 
     /// **Clés d'images d'une trajectoire dans l'espace** (partie 152 ; Anthony, 2026-11-13 : « Clés d'images ne crée pas de
@@ -973,17 +996,25 @@ impl App {
     /// grandit à toutes les images), **son chemin se déplace avec lui**, et ses clés sont reposées. Vrai si le calque suit une
     /// trajectoire dans l'espace (faux : rien n'est fait).
     pub(crate) fn trajectoire_espace_apres_pose(&mut self, li: usize) -> bool {
+        // (Une carte aimantée au sol y revient après le geste, partie 182 ; avec un chemin, encore après ses clés reposées.)
+        self.aimanter_si(li);
         let (pi, f, duree) = (self.cur_panel, self.cur_frame, self.frame_count());
         let world = self.e3_world();
         let Some(l) = self.layers().get(li) else { return false };
         let Some(t) = l.trajectoire.as_ref().filter(|t| t.support.is_some()) else { return false };
         let d = t.deplacement_a_l_image(f, duree).unwrap_or([0.0; 3]);
         let (pose, profondeur) = (l.pose(f), l.depth_libre_at(f));
-        let ici = world.card_xf(&pose, profondeur);
+        let ici = world.card_xf_de(l, &pose, profondeur);
         let propre = Xf { pos: m::sub(ici.pos, d), ..ici };
         let (base_avant, profondeur_avant) = pose_propre(l);
-        let glisse = m::sub(propre.pos, world.card_xf(&base_avant, profondeur_avant).pos);
-        let (base, la) = world.card_from_xf_libre(&pose, profondeur, &propre);
+        // (Le chemin suit l'origine de la carte, partie 182 : sans origine, son centre, comme avant.)
+        let e = world.ecart(l);
+        let glisse = match (t.ancre, t.fraction_suivie(f, duree).and_then(|fr| t.monde_a(fr))) {
+            // (`Ancre::Origine` : l'origine était sur le chemin, le chemin va là où on l'a posée.)
+            (Ancre::Origine, Some(sur_le_chemin)) => m::sub(world.origine_monde(&ici, e), sur_le_chemin),
+            _ => m::sub(world.origine_monde(&propre, e), world.origine_monde(&world.card_xf_o(&base_avant, profondeur_avant, e), e)),
+        };
+        let (base, la) = world.card_from_xf_libre_de(l, &pose, profondeur, &propre);
         let l = &mut self.layers_mut()[li];
         l.transform = LayerTransform { dz: 0.0, ..base };
         l.depth = la;
@@ -1181,6 +1212,25 @@ impl App {
         let mut cles = t.cles;
         if cles_espace_ui(ui, &mut cles) {
             self.e3_traj_sorte(&avec, cles);
+        }
+        // Ce qui suit le chemin, pour les cartes (partie 182) : leur origine posée sur le chemin, ou le déplacement du chemin
+        // depuis son départ. (La carte ne tourne jamais avec le chemin dans l'espace : vue par la tranche, elle disparaîtrait.)
+        let cartes: Vec<Sujet> = avec.iter().copied().filter(|s| matches!(s, Sujet::Carte(_))).collect();
+        if !cartes.is_empty() {
+            let mut sur = cartes.iter().all(|&s| self.e3_traj_de(s).is_some_and(|t| t.ancre == Ancre::Origine));
+            if ui
+                .checkbox(&mut sur, "L'origine du calque suit le chemin")
+                .on_hover_text("Coché : l'origine de la carte (le centre de sa feuille si elle n'en a pas) est posée sur le chemin à chaque image. Décoché : la carte garde sa place au départ et suit la forme du chemin. Dans l'espace, la carte ne tourne pas avec le chemin : vue par la tranche, elle disparaîtrait.")
+                .changed()
+            {
+                let ancre = if sur { Ancre::Origine } else { Ancre::Depart };
+                self.traj.ancre_propose = Some(ancre);
+                self.e3_traj_pour_tous(&cartes, "Ancrage de la trajectoire", |t, _| {
+                    let change = t.ancre != ancre;
+                    t.ancre = ancre;
+                    change
+                });
+            }
         }
         // La caméra garde son sujet dans le cadre (partie 172 : les trajectoires toutes faites le posent).
         if avec.contains(&Sujet::Camera) {

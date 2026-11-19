@@ -32,13 +32,23 @@ pub(crate) enum BoxHandle {
     Rotate,
     /// Juste hors du coin `k` : tourner (autour du centre, ou du coin opposé selon le réglage).
     RotateCorner(usize),
+    /// L'origine du calque (partie 182), le petit cercle à croix : la tirer la déplace, sans déplacer le dessin.
+    Origine,
 }
 
 /// Étirement par un coin ou le milieu d'un côté de la boîte `b` du contenu (repère du dessin du
 /// calque) : `m`, la souris ramenée dans ce repère ; le coin (ou le côté) opposé reste en place sur
 /// la feuille — ou le centre de la boîte, avec `centre` (réglage « Point fixe des poignées »). Coin :
 /// largeur et hauteur (Maj : les deux pareil) ; côté : un seul sens.
+// (Fusion du main de GitHub : depuis la partie 182, l'outil passe par `stretched_autour` ; `stretched` ne sert plus qu'aux essais.)
+#[cfg(test)]
 pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHandle, m: Pos2, shift: bool, centre: bool) -> LayerTransform {
+    stretched_autour(t0, pivot, b, handle, m, shift, centre.then(|| b.center()))
+}
+
+/// Comme `stretched`, le point fixe « au centre » étant `fixe` (coordonnées du dessin) : le centre de la boîte, ou l'origine du
+/// calque quand il en a une (partie 182) ; rien : le coin ou le côté opposé.
+pub(crate) fn stretched_autour(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHandle, m: Pos2, shift: bool, fixe: Option<Pos2>) -> LayerTransform {
     let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
     let mids = [b.center_top(), b.right_center(), b.center_bottom(), b.left_center()];
     let (h, anchor, along_x, along_y) = match handle {
@@ -46,7 +56,7 @@ pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHan
         BoxHandle::Edge(k) => (mids[k], mids[(k + 2) % 4], k % 2 == 1, k % 2 == 0),
         _ => return t0,
     };
-    let anchor = if centre { b.center() } else { anchor };
+    let anchor = fixe.unwrap_or(anchor);
     let ratio = |num: f32, den: f32| if den.abs() < 1e-3 { 1.0 } else { (num / den).clamp(0.01, 100.0) };
     let (mut fx, mut fy) = (
         if along_x { ratio(m.x - anchor.x, h.x - anchor.x) } else { 1.0 },
@@ -79,6 +89,8 @@ struct Peer {
     li: usize,
     t0: LayerTransform,
     off: Vec2,
+    /// L'origine du calque (coordonnées de son dessin), autour de laquelle sa pose se lit (partie 182).
+    pivot: Pos2,
 }
 
 /// Plusieurs calques choisis transformés ensemble (Anthony, 2026-10-19) : déplacer, tourner et
@@ -101,6 +113,8 @@ pub(crate) struct LayerDrag {
     center: Pos2,
     /// Le même centre tel qu'on le voit (avec le défilement multiplan) : pour lire la souris.
     seen_center: Pos2,
+    /// L'origine du calque telle qu'on la voit au début du geste (partie 182) : le centre de la poignée ronde quand il en a une.
+    seen_origine: Pos2,
     /// Boîte du contenu (repère du dessin) et passage de la feuille à ce repère, tels qu'au début
     /// du geste : pour les étirements.
     content: Rect,
@@ -109,6 +123,9 @@ pub(crate) struct LayerDrag {
     corners: [Pos2; 4],
     snap: Edit,
     changed: bool,
+    /// L'origine tirée (partie 182) : le calque tel qu'au début du geste (l'origine est reposée depuis lui à chaque pas : rien ne
+    /// s'accumule) et la boîte du contenu, pour l'aimantation avec Maj.
+    origine: Option<(crate::document::Layer, Rect)>,
 }
 
 impl App {
@@ -206,6 +223,11 @@ impl App {
 
     /// Partie de la boîte sous le pointeur (position écran).
     pub(crate) fn transform_handle_at(&self, screen: Pos2) -> Option<BoxHandle> {
+        // L'origine du calque courant (partie 182) d'abord : elle est souvent au milieu de la boîte. (Plusieurs calques choisis :
+        // la boîte commune, sans origine à tirer.)
+        if self.transform_peers().is_empty() && self.stage_to_screen(self.origine_sur_la_feuille()).distance(screen) <= crate::selbox::GRAB_PIVOT {
+            return Some(BoxHandle::Origine);
+        }
         let corners = self.box_corners();
         if self.box_rotate_handle(&corners).distance(screen) <= GRAB {
             return Some(BoxHandle::Rotate);
@@ -267,7 +289,9 @@ impl App {
         // (sans le défilement multiplan, qui ne dépend que de la caméra).
         // (Un calque accroché à la caméra, `accroche.rs` : le geste se fait sur la pose qu'on voit ; elle est ramenée dans le cadre de
         // la caméra quand elle est écrite, `poser_du_geste`.)
-        let (seen, own) = (self.layer_seen(), self.pose_du_geste(self.cur_layer));
+        // (Les deux autour de l'origine du calque, partie 182 : leur écart est le défilement multiplan de l'origine.)
+        let (seen, own) = (self.layer_seen_o(), self.pose_du_geste(self.cur_layer));
+        let origine = (handle == BoxHandle::Origine).then(|| (self.layer().clone(), self.content_box()));
         let seen_center = pos2(
             corners.iter().map(|c| c.x).sum::<f32>() / 4.0,
             corners.iter().map(|c| c.y).sum::<f32>() / 4.0,
@@ -280,11 +304,13 @@ impl App {
             t0: own,
             center,
             seen_center,
+            seen_origine: self.origine_sur_la_feuille(),
             content: self.content_box(),
             to_local: self.layer_affine().inverse(),
             corners,
             snap: self.snapshot(),
             changed: false,
+            origine,
         });
     }
 
@@ -304,8 +330,10 @@ impl App {
                 let l = &self.layers()[li];
                 // (Un calque accroché à la caméra : sa pose du geste est celle qu'on voit, sans écart.)
                 let own = self.pose_du_geste(li);
-                let seen = l.transform_seen_at(&camera, self.cur_frame).unwrap_or(own);
-                Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y) }
+                // (Rapportée à l'origine du calque comme sa pose, partie 182.)
+                let e = l.ecart_origine(self.doc.stage_center());
+                let seen = l.transform_seen_at(&camera, self.cur_frame).map(|t| t.a_l_origine(e)).unwrap_or(own);
+                Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y), pivot: l.pivot(self.doc.stage_center()) }
             })
             .collect();
         let skipped = self.chosen_layers().len() - list.len();
@@ -319,18 +347,19 @@ impl App {
             t0: self.pose_du_geste(self.cur_layer),
             center: Pos2::ZERO,
             seen_center: Pos2::ZERO,
+            seen_origine: Pos2::ZERO,
             content: box0,
             to_local: None,
             corners: [box0.left_top(), box0.right_top(), box0.right_bottom(), box0.left_bottom()],
             snap: self.snapshot(),
             changed: false,
+            origine: None,
         });
     }
 
     /// Le geste sur plusieurs calques : la même similitude de la feuille pour chacun, `T = D(t0)`.
     fn transform_many_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
         use crate::vector::Affine;
-        let pivot = self.doc.stage_center();
         let centre = (self.settings.point_fixe == crate::selbox::PointFixe::Centre) != ctrl;
         let coin = self.settings.rotation_autour == crate::selbox::CentreRotation::CoinOppose;
         let Some(d) = &mut self.layer_drag else { return };
@@ -377,6 +406,7 @@ impl App {
                 let f = ((p - anchor).dot(dir) / dir.length_sq().max(1e-6)).clamp(0.01, 100.0);
                 (Affine::scale_about(anchor, f, f), format!("à {:.0} %", f * 100.0), Op::Scale(f, anchor))
             }
+            BoxHandle::Origine => return,
             BoxHandle::Edge(k) => {
                 let mids = [m.box0.center_top(), m.box0.right_center(), m.box0.center_bottom(), m.box0.left_center()];
                 let (h, anchor) = (mids[k % 4], if centre { c } else { mids[(k + 2) % 4] });
@@ -392,6 +422,7 @@ impl App {
             .peers
             .iter()
             .map(|q| {
+                let pivot = q.pivot;
                 let t = match op {
                     Op::Shift(delta) => LayerTransform { x: q.t0.x + delta.x, y: q.t0.y + delta.y, ..q.t0 },
                     Op::Turn(turn, rc) => q.t0.around(pivot, rc - q.off, 1.0, turn),
@@ -427,7 +458,13 @@ impl App {
             self.transform_many_drag(p, shift, ctrl);
             return;
         }
-        let pivot = self.doc.stage_center();
+        if self.layer_drag.as_ref().is_some_and(|d| d.origine.is_some()) {
+            self.origine_drag(p, shift);
+            return;
+        }
+        // (La pose se lit autour de l'origine du calque, partie 182 : le centre de la feuille s'il n'en a pas.)
+        let pivot = self.layer().pivot(self.doc.stage_center());
+        let a_une_origine = self.layer().origine.is_some();
         let centre = (self.settings.point_fixe == crate::selbox::PointFixe::Centre) != ctrl;
         let rotation_centre = match self.layer_drag.as_ref().map(|d| (d.handle, d.corners)) {
             Some((BoxHandle::RotateCorner(k), corners)) => Some(self.corner_rotation_centre(&corners, k)),
@@ -436,10 +473,12 @@ impl App {
         let Some(d) = &mut self.layer_drag else { return };
         let (t0, start, q, seen) = (d.t0, d.start, d.center, d.seen_center);
         let t = match d.handle {
+            // (Le point fixe « au centre » : l'origine du calque quand il en a une, partie 182 ; sinon le centre de la boîte.)
             BoxHandle::Corner(_) | BoxHandle::Edge(_) => match d.to_local {
-                Some(inv) => stretched(t0, pivot, d.content, d.handle, inv.apply(p), shift, centre),
+                Some(inv) => stretched_autour(t0, pivot, d.content, d.handle, inv.apply(p), shift, centre.then(|| if a_une_origine { pivot } else { d.content.center() })),
                 None => t0,
             },
+            BoxHandle::Origine => t0,
             BoxHandle::RotateCorner(_) => {
                 // Autour du centre de la boîte ou du coin opposé, tel qu'on le voit ; ramené au repère de la
                 // transformation du calque comme le centre (`q` = `seen` sans le défilement multiplan).
@@ -466,11 +505,14 @@ impl App {
                 }
             }
             BoxHandle::Rotate => {
-                let mut turn = ((p - seen).angle() - (start - seen).angle()).to_degrees();
+                // Avec une origine (partie 182) : la poignée ronde tourne autour d'elle, telle qu'on la voit au début du geste
+                // (`d.corners` n'en dit rien : elle est relue de la pose d'avant le geste, `seen_origine`). Sans : le centre de la boîte.
+                let rc = if a_une_origine { d.seen_origine } else { seen };
+                let mut turn = ((p - rc).angle() - (start - rc).angle()).to_degrees();
                 if shift {
                     turn = ((t0.angle + turn) / 15.0).round() * 15.0 - t0.angle;
                 }
-                t0.around(pivot, q, 1.0, turn)
+                if a_une_origine { LayerTransform { angle: t0.angle + turn, ..t0 } } else { t0.around(pivot, q, 1.0, turn) }
             }
         };
         d.changed = true;
@@ -487,8 +529,41 @@ impl App {
         );
     }
 
+    /// L'origine tirée en `p` (point de la feuille) : elle passe au point du dessin sous le pointeur (Maj : au point de la boîte
+    /// du contenu le plus proche : son centre, un coin, le milieu d'un côté), reposée depuis le calque du début du geste : le
+    /// dessin ne bouge pas (`origine::deplacer_origine`). L'étape d'annulation est celle du geste.
+    fn origine_drag(&mut self, p: Pos2, shift: bool) {
+        let Some(d) = self.layer_drag.as_ref() else { return };
+        let Some((avant, boite)) = d.origine.clone() else { return };
+        let li = self.cur_layer;
+        // (Le point du dessin sous le pointeur, lu sur le calque du début du geste : sa pose ne change pas.)
+        let Some(q) = self.to_layer_opt(p) else { return };
+        let q = if shift { crate::origine::aimanter_a_la_boite(boite, q) } else { q };
+        let world = self.e3_world();
+        let mut l = avant;
+        crate::origine::deplacer_origine(&mut l, Some([q.x, q.y]), &world);
+        // (L'aimant au sol attend le lâcher, `finish_layer_drag` : la carte ne saute pas sous le pointeur pendant le geste.)
+        self.layers_mut()[li] = l;
+        if let Some(d) = self.layer_drag.as_mut() {
+            d.changed = true;
+        }
+        self.modified = true;
+        self.renderer.invalidate_all();
+        self.status = format!("Origine du calque : x {:.0}, y {:.0} px du dessin (le dessin ne bouge pas{}).", q.x, q.y, if shift { " ; Maj : sur la boîte du dessin" } else { "" });
+    }
+
     pub(crate) fn finish_layer_drag(&mut self) {
         let Some(d) = self.layer_drag.take() else { return };
+        // L'origine tirée (partie 182) : rien d'autre à reposer, le dessin n'a pas bougé ; une étape.
+        if d.origine.is_some() {
+            if d.changed {
+                let li = self.cur_layer;
+                self.aimanter_si(li);
+                self.named_step("Déplacer l'origine", |app| app.history.push(d.snap));
+                self.modified = true;
+            }
+            return;
+        }
         if d.changed {
             // Un calque à trajectoire (`trajectoireui.rs`) : le calque et son chemin bougent ensemble, les clés sont reposées.
             // (Plusieurs calques : chacun, comme un seul calque, partie 132.)
@@ -496,11 +571,14 @@ impl App {
                 None => {
                     let li = self.cur_layer;
                     self.trajectoire_apres_transformer(li, d.t0);
+                    // (Une carte aimantée au sol y revient, partie 182.)
+                    self.aimanter_si(li);
                 }
                 Some(m) => {
                     let peers: Vec<(usize, LayerTransform)> = m.peers.iter().map(|q| (q.li, q.t0)).collect();
                     for (li, t0) in peers {
                         self.trajectoire_apres_transformer(li, t0);
+                        self.aimanter_si(li);
                     }
                     if !m.peers.is_empty() {
                         self.status = format!("{} calques transformés ensemble.", m.peers.len());
@@ -509,6 +587,7 @@ impl App {
             }
             // Plusieurs calques : une seule étape, au nom du geste.
             let name = match d.handle {
+                BoxHandle::Origine => "Déplacer l'origine",
                 BoxHandle::Move => "Déplacer",
                 BoxHandle::Rotate | BoxHandle::RotateCorner(_) => "Tourner",
                 BoxHandle::Corner(_) | BoxHandle::Edge(_) => "Mettre à l'échelle",
@@ -582,7 +661,9 @@ impl App {
         let l = &self.layers()[li];
         let own = l.pose(self.cur_frame);
         if l.accroche {
-            l.transform_seen_at(&self.doc.camera_seen(self.cur_panel, self.cur_frame), self.cur_frame).unwrap_or(own)
+            // (Ce qu'on voit est rapporté au centre de la feuille : il revient autour de l'origine, comme `own`, partie 182.)
+            let e = l.ecart_origine(self.doc.stage_center());
+            l.transform_seen_at(&self.doc.camera_seen(self.cur_panel, self.cur_frame), self.cur_frame).map(|t| t.a_l_origine(e)).unwrap_or(own)
         } else {
             own
         }
@@ -591,7 +672,8 @@ impl App {
     /// Le calque `li` prend à l'image courante la pose `t` que donne le geste de l'outil Transformer (`pose_du_geste`) : pour un
     /// calque accroché à la caméra, elle est ramenée dans le cadre de la caméra avant d'être écrite.
     pub(crate) fn poser_du_geste(&mut self, li: usize, t: LayerTransform) {
-        let t = if self.layers()[li].accroche { self.doc.camera_seen(self.cur_panel, self.cur_frame).decrochee(t) } else { t };
+        let e = self.layers()[li].ecart_origine(self.doc.stage_center());
+        let t = if self.layers()[li].accroche { self.doc.camera_seen(self.cur_panel, self.cur_frame).decrochee(t.au_centre(e)).a_l_origine(e) } else { t };
         self.set_layer_pose(li, t);
     }
 
@@ -636,6 +718,13 @@ impl App {
                 egui::StrokeKind::Middle,
             );
         }
+        // L'origine du calque courant (partie 182) : toujours là, un cercle à croix ; allumée au survol ou tirée.
+        let o = self.stage_to_screen(self.origine_sur_la_feuille());
+        if o.is_finite() {
+            let tiree = self.layer_drag.as_ref().is_some_and(|d| d.origine.is_some());
+            let survolee = tiree || matches!(survol, Some((BoxHandle::Origine, _)));
+            crate::origine::peindre_repere(painter, o, COLOR, survolee);
+        }
     }
 
     /// Le mode d'emploi d'une poignée du Transformer, sous forme de bulle au pointeur (nom, phrase) : il était en note longue dans le
@@ -645,8 +734,9 @@ impl App {
             BoxHandle::Move => ("Déplacer le calque", "Glisser : déplacer le calque (Maj : à l'horizontale ou à la verticale). Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment."),
             BoxHandle::Corner(_) => ("Agrandir ou réduire", "Glisser : le coin opposé reste en place (Maj : en gardant les proportions ; Ctrl : l'autre point fixe, réglé par « Point fixe » dans Plus de réglages)."),
             BoxHandle::Edge(_) => ("Étirer dans un seul sens", "Glisser le milieu d'un côté : étirer le calque dans un seul sens."),
-            BoxHandle::Rotate => ("Tourner", "Glisser la poignée ronde : tourner autour du centre (Maj : par 15°)."),
+            BoxHandle::Rotate => ("Tourner", "Glisser la poignée ronde : tourner autour de l'origine du calque, sinon du centre (Maj : par 15°)."),
             BoxHandle::RotateCorner(_) => ("Tourner", "Glisser juste hors d'un coin : tourner autour du centre ou du coin opposé, selon « Rotation » dans Plus de réglages (Maj : par 15°)."),
+            BoxHandle::Origine => ("L'origine du calque", "Glisser : déplacer l'origine, le point autour duquel le calque se déplace, s'agrandit et tourne ; le dessin ne bouge pas (Maj : sur le centre, un coin ou le milieu d'un côté du dessin)."),
         }
     }
 
@@ -689,7 +779,10 @@ impl App {
             if self.edited(&r) {
                 next = Some(LayerTransform { x, ..t });
             }
-            let r = ui.add(egui::DragValue::new(&mut y).speed(2.0).prefix("y ").suffix(" px"));
+            // (Aimanté au sol, partie 182 : la hauteur est tenue par l'aimant.)
+            let aimant = self.layer().aimante_au_sol;
+            let r = ui.add_enabled(!aimant, egui::DragValue::new(&mut y).speed(2.0).prefix("y ").suffix(" px"));
+            let r = if aimant { r.on_disabled_hover_text("Aimanté au sol : la hauteur du calque est tenue par l'aimant (Plus > Réglages avancés).") } else { r };
             if self.edited(&r) {
                 next = Some(LayerTransform { y, ..t });
             }
@@ -722,7 +815,10 @@ impl App {
         if let Some(t) = next {
             let li = self.cur_layer;
             self.set_layer_pose(li, t);
+            self.aimanter_si(li);
         }
+        // L'origine du calque (partie 182) : ses champs x, y et le menu des origines toutes faites.
+        self.origine_fields(ui);
         // (Les clés de position, pour animer le calque, sont dans « Plus de réglages » : `pos_keys_ui`, `poskeysui.rs`.)
     }
 }

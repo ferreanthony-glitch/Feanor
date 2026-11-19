@@ -106,11 +106,17 @@ impl App {
         audio::samples_per_frame(self.doc.fps)
     }
 
-    /// Image de départ et plage jouée (en images du montage) : tout le montage, ou le panneau.
+    /// Image de départ et plage jouée (en images du montage) : le film (entre les bouts de sa plage de lecture,
+    /// `plagefilm.rs`), ou le panneau.
     fn play_range(&self) -> (usize, (usize, usize)) {
         if self.play_montage {
-            // La tête dans une version dépliée (partie 168) : le son du film à la même place dans le plan.
-            (self.depli_son_global().unwrap_or_else(|| self.global_frame()), (0, self.doc.total_frames()))
+            // La tête dans une version dépliée (partie 168) : le son du film à la même place dans le plan, tout le film (les versions
+            // dépliées se lisent sans la plage).
+            if self.depli_actif() {
+                return (self.depli_son_global().unwrap_or_else(|| self.global_frame()), (0, self.doc.total_frames()));
+            }
+            let (a, b) = self.film_play_range();
+            (self.global_frame().clamp(a, b - 1), (a, b))
         } else {
             // Entre les points d'entrée et de sortie du plan (13d).
             let s = self.doc.panel_start(self.cur_panel);

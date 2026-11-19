@@ -306,6 +306,19 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.fusionner_dessous", "Fusionner vers le bas (avec le calque du dessous)", true, false),
     act("calque.reinit_transformation", "Annuler la transformation du calque", true, false),
     act("calque.accrocher_camera", "Accrocher les calques choisis à la caméra (ou les décrocher) : ils gardent leur place dans l'image", true, false),
+    // L'origine du calque (partie 182, `origine.rs`) : son vrai pivot, sans touche d'office.
+    act("origine.centre_dessin", "Origine du calque au centre du dessin", true, false),
+    act("origine.bas_centre", "Origine du calque en bas au centre du dessin", true, false),
+    act("origine.haut_gauche", "Origine du calque en haut à gauche du dessin", true, false),
+    act("origine.haut_droite", "Origine du calque en haut à droite du dessin", true, false),
+    act("origine.bas_gauche", "Origine du calque en bas à gauche du dessin", true, false),
+    act("origine.bas_droite", "Origine du calque en bas à droite du dessin", true, false),
+    act("origine.ici", "Origine du calque ici (au point de la feuille sous le pointeur)", true, false),
+    act("origine.feuille", "Origine du calque au centre de la feuille (comme d'origine)", true, false),
+    act("calque.aimante_au_sol", "Aimanté au sol : l'origine du calque repose sur le sol de l'Espace 3D (oui / non)", true, false),
+    act("calque.devant_decor_3d", "Toujours devant le décor 3D : aucun objet du décor ne cache la carte du calque (oui / non)", true, false),
+    act("calque.porte_ombre", "Porte une ombre : l'encre de la carte du calque fait de l'ombre sous le soleil du décor 3D (oui / non)", true, false),
+    act("calque.recoit_ombres", "Reçoit les ombres : la carte du calque s'assombrit à l'ombre du décor 3D et des autres cartes (oui / non)", true, false),
     act("calque.dessus", "Calque du dessus", true, true),
     act("calque.dessous", "Calque du dessous", true, true),
     act("calque.nouveau", "Nouveau calque… (nom, sorte, groupe, mode, place)", true, false),
@@ -416,6 +429,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("plan.avancer", "Avancer le plan (plus tôt dans le montage)", true, false),
     act("plan.reculer", "Reculer le plan (plus tard dans le montage)", true, false),
     act("lecture.boucle", "Lecture en boucle (oui / non)", true, false),
+    // Plage de lecture du film (`plagefilm.rs`) : la lecture du montage entre deux images de plans différents.
+    act("plage.debut", "Début de la plage de lecture du film à l'image courante", true, false),
+    act("plage.fin", "Fin de la plage de lecture du film à l'image courante", true, false),
+    act("plage.plans_choisis", "Plage de lecture du film : les plans choisis", true, false),
+    act("plage.enlever", "Enlever la plage de lecture du film", true, false),
     // Rognage des plans dans le montage (`rognageui.rs`).
     act("montage.duree", "Durée du plan : taper la durée exacte…", true, false),
     act("montage.duree_plans", "Changer la durée des plans choisis…", true, false),
@@ -585,6 +603,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.detacher_couleur", "Détacher le calque de couleur de son trait", true, false),
     act("calque.griffonner", "Calque de couleur : griffonner (les couleurs posées remplissent les zones fermées par le trait)", true, false),
     act("fichier.importer_video", "Importer une vidéo (calque vidéo)", true, false),
+    act("fichier.importer_decor3d", "Ajouter un objet 3D au décor de la séquence (glTF, .glb ou .gltf)", true, false),
+    act("decor3d.enlever", "Enlever le décor 3D de la séquence (tous ses objets)", true, false),
+    act("decor3d.remesurer", "Remesurer le budget 3D de cet ordinateur (décor 3D)", true, false),
     act("fichier.importer_scenario", "Importer un scénario et le garder dans le projet (Fountain, .fdx, .docx, texte)", true, false),
     act("vue.scenario", "Panneau Scénario (ouvrir / fermer)", true, false),
     act("scenario.creer_plans", "Créer les plans depuis le scénario gardé dans le projet…", true, false),
@@ -652,6 +673,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     // commandes d'objets (`scene3d.ajouter_*`, `importer_modele`, `dupliquer`, `grouper`, `envoyer`…), du repère 3D
     // (`outil.repere3d`, `fichier.importer_modele3d`) n'existent plus.
     act("espace3d.basculer", "Espace 3D (afficher / quitter)", true, false),
+    act("espace3d.a_cote", "Espace 3D à côté du dessin (afficher / masquer)", true, false),
     // Une, deux ou quatre vues (`espace3dvues.rs`, `docs/INTERFACE.md` partie 144).
     act("espace3d.vues", "Espace 3D : vues, disposition suivante (1, 2 côte à côte, 2 l'une sur l'autre, 4)", true, false),
     act("espace3d.vues_une", "Espace 3D : 1 vue", true, false),
@@ -664,6 +686,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),
     act("espace3d.outil_echelle", "Espace 3D : outil mettre à l'échelle", true, false),
     act("espace3d.outil_camera", "Espace 3D : choisir la caméra du plan", true, false),
+    // « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine du calque ou de l'objet du décor.
+    act("espace3d.modifier_origine", "Espace 3D : modifier l'origine du calque ou de l'objet du décor choisi, sans le bouger (oui / non)", true, false),
     act("espace3d.cadrer", "Espace 3D : recadrer la vue sur tout l'espace", true, false),
     act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),

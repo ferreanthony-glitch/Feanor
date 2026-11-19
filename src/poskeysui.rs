@@ -134,6 +134,8 @@ impl App {
             let l = &mut self.layers_mut()[li];
             let t = l.pose(f);
             poskeys::set_key(&mut l.pos_keys, f, t);
+            // (Une carte aimantée au sol : la clé neuve y repose aussi, partie 182.)
+            self.aimanter_si(li);
         }
         let n = targets.len();
         self.modified = true;

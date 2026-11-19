@@ -34,7 +34,8 @@ use crate::render::Plan;
 /// Réglages d'un dessin dans le tampon : 4 coins (position, coordonnées de texture), une couleur,
 /// des paramètres = 6 vec4 = 96 octets.
 // (Partie 177 : un vec4 de plus, `extra`, pour l'iris et le volet en horloge.)
-const ITEM_BYTES: u64 = 112;
+/// (Coins, couleur, réglages, réglage de plus, et le plan de la carte pour la profondeur partagée avec le décor 3D, partie 183.)
+const ITEM_BYTES: u64 = 128;
 /// Au-delà, les textures les moins récemment affichées sont libérées.
 const CACHE_BYTES: u64 = 1 << 30;
 /// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
@@ -52,6 +53,9 @@ struct Item {
     color: vec4<f32>,
     params: vec4<f32>,
     extra: vec4<f32>,
+    // La profondeur partagée avec le décor 3D (partie 183, `profondeur.rs`) : le plan de la carte, l'inverse de sa distance à l'œil
+    // au pixel (x, y) de la feuille étant prof.x · x + prof.y · y + prof.z. Lu seulement par `fs_compose_p` et `fs_blend_p`.
+    prof: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> item: Item;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -230,13 +234,96 @@ fn dissolve_noise(x: u32, y: u32) -> f32 {
 // remplace (pas de mélange matériel). params.x : opacité ; params.z : le mode.
 @fragment
 fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
+    return fusionner(v, item.params.x);
+}
+
+// La profondeur du décor 3D posé dessous (partie 183) : l'inverse de la distance à l'œil de ce qu'il montre à chaque pixel de la
+// feuille, 0 là où il n'y a rien (le ciel ne cache rien).
+@group(3) @binding(0) var decor_prof: texture_2d<f32>;
+
+// Les tolérances de `profondeur.rs` (`TOLERANCE_RELATIVE`, `TOLERANCE_METRES`) : le décor ne cache une carte que s'il est plus
+// près qu'elle d'au moins cela.
+const TOLERANCE_RELATIVE: f32 = 0.004;
+const TOLERANCE_METRES: f32 = 0.01;
+
+// Les drapeaux d'une carte sur un décor (prof.w) : 1, le décor la cache selon sa distance (partie 183) ; 2, elle reçoit les ombres
+// (partie 185).
+fn drapeau(b: u32) -> bool {
+    return (u32(item.prof.w + 0.5) & b) != 0u;
+}
+
+// Le pixel de la carte se voit-il (1) ou le décor, plus près, le cache-t-il (0) ? Comme `profondeur::cache`.
+fn visible(pos: vec4<f32>) -> f32 {
+    if (!drapeau(1u)) {
+        return 1.0;
+    }
+    let taille = vec2<i32>(textureDimensions(decor_prof));
+    let p = vec2<i32>(floor(pos.xy));
+    if (p.x < 0 || p.y < 0 || p.x >= taille.x || p.y >= taille.y) {
+        return 1.0;
+    }
+    let decor = textureLoad(decor_prof, p, 0).r;
+    if (decor <= 0.0) {
+        return 1.0;
+    }
+    let carte = item.prof.x * pos.x + item.prof.y * pos.y + item.prof.z;
+    if (carte <= 0.0) {
+        return 1.0;
+    }
+    // (1 / décor < (1 − r) / carte − m, multiplié par décor · carte, tous deux positifs : sans division.)
+    if (carte * (1.0 + TOLERANCE_METRES * decor) < decor * (1.0 - TOLERANCE_RELATIVE)) {
+        return 0.0;
+    }
+    return 1.0;
+}
+
+// Une carte qui partage la profondeur du décor (partie 183) : composée comme `fs_compose` ou `fs_blend`, cachée là où le décor
+// est plus près (le décor, dessous, se voit alors).
+// (La profondeur n'est lue que là où la carte a de l'encre : une carte est surtout transparente.)
+// (Partie 185 : et, si elle reçoit les ombres, assombrie là où le décor ou une autre carte lui cache le soleil, `ombres.rs`.)
+@fragment
+fn fs_compose_p(v: VOut) -> @location(0) vec4<f32> {
+    let c = composer(v);
+    if (c.a <= 0.0) {
+        return c;
+    }
+    let o = c * visible(v.pos);
+    if (drapeau(2u) && o.a > 0.0) {
+        return assombrir_carte(o, ombre_recue(v.pos.xy));
+    }
+    return o;
+}
+
+@fragment
+fn fs_blend_p(v: VOut) -> @location(0) vec4<f32> {
+    let encre = textureSample(tex, samp, v.uv).a;
+    var vis = 1.0;
+    var teinte = vec3<f32>(1.0);
+    if (encre > 0.0) {
+        vis = visible(v.pos);
+        if (drapeau(2u) && vis > 0.0) {
+            teinte = vec3<f32>(1.0) - ombre_recue(v.pos.xy) * (vec3<f32>(1.0) - eclair.carte.rgb);
+        }
+    }
+    return fusionner_t(v, item.params.x * vis, teinte);
+}
+
+fn fusionner(v: VOut, opacite: f32) -> vec4<f32> {
+    return fusionner_t(v, opacite, vec3<f32>(1.0));
+}
+
+// `teinte` : ce qui reste de la couleur de la carte, en lumière linéaire, à l'ombre (partie 185 ; 1 : rien).
+fn fusionner_t(v: VOut, opacite: f32, teinte: vec3<f32>) -> vec4<f32> {
     let raw = textureSample(tex, samp, v.uv);
     let b = textureLoad(back_tex, vec2<i32>(floor(v.pos.xy)), 0);
-    let sa = raw.a * item.params.x;
+    let sa = raw.a * opacite;
     if (sa <= 0.0) {
         return b;
     }
-    let cs = min(raw.rgb / raw.a, vec3<f32>(1.0));
+    var cs = min(raw.rgb / raw.a, vec3<f32>(1.0));
+    if (any(teinte < vec3<f32>(1.0))) {
+        cs = vers_srgb(vers_lin(cs) * teinte);
+    }
     let mode = u32(item.params.z + 0.5);
     // Fondu : un point plein, ou le fond.
     if (mode == 1u) {
@@ -260,6 +347,10 @@ fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_compose(v: VOut) -> @location(0) vec4<f32> {
+    return composer(v);
+}
+
+fn composer(v: VOut) -> vec4<f32> {
     let s = textureSample(tex, samp, v.uv);
     let op = item.params.x;
     if (item.params.y < 0.5) {
@@ -388,6 +479,212 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
     }
     return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a) * item.params.x;
 }
+
+// sRGB ↔ linéaire (de 0 à 1), pour les ombres (partie 185).
+fn vers_lin(c: vec3<f32>) -> vec3<f32> {
+    return select(pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+}
+fn vers_srgb(l: vec3<f32>) -> vec3<f32> {
+    let c = clamp(l, vec3<f32>(0.0), vec3<f32>(1.0));
+    return select(1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055), c * 12.92, c <= vec3<f32>(0.0031308));
+}
+"#;
+
+/// Les ombres des cartes et du décor 3D (partie 185, `ombres.rs`) : la lumière du décor (`ombres::Lumiere::octets`), et ce que la
+/// composition et la carte d'ombres des cartes en font. Le même texte dans les deux modules (`eclair` y est déclarée à part).
+const LUMIERE: &str = r#"
+struct Lumiere {
+    light_vp: mat4x4<f32>,
+    oeil: vec4<f32>,       // xyz ; w : pixels par unité de la prise
+    droite: vec4<f32>,     // xyz ; w : centre x
+    haut: vec4<f32>,       // xyz ; w : centre y
+    avant: vec4<f32>,      // xyz ; w : rayon du filtre sur le décor
+    ciel: vec4<f32>,       // ambiance du ciel ; w : texel de la carte d'ombres
+    sol: vec4<f32>,        // ambiance du sol ; w : brume la plus forte (0 : sans)
+    soleil: vec4<f32>,     // couleur du soleil ; w : la carte d'ombres du décor est là
+    horizon: vec4<f32>,    // couleur de la brume ; w : rayon du filtre sur une carte
+    brume: vec4<f32>,      // début, fin de la brume ; taille de l'image composée
+    carte: vec4<f32>,      // ce qui reste d'une carte à l'ombre ; w : la carte d'ombres des cartes est faite
+    boite: vec4<f32>,      // où sont les cartes dans leur carte d'ombres (u0, v0, u1, v1)
+};
+
+// Le point du monde vu au pixel `px` de la feuille, à l'inverse de distance `inv` (`Lumiere::monde`).
+fn lum_monde(px: vec2<f32>, inv: f32) -> vec3<f32> {
+    let z = 1.0 / inv;
+    let d = vec2<f32>((px.x - eclair.droite.w) / eclair.oeil.w, -(px.y - eclair.haut.w) / eclair.oeil.w);
+    return eclair.oeil.xyz + z * (eclair.avant.xyz + eclair.droite.xyz * d.x + eclair.haut.xyz * d.y);
+}
+
+// Le point `p` du monde dans la carte d'ombres : (u, v) et sa profondeur (`Lumiere::vers_lumiere`).
+fn lum_vers(p: vec3<f32>) -> vec3<f32> {
+    let q = eclair.light_vp * vec4<f32>(p, 1.0);
+    return vec3<f32>(q.x * 0.5 + 0.5, 0.5 - q.y * 0.5, q.z);
+}
+"#;
+
+/// La composition (partie 185) : le soleil du décor, sa lumière, sa carte d'ombres et celle des cartes (groupe 3, avec la profondeur
+/// du décor de la partie 183).
+const COMPOSER_OMBRES: &str = r#"
+@group(3) @binding(1) var decor_soleil: texture_2d<f32>;
+@group(3) @binding(2) var<uniform> eclair: Lumiere;
+@group(3) @binding(3) var ombres_decor: texture_depth_2d;
+@group(3) @binding(4) var ombres_cartes: texture_depth_2d;
+@group(3) @binding(5) var s_cmp: sampler_comparison;
+
+// `ombres::BIAIS`, `ombres::PAS`.
+const BIAIS: f32 = 0.0015;
+const PAS: f32 = 1.5;
+
+// La part du soleil que voit le point `l` de la carte d'ombres `t` (`Lumiere::pcf`) : (2r + 1)² lectures comparées, chacune
+// décalée sur le plan de la carte qui reçoit (`g`).
+fn pcf(t: texture_depth_2d, l: vec3<f32>, g: vec2<f32>, r: i32) -> f32 {
+    if (l.x < 0.0 || l.x > 1.0 || l.y < 0.0 || l.y > 1.0 || l.z > 1.0) {
+        return 1.0;
+    }
+    let texel = eclair.ciel.w;
+    var somme = 0.0;
+    var n = 0.0;
+    for (var y = -r; y <= r; y = y + 1) {
+        for (var x = -r; x <= r; x = x + 1) {
+            let o = vec2<f32>(f32(x), f32(y)) * texel * PAS;
+            somme = somme + textureSampleCompareLevel(t, s_cmp, l.xy + o, l.z + dot(g, o) - BIAIS);
+            n = n + 1.0;
+        }
+    }
+    return somme / n;
+}
+
+fn dans_boite(l: vec3<f32>) -> bool {
+    return l.x >= eclair.boite.x && l.x <= eclair.boite.z && l.y >= eclair.boite.y && l.y <= eclair.boite.w;
+}
+
+// Le décor sous une carte qui lui cache `occ` du soleil : le soleil retiré d'autant, la brume gardée (`Lumiere::assombrir_decor`).
+fn assombrir_decor(c: vec4<f32>, s: vec2<f32>, d: f32, occ: f32) -> vec4<f32> {
+    if (occ <= 0.0) {
+        return c;
+    }
+    var f = 0.0;
+    if (eclair.sol.w > 0.0) {
+        let v = clamp((d - eclair.brume.x) / max(eclair.brume.y - eclair.brume.x, 0.0001), 0.0, 1.0) * eclair.sol.w;
+        f = v * v * (3.0 - 2.0 * v);
+    }
+    let lin = vers_lin(min(c.rgb / c.a, vec3<f32>(1.0)));
+    let hemi = mix(eclair.sol.rgb, eclair.ciel.rgb, s.y);
+    let kk = eclair.soleil.rgb * s.x;
+    let ratio = vec3<f32>(1.0) - occ * kk / max(hemi + kk, vec3<f32>(0.0001));
+    let brume = eclair.horizon.rgb * f;
+    let o = max((lin - brume) * ratio + brume, vec3<f32>(0.0));
+    return vec4<f32>(vers_srgb(o) * c.a, c.a);
+}
+
+// Une carte qui reçoit les ombres, dont `occ` du soleil est caché (`Lumiere::assombrir_carte`).
+fn assombrir_carte(c: vec4<f32>, occ: f32) -> vec4<f32> {
+    if (occ <= 0.0) {
+        return c;
+    }
+    let lin = vers_lin(min(c.rgb / c.a, vec3<f32>(1.0))) * (vec3<f32>(1.0) - occ * (vec3<f32>(1.0) - eclair.carte.rgb));
+    return vec4<f32>(vers_srgb(lin) * c.a, c.a);
+}
+
+// Ce que le décor et les autres cartes cachent du soleil au pixel `px` de la carte (son plan : prof.xyz ; sa pente dans la carte
+// d'ombres : extra.xy) (`Contexte::sur_la_carte`).
+fn ombre_recue(px: vec2<f32>) -> f32 {
+    let inv = item.prof.x * px.x + item.prof.y * px.y + item.prof.z;
+    if (inv <= 0.0) {
+        return 0.0;
+    }
+    let l = lum_vers(lum_monde(px, inv));
+    let r = i32(eclair.horizon.w + 0.5);
+    let g = item.extra.xy;
+    var vis = 1.0;
+    if (eclair.soleil.w > 0.5) {
+        vis = pcf(ombres_decor, l, g, r);
+    }
+    if (vis > 0.0 && eclair.carte.w > 0.5 && dans_boite(l)) {
+        vis = vis * pcf(ombres_cartes, l, g, r);
+    }
+    return 1.0 - vis;
+}
+
+// Le décor, assombri là où une carte lui cache le soleil (`Contexte::sur_le_decor`).
+@fragment
+fn fs_decor_o(v: VOut) -> @location(0) vec4<f32> {
+    let c = composer(v);
+    if (c.a <= 0.0 || eclair.carte.w < 0.5) {
+        return c;
+    }
+    let taille = vec2<i32>(textureDimensions(decor_prof));
+    let p = vec2<i32>(floor(v.pos.xy));
+    if (p.x < 0 || p.y < 0 || p.x >= taille.x || p.y >= taille.y) {
+        return c;
+    }
+    let inv = textureLoad(decor_prof, p, 0).r;
+    let s = textureLoad(decor_soleil, p, 0).rg;
+    if (inv <= 0.0 || s.x <= 0.0) {
+        return c;
+    }
+    let w = lum_monde(v.pos.xy, inv);
+    let l = lum_vers(w);
+    if (!dans_boite(l)) {
+        return c;
+    }
+    let occ = 1.0 - pcf(ombres_cartes, l, vec2<f32>(0.0), i32(eclair.avant.w + 0.5));
+    return assombrir_decor(c, s, distance(w, eclair.oeil.xyz), occ);
+}
+"#;
+
+/// La carte d'ombres des cartes (partie 185) : chaque carte qui porte une ombre, vue du soleil, là où son encre est.
+const OMBRE_DES_CARTES: &str = r#"
+struct Item {
+    corners: array<vec4<f32>, 4>,
+    color: vec4<f32>,
+    params: vec4<f32>,
+    extra: vec4<f32>,
+    prof: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> item: Item;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+@group(2) @binding(0) var<uniform> eclair: Lumiere;
+
+// `ombres::SEUIL_ALPHA`.
+const SEUIL_ALPHA: f32 = 0.5;
+
+struct OOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+// Un sommet de la carte (sa place dans l'image composée) : relevé sur son plan, dans le monde, puis vu du soleil.
+fn poser(ndc: vec2<f32>, uv: vec2<f32>) -> OOut {
+    let px = vec2<f32>((ndc.x + 1.0) * 0.5 * eclair.brume.z, (1.0 - ndc.y) * 0.5 * eclair.brume.w);
+    let inv = max(item.prof.x * px.x + item.prof.y * px.y + item.prof.z, 1e-6);
+    let q = eclair.light_vp * vec4<f32>(lum_monde(px, inv), 1.0);
+    var o: OOut;
+    // (Ce qui est entre le soleil et la carte d'ombres cache tout : ramené au plus près.)
+    o.pos = vec4<f32>(q.x, q.y, clamp(q.z, 0.0, 1.0), 1.0);
+    o.uv = uv;
+    return o;
+}
+
+@vertex
+fn vs_ombre(@builtin(vertex_index) i: u32) -> OOut {
+    var order = array<u32, 6>(0u, 1u, 2u, 0u, 2u, 3u);
+    let c = item.corners[order[i]];
+    return poser(c.xy, c.zw);
+}
+
+@vertex
+fn vs_ombre_mesh(@location(0) v: vec4<f32>) -> OOut {
+    return poser(v.xy, v.zw);
+}
+
+@fragment
+fn fs_ombre(o: OOut) {
+    if (textureSampleLevel(tex, samp, o.uv, 0.0).a * item.params.x < SEUIL_ALPHA) {
+        discard;
+    }
+}
 "#;
 
 struct CelTexture {
@@ -413,6 +710,11 @@ struct CelTexture {
     /// Résultat des effets sur la carte graphique d'un calque (`gpufx.rs`) : la texture est dessinée
     /// par des passes, jamais remplie de tuiles, et ne sert pas à recycler celle d'un dessin.
     fx: Option<FxState>,
+    /// Le décor 3D (partie 183) : la texture de sa profondeur, de même taille (`decor3dgpu::PROF`), dessinée avec lui, et ce que
+    /// la composition des cartes en lit (groupe 3 de `fs_compose_p`, `fs_blend_p`).
+    prof: Option<(wgpu::Texture, wgpu::BindGroup)>,
+    /// Le décor 3D avec ses ombres (partie 185) : ce que les ombres des cartes en lisent.
+    ombre: Option<Box<OmbreDecor>>,
 }
 
 /// Où en est la texture résultat des effets d'un calque.
@@ -426,7 +728,8 @@ struct FxState {
 impl CelTexture {
     /// Poids de la texture sur la carte.
     fn bytes(&self) -> u64 {
-        self.rect[2] as u64 * self.rect[3] as u64 * 4
+        // (Le décor 3D : sa profondeur à côté, deux octets par pixel, partie 183.)
+        self.rect[2] as u64 * self.rect[3] as u64 * if self.prof.is_some() { 6 } else { 4 } + self.ombre.as_ref().map_or(0, |o| o.bytes())
     }
 }
 
@@ -517,6 +820,22 @@ struct CanvasResources {
     /// Les mêmes, pour une feuille posée par un maillage (sommets au lieu de quatre coins).
     compose_mesh: wgpu::RenderPipeline,
     blend_mesh: wgpu::RenderPipeline,
+    /// Les mêmes quatre, pour une carte qui partage la profondeur du décor 3D (partie 183, `profondeur.rs`) : ils lisent aussi la
+    /// profondeur du décor (groupe 3) et cachent la carte là où il est plus près. Un plan sans décor ne s'en sert jamais.
+    compose_p: wgpu::RenderPipeline,
+    blend_p: wgpu::RenderPipeline,
+    compose_mesh_p: wgpu::RenderPipeline,
+    blend_mesh_p: wgpu::RenderPipeline,
+    /// Le groupe 3 de ces composeurs : la profondeur du décor (partie 183), son soleil, sa lumière, sa carte d'ombres et celle des
+    /// cartes (partie 185).
+    prof_layout: wgpu::BindGroupLayout,
+    /// Les ombres des cartes (partie 185, `ombres.rs`) : le décor assombri sous les cartes ; la carte d'ombres des cartes (quatre coins,
+    /// ou un maillage) ; la lumière du décor qu'elle lit ; les textures vides des groupes sans ombres.
+    decor_o: wgpu::RenderPipeline,
+    ombre_quad: wgpu::RenderPipeline,
+    ombre_mesh: wgpu::RenderPipeline,
+    lumiere_layout: wgpu::BindGroupLayout,
+    vides: Vides,
     /// Sommets des maillages de l'image, et sa taille en octets.
     mesh_vertices: Option<(wgpu::Buffer, u64)>,
     display: wgpu::RenderPipeline,
@@ -566,6 +885,20 @@ struct CanvasResources {
     bordures: HashMap<CelId, BordureGardee>,
     /// Passes d'effets dessinées, pour les mesures.
     fx_passes: u64,
+    /// Les décors 3D à redessiner à la prochaine composition (`place_decor` les pose ; `decor3dgpu.rs`).
+    decor_jobs: Vec<DecorJob>,
+}
+
+/// Un décor 3D à dessiner dans sa texture (la feuille vue de l'œil de la caméra) avant la composition.
+struct DecorJob {
+    out: CelId,
+    /// Un dessin par objet du décor (partie 181) ; les objets d'un même modèle partagent ce qui est dans la carte.
+    dessins: Vec<crate::decor3dgpu::Dessin>,
+    ciel: bool,
+    prise: crate::decor3drendu::Prise,
+    taille: [u32; 2],
+    qualite: crate::decor3dbudget::Qualite,
+    sig: u64,
 }
 
 impl CanvasResources {
@@ -718,6 +1051,11 @@ pub struct GpuCanvas {
 }
 
 impl GpuCanvas {
+    /// L'état de rendu partagé avec eframe : la vue Espace 3D y pose le moteur du décor 3D (`decor3dgpu.rs`, partie 180).
+    pub fn render_state(&self) -> &RenderState {
+        &self.render_state
+    }
+
     /// Plus grand côté d'une texture de la carte (au-delà, l'image composée de la feuille ne se crée pas).
     pub fn max_side(&self) -> u32 {
         self.render_state.device.limits().max_texture_dimension_2d
@@ -727,7 +1065,8 @@ impl GpuCanvas {
         let device = &rs.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("calques"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            // (Partie 185 : la lumière du décor et les ombres, à la suite.)
+            source: wgpu::ShaderSource::Wgsl(format!("{SHADER}{LUMIERE}{COMPOSER_OMBRES}").into()),
         });
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("calques réglages"),
@@ -860,6 +1199,87 @@ impl GpuCanvas {
         };
         let compose_mesh = mesh_pipeline("fs_compose", &layout, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
         let blend_mesh = mesh_pipeline("fs_blend", &blend_layout, None);
+        // La profondeur partagée avec le décor 3D (partie 183) : un quatrième groupe, la profondeur du décor (le troisième est le
+        // fond des modes de fusion, posé aussi pour les autres).
+        // (Partie 185 : et les ombres des cartes, `ombres.rs` : le soleil du décor, sa lumière, sa carte d'ombres, celle des cartes et
+        // leur échantillonneur ; des textures vides là où il n'y en a pas, `Vides`.)
+        let texture_lue = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let carte_d_ombres = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let lumiere_entree = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: NonZeroU64::new(crate::ombres::OCTETS) },
+            count: None,
+        };
+        let prof_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("calques : profondeur et ombres du décor 3D"),
+            entries: &[
+                texture_lue(0),
+                texture_lue(1),
+                lumiere_entree(2),
+                carte_d_ombres(3),
+                carte_d_ombres(4),
+                wgpu::BindGroupLayoutEntry { binding: 5, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison), count: None },
+            ],
+        });
+        let lumiere_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("calques : lumière du décor 3D"), entries: &[lumiere_entree(0)] });
+        let p_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("calques : profondeur partagée"),
+            bind_group_layouts: &[&uniform_layout, &texture_layout, &texture_layout, &prof_layout],
+            push_constant_ranges: &[],
+        });
+        let quad_pipeline = |entry: &str, blend: Option<wgpu::BlendState>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&p_layout),
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState { format: FRAME_FORMAT, blend, write_mask: wgpu::ColorWrites::ALL })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let compose_p = quad_pipeline("fs_compose_p", Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let blend_p = quad_pipeline("fs_blend_p", None);
+        let compose_mesh_p = mesh_pipeline("fs_compose_p", &p_layout, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let blend_mesh_p = mesh_pipeline("fs_blend_p", &p_layout, None);
+        // Les ombres des cartes (partie 185) : le décor assombri sous elles, et la carte d'ombres des cartes (profondeur seule).
+        let decor_o = quad_pipeline("fs_decor_o", Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let ombre_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("calques : ombres des cartes"), source: wgpu::ShaderSource::Wgsl(format!("{LUMIERE}{OMBRE_DES_CARTES}").into()) });
+        let ombre_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("calques : ombres des cartes"), bind_group_layouts: &[&uniform_layout, &texture_layout, &lumiere_layout], push_constant_ranges: &[] });
+        let ombre_pipeline = |entry: &str, mesh: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&ombre_layout),
+                vertex: wgpu::VertexState { module: &ombre_shader, entry_point: Some(entry), buffers: if mesh { &mesh_buffers } else { &[] }, compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState { module: &ombre_shader, entry_point: Some("fs_ombre"), targets: &[], compilation_options: Default::default() }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: Some(wgpu::DepthStencilState { format: OMBRE_FORMAT, depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let ombre_quad = ombre_pipeline("vs_ombre", false);
+        let ombre_mesh = ombre_pipeline("vs_ombre_mesh", true);
+        let vides = Vides::new(device);
         // Bilinéaire : un calque transformé est lissé ; un calque tel quel tombe pile sur les pixels.
         let nearest = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composer"),
@@ -884,6 +1304,16 @@ impl GpuCanvas {
             blend,
             compose_mesh,
             blend_mesh,
+            compose_p,
+            blend_p,
+            compose_mesh_p,
+            blend_mesh_p,
+            prof_layout,
+            decor_o,
+            ombre_quad,
+            ombre_mesh,
+            lumiere_layout,
+            vides,
             mesh_vertices: None,
             display,
             uniform_layout,
@@ -912,6 +1342,7 @@ impl GpuCanvas {
             fx_jobs: Vec::new(),
             bordures: HashMap::new(),
             fx_passes: 0,
+            decor_jobs: Vec::new(),
         });
         // Le budget de mémoire vidéo du système, lu sur un autre fil (`memoirevideo.rs`).
         crate::memoirevideo::suivre(&rs.adapter.get_info());
@@ -986,6 +1417,14 @@ impl GpuCanvas {
         if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
             res.whole_textures = whole;
             res.textures.clear();
+        }
+    }
+
+    /// Essais et mesures (partie 183) : l'image composée gardée est oubliée, la prochaine commande de dessin recompose tout.
+    #[cfg(test)]
+    pub fn oublier_composition(&self) {
+        if let Some(f) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>().and_then(|r| r.frame.as_mut()) {
+            f.composed = None;
         }
     }
 
@@ -1130,12 +1569,19 @@ impl GpuCanvas {
         // des effets de la carte : le fil de fond calcule le dessin dérivé par les effets du trait seuls, la
         // carte passe les autres effets dessus, à pleine résolution (`fx::hybrid_split`).
         let hybrid: Vec<Option<(crate::render::PlanItem, Vec<crate::fx::FxStep>)>> = plan.items.iter().zip(&on_gpu).map(|(item, &gpu)| gpu.then(|| crate::fx::hybrid_split(item)).flatten()).collect();
+        // Le décor 3D (partie 180) : dessiné par la carte, dans sa texture, avant la composition (`place_decor`) ; jamais rendu
+        // par le processeur ici (la caméra qui bouge ferait un rendu par image).
+        let max_side = rs.device.limits().max_texture_dimension_2d;
+        let decor_gpu: Vec<bool> = plan.items.iter().map(|item| matches!(item.fond, Some(crate::render::FondPart::Decor(_))) && size.0 <= max_side && size.1 <= max_side).collect();
         let displays: Vec<Option<crate::fx::Display>> = plan
             .items
             .iter()
             .zip(&on_gpu)
             .enumerate()
             .map(|(i, (item, &gpu))| {
+                if decor_gpu[i] {
+                    return None;
+                }
                 // (Sur la carte en attendant le calcul de fond d'un dessin qui déborde : il part ici, son résultat prend la place à son arrivée.)
                 if gpu {
                     crate::fx::demander_si_debord(doc, item);
@@ -1204,6 +1650,11 @@ impl GpuCanvas {
             }
             if let Some(entry) = res.textures.get_mut(&id) {
                 entry.last_used = tick;
+            }
+        }
+        for (i, item) in plan.items.iter().enumerate() {
+            if let (true, Some(crate::render::FondPart::Decor(key))) = (decor_gpu[i], &item.fond) {
+                resolved[i] = place_decor(rs, res, doc, key, size, tick, &mut bytes);
             }
         }
         // Les calques à effets sur la carte graphique : la texture du résultat de chaque pile (créée à
@@ -1491,11 +1942,17 @@ impl GpuCanvas {
         };
         // Ce que montre la texture de chaque dessin : sa place dans l'image du dessin (`rect`) et la
         // taille de cette image.
-        let places: Vec<Option<([u32; 4], (u32, u32))>> = {
+        // (Et, pour le décor 3D, s'il a sa profondeur : partie 183.)
+        // (Et sa lumière, s'il a les ombres des cartes : partie 185.)
+        let places: Vec<Option<([u32; 4], (u32, u32), bool, Option<crate::ombres::Lumiere>)>> = {
             let renderer = self.render_state.renderer.read();
             let textures = renderer.callback_resources.get::<CanvasResources>().map(|res| &res.textures);
-            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims))).collect()
+            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims, t.prof.is_some(), t.ombre.as_ref().map(|o| o.lumiere)))).collect()
         };
+        // Le décor 3D posé dessous, s'il a sa profondeur sur la carte : les cartes qui portent leur plan s'y cachent (partie 183).
+        let mut decor: Option<CelId> = None;
+        // Sa lumière, s'il a les ombres des cartes, et son rang parmi les éléments composés (partie 185).
+        let mut lumiere: Option<(CelId, crate::ombres::Lumiere, usize)> = None;
         let mut items = Vec::with_capacity(plan.items.len() + 1);
         if let Some(p) = plan.paper {
             items.push(GpuItem {
@@ -1506,6 +1963,9 @@ impl GpuCanvas {
                 blend: 0,
                 mesh: None,
                 adjust: None,
+                prof: None,
+                ombre: None,
+                decor_ombre: false,
             });
         }
         for ((item, id), place) in plan.items.iter().zip(resolved).zip(&places) {
@@ -1523,14 +1983,25 @@ impl GpuCanvas {
                         blend: r.blend.index(),
                         mesh: None,
                         adjust: Some(r.steps.clone()),
+                        prof: None,
+                        ombre: None,
+                        decor_ombre: false,
                     });
                 }
                 continue;
             }
             // Un élément sans dessin n'est pas composé.
             let Some(id) = *id else { continue };
+            if let Some(crate::render::FondPart::Decor(_)) = &item.fond {
+                decor = place.is_some_and(|p| p.2).then_some(id);
+                lumiere = place.and_then(|p| p.3).map(|l| (id, l, items.len()));
+            }
+            let ombre = match (lumiere, item.ombre) {
+                (Some((d, lum, _)), Some(o)) if item.tint.is_none() && (o.porte || o.recoit) => Some(OmbreGpu { decor: d, porte: o.porte, recoit: o.recoit, plan: o.plan, gradient: lum.gradient(&o) }),
+                _ => None,
+            };
             // (Sans texture, rien à poser : la passe de composition saute l'élément.)
-            let (rect, rdims) = place.unwrap_or(([0, 0, stage[0] as u32, stage[1] as u32], (stage[0] as u32, stage[1] as u32)));
+            let (rect, rdims) = place.map_or(([0, 0, stage[0] as u32, stage[1] as u32], (stage[0] as u32, stage[1] as u32)), |p| (p.0, p.1));
             let whole = rect == [0, 0, rdims.0, rdims.1];
             let (color, tinted) = match item.tint {
                 Some(t) => ([t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0], 1.0),
@@ -1583,7 +2054,18 @@ impl GpuCanvas {
                 blend,
                 mesh,
                 adjust: None,
+                prof: decor.zip(item.profondeur),
+                ombre,
+                decor_ombre: false,
             });
+        }
+        // Le décor s'assombrit sous les cartes qui portent une ombre (partie 185).
+        if let Some((d, _, rang)) = lumiere {
+            if items.iter().any(|i| i.ombre.is_some_and(|o| o.porte && o.decor == d)) {
+                if let Some(i) = items.get_mut(rang) {
+                    i.decor_ombre = i.cel == Some(d);
+                }
+            }
         }
         items
     }
@@ -1674,6 +2156,24 @@ struct GpuItem {
     /// Calque d'effet d'ajustement (`calqueffet.rs`) : ses effets s'appliquent à l'image composée
     /// jusque-là, le résultat est posé dessus avec l'opacité et le mode de l'élément.
     adjust: Option<Vec<crate::fx::FxStep>>,
+    /// La profondeur partagée avec le décor 3D (partie 183) : la texture du décor posé dessous (sa profondeur est à côté d'elle)
+    /// et le plan de la carte (`PlanItem::profondeur`).
+    prof: Option<(CelId, crate::profondeur::PlanCarte)>,
+    /// Les ombres de la carte (partie 185, `ombres.rs`) : le décor posé dessous (ses ombres de cartes sont à côté de lui), si elle
+    /// porte une ombre, si elle la reçoit, son plan et sa pente dans la carte d'ombres.
+    ombre: Option<OmbreGpu>,
+    /// Le décor, assombri sous les cartes qui portent une ombre (partie 185).
+    decor_ombre: bool,
+}
+
+/// Les ombres d'une carte sur la carte graphique (`GpuItem::ombre`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct OmbreGpu {
+    decor: CelId,
+    porte: bool,
+    recoit: bool,
+    plan: crate::profondeur::PlanCarte,
+    gradient: [f32; 2],
 }
 
 /// Ce qui fait un élément de l'image composée : le dessin et la version de sa texture, sa place, sa
@@ -1689,6 +2189,11 @@ struct ItemKey {
     mesh: Option<(usize, u64)>,
     /// Empreinte des effets d'un calque d'ajustement.
     adjust: Option<u64>,
+    /// La profondeur partagée avec le décor 3D : le décor et le plan de la carte (partie 183).
+    prof: Option<(CelId, [u32; 3])>,
+    /// Les ombres de la carte, et le décor assombri sous les cartes (partie 185).
+    ombre: Option<(CelId, bool, bool, [u32; 3], [u32; 2])>,
+    decor_ombre: bool,
 }
 
 impl ItemKey {
@@ -1712,7 +2217,9 @@ impl ItemKey {
             }
             std::hash::Hasher::finish(&h)
         });
-        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust }
+        let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits)));
+        let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
+        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust, prof, ombre, decor_ombre: item.decor_ombre }
     }
 }
 
@@ -1732,6 +2239,91 @@ fn compose_pass<'a>(encoder: &'a mut wgpu::CommandEncoder, target: &'a wgpu::Tex
         timestamp_writes: None,
         occlusion_query_set: None,
     })
+}
+
+/// Le format de la carte d'ombres des cartes (celui du décor).
+const OMBRE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// Ce que lit le groupe 3 d'une carte sur un décor sans ombres de cartes (partie 185) : rien d'utile, des textures d'un pixel, une
+/// lumière à zéro (ses drapeaux disent qu'il n'y a ni soleil ni carte d'ombres), l'échantillonneur des ombres.
+struct Vides {
+    soleil: wgpu::TextureView,
+    lumiere: wgpu::Buffer,
+    profondeur: wgpu::TextureView,
+    cmp: wgpu::Sampler,
+}
+
+impl Vides {
+    fn new(device: &wgpu::Device) -> Vides {
+        let tex = |format: wgpu::TextureFormat, label: &str| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: extent(1, 1),
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        Vides {
+            soleil: tex(crate::decor3dgpu::SOLEIL, "ombres : soleil vide"),
+            lumiere: device.create_buffer(&wgpu::BufferDescriptor { label: Some("ombres : lumière vide"), size: crate::ombres::OCTETS, usage: wgpu::BufferUsages::UNIFORM, mapped_at_creation: false }),
+            profondeur: tex(OMBRE_FORMAT, "ombres : carte vide"),
+            cmp: device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("ombres"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+/// Le groupe 3 des composeurs d'une carte sur un décor (`prof_layout`) : la profondeur du décor `prof`, et, s'il a ses ombres de
+/// cartes, son soleil, sa lumière et ses deux cartes d'ombres (rien : des vides).
+fn groupe_decor(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &Vides, prof: &wgpu::TextureView, ombres: Option<(&wgpu::TextureView, &wgpu::Buffer, &wgpu::TextureView, &wgpu::TextureView)>) -> wgpu::BindGroup {
+    let (soleil, lumiere, decor, cartes) = ombres.unwrap_or((&vides.soleil, &vides.lumiere, &vides.profondeur, &vides.profondeur));
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("décor 3D : profondeur et ombres"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(prof) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(soleil) },
+            wgpu::BindGroupEntry { binding: 2, resource: lumiere.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(decor) },
+            wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(cartes) },
+            wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&vides.cmp) },
+        ],
+    })
+}
+
+/// Les ombres des cartes d'un décor 3D sur la carte graphique (partie 185, `ombres.rs`) : gardées avec la texture du décor.
+struct OmbreDecor {
+    /// La part du soleil et le mélange de l'hémisphère à chaque pixel de la feuille (`decor3dgpu::SOLEIL`), dessinés avec le décor.
+    soleil: wgpu::Texture,
+    /// La lumière du rendu du décor (sa carte d'ombres, l'œil, les couleurs).
+    lumiere: crate::ombres::Lumiere,
+    /// Ses réglages sur la carte, et le groupe qui les donne à la carte d'ombres des cartes.
+    uniform: wgpu::Buffer,
+    groupe_lumiere: wgpu::BindGroup,
+    /// La carte d'ombres du décor, telle que sa dernière passe l'a dessinée (`decor3dgpu::Moteur::carte_ombres`).
+    carte_decor: Option<wgpu::TextureView>,
+    /// La carte d'ombres des cartes (son côté), faite à la première carte qui porte une ombre.
+    cartes: Option<(u32, wgpu::TextureView)>,
+    /// Le groupe 3 des composeurs, refait à chaque composition qui s'en sert.
+    groupe: Option<wgpu::BindGroup>,
+}
+
+impl OmbreDecor {
+    fn bytes(&self) -> u64 {
+        let s = self.soleil.size();
+        s.width as u64 * s.height as u64 * 2 + self.cartes.as_ref().map_or(0, |(c, _)| *c as u64 * *c as u64 * 4)
+    }
 }
 
 /// Une image composée posée à l'écran (une, ou deux avec une couche pour une transition).
@@ -1762,6 +2354,90 @@ struct CanvasPaint {
     /// Poser l'image lissée quand la vue la grossit (`GpuCanvas::lisser`). Réduite, tournée à 100 % ou en perspective, elle se pose
     /// lissée de toute façon (`pose_nette`).
     lisser: bool,
+}
+
+/// Les ombres des cartes du plan `span` de `items` (partie 185, `ombres.rs`) : la carte d'ombres de ses cartes qui en portent une,
+/// vues du soleil de son décor, là où leur encre est ; les réglages de la lumière ; le groupe 3 de ses composeurs. Rien sans décor
+/// qui ait ses ombres de cartes.
+fn ombres_des_cartes(encoder: &mut wgpu::CommandEncoder, res: &mut CanvasResources, items: &[GpuItem], ranges: &[Option<std::ops::Range<u32>>], span: std::ops::Range<usize>, device: &wgpu::Device, queue: &wgpu::Queue) {
+    let Some(decor) = items[span.clone()].iter().find_map(|i| i.ombre.map(|o| o.decor)) else { return };
+    let Some(mut od) = res.textures.get_mut(&decor).and_then(|t| t.ombre.take()) else { return };
+    let taille = res.frame.as_ref().map_or([1.0; 2], |f| [f.size.0 as f32, f.size.1 as f32]);
+    let lum = od.lumiere;
+    let porteurs: Vec<usize> = span.filter(|&i| items[i].ombre.is_some_and(|o| o.porte && o.decor == decor) && items[i].cel.is_some()).collect();
+    // La boîte des cartes dans leur carte d'ombres : leurs coins (ou les sommets de leur maillage), relevés sur leur plan.
+    let mut points = Vec::new();
+    for &i in &porteurs {
+        let (item, o) = (&items[i], items[i].ombre.expect("ombre"));
+        let ndc: Vec<[f32; 2]> = match &item.mesh {
+            Some(m) => m.iter().map(|v| [v[0], v[1]]).collect(),
+            None => item.corners.iter().map(|c| [c[0], c[1]]).collect(),
+        };
+        for p in ndc {
+            let (x, y) = ((p[0] + 1.0) * 0.5 * taille[0], (1.0 - p[1]) * 0.5 * taille[1]);
+            let inv = crate::profondeur::inverse_distance(&o.plan, x, y).max(1e-6);
+            points.push(lum.monde(x, y, inv));
+        }
+    }
+    let boite = if porteurs.is_empty() { None } else { Some(crate::ombres::boite_de(&lum, points).unwrap_or([0.0, 0.0, 1.0, 1.0])) };
+    if boite.is_some() {
+        let cote = lum.cote.max(1);
+        if od.cartes.as_ref().is_none_or(|(c, _)| *c != cote) {
+            let tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("décor 3D : ombres des cartes"),
+                size: extent(cote, cote),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: OMBRE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            od.cartes = Some((cote, tex.create_view(&Default::default())));
+            od.groupe = None;
+        }
+    }
+    queue.write_buffer(&od.uniform, 0, &lum.octets(taille, boite, od.carte_decor.is_some()));
+    if let (Some(_), Some((_, vue))) = (boite, od.cartes.as_ref()) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("ombres des cartes"),
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: vue, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }), stencil_ops: None }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        pass.set_bind_group(2, &od.groupe_lumiere, &[]);
+        for &i in &porteurs {
+            let Some(t) = items[i].cel.and_then(|id| res.textures.get(&id)) else { continue };
+            pass.set_bind_group(0, &res.uniform_group, &[(i as u64 * res.stride) as u32]);
+            pass.set_bind_group(1, &t.bind_group, &[]);
+            match (&items[i].mesh, ranges[i].clone()) {
+                (Some(_), Some(range)) => {
+                    let Some((buffer, _)) = &res.mesh_vertices else { continue };
+                    pass.set_pipeline(&res.ombre_mesh);
+                    pass.set_vertex_buffer(0, buffer.slice(..));
+                    pass.draw(range, 0..1);
+                }
+                (Some(_), None) => continue,
+                (None, _) => {
+                    pass.set_pipeline(&res.ombre_quad);
+                    pass.draw(0..6, 0..1);
+                }
+            }
+        }
+    }
+    if od.groupe.is_none() {
+        if let Some((prof, _)) = res.textures.get(&decor).and_then(|t| t.prof.as_ref()) {
+            let prof = prof.create_view(&Default::default());
+            let soleil = od.soleil.create_view(&Default::default());
+            let carte_decor = od.carte_decor.clone().unwrap_or_else(|| res.vides.profondeur.clone());
+            let cartes = od.cartes.as_ref().map_or_else(|| res.vides.profondeur.clone(), |c| c.1.clone());
+            od.groupe = Some(groupe_decor(device, &res.prof_layout, &res.vides, &prof, Some((&soleil, &od.uniform, &carte_decor, &cartes))));
+        }
+    }
+    if let Some(t) = res.textures.get_mut(&decor) {
+        t.ombre = Some(od);
+    }
 }
 
 /// Compose les éléments `span` de `items` dans `frame` (effacée d'abord). Un calque en mode de
@@ -1821,11 +2497,28 @@ fn compose_span(
             pass = compose_pass(encoder, &frame.target, false);
             pass.set_bind_group(2, &frame.backdrop_group, &[]);
         }
-        pass.set_pipeline(match (item.blend != 0, meshed) {
-            (false, false) => &res.compose,
-            (false, true) => &res.compose_mesh,
-            (true, false) => &res.blend,
-            (true, true) => &res.blend_mesh,
+        // Une carte qui partage la profondeur du décor 3D (partie 183) : les mêmes, qui lisent aussi la profondeur du décor ; et une
+        // carte qui reçoit les ombres, ou le décor sous les cartes qui en portent (partie 185) : le groupe de ses ombres.
+        let decor_de = item.prof.map(|(d, _)| d).or(item.ombre.filter(|o| o.recoit).map(|o| o.decor)).or(if item.decor_ombre { item.cel } else { None });
+        let groupe3 = decor_de.and_then(|d| res.textures.get(&d)).and_then(|t| t.ombre.as_ref().and_then(|o| o.groupe.as_ref()).or(t.prof.as_ref().map(|p| &p.1)));
+        let assombri = item.decor_ombre && groupe3.is_some() && !meshed && item.blend == 0;
+        let prof = groupe3.filter(|_| !item.decor_ombre || assombri);
+        if let Some(group) = prof {
+            if item.blend == 0 {
+                pass.set_bind_group(2, &frame.backdrop_group, &[]);
+            }
+            pass.set_bind_group(3, group, &[]);
+        }
+        pass.set_pipeline(match (item.blend != 0, meshed, prof.is_some()) {
+            _ if assombri => &res.decor_o,
+            (false, false, false) => &res.compose,
+            (false, true, false) => &res.compose_mesh,
+            (true, false, false) => &res.blend,
+            (true, true, false) => &res.blend_mesh,
+            (false, false, true) => &res.compose_p,
+            (false, true, true) => &res.compose_mesh_p,
+            (true, false, true) => &res.blend_p,
+            (true, true, true) => &res.blend_mesh_p,
         });
         pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
         pass.set_bind_group(1, group, &[]);
@@ -1850,6 +2543,12 @@ fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params:
     put_item_extra(bytes, corners, color, params, &[0.0; 4]);
 }
 
+fn put_floats(bytes: &mut [u8], values: &[f32]) {
+    for (k, v) in values.iter().enumerate() {
+        bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_ne_bytes());
+    }
+}
+
 fn put_item_extra(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4], extra: &[f32; 4]) {
     for (k, v) in corners.iter().flatten().chain(color).chain(params).chain(extra).enumerate() {
         bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_ne_bytes());
@@ -1865,6 +2564,28 @@ impl CallbackTrait for CanvasPaint {
         encoder: &mut wgpu::CommandEncoder,
         resources: &mut CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
+        // Le décor 3D (partie 180) : redessiné dans sa texture, de l'œil de la caméra, avant la composition qui la lit.
+        let jobs = resources.get_mut::<CanvasResources>().map(|r| std::mem::take(&mut r.decor_jobs)).unwrap_or_default();
+        if !jobs.is_empty() {
+            let mut moteur = resources.remove::<crate::decor3dgpu::Moteur>().unwrap_or_else(|| crate::decor3dgpu::Moteur::new(device, queue));
+            if let Some(res) = resources.get_mut::<CanvasResources>() {
+                for j in jobs {
+                    let Some((view, prof, soleil)) = res.textures.get(&j.out).and_then(|t| Some((t.texture.create_view(&Default::default()), t.prof.as_ref()?.0.create_view(&Default::default()), t.ombre.as_ref().map(|o| o.soleil.create_view(&Default::default()))))) else { continue };
+                    moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, &prof, soleil.as_ref(), j.ciel, j.qualite);
+                    if let Some(t) = res.textures.get_mut(&j.out) {
+                        if let Some(state) = t.fx.as_mut() {
+                            state.done = j.sig;
+                        }
+                        // (Les ombres des cartes lisent la carte d'ombres que le décor vient de dessiner, partie 185.)
+                        if let Some(o) = t.ombre.as_mut() {
+                            o.carte_decor = moteur.carte_ombres(j.out).map(|(_, v)| v);
+                            o.groupe = None;
+                        }
+                    }
+                }
+            }
+            resources.insert(moteur);
+        }
         let Some(res) = resources.get_mut::<CanvasResources>() else { return Vec::new() };
         // Effets de calque sur la carte graphique (`gpufx.rs`) : les textures de résultat dont la
         // signature a changé sont redessinées, avant la composition qui les lit.
@@ -1894,6 +2615,15 @@ impl CallbackTrait for CanvasPaint {
         let mut bytes = vec![0u8; n as usize * stride];
         for (i, item) in self.items.iter().enumerate() {
             put_item(&mut bytes[i * stride..], &item.corners, &item.color, &item.params);
+            // (Le plan de la carte, après le réglage de plus : la profondeur partagée avec le décor 3D, partie 183 ; et ses drapeaux :
+            // 1, cachée par le décor ; 2, elle reçoit les ombres, sa pente dans la carte d'ombres au réglage de plus, partie 185.)
+            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 };
+            if let Some(plan) = item.prof.map(|p| p.1).or(item.ombre.map(|o| o.plan)) {
+                put_floats(&mut bytes[i * stride + 112..], &[plan[0], plan[1], plan[2], drapeaux]);
+            }
+            if let Some(o) = item.ombre {
+                put_floats(&mut bytes[i * stride + 96..], &[o.gradient[0], o.gradient[1], 0.0, 0.0]);
+            }
         }
         let [w, h] = screen.size_in_pixels.map(|v| v.max(1) as f32);
         let ppp = screen.pixels_per_point;
@@ -1969,6 +2699,13 @@ impl CallbackTrait for CanvasPaint {
         // (Les calques d'ajustement ont besoin des effets : on les sort le temps de la composition.)
         let mut fx = res.gpufx.take();
         let mut passes = 0;
+        // Les ombres des cartes (partie 185) : la carte d'ombres des cartes de chaque plan, avant sa composition.
+        if fresh1 {
+            ombres_des_cartes(encoder, res, &self.items, &ranges, 0..split, device, queue);
+        }
+        if fresh2 {
+            ombres_des_cartes(encoder, res, &self.items, &ranges, split..self.items.len(), device, queue);
+        }
         if fresh1 {
             if let Some(frame) = &res.frame {
                 passes += compose_span(encoder, res, frame, &self.items, &ranges, 0..split, &mut fx, device, queue);
@@ -2190,6 +2927,8 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
             filled: Vec::new(),
             partial: None,
             fx: Some(FxState::default()),
+            prof: None,
+            ombre: None,
         };
         *bytes += entry.bytes();
         res.textures.insert(out, entry);
@@ -2205,6 +2944,88 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
     if entry.fx.is_some_and(|s| s.done != sig) {
         res.fx_jobs.retain(|j| j.out != out);
         res.fx_jobs.push(FxJob { src, out, chain: std::sync::Arc::new(chain), sig, bordure: bord.map(|b| b.1) });
+    }
+    Some(out)
+}
+
+/// La texture du décor 3D de la clé `key` (`decor3d.rs`) : une par décor, de la taille de la feuille, redessinée par la carte
+/// quand la clé change (la caméra ou un objet a bougé) — jamais remplie par le processeur. Rien : le décor a changé depuis la
+/// clé, ou n'est plus dans le projet.
+#[allow(clippy::too_many_arguments)]
+fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key: &crate::decor3d::DecorCle, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
+    let objets = crate::decor3d::objets_de(doc, key)?;
+    let aspect = key.aspect;
+    let prise = key.prise()?;
+    let out = crate::decor3d::id_texture(key.decor);
+    let qualite = if aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
+    let sig = crate::decor3d::id_of(key) ^ (qualite as u64) << 1;
+    let want = [0, 0, sheet.0, sheet.1];
+    if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.prof.is_some() && t.rect == want) {
+        if let Some(old) = res.textures.remove(&out) {
+            *bytes -= old.bytes();
+        }
+        let texture = crate::gpufx::target_texture(&rs.device, sheet.0, sheet.1);
+        let view = texture.create_view(&Default::default());
+        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+        // (Sa profondeur, dessinée avec lui : les cartes s'y cachent, partie 183.)
+        let prof = prof_texture(&rs.device, &res.prof_layout, &res.vides, sheet);
+        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()), prof: Some(prof), ombre: None };
+        *bytes += entry.bytes();
+        res.textures.insert(out, entry);
+    }
+    // Les ombres des cartes (partie 185, `ombres.rs`) : seulement si le décor a ses ombres sur cet ordinateur ; sa lumière, la part du
+    // soleil dessinée avec lui (une troisième cible), et plus tard la carte d'ombres des cartes.
+    let lumiere = if aspect.ombres && qualite != crate::decor3dbudget::Qualite::Sans {
+        let ec = crate::decor3dgpu::eclairage(&crate::decor3d::dessins_gpu(&objets, aspect), prise.oeil, &aspect, qualite);
+        crate::ombres::Lumiere::de(&ec, &aspect, &prise)
+    } else {
+        None
+    };
+    let lumiere_layout = res.lumiere_layout.clone();
+    let entry = res.textures.get_mut(&out).expect("texture du décor présente");
+    let avant = entry.bytes();
+    match lumiere {
+        Some(lum) => match entry.ombre.as_mut() {
+            Some(o) if o.soleil.size().width == sheet.0 && o.soleil.size().height == sheet.1 => {
+                if o.lumiere != lum {
+                    o.lumiere = lum;
+                    o.groupe = None;
+                }
+            }
+            _ => {
+                let soleil = rs.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("décor 3D : soleil"),
+                    size: extent(sheet.0, sheet.1),
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: crate::decor3dgpu::SOLEIL,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                });
+                let uniform = rs.device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D : lumière"), size: crate::ombres::OCTETS, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+                let groupe_lumiere = rs.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("décor 3D : lumière"), layout: &lumiere_layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }] });
+                entry.ombre = Some(Box::new(OmbreDecor { soleil, lumiere: lum, uniform, groupe_lumiere, carte_decor: None, cartes: None, groupe: None }));
+                // (La part du soleil est à dessiner avec le décor : le rendu d'avant ne l'a pas.)
+                if let Some(state) = entry.fx.as_mut() {
+                    state.done = 0;
+                }
+            }
+        },
+        None => entry.ombre = None,
+    }
+    *bytes = *bytes - avant + entry.bytes();
+    entry.last_used = tick;
+    let state = entry.fx.as_mut().expect("texture du décor");
+    if state.wanted != sig {
+        state.wanted = sig;
+        // La texture va changer : l'image composée gardée n'est plus bonne.
+        entry.generation = tick;
+    }
+    if entry.fx.is_some_and(|s| s.done != sig) {
+        res.decor_jobs.retain(|j| j.out != out);
+        let dessins = crate::decor3d::dessins_gpu(&objets, aspect);
+        res.decor_jobs.push(DecorJob { out, dessins, ciel: aspect.ciel, prise, taille: [sheet.0, sheet.1], qualite, sig });
     }
     Some(out)
 }
@@ -2252,10 +3073,29 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let texture = cel_texture(&rs.device, rect[2], rect[3]);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None }
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None, prof: None, ombre: None }
     });
     *bytes += entry.bytes();
     res.textures.insert(id, entry);
+}
+
+/// La texture de la profondeur du décor 3D (partie 183, `decor3dgpu::PROF`), de la taille de la feuille, et ce que la composition
+/// des cartes en lit.
+fn prof_texture(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &Vides, size: (u32, u32)) -> (wgpu::Texture, wgpu::BindGroup) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("décor 3D : profondeur"),
+        size: extent(size.0, size.1),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: crate::decor3dgpu::PROF,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    // (Sans ombres de cartes : le reste du groupe est vide, partie 185.)
+    let group = groupe_decor(device, layout, vides, &view, None);
+    (texture, group)
 }
 
 /// Texture d'un dessin : valeurs gamma prémultipliées, telles qu'elles sont en mémoire.

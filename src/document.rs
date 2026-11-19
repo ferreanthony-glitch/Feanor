@@ -311,6 +311,47 @@ impl LayerTransform {
         }
     }
 
+    /// La partie linéaire de `affine` (étirement, échelle, rotation) appliquée au vecteur `v` : ce que la pose fait d'un
+    /// déplacement du dessin, quel que soit son pivot.
+    pub fn lineaire(&self, v: Vec2) -> Vec2 {
+        let (s, c) = self.angle.to_radians().sin_cos();
+        let (kx, ky) = (self.scale * self.stretch_x, self.scale * self.stretch_y);
+        let (a, b, cc, d) = (kx * c, -ky * s, kx * s, ky * c);
+        vec2(a * v.x + b * v.y, cc * v.x + d * v.y)
+    }
+
+    /// **La même pose rapportée au centre de la feuille** (partie 182). La pose d'un calque dont l'origine est à `ecart` du
+    /// centre de la feuille (`Layer::ecart_origine`) est une affinité autour de cette origine ; celle-ci donne la même
+    /// affinité autour du centre (son `affine(centre)` est l'`affine(origine)` de la pose de départ). Seul le décalage
+    /// change : x' = x + e − A·e. Écart nul : la pose elle-même, au bit près. C'est sous cette forme que l'image d'un plan,
+    /// ses vignettes et ses exports posent un calque (`Layer::pose_seen`).
+    pub fn au_centre(&self, ecart: Vec2) -> LayerTransform {
+        if ecart == Vec2::ZERO {
+            return *self;
+        }
+        let ae = self.lineaire(ecart);
+        LayerTransform { x: self.x + ecart.x - ae.x, y: self.y + ecart.y - ae.y, ..*self }
+    }
+
+    /// L'inverse d'`au_centre` : une pose rapportée au centre de la feuille, rendue à l'origine à `ecart` du centre.
+    pub fn a_l_origine(&self, ecart: Vec2) -> LayerTransform {
+        if ecart == Vec2::ZERO {
+            return *self;
+        }
+        let ae = self.lineaire(ecart);
+        LayerTransform { x: self.x - ecart.x + ae.x, y: self.y - ecart.y + ae.y, ..*self }
+    }
+
+    /// La même affinité autour d'une autre origine (partie 182, « déplacer l'origine ne déplace jamais le dessin ») : la pose
+    /// d'un calque dont l'origine passe de o1 à o2 = o1 + `delta` (coordonnées du dessin) : xy2 = xy1 + A·Δ − Δ.
+    pub fn origine_deplacee(&self, delta: Vec2) -> LayerTransform {
+        if delta == Vec2::ZERO {
+            return *self;
+        }
+        let ad = self.lineaire(delta);
+        LayerTransform { x: self.x + ad.x - delta.x, y: self.y + ad.y - delta.y, ..*self }
+    }
+
     /// Même transformation suivie d'une similitude autour du point `q` de la feuille : échelle
     /// `factor` et rotation `turn` (degrés). On reste ainsi dans « décalage + échelle + rotation ».
     pub fn around(&self, pivot: Pos2, q: Pos2, factor: f32, turn: f32) -> LayerTransform {
@@ -337,6 +378,9 @@ pub struct CameraSeen {
     pub d0: f32,
     pub grossissement: f32,
     pub angle: f32,
+    /// Le centre de la feuille (partie 182) : une pose se lit autour de l'origine de son calque, que `Layer::pose_seen`
+    /// rapporte à ce centre (`LayerTransform::au_centre`).
+    pub centre: Pos2,
 }
 
 /// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
@@ -467,6 +511,25 @@ pub struct Layer {
     /// Sa profondeur se lit alors toujours bornée (`depth_libre_at` = `depth_at`), comme avant : la même image. Faux pour tout
     /// autre calque.
     pub profondeur_bornee: bool,
+    /// **L'origine du calque** (partie 182, `origine.rs`) : le point de son dessin (coordonnées du dessin, la feuille non
+    /// transformée : elle suit le dessin) autour duquel sa pose, fixe ou de chaque clé, se déplace, s'agrandit, s'étire et
+    /// tourne ; c'est son vrai pivot, et dans l'Espace 3D le point de la carte qui porte sa place. Rien : le centre de la
+    /// feuille, comme avant (au bit près).
+    pub origine: Option<[f32; 2]>,
+    /// **Aimanté au sol** (partie 182) : l'origine de la carte repose sur le sol de l'Espace 3D, à la pose fixe et à chaque
+    /// clé (`origine::aimanter_au_sol`, refait après chaque modification, jamais à la lecture). Décoché : la carte garde la
+    /// hauteur que l'aimant lui a donnée.
+    pub aimante_au_sol: bool,
+    /// **Toujours devant le décor 3D** (partie 183, `profondeur.rs`) : la carte du calque n'est jamais cachée par un objet
+    /// du décor 3D de la séquence, quelle que soit sa distance (elle passe devant, comme avant la profondeur partagée).
+    /// Faux : la carte et le décor se cachent selon leur vraie distance.
+    pub devant_decor: bool,
+    /// **Porte une ombre** (partie 185, `ombres.rs`) : l'encre de la carte du calque cache le soleil du décor 3D de la séquence (son
+    /// ombre tombe sur le sol, les objets, les autres cartes). Vrai d'origine.
+    pub porte_ombre: bool,
+    /// **Reçoit les ombres** (partie 185) : la carte s'assombrit là où un objet du décor, ou une autre carte, lui cache le soleil.
+    /// Vrai d'origine.
+    pub recoit_ombres: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -545,7 +608,39 @@ impl Layer {
             accroche: false,
             calque_3d: None,
             profondeur_bornee: false,
+            origine: None,
+            aimante_au_sol: false,
+            devant_decor: false,
+            porte_ombre: true,
+            recoit_ombres: true,
         }
+    }
+
+    /// L'origine du calque en coordonnées de son dessin : la sienne, ou le `centre` de la feuille (partie 182).
+    pub fn pivot(&self, centre: Pos2) -> Pos2 {
+        match self.origine {
+            Some([x, y]) => pos2(x, y),
+            None => centre,
+        }
+    }
+
+    /// De combien l'origine du calque est loin du `centre` de la feuille (coordonnées du dessin) ; zéro sans origine.
+    pub fn ecart_origine(&self, centre: Pos2) -> Vec2 {
+        match self.origine {
+            Some([x, y]) => vec2(x - centre.x, y - centre.y),
+            None => Vec2::ZERO,
+        }
+    }
+
+    /// La pose de l'image `frame` rapportée au `centre` de la feuille (`LayerTransform::au_centre`) : celle qui se pose avec
+    /// `affine(centre)`, comme les éléments d'un plan.
+    pub fn pose_au_centre(&self, frame: usize, centre: Pos2) -> LayerTransform {
+        self.pose(frame).au_centre(self.ecart_origine(centre))
+    }
+
+    /// Du dessin du calque vers la feuille à l'image `frame`, sans caméra : sa pose autour de son origine.
+    pub fn affine_at(&self, frame: usize, centre: Pos2) -> crate::vector::Affine {
+        self.pose(frame).affine(self.pivot(centre))
     }
 
     /// Les images de ce calque suivent celles d'un autre (calque de couleur) : on n'y pose, déplace
@@ -780,7 +875,11 @@ impl Layer {
     /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`). Pour une carte inclinée
     /// (`LayerTransform::is_tilted`), c'est la pose à plat : l'inclinaison se pose par un maillage
     /// (`espace3d.rs`), pas par une affinité.
+    ///
+    /// `t` est lue autour de l'origine du calque ; ce qui en sort est rapporté au centre de la feuille (partie 182,
+    /// `LayerTransform::au_centre`) : c'est ce que posent l'image, les vignettes et les exports, avec `affine(centre)`.
     pub(crate) fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
+        let t = t.au_centre(self.ecart_origine(seen.centre));
         // Accroché à la caméra (`accroche.rs`) : sa pose se lit dans le cadre de la caméra, où qu'elle soit ; pas de multiplan.
         if self.accroche {
             return Some(seen.accrochee(t));
@@ -1411,6 +1510,9 @@ pub struct Structure {
     /// d'annulation les tient ainsi (une entrée par image et par calque pesait 16 octets : 4,5 Mo pour 450 plans, 830 Mo pour
     /// 183 étapes). Hors de cet état, `None` et les `frames` des calques sont en place.
     pub frames_rangees: Option<Box<FramesRangees>>,
+    /// Les décors 3D des séquences (`decor3d.rs`, partie 180) : importer, enlever, déplacer un décor s'annulent avec le reste.
+    /// Les modèles sont partagés (`Arc`) : une étape d'annulation ne les recopie pas.
+    pub decors3d: crate::decor3d::Decors3d,
 }
 
 /// Les `frames` de chaque calque de chaque plan d'une `Structure`, en suites (dessin ou rien, nombre d'images de suite).
@@ -1572,6 +1674,9 @@ pub struct Document {
     /// (montré, couleur, opacité, pas). Écrit dans le manifeste (champ facultatif `environnement_3d`, sans changer `VERSION`). Hors de
     /// l'annulation, comme `vues_3d` : une façon de regarder, jamais dans l'image du film. Rien : l'aspect d'origine.
     pub environnement_3d: Option<crate::espace3ddecor::Environnement3d>,
+    /// Les décors 3D des séquences (`decor3d.rs`, partie 180), par numéro de séquence ; enregistrés à côté du manifeste, dans
+    /// `decors3d.json`, leurs modèles dans `decors/`, sans changer `VERSION`. Dans `Structure` : l'annulation les rétablit.
+    pub decors3d: crate::decor3d::Decors3d,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1642,6 +1747,7 @@ impl Document {
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
             environnement_3d: None,
+            decors3d: Default::default(),
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1673,6 +1779,7 @@ impl Document {
             .chain(structure.transitions.iter().map(|t| t.id))
             .chain(structure.references.iter().map(|r| r.id))
             .chain(structure.personnages.iter().map(|p| p.id))
+            .chain(crate::decor3d::ids(&structure.decors3d))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -1718,6 +1825,7 @@ impl Document {
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
             environnement_3d: None,
+            decors3d: structure.decors3d,
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1771,6 +1879,7 @@ impl Document {
             duree_plan_neuf: self.duree_plan_neuf,
             vues_3d: self.vues_3d.clone(),
             environnement_3d: self.environnement_3d,
+            decors3d: self.decors3d.clone(),
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
@@ -2295,6 +2404,7 @@ impl Document {
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
             frames_rangees: None,
+            decors3d: self.decors3d.clone(),
         }
     }
 
@@ -2339,6 +2449,7 @@ impl Document {
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
             scenario: std::mem::replace(&mut self.scenario, s.scenario),
             frames_rangees: None,
+            decors3d: std::mem::replace(&mut self.decors3d, s.decors3d),
         }
     }
 
@@ -2991,16 +3102,20 @@ impl Document {
         self.rehome_comments(next.id, self.panels[index].id, next_len, a_len);
         self.rehome_references(next.id, self.panels[index].id);
         self.annules_suivre_jonction(next.id, self.panels[index].id);
+        // (Pour lire les poses du second plan autour de l'origine des calques du premier, partie 182.)
+        let world = crate::espace3d::Monde::du_plan(self, index);
         let a = &mut self.panels[index];
         a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
         // rang pour rang parmi les calques propres au panneau.
         let own: Vec<usize> = (0..a.layers.len()).filter(|&k| a.layers[k].scene_wide.is_none()).collect();
         let mut renum: HashMap<u64, u64> = HashMap::new();
-        for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
+        for (i, mut lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
                 renum.insert(lb.id, a.layers[k].id);
                 let la = &mut a.layers[k];
+                // (Les poses du second calque, rendues à l'origine du premier : la même image, partie 182.)
+                crate::origine::deplacer_origine(&mut lb, la.origine, &world);
                 // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
                 if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
                     ca.dessins.extend(cb.dessins.iter().map(|(t, c)| (*t, *c)));

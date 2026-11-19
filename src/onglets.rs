@@ -141,6 +141,8 @@ etat_projet! {
     fx_key_sel: Vec<crate::fxkeys::FxKeyRef> = Vec::new(),
     fx_key_anchor: Option<crate::fxkeys::FxKeyRef> = None,
     board_sel: Vec<u64> = Vec::new(),
+    // (La plage de lecture du film est accrochée aux plans de ce projet : `plagefilm.rs`.)
+    plage_film: crate::plagefilm::PlageFilm = Default::default(),
     board_notes: Vec<crate::board::NoteRef> = Vec::new(),
     sel_clip: Option<u64> = None,
     vsel: Option<crate::vtools::VSelection> = None,
@@ -278,6 +280,8 @@ etat_projet! {
     // --- l'écriture continue et les jalons (`continu.rs`, `jalonsui.rs`)
     continu: crate::continu::Continu = Default::default(),
     jalons_ui: Option<crate::jalonsui::Fenetre> = None,
+    // --- le décor 3D de la séquence (`decor3dui.rs`) : import en cours, fenêtre « Ce décor est lourd »
+    decor3d: crate::decor3dui::Etat3d = Default::default(),
 }
 
 
