@@ -163,7 +163,8 @@ fn toutes_les_icones_de_la_timeline_du_storyboard_ont_la_meme_taille_barre_de_le
         ("remise à zéro, ligne Caméra", hauteur_du_glyphe(&b, ph::ARROW_COUNTER_CLOCKWISE, h + rows.camera_top(), h + rows.camera_top() + rows.cam_h())),
         ("nouveau dossier, ligne Calques", hauteur_du_glyphe(&b, ph::FOLDER_PLUS, c0, c1)),
         ("supprimer, ligne Calques", hauteur_du_glyphe(&b, ph::TRASH, c0, c1)),
-        ("punaise, calque actif", hauteur_du_glyphe(&b, ph::PUSH_PIN, p0, p1)),
+        // (Partie 179.15 : plus de punaise sur la ligne ; le losange de l'opacité.)
+        ("losange, calque actif", hauteur_du_glyphe(&b, ph::DIAMOND, p0, p1)),
         ("pelure, calque actif", hauteur_du_glyphe(&b, Colonne::Pelure.icone(), p0, p1)),
     ];
     let reference = mesures[3].1.expect("le nouveau plan de la ligne Plans");

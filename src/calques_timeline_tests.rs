@@ -111,15 +111,17 @@ fn a_folder_is_a_thin_line_and_never_the_active_layer() {
     assert_eq!(toute.len(), 11);
     assert!(toute.iter().all(|l| matches!(l.0, Sorte::Calque | Sorte::Dossier)));
     assert_eq!(toute.iter().filter(|l| l.0 == Sorte::Dossier).map(|l| (l.1, l.2)).collect::<Vec<_>>(), [(0, DOSSIER_H), (6, DOSSIER_H)]);
-    assert_eq!(toute.iter().filter(|l| l.2 == LAYER_H).map(|l| l.1).collect::<Vec<_>>(), [8], "seul le calque actif est déplié");
+    // (Partie 179.13 : tous les calques sur deux rangées, le calque actif comme les autres ; avant, seul le calque actif.)
+    assert!(toute.iter().filter(|l| l.0 == Sorte::Calque).all(|l| l.2 == LAYER_H), "tous les calques dépliés : {toute:?}");
     // D'un bout à l'autre de la pile : le calque actif est toujours déplié (165.4), jamais un dossier, et un dossier reste plus petit.
     let noms: Vec<String> = app.layers().iter().filter(|l| !l.folder).map(|l| l.name.clone()).collect();
     for nom in &noms {
         aller(&mut app, nom);
         let lanes = app.montage_rows(300.0).lanes;
-        let actif = lanes.iter().find(|l| !l.folded).unwrap_or_else(|| panic!("{nom} : pas de calque actif"));
+        let r = crate::montagerows::row_of_layer(app.layers(), rang(&app, nom)).unwrap();
+        let actif = lanes.iter().find(|l| l.row == r).unwrap_or_else(|| panic!("{nom} : pas de piste"));
         assert_eq!(actif.h, LAYER_H, "{nom}");
-        assert_eq!(layer_in_row(app.layers(), actif.row), Some(rang(&app, nom)), "{nom} est le calque déplié");
+        assert_eq!(layer_in_row(app.layers(), actif.row), Some(rang(&app, nom)), "{nom} a sa piste");
         assert!(lanes.iter().filter(|l| l.est_dossier()).all(|l| l.h == DOSSIER_H && l.h < crate::pistes::FOLDED_H), "{nom} : un dossier est toujours plus petit");
     }
 }

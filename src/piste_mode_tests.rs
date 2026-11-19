@@ -19,11 +19,11 @@ fn banc_dans(espace: Espace) -> Banc {
     b
 }
 
-/// Le rectangle de l'élément dont la bulle s'appelle `nom` (il n'y en a qu'un à l'écran).
+/// Le rectangle de l'élément dont la bulle s'appelle `nom`, sur la piste du calque actif. (Partie 179.13 : chaque calque a sa
+/// piste complète ; le calque actif de ces essais, « Ombre », est le plus bas de la pile : sa piste est peinte la dernière.)
 fn ou(nom: &str) -> Rect {
     let v = vus::ou(nom);
-    assert_eq!(v.len(), 1, "« {nom} » : un seul à l'écran : {v:?} ({:?})", vus::noms());
-    v[0]
+    *v.last().unwrap_or_else(|| panic!("« {nom} » : pas à l'écran ({:?})", vus::noms()))
 }
 
 /// Les calques choisis avec le calque courant (0, « Ombre ») : `garder`.
@@ -96,7 +96,8 @@ fn rien_ne_deborde(b: &Banc, label: &str, quoi: &str) {
 
 /// Partie 173.5 : les options de la ligne du calque de la timeline qui manquaient sur la piste (nom de leur bulle ; « Groupe : … »
 /// commence ainsi), dans leur ordre sur la piste, après l'accroche à la caméra.
-const ICONES_DE_LA_PISTE: &[&str] = &[crate::accroche::NOM, "Aplat sous le trait", "Préserver la transparence", "Pochoir", "Pochoir positif", "Verrouiller la position", "Groupe : ", "Pelure d'oignon du calque"];
+/// (Partie 179.15 : le sens du pochoir, la position verrouillée et le groupe ne sont plus sur la piste : au clic droit.)
+const ICONES_DE_LA_PISTE: &[&str] = &[crate::accroche::NOM, "Aplat sous le trait", "Préserver la transparence", "Pochoir", "Pelure d'oignon du calque"];
 
 /// Le rectangle de l'icône de la piste dont la bulle est `nom` (ou commence par `nom` pour le groupe).
 fn icone(nom: &str) -> Option<Rect> {
@@ -214,8 +215,9 @@ fn the_animation_timeline_keeps_its_own_line_untouched() {
     // 179.5 : plus d'icônes des colonnes sur la rangée d'en-tête : trois cases, une par calque.)
     let b = banc_dans(Espace::Animation);
     assert_eq!(vus::ou("Pelure d'oignon du calque").len(), 3);
-    assert_eq!(vus::ou("Mode précédent").len(), 1);
-    assert_eq!(vus::ou("Mode suivant").len(), 1);
+    // (Partie 179.13 : chaque calque a sa ligne complète, ses flèches.)
+    assert_eq!(vus::ou("Mode précédent").len(), 3);
+    assert_eq!(vus::ou("Mode suivant").len(), 3);
     assert!(texte_dans(&b, "Normal", ou("Mode de fusion")).is_some());
 }
 
@@ -308,23 +310,16 @@ fn the_options_added_to_the_track_do_what_the_timeline_line_does() {
     assert!(calque(&b, 0).keep_alpha);
     pas(&mut b, "Pochoir");
     assert!(calque(&b, 0).stencil && calque(&b, 2).stencil, "le pochoir va aux calques choisis, comme dans la timeline");
-    pas(&mut b, "Pochoir positif");
-    assert!(calque(&b, 0).stencil_negative);
-    b.chauffer(2);
-    assert!(icone("Pochoir négatif").is_some(), "la bulle suit le sens du pochoir");
-    pas(&mut b, "Verrouiller la position");
-    assert!(calque(&b, 0).position_locked);
+    // (Partie 179.15 : le sens du pochoir et la position verrouillée sont au clic droit, `indicateurs_tests`.)
+
     pas(&mut b, "Pelure d'oignon du calque");
     assert_eq!(calque(&b, 0).onion, calque(&b, 2).onion);
     pas(&mut b, crate::accroche::NOM);
     assert!(b.app.est_accroche(0), "{}", b.app.status);
     pas(&mut b, "Aplat sous le trait");
     assert!(calque(&b, 0).fond.is_some(), "{}", b.app.status);
-    // Le groupe : son menu s'ouvre au clic, comme sur la ligne de la timeline.
-    let r = icone("Groupe : ").expect("le groupe");
-    let avant = textes(&b).len();
-    clic(&mut b, r.center(), Modifiers::NONE);
-    assert!(textes(&b).len() > avant, "le menu des groupes s'ouvre");
+    // (Le groupe aussi, partie 179.15.)
+
 }
 
 /// Partie 173.6 (Anthony : « les icônes au-dessus des options de fusion et opacité peuvent être plus espacées pour être plus

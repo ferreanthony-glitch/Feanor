@@ -13,7 +13,8 @@
 //! ```
 //!
 //! - **Organiser** : monter, descendre, aller à un calque, dossiers, groupes.
-//! - **Apparence** : afficher, verrouiller, opacité, mode de fusion, couleur d'étiquette, pelure d'oignon du calque (Ctrl+L) et
+//! - **Apparence** : afficher, verrouiller, opacité, mode de fusion, groupe (couleur d'étiquette), pochoir négatif, position
+//!   verrouillée (partie 179.15), pelure d'oignon du calque (Ctrl+L) et
 //!   panneau de la pelure (partie 173 : l'icône de la pelure a quitté la piste du Storyboard pour ici).
 //! - **Plus** : ce qui est rare ou propre à une sorte de calque (presse-papiers, retourner, réglages avancés, calque de
 //!   couleur, vidéo, avant / après les images, propagation, choisir, afficher, pochoirs, nettoyer, fusions en masse…).
@@ -225,7 +226,21 @@ impl App {
                 }
             });
         }
-        ui.menu_button("Couleur d'étiquette", |ui| self.group_menu(ui, li));
+        // Partie 179.15 (Anthony : les indicateurs de la ligne, « supprime les carrément. Ça sera accessible en clic droit ça suffit ») :
+        // le groupe (sa couleur d'étiquette), le sens du pochoir et la position verrouillée sont ici (ces deux derniers étaient sous
+        // Plus > Réglages avancés).
+        ui.menu_button("Groupe · Couleur d'étiquette", |ui| self.group_menu(ui, li));
+        if !folder {
+            let (stencil, negative, fixed) = self.layers().get(li).map_or((false, false, false), |l| (l.stencil, l.stencil_negative, l.position_locked));
+            let resp = ui.add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"));
+            let resp = if stencil { resp.on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.") } else { resp.on_disabled_hover_text("Le calque n'est pas un pochoir : allume sa colonne Pochoir d'abord.") };
+            if resp.clicked() {
+                self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
+            }
+            if ui.checkbox(&mut fixed.clone(), "Verrouiller la position").on_hover_text("L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.").clicked() {
+                self.set_layer_flag(li, |l| l.position_locked = !fixed);
+            }
+        }
         // La pelure d'oignon du calque, avec son raccourci (partie 173 : son icône a quitté la piste du Storyboard pour ici), et le
         // panneau de la pelure, qu'ouvrait le clic droit de cette icône.
         if !folder {
@@ -306,30 +321,18 @@ impl App {
         }
     }
 
-    /// Plus > Réglages avancés : préserver la transparence, pochoir, position verrouillée, profondeur.
+    /// Plus > Réglages avancés : préserver la transparence, pochoir, accroche à la caméra, profondeur.
     fn reglages_avances_menu(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some(l) = self.layers().get(li) else { return };
-        let (keep_alpha, stencil, negative, fixed) = (l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked);
+        let (keep_alpha, stencil) = (l.keep_alpha, l.stencil);
         if ui.checkbox(&mut keep_alpha.clone(), "Préserver la transparence").on_hover_text("Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide.").clicked() {
             self.set_layer_flag(li, |l| l.keep_alpha = !keep_alpha);
         }
         if ui.checkbox(&mut stencil.clone(), "Pochoir").on_hover_text("Le dessin de ce calque limite où l'on peint sur les autres calques.").clicked() {
             self.basculer_calques(li, "Pochoir", |l| l.stencil, |l, v| l.stencil = v, false);
         }
-        if ui
-            .add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"))
-            .on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.")
-            .clicked()
-        {
-            self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
-        }
-        if ui
-            .checkbox(&mut fixed.clone(), "Verrouiller la position")
-            .on_hover_text("L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.")
-            .clicked()
-        {
-            self.set_layer_flag(li, |l| l.position_locked = !fixed);
-        }
+        // (Partie 179.15 : « Pochoir négatif » et « Verrouiller la position » sont montés dans Apparence.)
+
         // Accrocher à la caméra (`accroche.rs`) : le calque garde sa place dans l'image, quoi que fasse la caméra.
         let accroche = self.est_accroche(li);
         let raison = self.layers().get(li).filter(|l| !l.accroche).and_then(|l| l.raison_sans_accroche()).map(|r| format!("Ce calque ne s'accroche pas à la caméra : {r}."));

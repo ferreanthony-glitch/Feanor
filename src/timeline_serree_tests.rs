@@ -203,15 +203,14 @@ fn le_calque_actif_tient_sur_deux_rangees_et_ses_icones_sont_collees_a_droite_so
     let b = banc_sb(film(), 1920, 1080, false);
     let rows = rangees(&b);
     let hauteurs: Vec<f32> = rows.lanes.iter().filter(|l| !l.est_dossier()).map(|l| l.h).collect();
-    assert_eq!(hauteurs.iter().filter(|h| **h > 30.0).count(), 1, "un seul calque déplié : {hauteurs:?}");
-    for h in &hauteurs {
-        assert!(*h == 40.0 || *h == 15.0, "le calque actif sur 40 points (66 avant), les autres sur 15 (17 avant) : {hauteurs:?}");
-    }
+    // (Partie 179.13 : tous les calques sur deux rangées, 40 points ; avant, le seul calque actif.)
+    assert!(hauteurs.iter().all(|h| *h == 40.0), "tous les calques sur 40 points : {hauteurs:?}");
     let (p0, p1) = piste_active(&b);
     let milieu = p0 + 20.0;
     let (e0, e1) = ligne_calques(&b);
     // Sur la ligne du nom : les indicateurs et les colonnes (sauf l'œil, à gauche comme sur toutes les pistes).
-    for nom in ["Pochoir positif", "Verrouiller la position"] {
+    // (Partie 179.15 : le sens du pochoir et la position verrouillée ne sont plus sur la ligne : il reste les effets, absents ici.)
+    for nom in [crate::layerheads::Colonne::Pochoir.nom()] {
         let r = un(nom, p0, p1);
         assert!(r.center().y < milieu, "« {nom} » sur la ligne du nom : {r:?} / {p0}");
     }
@@ -273,7 +272,8 @@ fn dans_l_animation_les_commandes_des_calques_montent_et_le_calque_courant_tient
     b.chauffer(4);
     let lignes = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().0.clone());
     for (li, a, z) in &lignes {
-        let attendu = if *li == perso { 40.0 } else { 18.0 };
+        // (Partie 179.13 : tous les calques sur deux rangées, les dossiers sur une ligne fine.)
+        let attendu = if b.app.layers()[*li].folder { 18.0 } else { 40.0 };
         assert!((z - a - attendu).abs() < 0.5, "calque {li} : {} points ({attendu} attendus : 60 et 22 avant)", z - a);
     }
     let haut = lignes.iter().map(|l| l.1).fold(f32::MAX, f32::min);
@@ -293,7 +293,7 @@ fn dans_l_animation_les_commandes_des_calques_montent_et_le_calque_courant_tient
     // Le calque courant : les colonnes et les indicateurs sur la rangée du nom ; le mode, l'opacité et le ⋮ sur la seconde.
     let (a, z) = lignes.iter().find(|l| l.0 == perso).map(|l| (l.1, l.2)).unwrap();
     let dedans = |nom: &str| vus::ou(nom).into_iter().find(|r| r.center().y > a && r.center().y < z).unwrap_or_else(|| panic!("« {nom} » sur la ligne du calque courant"));
-    for nom in ["Pochoir positif", "Verrouiller la position", Colonne::Pelure.nom(), Colonne::Camera.nom()] {
+    for nom in [Colonne::Pelure.nom(), Colonne::Camera.nom()] {
         assert!(dedans(nom).center().y < a + 20.0, "« {nom} » sur la rangée du nom");
     }
     for nom in ["Mode de fusion", "Opacité du calque", "Commandes du calque"] {
@@ -334,7 +334,8 @@ fn a_la_plus_petite_fenetre_rien_ne_deborde_ni_ne_se_chevauche() {
         assert!(ligne.iter().all(|(_, r)| r.left() >= gauche - 0.5 && r.right() <= grip.left() + 0.5), "{quoi} : la ligne « Calques » dans la colonne : {ligne:?}");
         // La piste active : chaque rangée sans chevauchement, dans la colonne.
         let (p0, p1) = piste_active(&b);
-        let noms = ["Afficher / cacher", "Pochoir positif", "Verrouiller la position", "Mode de fusion", "Opacité du calque", "Commandes du calque"];
+        // (Partie 179.15 : sans le sens du pochoir ni la position verrouillée.)
+        let noms = ["Afficher / cacher", "Mode de fusion", "Opacité du calque", "Commandes du calque"];
         let mut piste: Vec<(String, Rect)> = noms
             .iter()
             .map(|n| n.to_string())
@@ -409,8 +410,21 @@ fn timeline_serree_179_captures() {
         b.app.montage_zoom = 8.0;
         b.app.cur_panel = 0;
         b.app.cur_layer = b.app.layers().len() - 1;
-        // (Partie 179.10 : `SHOT_CAPTURE_DEPLIER=1`, « Déplier le calque actif » allumé ; éteint d'origine.)
-        b.app.settings.deplier_calque_actif = std::env::var("SHOT_CAPTURE_DEPLIER").is_ok_and(|v| v == "1");
+        // (Partie 179.13 : `SHOT_CAPTURE_REPLIER=1`, « Replier les calques » allumé ; éteint d'origine. `SHOT_CAPTURE_HAUTEURS` :
+        // « séquence,plans,caméra,calques » ; `SHOT_CAPTURE_COULEURS=1` : quatre couleurs de lignes, partie 179.14.)
+        b.app.settings.replier_calques = std::env::var("SHOT_CAPTURE_REPLIER").is_ok_and(|v| v == "1");
+        if let Ok(h) = std::env::var("SHOT_CAPTURE_HAUTEURS") {
+            let v: Vec<u8> = h.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if let [s, p, c, k] = v[..] {
+                (b.app.settings.hauteur_sequence, b.app.settings.hauteur_plans, b.app.settings.hauteur_camera, b.app.settings.hauteur_calques) = (s, p, c, k);
+            }
+        }
+        if std::env::var("SHOT_CAPTURE_COULEURS").is_ok_and(|v| v == "1") {
+            b.app.settings.couleur_ligne_sequence = Some([70, 110, 220]);
+            b.app.settings.couleur_ligne_plans = Some([220, 180, 50]);
+            b.app.settings.couleur_ligne_camera = Some([210, 70, 60]);
+            b.app.settings.couleur_ligne_calques = Some([60, 190, 110]);
+        }
         // (Partie 179.5 : `SHOT_CAPTURE_ICONES`, une autre taille d'icônes.)
         if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
             b.app.settings.taille_icones = t;
@@ -431,13 +445,29 @@ fn timeline_serree_179_captures() {
     let z = Rect::from_min_max(pos2(gauche, (haut_bande - 40.0).max(0.0)), pos2(gauche + 793.0, bas));
     sauver(&mut b, &format!("{prefixe}-1-storyboard-colonne-432.png"), z, [1920, 1080]);
     // Partie 179.10 : la piste du calque actif dépliée, en gros plan (sa seconde rangée).
-    if b.app.settings.deplier_calque_actif {
+    if !b.app.settings.replier_calques {
         let rows = rangees(&b);
         let rang = crate::montagerows::row_of_layer(b.app.layers(), b.app.cur_layer).unwrap_or(0);
         if let Some(l) = rows.lanes.iter().find(|l| l.row == rang) {
             let y = haut_bande + rows.layers_top() + l.top;
             let z = Rect::from_min_max(pos2(gauche, y - 4.0), pos2(grip.right() + 4.0, y + l.h + 4.0));
             sauver(&mut b, &format!("{prefixe}-7-calque-actif-deplie.png"), z, [1920, 1080]);
+            // Partie 179.15 : le clic droit du calque actif, Apparence ouvert (le groupe, le sens du pochoir, la position).
+            let p = pos2(gauche + 120.0, y + 9.0);
+            b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+            b.image(vec![Event::PointerButton { pos: p, button: eframe::egui::PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+            b.image(vec![Event::PointerButton { pos: p, button: eframe::egui::PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+            b.chauffer(3);
+            if let Some(a) = textes(&b).into_iter().find(|(t, _)| t.contains("Apparence")).map(|(_, r)| r) {
+                b.image(vec![Event::PointerMoved(a.center() - vec2(0.0, 1.0))], 1.0 / 60.0);
+                b.chauffer(3);
+                b.image(vec![Event::PointerMoved(a.center())], 1.0 / 60.0);
+                b.chauffer(4);
+                let z = Rect::from_min_max(pos2(gauche, y - 10.0), pos2(gauche + 760.0, (y + 420.0).min(1080.0)));
+                sauver(&mut b, &format!("{prefixe}-8-clic-droit-apparence.png"), z, [1920, 1080]);
+                b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+                b.chauffer(3);
+            }
         }
     }
     // Gros plan de la colonne.
@@ -470,7 +500,7 @@ fn timeline_serree_179_captures() {
     if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
         a.app.settings.taille_icones = t;
     }
-    a.app.settings.deplier_calque_actif = std::env::var("SHOT_CAPTURE_DEPLIER").is_ok_and(|v| v == "1");
+    a.app.settings.replier_calques = std::env::var("SHOT_CAPTURE_REPLIER").is_ok_and(|v| v == "1");
     a.garder_formes = true;
     a.chauffer(12);
     let lignes = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().0.clone());
@@ -487,7 +517,7 @@ fn timeline_serree_179_captures() {
     p.garder_formes = true;
     p.chauffer(10);
     if let Some(r) = crate::pistes_tests::textes(&p).into_iter().find(|(t, _)| t == "Taille des icônes").map(|(_, r)| r) {
-        let z = Rect::from_min_max(pos2((r.left() - 30.0).max(0.0), (r.top() - 90.0).max(0.0)), pos2(r.left() + 560.0, r.bottom() + 50.0));
+        let z = Rect::from_min_max(pos2((r.left() - 30.0).max(0.0), (r.top() - 90.0).max(0.0)), pos2(r.left() + 660.0, r.bottom() + 190.0));
         sauver(&mut p, &format!("{prefixe}-6-preferences-tailles.png"), z, [1920, 1080]);
     }
     crate::tailleicones::poser(crate::tailleicones::TAILLE_DEFAUT);

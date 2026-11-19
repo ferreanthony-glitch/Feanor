@@ -876,6 +876,17 @@ impl App {
             }
         }
 
+        // Partie 179.14 : dans le Storyboard, une couleur réglée pour la ligne Séquence ou la ligne Plans teinte le fond de sa rangée
+        // (sous les blocs, qui gardent leurs couleurs).
+        if rows.sb.is_some() {
+            use crate::hauteurstimeline::Ligne;
+            for (l, y, h) in [(Ligne::Sequence, bands_top, rows.seq_h()), (Ligne::Plans, top, block_h)] {
+                let fond = crate::hauteurstimeline::teinte(l, theme::rangee_sombre());
+                if fond != theme::rangee_sombre() {
+                    painter.rect_filled(Rect::from_min_max(pos2(r.left(), y), pos2(r.right(), y + h)), 0.0, fond);
+                }
+            }
+        }
         // Plans. (Les numéros du film, trouvés une fois pour les titres et la barre des séquences.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;

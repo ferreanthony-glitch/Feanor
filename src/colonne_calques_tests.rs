@@ -143,10 +143,9 @@ fn every_layer_has_its_columns_on_the_x_of_the_header() {
             assert!((case.center().x - t.center().x).abs() < 0.5, "« {nom} », « {} » sous l'en-tête : {case:?} / {t:?}", col.nom());
         }
     }
-    // Le calque courant sur trois rangées, les autres sur une ligne.
-    let perso = rang(&b, "Perso");
+    // (Partie 179.13 : tous les calques sur leur ligne complète, les dossiers sur une ligne fine.)
     for (li, haut, bas) in lignes() {
-        let h = if li == perso { ROW_FULL } else { ROW_FINE };
+        let h = if b.app.layers()[li].folder { ROW_FINE } else { ROW_FULL };
         assert!((bas - haut - h).abs() < 0.5, "calque {li} : {haut} {bas}");
     }
 }

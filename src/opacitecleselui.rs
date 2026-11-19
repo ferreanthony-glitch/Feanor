@@ -199,6 +199,35 @@ impl App {
         });
     }
 
+    /// Partie 179.13 : le losange des clés d'opacité sur la ligne du calque `li`, qui n'est pas forcément le calque courant (tous
+    /// les calques ont maintenant leur seconde rangée) : il montre les clés de `li` ; un clic fait de `li` le calque courant et pose
+    /// la clé ; son clic droit (supprimer) est celui du calque courant.
+    pub(crate) fn losange_opacite_de(&mut self, ui: &mut egui::Ui, rect: egui::Rect, li: usize, on: egui::Color32, off: egui::Color32) {
+        if li == self.cur_layer {
+            self.losange_opacite(ui, rect, on, off);
+            return;
+        }
+        let f = self.cur_frame;
+        let Some(layer) = self.layers().get(li) else { return };
+        let keys = layer.opacity_keys.len();
+        let here = ok::key_at(&layer.opacity_keys, f).is_some();
+        let resp = crate::layerheads::icon_at(ui, rect, ph::DIAMOND, if here || keys > 0 { on } else { off });
+        if here {
+            ui.painter().circle_filled(rect.center(), 2.0, on);
+        }
+        let key = self.raccourci("calque.cle_opacite");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Créer une clé",
+            "Pose une clé d'opacité à l'image courante sur ce calque (il devient le calque courant), avec son opacité actuelle. Clic droit, sur le calque courant : supprimer la clé d'ici, ou toutes.",
+            &key,
+        );
+        if resp.clicked() {
+            self.select_layer(li);
+            self.run_action("calque.cle_opacite");
+        }
+    }
+
     /// Supprime la clé de l'image courante, quel que soit le choix de la timeline (le bouton du panneau).
     fn op_keys_delete_here(&mut self) {
         self.op_keys_delete_with(false);

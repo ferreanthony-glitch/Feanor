@@ -51,9 +51,6 @@ pub(crate) fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Ba
     b.app.set_espace(Espace::Storyboard);
     b.app.settings.storyboard_camera_depliee = camera_depliee;
     b.app.settings.storyboard_calques_replies = false;
-    // (Partie 179.10 : ces essais décrivent la piste dépliée du calque actif, que « Déplier le calque actif » montre ; d'origine,
-    // elle a la hauteur des autres : `deplier_calque_tests`.)
-    b.app.settings.deplier_calque_actif = true;
     b.app.montage_zoom = PPF;
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.garder_formes = true;
@@ -520,7 +517,8 @@ fn les_calques_se_replient_en_une_ligne_de_resume_et_se_deplient() {
     doc.panels[0].layers[1].opacity = 0.5;
     let mut b = banc_sb(doc, 1920, 1080, false);
     assert!(!rangees(&b).lanes.is_empty());
-    assert_eq!(vus::ou("Mode de fusion").len(), 1, "la piste du calque actif, comme avant");
+    // (Partie 179.13 : la piste de chaque calque a son mode.)
+    assert_eq!(vus::ou("Mode de fusion").len(), b.app.layers().iter().filter(|l| !l.folder).count(), "la piste de chaque calque");
     // Un calque à 50 % : son opacité, en petit, sur sa ligne.
     assert!(texte(&b, "50 %").is_some(), "l'opacité d'un calque à moins de 100 %");
     let rows = rangees(&b);

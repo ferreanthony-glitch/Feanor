@@ -46,8 +46,8 @@ const LISTE_W: f32 = 96.0;
 const FLECHE_W: f32 = 14.0;
 /// Partie 174 : l'action « replier / déplier tous les calques » de la timeline (⊖ / ⊕ de l'en-tête).
 pub(crate) const ACTION_REPLIER: &str = "calques.replier_tout";
-/// Hauteur de la ligne d'un dossier courant (13b-5) : nom ; afficher, verrouiller, opacité.
-pub(crate) const ROW_FOLDER: f32 = 40.0;
+// (Partie 179.13 : la ligne d'un dossier courant, `ROW_FOLDER` (40), n'existe plus : un dossier garde toujours sa ligne fine ; son
+// opacité est au clic droit, Apparence.)
 /// Décalage des lignes des calques rangés dans un dossier.
 const INDENT: f32 = 12.0;
 /// Largeur d'une icône de réglage.
@@ -85,11 +85,9 @@ pub(crate) fn rows_of_en(layers: &[Layer], groups: &[LayerGroup], cur: usize, to
         .filter(|(li, l)| *li == cur || groups.get(l.group as usize).is_none_or(|g| g.shown))
         .filter(|(li, l)| *li == cur || l.parent.is_none_or(|p| !closed.contains(&p)))
         .map(|(li, l)| {
-            let h = match (l.folder, li == cur && !tout_replie) {
-                (true, true) => ROW_FOLDER,
-                (false, true) => ROW_FULL,
-                (_, false) => ROW_FINE,
-            };
+            // (Partie 179.13, Anthony : « Il faut que tous les calques aient cette épaisseur de base » : tout calque a la ligne
+            // complète, sauf repliés ; un dossier garde sa ligne fine.)
+            let h = if l.folder || tout_replie { ROW_FINE } else { ROW_FULL };
             let row = Row { li, top, h };
             top += h;
             row
@@ -382,9 +380,6 @@ pub(crate) fn liste_des_modes(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: Bl
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum IndicateurDeLigne {
     Effets,
-    Groupe,
-    SensDuPochoir,
-    Position,
     Maillon,
 }
 
@@ -404,9 +399,7 @@ struct Head {
     /// Calque de couleur lié à un calque de trait : la ligne est décalée sous son trait (un calque libre garde sa place).
     sous_trait: bool,
     visible: bool,
-    stencil: bool,
     negative: bool,
-    fixed: bool,
     group: usize,
     collapsed: bool,
     opacity: f32,
@@ -531,9 +524,7 @@ impl App {
                 couleur: l.couleur.is_some(),
                 sous_trait: l.keys_follow_line(),
                 visible: l.visible,
-                stencil: l.stencil,
                 negative: l.stencil_negative,
-                fixed: l.position_locked,
                 group: (l.group as usize).min(crate::groups::COUNT - 1),
                 collapsed: l.collapsed,
                 opacity: l.opacity_at(self.cur_frame),
@@ -595,7 +586,8 @@ impl App {
         let resp = ui.interact(r, egui::Id::new(("tete_calque", h.id)), Sense::click_and_drag());
         // Partie 160 : la ligne fine (tout calque ou dossier qui n'est pas le courant) ou la ligne complète, celle du courant
         // (`rows_of`). Partie 174 : « tout replier » (⊖ de l'en-tête) met aussi le courant sur une ligne fine.
-        let fine = li != self.cur_layer || self.calques_tout_replies();
+        // (Partie 179.13 : tous les calques sur leur ligne complète, sauf repliés ; un dossier sur sa ligne fine.)
+        let fine = self.layers()[li].folder || self.calques_tout_replies();
         // Partie 174 (la disposition validée par Anthony) : les colonnes de réglages, à droite, sur les x de la rangée d'en-tête ;
         // tout le reste de la ligne s'arrête avant elles.
         let cols = debut_des_colonnes(r.right());
@@ -610,7 +602,8 @@ impl App {
             Vec::new()
         } else {
             let partage = self.doc.plans_du_partage(self.cur_panel, li).iter().any(|&i| i != self.cur_panel);
-            [(self.fx_switch_shown(li), IndicateurDeLigne::Effets), (true, IndicateurDeLigne::Groupe), (true, IndicateurDeLigne::SensDuPochoir), (true, IndicateurDeLigne::Position), (partage, IndicateurDeLigne::Maillon)]
+            // (Partie 179.15 : plus de groupe, de sens du pochoir ni de position verrouillée sur la ligne : au clic droit, Apparence.)
+            [(self.fx_switch_shown(li), IndicateurDeLigne::Effets), (partage, IndicateurDeLigne::Maillon)]
                 .into_iter()
                 .filter_map(|(oui, i)| oui.then_some(i))
                 .collect()
@@ -625,7 +618,7 @@ impl App {
         // pastille de sa couleur d'étiquette et ses effets ; sur la ligne complète, les indicateurs.)
         let fin_du_nom = match (h.folder, fine) {
             (true, true) => cols - 22.0,
-            (false, true) => cols - 4.0 - if h.group > 0 { 10.0 } else { 0.0 } - if self.fx_switch_shown(li) { 20.0 } else { 0.0 },
+            (false, true) => cols - 4.0 - if self.fx_switch_shown(li) { 20.0 } else { 0.0 },
             (true, false) => r.right() - 22.0,
             (false, false) => debut_indicateurs - 2.0,
         };
@@ -676,9 +669,9 @@ impl App {
                     if li != self.cur_layer {
                         self.click_layer_head(li, false, false);
                     }
-                    self.regler_deplier_calque_actif(true);
+                    self.regler_replier_calques(false);
                 } else {
-                    self.regler_deplier_calque_actif(false);
+                    self.regler_replier_calques(true);
                 }
             }
         }
@@ -732,19 +725,13 @@ impl App {
         self.colonnes_du_calque(ui, r.right(), y_cols, li, h.id, h.negative, fg, li == self.cur_layer);
 
         if fine && !h.folder {
-            // La pastille de sa couleur d'étiquette (son groupe, s'il en a un), puis ses effets, juste avant les colonnes.
-            let mut x = cols - 2.0;
+            // Ses effets, juste avant les colonnes. (Partie 179.15 : plus de pastille du groupe : son filet à gauche le dit, et il se
+            // change au clic droit, Apparence.)
+            let x = cols - 2.0;
             if let Some(resp) = self.fx_switch(ui, li, Some(Rect::from_center_size(pos2(x - 10.0, line1), vec2(20.0, 18.0_f32.min(r.height())))), fg) {
                 if resp.clicked() {
                     self.toggle_layer_fx(li);
                 }
-                x -= 20.0;
-            }
-            if h.group > 0 {
-                let c = Rect::from_center_size(pos2(x - 5.0, line1), vec2(10.0, r.height()));
-                painter.circle_filled(c.center(), 3.5, group_color(group.color));
-                let resp = ui.interact(c, egui::Id::new(("etiquette_calque", h.id)), Sense::hover());
-                bulle(resp, &format!("Groupe : {}", group.name), "La couleur d'étiquette du calque (son groupe). Le changer : sur la ligne du calque courant, ou clic droit.", "");
             }
             return;
         }
@@ -786,7 +773,7 @@ impl App {
         let mut x = debut_indicateurs;
         for i in &indicateurs[..en_haut] {
             let case = Rect::from_min_size(pos2(x, line1 - 8.5), vec2(largeur(i), 17.0));
-            self.indicateur_de_ligne(ui, *i, case, li, &h, &group, fg, off);
+            self.indicateur_de_ligne(ui, *i, case, li, &h, fg);
             x += largeur(i);
         }
 
@@ -818,7 +805,7 @@ impl App {
         let mut x = thumb.right() + 4.0;
         for i in &indicateurs[en_haut..] {
             let case = Rect::from_min_size(pos2(x, yc), vec2(largeur(i), hc));
-            self.indicateur_de_ligne(ui, *i, case, li, &h, &group, fg, off);
+            self.indicateur_de_ligne(ui, *i, case, li, &h, fg);
             x += largeur(i);
         }
         let modes = BlendMode::ALL;
@@ -856,46 +843,20 @@ impl App {
         }
         let bar = Rect::from_min_max(pos2(x + 4.0, yc + 2.0), pos2((losange.left() - 2.0).max(x + 20.0), yc + hc - 2.0));
         self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
-        self.losange_opacite(ui, losange, fg, off);
+        self.losange_opacite_de(ui, losange, li, fg, off);
     }
 
     /// Partie 179 : un indicateur de la ligne complète du calque courant, dans `case` : les effets (fx), le groupe (son menu de
     /// couleurs), le sens du pochoir (+ / −), la position verrouillée (la punaise), le maillon de la planche-mère. Les mêmes bulles et
     /// les mêmes gestes qu'avant.
     #[allow(clippy::too_many_arguments)]
-    fn indicateur_de_ligne(&mut self, ui: &mut Ui, quoi: IndicateurDeLigne, case: Rect, li: usize, h: &Head, group: &LayerGroup, fg: Color32, off: Color32) {
-        let shade = |on: bool| if on { fg } else { off };
+    fn indicateur_de_ligne(&mut self, ui: &mut Ui, quoi: IndicateurDeLigne, case: Rect, li: usize, h: &Head, fg: Color32) {
         match quoi {
             IndicateurDeLigne::Effets => {
                 if let Some(resp) = self.fx_switch(ui, li, Some(case), fg) {
                     if resp.clicked() {
                         self.toggle_layer_fx(li);
                     }
-                }
-            }
-            IndicateurDeLigne::Groupe => {
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("groupe_calque", h.id)));
-                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(crate::tailleicones::icone()).color(group_color(group.color))).frame(false);
-                let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.group_menu(ui, li)).response;
-                bulle(resp, &format!("Groupe : {}", group.name), "Ranger le calque dans un groupe de couleur.", "");
-            }
-            IndicateurDeLigne::SensDuPochoir => {
-                let resp = icon_at(ui, case, if h.negative { ph::MINUS } else { ph::PLUS }, shade(h.stencil));
-                let resp = bulle(
-                    resp,
-                    if h.negative { "Pochoir négatif" } else { "Pochoir positif" },
-                    "Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors. Clic : changer.",
-                    "",
-                );
-                if resp.clicked() {
-                    self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
-                }
-            }
-            IndicateurDeLigne::Position => {
-                let resp = icon_at(ui, case, ph::PUSH_PIN, shade(h.fixed));
-                let resp = bulle(resp, "Verrouiller la position", "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.", "");
-                if resp.clicked() {
-                    self.set_layer_flag(li, |l| l.position_locked = !l.position_locked);
                 }
             }
             IndicateurDeLigne::Maillon => {
@@ -906,7 +867,6 @@ impl App {
             }
         }
     }
-
     /// Partie 174 : les sept colonnes de réglages du calque `li` (`Colonne::TOUTES`), sur les x de l'en-tête (`case_de_colonne`) d'une
     /// colonne dont le bord droit est `droite`, à la hauteur `y`. Une case vide quand le réglage n'a pas de sens pour ce calque. Un
     /// clic : la même action qu'avant (`agir_colonne`), annulable.
@@ -986,14 +946,14 @@ impl App {
     pub(crate) fn basculer_calques_replies(&mut self) {
         // (Partie 179.10 : c'est le réglage « Déplier le calque actif », le même que dans le Storyboard.)
         let replies = self.calques_tout_replies();
-        self.regler_deplier_calque_actif(replies);
+        self.regler_replier_calques(!replies);
     }
 
     /// Partie 179.10 : tous les calques de la timeline de l'Animation sur une ligne, le calque courant compris : d'origine (Anthony :
     /// « D'origine, les calques ne changent pas de taille que l'on soit sur le calque actif ou non »), tant que « Déplier le calque
     /// actif » est éteint ; ou repliés à la main (⊖, partie 174).
     pub(crate) fn calques_tout_replies(&self) -> bool {
-        self.settings.calques_replies || !self.settings.deplier_calque_actif
+        self.settings.replier_calques
     }
 
     /// Partie 174 : les lignes de la colonne des calques de la timeline (`rows_of_en`, repliées ou non).

@@ -123,12 +123,34 @@ pub struct Settings {
     /// calques sur une ligne, le calque courant compris (⊖ / ⊕ de sa rangée d'en-tête). Un réglage d'affichage du poste.
     #[serde(default, rename = "timeline_tout_replie")]
     pub calques_replies: bool,
-    /// Partie 179.10 (Anthony : « je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille
-    /// que l'on soit sur le calque actif ou non ») : allumé, le calque actif s'étale sur deux rangées (vignette, mode, opacité) dans
-    /// la timeline du Storyboard et dans celle de l'Animation ; éteint (d'origine), il a la hauteur des autres calques. L'espace
-    /// Montage garde son réglage à lui (`montage_auto_open`). Un réglage d'affichage du poste.
-    #[serde(default, rename = "deplier_calque_actif", skip_serializing_if = "std::ops::Not::not")]
-    pub deplier_calque_actif: bool,
+    /// Partie 179.13 (Anthony, sur la capture du calque déplié : « Il faut que tous les calques aient cette épaisseur de base ») :
+    /// d'origine, tous les calques des timelines du Storyboard et de l'Animation sont sur deux rangées (le nom et les réglages ; la
+    /// vignette, le mode, l'opacité), le calque actif seulement surligné ; allumé, « Replier les calques » les met tous sur une ligne
+    /// fine. L'espace Montage garde son réglage à lui (`montage_auto_open`). Un réglage d'affichage du poste. (Il remplace
+    /// `deplier_calque_actif` de la partie 179.10, au sens inverse, qui n'est pas repris.)
+    #[serde(default, rename = "replier_calques", skip_serializing_if = "std::ops::Not::not")]
+    pub replier_calques: bool,
+    /// Partie 179.13 (Anthony : « Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan,
+    /// caméra, calques ») : la hauteur des lignes de la timeline du Storyboard, en points (`hauteurstimeline.rs`, Préférences >
+    /// Apparence > Tailles). Absentes : celles d'origine (20, 26, 22, 40).
+    #[serde(default = "crate::hauteurstimeline::seq_defaut", rename = "hauteur_ligne_sequence", skip_serializing_if = "crate::hauteurstimeline::seq_est_defaut")]
+    pub hauteur_sequence: u8,
+    #[serde(default = "crate::hauteurstimeline::plans_defaut", rename = "hauteur_ligne_plans", skip_serializing_if = "crate::hauteurstimeline::plans_est_defaut")]
+    pub hauteur_plans: u8,
+    #[serde(default = "crate::hauteurstimeline::camera_defaut", rename = "hauteur_ligne_camera", skip_serializing_if = "crate::hauteurstimeline::camera_est_defaut")]
+    pub hauteur_camera: u8,
+    #[serde(default = "crate::hauteurstimeline::calques_defaut", rename = "hauteur_ligne_calques", skip_serializing_if = "crate::hauteurstimeline::calques_est_defaut")]
+    pub hauteur_calques: u8,
+    /// Partie 179.14 (Anthony : « la possibilité de donner une couleur à chaque ligne ») : la couleur de fond de chaque ligne de la
+    /// timeline du Storyboard (hauteurstimeline.rs). Absente : celle du thème.
+    #[serde(default, rename = "couleur_ligne_sequence", skip_serializing_if = "Option::is_none")]
+    pub couleur_ligne_sequence: Option<[u8; 3]>,
+    #[serde(default, rename = "couleur_ligne_plans", skip_serializing_if = "Option::is_none")]
+    pub couleur_ligne_plans: Option<[u8; 3]>,
+    #[serde(default, rename = "couleur_ligne_camera", skip_serializing_if = "Option::is_none")]
+    pub couleur_ligne_camera: Option<[u8; 3]>,
+    #[serde(default, rename = "couleur_ligne_calques", skip_serializing_if = "Option::is_none")]
+    pub couleur_ligne_calques: Option<[u8; 3]>,
     /// Partie 178 (la timeline du Storyboard d'Anthony) : la rangée Caméra dépliée, la rangée des préréglages de caméra sous ses
     /// clés (« On déplie uniquement pour poser des préréglages »). Repliée d'office. Un réglage d'affichage du poste.
     #[serde(default, rename = "storyboard_camera_depliee")]
@@ -439,7 +461,15 @@ impl Default for Settings {
             storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
             calques_replies: false,
-            deplier_calque_actif: false,
+            replier_calques: false,
+            hauteur_sequence: crate::hauteurstimeline::SEQ_DEFAUT,
+            hauteur_plans: crate::hauteurstimeline::PLANS_DEFAUT,
+            hauteur_camera: crate::hauteurstimeline::CAMERA_DEFAUT,
+            hauteur_calques: crate::hauteurstimeline::CALQUES_DEFAUT,
+            couleur_ligne_sequence: None,
+            couleur_ligne_plans: None,
+            couleur_ligne_camera: None,
+            couleur_ligne_calques: None,
             storyboard_camera_depliee: false,
             storyboard_calques_replies: false,
             montage_plans: Default::default(),

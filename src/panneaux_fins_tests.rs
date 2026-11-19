@@ -178,7 +178,8 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
     let mut b = banc_dans(Espace::Animation);
     b.chauffer(2);
     let fusion = vus::ou("Mode de fusion");
-    assert_eq!(fusion.len(), 1, "une seule ligne complète, celle du calque courant : {fusion:?}");
+    // (Partie 179.13 : chaque calque a sa ligne complète.)
+    assert_eq!(fusion.len(), 3, "une ligne complète par calque : {fusion:?}");
     // (La colonne commence au bord gauche de la bande, après la barre d'outils : la barre d'actions part de là.)
     let debut = vus::ou(crate::barrecalques::NOMS[0]).last().copied().expect("la barre d'actions").left();
     la_colonne_porte_tout(debut, debut + crate::layerheads::HEAD_W + 2.0, fusion[0]);
@@ -189,14 +190,13 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
     for nom in ["Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
         assert!(vus::ou(nom).iter().all(|r| r.top() > haut_des_lignes), "« {nom} » n'est plus en haut de la colonne : {:?}", vus::ou(nom));
     }
-    // Un autre calque devient courant : c'est sa ligne qui est complète, l'autre est fine.
+    // Un autre calque devient courant : aucune ligne ne change de hauteur (partie 179.13).
     let rows = |b: &Banc| crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
-    assert_eq!(rows(&b).iter().filter(|r| r.h == crate::layerheads::ROW_FULL).count(), 1);
+    let avant: Vec<f32> = rows(&b).iter().map(|r| r.h).collect();
+    assert!(avant.iter().all(|h| *h == crate::layerheads::ROW_FULL));
     b.app.select_layer(0);
     b.chauffer(2);
-    for r in rows(&b) {
-        assert_eq!(r.h, if r.li == 0 { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE });
-    }
+    assert_eq!(rows(&b).iter().map(|r| r.h).collect::<Vec<_>>(), avant);
 }
 
 #[test]
@@ -206,7 +206,8 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     // La piste du calque actif : deux rangées de 20 (partie 179 ; trois de 22 en partie 173.5).
     assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
     let fusion = vus::ou("Mode de fusion");
-    assert_eq!(fusion.len(), 1, "seule la piste du calque actif : {fusion:?}");
+    // (Partie 179.13 : la piste de chaque calque porte tout.)
+    assert_eq!(fusion.len(), 3, "une piste complète par calque : {fusion:?}");
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)
     let colonne = ou("Largeur de la colonne").right();
     // Les options de la piste active sont dans la colonne, sur trois rangées (partie 173.5 : le nom, les options, le mode et
@@ -218,7 +219,8 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     // (Partie 178 : la pelure de la piste active, posée après celle de la ligne « Calques » du Storyboard.)
     let milieu = *vus::ou("Pelure d'oignon du calque").last().expect("la pelure de la piste active");
     // (Partie 179 : la pelure sur la rangée du nom, l'opacité et le ⋮ sur la seconde.)
-    let (menu, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
+    // (Partie 179.13 : la même piste que la pelure, celle du calque actif, peinte la dernière.)
+    let (menu, bas) = (*vus::ou("Commandes du calque").last().unwrap(), *vus::ou("Opacité du calque").last().unwrap());
     let pas = crate::pistes::RANGEE_ACTIVE;
     assert!((bas.center().y - milieu.center().y - pas).abs() < 3.0 && (menu.center().y - bas.center().y).abs() < 3.0, "deux rangées : {milieu:?} {bas:?} {menu:?}");
     // (La barre du bas de la bande part de son bord gauche, à gauche des en-têtes de la colonne.)

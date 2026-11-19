@@ -118,7 +118,7 @@ impl App {
             // (Pas dans la barre du bas de l'espace Montage, qui garde son « Déplier le calque courant ».)
             if self.espace != crate::workspace::Espace::Montage {
                 ui.separator();
-                self.deplier_calque_actif_case(ui);
+                self.replier_calques_case(ui);
             }
         })
         .response;

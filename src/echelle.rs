@@ -69,6 +69,8 @@ impl App {
             }
         });
         self.taille_icones_prefs_ui(ui);
+        // (Parties 179.13 et 179.14 : la hauteur et la couleur de chaque ligne de la timeline.)
+        self.lignes_timeline_prefs_ui(ui);
         ui.label(RichText::new("100 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 125 % ou 150 %.").small().weak());
     }
 }

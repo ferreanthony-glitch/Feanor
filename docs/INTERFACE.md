@@ -15348,3 +15348,89 @@ rouges sur le code d'avant, verts ensuite).
 4. La barre de lecture en haut, en face de la règle ; la ligne « Séquence » dessous : nouvelle séquence, renommer, versions, ⋯.
 5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
 6. Montage : rien n'a changé.
+
+### 179.13 Tous les calques épais d'origine, la hauteur de chaque ligne
+
+Anthony, sur la capture du calque déplié (deux rangées de 20 points) : « Il faut que tous les calques aient cette épaisseur de base.
+Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan, caméra, calques. »
+
+**D'origine, tous les calques** (Storyboard et Animation) ont la disposition du calque déplié, sur deux rangées : l'œil, la pastille,
+le nom, les indicateurs, puis les icônes de réglage collées à droite ; dessous la vignette, ‹ mode ▾ ›, l'opacité, ◇ et ⋮. Le calque
+actif est seulement surligné ; aucun calque ne change de taille quand on change de calque actif. Le mode et l'opacité de chaque
+calque se règlent sur sa ligne et suivent « la sélection agit sur tout » (plusieurs calques choisis : tous). Le losange ◇ de chaque
+calque montre ses clés d'opacité ; un clic en fait le calque courant et pose la clé (son clic droit, supprimer, reste celui du calque
+courant). **Les dossiers** gardent leur ligne fine (13 points dans le Storyboard, 18 dans l'Animation) : ils n'ont ni dessin ni
+mode ; leur opacité est au clic droit (Apparence). Dans l'Animation, un dossier courant avait avant sa ligne de 40 (son opacité) :
+il garde maintenant la ligne fine, comme les autres.
+
+**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 179.10, éteint d'origine, clé `replier_calques` ; un
+ancien `deplier_calque_actif` n'est pas repris) met tous les calques sur une ligne fine (15 points dans le Storyboard, 18 dans
+l'Animation), le calque actif avec ses réglages en icônes à droite. Mêmes places : le ⋯ de la ligne « Calques », Préférences >
+Montage > Pistes du montage, ⊖ / ⊕ et Maj+Alt+C dans l'Animation.
+
+**La hauteur de chaque ligne** du Storyboard, dans Préférences > Apparence > Tailles, « Lignes de la timeline » : un choix de
+valeurs en texte, comme la taille de l'interface ; effet immédiat ; réglages du poste.
+
+| Ligne | Choix (points) | D'origine | Clé |
+|---|---|---|---|
+| Séquence | 18, 20, 24, 28, 32 | 20 | `hauteur_ligne_sequence` |
+| Plans | 22, 26, 32, 40, 48, 56 | 26 | `hauteur_ligne_plans` |
+| Caméra | 18, 22, 26, 30, 36 | 22 | `hauteur_ligne_camera` |
+| Calques | 36, 40, 44, 48, 56, 64 | 40 | `hauteur_ligne_calques` |
+
+Une ligne ne descend jamais sous la taille des icônes et 5 points (18 pour des icônes de 13, 21 pour 16) ; un calque, deux fois
+cela. Les blocs de la bande (séquences, plans, clés de caméra, calques) suivent la hauteur de leur rangée. La hauteur repliée (15)
+et la ligne « Calques » (20) ne se règlent pas. L'espace Montage garde ses hauteurs (pistes de 66 et 17, caméra de 16).
+
+`App::sans_fenetre` (le constructeur des essais) ne touche plus au réglage : le défaut des essais est le nouvel état d'origine.
+
+Le code : `src/hauteurstimeline.rs` (hauteurs, couleurs, la page des Préférences), `montagerows.rs` (`sb_seq_h`, `sb_plan_h`,
+`sb_cam_h`, `calques_du_storyboard`), `pistes.rs` (la piste de chaque calque, `regler_replier_calques`), `layerheads.rs`,
+`opacitecleselui.rs` (`losange_opacite_de`), `settings.rs`.
+
+### 179.14 La couleur de chaque ligne
+
+Anthony : « Ajoute aussi dans les réglages la possibilité de donner une couleur à chaque ligne. »
+
+À côté des hauteurs, chaque ligne (Séquence, Plans, Caméra, Calques) a sa pastille : le champ de couleur commun de FEANOR (celui
+du calque Couleur unie, avec sa pipette), effet immédiat ; « Par défaut » paraît quand la ligne a une couleur et rend celle du
+thème. Clés `couleur_ligne_sequence`, `couleur_ligne_plans`, `couleur_ligne_camera`, `couleur_ligne_calques` (absentes : le thème).
+
+La couleur teinte le fond de la ligne : sa case dans la colonne de gauche et sa rangée dans la bande. Pour que le texte et les icônes
+restent lisibles quelle que soit la couleur, elle est **fondue à 35 % avec le fond du thème** (pas de couleur pure, pas de contraste
+recalculé) : une couleur claire éclaircit un peu le fond, sans le rendre blanc. Les blocs des plans, des séquences et des clés, la
+couleur d'étiquette d'un calque et les teintes des versions de plan gardent les leurs. Dans l'espace Montage, rien n'est teinté (le
+code des en-têtes et des rangées est partagé : la teinte n'y joue que pour la disposition du Storyboard).
+
+Essais (179.13 et 179.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
+
+### 179.15 À tester (sa checklist)
+
+1. Storyboard : tous les calques sur deux rangées ; changer de calque actif : rien ne bouge, il est surligné.
+2. Sur un calque qui n'est pas l'actif : son mode, son opacité ; avec deux calques choisis (Ctrl + clic) : les deux.
+3. ⋯ de la ligne « Calques » > « Replier les calques » : tous fins ; décocher : retour.
+4. Préférences > Apparence > Tailles > Lignes de la timeline : Plans 40, Calques 36… tout de suite ; la pastille d'une ligne, puis
+   « Par défaut ».
+5. Animation : tous les calques sur leur ligne complète, les dossiers fins.
+6. Montage : rien n'a changé.
+
+### 179.16 Trois indicateurs en moins sur la ligne des calques
+
+Anthony, sur les trois indicateurs de la rangée 1 d'un calque (le dossier du groupe de couleur, le + / − du sens du pochoir, la
+punaise de la position verrouillée) : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit ».
+
+- Ils ne sont plus sur les lignes de calque, ni dans le Storyboard ni dans l'Animation ; la pastille du groupe des lignes fines de
+  l'Animation part aussi (le filet de couleur à gauche de la ligne dit déjà le rangement). Les effets (fx) et le maillon de la
+  planche-mère restent. La place libérée va au nom.
+- Au clic droit d'un calque (et à son ⋮, le même menu), **Apparence** : « Groupe (couleur d'étiquette) » et son menu de couleurs (il
+  y était, sous le nom « Couleur d'étiquette »), « Pochoir négatif » (une coche, grisée tant que le pochoir n'est pas allumé, avec
+  sa raison en bulle) et « Verrouiller la position » (une coche). Ces deux-là étaient sous Plus > Réglages avancés : ils sont montés,
+  pas en double. Mêmes actions, même Ctrl+Z ; le sens du pochoir agit sur tous les calques choisis, comme avant ; la position, sur
+  le calque cliqué, comme avant.
+- L'espace Montage : sa piste active a son propre code (`pistes::piste_active_head`), non partagé : ses indicateurs restent.
+
+Essais : `src/indicateurs_tests.rs` (3 rouges sur le code d'avant, verts ensuite) ; adaptés : ceux qui cherchaient « Pochoir
+positif » ou « Verrouiller la position » sur la ligne du calque.
+
+(La checklist de la partie 179.15 ci-dessus vaut pour 179.13 et 179.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
+de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)

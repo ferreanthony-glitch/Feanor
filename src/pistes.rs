@@ -113,9 +113,7 @@ const PAS_MAX: f32 = 30.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Indicateur {
     Effets,
-    Groupe,
-    SensDuPochoir,
-    Position,
+    // (Partie 179.15 : le groupe, le sens du pochoir et la position verrouillée ne sont plus sur la ligne : au clic droit.)
     Maillon,
 }
 
@@ -438,50 +436,42 @@ impl App {
         self.pistes.active_fermee = false;
     }
 
-    /// Le calque actif, si le réglage « Déplier le calque courant » est allumé.
+    /// Le calque actif, si le réglage « Déplier le calque courant » est allumé (espace Montage ; dans le Storyboard, partie 179.13,
+    /// tous les calques ont la même hauteur : `montage_rows_en`).
     pub(crate) fn pistes_auto_open(&self) -> AutoOpen {
-        // (Partie 179.10 : dans la timeline du Storyboard, le calque actif ne se déplie que si « Déplier le calque actif » est allumé ;
-        // l'espace Montage garde son réglage.)
-        let deplier = self.settings.montage_auto_open && (!self.timeline_du_storyboard() || self.settings.deplier_calque_actif);
-        deplier.then_some(self.pistes.auto_open).flatten()
+        self.settings.montage_auto_open.then_some(self.pistes.auto_open).flatten()
     }
 
-    /// Partie 179.10 : « Déplier le calque actif » (Storyboard et Animation) allumé ou éteint, tout de suite, gardé dans les
-    /// réglages du poste.
-    pub(crate) fn regler_deplier_calque_actif(&mut self, oui: bool) {
-        self.settings.deplier_calque_actif = oui;
-        if oui {
-            // (Le calque actif se déplie tout de suite, même replié à la main avant.)
-            self.settings.calques_replies = false;
-            self.pistes.seen = None;
-            self.pistes.active_fermee = false;
-        }
+    /// Partie 179.13 : « Replier les calques » (Storyboard et Animation) allumé ou éteint, tout de suite, gardé dans les réglages du
+    /// poste. Éteint (d'origine) : tous les calques sur deux rangées ; allumé : tous sur une ligne fine.
+    pub(crate) fn regler_replier_calques(&mut self, oui: bool) {
+        self.settings.replier_calques = oui;
+        self.settings.calques_replies = false;
         if let Err(e) = self.settings.save() {
             self.status = format!("Réglages non enregistrés : {e}");
             return;
         }
         self.status = if oui {
-            "Le calque actif se déplie sur deux rangées : vignette, mode de fusion, opacité.".into()
+            "Calques repliés : tous sur une ligne fine (mode et opacité : clic droit > Apparence).".into()
         } else {
-            "Tous les calques ont la même hauteur, le calque actif compris (mode et opacité : clic droit > Apparence).".into()
+            "Calques dépliés : chacun sur deux rangées, sa vignette, son mode et son opacité.".into()
         };
     }
 
-    /// Partie 179.10 : la case « Déplier le calque actif » (le ⋯ de la ligne « Calques », les Préférences).
-    pub(crate) fn deplier_calque_actif_case(&mut self, ui: &mut Ui) {
-        let mut oui = self.settings.deplier_calque_actif;
-        let resp = ui.checkbox(&mut oui, "Déplier le calque actif");
+    /// Partie 179.13 : la case « Replier les calques » (le ⋯ de la ligne « Calques », les Préférences).
+    pub(crate) fn replier_calques_case(&mut self, ui: &mut Ui) {
+        let mut oui = self.settings.replier_calques;
+        let resp = ui.checkbox(&mut oui, "Replier les calques");
         let resp = crate::bulles::bulle(
             resp,
-            "Déplier le calque actif",
-            "Allumé : le calque actif s'étale sur deux rangées (vignette, mode de fusion, opacité). Éteint (d'origine) : tous les calques ont la même hauteur ; le mode et l'opacité sont au clic droit du calque, Apparence.",
+            "Replier les calques",
+            "Allumé : tous les calques sur une ligne fine (le nom, les réglages). Éteint (d'origine) : chacun sur deux rangées, avec sa vignette, son mode et son opacité. Le calque actif est seulement surligné.",
             "",
         );
         if resp.clicked() {
-            self.regler_deplier_calque_actif(oui);
+            self.regler_replier_calques(oui);
         }
     }
-
     /// La rangée du calque `li` du plan courant (celle de son trait pour un calque de couleur lié).
     pub(crate) fn track_row_of(&self, li: usize) -> usize {
         row_of_layer(self.layers(), li).unwrap_or(0)
@@ -935,8 +925,10 @@ impl App {
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
         let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
         let retrait = if filet.is_some() { RETRAIT } else { 0.0 };
-        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + RANGEE_ACTIVE));
-        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - RANGEE_ACTIVE), r.max);
+        // (Partie 179.13 : deux rangées égales de la hauteur réglée de la ligne Calques, `hauteurstimeline.rs` ; 20 d'origine.)
+        let rangee = (r.height() * 0.5).max(RANGEE_ACTIVE * 0.5);
+        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + rangee));
+        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - rangee), r.max);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("tete_piste_active", id)));
         // (Rien ne sort de la piste, même dans la colonne étroite.)
         child.set_clip_rect(r.intersect(ui.clip_rect()));
@@ -986,15 +978,10 @@ impl App {
             }
         }
         // Les indicateurs, juste avant les colonnes ; ceux qui laisseraient moins de `NOM_MIN` au nom descendent sur la seconde rangée.
+        // (Partie 179.15, Anthony : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit » : plus de groupe, de
+        // sens du pochoir ni de position verrouillée sur la ligne ; ils sont au clic droit, Apparence.)
         let partage = self.doc.plans_du_partage(self.cur_panel, li).iter().any(|&i| i != self.cur_panel);
-        let groupe = self.doc.groups.get(self.layers()[li].group as usize).is_some();
-        let indicateurs: Vec<Indicateur> = [
-            (self.fx_switch_shown(li), Indicateur::Effets),
-            (groupe, Indicateur::Groupe),
-            (true, Indicateur::SensDuPochoir),
-            (true, Indicateur::Position),
-            (partage, Indicateur::Maillon),
-        ]
+        let indicateurs: Vec<Indicateur> = [(self.fx_switch_shown(li), Indicateur::Effets), (partage, Indicateur::Maillon)]
         .into_iter()
         .filter_map(|(oui, i)| oui.then_some(i))
         .collect();
@@ -1031,7 +1018,7 @@ impl App {
         let y = bas.center().y;
         let mut x = bas.left() + 2.0 + retrait;
         if large {
-            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, RANGEE_ACTIVE - 5.0));
+            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, rangee - 5.0));
             if unie {
                 let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
                 c.spacing_mut().interact_size = v.size();
@@ -1054,7 +1041,8 @@ impl App {
             x += largeur(i);
         }
         let menu = Rect::from_min_size(pos2(bas.right() - MENU_W, y - 8.0), vec2(MENU_W - 1.0, 16.0));
-        let losange = if li == self.cur_layer { 16.0 } else { 0.0 };
+        // (Partie 179.13 : chaque calque a son losange, `losange_opacite_de`.)
+        let losange = 16.0;
         let fin = menu.left() - 1.0;
         let reste = (fin - x - losange - 2.0).max(0.0);
         let fleches = reste >= LISTE_MAX + 2.0 * FLECHE + BARRE_AVEC_FLECHES;
@@ -1089,10 +1077,7 @@ impl App {
         let barre = Rect::from_min_max(pos2(x + 2.0, y - 6.5), pos2((fin - losange).max(x + 8.0), y + 6.5));
         let painter = ui.painter().clone();
         self.opacity_bar(ui, &painter, barre, r, li, egui::Id::new(("opacite_piste", id)), opacity, true, "Opacité du calque", "Cliquer ou tirer dans la barre.");
-        // (Le losange vise le calque courant : sur la piste du trait d'un calque de couleur courant, il n'y est pas.)
-        if li == self.cur_layer {
-            self.losange_opacite(ui, Rect::from_min_size(pos2(barre.right() + 1.0, y - 8.5), vec2(14.0, 17.0)), fg, off);
-        }
+        self.losange_opacite_de(ui, Rect::from_min_size(pos2(barre.right() + 1.0, y - 8.5), vec2(14.0, 17.0)), li, fg, off);
         let mut m = ui.new_child(egui::UiBuilder::new().max_rect(menu).id_salt(("options_piste", id)));
         let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false);
         let resp = egui::menu::menu_custom_button(&mut m, button, |ui| self.montage_layer_menu(ui, li)).response;
@@ -1102,44 +1087,14 @@ impl App {
     /// Partie 179 : un indicateur de la piste active du Storyboard, dans `case` : les effets (fx), le groupe (son menu de couleurs), le
     /// sens du pochoir (+ / −), la position verrouillée (la punaise), le maillon de la planche-mère. Les mêmes bulles et les mêmes
     /// gestes qu'avant.
-    fn indicateur_de_piste(&mut self, ui: &mut Ui, quoi: Indicateur, case: Rect, li: usize, fg: Color32, off: Color32) {
-        let Some(l) = self.layers().get(li) else { return };
-        let (id, stencil, negative, fixe, groupe) = (l.id, l.stencil, l.stencil_negative, l.position_locked, l.group as usize);
-        let shade = |on: bool| if on { fg } else { off };
+    fn indicateur_de_piste(&mut self, ui: &mut Ui, quoi: Indicateur, case: Rect, li: usize, fg: Color32, _off: Color32) {
+        let Some(id) = self.layers().get(li).map(|l| l.id) else { return };
         match quoi {
             Indicateur::Effets => {
                 if let Some(resp) = self.fx_switch(ui, li, Some(case), fg) {
                     if resp.clicked() {
                         self.toggle_layer_fx(li);
                     }
-                }
-            }
-            Indicateur::Groupe => {
-                let Some(g) = self.doc.groups.get(groupe).cloned() else { return };
-                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("groupe_piste", id)));
-                c.spacing_mut().button_padding = vec2(0.0, 0.0);
-                // (La case entière se clique, comme les autres icônes de la rangée.)
-                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(crate::tailleicones::icone()).color(crate::layerheads::group_color(g.color))).frame(false).min_size(case.size());
-                let resp = egui::menu::menu_custom_button(&mut c, button, |ui| self.group_menu(ui, li)).response;
-                crate::bulles::bulle(resp, &format!("Groupe : {}", g.name), "Ranger le calque dans un groupe de couleur.", "");
-            }
-            Indicateur::SensDuPochoir => {
-                let resp = crate::layerheads::icon_at(ui, case, if negative { ph::MINUS } else { ph::PLUS }, shade(stencil));
-                let resp = crate::bulles::bulle(
-                    resp,
-                    if negative { "Pochoir négatif" } else { "Pochoir positif" },
-                    "Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors. Clic : changer.",
-                    "",
-                );
-                if resp.clicked() {
-                    self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
-                }
-            }
-            Indicateur::Position => {
-                let resp = crate::layerheads::icon_at(ui, case, ph::PUSH_PIN, shade(fixe));
-                let resp = crate::bulles::bulle(resp, "Verrouiller la position", "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.", "");
-                if resp.clicked() {
-                    self.set_layer_flag(li, |l| l.position_locked = !l.position_locked);
                 }
             }
             Indicateur::Maillon => {
@@ -1150,7 +1105,6 @@ impl App {
             }
         }
     }
-
     /// La ligne fine du dossier `li`, dans `r` : son triangle (couché : fermé ; droit : ouvert ; de biais : fermé, ouvert le temps du
     /// passage), le carré de sa couleur, son nom, son cadenas et le nombre de ses calques. `survol` : la souris est dessus.
     pub(crate) fn dossier_head(&self, ui: &mut Ui, r: Rect, li: usize, survol: bool) {
@@ -1258,7 +1212,7 @@ impl App {
             self.run_action("piste.auto_deplier");
         }
         // Partie 179.10 : le calque actif des timelines du Storyboard et de l'Animation.
-        self.deplier_calque_actif_case(ui);
+        self.replier_calques_case(ui);
         // Les calques proches du calque actif prennent la grande hauteur quand la bande a de la place (`agrandir`).
         let mut grands = self.settings.montage_grands;
         let resp = ui

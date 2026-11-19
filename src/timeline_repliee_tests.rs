@@ -9,10 +9,9 @@ use eframe::egui::{epaint::Shape, Color32, Rect};
 
 use crate::clesplan::{cles_du_plan, ClesBlocs};
 use crate::document::{Cel, LayerKind};
-use crate::montagerows::{layer_in_row, row_count, row_of_layer, LAYER_H};
+use crate::montagerows::{layer_in_row, row_count, row_of_layer};
 use crate::perf_tests::Banc;
-use crate::pistes::FOLDED_H;
-use crate::pistes_tests::{app_with, banc_montage, doc_with, lieu, textes};
+use crate::pistes_tests::{banc_montage, doc_with, lieu, textes};
 use crate::poskeys::PosKey;
 use crate::workspace::Espace;
 
@@ -159,11 +158,13 @@ fn a_linked_colour_layer_has_no_row_of_its_own() {
     assert_eq!(layer_in_row(layers, 2), None);
     assert_eq!((row_of_layer(layers, 2), row_of_layer(layers, 1), row_of_layer(layers, 0)), (Some(0), Some(0), Some(1)), "le calque de couleur est à la rangée de son trait");
     // Les pistes : deux, pas trois ; le calque de couleur courant rend son trait actif.
-    let mut app = app_with("lie", doc);
+    // (Partie 179.13 : dans l'espace Montage, où seul le calque actif se déplie ; le Storyboard les déplie tous.)
+    let mut app = crate::pistes_tests::app_montage("lie", doc);
     app.cur_layer = 1;
     app.pistes_follow_current(false);
     let lanes = app.montage_rows(300.0).lanes;
-    assert_eq!(lanes.iter().map(|l| (l.row, l.h)).collect::<Vec<_>>(), [(0, LAYER_H), (1, FOLDED_H)], "le trait du calque de couleur courant est déplié");
+    let (grande, fine) = (crate::montagerows::LAYER_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE);
+    assert_eq!(lanes.iter().map(|l| (l.row, l.h)).collect::<Vec<_>>(), [(0, grande), (1, fine)], "le trait du calque de couleur courant est déplié");
     // Un calque de couleur libre (sans trait) garde sa rangée.
     app.doc.panels[0].layers[1].couleur.as_mut().unwrap().trait_id = 0;
     assert_eq!(row_count(&app.doc.panels[0].layers), 3);
@@ -227,7 +228,12 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
         // (Partie 179 : les pistes du Storyboard sont moins épaisses ; le Montage garde les siennes.)
         let h = crate::pistes::Hauteurs::de(espace != Espace::Montage);
-        assert_eq!(hs, [h.grande, h.fine, h.fine, h.fine], "{espace:?}");
+        // (Partie 179.13 : dans le Storyboard, tous les calques sur deux rangées ; seul le Montage déplie le calque actif seul.)
+        if espace == Espace::Storyboard {
+            assert!(hs.iter().all(|x| *x == crate::montagerows::LAYER_H), "{espace:?} : {hs:?}");
+        } else {
+            assert_eq!(hs, [h.grande, h.fine, h.fine, h.fine], "{espace:?}");
+        }
     }
     // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 160 : le calque courant y a sa ligne complète, les
     // autres une ligne fine).
@@ -235,7 +241,8 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
     b.app.set_espace(Espace::Animation);
     b.chauffer(8);
     let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
-    assert!(rows.iter().all(|r| r.h == if r.li == b.app.cur_layer { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE }), "le courant complet, les autres fins");
+    // (Partie 179.13 : tous les calques y ont leur ligne complète.)
+    assert!(rows.iter().all(|r| r.h == crate::layerheads::ROW_FULL), "tous complets : {rows:?}");
     assert_eq!(rows.len(), 4);
     for nom in ["Perso", "Décor", "Fond", "Vide"] {
         assert!(combien(&b, nom) >= 1, "« {nom} » manque dans la timeline de l'animation");
