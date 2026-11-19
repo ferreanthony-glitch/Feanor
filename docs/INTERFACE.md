@@ -16043,3 +16043,169 @@ jusqu'à les poser sur le sol, Ctrl+Z rend tout ; le survol d'une poignée grise
    aux pieds (le milieu du bas). S'il est aimanté au sol, au lâcher ses pieds se posent sur le sol. Ctrl+Z.
 8. Vues multiples (4 vues) : choisir et tirer un objet dans chacune ; Regarder par la caméra : la même chose.
 9. Exporter une image : rien n'a changé dans l'image hors de ce qu'on a déplacé.
+
+
+## 185. Les ombres des cartes et du décor 3D (2026-11-19, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé)
+
+Jusqu'ici le décor 3D d'une séquence (parties 180 à 184) ne portait d'ombres que sur lui-même : un personnage debout sur une dalle
+n'y avait pas d'ombre, et passait au soleil sous un arbre. Maintenant, **sous le même soleil que le décor**, une carte porte son
+ombre sur le décor et sur les autres cartes, et le décor ombre les cartes. Dans l'image du plan à l'écran (la vue de dessin), dans
+les exports et les vignettes quand une carte graphique rend le décor. Format du projet inchangé (61). Compilé et essayé sur le Mac
+seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 185.1 Ce qui change pour Anthony
+
+1. **Une carte porte son ombre sur le décor** : le sol, les dalles, les objets. C'est l'ombre de **son encre** (là où le dessin est
+   au moins à moitié opaque, à l'opacité du calque), pas de son rectangle : un personnage a une ombre de personnage, le vide entre
+   ses jambes laisse passer le soleil. Debout sur le sol (« Aimanté au sol », partie 182), son ombre part de ses pieds. Elle suit le
+   soleil du décor (panneau Espace 3D : autour, hauteur) et se fond dans la brume comme les ombres du décor.
+2. **Le décor ombre les cartes** : là où un objet est entre le soleil et une carte, la carte s'assombrit comme une face du décor à
+   l'ombre (elle garde la lumière du ciel et du sol, perd celle du soleil). Un personnage qui passe à l'ombre d'un arbre s'assombrit,
+   puis ressort au soleil.
+3. **Une carte ombre les autres cartes** : la même chose entre cartes (un panneau peint entre le soleil et un personnage l'ombre).
+   Une carte n'est jamais dans sa propre ombre, même inclinée sous le soleil.
+4. **Deux cases par calque, cochées d'office** : **« Porte une ombre »** et **« Reçoit les ombres »**. Dans le menu du calque, Plus >
+   Réglages avancés, sous « Toujours devant le décor 3D » ; dans le panneau de la carte de l'Espace 3D, sous la même case (quand la
+   séquence a un décor avec ses ombres) ; et dans la palette (Ctrl+K), `calque.porte_ombre` et `calque.recoit_ombres`, sans touche,
+   à assigner au clic droit. Une étape d'annulation chacune. À décocher pour un fond peint, un ciel, une lueur, une carte de
+   brume : ce qui ne doit ni faire d'ombre ni s'assombrir.
+5. **« Toujours devant le décor 3D »** (partie 183) ne change que ce qui cache quoi : une carte toujours devant reste au soleil du
+   monde, elle porte et reçoit les ombres comme les autres (son ombre et celle des objets restent à leur place, la carte se voit
+   seulement par-dessus).
+6. **Jamais d'ombre** (ni portée ni reçue) : un calque accroché à la caméra (il est dans le cadre, pas dans le monde : un titre, une
+   salissure d'objectif), les calques d'effet, les dossiers, les calques d'annotation, la couleur unie d'un calque, les pelures
+   d'oignon. Le menu du calque grise les deux cases d'un calque accroché et dit pourquoi.
+7. **Les ombres du décor décident** : sans l'aspect « Ombres » du décor (panneau Espace 3D), ou sur un ordinateur dont le budget ne
+   permet pas d'ombres (« sans ombres », partie 180), les cartes n'ont pas d'ombres non plus, et rien ne coûte rien de plus. Leur
+   finesse suit celle du décor (basses, hautes).
+8. **À l'export**, avec une carte graphique (le décor y est rendu comme à l'écran, ombres comprises), les mêmes ombres. Le rendu de
+   secours **sans carte graphique** n'a pas d'ombres du décor (partie 180) : ni d'ombres de cartes.
+9. **Un plan sans décor, ou sans ses ombres, ne change pas** : les mêmes images au bit près, par les mêmes chemins, au même coût.
+
+### 185.2 Comment c'est fait
+
+- **`ombres.rs`** (nouveau) porte tout ; `decor3dgpu.rs`, `gpu.rs`, `render.rs` et `decor3d.rs` y passent la main par quelques appels.
+  Le rendu du décor reste **gardé** (`DecorCle` : redessiné seulement quand la caméra, un objet ou le soleil bouge) ; les cartes, qui
+  bougent à chaque image d'une animation, n'y entrent pas : tout se fait **à la composition**.
+- **Le soleil du décor gardé à chaque pixel.** Quand le décor a ses ombres, sa passe de l'image du plan a une troisième cible
+  (`decor3dgpu::SOLEIL`, `Rg8Unorm`, deux octets par pixel) : la part du soleil qu'il y a mise (`max(n·soleil, 0)` × ses propres
+  ombres) et le mélange de la lumière hémisphère (`n.y / 2 + 1/2`). Sa couleur étant `base × (hémisphère + soleil × part)` puis la
+  brume, on sait exactement ce qu'elle serait sans ce soleil-là : **une ombre de carte retire le soleil comme le décor le retire de
+  ses faces à l'ombre**, brume comprise (`Lumiere::assombrir_decor`), sans rien recalculer du décor. Le soleil et la brume d'une passe
+  (`decor3dgpu::eclairage` : la matrice de la carte d'ombres, son côté, son filtre) sont sortis de `dessiner_dans` pour servir aux deux.
+- **La carte d'ombres des cartes.** À chaque composition (elle n'est refaite que si l'image change), les cartes qui portent une ombre
+  sont dessinées **vues du soleil**, avec la matrice de la carte d'ombres du décor, dans une carte de profondeur de même côté (1024 ou
+  2048 selon la qualité) : chaque sommet de la carte (ses quatre coins, ou le maillage d'une carte inclinée) est relevé sur son plan
+  (le plan de la partie 183, `PlanItem::ombre`, aussi pour une carte « Toujours devant ») puis vu du soleil, et le fragment lit
+  **l'alpha de son dessin** déjà sur la carte graphique (`fs_ombre` : moins de la moitié, rien). Seulement avec un décor qui a ses
+  ombres et au moins une carte qui en porte une (`gpu.rs`, `ombres_des_cartes`).
+- **Sur le décor** (`fs_decor_o`) : chaque pixel retrouve son point du monde (sa profondeur de la partie 183 et le regard de l'œil,
+  `Lumiere::monde`), le projette dans la vue du soleil et lit la carte d'ombres des cartes avec le filtre du décor (3 × 3 lectures
+  comparées en basses, 5 × 5 en hautes), seulement s'il tombe dans la boîte des cartes et que le soleil l'éclaire.
+- **Sur une carte** (`fs_compose_p`, `fs_blend_p`, à plat et par maillage) : son point du monde vient de son plan ; on lit la carte
+  d'ombres **du décor** (la sienne, gardée de sa dernière passe : `Moteur::carte_ombres`) et celle **des cartes**, une lecture
+  filtrée chacune (quatre texels). Chaque lecture compare à la profondeur que **le plan de la carte** a à cet endroit de la carte
+  d'ombres (`Lumiere::gradient`) : une carte n'est jamais dans sa propre ombre, sans biais qui décolle les ombres des pieds. La
+  couleur perd ce que le décor perd à l'ombre pour une face tournée vers le soleil, sous la lumière hémisphère d'une face verticale
+  (`Lumiere::carte`, par canal, en lumière linéaire). Les drapeaux de la carte (cachée par le décor, partie 183 ; reçoit les
+  ombres) sont dans son réglage de plan ; le groupe des composeurs porte maintenant, à côté de la profondeur du décor, son soleil,
+  sa lumière et les deux cartes d'ombres (des textures vides d'un pixel quand il n'y a pas d'ombres).
+- **À l'export** (`decor3d::calculer`, carte graphique prêtée) : le rendu du décor relit aussi sa part du soleil et sa carte d'ombres
+  (`decor3dgpu::SortieOmbres`), gardées avec le rendu (`decor3d::soleil_du_rendu`, par le numéro du rendu, comme la profondeur).
+  La composition par le processeur fait le même calcul (`ombres::Contexte`, fait une fois par image et gardé par l'empreinte du plan :
+  les tuiles d'une image, sur plusieurs fils, n'en font qu'un) : la carte d'ombres des cartes y est tracée **depuis le soleil** (pour
+  chaque texel, le rayon coupe le plan de la carte, ce point vu de l'œil tombe sur un pixel de la feuille, et l'encre de la carte,
+  composée seule à l'opacité de son calque, y décide) ; puis les mêmes formules, le même filtre (une lecture comparée bilinéaire
+  comme celle de la carte graphique) — `composite_tile_into`, `composite_world_tile`, `pixel_of` (vignettes, pipette).
+- **Le fichier** : `porte_ombre` et `recoit_ombres` d'un calque, écrits seulement quand ils sont décochés, **sans changer `VERSION`**
+  (61, toujours sur aucune version distribuée, comme la case de la partie 183, note dans `project.rs`). Une version qui ne les
+  connaît pas n'a pas d'ombres de cartes, c'est-à-dire l'image des deux cases décochées ; elle les perdrait en enregistrant. Un projet
+  de version 60 ou moins s'ouvre tel quel, les deux cases cochées.
+
+### 185.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai, la carte graphique étant ce qui compte. `ombres_perf` (nouveau,
+ignoré : `cargo test --lib ombres_perf -- --ignored --nocapture`), lancé seul, cinq passages, chacun la meilleure de trois séries de
+vingt compositions (affichage compris). Feuille 3840 × 2160 (cadre 1920 × 1080), la grille d'essai du décor en sol (180 000 triangles,
+ciel, brume), huit cartes à des distances de 0,5 à 7,5 m :
+
+| Huit cartes, feuille 4K | sans décor | décor, cartes sans ombres | ombres des cartes | ce qu'elles coûtent |
+|---|---|---|---|---|
+| de personnage (un huitième de la feuille chacune), basses | 1,32 à 1,58 ms | 1,43 à 1,70 ms | 1,41 à 1,73 ms | **non mesurable** (± 0,06 ms) |
+| de personnage, hautes | 1,32 à 1,58 ms | 1,41 à 1,86 ms | 1,41 à 1,73 ms | **non mesurable** (un passage sur cinq : +1,1 ms, le bruit de la carte) |
+| pleines (de l'encre sur toute la feuille : le pire cas), basses | 1,30 à 1,58 ms | 2,70 à 3,23 ms | 4,19 à 4,84 ms | **+1,5 à 2,1 ms** |
+| pleines, hautes | 1,30 à 1,58 ms | 2,69 à 3,36 ms | 4,71 à 5,23 ms | **+1,5 à 2,5 ms** |
+
+- **Le filtre des cartes a été choisi sur ces mesures** : 3 × 3 lectures dans chacune des deux cartes d'ombres coûtaient +1,3 ms pour
+  huit personnages et +5,1 ms pour huit cartes pleines ; une lecture filtrée (quatre texels) chacune, rien de mesurable et +1,5 à
+  2,5 ms. Le filtre du décor sur lui-même (3 × 3 ou 5 × 5 selon la qualité) ne se voit pas dans la mesure pour les ombres des cartes
+  sur le décor : il est gardé, pour que l'ombre d'une carte sur le sol ait le flou des ombres du décor.
+- **Le décor lui-même** (sa troisième cible, deux octets par pixel) : dans le bruit (20 000 triangles : 0,37 à 1,24 ms avec ou
+  sans ; 980 000 : 1,70 à 2,11 ms avec ou sans). L'étalonnage de la machine mesure maintenant la passe avec la part du soleil quand le
+  décor a ses ombres (`rendre_hors_ecran`) : le budget reste celui de ce que FEANOR dessine vraiment. **La règle des 4 ms tient** :
+  le décor n'est pas redessiné plus souvent qu'avant.
+- **Huit cartes pleines d'encre sur une feuille 4K** sont un cas extrême (183.3 : +1,0 à 1,4 ms déjà pour la profondeur) ; un fond
+  peint sur toute la feuille gagne de toute façon à avoir ses deux cases décochées (il ne doit ni porter ni recevoir), et elles
+  retirent son coût. Les ombres des cartes suivent la qualité des ombres du décor : sur une machine dont le budget ne permet pas
+  d'ombres, elles disparaissent avant que rien ne ralentisse.
+- **L'export par le processeur** (le décor rendu par la carte prêtée, une image dont la carte d'ombres des cartes est refaite, cadre
+  1920 × 1080, profil d'essai) : huit personnages, 9 à 10 ms sans ombres, 31 à 32 ms avec ; huit cartes pleines, 15 ms et 143 à 146 ms.
+  Le décor est en plus relu de la carte graphique (sa part du soleil, 16 Mo, et sa carte d'ombres, 4 ou 16 Mo) quand il a bougé.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony**, avec la superposition « Performance » ouverte et un décor au budget.
+
+### 185.4 Essais (`src/ombres_tests.rs`, 13 essais dont un ignoré)
+
+Le calcul : seules les cartes du monde ont des ombres, seulement sur un décor qui a ses ombres (accrochée, annotation, les deux cases
+décochées : non ; « Toujours devant » : oui ; le même plan que la profondeur partagée ; le dessin et les sorties ont le même plan) ;
+la pente d'une carte inclinée dans la carte d'ombres suit son plan, le point du monde d'un pixel, le filtre (hors de la carte : au
+soleil ; la carte d'ombres de la carte elle-même ne l'ombre pas, une carte derrière elle si) ; les nombres du shader sont ceux du
+programme. **Par la carte graphique** (l'image composée de `GpuCanvas`, le décor dessiné par elle, sous un soleil de derrière à
+45°) : l'ombre d'un personnage tombe sur la dalle devant lui, à ses deux qualités, s'arrête à sa hauteur, rien à côté ni derrière, le
+haut de l'image identique au pixel près, la carte pas dans sa propre ombre ; deux barres d'encre font deux ombres, pas le vide entre
+elles ; une boîte haute derrière le personnage l'assombrit là où elle lui cache le soleil (« Reçoit les ombres » décoché : non) ; un
+panneau ombre un mur (le panneau sans ombre : non) ; sans ombres sur cet ordinateur, cases décochées, aspect sans ombres, accroché à
+la caméra : la même image que sans les ombres des cartes ; sans décor, la même image au bit près (processeur et carte graphique)
+qu'un plan dont les éléments porteraient des ombres. **L'export** (le décor rendu par la carte prêtée) : la même ombre sur la dalle
+qu'à l'écran (à quelques niveaux près, les pixels assombris presque les mêmes), la même ombre de la boîte sur la carte ; le rendu de
+secours sans carte : aucune ombre de carte. **Les cases** : une étape d'annulation chacune, les commandes de la palette, leurs blocs
+dans `keymap.toml` ; écrites pour le seul calque décoché, relues, un fichier d'avant s'ouvre cochées, le format reste 61.
+`ombres_perf` (ignoré) : les mesures de 185.3. Et `gpu_tests`, `profondeur_tests`, `decor3d_tests` passent toujours.
+
+### 185.5 Ce qui n'est pas fait (ou limité)
+
+- **La vue Espace 3D ne montre pas les ombres des cartes** : ses cartes sont dessinées par egui, et le décor de la vue a sa propre
+  passe ; elle garde les ombres du décor sur lui-même. Les ombres des cartes sont dans l'image du plan (la vue de dessin), les
+  exports et les vignettes.
+- **Le rendu de secours sans carte graphique** n'a ni ombres du décor ni ombres de cartes.
+- **Le bord d'une ombre sur une carte** est plus net que sur le décor (une lecture filtrée au lieu de 3 × 3 ou 5 × 5 : le coût,
+  185.3) ; une ombre qui passe du sol à une carte change donc un peu de flou.
+- **Ce qui est hors de la boîte du décor** ne porte ni ne reçoit d'ombre : la carte d'ombres couvre la boîte des objets du décor (et
+  ce qui tient dans sa sphère). Une carte posée loin de tout objet n'y est pas.
+- **À l'export par le processeur**, l'encre d'une carte qui sort de plus d'une demi-feuille de la feuille ne porte pas d'ombre (la
+  carte graphique, à l'écran, prend la carte entière) ; et une carte d'ombres des cartes est refaite par image exportée où une carte
+  bouge (31 ms pour huit personnages en 1920 × 1080 sur le Mac, 185.3). Les vignettes aussi la refont, une fois par vignette.
+- **Pas d'ombre colorée ni translucide** : une encre à moitié opaque porte une ombre pleine, moins de la moitié rien ; une carte à
+  l'opacité de 30 % ne porte pas d'ombre.
+- **L'ombre d'une carte est celle de ce qu'elle montre**, effets du calque compris (une lueur large fait une ombre large) : décocher
+  « Porte une ombre » sur un calque de lueur.
+- Un calque d'ajustement résolu par le processeur (183.5) compose ce qu'il couvre sans les ombres des cartes.
+
+### 185.6 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D : une dalle de route, un arbre. Un personnage sur une carte,
+   « Aimanté au sol » sur la dalle : **son ombre part de ses pieds** sur la dalle, du côté opposé au soleil ; tourne le soleil (panneau
+   Espace 3D : autour, hauteur), elle tourne avec.
+2. Une carte avec un trou dans l'encre (entre les jambes, sous un bras) : le trou laisse passer le soleil dans l'ombre.
+3. Fais passer le personnage (deux clés de position) à l'ombre de l'arbre : il s'assombrit, puis ressort au soleil ; lecture à 24 i/s,
+   J/K/L : **rien ne saccade**.
+4. Un fond peint en carte : décoche ses deux cases (menu du calque > Plus > Réglages avancés, ou le panneau de la carte) ; Ctrl+Z. Il
+   ne fait plus d'ombre sur le décor et ne s'assombrit plus.
+5. Deux personnages, l'un entre le soleil et l'autre : le premier ombre le second.
+6. Coche « Toujours devant le décor 3D » sur le personnage : il passe devant l'arbre, mais **garde son ombre** et l'ombre de l'arbre
+   sur lui.
+7. Un calque accroché à la caméra (un titre) : jamais d'ombre ; les deux cases sont grises dans son menu.
+8. Décoche « Ombres » dans l'aspect du décor : plus aucune ombre, ni du décor ni des cartes.
+9. Exporte une image et un film : les mêmes ombres qu'à l'écran.
+10. Un plan sans décor : les mêmes images qu'avant.
+11. Enregistre, ferme, rouvre : les cases décochées le sont restées.

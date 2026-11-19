@@ -1957,6 +1957,8 @@ impl App {
         // profondeur qu'il partage avec les cartes (partie 183, `profondeur.rs`) : sans décor, aucune carte ne porte de plan.
         let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, &camera, repere.as_ref());
         let avec_decor = decor.is_some();
+        // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
+        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres));
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
@@ -2000,7 +2002,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: card_pre.clone(),
-                            profondeur: None,
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -2023,7 +2025,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: pl.pre,
-                            profondeur: None,
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -2053,6 +2055,7 @@ impl App {
                     fond: None,
                     pre: card_pre.clone(),
                     profondeur: if avec_decor { crate::profondeur::plan_du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
+                    ombre: if avec_ombres { crate::ombres::du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
                 };
                 // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
                 // (`fond.rs`), la peinture libre ou le trait par-dessus.
@@ -2069,7 +2072,7 @@ impl App {
                 // (c'est ce qu'on pose avec le pinceau ; le remplissage est dessous).
                 if onion && li == cur && !self.playing {
                     if let Some(g) = layer.couleur.as_ref().filter(|c| c.griffonner).and_then(|c| c.griffonnages.get(&cel).copied()) {
-                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone(), profondeur: None });
+                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone(), profondeur: None, ombre: None });
                     }
                 }
             }
@@ -5421,6 +5424,8 @@ impl App {
             crate::origine::AIMANT_ACTION => self.basculer_aimant(self.cur_layer),
             // Toujours devant le décor 3D (`profondeur.rs`, partie 183).
             crate::profondeur::ACTION => self.basculer_devant_decor(self.cur_layer),
+            crate::ombres::ACTION_PORTE => self.basculer_porte_ombre(self.cur_layer),
+            crate::ombres::ACTION_RECOIT => self.basculer_recoit_ombres(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.

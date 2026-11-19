@@ -417,3 +417,27 @@ celui de la séquence (parties 14 à 16). Mais **ses objets se choisissent et se
   points de la boîte (`origine::aimanter_a_la_boite` ; `poignees3d::points_de_la_boite`). Au lâcher, l'aimant repose par la
   nouvelle origine.
 - Rien ne change dans l'image du plan, les exports ni le fichier.
+
+
+## 18. Les ombres des cartes et du décor (2026-11-19, branche `ombres-cartes`, partie 185 de `docs/INTERFACE.md`)
+
+Sous le même soleil que le décor : **une carte porte l'ombre de son encre** sur le décor et sur les autres cartes, et **le décor
+ombre les cartes**. Code : `ombres.rs`.
+
+- **Le décor reste gardé** (`DecorCle`) ; les cartes n'y entrent pas, tout se fait à la composition de l'image du plan. Quand le décor
+  a ses ombres, sa passe garde à chaque pixel **la part du soleil** qu'il y a mise et le mélange de l'hémisphère (une troisième cible,
+  `decor3dgpu::SOLEIL`) : l'ombre d'une carte retire ce soleil-là exactement, brume comprise (`Lumiere::assombrir_decor`).
+- **La carte d'ombres des cartes** : les cartes qui portent une ombre, vues du soleil avec la matrice de la carte d'ombres du décor
+  (`decor3dgpu::eclairage`), relevées sur leur plan (`PlanItem::ombre`, le plan de la partie 16, aussi pour une carte « Toujours
+  devant le décor 3D »), là où leur dessin est au moins à moitié opaque.
+- **Le décor** (`fs_decor_o`) : son point du monde vient de sa profondeur (partie 16) ; comparé à la carte d'ombres des cartes avec
+  le filtre du décor. **Une carte** (`fs_compose_p`, `fs_blend_p`) : son point du monde vient de son plan ; comparée à la carte
+  d'ombres du décor et à celle des cartes, chaque lecture à la profondeur de son propre plan (`Lumiere::gradient` : jamais dans sa
+  propre ombre) ; assombrie de ce que perd une face du décor tournée vers le soleil.
+- **Ni porter ni recevoir** (`ombres::concerne`, et les cases `Layer::porte_ombre`, `Layer::recoit_ombres`, écrites
+  `porte_ombre`, `recoit_ombres` quand elles sont décochées, sous le format 61) : dossiers, calques d'effet, d'annotation, accrochés
+  à la caméra ; ni la couleur unie d'un calque, ni les pelures d'oignon.
+- **À l'export** avec une carte graphique, la même chose par le processeur (`ombres::Contexte`) avec ce que le rendu du décor a relu
+  (`decor3dgpu::SortieOmbres`) ; sans carte graphique, ni ombres du décor ni ombres de cartes. La vue Espace 3D ne montre pas les
+  ombres des cartes (ses cartes sont dessinées par egui).
+- **Sans décor, ou sans ses ombres**, aucun élément ne porte d'ombre : la composition d'avant, par les mêmes chemins.

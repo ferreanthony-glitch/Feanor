@@ -101,7 +101,7 @@ fn scene(w: usize, h: usize) -> Scene {
 }
 
 fn item(id: CelId, fx: Vec<FxStep>) -> PlanItem {
-    PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx, ctg: None, fond: None, pre: None, profondeur: None }
+    PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx, ctg: None, fond: None, pre: None, profondeur: None, ombre: None }
 }
 
 /// Écart entre deux images : moyenne (niveaux, sur les pixels qui portent quelque chose), maximum, nombre de
@@ -487,7 +487,7 @@ fn marker(steps: Vec<FxStep>, opacity: u8, blend: crate::blend::BlendMode, from:
     use crate::calqueffet::Reglage;
     use crate::render::FondPart;
     let r = Reglage { layer: 7, from, root, steps, opacity, blend };
-    PlanItem { cel: (1 << 62) | 7, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: Some(FondPart::Reglage(std::sync::Arc::new(r))), pre: None, profondeur: None }
+    PlanItem { cel: (1 << 62) | 7, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: Some(FondPart::Reglage(std::sync::Arc::new(r))), pre: None, profondeur: None, ombre: None }
 }
 
 #[test]

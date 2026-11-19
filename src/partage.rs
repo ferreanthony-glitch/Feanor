@@ -67,6 +67,9 @@ impl Layer {
             aimante_au_sol: self.aimante_au_sol,
             // (« Toujours devant le décor 3D » va avec la carte, partie 183.)
             devant_decor: self.devant_decor,
+            // (Les ombres vont avec la carte, partie 185.)
+            porte_ombre: self.porte_ombre,
+            recoit_ombres: self.recoit_ombres,
             partage: self.partage,
             ..modele.clone()
         }

@@ -317,6 +317,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("origine.feuille", "Origine du calque au centre de la feuille (comme d'origine)", true, false),
     act("calque.aimante_au_sol", "Aimanté au sol : l'origine du calque repose sur le sol de l'Espace 3D (oui / non)", true, false),
     act("calque.devant_decor_3d", "Toujours devant le décor 3D : aucun objet du décor ne cache la carte du calque (oui / non)", true, false),
+    act("calque.porte_ombre", "Porte une ombre : l'encre de la carte du calque fait de l'ombre sous le soleil du décor 3D (oui / non)", true, false),
+    act("calque.recoit_ombres", "Reçoit les ombres : la carte du calque s'assombrit à l'ombre du décor 3D et des autres cartes (oui / non)", true, false),
     act("calque.dessus", "Calque du dessus", true, true),
     act("calque.dessous", "Calque du dessous", true, true),
     act("calque.nouveau", "Nouveau calque… (nom, sorte, groupe, mode, place)", true, false),

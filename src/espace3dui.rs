@@ -783,6 +783,20 @@ impl App {
             if self.aide(r, crate::profondeur::NOM, crate::profondeur::PHRASE, crate::profondeur::ACTION).clicked() {
                 self.basculer_devant_decor(li);
             }
+            // Porte une ombre, reçoit les ombres (partie 185) : quand le décor a ses ombres.
+            if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.aspect.ombres) && crate::ombres::concerne(&self.layers()[li]) {
+                let locked = self.layers()[li].locked;
+                let mut porte = self.layers()[li].porte_ombre;
+                let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut porte, crate::ombres::NOM_PORTE));
+                if self.aide(r, crate::ombres::NOM_PORTE, crate::ombres::PHRASE_PORTE, crate::ombres::ACTION_PORTE).clicked() {
+                    self.basculer_porte_ombre(li);
+                }
+                let mut recoit = self.layers()[li].recoit_ombres;
+                let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut recoit, crate::ombres::NOM_RECOIT));
+                if self.aide(r, crate::ombres::NOM_RECOIT, crate::ombres::PHRASE_RECOIT, crate::ombres::ACTION_RECOIT).clicked() {
+                    self.basculer_recoit_ombres(li);
+                }
+            }
         }
         let mut ouvert = self.espace3d.precis_carte;
         if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {

@@ -524,6 +524,12 @@ pub struct Layer {
     /// du décor 3D de la séquence, quelle que soit sa distance (elle passe devant, comme avant la profondeur partagée).
     /// Faux : la carte et le décor se cachent selon leur vraie distance.
     pub devant_decor: bool,
+    /// **Porte une ombre** (partie 185, `ombres.rs`) : l'encre de la carte du calque cache le soleil du décor 3D de la séquence (son
+    /// ombre tombe sur le sol, les objets, les autres cartes). Vrai d'origine.
+    pub porte_ombre: bool,
+    /// **Reçoit les ombres** (partie 185) : la carte s'assombrit là où un objet du décor, ou une autre carte, lui cache le soleil.
+    /// Vrai d'origine.
+    pub recoit_ombres: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -605,6 +611,8 @@ impl Layer {
             origine: None,
             aimante_au_sol: false,
             devant_decor: false,
+            porte_ombre: true,
+            recoit_ombres: true,
         }
     }
 

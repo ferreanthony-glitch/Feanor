@@ -31,7 +31,7 @@ fn lacet(k: usize, w: f32, h: f32) -> (eframe::egui::Pos2, f32, f64) {
 }
 
 pub(crate) fn line_item(cel: CelId) -> PlanItem {
-    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None }
+    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None, ombre: None }
 }
 
 /// Un hasard reproductible.

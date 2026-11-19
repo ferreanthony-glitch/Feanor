@@ -316,6 +316,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// toute carte devant le décor, la même image que ce réglage ; elle le perdrait en enregistrant, et la carte redeviendrait
 /// cachable ici. Le numéro ne change pas pour autant : le format 61 n'est encore sur aucune version distribuée (`main` est en
 /// 60), et un projet de version 60 ou moins s'ouvre tel quel, la case décochée.
+/// Sous ce même numéro (2026-11-19, `docs/INTERFACE.md` partie 185) : **les ombres des cartes** — `porte_ombre` et
+/// `recoit_ombres` d'un calque, écrits seulement quand ils sont faux (cochés d'office) : la carte cache le soleil du décor 3D de la
+/// séquence (son ombre tombe sur le décor et les autres cartes) et s'assombrit là où on le lui cache. Une version qui ne les
+/// connaît pas n'a pas d'ombres de cartes : elle montre déjà l'image des deux cases décochées, et les perdrait en enregistrant
+/// (elles redeviendraient cochées ici). Le numéro ne change pas, pour la même raison que la case de la partie 183 ; un projet de
+/// version 60 ou moins s'ouvre tel quel, les deux cases cochées.
 pub const VERSION: u32 = 61;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
@@ -978,6 +984,12 @@ struct LayerEntry {
     /// profondeur partagée et montre déjà toute carte devant le décor.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     devant_decor_3d: bool,
+    /// Porte une ombre, reçoit les ombres (partie 185, `ombres.rs`) : la carte cache le soleil du décor 3D, et s'assombrit là où
+    /// on le lui cache ; absents : vrais. Écrits seulement quand ils sont décochés, sous le format 61 (voir la note de 61).
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    porte_ombre: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    recoit_ombres: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2688,6 +2700,8 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 origine: l.origine,
                 aimante_au_sol: l.aimante_au_sol,
                 devant_decor_3d: l.devant_decor,
+                porte_ombre: l.porte_ombre,
+                recoit_ombres: l.recoit_ombres,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3559,6 +3573,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         origine: crate::origine::assainie(l.origine),
                         aimante_au_sol: l.aimante_au_sol,
                         devant_decor: l.devant_decor_3d,
+                        porte_ombre: l.porte_ombre,
+                        recoit_ombres: l.recoit_ombres,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

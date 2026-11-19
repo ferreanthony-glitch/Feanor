@@ -376,6 +376,10 @@ mod profondeur_tests;
 mod poignees3d;
 #[cfg(test)]
 mod poignees3d_tests;
+// Les ombres des cartes sur le décor 3D, et du décor sur les cartes (partie 185).
+mod ombres;
+#[cfg(test)]
+mod ombres_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;

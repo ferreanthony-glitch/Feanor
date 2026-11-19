@@ -1981,7 +1981,7 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
         ctg: None,
         fond: Some(crate::render::FondPart::Forme(*r)),
         pre: None,
-        profondeur: None,
+        profondeur: None, ombre: None,
     };
     let id = shown_id(&item);
     let Some(cover) = COVERS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).filter(|e| e.0 == src.version).map(|e| e.1.clone()) else { return };
@@ -2020,7 +2020,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
         ctg: ctg.cloned(),
         fond: None,
         pre: None,
-        profondeur: None,
+        profondeur: None, ombre: None,
     };
     let id = shown_id(&item);
     // Version : celle du dessin, et celles des sources du remplissage.

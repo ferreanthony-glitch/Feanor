@@ -17,7 +17,7 @@ use crate::vuenette::{image_pour_essai, Cadrage, VueNette};
 const PAPIER: [u8; 3] = [255, 255, 255];
 
 fn item(cel: CelId) -> PlanItem {
-    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: BlendMode::Normal, fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None }
+    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: BlendMode::Normal, fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None, ombre: None }
 }
 
 /// Un dessin bitmap à motif : ces tuiles de la feuille, de cette couleur (prémultipliée).

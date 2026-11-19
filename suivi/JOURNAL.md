@@ -5,6 +5,22 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Les ombres des cartes et du décor 3D** (partie 185, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé),
+  le choix d'Anthony (« Ombres cartes / décor »). Sous le soleil du décor : **une carte porte l'ombre de son encre** (pas de son
+  rectangle) sur le sol, les dalles, les objets et les autres cartes ; **le décor ombre les cartes** (un personnage s'assombrit à
+  l'ombre d'un arbre) ; une carte n'est jamais dans sa propre ombre. Le rendu du décor reste gardé : sa passe garde en plus la part
+  du soleil à chaque pixel (une troisième cible, seulement avec ses ombres), les cartes qui portent une ombre sont dessinées vues du
+  soleil dans une carte d'ombres à part, et tout se fait à la composition (sur le décor, retirer le soleil comme il le retire de ses
+  faces ; sur une carte, lire les deux cartes d'ombres le long de son plan). Image du plan à l'écran et exports (le décor rendu par
+  la carte prêtée ; le processeur fait le même calcul) ; pas dans la vue Espace 3D, ni dans le rendu de secours sans carte (qui n'a
+  pas d'ombres du tout). Deux cases par calque, **cochées d'office** : « Porte une ombre », « Reçoit les ombres » (menu du calque,
+  panneau de la carte, palette ; écrites seulement décochées, `VERSION` inchangée) ; jamais d'ombre pour un calque accroché, d'effet,
+  d'annotation ; « Toujours devant le décor 3D » garde ses ombres. Sans décor ou sans ses ombres, les mêmes images par les mêmes
+  chemins. Mesures (Mac, feuille 4K, huit cartes) : rien de mesurable pour huit personnages, +1,5 à 2,5 ms pour huit cartes pleines
+  (le pire cas) ; le filtre des cartes a été réduit à une lecture filtrée sur ces mesures. Essais : 13 nouveaux (dont un de mesure,
+  ignoré) ; les 90 échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de
+  commit** (liste 185.6).
+
 - **Les poignées dans la vue** (partie 184, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé), le choix
   d'Anthony. Dans la vue Espace 3D, un **objet du décor 3D se choisit au clic** (sur ses vrais triangles ; le plus proche de l'œil,
   carte ou objet, l'emporte ; Maj mêle cartes, objets et caméra), choisi aussi dans la liste du panneau et l'inverse, et **se manie

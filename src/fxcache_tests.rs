@@ -209,7 +209,7 @@ fn doc_and_item(id: CelId, steps: Vec<FxStep>) -> (Document, PlanItem) {
         ctg: None,
         fond: None,
         pre: None,
-        profondeur: None,
+        profondeur: None, ombre: None,
     };
     (doc, item)
 }

@@ -710,7 +710,7 @@ pub fn item(doc: &Document, index: usize, camera: &crate::document::CameraSeen, 
         ctg: None,
         fond: Some(crate::render::FondPart::Decor(key)),
         pre: None,
-        profondeur: None,
+        profondeur: None, ombre: None,
     })
 }
 
@@ -777,7 +777,26 @@ pub fn budget() -> Option<crate::decor3dbudget::BudgetMachine> {
 /// La qualité des ombres d'un décor de `triangles` triangles (tous ses objets) sur cette machine : la meilleure qui tient dans
 /// son budget (sans budget mesuré : pas d'ombres, rien ne ralentit avant la mesure).
 pub fn qualite(triangles: u64) -> crate::decor3dbudget::Qualite {
+    #[cfg(test)]
+    if let Some(q) = QUALITE_ESSAI.with(|q| q.get()) {
+        return q;
+    }
     BUDGET.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map_or(crate::decor3dbudget::Qualite::Sans, |b| b.qualite_pour(triangles))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais (partie 185) : la qualité des ombres de ce fil, sans toucher au budget de la machine que les autres essais voient.
+    static QUALITE_ESSAI: std::cell::Cell<Option<crate::decor3dbudget::Qualite>> = const { std::cell::Cell::new(None) };
+    /// Essais : la carte graphique que l'export de ce fil emprunte (`poser_carte` vaut pour tous les fils).
+    static CARTE_ESSAI: std::cell::RefCell<Option<(eframe::egui_wgpu::wgpu::Device, eframe::egui_wgpu::wgpu::Queue, Option<crate::decor3dgpu::Moteur>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Essais : la qualité des ombres et la carte graphique prêtée à l'export, pour ce fil seulement.
+#[cfg(test)]
+pub(crate) fn essai_poser(qualite: Option<crate::decor3dbudget::Qualite>, carte: Option<&eframe::egui_wgpu::RenderState>) {
+    QUALITE_ESSAI.with(|q| q.set(qualite));
+    CARTE_ESSAI.with(|c| *c.borrow_mut() = carte.map(|rs| (rs.device.clone(), rs.queue.clone(), None)));
 }
 
 /// Lissage des bords selon la taille de la feuille (le rendu par le processeur).
@@ -791,25 +810,44 @@ fn sur_echantillonnage(feuille: [usize; 2]) -> usize {
 
 /// L'image du décor pour la clé `key` et ses objets : la feuille entière, transparente hors du décor (opaque avec le ciel), et sa
 /// profondeur (partie 183, `profondeur.rs` : l'inverse de la distance à l'œil à chaque pixel, 0 là où rien n'est dessiné).
-pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Option<Vec<f32>>) {
+///
+/// Et, rendu par la carte graphique avec ses ombres, son soleil (partie 185, `ombres::Soleil`) : ce que les ombres des cartes lisent
+/// à la composition de l'export. Le rendu de secours par le processeur n'a pas d'ombres, donc pas de soleil.
+pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Option<Vec<f32>>, Option<crate::ombres::Soleil>) {
     let [w, h] = key.feuille;
-    let Some(prise) = key.prise() else { return (Raster::new(w, h), None) };
+    let Some(prise) = key.prise() else { return (Raster::new(w, h), None, None) };
+    let par_la_carte = |device: &eframe::egui_wgpu::wgpu::Device, queue: &eframe::egui_wgpu::wgpu::Queue, mt: &mut Option<crate::decor3dgpu::Moteur>| {
+        let mt = mt.get_or_insert_with(|| crate::decor3dgpu::Moteur::new(device, queue));
+        let d = dessins_gpu(objets, key.aspect);
+        let q = if key.aspect.ombres { qualite(triangles_de(objets)) } else { crate::decor3dbudget::Qualite::Sans };
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran_tout(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1, true, true)));
+        match r {
+            Ok(Some((rgba, _, prof, ombres))) => {
+                let soleil = ombres.and_then(|o| crate::ombres::Lumiere::de(&o.eclairage, &key.aspect, &prise).map(|lum| crate::ombres::Soleil { lum, soleil: o.soleil, carte: o.carte }));
+                Some((Raster::from_rgba(w, h, &rgba), prof, soleil))
+            }
+            _ => None,
+        }
+    };
+    #[cfg(test)]
+    {
+        let r = CARTE_ESSAI.with(|c| c.borrow_mut().as_mut().and_then(|(device, queue, mt)| par_la_carte(device, queue, mt)));
+        if let Some(r) = r {
+            return r;
+        }
+    }
     // La carte graphique d'abord, si l'application en a une (la même image qu'à l'écran).
     {
         let mut g = CARTE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((device, queue, mt)) = g.as_mut() {
-            let mt = mt.get_or_insert_with(|| crate::decor3dgpu::Moteur::new(device, queue));
-            let d = dessins_gpu(objets, key.aspect);
-            let q = if key.aspect.ombres { qualite(triangles_de(objets)) } else { crate::decor3dbudget::Qualite::Sans };
-            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran_prof(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1, true)));
-            if let Ok(Some((rgba, _, prof))) = r {
-                return (Raster::from_rgba(w, h, &rgba), prof);
+            if let Some(r) = par_la_carte(device, queue, mt) {
+                return r;
             }
         }
     }
     let scenes: Vec<(&Scene3d, M4)> = objets.iter().map(|(mdl, mx)| (&*mdl.scene, *mx)).collect();
     let (rgba, prof) = crate::decor3drendu::rendre_objets_prof(&scenes, &prise, [w, h], sur_echantillonnage(key.feuille), fils, &key.aspect);
-    (Raster::from_rgba(w, h, &rgba), Some(prof))
+    (Raster::from_rgba(w, h, &rgba), Some(prof), None)
 }
 
 fn cel_of(raster: Raster, key: &DecorCle) -> Arc<Cel> {
@@ -823,9 +861,17 @@ pub fn profondeur_du_rendu(version: u64) -> Option<crate::profondeur::Profondeur
     garde(|g| g.profs.get(&version).cloned())
 }
 
+/// Le soleil du rendu du décor dont le dessin porte la version `version`, s'il a été rendu par la carte graphique avec ses ombres
+/// et est gardé : la composition par le processeur y pose les ombres des cartes (partie 185, `ombres.rs`).
+pub fn soleil_du_rendu(version: u64) -> Option<Arc<crate::ombres::Soleil>> {
+    garde(|g| g.soleils.get(&version).cloned())
+}
+
+type Rendu = (Raster, Option<Vec<f32>>, Option<crate::ombres::Soleil>);
+
 struct Travail {
     key: DecorCle,
-    handle: std::thread::JoinHandle<Option<(Raster, Option<Vec<f32>>)>>,
+    handle: std::thread::JoinHandle<Option<Rendu>>,
 }
 
 #[derive(Default)]
@@ -836,6 +882,8 @@ struct Garde {
     dernier: HashMap<u64, Arc<Cel>>,
     /// La profondeur de chaque rendu gardé (dans `finis` ou `dernier`), par le numéro du rendu (partie 183).
     profs: HashMap<CelId, crate::profondeur::Profondeurs>,
+    /// Le soleil de chaque rendu gardé, s'il en a un (partie 185).
+    soleils: HashMap<CelId, Arc<crate::ombres::Soleil>>,
     en_cours: Option<Travail>,
     attente: Option<(DecorCle, Vec<Pose3d>)>,
     arrive: bool,
@@ -860,8 +908,16 @@ fn garde<R>(f: impl FnOnce(&mut Garde) -> R) -> R {
     f(g.get_or_insert_with(Garde::default))
 }
 
-fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<Vec<f32>>) {
+fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<Vec<f32>>, soleil: Option<crate::ombres::Soleil>) {
     let id = id_of(key);
+    match soleil {
+        Some(s) => {
+            g.soleils.insert(id, Arc::new(s));
+        }
+        None => {
+            g.soleils.remove(&id);
+        }
+    }
     if g.finis.insert(id, cel.clone()).is_none() {
         g.ordre.push_back(id);
     }
@@ -882,6 +938,7 @@ fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<Vec<f32>>) 
     // (Une profondeur ne reste que pour un rendu encore gardé.)
     let (finis, dernier) = (&g.finis, &g.dernier);
     g.profs.retain(|v, _| finis.contains_key(v) || dernier.values().any(|c| c.version == *v));
+    g.soleils.retain(|v, _| finis.contains_key(v) || dernier.values().any(|c| c.version == *v));
 }
 
 fn coeurs() -> usize {
@@ -917,9 +974,9 @@ pub fn montre(doc: &Document, key: &DecorCle) -> Option<crate::fx::Shown<'static
             g.dernier.get(&key.decor).cloned().map(crate::fx::Shown::Fx)
         });
     }
-    let (raster, prof) = calculer(&objets, key, coeurs().max(2));
+    let (raster, prof, soleil) = calculer(&objets, key, coeurs().max(2));
     let cel = cel_of(raster, key);
-    garde(|g| ranger(g, key, cel.clone(), prof));
+    garde(|g| ranger(g, key, cel.clone(), prof, soleil));
     Some(crate::fx::Shown::Fx(cel))
 }
 
@@ -929,9 +986,9 @@ pub fn poll() -> bool {
     garde(|g| {
         if g.en_cours.as_ref().is_some_and(|t| t.handle.is_finished()) {
             if let Some(t) = g.en_cours.take() {
-                if let Ok(Some((raster, prof))) = t.handle.join() {
+                if let Ok(Some((raster, prof, soleil))) = t.handle.join() {
                     let cel = cel_of(raster, &t.key);
-                    ranger(g, &t.key, cel, prof);
+                    ranger(g, &t.key, cel, prof, soleil);
                     g.arrive = true;
                     crate::fx::decor_arrive();
                 }
@@ -954,8 +1011,10 @@ pub fn forget_all() {
         g.ordre.clear();
         g.dernier.clear();
         g.profs.clear();
+        g.soleils.clear();
         g.attente = None;
     });
+    crate::ombres::oublier();
 }
 
 /// Essais : attend la fin des rendus de fond.

@@ -17,7 +17,7 @@ use crate::render::{self, Plan, PlanItem};
 use crate::vector::{Affine, Element};
 
 fn line_item(cel: CelId) -> PlanItem {
-    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None }
+    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None, ombre: None }
 }
 
 fn doc_with(elements: Vec<Element>) -> (Document, CelId) {
