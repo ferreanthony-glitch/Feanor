@@ -1086,7 +1086,11 @@ impl App {
         // Une application qui tourne fait vieillir les demandes du cache des effets et peut le vider :
         // elle ne tourne pas pendant un essai qui compte sur cet état commun (`fxcache::monde`).
         crate::fxcache::monde::lire();
-        Self::construire(ctx, rs, false)
+        let mut app = Self::construire(ctx, rs, false);
+        // (Partie 179.10 : les essais d'avant comptent sur le calque actif déplié sur deux rangées ; d'origine, il a maintenant la
+        // hauteur des autres, et `deplier_calque_tests.rs` éteint le réglage pour le vérifier.)
+        app.settings.deplier_calque_actif = true;
+        app
     }
 
     /// L'état de départ. `reel` : lancé par l'utilisateur (copie de secours de la séance, séances

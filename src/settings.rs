@@ -123,6 +123,12 @@ pub struct Settings {
     /// calques sur une ligne, le calque courant compris (⊖ / ⊕ de sa rangée d'en-tête). Un réglage d'affichage du poste.
     #[serde(default, rename = "timeline_tout_replie")]
     pub calques_replies: bool,
+    /// Partie 179.10 (Anthony : « je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille
+    /// que l'on soit sur le calque actif ou non ») : allumé, le calque actif s'étale sur deux rangées (vignette, mode, opacité) dans
+    /// la timeline du Storyboard et dans celle de l'Animation ; éteint (d'origine), il a la hauteur des autres calques. L'espace
+    /// Montage garde son réglage à lui (`montage_auto_open`). Un réglage d'affichage du poste.
+    #[serde(default, rename = "deplier_calque_actif", skip_serializing_if = "std::ops::Not::not")]
+    pub deplier_calque_actif: bool,
     /// Partie 178 (la timeline du Storyboard d'Anthony) : la rangée Caméra dépliée, la rangée des préréglages de caméra sous ses
     /// clés (« On déplie uniquement pour poser des préréglages »). Repliée d'office. Un réglage d'affichage du poste.
     #[serde(default, rename = "storyboard_camera_depliee")]
@@ -433,6 +439,7 @@ impl Default for Settings {
             storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
             calques_replies: false,
+            deplier_calque_actif: false,
             storyboard_camera_depliee: false,
             storyboard_calques_replies: false,
             montage_plans: Default::default(),

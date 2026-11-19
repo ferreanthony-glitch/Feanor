@@ -595,7 +595,7 @@ impl App {
         let resp = ui.interact(r, egui::Id::new(("tete_calque", h.id)), Sense::click_and_drag());
         // Partie 160 : la ligne fine (tout calque ou dossier qui n'est pas le courant) ou la ligne complète, celle du courant
         // (`rows_of`). Partie 174 : « tout replier » (⊖ de l'en-tête) met aussi le courant sur une ligne fine.
-        let fine = li != self.cur_layer || self.settings.calques_replies;
+        let fine = li != self.cur_layer || self.calques_tout_replies();
         // Partie 174 (la disposition validée par Anthony) : les colonnes de réglages, à droite, sur les x de la rangée d'en-tête ;
         // tout le reste de la ligne s'arrête avant elles.
         let cols = debut_des_colonnes(r.right());
@@ -676,9 +676,9 @@ impl App {
                     if li != self.cur_layer {
                         self.click_layer_head(li, false, false);
                     }
-                    self.settings.calques_replies = false;
+                    self.regler_deplier_calque_actif(true);
                 } else {
-                    self.settings.calques_replies = true;
+                    self.regler_deplier_calque_actif(false);
                 }
             }
         }
@@ -756,9 +756,17 @@ impl App {
         }
         // Le ⋮ du menu : au bout de la première rangée d'un dossier ; au bout de la seconde rangée d'un calque (partie 179 : les
         // colonnes ont pris le bout de la première).
-        let opts = if h.folder { Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 1.0), vec2(18.0, 18.0)) } else { Rect::from_min_size(pos2(r.right() - 17.0, r.top() + RANGEE_B), vec2(16.0, 18.0_f32.min(r.bottom() - r.top() - RANGEE_B))) };
+        // (Partie 179.10, Anthony : « Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur
+        // effet et opacité » : sur la seconde rangée, la case du ⋮ est celle du mode, de l'opacité et du losange, `yc` et `hc` ci-dessous,
+        // et le ⋮ en occupe tout le milieu : il était 1,5 point plus haut qu'eux.)
+        let opts = if h.folder {
+            Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 1.0), vec2(18.0, 18.0))
+        } else {
+            Rect::from_min_size(pos2(r.right() - 17.0, r.top() + RANGEE_B + 1.5), vec2(16.0, 17.0_f32.min(r.bottom() - r.top() - RANGEE_B - 1.5)))
+        };
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(opts).id_salt(("options_calque", h.id)));
-        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false);
+        child.spacing_mut().button_padding = vec2(0.0, 0.0);
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false).min_size(opts.size());
         let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_head_menu(ui, li)).response;
         bulle(resp, "Commandes du calque", "Renommer, profondeur, dupliquer, verrouiller, supprimer, groupe… (aussi : clic droit sur la ligne).", "");
 
@@ -952,7 +960,7 @@ impl App {
         let painter = ui.painter_at(rect);
         painter.line_segment([pos2(rect.left(), rect.bottom() - 0.5), pos2(rect.right(), rect.bottom() - 0.5)], Stroke::new(1.0_f32, theme::bord()));
         let doux = ui.visuals().weak_text_color();
-        let replie = self.settings.calques_replies;
+        let replie = self.calques_tout_replies();
         let bouton = Rect::from_min_size(pos2(rect.left() + 5.0, rect.top() + 1.0), vec2(16.0, rect.height() - 2.0));
         let resp = icon_at(ui, bouton, if replie { ph::PLUS_CIRCLE } else { ph::MINUS_CIRCLE }, doux);
         let (nom, quoi) = if replie {
@@ -976,17 +984,21 @@ impl App {
     /// Partie 174 : replier tous les calques de la timeline sur une ligne, ou les déplier (le calque courant retrouve ses trois
     /// rangées). Un réglage d'affichage du poste, pas du projet.
     pub(crate) fn basculer_calques_replies(&mut self) {
-        self.settings.calques_replies = !self.settings.calques_replies;
-        self.status = if self.settings.calques_replies {
-            "Calques repliés : tous sur une ligne (⊕ ou le même raccourci les déplie).".into()
-        } else {
-            "Calques dépliés : le calque courant sur trois rangées.".into()
-        };
+        // (Partie 179.10 : c'est le réglage « Déplier le calque actif », le même que dans le Storyboard.)
+        let replies = self.calques_tout_replies();
+        self.regler_deplier_calque_actif(replies);
+    }
+
+    /// Partie 179.10 : tous les calques de la timeline de l'Animation sur une ligne, le calque courant compris : d'origine (Anthony :
+    /// « D'origine, les calques ne changent pas de taille que l'on soit sur le calque actif ou non »), tant que « Déplier le calque
+    /// actif » est éteint ; ou repliés à la main (⊖, partie 174).
+    pub(crate) fn calques_tout_replies(&self) -> bool {
+        self.settings.calques_replies || !self.settings.deplier_calque_actif
     }
 
     /// Partie 174 : les lignes de la colonne des calques de la timeline (`rows_of_en`, repliées ou non).
     pub(crate) fn lignes_de_la_timeline(&self) -> Vec<Row> {
-        rows_of_en(self.layers(), &self.doc.groups, self.cur_layer, self.settings.calques_replies)
+        rows_of_en(self.layers(), &self.doc.groups, self.cur_layer, self.calques_tout_replies())
     }
 
     /// Barre d'opacité du calque `li` (identifiée par `key`) qu'on clique ou qu'on tire ; une

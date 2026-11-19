@@ -440,7 +440,46 @@ impl App {
 
     /// Le calque actif, si le réglage « Déplier le calque courant » est allumé.
     pub(crate) fn pistes_auto_open(&self) -> AutoOpen {
-        self.settings.montage_auto_open.then_some(self.pistes.auto_open).flatten()
+        // (Partie 179.10 : dans la timeline du Storyboard, le calque actif ne se déplie que si « Déplier le calque actif » est allumé ;
+        // l'espace Montage garde son réglage.)
+        let deplier = self.settings.montage_auto_open && (!self.timeline_du_storyboard() || self.settings.deplier_calque_actif);
+        deplier.then_some(self.pistes.auto_open).flatten()
+    }
+
+    /// Partie 179.10 : « Déplier le calque actif » (Storyboard et Animation) allumé ou éteint, tout de suite, gardé dans les
+    /// réglages du poste.
+    pub(crate) fn regler_deplier_calque_actif(&mut self, oui: bool) {
+        self.settings.deplier_calque_actif = oui;
+        if oui {
+            // (Le calque actif se déplie tout de suite, même replié à la main avant.)
+            self.settings.calques_replies = false;
+            self.pistes.seen = None;
+            self.pistes.active_fermee = false;
+        }
+        if let Err(e) = self.settings.save() {
+            self.status = format!("Réglages non enregistrés : {e}");
+            return;
+        }
+        self.status = if oui {
+            "Le calque actif se déplie sur deux rangées : vignette, mode de fusion, opacité.".into()
+        } else {
+            "Tous les calques ont la même hauteur, le calque actif compris (mode et opacité : clic droit > Apparence).".into()
+        };
+    }
+
+    /// Partie 179.10 : la case « Déplier le calque actif » (le ⋯ de la ligne « Calques », les Préférences).
+    pub(crate) fn deplier_calque_actif_case(&mut self, ui: &mut Ui) {
+        let mut oui = self.settings.deplier_calque_actif;
+        let resp = ui.checkbox(&mut oui, "Déplier le calque actif");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Déplier le calque actif",
+            "Allumé : le calque actif s'étale sur deux rangées (vignette, mode de fusion, opacité). Éteint (d'origine) : tous les calques ont la même hauteur ; le mode et l'opacité sont au clic droit du calque, Apparence.",
+            "",
+        );
+        if resp.clicked() {
+            self.regler_deplier_calque_actif(oui);
+        }
     }
 
     /// La rangée du calque `li` du plan courant (celle de son trait pour un calque de couleur lié).
@@ -569,15 +608,37 @@ impl App {
     /// la pastille de la sorte du calque, le nom (ou son champ quand on le renomme ; sous le nom de son dossier dans une piste dépliée) et
     /// le cadenas d'un calque verrouillé. Le fond de la rangée (clics, glissés, menu) est déjà posé ; l'opacité, la fusion sont au clic
     /// droit.
-    pub(crate) fn montage_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32, folded: bool) {
+    /// Partie 179.10 : `colonnes` : la piste repliée du calque actif du Storyboard (« Déplier le calque actif » éteint) : ses
+    /// réglages (verrou, pelure, transparence, pochoir, aplat, caméra) en icônes collées à droite, pâles quand ils sont éteints, comme
+    /// sur la piste dépliée ; le nom s'arrête avant elles (le cadenas est celui de la colonne).
+    pub(crate) fn montage_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32, folded: bool, colonnes: bool) {
         let layers = self.layers();
         let Some(l) = layers.get(li) else { return };
-        let (id, name, visible, dot) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l));
+        let (id, name, visible, dot, negatif) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.stencil_negative);
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
         let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
-        let verrou = l.locked || crate::folders::locked_by_folder(layers, li);
+        let verrou = (l.locked || crate::folders::locked_by_folder(layers, li)) && !colonnes;
         // Partie 178 : dans la timeline du Storyboard, l'opacité d'un calque qui n'est pas à 100 %, en petit avant son cadenas.
         let opacite = (self.timeline_du_storyboard() && !l.folder && l.opacity < 0.995).then(|| format!("{:.0} %", l.opacity.clamp(0.0, 1.0) * 100.0));
+        let droite = r.right();
+        let r = if colonnes { Rect::from_min_max(r.min, pos2((crate::layerheads::debut_des_colonnes(droite) - 2.0).max(r.left() + 40.0), r.bottom())) } else { r };
+        if colonnes {
+            use crate::layerheads::{case_de_colonne, Colonne};
+            let fg = ui.visuals().text_color();
+            let y = r.center().y - 8.5;
+            for (k, col) in Colonne::TOUTES.into_iter().enumerate().skip(1) {
+                let Some(on) = self.layers().get(li).and_then(|l| col.etat(l)) else { continue };
+                let icone = if col == Colonne::Pochoir && negatif { ph::EXCLUDE } else { col.icone() };
+                let resp = crate::layerheads::case_de_reglage_en(ui, case_de_colonne(droite, k, y), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg, true);
+                let resp = self.aide(resp, col.nom(), col.description(), col.action());
+                if resp.clicked() {
+                    self.agir_colonne(col, li);
+                }
+                if col == Colonne::Pelure && resp.secondary_clicked() {
+                    self.onion_window = true;
+                }
+            }
+        }
         let mut at = head_layout_en(r, folded, if filet.is_some() { RETRAIT } else { 0.0 });
         if verrou {
             at.name.max.x = (at.name.max.x - VERROU_W).max(at.name.min.x + 1.0);
@@ -1196,6 +1257,8 @@ impl App {
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
         }
+        // Partie 179.10 : le calque actif des timelines du Storyboard et de l'Animation.
+        self.deplier_calque_actif_case(ui);
         // Les calques proches du calque actif prennent la grande hauteur quand la bande a de la place (`agrandir`).
         let mut grands = self.settings.montage_grands;
         let resp = ui

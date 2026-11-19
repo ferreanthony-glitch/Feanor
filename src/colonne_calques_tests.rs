@@ -279,7 +279,8 @@ fn fold_all_puts_every_layer_on_one_line_and_unfold_gives_back_the_three_rows() 
     let n = etapes(&b);
     let x0 = x_image(&b, 0);
     clic(&mut b, vus::ou("Replier tous les calques")[0].center(), Modifiers::NONE);
-    assert!(b.app.settings.calques_replies, "replié");
+    // (Partie 179.10 : le réglage « Déplier le calque actif », éteint.)
+    assert!(b.app.calques_tout_replies(), "replié");
     b.chauffer(2);
     assert!((x_image(&b, 0) - x0).abs() < 0.5, "la grille ne bouge pas : {x0} / {}", x_image(&b, 0));
     let droite = entete(&b, Colonne::Camera).right();
@@ -290,20 +291,20 @@ fn fold_all_puts_every_layer_on_one_line_and_unfold_gives_back_the_three_rows() 
     assert_eq!(etapes(&b), n, "un réglage d'affichage : rien à annuler");
     // ⊕ de l'en-tête : dépliés.
     clic(&mut b, vus::ou("Déplier les calques")[0].center(), Modifiers::NONE);
-    assert!(!b.app.settings.calques_replies);
+    assert!(!b.app.calques_tout_replies());
     b.chauffer(2);
     let (h, bs) = ligne(perso);
     assert!((bs - h - ROW_FULL).abs() < 0.5);
     // Le raccourci fait de même ; ⊕ sur la ligne d'un autre calque le rend courant, déplié.
     b.app.run_action(crate::layerheads::ACTION_REPLIER);
-    assert!(b.app.settings.calques_replies);
+    assert!(b.app.calques_tout_replies());
     b.chauffer(3);
     let ombre = rang(&b, "Ombre");
     let (h, bs) = ligne(ombre);
     let plus = vus::ou("Déplier le calque").into_iter().find(|r| r.center().y > h && r.center().y < bs).expect("le ⊕ de la ligne d'Ombre");
     clic(&mut b, plus.center(), Modifiers::NONE);
     assert_eq!(b.app.cur_layer, ombre);
-    assert!(!b.app.settings.calques_replies);
+    assert!(!b.app.calques_tout_replies());
     b.chauffer(2);
     let (h, bs) = ligne(ombre);
     assert!((bs - h - ROW_FULL).abs() < 0.5);

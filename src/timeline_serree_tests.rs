@@ -23,7 +23,6 @@ use crate::bulles::vus;
 use crate::layerheads::Colonne;
 use crate::perf_tests::Banc;
 use crate::pistes_tests::{clic, textes};
-use crate::storyboard::RULER_H;
 use crate::timelinesb_tests::{banc_sb, colonne, film, haut, rangees};
 use crate::workspace::Espace;
 
@@ -32,6 +31,8 @@ fn commandes(b: &Banc) -> Vec<(&'static str, String, u8)> {
     let reglage = crate::barres::ReglageBarre::default();
     crate::barres::dans_la_barre(Barre::Montage, &reglage)
         .into_iter()
+        // (Partie 179.11 : « Nouvelle séquence » est sur la ligne « Séquence », plus dans la barre.)
+        .filter(|c| !crate::barres::HORS_DE_LA_BARRE_DE_LECTURE.contains(&c.id))
         .filter_map(|c| match c.genre {
             Genre::Menu => Some((c.id, c.nom.to_string(), c.groupe)),
             Genre::Bouton | Genre::Etat => {
@@ -46,7 +47,8 @@ fn commandes(b: &Banc) -> Vec<(&'static str, String, u8)> {
 /// La ligne des boutons en haut de la colonne (en face de la règle et de la ligne des séquences) : son haut et son bas à l'écran.
 fn ligne_de_la_barre(b: &Banc) -> (f32, f32) {
     let h = haut(b);
-    (h, h + RULER_H + rangees(b).bands_h())
+    // (Partie 179.11 : la barre est en face de la règle seule ; la ligne « Séquence » est dessous.)
+    (h, h + rangees(b).regle_h())
 }
 
 /// Le bouton `nom` sur la ligne de la barre, dans la colonne (le même nom peut être ailleurs : l'en-tête des plans).
@@ -113,7 +115,8 @@ fn la_barre_du_storyboard_tient_sur_une_seule_ligne_a_toutes_les_largeurs_et_rie
             let (y0, y1) = ligne_de_la_barre(&b);
             // Plus de seconde ligne : les calques commencent juste sous la règle, les séquences, les plans, la caméra et « Calques ».
             let rows = rangees(&b);
-            let attendu = RULER_H + rows.bands_h() + rows.block_h + 1.0 + rows.cam_h() + crate::montagerows::SB_CALQUES_H;
+            // (Partie 179.11 : la règle a la hauteur de la barre de lecture, `Rows::regle_h`.)
+            let attendu = rows.regle_h() + rows.bands_h() + rows.block_h + 1.0 + rows.cam_h() + crate::montagerows::SB_CALQUES_H;
             assert!((rows.layers_top() - attendu).abs() < 0.5, "{quoi} : pas de bande vide sous la règle : {} / {attendu}", rows.layers_top());
             // La lecture et le temps toujours sur la ligne ; chaque autre commande sur la ligne ou sous « Plus… ».
             let mut sur: Vec<(&str, u8, Rect)> = Vec::new();
@@ -406,6 +409,8 @@ fn timeline_serree_179_captures() {
         b.app.montage_zoom = 8.0;
         b.app.cur_panel = 0;
         b.app.cur_layer = b.app.layers().len() - 1;
+        // (Partie 179.10 : `SHOT_CAPTURE_DEPLIER=1`, « Déplier le calque actif » allumé ; éteint d'origine.)
+        b.app.settings.deplier_calque_actif = std::env::var("SHOT_CAPTURE_DEPLIER").is_ok_and(|v| v == "1");
         // (Partie 179.5 : `SHOT_CAPTURE_ICONES`, une autre taille d'icônes.)
         if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
             b.app.settings.taille_icones = t;
@@ -425,6 +430,16 @@ fn timeline_serree_179_captures() {
     let gauche = (grip.right() - b.app.montage_head_w - 20.0).max(0.0);
     let z = Rect::from_min_max(pos2(gauche, (haut_bande - 40.0).max(0.0)), pos2(gauche + 793.0, bas));
     sauver(&mut b, &format!("{prefixe}-1-storyboard-colonne-432.png"), z, [1920, 1080]);
+    // Partie 179.10 : la piste du calque actif dépliée, en gros plan (sa seconde rangée).
+    if b.app.settings.deplier_calque_actif {
+        let rows = rangees(&b);
+        let rang = crate::montagerows::row_of_layer(b.app.layers(), b.app.cur_layer).unwrap_or(0);
+        if let Some(l) = rows.lanes.iter().find(|l| l.row == rang) {
+            let y = haut_bande + rows.layers_top() + l.top;
+            let z = Rect::from_min_max(pos2(gauche, y - 4.0), pos2(grip.right() + 4.0, y + l.h + 4.0));
+            sauver(&mut b, &format!("{prefixe}-7-calque-actif-deplie.png"), z, [1920, 1080]);
+        }
+    }
     // Gros plan de la colonne.
     let z = Rect::from_min_max(pos2(gauche, (haut_bande - 4.0).max(0.0)), pos2(grip.right() + 30.0, bas));
     sauver(&mut b, &format!("{prefixe}-3-gros-plan-colonne.png"), z, [1920, 1080]);
@@ -455,12 +470,14 @@ fn timeline_serree_179_captures() {
     if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
         a.app.settings.taille_icones = t;
     }
+    a.app.settings.deplier_calque_actif = std::env::var("SHOT_CAPTURE_DEPLIER").is_ok_and(|v| v == "1");
     a.garder_formes = true;
     a.chauffer(12);
     let lignes = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().0.clone());
     let haut_l = lignes.iter().map(|l| l.1).fold(f32::MAX, f32::min);
     let bas_l = lignes.iter().map(|l| l.2).fold(0.0, f32::max);
-    let gauche = vus::ou("Replier tous les calques").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 8.0;
+    // (Partie 179.10 : repliés d'origine, le ⊕ s'appelle « Déplier les calques ».)
+    let gauche = vus::ou("Replier tous les calques").iter().chain(vus::ou("Déplier les calques").iter()).map(|r| r.left()).fold(f32::MAX, f32::min) - 8.0;
     let z = Rect::from_min_max(pos2(gauche.max(0.0), (haut_l - 90.0).max(0.0)), pos2(gauche.max(0.0) + 793.0, (bas_l + 60.0).min(1080.0)));
     sauver(&mut a, &format!("{prefixe}-5-animation.png"), z, [1920, 1080]);
     // Partie 179.5 : Préférences > Apparence, le groupe « Tailles ».

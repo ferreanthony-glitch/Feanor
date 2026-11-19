@@ -41,7 +41,8 @@ fn piste_active(b: &Banc) -> (f32, f32) {
 /// La ligne de la barre de lecture, en haut de la colonne (en face de la règle et de la ligne des séquences).
 fn ligne_de_la_barre(b: &Banc) -> (f32, f32) {
     let h = haut(b);
-    (h, h + crate::storyboard::RULER_H + rangees(b).bands_h())
+    // (Partie 179.11 : la barre est en face de la règle seule.)
+    (h, h + rangees(b).regle_h())
 }
 
 /// Les éléments nommés `nom` entre `y0` et `y1`, dans la colonne.

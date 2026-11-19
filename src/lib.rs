@@ -51,6 +51,12 @@ mod echelle_tests;
 mod tailleicones;
 #[cfg(test)]
 mod tailleicones_tests;
+// Partie 179.10 : « Déplier le calque actif », une option ; d'origine, tous les calques ont la même hauteur.
+#[cfg(test)]
+mod deplier_calque_tests;
+// Partie 179.11 : la barre de lecture tout en haut, la ligne « Séquence ».
+#[cfg(test)]
+mod ligne_sequence_tests;
 mod reglagestylet;
 #[cfg(test)]
 mod reglagestylet_tests;

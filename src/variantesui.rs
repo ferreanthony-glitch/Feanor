@@ -60,7 +60,7 @@ impl App {
     }
 
     /// La séquence du plan courant.
-    fn sequence_courante(&self) -> Option<u64> {
+    pub(crate) fn sequence_courante(&self) -> Option<u64> {
         self.doc.panels.get(self.cur_panel)?;
         Some(self.doc.sequence_of(self.cur_panel))
     }

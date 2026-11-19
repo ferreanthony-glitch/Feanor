@@ -327,8 +327,9 @@ fn the_search_ignores_case_and_accents_and_needs_every_word() {
     // Le titre d'un groupe répond pour tous ses réglages.
     let r = chercher("pistes du montage");
     let g = r.iter().find(|t| t.groupe == Groupe::Pistes).expect("le groupe Pistes");
-    // (Quatre depuis la partie 165.7 : « Calques dans la timeline », trois calques ou toute la pile, est retiré.)
-    assert_eq!(g.libelles.len(), 4);
+    // (Quatre depuis la partie 165.7 : « Calques dans la timeline », trois calques ou toute la pile, est retiré ; cinq depuis la partie
+    // 179.10 : « Déplier le calque actif ».)
+    assert_eq!(g.libelles.len(), 5);
     // Chaque étiquette se retrouve en la cherchant.
     for reg in REGLAGES {
         let r = chercher(reg.libelle);

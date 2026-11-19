@@ -15280,3 +15280,71 @@ réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179
 5. « Taille de l'interface » 125 % : tout grandit ; retour à 100 %.
 6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
 7. Montage : rien n'a changé.
+
+### 179.10 Le repli du calque actif devient une option
+
+Anthony : « Ok maintenant je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille que l'on
+soit sur le calque actif ou non. Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur effet
+et opacité. »
+
+**D'origine**, le calque actif a la hauteur des autres : une ligne de 15 points dans le Storyboard, 18 dans l'Animation. Il reste
+surligné (son cadre) ; dans le Storyboard, ses réglages (verrou, pelure, transparence, pochoir, aplat, caméra) sont en icônes collées
+à droite, pâles quand ils sont éteints, un clic les bascule (mêmes bulles, Ctrl+Z) ; dans l'Animation, la ligne du calque courant
+les avait déjà (179.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
+que si le calque actif se déplie).
+
+**Où sont le mode et l'opacité** quand le calque est replié : clic droit sur sa piste (ou sa ligne dans l'Animation) > Apparence
+(opacité, mode de fusion…) ; et le ⋯ de la ligne « Calques » > Opérations sur les calques, le même menu, celui du calque actif. Le ⋮
+n'est pas sur la ligne repliée (les colonnes vont jusqu'au bord) ; il n'y a plus de panneau Calques depuis la partie 160.
+
+**« Déplier le calque actif »** (réglage du poste, clé `deplier_calque_actif`, éteint d'origine, format du projet inchangé) remet le
+calque actif sur deux rangées (vignette, mode, opacité, losange, ⋮), dans le Storyboard et l'Animation, tout de suite, sans fenêtre.
+Il est à deux endroits : le ⋯ de la ligne « Calques » (sous « Opérations sur les calques ») et Préférences > Montage > Pistes du
+montage. Dans l'Animation, le ⊖ / ⊕ de la rangée « Calques », le ⊕ / ⊖ d'une ligne et le raccourci Maj+Alt+C basculent ce même
+réglage. L'espace Montage garde le sien (« Déplier le calque courant tout seul ») et ses pistes de 66 et 17.
+
+**L'alignement de la seconde rangée.** Mesuré sur l'encre des glyphes (pas sur leur boîte), à 100, 125 et 150 % : dans le Storyboard,
+‹ › et le losange étaient 0,5 point *plus haut* que le milieu de la liste du mode et de la barre, le ⋮ pile dessus ; sur l'image
+rendue (pixels), les cinq sont centrés sur la même ligne. Rien n'était plus bas. Dans l'Animation, le ⋮ était 1,5 à 2 points plus
+haut : sa case est maintenant celle du mode et du losange, il y est centré. Un essai compare les centres (à 0,75 point près, jamais
+plus bas que le mode). **À lui de dire, sur son écran, ce qui lui paraît encore bas** : je ne l'ai pas retrouvé.
+
+Le code : `settings.rs` (`deplier_calque_actif`), `pistes.rs` (`pistes_auto_open`, `regler_deplier_calque_actif`,
+`deplier_calque_actif_case`, `montage_head` et ses colonnes), `layerheads.rs` (`calques_tout_replies`, la case du ⋮),
+`barrecalques.rs` (le ⋯), `montagerows.rs`, `prefsonglets.rs`. Essais : `src/deplier_calque_tests.rs` (sur l'ancien comportement : 3
+rouges sur 6 ; l'essai d'alignement, mesuré d'abord à la boîte, était vert : il mesure maintenant l'encre). Le banc d'essai
+(`perf_tests::banc_taille`) allume le réglage pour les essais d'avant, qui décrivent le calque déplié.
+
+### 179.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
+
+Anthony : « C'est vrai qu'il manque une ligne de séquence. La ligne des icônes de lecture se placerait au-dessus de tout dans ce
+cas. »
+
+- **La barre de lecture** (début, lire, boucle, temps, nouveau plan, liste, son, ⋯, aide) est la première ligne de la colonne, en face
+  de la **règle des temps seule** ; la règle prend sa hauteur (22 points, 18 avant : une case de 20 et un point de chaque côté). Je ne
+  l'ai pas fait courir sur toute la largeur : une ligne de plus au-dessus de la règle aurait coûté 22 points, la règle en face de la
+  barre n'en coûte que 4.
+- **La ligne « Séquence »**, en face de la bande des séquences, au format de Plans et Caméra : « Séquence » à gauche ; à droite
+  nouvelle séquence, renommer la séquence, versions de la séquence (le menu des versions), ⋯ (nouvelle séquence avec les plans
+  choisis, couper la séquence au plan courant). Il n'existe ni dupliquer, ni supprimer, ni couleur de séquence (une séquence vidée de
+  ses plans s'en va). Le clic droit sur une séquence garde son menu. 20 points (16 avant), la place d'une case d'icône.
+- **« Nouvelle séquence » quitte la barre de lecture** (ni sur la ligne ni sous « ⋯ ») : elle est juste dessous.
+- **Hauteurs de l'en-tête** au-dessus des plans : 18 + 16 = **34 points avant, 22 + 20 = 42 après** ; tout l'en-tête jusqu'aux pistes
+  de calques (règle, séquences, plans 26 + 1, caméra 22, « Calques » 20) : **103 → 111**.
+- **Animation** : sa timeline n'a pas de bande des séquences ; sa barre est déjà en haut de la colonne, en face de la règle : rien ne
+  change. **Montage** : inchangé (sa règle de 18, sa ligne des séquences, sa barre au-dessus de la bande).
+
+Le code : `montagerows.rs` (`SB_SEQ_H` = 20, `sb_regle_h`, `Rows::regle_h`), `storyboard.rs` (la règle, la ligne de la barre),
+`timelinesb.rs` (`entete_sequences_sb`), `barres.rs` (`HORS_DE_LA_BARRE_DE_LECTURE`). Essais : `src/ligne_sequence_tests.rs` (5
+rouges sur le code d'avant, verts ensuite).
+
+### 179.12 À tester (sa checklist)
+
+1. Storyboard : tous les calques de la même hauteur ; le calque actif surligné, ses réglages en icônes à droite ; clic droit >
+   Apparence pour le mode et l'opacité.
+2. ⋯ de la ligne « Calques » > « Déplier le calque actif » : deux rangées tout de suite ; décocher : retour. La même case dans
+   Préférences > Montage.
+3. La seconde rangée dépliée : ‹ ›, le losange, le ⋮ te paraissent-ils encore bas ? (Mesurés centrés ; dis-moi lequel.)
+4. La barre de lecture en haut, en face de la règle ; la ligne « Séquence » dessous : nouvelle séquence, renommer, versions, ⋯.
+5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
+6. Montage : rien n'a changé.

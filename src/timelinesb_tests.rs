@@ -51,6 +51,9 @@ pub(crate) fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Ba
     b.app.set_espace(Espace::Storyboard);
     b.app.settings.storyboard_camera_depliee = camera_depliee;
     b.app.settings.storyboard_calques_replies = false;
+    // (Partie 179.10 : ces essais décrivent la piste dépliée du calque actif, que « Déplier le calque actif » montre ; d'origine,
+    // elle a la hauteur des autres : `deplier_calque_tests`.)
+    b.app.settings.deplier_calque_actif = true;
     b.app.montage_zoom = PPF;
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.garder_formes = true;
@@ -170,18 +173,20 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
     let rows = rangees(&b);
     let sb = rows.sb.expect("la disposition du Storyboard");
     assert_eq!(rows.bands_h(), SB_SEQ_H, "la ligne des séquences, la plus fine");
-    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (16.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
+    // (Partie 179.11 : la ligne des séquences a son en-tête et ses icônes : 20, 16 avant.)
+    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (20.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
     assert_eq!(rows.block_h, SB_PLAN_H, "la rangée des plans");
     assert_eq!(rows.cam_h(), SB_CAM_H, "la ligne de la caméra");
     assert_eq!(sb.prereglages_h, 0.0, "repliée d'office : pas de rangée des préréglages");
     // De haut en bas : la règle, les séquences, les plans, la caméra, la ligne « Calques », les calques.
-    assert!(RULER_H + rows.bands_h() <= rows.blocks_top() + 0.01);
+    assert!(rows.regle_h() + rows.bands_h() <= rows.blocks_top() + 0.01 && rows.regle_h() >= RULER_H);
     assert!(rows.blocks_top() + rows.block_h <= rows.camera_top() + 0.01, "la caméra sous les plans");
     assert!(rows.camera_top() + rows.cam_h() <= rows.calques_top() + 0.01);
     assert!(rows.calques_top() + SB_CALQUES_H <= rows.layers_top() + 0.01);
     // Plus contenue qu'avant (la caméra de 16 au-dessus de plans de 56 : les calques commençaient à 111 points).
     // (Partie 179 : plus de seconde ligne de boutons, plus de bande sous la règle.)
-    assert!(rows.layers_top() <= 103.5, "le haut des calques : {}", rows.layers_top());
+    // (Partie 179.11 : la ligne « Séquence » et la barre de lecture en face de la règle : 8 points de plus, 111.)
+    assert!(rows.layers_top() <= 111.5, "le haut des calques : {}", rows.layers_top());
     // À l'écran : les plans, leurs en-têtes et celui de la caméra sur ces rangées.
     let h = haut(&b);
     assert!(blocs().iter().all(|r| (r.height() - (SB_PLAN_H - 2.0)).abs() < 0.6), "des plans de 24 points : {:?}", blocs());
@@ -549,9 +554,10 @@ fn les_calques_se_replient_en_une_ligne_de_resume_et_se_deplient() {
     assert!(!rangees(&b).lanes.is_empty());
     // Dans l'Animation, il replie toujours la colonne de la timeline, sans toucher au Storyboard.
     b.app.set_mode(crate::app::Mode::Animation);
-    let avant = b.app.settings.calques_replies;
+    // (Partie 179.10 : c'est le réglage « Déplier le calque actif ».)
+    let avant = b.app.calques_tout_replies();
     b.app.run_action(crate::layerheads::ACTION_REPLIER);
-    assert_eq!((b.app.settings.calques_replies, b.app.settings.storyboard_calques_replies), (!avant, false));
+    assert_eq!((b.app.calques_tout_replies(), b.app.settings.storyboard_calques_replies), (!avant, false));
 }
 
 // ------------------------------------------------------------------------------------------------ 8. les coupes

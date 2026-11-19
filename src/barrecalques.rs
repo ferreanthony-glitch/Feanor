@@ -114,6 +114,12 @@ impl App {
                 self.groups_window = !self.groups_window;
             }
             ui.menu_button(format!("{}  Opérations sur les calques", ph::LIST), |ui| self.layer_ops_menu(ui));
+            // Partie 179.10 (Anthony : « le repli des calques soit une option ») : un réglage d'affichage, ici et dans les Préférences.
+            // (Pas dans la barre du bas de l'espace Montage, qui garde son « Déplier le calque courant ».)
+            if self.espace != crate::workspace::Espace::Montage {
+                ui.separator();
+                self.deplier_calque_actif_case(ui);
+            }
         })
         .response;
         bulle(

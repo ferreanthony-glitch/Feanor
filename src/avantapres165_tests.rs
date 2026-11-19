@@ -357,7 +357,8 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     let grip = ou("Largeur de la colonne");
     let camera = vus::ou("Caméra").into_iter().filter(|r| r.right() <= grip.right() + 1.0).min_by(|a, c| a.top().total_cmp(&c.top()));
     let haut_des_pistes = camera.map_or(grip.top() + 40.0, |c| c.top());
-    let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes);
+    // (Partie 179.11 : « Nouvelle séquence » a quitté la barre pour la ligne « Séquence », juste dessous.)
+    let boutons: Vec<_> = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes).into_iter().filter(|(n, _)| n.as_str() != "Nouvelle séquence").collect();
     assert!(boutons.len() >= 3, "{boutons:?}");
     // En haut de la colonne, en face de la règle : la barre du haut n'existe plus. (Partie 179 : sur une seule ligne, même au plus
     // étroit ; ce qui n'y tient pas est sous « Plus… », partie 173.5 changée.)
@@ -381,7 +382,7 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     b.app.montage_head_w = crate::montagehead::HEAD_MAX;
     b.chauffer(6);
     let grip = ou("Largeur de la colonne");
-    let larges = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), grip.top() + 80.0);
+    let larges: Vec<_> = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), grip.top() + 80.0).into_iter().filter(|(n, _)| n.as_str() != "Nouvelle séquence").collect();
     let y = larges[0].1.center().y;
     assert!(larges.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {larges:?}");
     assert!(larges.len() > boutons.len(), "plus large, plus de boutons : {} / {}", larges.len(), boutons.len());

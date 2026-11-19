@@ -117,6 +117,38 @@ impl App {
         x + w
     }
 
+    /// Partie 179.11 (Anthony : « C'est vrai qu'il manque une ligne de séquence ») : l'en-tête de la rangée des séquences, au format
+    /// de Plans et Caméra : « Séquence », puis collées à droite : nouvelle séquence, renommer la séquence, ses versions (menu),
+    /// « ⋯ » (nouvelle séquence avec les plans choisis, couper la séquence au plan courant). Il n'existe ni « dupliquer », ni
+    /// « supprimer », ni couleur de séquence : une séquence vidée de ses plans s'en va d'elle-même.
+    pub(crate) fn entete_sequences_sb(&mut self, ui: &mut egui::Ui, r: Rect) {
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("entete_sequences_sb"));
+        child.set_clip_rect(r.intersect(ui.clip_rect()));
+        let ui = &mut child;
+        let doux = ui.visuals().weak_text_color();
+        Self::mot_d_entete(ui, r, r.left() + 6.0, "Séquence", doux);
+        let c = Self::cases_d_entete(r, 4);
+        let mut lancer: Option<&str> = None;
+        if self.icone_d_entete(ui, c[0], ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle", true) {
+            lancer = Some("sequence.nouvelle");
+        }
+        if self.icone_d_entete(ui, c[1], ph::PENCIL_SIMPLE, "Renommer la séquence", "Le nom de la séquence courante (son titre sur la planche).", "sequence.renommer", true) {
+            lancer = Some("sequence.renommer");
+        }
+        if let Some(seq) = self.sequence_courante() {
+            self.menu_d_entete(ui, c[2], ph::STACK, "Versions de la séquence", "Nouvelle version (en gardant ou en copiant les plans, ou vide), passer à une autre, renommer, comparer, supprimer.", |app, ui| {
+                app.variantes_menu_contenu(ui, seq);
+            });
+        }
+        self.menu_d_entete(ui, c[3], ph::DOTS_THREE, "Autres commandes des séquences", "Nouvelle séquence avec les plans choisis, couper la séquence au plan courant. Aussi au clic droit sur une séquence.", |app, ui| {
+            app.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
+            app.action_item(ui, "Couper la séquence ici (le plan courant la commence)", "sequence.couper_ici");
+        });
+        if let Some(action) = lancer {
+            self.run_action(action);
+        }
+    }
+
     /// L'en-tête de la rangée des plans : « Plans », puis nouveau plan, dupliquer, versions, transitions (le panneau Préréglages,
     /// onglet Montage), couper le plan à la tête de lecture, « ⋯ » (le reste des actions de plan).
     pub(crate) fn entete_plans_sb(&mut self, ui: &mut egui::Ui, r: Rect) {

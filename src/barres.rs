@@ -671,6 +671,10 @@ pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
     }
 }
 
+/// Partie 179.11 : les commandes de la barre du montage qui ne sont plus dans la barre de lecture de la timeline du Storyboard (ni
+/// sous son « Plus… ») : « Nouvelle séquence » est sur la ligne « Séquence », juste dessous (`timelinesb::entete_sequences_sb`).
+pub(crate) const HORS_DE_LA_BARRE_DE_LECTURE: [&str; 1] = ["sequence.nouvelle"];
+
 /// Partie 179 : la place d'un trait entre deux groupes de la barre (ses marges, le trait, les écarts).
 const TRAIT_W: f32 = 2.0 * MARGE_TRAIT + 6.0 + 2.0 * ECART;
 
@@ -730,7 +734,11 @@ impl App {
         let debut = ui.cursor().left();
         let reglage = self.settings.bars.de(barre).clone();
         // (Une commande qui ne s'applique pas à l'instant n'est pas dans la barre : elle reste, grisée et expliquée, sous « Plus… ».)
-        let montrees: Vec<&'static Cmd> = dans_la_barre(barre, &reglage).into_iter().filter(|c| !(matches!(c.genre, Genre::Bouton | Genre::Etat) && !self.vue_de(barre, c).actif)).collect();
+        let montrees: Vec<&'static Cmd> = dans_la_barre(barre, &reglage)
+            .into_iter()
+            .filter(|c| !(matches!(c.genre, Genre::Bouton | Genre::Etat) && !self.vue_de(barre, c).actif))
+            .filter(|c| !HORS_DE_LA_BARRE_DE_LECTURE.contains(&c.id))
+            .collect();
         let (premieres, autres): (Vec<&'static Cmd>, Vec<&'static Cmd>) = montrees.into_iter().partition(|c| c.groupe == 0);
         let mut groupe: Option<u8> = None;
         for c in &premieres {

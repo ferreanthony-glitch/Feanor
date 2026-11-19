@@ -498,7 +498,7 @@ impl App {
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
-                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + rows.bands_h()));
+                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, rows.regle_h()));
                         // Partie 179 (Anthony : la seconde ligne de boutons barrée, ses boutons dans la place vide à droite du temps) :
                         // une seule ligne, quelle que soit la largeur de la colonne ; ce qui n'y tient pas passe sous « Plus… », les
                         // commandes les moins utilisées d'abord (`barres::barre_dans_la_colonne_serree`). (La seconde ligne de la partie
@@ -813,7 +813,8 @@ impl App {
         // L'abscisse de l'image 0 pour ce qui se dessine à l'abscisse `x` (le son, les gestes sur ses pistes) : le film y est décalé
         // des versions dépliées d'avant.
         let left_at = |x: f32| left + carte.decalage(carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf))) as f32 * ppf;
-        let bands_top = r.top() + RULER_H;
+        // (Partie 179.11 : dans le Storyboard, la règle a la hauteur de la barre de lecture en face d'elle, `Rows::regle_h`.)
+        let bands_top = r.top() + rows.regle_h();
         let top = r.top() + rows.blocks_top();
         let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
