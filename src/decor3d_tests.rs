@@ -1078,7 +1078,7 @@ fn changer_l_origine_ne_bouge_pas_l_objet() {
 // --------------------------------------------------------------------------------------------- l'aimant
 
 /// Une boîte pleine de `a` à `b` (six faces).
-fn boite(a: [f32; 3], b: [f32; 3]) -> Scene3d {
+pub(crate) fn boite(a: [f32; 3], b: [f32; 3]) -> Scene3d {
     let mut p = Primitive3d { couleur: [0.7, 0.7, 0.7, 1.0], ..Default::default() };
     for f in 0..6 {
         let (axe, cote) = (f / 2, f % 2);
@@ -1099,7 +1099,7 @@ fn boite(a: [f32; 3], b: [f32; 3]) -> Scene3d {
     Scene3d { primitives: vec![p], textures: Vec::new() }
 }
 
-fn objet(id: u64, scene: Scene3d, x: f32, z: f32) -> Objet3d {
+pub(crate) fn objet(id: u64, scene: Scene3d, x: f32, z: f32) -> Objet3d {
     // (Un vrai .glb : l'objet s'enregistre et se relit.)
     let glb = gltf::ecrire_glb(&scene, gltf::Ecriture { cote_max: None }).unwrap();
     let mut o = Objet3d::neuf(id, format!("objet {id}"), String::new(), Vec::new(), Arc::new(Modele3d::new(Arc::new(scene), Arc::new(glb))));

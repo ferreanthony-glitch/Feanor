@@ -199,16 +199,19 @@ pub fn deplacer_origine(layer: &mut Layer, nouvelle: Option<[f32; 2]>, world: &M
 }
 
 /// **La hauteur du sol** (mètres, l'axe Y du monde) sous le point (`x`, `z`) de l'Espace 3D du monde `world`. C'est par
-/// cette seule fonction que l'aimant lit le sol : aujourd'hui le plan du sol du monde (`Monde::sol_y`), partout le même ;
-/// demain aussi le dessus des objets du décor 3D, à brancher ici.
-pub fn hauteur_du_sol_sous(world: &Monde, x: f32, z: f32) -> f32 {
-    let _ = (x, z);
-    world.sol_y()
+/// cette seule fonction que l'aimant lit le sol : le plan du sol du monde (`Monde::sol_y`), ou le dessus d'un objet du décor 3D
+/// de la séquence (`decor`, `decor3daimant::hauteur_sous`) ; `ici` est la hauteur où est l'origine : parmi les appuis possibles,
+/// le plus proche (une carte glissée sur un banc y monte, une carte sous la ramure d'un arbre reste au sol).
+pub fn hauteur_du_sol_sous(world: &Monde, decor: Option<&crate::decor3d::Decor3d>, x: f32, z: f32, ici: f32) -> f32 {
+    match decor {
+        Some(d) => crate::decor3daimant::hauteur_sous(d, world.sol_y(), x, z, ici),
+        None => world.sol_y(),
+    }
 }
 
 /// La pose `t` (profondeur totale `depth`, origine à `ecart` du centre de la feuille) dont l'origine est posée sur le sol :
 /// seule sa hauteur change (la place de l'origine en Y, `Monde::card_xf_o`), sa profondeur et tout le reste demeurent.
-pub fn pose_au_sol(world: &Monde, t: LayerTransform, depth: f32, ecart: Vec2) -> LayerTransform {
+pub fn pose_au_sol(world: &Monde, decor: Option<&crate::decor3d::Decor3d>, t: LayerTransform, depth: f32, ecart: Vec2) -> LayerTransform {
     let s = 1.0 + depth.max(Layer::MIN_DEPTH);
     let k = s * world.k;
     if !(k.is_finite() && k.abs() > 1e-12) {
@@ -216,21 +219,22 @@ pub fn pose_au_sol(world: &Monde, t: LayerTransform, depth: f32, ecart: Vec2) ->
     }
     let x = (ecart.x + t.x) * k;
     let z = -world.d0 * depth;
-    let sol = hauteur_du_sol_sous(world, x, z);
+    let ici = -(ecart.y + t.y) * k;
+    let sol = hauteur_du_sol_sous(world, decor, x, z, ici);
     LayerTransform { y: -sol / k - ecart.y, ..t }
 }
 
 /// **Aimante au sol** le calque `layer` s'il l'est (`Layer::aimante_au_sol`) : l'origine de sa carte repose sur le sol, à sa
 /// pose fixe et à chacune de ses clés. Rien pour un calque accroché à la caméra (sa pose se lit dans le cadre). Vrai si
 /// quelque chose a changé.
-pub fn aimanter_au_sol(layer: &mut Layer, world: &Monde) -> bool {
+pub fn aimanter_au_sol(layer: &mut Layer, world: &Monde, decor: Option<&crate::decor3d::Decor3d>) -> bool {
     if !layer.aimante_au_sol || layer.accroche || layer.folder {
         return false;
     }
     let e = world.ecart(layer);
     let avant = (layer.transform, layer.pos_keys.clone());
-    layer.transform = pose_au_sol(world, layer.transform, profondeur(layer, layer.transform.dz), e);
-    let poses: Vec<LayerTransform> = layer.pos_keys.iter().map(|k| pose_au_sol(world, k.t, profondeur(layer, k.t.dz), e)).collect();
+    layer.transform = pose_au_sol(world, decor, layer.transform, profondeur(layer, layer.transform.dz), e);
+    let poses: Vec<LayerTransform> = layer.pos_keys.iter().map(|k| pose_au_sol(world, decor, k.t, profondeur(layer, k.t.dz), e)).collect();
     for (k, t) in layer.pos_keys.iter_mut().zip(poses) {
         k.t = t;
     }
@@ -292,11 +296,12 @@ impl App {
     /// liés au calque suivent (`calquecouleur::sync`, au prochain passage).
     pub(crate) fn origine_sans_etape(&mut self, li: usize, nouvelle: Option<[f32; 2]>) -> bool {
         let world = self.monde_de_l_origine();
+        let decor = self.doc.decor_du_plan(self.cur_panel).cloned();
         let Some(l) = self.layers_mut().get_mut(li) else { return false };
         if !deplacer_origine(l, nouvelle, &world) {
             return false;
         }
-        crate::origine::aimanter_au_sol(l, &world);
+        crate::origine::aimanter_au_sol(l, &world, decor.as_ref());
         self.modified = true;
         true
     }
@@ -333,11 +338,34 @@ impl App {
     /// d'annulation : il fait partie de l'étape du geste.
     pub(crate) fn aimanter_si(&mut self, li: usize) {
         let world = self.monde_de_l_origine();
+        let decor = self.doc.decor_du_plan(self.cur_panel).cloned();
         if let Some(l) = self.layers_mut().get_mut(li) {
-            if aimanter_au_sol(l, &world) {
+            if aimanter_au_sol(l, &world, decor.as_ref()) {
                 self.renderer.invalidate_all();
             }
         }
+    }
+
+    /// Repose les cartes aimantées au sol de tous les plans de la séquence `seq` sur son décor tel qu'il est maintenant (un
+    /// objet du décor ajouté, déplacé, tourné, agrandi, allégé ou enlevé : la carte posée dessus suit). Sans étape
+    /// d'annulation : elle fait partie de celle de la retouche du décor. Vrai si une carte a bougé.
+    pub(crate) fn reposer_les_cartes_aimantees(&mut self, seq: u64) -> bool {
+        let decor = self.doc.decors3d.par_sequence.get(&seq).filter(|d| !d.objets.is_empty()).cloned();
+        let plans: Vec<usize> = (0..self.doc.panels.len()).filter(|&pi| self.doc.sequence_of(pi) == seq).collect();
+        let mut bouge = false;
+        for pi in plans {
+            if !self.doc.panels[pi].layers.iter().any(|l| l.aimante_au_sol) {
+                continue;
+            }
+            let world = Monde::du_plan(&self.doc, pi);
+            for l in self.doc.panels[pi].layers.iter_mut().filter(|l| l.aimante_au_sol) {
+                bouge |= aimanter_au_sol(l, &world, decor.as_ref());
+            }
+        }
+        if bouge {
+            self.renderer.invalidate_all();
+        }
+        bouge
     }
 
     /// Coche ou décoche « Aimanté au sol » sur le calque `li` : coché, l'origine de la carte se pose sur le sol (pose fixe et
@@ -360,11 +388,12 @@ impl App {
         self.end_stroke();
         let snap = self.snapshot();
         let world = self.monde_de_l_origine();
+        let decor = self.doc.decor_du_plan(self.cur_panel).cloned();
         let l = &mut self.layers_mut()[li];
         l.aimante_au_sol = on;
         // (Décoché : rien d'autre ne change, les hauteurs que l'aimant a données restent.)
         if on {
-            aimanter_au_sol(l, &world);
+            aimanter_au_sol(l, &world, decor.as_ref());
         }
         self.commit_named(snap, if on { "Aimanter au sol" } else { "Ne plus aimanter au sol" });
         self.renderer.invalidate_all();

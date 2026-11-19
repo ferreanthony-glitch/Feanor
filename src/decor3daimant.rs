@@ -179,3 +179,38 @@ pub fn aimanter(d: &mut Decor3d, sol_y: f32) -> Vec<String> {
     }
     notes
 }
+
+/// La hauteur (monde) où se pose **un point** aimanté au-dessus de (x, z) — l'origine d'une carte dessinée aimantée au sol
+/// (partie 182, branchée sur le décor à la réunion des parties 181 et 182) : le sol `sol_y`, ou le dessus d'un objet du
+/// décor `d`. Même règle que pour les objets : parmi les niveaux possibles (le sol, chaque surface traversée par la verticale
+/// au-dessus du sol), ceux qui ne sont pas **dans** un objet (un nombre pair de ses surfaces au-dessus), le plus proche de
+/// `ici` (la hauteur où le point est), à égalité le plus haut : une carte glissée sur un banc y monte, une carte sous la ramure
+/// d'un arbre reste au sol. Calculé aux retouches seulement, comme `aimanter`.
+pub fn hauteur_sous(d: &Decor3d, sol_y: f32, x: f32, z: f32, ici: f32) -> f32 {
+    let mut surfaces: Vec<(usize, f32)> = Vec::new();
+    let mut hits = Vec::new();
+    for (j, o) in d.objets.iter().enumerate() {
+        let f = fiche(o);
+        traversees(o, &f, x, z, &mut hits);
+        let base = o.place.position[1] - f.echelle * f.origine_y;
+        surfaces.extend(hits.iter().map(|&y| (j, base + f.echelle * y)));
+    }
+    if surfaces.is_empty() {
+        return sol_y;
+    }
+    let dehors = |c: f32| {
+        let mut dessus: Vec<(usize, usize)> = Vec::new();
+        for &(j, _) in surfaces.iter().filter(|&&(_, y)| y > c + TOLERANCE) {
+            match dessus.iter_mut().find(|(k, _)| *k == j) {
+                Some(e) => e.1 += 1,
+                None => dessus.push((j, 1)),
+            }
+        }
+        dessus.iter().all(|&(_, k)| k % 2 == 0)
+    };
+    std::iter::once(sol_y)
+        .chain(surfaces.iter().map(|&(_, y)| y).filter(|&y| y >= sol_y - TOLERANCE).map(|y| y.max(sol_y)))
+        .filter(|&c| dehors(c))
+        .min_by(|a, b| (a - ici).abs().total_cmp(&(b - ici).abs()).then(b.total_cmp(a)))
+        .unwrap_or(sol_y)
+}

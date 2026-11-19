@@ -547,7 +547,7 @@ fn l_aimant_suit_les_gestes_et_le_sol_passe_par_une_seule_fonction() {
     let l = &app.layers()[0];
     let o = world.origine_monde(&world.carte(l, 10), world.ecart(l));
     assert!((o[1] - world.sol_y()).abs() < 1e-4, "après le geste, au sol : {o:?}");
-    assert!((origine::hauteur_du_sol_sous(&world, o[0], o[2]) - world.sol_y()).abs() < 1e-6);
+    assert!((origine::hauteur_du_sol_sous(&world, None, o[0], o[2], o[1]) - world.sol_y()).abs() < 1e-6);
     // Déplacer l'origine d'une carte aimantée : c'est la nouvelle origine qui repose au sol.
     assert!(app.poser_origine(0, Some([130.0, 60.0]), "Déplacer l'origine"));
     let l = &app.layers()[0];
@@ -652,4 +652,71 @@ fn une_trajectoire_neuve_sur_un_calque_sans_origine_ne_fait_pas_sauter_le_dessin
     crate::trajectoireui_tests::tracer_le_chemin(&mut b);
     let t = b.app.layers()[0].trajectoire.as_ref().expect("une trajectoire");
     assert_eq!(t.ancre, Ancre::Depart, "sans origine posée : le chemin part du début du trait, comme avant");
+}
+
+// ------------------------------------------------------------------- l'aimant des cartes et le décor 3D (181 + 182)
+
+/// L'origine (monde) de la carte du calque 0 à l'image `f`.
+fn origine_monde(app: &App, f: usize) -> [f32; 3] {
+    let world = app.e3_world();
+    let l = &app.layers()[0];
+    world.origine_monde(&world.carte(l, f), world.ecart(l))
+}
+
+#[test]
+fn une_carte_aimantee_se_pose_sur_un_objet_du_decor_et_le_suit() {
+    let mut app = app_avec("aimant-decor", doc_aimant());
+    app.basculer_aimant(0);
+    let sol = app.e3_world().sol_y();
+    let o = origine_monde(&app, 10);
+    assert!((o[1] - sol).abs() < 1e-4, "d'abord au sol : {o:?}");
+    // Une dalle de 40 cm de haut glissée sous l'origine de la carte : la carte monte dessus (au sol, elle serait dedans).
+    let seq = app.doc.sequence_of(0);
+    let mut dalle = crate::decor3d_tests::objet(app.doc.alloc(), crate::decor3d_tests::boite([-0.5, 0.0, -0.5], [0.5, 0.4, 0.5]), o[0], o[2]);
+    (dalle.place.position[1], dalle.aimante) = (sol, false);
+    let mut d = crate::decor3d::Decor3d::new(Default::default());
+    d.objets.push(dalle);
+    let snap = app.snapshot();
+    app.doc.decors3d.par_sequence.insert(seq, d);
+    assert!(app.reposer_les_cartes_aimantees(seq));
+    app.commit_structure(snap);
+    let sur = origine_monde(&app, 10);
+    assert!((sur[1] - (sol + 0.4)).abs() < 1e-3, "sur la dalle : {sur:?}");
+    assert!((sur[0] - o[0]).abs() < 1e-4 && (sur[2] - o[2]).abs() < 1e-4, "seule la hauteur change");
+    // La dalle monte de 30 cm par le panneau (une retouche) : la carte la suit ; au lâcher, une étape ; l'annuler ramène les deux.
+    let mut d = app.doc.decors3d.par_sequence[&seq].clone();
+    d.objets[0].place.position[1] += 0.3;
+    app.decor3d_retoucher(seq, d);
+    app.decor3d_retouche_finir();
+    assert!((origine_monde(&app, 10)[1] - (sol + 0.7)).abs() < 1e-3);
+    app.undo();
+    assert!((origine_monde(&app, 10)[1] - (sol + 0.4)).abs() < 1e-3, "l'annulation ramène la carte avec la dalle");
+    // La dalle enlevée : la carte revient au sol.
+    let snap = app.snapshot();
+    app.doc.decors3d.par_sequence.remove(&seq);
+    app.reposer_les_cartes_aimantees(seq);
+    app.commit_structure(snap);
+    assert!((origine_monde(&app, 10)[1] - sol).abs() < 1e-4);
+}
+
+#[test]
+fn une_carte_sous_un_objet_haut_reste_au_sol() {
+    // Une ramure de 2 à 3 m au-dessus de l'origine : le plus proche appui de la carte au sol reste le sol.
+    let mut app = app_avec("aimant-ramure", doc_aimant());
+    app.basculer_aimant(0);
+    let sol = app.e3_world().sol_y();
+    let o = origine_monde(&app, 10);
+    let seq = app.doc.sequence_of(0);
+    let mut ramure = crate::decor3d_tests::objet(app.doc.alloc(), crate::decor3d_tests::boite([-1.0, 2.0, -1.0], [1.0, 3.0, 1.0]), o[0], o[2]);
+    // (L'origine au point (0, 0, 0) du modèle, au sol : la ramure flotte de 2 à 3 m au-dessus.)
+    (ramure.place.position[1], ramure.aimante, ramure.origine) = (sol, false, [0.0; 3]);
+    let mut d = crate::decor3d::Decor3d::new(Default::default());
+    d.objets.push(ramure);
+    app.doc.decors3d.par_sequence.insert(seq, d);
+    app.reposer_les_cartes_aimantees(seq);
+    assert!((origine_monde(&app, 10)[1] - sol).abs() < 1e-4);
+    // Décocher : rien ne bouge.
+    let avant = app.layers()[0].pos_keys.clone();
+    app.basculer_aimant(0);
+    assert_eq!(app.layers()[0].pos_keys, avant);
 }

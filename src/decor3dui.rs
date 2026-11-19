@@ -45,8 +45,9 @@ pub(crate) struct Etat3d {
     lourd: Option<Lourd>,
     /// Les modèles déjà comparés au budget de cette machine (`Modele3d::uid`).
     vus: BTreeSet<u64>,
-    /// La retouche en cours d'un objet ou de l'aspect : les décors d'avant (pour l'étape d'annulation, au lâcher).
-    retouche: Option<crate::decor3d::Decors3d>,
+    /// La retouche en cours d'un objet ou de l'aspect : le projet d'avant (les décors, et les cartes aimantées qui reposent
+    /// dessus), pour l'étape d'annulation, au lâcher.
+    retouche: Option<crate::history::Edit>,
     /// L'objet choisi dans la liste du panneau Espace 3D (`Objet3d::id`) : ses champs se retouchent.
     pub(crate) choisi: Option<u64>,
 }
@@ -346,6 +347,7 @@ impl App {
         d.objets.push(o);
         let n = d.objets.len();
         let notes = crate::decor3daimant::aimanter(d, monde.sol_y());
+        self.reposer_les_cartes_aimantees(c.seq);
         let before = self.history.context.replace("Ajouter un objet 3D".into());
         self.commit_structure(snap);
         self.history.context = before;
@@ -388,6 +390,7 @@ impl App {
         } else {
             self.doc.decors3d.par_sequence.insert(seq, d);
         }
+        self.reposer_les_cartes_aimantees(seq);
         let before = self.history.context.replace(nom.into());
         self.commit_structure(snap);
         self.history.context = before;
@@ -630,7 +633,8 @@ impl App {
         self.decor3d.vus.insert(modele.uid);
         let sol = Monde::of(&self.doc).sol_y();
         let mut nom = String::new();
-        for d in self.doc.decors3d.par_sequence.values_mut() {
+        let mut sequences = Vec::new();
+        for (&seq, d) in self.doc.decors3d.par_sequence.iter_mut() {
             if !d.objets.iter().any(|o| o.modele.uid == uid) {
                 continue;
             }
@@ -640,6 +644,10 @@ impl App {
                 nom = o.nom.clone();
             }
             crate::decor3daimant::aimanter(d, sol);
+            sequences.push(seq);
+        }
+        for seq in sequences {
+            self.reposer_les_cartes_aimantees(seq);
         }
         crate::decor3d::masquer(uid, false);
         let before = self.history.context.replace("Alléger un objet 3D".into());
@@ -716,10 +724,7 @@ impl App {
 
     /// Termine la retouche en cours (une étape d'annulation pour toute la retouche).
     pub(crate) fn decor3d_retouche_finir(&mut self) {
-        if let Some(avant) = self.decor3d.retouche.take() {
-            let maintenant = std::mem::replace(&mut self.doc.decors3d, avant);
-            let snap = self.snapshot();
-            self.doc.decors3d = maintenant;
+        if let Some(snap) = self.decor3d.retouche.take() {
             let before = self.history.context.replace("Retoucher le décor 3D".into());
             self.commit_structure(snap);
             self.history.context = before;
@@ -730,13 +735,14 @@ impl App {
     /// d'annulation viendra au lâcher (`decor3d_retouche_finir`).
     pub(crate) fn decor3d_retoucher(&mut self, seq: u64, mut d: Decor3d) {
         if self.decor3d.retouche.is_none() {
-            self.decor3d.retouche = Some(self.doc.decors3d.clone());
+            self.decor3d.retouche = Some(self.snapshot());
         }
         let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
         if !notes.is_empty() {
             self.status = notes.join(" ");
         }
         self.doc.decors3d.par_sequence.insert(seq, d);
+        self.reposer_les_cartes_aimantees(seq);
         self.modified = true;
     }
 

@@ -934,10 +934,11 @@ impl App {
         let Some(t) = l.trajectoire.as_ref().filter(|t| t.support.is_some()) else { return };
         let world = Monde::du_plan(&self.doc, pi);
         let cles = cles_dans_l_espace(&world, l, t, duree);
+        let decor = self.doc.decor_du_plan(pi).cloned();
         let l = &mut self.doc.panels[pi].layers[li];
         l.pos_keys = cles;
         // (Une carte aimantée au sol : chaque clé posée par le chemin y repose, partie 182.)
-        crate::origine::aimanter_au_sol(l, &world);
+        crate::origine::aimanter_au_sol(l, &world, decor.as_ref());
     }
 
     /// **Clés d'images d'une trajectoire dans l'espace** (partie 152 ; Anthony, 2026-11-13 : « Clés d'images ne crée pas de

@@ -348,8 +348,10 @@ image : la pose y est rapportée au centre de la feuille (`LayerTransform::au_ce
   le chemin (vue par la tranche, elle disparaîtrait). Une trajectoire neuve tracée dans la vue part avec l'ancrage `Origine`.
 - **Aimanté au sol** (`Layer::aimante_au_sol`, `origine::aimanter_au_sol`) : l'origine de la carte repose sur le sol, à sa pose
   fixe et à chacune de ses clés : seul `y` change, `y = −sol / (s · k) − e.y`, à la profondeur de la pose. Le sol se lit par **une
-  seule fonction**, `origine::hauteur_du_sol_sous(monde, x, z)` : aujourd'hui le plan `Monde::sol_y`, partout ; le dessus des
-  objets d'un décor se branchera là. L'aimant est refait **après chaque modification** (manipulateur, champs, réglette de
+  seule fonction**, `origine::hauteur_du_sol_sous(monde, decor, x, z, ici)` : le plan `Monde::sol_y`, ou le dessus d'un objet du
+  décor de la séquence (`decor3daimant::hauteur_sous` : la verticale de l'origine traverse les triangles des objets ; un niveau
+  dedans un objet est écarté ; le plus proche de la hauteur où est l'origine l'emporte). Toute retouche du décor repose les
+  cartes aimantées de la séquence (`App::reposer_les_cartes_aimantees`). L'aimant est refait **après chaque modification** (manipulateur, champs, réglette de
   distance, taille, clé posée, trajectoire recalculée, origine déplacée, profondeur dans le panneau Calques ou la vue de dessus),
   jamais à la lecture d'un fichier ni pendant la lecture du film. Coché, la hauteur (Y) est grisée dans le panneau. Décoché,
   rien ne bouge : la carte reste où l'aimant l'a mise, maintenant et après enregistrement. Un calque accroché à la caméra ne se

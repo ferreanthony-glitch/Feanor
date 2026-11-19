@@ -15657,8 +15657,11 @@ choisie, l'origine est le centre de la feuille : **tout est comme avant, au bit 
    le chemin »** dans les réglages de l'outil ; décochée, le déplacement relatif d'avant). La carte n'y tourne pas avec le chemin :
    vue par la tranche, elle disparaîtrait.
 8. **« Aimanté au sol »** (panneau de la carte dans l'Espace 3D, sous « Taille dans le cadre » ; menu du calque, Plus > Réglages
-   avancés ; `calque.aimante_au_sol`, sans touche) : l'origine de la carte repose sur le sol de l'Espace 3D, à sa pose fixe et à
-   chacune de ses clés. Coché, la hauteur (Y de « Position », y de l'outil Transformer) est grisée : l'aimant la tient. L'aimant
+   avancés ; `calque.aimante_au_sol`, sans touche) : l'origine de la carte repose sur le sol de l'Espace 3D, ou sur le dessus
+   d'un objet du décor 3D de la séquence (partie 181) — de ses appuis possibles, le plus proche de là où elle est : une carte
+   glissée sur une dalle y monte, une carte sous la ramure d'un arbre reste au sol —, à sa pose fixe et à chacune de ses clés.
+   Un objet du décor ajouté, déplacé, tourné, agrandi, allégé ou enlevé repose les cartes aimantées de la séquence, dans la même
+   étape d'annulation que la retouche. Coché, la hauteur (Y de « Position », y de l'outil Transformer) est grisée : l'aimant la tient. L'aimant
    est refait après chaque geste (manipulateur, champs, réglette de distance, taille, clé posée, trajectoire, origine déplacée,
    profondeur), jamais pendant la lecture. **Décoché, la carte reste exactement où l'aimant l'avait posée**, maintenant et après
    enregistrement ; la hauteur redevient réglable. Cocher et décocher sont chacun une étape d'annulation. Un calque accroché à la
@@ -15687,8 +15690,11 @@ choisie, l'origine est le centre de la feuille : **tout est comme avant, au bit 
 - **L'ancrage** `Ancre::Origine` (`trajectoire.rs`) : `pose_tournee` tourne autour de l'origine du calque (le pivot passé est
   `Layer::pivot`) ; avec l'origine pour point d'ancrage, rien n'est à compenser. `assainie` le garde dans l'espace (« le dessin
   tourne » y reste refusé).
-- **L'aimant** (`origine.rs`) : `hauteur_du_sol_sous(monde, x, z)` est la seule lecture du sol (le plan `Monde::sol_y` ; le dessus
-  des objets d'un décor s'y branchera) ; `aimanter_au_sol` ne change que `y` de la pose fixe et de chaque clé.
+- **L'aimant** (`origine.rs`) : `hauteur_du_sol_sous(monde, decor, x, z, ici)` est la seule lecture du sol : le plan
+  `Monde::sol_y`, ou le dessus d'un objet du décor de la séquence (`decor3daimant::hauteur_sous`, la règle des objets aimantés
+  appliquée à un point : pas dedans un objet, le niveau le plus proche de `ici`) ; `aimanter_au_sol` ne change que `y` de la pose
+  fixe et de chaque clé ; `App::reposer_les_cartes_aimantees(seq)` après toute retouche du décor (la retouche en cours garde
+  l'instantané du projet entier : l'annuler ramène le décor et les cartes).
 - **Le format 61** (`project.rs`) : `origine` (absente sans origine) et `aimante_au_sol` (absent s'il est faux) d'un calque,
   l'ancrage `"Origine"` d'une trajectoire. Une version précédente lirait la pose autour du centre de la feuille (un autre film) :
   elle refuse. Un projet de version 60 ou moins s'ouvre tel quel, sans origine ni aimant, avec les mêmes images. Une origine
@@ -15719,5 +15725,7 @@ des trajectoires gardent le déplacement relatif (`ancre_propose`), et ceux du f
    Déplacer l'origine ensuite : rien ne bouge, le chemin suit.
 5. Espace 3D : choisir la carte, l'origine s'y voit ; tourner avec le manipulateur : autour d'elle. Cocher « Aimanté au sol » : les
    pieds sur le sol, à chaque clé ; le Y de Position est grisé. Décocher : rien ne bouge ; enregistrer, rouvrir : toujours là.
+   Avec un décor 3D : glisser une dalle de la banque sous la carte aimantée, elle monte dessus ; monter la dalle (champ Y),
+   elle suit ; annuler, les deux reviennent ; une carte sous un arbre reste au sol.
 6. Un projet d'avant : les mêmes images, les trajectoires gardent leur ancrage.
 

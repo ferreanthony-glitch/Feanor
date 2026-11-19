@@ -483,8 +483,9 @@ impl App {
         self.trajectoire_recalculer_sans_aimant(pi, li);
         // (Une carte aimantée au sol y revient, à chacune des clés que le chemin vient de poser : partie 182.)
         let world = self.e3_world();
+        let decor = self.doc.decor_du_plan(pi).cloned();
         if let Some(l) = self.doc.panels.get_mut(pi).and_then(|p| p.layers.get_mut(li)) {
-            crate::origine::aimanter_au_sol(l, &world);
+            crate::origine::aimanter_au_sol(l, &world, decor.as_ref());
         }
     }
 
