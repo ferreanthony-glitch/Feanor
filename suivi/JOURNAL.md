@@ -14,6 +14,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   lignes « exception seule », les lignes à 28 points ; la colonne est celle de la 174. La partie devient la **179** (168 : les versions
   d'un plan ; 178 : la plage de lecture du film, branche `plage-lecture`). Essais : ceux de la colonne sont ceux du `main` ;
   `timeline_claire_tests` garde la teinte et vérifie la couleur d'un calque rangé. Compilé et essayé sur le Mac seulement.
+- **`piste-mode-liste` fusionnée dans main (9c422b9), poussée, et son FEANOR habituel reconstruit** (exe de 2 h 22), sur
+  son « fusionne et pousse sur github ». Parties 173 à 174 : la piste du calque actif du Storyboard (liste « Normal ▾ »,
+  colonne réglable 250–520 points, toutes les options du calque) et la colonne des calques de la timeline dans la
+  disposition qu'il a validée (en-tête des réglages en colonnes pour tous les calques, calque actif sur trois rangées, tout
+  replier Maj+Alt+C, comportement avant et après les images). Main avait reçu 175 à 177 entre-temps : fusionnées d'abord
+  dans la branche (12e5e45, seul conflit INTERFACE.md, les deux sections gardées), puis vérificateur complet sur l'arbre
+  fusionné : sans avertissement, 4 914 réussis, 0 échec, deux passages, aucun intermittent. Son FEANOR n'était pas ouvert.
+  Contrôle de lancement sur une copie de « retakes brawlydays » (Tests\lancement main 9c422b9, faux réglages) : vivant après
+  15 s, aucun rapport de plantage. Format inchangé (60). **Pas regardé sur son écran** : liste 174 d'INTERFACE.md. Gardé, retrait
+  proposé (sa décision) : le dossier `Chantiers\piste-mode`. Il enverra ce commit à la session du Mac.
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-reponses` et sa branche locale retirés (elle n'avait jamais
   été poussée ; tout est dans main, sur GitHub), `Tests\essai 177` mis à la corbeille (il n'avait pas servi). `Chantiers\piste-mode`
   et `Tests\essai 173`, à l'autre session, pas touchés.
