@@ -51,6 +51,8 @@ const DOT_W: f32 = 10.0;
 pub(crate) const RETRAIT: f32 = 6.0;
 /// Place du cadenas d'un calque verrouillé, à droite du nom.
 const VERROU_W: f32 = 13.0;
+/// Partie 178 : la place de l'opacité d'un calque à moins de 100 % (« 50 % »), à droite du nom, dans le Storyboard.
+const OPACITE_W: f32 = 30.0;
 /// Une rangée de la piste du calque actif (partie 173.5 : trois rangées, `LAYER_H` = 3 × 22 ; deux depuis la partie 160).
 pub(crate) const RANGEE_ACTIVE: f32 = 22.0;
 /// La colonne doit avoir au moins cette largeur pour que la piste du calque actif montre aussi la vignette de son dessin (à la
@@ -518,9 +520,15 @@ impl App {
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
         let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
         let verrou = l.locked || crate::folders::locked_by_folder(layers, li);
+        // Partie 178 : dans la timeline du Storyboard, l'opacité d'un calque qui n'est pas à 100 %, en petit avant son cadenas.
+        let opacite = (self.timeline_du_storyboard() && !l.folder && l.opacity < 0.995).then(|| format!("{:.0} %", l.opacity.clamp(0.0, 1.0) * 100.0));
         let mut at = head_layout_en(r, folded, if filet.is_some() { RETRAIT } else { 0.0 });
         if verrou {
             at.name.max.x = (at.name.max.x - VERROU_W).max(at.name.min.x + 1.0);
+        }
+        let opacite_x = at.name.max.x;
+        if opacite.is_some() {
+            at.name.max.x = (at.name.max.x - OPACITE_W).max(at.name.min.x + 1.0);
         }
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("tete_piste", id)));
         let ui = &mut child;
@@ -538,6 +546,9 @@ impl App {
         if verrou {
             let ou = pos2(r.right() - VERROU_W * 0.5 - 1.0, r.center().y);
             ui.painter().text(ou, Align2::CENTER_CENTER, ph::LOCK_SIMPLE, FontId::proportional(if folded { 10.0 } else { 11.5 }), fg.gamma_multiply(0.75));
+        }
+        if let Some(t) = &opacite {
+            ui.painter().text(pos2(opacite_x - 1.0, r.center().y), Align2::RIGHT_CENTER, t, FontId::proportional(if folded { 9.0 } else { 10.0 }), fg.gamma_multiply(0.7));
         }
         let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == id && n.in_montage);
         if renaming {

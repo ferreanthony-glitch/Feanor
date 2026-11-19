@@ -214,7 +214,9 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
         let r = ou(nom);
         assert!(r.right() <= colonne + 2.0, "« {nom} » dans la colonne : {r:?} / {colonne}");
     }
-    let (haut, milieu, bas) = (ou("Commandes du calque"), ou("Pelure d'oignon du calque"), ou("Opacité du calque"));
+    // (Partie 178 : la pelure de la piste active, posée après celle de la ligne « Calques » du Storyboard.)
+    let milieu = *vus::ou("Pelure d'oignon du calque").last().expect("la pelure de la piste active");
+    let (haut, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
     let pas = crate::pistes::RANGEE_ACTIVE;
     assert!((milieu.center().y - haut.center().y - pas).abs() < 3.0 && (bas.center().y - milieu.center().y - pas).abs() < 3.0, "trois rangées : {haut:?} {milieu:?} {bas:?}");
     // (La barre du bas de la bande part de son bord gauche, à gauche des en-têtes de la colonne.)

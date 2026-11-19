@@ -485,6 +485,8 @@ fn hovering_the_label_opens_the_pile_clicking_a_card_switches_and_leaving_closes
     doc.nouvelle_version(0, 11);
     let plan = doc.panels[0].id;
     let mut b = banc(doc, false);
+    // (Partie 178 : l'étiquette sur le bloc vient avec les plans de hauteur moyenne, ceux de l'espace Montage.)
+    b.app.set_espace(crate::workspace::Espace::Montage);
     b.app.modified = false;
     assert!(jusqu_a(&mut b, 120, |b| etiquette_du_plan(b, plan).is_some()), "l'étiquette « V3 » est posée sur le bloc du plan");
     // Un plan à une seule version n'en a pas.
@@ -532,6 +534,8 @@ fn the_cross_asks_for_confirmation_then_deletes_and_the_current_card_has_no_cros
     doc.nouvelle_version(0, 10);
     let plan = doc.panels[0].id;
     let mut b = banc(doc, false);
+    // (Partie 178 : l'étiquette sur le bloc vient avec les plans de hauteur moyenne, ceux de l'espace Montage.)
+    b.app.set_espace(crate::workspace::Espace::Montage);
     b.app.modified = false;
     assert!(jusqu_a(&mut b, 120, |b| etiquette_du_plan(b, plan).is_some()));
     let zone = etiquette_du_plan(&b, plan).unwrap();
@@ -578,6 +582,8 @@ fn a_closed_pile_and_an_open_one_leave_the_application_idle() {
     doc.nouvelle_version(0, 10);
     let plan = doc.panels[0].id;
     let mut b = banc(doc, false);
+    // (Partie 178 : l'étiquette sur le bloc vient avec les plans de hauteur moyenne, ceux de l'espace Montage.)
+    b.app.set_espace(crate::workspace::Espace::Montage);
     b.app.modified = false;
     assert!(jusqu_a(&mut b, 120, |b| etiquette_du_plan(b, plan).is_some()));
     assert!(se_reposer(&mut b, 80) < 80, "la pile fermée ne demande aucune image");

@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **La timeline du Storyboard dans son organisation** (partie 178, branche `timeline-storyboard` partie de main 9a748bb, format
+  60 inchangé), d'après son dessin et la maquette qu'il a validée : de haut en bas Séquence (16 points), Plans (26, le ⋈ des
+  transitions sur les coupes, un clic ouvre leur menu), ⊕/⊖ Caméra (22 ; dépliée, la rangée Préréglages de 24 où l'on pose,
+  glisse, étire les préréglages de caméra comme dans l'Animation), ⊕/⊖ Calques (repliée : une ligne de résumé). Chaque rangée a
+  ses icônes d'en-tête ; les coupes des plans traversent tout. L'espace Montage garde sa disposition. **Pas fusionné, pas
+  regardé sur son écran** : liste 178.4 d'INTERFACE.md. Captures dans le dossier `vues178` de la session.
 - **`piste-mode-liste` fusionnée dans main (9c422b9), poussée, et son FEANOR habituel reconstruit** (exe de 2 h 22), sur
   son « fusionne et pousse sur github ». Parties 173 à 174 : la piste du calque actif du Storyboard (liste « Normal ▾ »,
   colonne réglable 250–520 points, toutes les options du calque) et la colonne des calques de la timeline dans la
