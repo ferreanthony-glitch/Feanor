@@ -574,7 +574,10 @@ impl App {
                 self.barre_calques(ui, self.montage_head_w - 4.0);
             }
             ui.add_space(4.0);
-            let small = |icon: &str| egui::Button::new(RichText::new(icon).size(11.0)).frame(false).min_size(vec2(16.0, 14.0));
+            // (Partie 179.5 : dans le Storyboard, le zoom a aussi la taille des icônes de la timeline, `tailleicones.rs` ; le Montage garde
+            // ses petites icônes.)
+            let taille = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else { 11.0 };
+            let small = |icon: &str| egui::Button::new(RichText::new(icon).size(taille)).frame(false).min_size(vec2(16.0, 14.0));
             let (out, inn, all) = (self.raccourci("bande.zoom_arriere"), self.raccourci("bande.zoom_avant"), self.raccourci("bande.tout_voir"));
             if bulle(ui.add(small(ph::MAGNIFYING_GLASS_MINUS)), "Zoom arrière", "Ou Ctrl + molette sur la bande.", &out).clicked() {
                 self.run_action("bande.zoom_arriere");

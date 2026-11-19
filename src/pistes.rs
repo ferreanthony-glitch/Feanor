@@ -594,14 +594,18 @@ impl App {
         if let Some(c) = filet {
             ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 2.0, r.top() + 1.0), pos2(r.left() + 5.0, r.bottom() - 1.0)), 1.0, c);
         }
-        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, if folded { 11.0 } else { 13.0 }, if visible { fg } else { off });
+        // (Partie 179.5 : dans le Storyboard, l'œil a la taille de toutes les icônes de la timeline, `tailleicones.rs` ; le Montage garde
+        // le sien.)
+        let taille_oeil = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else if folded { 11.0 } else { 13.0 };
+        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, taille_oeil, if visible { fg } else { off });
         if crate::bulles::bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait). Verrou, opacité, fusion : clic droit sur la piste.", "").clicked() {
             self.toggle_layer_visible(li);
         }
         ui.painter().circle_filled(at.dot, at.dot_r, if visible { dot } else { dot.gamma_multiply(0.4) });
         if verrou {
             let ou = pos2(r.right() - VERROU_W * 0.5 - 1.0, r.center().y);
-            ui.painter().text(ou, Align2::CENTER_CENTER, ph::LOCK_SIMPLE, FontId::proportional(if folded { 10.0 } else { 11.5 }), fg.gamma_multiply(0.75));
+            let taille = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else if folded { 10.0 } else { 11.5 };
+            ui.painter().text(ou, Align2::CENTER_CENTER, ph::LOCK_SIMPLE, FontId::proportional(taille), fg.gamma_multiply(0.75));
         }
         if let Some(t) = &opacite {
             ui.painter().text(pos2(opacite_x - 1.0, r.center().y), Align2::RIGHT_CENTER, t, FontId::proportional(if folded { 9.0 } else { 10.0 }), fg.gamma_multiply(0.7));
@@ -884,7 +888,7 @@ impl App {
         }
         // ---- En haut, à gauche : l'œil, la pastille.
         let at = head_layout_en(haut, false, retrait);
-        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, 13.0, if visible { fg } else { off });
+        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, crate::tailleicones::icone(), if visible { fg } else { off });
         if crate::bulles::bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait).", "").clicked() {
             self.toggle_layer_visible(li);
         }
@@ -901,7 +905,7 @@ impl App {
         let resp = ui.interact(Rect::from_center_size(at.dot, vec2(DOT_W, haut.height())), egui::Id::new(("sorte_piste", id)), Sense::hover());
         crate::bulles::bulle(resp, &format!("{}  {}", sorte.icone_ligne(), sorte.nom()), sorte.phrase(), "");
         // ---- En haut, à droite : les colonnes de réglages, sous les icônes de la ligne « Calques » (même bord droit), sauf l'œil.
-        use crate::layerheads::{case_de_colonne, Colonne, ICON_W};
+        use crate::layerheads::{case_de_colonne, Colonne};
         let droite = r.right();
         let y_cases = haut.top() + (haut.height() - 17.0) * 0.5;
         // (Les indicateurs s'arrêtent avant la case de l'œil, laissée vide sous l'œil de la ligne « Calques » : aucune icône n'est
@@ -910,7 +914,8 @@ impl App {
         for (k, col) in Colonne::TOUTES.into_iter().enumerate().skip(1) {
             let Some(on) = self.layers().get(li).and_then(|l| col.etat(l)) else { continue };
             let icone = if col == Colonne::Pochoir && negative { ph::EXCLUDE } else { col.icone() };
-            let resp = crate::layerheads::case_de_reglage(ui, case_de_colonne(droite, k, y_cases), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg);
+            // (Partie 179.5 : éteint, l'icône pâle, plus le petit point : l'en-tête des colonnes a quitté la ligne « Calques ».)
+            let resp = crate::layerheads::case_de_reglage_en(ui, case_de_colonne(droite, k, y_cases), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg, true);
             let resp = self.aide(resp, col.nom(), col.description(), col.action());
             if resp.clicked() {
                 self.agir_colonne(col, li);
@@ -932,7 +937,7 @@ impl App {
         .into_iter()
         .filter_map(|(oui, i)| oui.then_some(i))
         .collect();
-        let largeur = |i: &Indicateur| if *i == Indicateur::Maillon { MAILLON_W } else { ICON_W };
+        let largeur = |i: &Indicateur| if *i == Indicateur::Maillon { MAILLON_W } else { crate::layerheads::icon_w() };
         let place = debut_cols - 2.0 - at.name.min.x - NOM_MIN;
         let mut en_haut = indicateurs.len();
         while en_haut > 0 && indicateurs[..en_haut].iter().map(largeur).sum::<f32>() > place {
@@ -1028,7 +1033,7 @@ impl App {
             self.losange_opacite(ui, Rect::from_min_size(pos2(barre.right() + 1.0, y - 8.5), vec2(14.0, 17.0)), fg, off);
         }
         let mut m = ui.new_child(egui::UiBuilder::new().max_rect(menu).id_salt(("options_piste", id)));
-        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0).color(fg)).frame(false);
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false);
         let resp = egui::menu::menu_custom_button(&mut m, button, |ui| self.montage_layer_menu(ui, li)).response;
         crate::bulles::bulle(resp, "Commandes du calque", "Renommer, dupliquer, organiser, apparence, effets, aplat… (aussi : clic droit sur la piste).", "");
     }
@@ -1053,7 +1058,7 @@ impl App {
                 let mut c = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("groupe_piste", id)));
                 c.spacing_mut().button_padding = vec2(0.0, 0.0);
                 // (La case entière se clique, comme les autres icônes de la rangée.)
-                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(crate::layerheads::group_color(g.color))).frame(false).min_size(case.size());
+                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(crate::tailleicones::icone()).color(crate::layerheads::group_color(g.color))).frame(false).min_size(case.size());
                 let resp = egui::menu::menu_custom_button(&mut c, button, |ui| self.group_menu(ui, li)).response;
                 crate::bulles::bulle(resp, &format!("Groupe : {}", g.name), "Ranger le calque dans un groupe de couleur.", "");
             }

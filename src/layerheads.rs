@@ -207,7 +207,7 @@ pub(crate) fn group_color(rgb: [u8; 3]) -> Color32 {
 
 /// Icône sans cadre posée dans `rect`.
 pub(crate) fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> egui::Response {
-    ui.put(rect, egui::Button::new(RichText::new(icon).size(13.0).color(color)).frame(false))
+    ui.put(rect, egui::Button::new(RichText::new(icon).size(crate::tailleicones::icone()).color(color)).frame(false))
 }
 
 /// Partie 174 (la disposition validée par Anthony) : les colonnes de réglages de la colonne des calques, dans l'ordre de la rangée
@@ -297,8 +297,14 @@ impl Colonne {
 /// que leur gauche).
 pub(crate) fn case_de_colonne(droite: f32, k: usize, y: f32) -> Rect {
     let n = Colonne::TOUTES.len();
-    let gauche = droite - MARGE_COLONNES - (n - k) as f32 * ICON_W;
-    Rect::from_min_size(pos2(gauche, y), vec2(ICON_W, 17.0))
+    let w = icon_w();
+    let gauche = droite - MARGE_COLONNES - (n - k) as f32 * w;
+    Rect::from_min_size(pos2(gauche, y), vec2(w, 17.0))
+}
+
+/// Partie 179.5 : la largeur d'une case de réglage à la taille des icônes en cours (`ICON_W`, 19 points, pour des icônes de 13).
+pub(crate) fn icon_w() -> f32 {
+    crate::tailleicones::mesure(ICON_W)
 }
 
 /// Partie 174 : le bord gauche de la première colonne (tout ce qui est avant, nom, indicateurs, s'arrête là).
@@ -309,17 +315,30 @@ pub(crate) fn debut_des_colonnes(droite: f32) -> f32 {
 /// Partie 174 : une case de réglage : l'icône quand le réglage est allumé ; éteint, un petit point discret (l'icône pâle au survol,
 /// pour savoir ce qu'un clic allumera). `id` : son identifiant.
 pub(crate) fn case_de_reglage(ui: &mut Ui, rect: Rect, id: egui::Id, icone: &str, on: bool, encre: Color32) -> egui::Response {
+    case_de_reglage_en(ui, rect, id, icone, on, encre, false)
+}
+
+/// Partie 179.5 (Anthony : les icônes des colonnes barrées sur la ligne « Calques ») : `case_de_reglage`, et `pale` : éteint, l'icône
+/// pâle au lieu du petit point. C'est l'aspect des réglages du calque actif (Storyboard) et du calque courant (Animation) : l'en-tête
+/// des colonnes n'existe plus, c'est leur ligne qui dit quelle colonne est laquelle. Pâle = éteint, allumée = actif.
+pub(crate) fn case_de_reglage_en(ui: &mut Ui, rect: Rect, id: egui::Id, icone: &str, on: bool, encre: Color32, pale: bool) -> egui::Response {
     let resp = ui.interact(rect, id, Sense::click());
     let painter = ui.painter();
+    let taille = FontId::proportional(crate::tailleicones::icone());
     if on {
-        painter.text(rect.center(), Align2::CENTER_CENTER, icone, FontId::proportional(13.0), encre);
+        painter.text(rect.center(), Align2::CENTER_CENTER, icone, taille, encre);
     } else if resp.hovered() {
-        painter.text(rect.center(), Align2::CENTER_CENTER, icone, FontId::proportional(13.0), encre.gamma_multiply(0.45));
+        painter.text(rect.center(), Align2::CENTER_CENTER, icone, taille, encre.gamma_multiply(if pale { 0.7 } else { 0.45 }));
+    } else if pale {
+        painter.text(rect.center(), Align2::CENTER_CENTER, icone, taille, encre.gamma_multiply(ICONE_PALE));
     } else {
         painter.circle_filled(rect.center(), 1.6, encre.gamma_multiply(0.4));
     }
     resp
 }
+
+/// Partie 179.5 : l'encre d'un réglage éteint du calque actif (son icône pâle).
+pub(crate) const ICONE_PALE: f32 = 0.32;
 
 /// Partie 173 : la liste des modes de fusion de la piste du calque actif (Storyboard), posée exactement dans `rect` : le même
 /// aspect que l'ancienne liste de la timeline (une `ComboBox`, remplacée par celle-ci en partie 174), mais un nom trop long est raccourci (« Superpos… ») sans sortir de `rect`, et la
@@ -596,7 +615,7 @@ impl App {
                 .filter_map(|(oui, i)| oui.then_some(i))
                 .collect()
         };
-        let largeur = |i: &IndicateurDeLigne| if *i == IndicateurDeLigne::Maillon { MAILLON_W } else { ICON_W };
+        let largeur = |i: &IndicateurDeLigne| if *i == IndicateurDeLigne::Maillon { MAILLON_W } else { icon_w() };
         let mut en_haut = indicateurs.len();
         while en_haut > 0 && indicateurs[..en_haut].iter().map(largeur).sum::<f32>() > cols - 2.0 - (x0 + 14.0) - NOM_MIN {
             en_haut -= 1;
@@ -670,11 +689,11 @@ impl App {
             let icon = if h.collapsed { ph::FOLDER } else { ph::FOLDER_OPEN };
             painter.text(pos2(x0 - 2.0, line1), Align2::LEFT_CENTER, icon, FontId::proportional(14.0), fg);
         } else if h.cfx {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(13.0), badge);
+            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(crate::tailleicones::icone()), badge);
         } else if h.annotation {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::MARKER_CIRCLE, FontId::proportional(13.0), badge);
+            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::MARKER_CIRCLE, FontId::proportional(crate::tailleicones::icone()), badge);
         } else if h.unie {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SQUARE, FontId::proportional(13.0), badge);
+            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SQUARE, FontId::proportional(crate::tailleicones::icone()), badge);
         } else {
             painter.text(pos2(x0, line1), Align2::LEFT_CENTER, if h.couleur { "C" } else { h.kind.badge() }, FontId::monospace(11.0), badge);
         }
@@ -709,7 +728,8 @@ impl App {
             (false, true) => r.top() + RANGEE_B,
             _ => line1 - 8.5,
         };
-        self.colonnes_du_calque(ui, r.right(), y_cols, li, h.id, h.negative, fg);
+        // (Partie 179.5 : le calque courant montre ses réglages éteints en icônes pâles : sa ligne tient lieu d'en-tête des colonnes.)
+        self.colonnes_du_calque(ui, r.right(), y_cols, li, h.id, h.negative, fg, li == self.cur_layer);
 
         if fine && !h.folder {
             // La pastille de sa couleur d'étiquette (son groupe, s'il en a un), puis ses effets, juste avant les colonnes.
@@ -738,7 +758,7 @@ impl App {
         // colonnes ont pris le bout de la première).
         let opts = if h.folder { Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 1.0), vec2(18.0, 18.0)) } else { Rect::from_min_size(pos2(r.right() - 17.0, r.top() + RANGEE_B), vec2(16.0, 18.0_f32.min(r.bottom() - r.top() - RANGEE_B))) };
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(opts).id_salt(("options_calque", h.id)));
-        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0).color(fg)).frame(false);
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false);
         let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_head_menu(ui, li)).response;
         bulle(resp, "Commandes du calque", "Renommer, profondeur, dupliquer, verrouiller, supprimer, groupe… (aussi : clic droit sur la ligne).", "");
 
@@ -847,7 +867,7 @@ impl App {
             }
             IndicateurDeLigne::Groupe => {
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("groupe_calque", h.id)));
-                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(group_color(group.color))).frame(false);
+                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(crate::tailleicones::icone()).color(group_color(group.color))).frame(false);
                 let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.group_menu(ui, li)).response;
                 bulle(resp, &format!("Groupe : {}", group.name), "Ranger le calque dans un groupe de couleur.", "");
             }
@@ -882,7 +902,8 @@ impl App {
     /// Partie 174 : les sept colonnes de réglages du calque `li` (`Colonne::TOUTES`), sur les x de l'en-tête (`case_de_colonne`) d'une
     /// colonne dont le bord droit est `droite`, à la hauteur `y`. Une case vide quand le réglage n'a pas de sens pour ce calque. Un
     /// clic : la même action qu'avant (`agir_colonne`), annulable.
-    pub(crate) fn colonnes_du_calque(&mut self, ui: &mut Ui, droite: f32, y: f32, li: usize, id: u64, negatif: bool, encre: Color32) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn colonnes_du_calque(&mut self, ui: &mut Ui, droite: f32, y: f32, li: usize, id: u64, negatif: bool, encre: Color32, pale: bool) {
         let Some(l) = self.layers().get(li) else { return };
         let etats: Vec<Option<bool>> = Colonne::TOUTES.iter().map(|c| c.etat(l)).collect();
         for (k, col) in Colonne::TOUTES.into_iter().enumerate() {
@@ -891,8 +912,8 @@ impl App {
             let resp = match col {
                 // (L'œil reste un œil, barré quand le calque est caché.)
                 Colonne::Afficher => icon_at(ui, case, if on { ph::EYE } else { ph::EYE_SLASH }, if on { encre } else { encre.gamma_multiply(0.45) }),
-                Colonne::Pochoir => case_de_reglage(ui, case, egui::Id::new(("colonne", id, k)), if negatif { ph::EXCLUDE } else { ph::INTERSECT }, on, encre),
-                _ => case_de_reglage(ui, case, egui::Id::new(("colonne", id, k)), col.icone(), on, encre),
+                Colonne::Pochoir => case_de_reglage_en(ui, case, egui::Id::new(("colonne", id, k)), if negatif { ph::EXCLUDE } else { ph::INTERSECT }, on, encre, pale),
+                _ => case_de_reglage_en(ui, case, egui::Id::new(("colonne", id, k)), col.icone(), on, encre, pale),
             };
             let resp = self.aide(resp, col.nom(), col.description(), col.action());
             if resp.clicked() {
@@ -923,8 +944,7 @@ impl App {
     }
 
     /// Partie 174 : la rangée d'en-tête de la colonne des calques, dans `rect` : le bouton ⊖ / ⊕ (replier / déplier tous les
-    /// calques), « Calques », puis une icône par colonne, sur les mêmes x que les colonnes des calques. Un clic sur une icône agit
-    /// comme un clic dans la case du calque courant : sur lui et, s'il fait partie d'un choix, sur tous les calques choisis.
+    /// calques), « Calques », puis (partie 179.5) les commandes des calques collées à droite.
     fn entete_des_colonnes(&mut self, ui: &mut Ui, rect: Rect) {
         // (Partie 179 : le clic droit de la rangée, hors d'un bouton, est celui de l'ancienne barre du bas : nouveau calque, coller.)
         let vide = ui.interact(rect, ui.id().with("entete_des_colonnes_vide"), Sense::click());
@@ -945,34 +965,12 @@ impl App {
         }
         let mot = painter.text(pos2(bouton.right() + 4.0, rect.center().y), Align2::LEFT_CENTER, "Calques", FontId::proportional(12.0), doux);
         // Partie 179 (Anthony, sur la timeline du Storyboard : les boutons de la barre du bas de la colonne montés sur la ligne
-        // « Calques » ; la même chose ici) : les commandes des calques juste après « Calques », jusqu'aux icônes des colonnes.
+        // « Calques » ; la même chose ici) : les commandes des calques sur cette rangée. Partie 179.5 (le groupe entouré, une flèche
+        // vers la droite, les icônes des colonnes barrées ; la même chose ici) : justifiées à droite, à la place des icônes des
+        // colonnes, qui ont quitté la rangée (le calque courant montre chaque réglage en icône, pâle quand il est éteint ; un clic
+        // dans sa case fait ce que faisait le clic sur l'icône de l'en-tête).
         let rangee = rect.shrink2(vec2(0.0, 1.0));
-        self.actions_des_calques_en_ligne(ui, rangee, mot.right() + 6.0, debut_des_colonnes(rect.right()) - 4.0);
-        self.icones_des_colonnes(ui, rect);
-    }
-
-    /// Partie 174 : les icônes des sept colonnes d'une rangée d'en-tête `rect`, alignées à droite (`case_de_colonne`). Un clic agit comme
-    /// un clic dans la case du calque courant (et de tous les calques choisis). Aussi sur la ligne « Calques » du Storyboard (178).
-    pub(crate) fn icones_des_colonnes(&mut self, ui: &mut Ui, rect: Rect) {
-        let doux = ui.visuals().weak_text_color();
-        let cur = self.cur_layer;
-        let etats: Vec<Option<bool>> = match self.layers().get(cur) {
-            Some(l) => Colonne::TOUTES.iter().map(|c| c.etat(l)).collect(),
-            None => vec![None; Colonne::TOUTES.len()],
-        };
-        for (k, col) in Colonne::TOUTES.into_iter().enumerate() {
-            let case = case_de_colonne(rect.right(), k, rect.top() + (rect.height() - 17.0) * 0.5);
-            let resp = icon_at(ui, case, col.icone(), doux);
-            let quoi = format!("Colonne : {} Clic : comme dans la case du calque courant (et de tous les calques choisis).", col.description());
-            let resp = self.aide(resp, col.nom(), &quoi, col.action());
-            if resp.clicked() {
-                if etats[k].is_some() {
-                    self.agir_colonne(col, cur);
-                } else {
-                    self.status = format!("{} : le calque courant n'en a pas (un dossier n'a que l'œil et le cadenas).", col.nom());
-                }
-            }
-        }
+        self.actions_des_calques_en_ligne(ui, rangee, mot.right() + 6.0, rect.right() - MARGE_COLONNES);
     }
 
     /// Partie 174 : replier tous les calques de la timeline sur une ligne, ou les déplier (le calque courant retrouve ses trois

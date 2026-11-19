@@ -521,9 +521,13 @@ fn les_calques_se_replient_en_une_ligne_de_resume_et_se_deplient() {
     let rows = rangees(&b);
     let h = haut(&b);
     let ligne = (h + rows.calques_top(), h + rows.calques_top() + SB_CALQUES_H);
-    // Dépliée : les icônes des sept colonnes de la partie 174 sur la ligne « Calques ».
+    // Dépliée : les commandes des calques sur la ligne « Calques ». (Partie 179.5 : les icônes des sept colonnes de la partie 174 ont
+    // quitté la ligne ; la piste du calque actif montre ses réglages en icônes.)
+    for nom in crate::barrecalques::NOMS {
+        assert!(vus::ou(nom).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {nom} » sur la ligne Calques");
+    }
     for col in crate::layerheads::Colonne::TOUTES {
-        assert!(vus::ou(col.nom()).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {} » sur la ligne Calques", col.nom());
+        assert!(!vus::ou(col.nom()).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {} » n'est plus sur la ligne Calques", col.nom());
     }
     let hauteur_avant = rows.height(0);
     clic(&mut b, ou_dans("Replier la rangée Calques", ligne.0, ligne.1).center(), Modifiers::NONE);
@@ -591,7 +595,12 @@ fn a_la_plus_petite_fenetre_rien_ne_deborde_des_en_tetes() {
         icones_en_ordre(&ICONES_DES_PLANS, hh + rows.blocks_top(), hh + rows.blocks_top() + rows.block_h, &quoi);
         icones_en_ordre(&["Replier la caméra", "Clé de caméra ici", "Préréglages de caméra", "Remettre la caméra à zéro", "Autres commandes de la caméra"], hh + rows.camera_top(), hh + rows.camera_top() + SB_CAM_H, &quoi);
         let (a, z) = (hh + rows.calques_top(), hh + rows.calques_top() + SB_CALQUES_H);
-        let mut ligne: Vec<Rect> = std::iter::once(ou_dans("Replier la rangée Calques", a, z)).chain(crate::layerheads::Colonne::TOUTES.iter().map(|c| ou_dans(c.nom(), a, z))).collect();
+        // (Partie 179.5 : la ligne « Calques » porte ⊖ et les commandes des calques, plus les icônes des colonnes ; « + » et « ⋯ » y
+        // sont toujours, les autres selon la place.)
+        let mut ligne: Vec<Rect> = std::iter::once(ou_dans("Replier la rangée Calques", a, z))
+            .chain([crate::barrecalques::NOMS[0], crate::barrecalques::NOMS[5]].iter().map(|n| ou_dans(n, a, z)))
+            .chain(crate::barrecalques::NOMS[1..5].iter().flat_map(|n| vus::ou(n).into_iter().filter(|r| r.center().y > a && r.center().y < z)))
+            .collect();
         ligne.sort_by(|p, q| p.left().total_cmp(&q.left()));
         let col = colonne();
         for (k, r) in ligne.iter().enumerate() {

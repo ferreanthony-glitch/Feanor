@@ -75,6 +75,12 @@ fn ligne_calques(b: &Banc) -> (f32, f32) {
     (h + rows.calques_top(), h + rows.calques_top() + crate::montagerows::SB_CALQUES_H)
 }
 
+/// Les éléments nommés `nom` entre `y0` et `y1`, dans la colonne.
+fn dans_la_ligne(nom: &str, y0: f32, y1: f32) -> Vec<Rect> {
+    let grip = colonne();
+    vus::ou(nom).into_iter().filter(|r| r.center().y > y0 && r.center().y < y1 && r.right() <= grip.right() + 1.0).collect()
+}
+
 /// Le seul élément nommé `nom` entre `y0` et `y1`, dans la colonne.
 fn un(nom: &str, y0: f32, y1: f32) -> Rect {
     let grip = colonne();
@@ -155,12 +161,13 @@ fn les_commandes_des_calques_sont_sur_la_ligne_calques_et_marchent() {
     let mut b = banc_sb(film(), 1920, 1080, false);
     let (y0, y1) = ligne_calques(&b);
     let mot = textes(&b).into_iter().find(|(t, r)| t == "Calques" && r.center().y > y0 && r.center().y < y1).expect("« Calques »").1;
-    let premiere_colonne = un(Colonne::Afficher.nom(), y0, y1);
+    // (Partie 179.5 : les icônes des colonnes ont quitté la ligne ; les commandes sont justifiées à droite, au bord de la colonne.)
+    let bord = colonne().left() - 2.5;
     let mut avant = mot.right();
     for nom in NOMS {
         let r = un(nom, y0, y1);
         assert!(r.left() >= avant - 0.5, "« {nom} » après « Calques » et le bouton d'avant, sans chevauchement : {r:?} / {avant}");
-        assert!(r.right() <= premiere_colonne.left() + 0.5, "« {nom} » avant les icônes des colonnes : {r:?} / {premiere_colonne:?}");
+        assert!(r.right() <= bord + 0.5, "« {nom} » dans la ligne : {r:?} / {bord}");
         avant = r.right();
     }
     // Plus rien sous la colonne : la barre du bas n'a plus que le zoom, à droite de la colonne.
@@ -205,11 +212,14 @@ fn le_calque_actif_tient_sur_deux_rangees_et_ses_icones_sont_collees_a_droite_so
         let r = un(nom, p0, p1);
         assert!(r.center().y < milieu, "« {nom} » sur la ligne du nom : {r:?} / {p0}");
     }
-    for col in &Colonne::TOUTES[1..] {
+    // (Partie 179.5 : plus d'icônes des colonnes sur la ligne « Calques » ; chaque colonne garde sa case, `case_de_colonne`.)
+    let droite = colonne().left();
+    for (k, col) in Colonne::TOUTES.iter().enumerate().skip(1) {
         let r = un(col.nom(), p0, p1);
-        let t = un(col.nom(), e0, e1);
         assert!(r.center().y < milieu, "« {} » sur la ligne du nom : {r:?}", col.nom());
-        assert!((r.center().x - t.center().x).abs() < 0.5, "« {} » sous son icône de la ligne « Calques » : {r:?} / {t:?}", col.nom());
+        let attendu = crate::layerheads::case_de_colonne(droite, k, 0.0);
+        assert!((r.center().x - attendu.center().x).abs() < 1.6, "« {} » dans sa colonne : {r:?} / {attendu:?}", col.nom());
+        assert!(dans_la_ligne(col.nom(), e0, e1).is_empty(), "« {} » n'est plus sur la ligne « Calques »", col.nom());
     }
     // Sur la seconde : le mode, l'opacité, le ⋮.
     for nom in ["Mode de fusion", "Opacité du calque", "Commandes du calque"] {
@@ -222,7 +232,8 @@ fn le_calque_actif_tient_sur_deux_rangees_et_ses_icones_sont_collees_a_droite_so
     let h = haut(&b);
     let fins = [
         ("caméra de la piste", un(Colonne::Camera.nom(), p0, p1).right()),
-        ("caméra de « Calques »", un(Colonne::Camera.nom(), e0, e1).right()),
+        // (Partie 179.5 : le « ⋯ » des calques a pris la place de la caméra de l'en-tête.)
+        ("⋯ de « Calques »", un(NOMS[5], e0, e1).right()),
         ("⋯ des plans", un("Autres commandes des plans", h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h).right()),
         ("⋯ de la caméra", un("Autres commandes de la caméra", h + rows.camera_top(), h + rows.camera_top() + rows.cam_h()).right()),
     ];
@@ -265,11 +276,14 @@ fn dans_l_animation_les_commandes_des_calques_montent_et_le_calque_courant_tient
     let haut = lignes.iter().map(|l| l.1).fold(f32::MAX, f32::min);
     let (e0, e1) = (haut - crate::layerheads::ENTETE_H - 1.0, haut + 0.5);
     let mot = textes(&b).into_iter().find(|(t, r)| t == "Calques" && r.center().y > e0 && r.center().y < e1).expect("« Calques » sur la rangée d'en-tête").1;
-    let premiere_colonne = vus::ou(Colonne::Afficher.nom()).into_iter().find(|r| r.center().y > e0 && r.center().y < e1).expect("l'œil de l'en-tête");
+    // (Partie 179.5 : plus d'icônes des colonnes sur la rangée ; les commandes vont jusqu'au bord droit de la colonne, celui des
+    // colonnes du calque courant.)
+    let (a0, z0) = lignes.iter().find(|l| l.0 == perso).map(|l| (l.1, l.2)).unwrap();
+    let bord = vus::ou(Colonne::Camera.nom()).into_iter().find(|r| r.center().y > a0 && r.center().y < z0).expect("la caméra du calque courant").right();
     let mut avant = mot.right();
     for nom in NOMS {
         let r = vus::ou(nom).into_iter().find(|r| r.center().y > e0 && r.center().y < e1).unwrap_or_else(|| panic!("« {nom} » sur la rangée « Calques » : {:?}", vus::ou(nom)));
-        assert!(r.left() >= avant - 0.5 && r.right() <= premiere_colonne.left() + 0.5, "« {nom} » entre « Calques » et les colonnes : {r:?}");
+        assert!(r.left() >= avant - 0.5 && r.right() <= bord + 0.5, "« {nom} » entre « Calques » et le bord : {r:?}");
         avant = r.right();
         assert_eq!(vus::ou(nom).len(), 1, "« {nom} » une seule fois (plus dans la barre du bas) : {:?}", vus::ou(nom));
     }
@@ -392,6 +406,10 @@ fn timeline_serree_179_captures() {
         b.app.montage_zoom = 8.0;
         b.app.cur_panel = 0;
         b.app.cur_layer = b.app.layers().len() - 1;
+        // (Partie 179.5 : `SHOT_CAPTURE_ICONES`, une autre taille d'icônes.)
+        if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
+            b.app.settings.taille_icones = t;
+        }
         b.garder_formes = true;
         b.chauffer(12);
         b
@@ -434,6 +452,9 @@ fn timeline_serree_179_captures() {
     a.app.settings.calques_replies = false;
     a.app.cur_panel = 0;
     a.app.cur_layer = a.app.layers().len() - 1;
+    if let Some(t) = std::env::var("SHOT_CAPTURE_ICONES").ok().and_then(|t| t.parse().ok()) {
+        a.app.settings.taille_icones = t;
+    }
     a.garder_formes = true;
     a.chauffer(12);
     let lignes = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().0.clone());
@@ -442,4 +463,15 @@ fn timeline_serree_179_captures() {
     let gauche = vus::ou("Replier tous les calques").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 8.0;
     let z = Rect::from_min_max(pos2(gauche.max(0.0), (haut_l - 90.0).max(0.0)), pos2(gauche.max(0.0) + 793.0, (bas_l + 60.0).min(1080.0)));
     sauver(&mut a, &format!("{prefixe}-5-animation.png"), z, [1920, 1080]);
+    // Partie 179.5 : Préférences > Apparence, le groupe « Tailles ».
+    let mut p = crate::perf_tests::banc_taille(charger(), true, 1920, 1080);
+    p.app.settings.prefs_onglet = crate::prefsonglets::Onglet::Apparence;
+    p.app.run_action("fichier.preferences");
+    p.garder_formes = true;
+    p.chauffer(10);
+    if let Some(r) = crate::pistes_tests::textes(&p).into_iter().find(|(t, _)| t == "Taille des icônes").map(|(_, r)| r) {
+        let z = Rect::from_min_max(pos2((r.left() - 30.0).max(0.0), (r.top() - 90.0).max(0.0)), pos2(r.left() + 560.0, r.bottom() + 50.0));
+        sauver(&mut p, &format!("{prefixe}-6-preferences-tailles.png"), z, [1920, 1080]);
+    }
+    crate::tailleicones::poser(crate::tailleicones::TAILLE_DEFAUT);
 }

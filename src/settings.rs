@@ -284,6 +284,10 @@ pub struct Settings {
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
+    /// Partie 179.5 : la taille des icônes de la timeline et de sa barre de lecture, en points : 11 à 16 (`tailleicones.rs`,
+    /// Préférences > Apparence > Tailles). Un réglage du poste ; absente des anciens réglages : 13, la taille d'origine.
+    #[serde(default = "crate::tailleicones::defaut", rename = "taille_icones", skip_serializing_if = "crate::tailleicones::est_defaut")]
+    pub taille_icones: u8,
     /// Le dossier des images de l'écran d'accueil (`accueilimages.rs`, Préférences > Apparence > Images d'accueil) : un réglage de ce
     /// poste, pas du projet. Vide : `Documents\SHOT\Identité\Accueil`.
     #[serde(default, rename = "dossier_accueil", skip_serializing_if = "String::is_empty")]
@@ -472,6 +476,7 @@ impl Default for Settings {
             explications_vues: Vec::new(),
             afficher_explications: false,
             echelle: crate::echelle::ECHELLE_DEFAUT,
+            taille_icones: crate::tailleicones::TAILLE_DEFAUT,
             dossier_accueil: String::new(),
             vignettes: Default::default(),
             point_fixe: Default::default(),
@@ -551,6 +556,7 @@ impl Settings {
         s.brosses_classiques = crate::personnages::brosses_nettoyees(std::mem::take(&mut s.brosses_classiques), crate::personnages::MAX_CLASSIQUES);
         s.brosses_decor = crate::personnages::brosses_nettoyees(std::mem::take(&mut s.brosses_decor), crate::personnages::MAX_DECORS);
         s.echelle = crate::echelle::echelle_valide(s.echelle);
+        s.taille_icones = crate::tailleicones::taille_valide(s.taille_icones);
         s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
         s.reprendre_les_anciens_pinceaux_de_decor();
         s.new_plan_secs = crate::dureeplans::secondes_valides(s.new_plan_secs);

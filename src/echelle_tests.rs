@@ -77,7 +77,8 @@ fn the_chosen_size_is_applied_live_to_the_interface_and_written_to_disk() {
     // Les quatre choix sont dans la fenêtre, 100 % est allumé.
     // (« 100 % » est aussi un bouton de la vue sous le dessin : on prend celui de la ligne « Échelle ».)
     let pos = |b: &Banc, t: &str| {
-        let ligne = tous_les_textes(b).into_iter().find(|(x, _)| x == "Échelle").expect("la ligne Échelle").1.y;
+        // (Partie 179.5 : la ligne « Échelle » s'appelle « Taille de l'interface ».)
+        let ligne = tous_les_textes(b).into_iter().find(|(x, _)| x == "Taille de l'interface").expect("la ligne Taille de l'interface").1.y;
         tous_les_textes(b).into_iter().find(|(x, p)| x == t && (p.y - ligne).abs() < 4.0).unwrap_or_else(|| panic!("« {t} » manque")).1
     };
     for e in ECHELLES {

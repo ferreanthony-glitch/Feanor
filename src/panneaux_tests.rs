@@ -164,7 +164,8 @@ fn the_layers_action_bar_has_its_six_buttons_under_the_column() {
         }
     }
     // Elle tient dans la colonne des calques (sa largeur) ; les onglets Notes, Son… restent à droite de la colonne.
-    assert!(cases[5].right() <= crate::layerheads::HEAD_W + 16.0, "{cases:?}");
+    // (Partie 179.5 : collée au bord droit de la colonne, dont la largeur est au moins celle de la barre de la timeline.)
+    assert!(cases[5].right() <= crate::layerheads::largeur_colonne_timeline() + 16.0, "{cases:?}");
     let (_, notes) = trouver(&textes, "Notes").expect("l'onglet Notes");
     assert!(notes.left() > cases[5].right(), "les onglets du bas à sa droite");
     // Ni monter ni descendre dans la barre.

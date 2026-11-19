@@ -15189,3 +15189,86 @@ l'espace Montage).
 5. Tirer la colonne au plus étroit : rien ne déborde, les boutons passent sous les « ⋯ ».
 6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
 7. Montage : rien n'a changé.
+
+### 179.5 Sa demande sur la capture d'après 179
+
+Sur la capture du Storyboard après 179, Anthony a entouré, sur la ligne « ⊖ Calques », le groupe +, dossier, effet, dupliquer,
+supprimer, ⋯, tracé une flèche vers la droite jusqu'aux icônes des colonnes (œil, verrou, pelure, transparence, pochoir, aplat,
+caméra) et barré celles-ci : « repositionne les icônes comme sur le screenshot. Les icônes sur la ligne de séquence gardent la même
+taille que sur le reste des autres lignes. Pareil pour les icônes de l'interface de visionnage au-dessus de la timeline. Tous les
+icônes doivent avoir cette taille. La taille des icônes et de l'interface doit être réglable dans les préférences. »
+Rien dans le projet (format inchangé, 60).
+
+### 179.6 Ce qui a bougé
+
+**La ligne « ⊖ Calques »** (Storyboard et Animation) : ⊖ et « Calques » restent à gauche ; le groupe +, dossier, effet, dupliquer,
+supprimer, ⋯ est **collé au bord droit**, à la place des icônes des colonnes, au même bord que le ⋯ des lignes Plans et Caméra. Le
+débordement est le même : colonne étroite, supprimer, puis dupliquer, effet, dossier passent en tête de « ⋯ ».
+
+**L'en-tête des colonnes a disparu.** C'est la ligne du calque actif qui le remplace : sur sa première rangée, chaque réglage
+(verrou, pelure, préserver la transparence, pochoir, aplat, accroché à la caméra ; l'œil reste à gauche) est **son icône** : pâle =
+éteint, allumée = actif (avant : un petit point quand il était éteint). Clic = bascule, mêmes bulles, même raccourci, même « la
+sélection agit sur tout ». Dans l'Animation, la ligne du calque courant fait de même (y compris quand tous les calques sont repliés
+sur une ligne) ; les autres lignes gardent leurs petits points, sous les icônes du calque courant.
+Rien n'est perdu : le clic sur une icône de l'en-tête faisait exactement le clic dans la case du calque courant (et des calques
+choisis), qui est maintenant juste dessous, en icône. Il n'y avait ni menu ni « tout basculer » sur l'en-tête.
+
+**Une seule taille d'icônes** : celle des icônes des lignes Plans et Caméra (13 points), partout dans la timeline : lignes Plans,
+Caméra, Calques, le calque actif (réglages, indicateurs, ⋮, œil et cadenas des pistes), le zoom sous la bande, et **la barre de
+lecture au-dessus de la timeline** (début, lire, boucle, temps, nouveau plan, la liste des plans, le son, ⋯, la légende des clés).
+
+| | Avant | Maintenant |
+|---|---|---|
+| Icônes de la barre de lecture (Storyboard, Animation) | 17 points, cases de 28 × 26 | **13 points, cases de 20 × 20** |
+| Icônes des lignes, du calque actif | 13 (et 11 à 14 ailleurs : œil 11 des pistes repliées, cadenas 10, commandes des calques 13) | **13 partout** |
+| Ligne de la barre, Storyboard | 34 points (la règle 18 + la ligne des séquences 16) | 34 (elle est en face de la règle et des séquences : les boutons y sont plus petits, la ligne garde la hauteur de la règle) |
+| Barre de la timeline de l'Animation (deux lignes) | 30 + 28 = 58 points | **24 + 24 = 48** (−10) |
+
+La ligne de séquence n'a pas d'icônes à elle (les blocs des séquences) ; c'est en face d'elle et de la règle qu'est la barre de
+lecture, d'où sans doute ses mots : ses boutons ont maintenant la taille des autres.
+L'espace Montage garde sa barre au-dessus de la bande (17 points), ses pistes, sa barre du bas. **Code partagé** : les cases de
+réglage et quelques icônes de ses pistes (`layerheads::icon_at`, `case_de_reglage`) suivent elles aussi « Taille des icônes » ; à
+13, rien n'y change.
+
+Barre de lecture : les commandes qui passent sous « ⋯ » sont maintenant strictement les moins utilisées (avant, un trait de groupe
+pouvait faire entrer une commande moins utilisée à la place d'une plus utilisée).
+
+### 179.7 Les réglages
+
+Préférences > Apparence > **Tailles** (le groupe s'appelait « Taille de l'interface ») :
+
+- **Taille de l'interface** : le réglage qui existait (« Échelle », renommé) : 90 %, 100 % (d'origine), 125 %, 150 % ; tout grandit
+  (le zoom d'egui), clé `echelle_interface`.
+- **Taille des icônes** (nouveau, juste dessous) : six petites icônes, chacune à sa taille : **11, 12, 13 (d'origine), 14, 15, 16
+  points** ; la choisie est allumée, le clic agit tout de suite. Les cases suivent (18 points pour 13), la hauteur des rangées non
+  (c'est le rôle de la taille de l'interface). Clé `taille_icones` dans `reglages.toml` (absente à 13). Un réglage du poste.
+
+Le code : `src/tailleicones.rs` (la taille en cours, `mesure`, `case_de_barre`, la ligne des Préférences) ; `barres.rs`
+(`icone_de_barre`, `case_de_barre`, la barre de lecture « compacte ») ; `barrecalques::actions_des_calques_en_ligne` (justifiées à
+droite) ; `layerheads::case_de_reglage_en` (l'icône pâle), `icon_w` ; `icones_des_colonnes` retirée ; `timeline::LIGNE1_H` /
+`LIGNE2_H` = 24.
+
+### 179.8 Les essais
+
+`src/tailleicones_tests.rs` (lancés d'abord sur le code d'avant : 8 rouges sur 9 ; le neuvième, l'écriture du réglage, était déjà
+vert, le champ ayant été ajouté avant ; verts ensuite) : la ligne « Calques » sans icônes des colonnes, ses commandes collées à droite
+au bord du ⋯ des plans (Storyboard, Animation) ; les réglages éteints du calque actif en icônes (Storyboard, Animation) ; la même
+hauteur pour les icônes de la barre de lecture, des lignes Plans, Caméra, Calques et du calque actif, la case de « Lire » de 20
+points ; l'Animation (même taille, lignes de 24) ; 16 et 11 agissent tout de suite partout sans déborder ; le réglage retenu, absent à
+13 ; la page des Préférences (les deux réglages l'un sous l'autre, un clic écrit `taille_icones = 15`).
+Changés : `timeline_serree_tests` (les commandes jusqu'au bord droit ; chaque colonne du calque actif à sa case, plus sous une icône
+d'en-tête ; le ⋯ des calques au bord commun ; les captures savent `SHOT_CAPTURE_ICONES` et font la page des Préférences),
+`echelle_tests` (la ligne s'appelle « Taille de l'interface »).
+
+### 179.9 À tester (sa checklist)
+
+1. Storyboard : la ligne « ⊖ Calques » : « Calques » à gauche, +, dossier, effet, dupliquer, supprimer, ⋯ à droite ; plus d'icônes
+   de colonnes dessus.
+2. Le calque actif : verrou, pelure, transparence, pochoir, aplat, caméra en icônes pâles ; un clic l'allume (Ctrl+Z) ; lisibles ?
+   assez pâles pour qu'on voie tout de suite ce qui est allumé ?
+3. La barre au-dessus de la timeline : des boutons plus petits, de la taille des icônes des lignes Plans et Caméra. Assez gros pour la
+   main ?
+4. Préférences > Apparence > Tailles : « Taille des icônes » 15 ou 16, puis 11 : toute la timeline suit tout de suite ; retour à 13.
+5. « Taille de l'interface » 125 % : tout grandit ; retour à 100 %.
+6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
+7. Montage : rien n'a changé.

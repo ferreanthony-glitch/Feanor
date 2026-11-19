@@ -125,25 +125,30 @@ impl App {
     }
 
     /// Partie 179 (Anthony, sur la timeline du Storyboard : les boutons de la barre du bas de la colonne entourés, une flèche vers la
-    /// ligne « ⊕ Calques ») : les commandes de la barre d'actions des calques sur la ligne d'en-tête « Calques », de `x` à `fin` au
-    /// plus, dans la rangée `r` (les mêmes icônes, bulles, raccourcis et clics droits qu'en bas ; le clic droit de la ligne, hors d'un
-    /// bouton : nouveau calque, coller le calque). Quand la place manque (colonne étroite), « Supprimer », puis « Dupliquer », « Nouveau
-    /// calque d'effet » et « Nouveau dossier » passent en tête de « ⋯ », qui reste avec « Nouveau calque ». Rend le bord droit du
-    /// dernier bouton posé.
+    /// ligne « ⊕ Calques ») : les commandes de la barre d'actions des calques sur la ligne d'en-tête « Calques », entre `x` et `fin`,
+    /// dans la rangée `r` (les mêmes icônes, bulles, raccourcis et clics droits qu'en bas ; le clic droit de la ligne, hors d'un
+    /// bouton : nouveau calque, coller le calque). Partie 179.5 (Anthony : le groupe entouré, une flèche vers la droite jusqu'aux
+    /// icônes des colonnes, barrées) : **justifiées à droite**, le dernier bouton (« ⋯ ») finit à `fin`. Quand la place manque
+    /// (colonne étroite), « Supprimer », puis « Dupliquer », « Nouveau calque d'effet » et « Nouveau dossier » passent en tête de « ⋯ »,
+    /// qui reste avec « Nouveau calque ». Rend le bord gauche du premier bouton posé.
     pub(crate) fn actions_des_calques_en_ligne(&mut self, ui: &mut egui::Ui, r: egui::Rect, x: f32, fin: f32) -> f32 {
-        let pas = CASE[0] + ECART_EN_LIGNE;
+        // (Les cases suivent la taille des icônes de la timeline, `tailleicones.rs` : 18 points pour des icônes de 13.)
+        let case_w = crate::tailleicones::mesure(CASE[0]);
+        let pas = case_w + ECART_EN_LIGNE;
         let place = fin - x;
         // Combien des quatre boutons du milieu tiennent avec « + » et « ⋯ ».
         let milieu = ((((place + ECART_EN_LIGNE) / pas).floor() as i32) - 2).clamp(0, 4) as usize;
         let caches: Vec<usize> = (1 + milieu..5).collect();
         let n = 2 + milieu;
-        let ligne = egui::Rect::from_min_max(egui::pos2(x, r.top()), egui::pos2(x + n as f32 * pas, r.bottom()));
+        let debut = fin - n as f32 * pas + ECART_EN_LIGNE;
+        let ligne = egui::Rect::from_min_max(egui::pos2(debut, r.top()), egui::pos2(fin, r.bottom()));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(ligne).id_salt("actions_calques_en_ligne").layout(egui::Layout::left_to_right(egui::Align::Center)));
         child.spacing_mut().item_spacing.x = ECART_EN_LIGNE;
-        child.spacing_mut().button_padding = vec2(2.0, 1.0);
+        child.spacing_mut().button_padding = vec2(0.0, 0.0);
         child.set_clip_rect(ligne.intersect(ui.clip_rect()));
         let ui = &mut child;
-        let case = |icone: &str| egui::Button::new(RichText::new(icone).size(ICONE_EN_LIGNE)).frame(false).min_size(vec2(CASE[0], CASE[1].min(r.height())));
+        let icone_w = crate::tailleicones::icone();
+        let case = |icone: &str| egui::Button::new(RichText::new(icone).size(icone_w)).frame(false).min_size(vec2(case_w, CASE[1].min(r.height())));
         let resp = egui::menu::menu_custom_button(ui, case(ph::PLUS), |ui| self.layer_new_menu(ui)).response;
         let quoi = if self.espace3d_vue_ouverte() {
             "Dessin vectoriel ou bitmap, calque de couleur, couleur unie, calque d'effet, annotation, vidéo, dossier, calques 3D, et « Nom, groupe, place… »."
@@ -174,7 +179,7 @@ impl App {
             }
         }
         self.plus_des_calques(ui, case(ph::DOTS_THREE), &caches);
-        ui.min_rect().right()
+        debut
     }
 
     /// Partie 179 : le clic droit d'une ligne d'en-tête « Calques », hors d'un bouton (c'était celui de la barre du bas) : nouveau
@@ -187,7 +192,6 @@ impl App {
     }
 }
 
-/// Partie 179 : l'écart entre deux boutons d'action sur la ligne « Calques » (2 points : la ligne est courte) et la taille de leurs
-/// icônes (13, celle des icônes des colonnes juste à droite).
+/// Partie 179 : l'écart entre deux boutons d'action sur la ligne « Calques » (2 points : la ligne est courte). (Partie 179.5 : la
+/// taille de leurs icônes est celle de toute la timeline, `tailleicones::icone`.)
 pub(crate) const ECART_EN_LIGNE: f32 = 2.0;
-const ICONE_EN_LIGNE: f32 = 13.0;

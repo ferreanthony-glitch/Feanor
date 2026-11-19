@@ -47,6 +47,10 @@ mod sans_marques_tests;
 mod echelle;
 #[cfg(test)]
 mod echelle_tests;
+// Partie 179.5 : une seule taille d'icônes pour la timeline et sa barre, réglable dans Préférences > Apparence.
+mod tailleicones;
+#[cfg(test)]
+mod tailleicones_tests;
 mod reglagestylet;
 #[cfg(test)]
 mod reglagestylet_tests;

@@ -422,7 +422,10 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let cases = crate::bulles::vus::ou("Aplat sous le trait");
     assert_eq!(cases.len(), 3, "C1, C2 et « Hors dossier », pas le dossier : {cases:?}");
     assert!(cases.iter().all(|r| (r.center().x - cases[0].center().x).abs() < 0.5), "une colonne : {cases:?}");
-    assert!(!textes.iter().any(|(t, _)| t.contains(ph_fond)), "éteint partout : un point, pas l'icône");
+    // (Partie 179.5 : éteint, le calque courant montre l'icône pâle, les autres un petit point.)
+    let icones: Vec<Rect> = textes.iter().filter(|(t, _)| t.contains(ph_fond)).map(|(_, r)| *r).collect();
+    let (_, c1) = trouver(&textes, "C1").unwrap().clone();
+    assert!(icones.len() == 1 && (icones[0].center().y - c1.center().y).abs() < 10.0, "éteint : l'icône pâle sur C1 (le courant), un point ailleurs : {icones:?} / {c1:?}");
     // Un clic sur la case de la ligne « C1 » lui donne un fond.
     let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
     let bouton = *cases.iter().find(|r| r.center().y > ligne.top() && r.center().y - ligne.center().y < 30.0).expect("la case de la ligne C1");

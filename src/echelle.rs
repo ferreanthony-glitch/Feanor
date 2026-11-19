@@ -55,10 +55,10 @@ impl App {
         }
     }
 
-    /// Préférences > Apparence > Taille de l'interface.
+    /// Préférences > Apparence > Tailles : la taille de l'interface, puis (partie 179.5) celle des icônes de la timeline.
     pub(crate) fn echelle_prefs_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label("Échelle");
+            ui.label("Taille de l'interface");
             let actuelle = echelle_valide(self.settings.echelle);
             for e in ECHELLES {
                 let r = ui.selectable_label(actuelle == e, RichText::new(format!("{e} %")));
@@ -68,6 +68,7 @@ impl App {
                 }
             }
         });
-        ui.label(RichText::new("100 % : la taille d'origine. Pour un grand écran ou une vue fatiguée, 125 % ou 150 %.").small().weak());
+        self.taille_icones_prefs_ui(ui);
+        ui.label(RichText::new("100 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 125 % ou 150 %.").small().weak());
     }
 }

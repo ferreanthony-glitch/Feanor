@@ -84,7 +84,7 @@ impl App {
     fn icone_d_entete(&mut self, ui: &mut egui::Ui, case: Rect, symbole: &str, nom: &str, description: &str, action: &str, actif: bool) -> bool {
         let encre = ui.visuals().text_color();
         let encre = if actif { encre } else { encre.gamma_multiply(0.35) };
-        let resp = ui.put(case, egui::Button::new(RichText::new(symbole).size(13.0).color(encre)).frame(false));
+        let resp = ui.put(case, egui::Button::new(RichText::new(symbole).size(crate::tailleicones::icone()).color(encre)).frame(false));
         crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
         self.aide(resp, nom, description, action).clicked() && actif
     }
@@ -94,7 +94,7 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("menu_entete_sb", nom)));
         child.spacing_mut().button_padding = vec2(0.0, 0.0);
         let encre = child.visuals().text_color();
-        let bouton = egui::Button::new(RichText::new(symbole).size(13.0).color(encre)).frame(false).min_size(case.size());
+        let bouton = egui::Button::new(RichText::new(symbole).size(crate::tailleicones::icone()).color(encre)).frame(false).min_size(case.size());
         let resp = egui::menu::menu_custom_button(&mut child, bouton, |ui| contenu(self, ui)).response;
         crate::bulles::bulle(resp, nom, description, "");
     }
@@ -103,8 +103,10 @@ impl App {
     /// Anthony : « Justifie toutes les icônes à droite » : la dernière finit où finissent les colonnes de la ligne « Calques »,
     /// `layerheads::case_de_colonne`).
     fn cases_d_entete(r: Rect, n: usize) -> Vec<Rect> {
-        let derniere = r.right() - MARGE_DROITE - CASE_W;
-        (0..n).map(|k| Rect::from_min_size(pos2(derniere - (n - 1 - k) as f32 * PAS, r.top() + 1.0), vec2(CASE_W, (r.height() - 2.0).max(10.0)))).collect()
+        // (Partie 179.5 : les cases suivent la taille des icônes, `tailleicones.rs` ; 18 et 21 points pour des icônes de 13.)
+        let (case_w, pas) = (crate::tailleicones::mesure(CASE_W), crate::tailleicones::mesure(PAS));
+        let derniere = r.right() - MARGE_DROITE - case_w;
+        (0..n).map(|k| Rect::from_min_size(pos2(derniere - (n - 1 - k) as f32 * pas, r.top() + 1.0), vec2(case_w, (r.height() - 2.0).max(10.0)))).collect()
     }
 
     /// Le mot d'une rangée (« Plans », « Caméra »…) à l'abscisse `x` de `r` ; rend son bord droit.
@@ -213,7 +215,7 @@ impl App {
         } else {
             ("Déplier la caméra", "La rangée des préréglages de caméra sous ses clés : y poser, glisser, étirer, régler les préréglages (comme dans la timeline de l'Animation).")
         };
-        let resp = ui.put(plie, egui::Button::new(RichText::new(if depliee { ph::MINUS_CIRCLE } else { ph::PLUS_CIRCLE }).size(13.0).color(ui.visuals().weak_text_color())).frame(false));
+        let resp = ui.put(plie, egui::Button::new(RichText::new(if depliee { ph::MINUS_CIRCLE } else { ph::PLUS_CIRCLE }).size(crate::tailleicones::icone()).color(ui.visuals().weak_text_color())).frame(false));
         if crate::bulles::bulle(resp, nom, quoi, "").clicked() {
             self.basculer_camera_sb();
         }
@@ -278,8 +280,8 @@ impl App {
         );
     }
 
-    /// L'en-tête de la rangée Calques (`r`) : ⊕ / ⊖ (la rangée repliée en une ligne de résumé, ou dépliée), « Calques », puis, dépliée,
-    /// les icônes des sept colonnes de réglages (afficher, verrouiller, pelure, transparence, pochoir, aplat, caméra : partie 174).
+    /// L'en-tête de la rangée Calques (`r`) : ⊕ / ⊖ (la rangée repliée en une ligne de résumé, ou dépliée), « Calques », puis, collées
+    /// à droite, les commandes des calques (partie 179.5 : elles ont pris la place des icônes des sept colonnes de la partie 174).
     pub(crate) fn entete_calques_sb(&mut self, ui: &mut egui::Ui, r: Rect, replies: bool) {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("entete_calques_sb"));
         child.set_clip_rect(r.intersect(ui.clip_rect()));
@@ -293,21 +295,18 @@ impl App {
         } else {
             ("Replier la rangée Calques", "Une seule ligne de résumé (les clés de chaque plan) : la timeline laisse plus de place au dessin.")
         };
-        let resp = ui.put(plie, egui::Button::new(RichText::new(if replies { ph::PLUS_CIRCLE } else { ph::MINUS_CIRCLE }).size(13.0).color(ui.visuals().weak_text_color())).frame(false));
+        let resp = ui.put(plie, egui::Button::new(RichText::new(if replies { ph::PLUS_CIRCLE } else { ph::MINUS_CIRCLE }).size(crate::tailleicones::icone()).color(ui.visuals().weak_text_color())).frame(false));
         if self.aide(resp, nom, quoi, crate::layerheads::ACTION_REPLIER).clicked() {
             self.basculer_calques_sb();
         }
         let n = self.layers().iter().filter(|l| !l.folder).count();
         let mot = if replies { format!("Calques · {n}") } else { "Calques".to_string() };
         let apres_le_mot = Self::mot_d_entete(ui, r, plie.right() + 3.0, &mot, ui.visuals().weak_text_color());
-        // Partie 179 (Anthony : la barre du bas de la colonne entourée, une flèche vers cette ligne) : les commandes des calques juste
-        // après « Calques » (`barrecalques.rs`), jusqu'aux icônes des colonnes.
-        let colonnes = if replies { r.right() } else { crate::layerheads::debut_des_colonnes(r.right()) };
-        self.actions_des_calques_en_ligne(ui, r, apres_le_mot + 6.0, colonnes - 4.0);
-        if !replies {
-            // (Les colonnes de la partie 174, collées au bord droit de la rangée, au-dessus de celles de la piste active : partie 179.)
-            self.icones_des_colonnes(ui, r);
-        }
+        // Partie 179 (Anthony : la barre du bas de la colonne entourée, une flèche vers cette ligne) : les commandes des calques sur
+        // cette ligne (`barrecalques.rs`). Partie 179.5 (le groupe entouré, une flèche vers la droite, les icônes des colonnes barrées) :
+        // justifiées à droite, à la place des icônes des colonnes, au même bord que les icônes des lignes Plans et Caméra. Les icônes
+        // des colonnes ont quitté la ligne : la piste du calque actif montre chaque réglage en icône (pâle quand il est éteint).
+        self.actions_des_calques_en_ligne(ui, r, apres_le_mot + 6.0, r.right() - MARGE_DROITE);
     }
 
     /// La rangée des préréglages de la timeline du Storyboard : les blocs de chaque plan visible (`blocs` : les plans à l'écran),

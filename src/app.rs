@@ -5674,6 +5674,8 @@ impl App {
         self.ppp = ctx.pixels_per_point();
         // Taille de l'interface choisie dans les préférences (`echelle.rs`).
         self.appliquer_echelle(ctx);
+        // Partie 179.5 : la taille des icônes de la timeline (`tailleicones.rs`), lue par les fonctions de disposition.
+        crate::tailleicones::poser(self.settings.taille_icones);
         // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout
         // l'écran suit dès cette image.
         if self.settings.theme != self.theme_applied {

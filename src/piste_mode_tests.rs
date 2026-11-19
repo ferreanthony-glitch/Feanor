@@ -210,9 +210,10 @@ fn the_onion_of_the_layer_left_the_track_for_its_right_click_menu() {
 #[test]
 fn the_animation_timeline_keeps_its_own_line_untouched() {
     // La ligne du calque courant de la timeline (Animation) garde sa pelure, ses flèches ‹ › et sa liste. (Partie 174 : la pelure
-    // est une colonne de l'en-tête et de chaque calque : quatre cases pour trois calques ; la liste écrit le mode, comme ici.)
+    // est une colonne de l'en-tête et de chaque calque : quatre cases pour trois calques ; la liste écrit le mode, comme ici. Partie
+    // 179.5 : plus d'icônes des colonnes sur la rangée d'en-tête : trois cases, une par calque.)
     let b = banc_dans(Espace::Animation);
-    assert_eq!(vus::ou("Pelure d'oignon du calque").len(), 4);
+    assert_eq!(vus::ou("Pelure d'oignon du calque").len(), 3);
     assert_eq!(vus::ou("Mode précédent").len(), 1);
     assert_eq!(vus::ou("Mode suivant").len(), 1);
     assert!(texte_dans(&b, "Normal", ou("Mode de fusion")).is_some());
@@ -228,7 +229,9 @@ const BOUTONS_DE_LA_COLONNE: &[&str] = &["Début du montage", "Lire le montage /
 fn les_boutons_tiennent(quoi: &str) {
     let colonne = ou("Largeur de la colonne");
     for nom in BOUTONS_DE_LA_COLONNE {
-        let r = *vus::ou(nom).iter().find(|r| r.top() < colonne.top() + 80.0).unwrap_or_else(|| panic!("{quoi} : « {nom} » n'est pas en tête de la colonne : {:?}", vus::ou(nom)));
+        // (Partie 179.5 : en tête de la colonne, pas plus haut : la barre de commandes du haut de la fenêtre a aussi un « Plus… », qui
+        // tombait dans la colonne la plus étroite d'avant et n'y tombe plus.)
+        let r = *vus::ou(nom).iter().find(|r| r.top() >= colonne.top() - 2.0 && r.top() < colonne.top() + 80.0).unwrap_or_else(|| panic!("{quoi} : « {nom} » n'est pas en tête de la colonne : {:?}", vus::ou(nom)));
         assert!(r.right() <= colonne.right() + 0.5, "{quoi} : « {nom} » sort de la colonne : {r:?} / {colonne:?}");
     }
 }
