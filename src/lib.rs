@@ -600,6 +600,9 @@ mod couleur;
 #[cfg(test)]
 mod couleur_tests;
 mod cues;
+mod plagefilm;
+#[cfg(test)]
+mod plagefilm_tests;
 #[cfg(test)]
 mod cues_tests;
 #[cfg(test)]
