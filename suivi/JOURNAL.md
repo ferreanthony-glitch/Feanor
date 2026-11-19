@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Les branches rangées dans `main`** (sur son « Ranger les branches ») : le `main` de GitHub (fa23204, la timeline du
+  Storyboard faite sur le PC, partie 178) réuni dans le `main` local (c9c24f6 : 162, 163, 178 la plage de lecture, 179), puis
+  `banque-3d` (parties 180 à 185 : décor 3D, banque, origine et aimant, profondeur partagée, poignées dans la vue, ombres). Seuls
+  INTERFACE.md et ce journal se contredisaient : les deux côtés gardés. Numéros en double renumérotés, déplacés à la fin
+  d'INTERFACE.md : 162 les raccourcis qui manquaient → **186**, 163 l'Espace 3D à côté → **187**, 178 la plage de lecture →
+  **188** (le 178 reste à la timeline du Storyboard, déjà sur GitHub). Essais sur le Mac seulement ; rien regardé à l'écran.
 - **Les ombres des cartes et du décor 3D** (partie 185, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé),
   le choix d'Anthony (« Ombres cartes / décor »). Sous le soleil du décor : **une carte porte l'ombre de son encre** (pas de son
   rectangle) sur le sol, les dalles, les objets et les autres cartes ; **le décor ombre les cartes** (un personnage s'assombrit à

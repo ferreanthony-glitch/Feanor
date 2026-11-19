@@ -228,7 +228,7 @@ sol ou en mur. Les points 11.1 (tri par profondeur) et 11.5 (inclinaison limité
 Demandé par Anthony : garder la vue 3D ouverte à côté de la feuille pendant qu'on dessine. Plan validé par lui le
 2026-11-16 (partage de la zone du dessin plutôt qu'un panneau ; un geste va à la vue où il commence ; Réglages de la
 dernière vue cliquée ; branche partie d'`espace-libre`, puis remise sur `main` e1f18b2 le même jour). Code : `espace3dcote.rs` ; essais : `espace3dcote_tests.rs` ;
-interface et liste de contrôle : `docs/INTERFACE.md`, partie 163. **Rien n'a été regardé à l'écran.**
+interface et liste de contrôle : `docs/INTERFACE.md`, partie 187 (numérotée 163 sur sa branche). **Rien n'a été regardé à l'écran.**
 
 - **Le partage** (`espace3dcote::partage`) : la feuille à gauche, une barre de 6 points à tirer, la vue 3D à droite
   (20 à 80 % de la largeur, 50 % par défaut, `Layout::part_espace3d`, retenue d'une séance et d'un espace de travail à

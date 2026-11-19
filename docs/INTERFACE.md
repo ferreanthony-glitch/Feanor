@@ -1321,6 +1321,7 @@ l'Espace 3D tant qu'il est ouvert). Les identifiants d'avant (`vue.3d`, `scene3d
     « Repère 3D » ; le panneau Calques n'a plus « Nouveau calque de fond » (icône des montagnes).
 14. **Fluidité et thèmes** : 10 cartes, tourner la vue et tirer une carte restent fluides ; poignées, contours de cartes et
     pyramide lisibles dans les trois thèmes (l'espace a son fond sombre propre).
+
 ## 14. Espaces de travail liés aux modes, barres minces et « Plus… » (2026-10-19, branche `espaces-barres`)
 
 Les propositions 6.1 et 6.3, approuvées par Anthony. Rien n'a été regardé à l'écran dans cette séance (aucun
@@ -1756,6 +1757,7 @@ Règles et code : `src/numerotation.rs` (module en tête), interface `src/numero
 2. Supprimer le 3 : les autres gardent leur numéro ; un nouveau plan après le 2 se nomme 2A, pas 3.
 3. Glisser le plan 5 devant le 1 : il reste « 5 ». « Renuméroter les plans… » : confirmation, tout repart de 1 ; Ctrl+Z.
 4. Les titres (planche, fiche, PDF) disent « Plan 12A ».
+
 ## 17. Exporter pour le montage (2026-10-20, branche `numerotation-export`)
 
 Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/editorial.rs`, `src/editorialjob.rs`,
@@ -4265,6 +4267,7 @@ Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintena
 la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
 boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
 le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
+
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
@@ -5772,6 +5775,7 @@ pixel ne change, la première écriture dans une tuile partagée en fait une à 
 les décors faits d'aplats immenses passaient de 17,4 Go à 7,4 Go de mémoire vive.
 
 ---------------------------------------------------------------------------------------------------
+
 ## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)
 
 Demande d'Anthony : « On doit rajouter des clés d'opacité à SHOT dans ce cas. Et un calque color card, qui applique une couleur unie sur
@@ -6559,6 +6563,7 @@ Deux instabilités de la suite complète et cinq retouches de l'audit pratique. 
 - **Échap** ferme la fenêtre Exporter et la fenêtre d'un export choisi, sans rien lancer.
 - **Fin d'export** : la fenêtre d'un export réussi s'efface seule après 8 s (le pointeur dessus la garde) ; le message reste dans la barre d'état avec **Ouvrir le dossier**. Une erreur reste jusqu'au clic.
 - **`crayonnes.json`** (ancienne planche de crayonnés) : l'avis d'ouverture devient « Ouvert avec N remarque(s) » et propose **Mettre de côté** : le fichier est renommé `crayonnes.json.ancien` (jamais lu, jamais effacé) et un bouton **Annuler** le remet. Sans ce choix, rien n'est touché.
+
 ## 86. Numérotation verrouillée d'origine et montage redimensionnable (2026-10-30, branche `numerotation-montage`)
 
 Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs), réglages `src/settings.rs`. `project::VERSION` ne change pas (44).
@@ -6574,6 +6579,7 @@ Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs
 2. Ouvrir un ancien projet suivi : il reste suivi.
 3. Tirer le bord entre le dessin et le montage : la pastille s'allume, la bande ne passe pas sous 200 points ; changer d'espace de travail et revenir : la hauteur est gardée.
 4. Réduire la bande : la barre de défilement apparaît, la piste Son 1 s'atteint ; M, S et le verrou se lisent et se cliquent. Bouton de hauteur sous le montage : petite, moyenne, grande.
+
 ## 88. Fil de décision par plan (2026-10-30, branche `fil-decision`)
 
 Recommandation de l'audit (idée ★1) : le client ou le réalisateur renvoie beaucoup de notes, parfois contradictoires ; il faut savoir laquelle compte et ce qui a été traité. Code : `src/fildecision.rs` (modèle, sans interface), `src/fildecisionui.rs` (panneau, pastille, commandes), `src/fildecision_tests.rs`. Une note est un **commentaire** de la timeline : tout vit dans le panneau Commentaires, rien de nouveau à ouvrir.
@@ -8184,6 +8190,7 @@ Deux commentaires périmés corrigés (`vignettecam.rs`, `vignettecamui.rs`) : l
 6. Écarte tout : le Storyboard le dit, Fichier > Exporter refuse ; un trait dans une case pâle fait un plan.
 7. Enregistre, rouvre : les croix sont là ; reprends : dessins, versions, caméra, textes.
 8. Un plan à mouvement de caméra écarté : la case montre A et les cadres en gris, pas la grande tuile. Les textes sous une case écartée ne sont pas peints (ils sont gardés) : dis-moi s'ils te manquent.
+
 ## 116. Un cadre de plus sans le clic droit : le « + » de la peau de Maj (2026-11-06, branche `cadre-plus`)
 
 Demande du réalisateur : créer un cadre C (ou D, ou B) en Vignettes avec Maj, le plus simplement possible, sans le clic droit. Fichiers :
@@ -12048,6 +12055,7 @@ Le lasso dans la vue (152.4) :
     choisie). Ctrl+clic sans glisser : la carte sous le pointeur devient le calque courant.
 20. Alt+glisser, clic droit, bouton du milieu, molette, avec l'outil Sélection : la vue tourne, glisse, avance.
 21. Prendre un outil de la vue (déplacer) : ce qui était choisi est posé, le pointeur manipule de nouveau les cartes.
+
 ## 153. L'aide animée : des animations à la place des textes gris, et le registre des explications (2026-11-13, branche `aide-animee`)
 
 Demande d'Anthony, validée sur six essais montrés en boucle : les textes explicatifs gris (petits et pâles) quittent les
@@ -15078,164 +15086,6 @@ glisser (repliée et dépliée) et par clic, comme `ajouter_effet_camera` de l'A
 6. ⊖ Caméra : la ligne seule, un trait jaune sous les préréglages ; glisser un préréglage dessus : il se pose quand même.
 7. ⊖ Calques (ou Maj+Alt+C) : une ligne de résumé ; ⊕ : les pistes ; rouvrir FEANOR : les deux états gardés.
 8. La plus petite fenêtre : rien ne déborde.
-## 178. La plage de lecture du film (2026-11-19, branche `plage-lecture`, partie de `main` 6b1b99c)
-
-Anthony, en comparant la timeline de FEANOR à celle d'un autre logiciel de storyboard : il manquait une plage de lecture sur
-plusieurs plans. Les points d'entrée et de sortie (13d) ne valent que pour la lecture d'un plan seul ; la lecture du film entier
-allait toujours du début à la fin.
-
-### 178.1 Ce qui change pour lui
-
-- **La lecture du montage reste entre deux images du film**, qui peuvent être dans des plans différents (de l'image 12 du plan 3 à
-  l'image 5 du plan 7). Arrêt au bout, ou boucle si la lecture en boucle est allumée ; en arrière (J) de même ; le son suit.
-- **Clic droit sur la règle du montage** (la tête de lecture y va) : « Début de la plage de lecture ici », « Fin de la plage de
-  lecture ici », « Plage de lecture : ce plan » ou « les N plans choisis », « Enlever la plage de lecture ». Les quatre commandes
-  sont aussi dans la palette (Ctrl+K), sans touche par défaut (comme « Lecture en boucle »).
-- **Sur la règle** : un crochet à chaque bout, le film hors de la plage assombri (règle et plans).
-- Un bout seul suffit : sans fin, la plage va jusqu'au bout du film ; sans début, elle part de son début. Une fin posée avant le
-  début enlève le début (et inversement), la barre d'état le dit.
-- Les points d'entrée et de sortie d'un plan ne changent pas : ils bornent toujours la lecture du plan seul.
-
-### 178.2 Comment c'est fait
-
-- `src/plagefilm.rs` : chaque bout est accroché à un plan (son identifiant) et à une image de ce plan (`Ancre`), pas à un numéro
-  d'image du film : allonger, raccourcir, ajouter ou supprimer un plan avant la plage la déplace avec son contenu, comme les
-  signets. Un bout dont le plan a disparu ne compte plus ; un bout au-delà de la fin de son plan se pose sur sa dernière image ;
-  des bouts croisés ne bornent plus rien.
-- `App::tick_playback` lit le film image par image en images du film entre les bouts (`film_play_range`), `toggle_play_scope` part
-  du début de la plage quand la tête est dehors ; `soundtrack::play_range` donne la même plage au son. Les versions dépliées
-  (partie 168) se lisent sans la plage.
-- **Un réglage de la séance**, comme la boucle : ni dans le projet ni dans l'annulation ; rangé avec l'onglet de son projet
-  (`etat_projet!`), remis à zéro quand un autre projet est chargé (`load_doc` : les numéros de plans recommencent d'un projet à
-  l'autre). **Le format des projets ne change pas** (60).
-
-### 178.3 Les essais
-
-`src/plagefilm_tests.rs` (9) : les bornes (un bout, deux, croisés, tout le film), les bouts qui suivent leurs plans (plan allongé,
-raccourci, supprimé), la lecture une fois à travers trois plans puis l'arrêt, la boucle qui reste dedans, la lecture en arrière qui
-s'arrête au début de la plage, les plans choisis, la fin posée avant le début, un autre projet sans plage, la lecture sans plage
-inchangée. Compilé et essayé sur le Mac seulement (les mêmes 90 échecs que `main` sur ce Mac, aucun de plus) ; à l'écran sur le Mac :
-la commande dans la palette, le crochet et le voile sur la règle.
-
-### 178.4 À tester (sa checklist)
-
-1. Montage : clic droit sur la règle au milieu du plan 2, « Début de la plage de lecture ici » ; au milieu du plan 5, « Fin… ici ».
-   Le crochet, et le film assombri hors de la plage.
-2. Lire (Entrée) : la lecture part du début de la plage, traverse les plans, s'arrête à la fin ; boucle allumée, elle reprend au début.
-3. Allonger le plan 1 : la plage suit son contenu.
-4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
-5. « Enlever la plage de lecture » : la lecture reprend tout le film.
-
-## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
-
-Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
-reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
-de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
-
-### 162.1 Ce qui change
-
-- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
-  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
-  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
-  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
-  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
-  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
-- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
-  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
-  où l'on écrit le garde, comme avant.
-- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
-  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
-  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
-  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
-  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
-- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
-  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
-- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
-  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
-  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
-  de la vue (sur un panneau).
-- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
-  du 2026-11-11).
-
-### 162.2 Essais
-
-`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
-(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
-où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
-bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
-la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
-sous la souris zoome, et la souris hors des vues, la vue active.
-
-### 162.3 Comment Anthony teste (sur une copie de projet)
-
-1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
-   Note la phrase (ou fais une capture) et ce que tu venais de faire.
-2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
-   venais de faire juste avant.
-3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
-4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
-   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).
-
-## 163. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2)
-
-(Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
-
-Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
-calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
-Conception, mesures, essais et limites : `docs/ESPACE3D.md`, partie 13. **Rien de cette partie n'a été regardé à l'écran.**
-
-**Où ça se trouve.**
-
-| Élément | Où | Commande | Ce qu'il fait |
-|---|---|---|---|
-| Bouton « Espace 3D à côté » (carré coupé en deux) | barre au-dessus du dessin, juste après le cube | `espace3d.a_cote` | ouvre ou ferme la vue 3D à droite de la feuille ; depuis le plein écran, y remet la vue |
-| Entrée « Espace 3D à côté du dessin » | menu Affichage > Plateau | `espace3d.a_cote` | la même chose |
-| Barre verticale entre la feuille et la vue | entre les deux | | la tirer règle la largeur de la vue (20 à 80 %) ; double-clic : moitié-moitié ; retenue |
-| Rangée d'outils de la vue | en haut de la vue 3D | `espace3d.outil_*`, `espace3d.cadrer`, `espace3d.vue_camera` | Choisir, Déplacer, Tourner, Échelle, Caméra · Recadrer, Regarder par la caméra · **Agrandir** (le plein écran d'avant ; le refermer rend le côte à côte) · **Fermer** |
-
-Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et `keymap.toml`.
-
-**Les gestes.** Un geste va à la vue où il commence, jusqu'au relâché.
-
-- Sur la feuille : tout comme d'habitude (stylet, outils, molette, bouton du milieu, clic droit). Un trait qui file dans
-  la vue 3D continue sur la feuille.
-- Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
-  droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
-  Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
-- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran. Le zoom 1 et 2
-  suit la souris : sur la vue 3D, il la rapproche ou l'éloigne (même pas que la feuille, × 1,25) ; ailleurs, la feuille zoome
-  (`App::souris_sur_la_vue_a_cote`, après la fusion de `raccourcis-muets` dans la branche, partie 162).
-- Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
-  caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
-  devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
-- Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
-
-**Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
-à côté : masqué. ».
-
-À vérifier à l'écran (par Anthony), dans les trois thèmes :
-
-1. Le bouton « Espace 3D à côté » après le cube : icône lisible, bulle à une seconde, couleur d'accent quand il est ouvert.
-2. Ouvert : feuille à gauche, vue 3D à droite, barre entre les deux ; la feuille est cadrée dans sa moitié. La rangée
-   d'outils de la vue tient sur une ligne ; trop étroite, elle est coupée (le dire si c'est gênant).
-3. Tirer la barre : la largeur suit, s'arrête à 20 % et 80 % ; double-clic : moitié-moitié ; fermer et rouvrir FEANOR :
-   la largeur est retenue.
-4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
-   trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
-5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
-6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
-   garde l'outil.
-7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
-   feuille : seule la feuille zoome. Touches 1 et 2, souris
-   sur la vue 3D : elle zoome seule ; souris sur la feuille : la feuille seule.
-8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
-   place avec le film.
-9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :
-   la feuille reprend toute la zone.
-10. Un pot de peinture ou une gomme sur toute une grande feuille, vue ouverte : signaler un à-coup.
-11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
-    sur la feuille par la caméra : la carte suit.
-12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
 
 ## 179. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
 
@@ -15245,7 +15095,7 @@ Le `main` du 19 novembre (9c422b9) apportait la colonne des calques de la partie
 l'autre chemin que celle-ci : une rangée d'en-tête et sept colonnes de réglages sur tous les calques, le calque courant déplié sur
 trois rangées. Les deux ne tenaient pas ensemble. Sur trois maquettes cliquables (A : celle-ci, B : la 174, C : la 174 plus ce qui ne la
 contredit pas d'ici), **Anthony a choisi C**. La partie, numérotée 168 sur la branche, devient la 179 (le `main` a pris le 168 pour les
-versions d'un plan, et la plage de lecture du film a pris le 178).
+versions d'un plan, et la plage de lecture du film avait pris le 178 sur sa branche ; elle est devenue la 188 à la fusion dans `main`).
 
 - **Gardé** : la couleur du rangement (celle du dossier, sinon du groupe) sur toute la ligne, dans la colonne et dans la grille
   (`layerheads::fond_teinte`) ; les dossiers en titres, l'icône de leur couleur et le nom en demi-gras ; un dossier fermé qui montre les
@@ -16288,3 +16138,163 @@ dans `keymap.toml` ; écrites pour le seul calque décoché, relues, un fichier 
 9. Exporte une image et un film : les mêmes ombres qu'à l'écran.
 10. Un plan sans décor : les mêmes images qu'avant.
 11. Enregistre, ferme, rouvre : les cases décochées le sont restées.
+
+## 186. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets` ; numérotée 162, 186 à la fusion dans `main` du 19 novembre : le panneau Espace 3D qu'on manipule avait pris le 162)
+
+Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
+reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
+de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
+
+### 186.1 Ce qui change
+
+- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
+  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
+  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
+  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
+  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
+  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
+- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
+  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
+  où l'on écrit le garde, comme avant.
+- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
+  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
+  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
+  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
+  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
+- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
+  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
+  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
+  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
+  de la vue (sur un panneau).
+- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
+  du 2026-11-11).
+
+### 186.2 Essais
+
+`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
+(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
+où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
+la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
+sous la souris zoome, et la souris hors des vues, la vue active.
+
+### 186.3 Comment Anthony teste (sur une copie de projet)
+
+1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
+   Note la phrase (ou fais une capture) et ce que tu venais de faire.
+2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
+   venais de faire juste avant.
+3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
+4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
+   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).
+
+## 187. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2 ; numérotée 163, 187 à la fusion dans `main` du 19 novembre : les panneaux plus visuels avaient pris le 163)
+
+(Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
+
+Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
+calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
+Conception, mesures, essais et limites : `docs/ESPACE3D.md`, partie 13. **Rien de cette partie n'a été regardé à l'écran.**
+
+**Où ça se trouve.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Espace 3D à côté » (carré coupé en deux) | barre au-dessus du dessin, juste après le cube | `espace3d.a_cote` | ouvre ou ferme la vue 3D à droite de la feuille ; depuis le plein écran, y remet la vue |
+| Entrée « Espace 3D à côté du dessin » | menu Affichage > Plateau | `espace3d.a_cote` | la même chose |
+| Barre verticale entre la feuille et la vue | entre les deux | | la tirer règle la largeur de la vue (20 à 80 %) ; double-clic : moitié-moitié ; retenue |
+| Rangée d'outils de la vue | en haut de la vue 3D | `espace3d.outil_*`, `espace3d.cadrer`, `espace3d.vue_camera` | Choisir, Déplacer, Tourner, Échelle, Caméra · Recadrer, Regarder par la caméra · **Agrandir** (le plein écran d'avant ; le refermer rend le côte à côte) · **Fermer** |
+
+Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et `keymap.toml`.
+
+**Les gestes.** Un geste va à la vue où il commence, jusqu'au relâché.
+
+- Sur la feuille : tout comme d'habitude (stylet, outils, molette, bouton du milieu, clic droit). Un trait qui file dans
+  la vue 3D continue sur la feuille.
+- Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
+  droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
+  Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
+- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran. Le zoom 1 et 2
+  suit la souris : sur la vue 3D, il la rapproche ou l'éloigne (même pas que la feuille, × 1,25) ; ailleurs, la feuille zoome
+  (`App::souris_sur_la_vue_a_cote`, après la fusion de `raccourcis-muets` dans la branche, partie 186).
+- Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
+  caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
+  devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
+- Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
+
+**Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
+à côté : masqué. ».
+
+À vérifier à l'écran (par Anthony), dans les trois thèmes :
+
+1. Le bouton « Espace 3D à côté » après le cube : icône lisible, bulle à une seconde, couleur d'accent quand il est ouvert.
+2. Ouvert : feuille à gauche, vue 3D à droite, barre entre les deux ; la feuille est cadrée dans sa moitié. La rangée
+   d'outils de la vue tient sur une ligne ; trop étroite, elle est coupée (le dire si c'est gênant).
+3. Tirer la barre : la largeur suit, s'arrête à 20 % et 80 % ; double-clic : moitié-moitié ; fermer et rouvrir FEANOR :
+   la largeur est retenue.
+4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
+   trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
+5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
+6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
+   garde l'outil.
+7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
+   feuille : seule la feuille zoome. Touches 1 et 2, souris
+   sur la vue 3D : elle zoome seule ; souris sur la feuille : la feuille seule.
+8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
+   place avec le film.
+9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :
+   la feuille reprend toute la zone.
+10. Un pot de peinture ou une gomme sur toute une grande feuille, vue ouverte : signaler un à-coup.
+11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
+    sur la feuille par la caméra : la carte suit.
+12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
+
+## 188. La plage de lecture du film (2026-11-19, branche `plage-lecture`, partie de `main` 6b1b99c ; numérotée 178, 188 à la fusion dans `main` du 19 novembre : la timeline du Storyboard, déjà sur le `main` de GitHub, avait pris le 178)
+
+Anthony, en comparant la timeline de FEANOR à celle d'un autre logiciel de storyboard : il manquait une plage de lecture sur
+plusieurs plans. Les points d'entrée et de sortie (13d) ne valent que pour la lecture d'un plan seul ; la lecture du film entier
+allait toujours du début à la fin.
+
+### 188.1 Ce qui change pour lui
+
+- **La lecture du montage reste entre deux images du film**, qui peuvent être dans des plans différents (de l'image 12 du plan 3 à
+  l'image 5 du plan 7). Arrêt au bout, ou boucle si la lecture en boucle est allumée ; en arrière (J) de même ; le son suit.
+- **Clic droit sur la règle du montage** (la tête de lecture y va) : « Début de la plage de lecture ici », « Fin de la plage de
+  lecture ici », « Plage de lecture : ce plan » ou « les N plans choisis », « Enlever la plage de lecture ». Les quatre commandes
+  sont aussi dans la palette (Ctrl+K), sans touche par défaut (comme « Lecture en boucle »).
+- **Sur la règle** : un crochet à chaque bout, le film hors de la plage assombri (règle et plans).
+- Un bout seul suffit : sans fin, la plage va jusqu'au bout du film ; sans début, elle part de son début. Une fin posée avant le
+  début enlève le début (et inversement), la barre d'état le dit.
+- Les points d'entrée et de sortie d'un plan ne changent pas : ils bornent toujours la lecture du plan seul.
+
+### 188.2 Comment c'est fait
+
+- `src/plagefilm.rs` : chaque bout est accroché à un plan (son identifiant) et à une image de ce plan (`Ancre`), pas à un numéro
+  d'image du film : allonger, raccourcir, ajouter ou supprimer un plan avant la plage la déplace avec son contenu, comme les
+  signets. Un bout dont le plan a disparu ne compte plus ; un bout au-delà de la fin de son plan se pose sur sa dernière image ;
+  des bouts croisés ne bornent plus rien.
+- `App::tick_playback` lit le film image par image en images du film entre les bouts (`film_play_range`), `toggle_play_scope` part
+  du début de la plage quand la tête est dehors ; `soundtrack::play_range` donne la même plage au son. Les versions dépliées
+  (partie 168) se lisent sans la plage.
+- **Un réglage de la séance**, comme la boucle : ni dans le projet ni dans l'annulation ; rangé avec l'onglet de son projet
+  (`etat_projet!`), remis à zéro quand un autre projet est chargé (`load_doc` : les numéros de plans recommencent d'un projet à
+  l'autre). **Le format des projets ne change pas** (60).
+
+### 188.3 Les essais
+
+`src/plagefilm_tests.rs` (9) : les bornes (un bout, deux, croisés, tout le film), les bouts qui suivent leurs plans (plan allongé,
+raccourci, supprimé), la lecture une fois à travers trois plans puis l'arrêt, la boucle qui reste dedans, la lecture en arrière qui
+s'arrête au début de la plage, les plans choisis, la fin posée avant le début, un autre projet sans plage, la lecture sans plage
+inchangée. Compilé et essayé sur le Mac seulement (les mêmes 90 échecs que `main` sur ce Mac, aucun de plus) ; à l'écran sur le Mac :
+la commande dans la palette, le crochet et le voile sur la règle.
+
+### 188.4 À tester (sa checklist)
+
+1. Montage : clic droit sur la règle au milieu du plan 2, « Début de la plage de lecture ici » ; au milieu du plan 5, « Fin… ici ».
+   Le crochet, et le film assombri hors de la plage.
+2. Lire (Entrée) : la lecture part du début de la plage, traverse les plans, s'arrête à la fin ; boucle allumée, elle reprend au début.
+3. Allonger le plan 1 : la plage suit son contenu.
+4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
+5. « Enlever la plage de lecture » : la lecture reprend tout le film.
+

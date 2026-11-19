@@ -1,4 +1,4 @@
-//! « Espace 3D à côté » (`docs/ESPACE3D.md`, partie 13 ; `docs/INTERFACE.md`, partie 163) : la vue 3D partage la zone du
+//! « Espace 3D à côté » (`docs/ESPACE3D.md`, partie 13 ; `docs/INTERFACE.md`, partie 187, numérotée 163 sur sa branche) : la vue 3D partage la zone du
 //! dessin avec la feuille. On dessine, on anime, on lit le plan à gauche ; à droite, les cartes (les calques) suivent.
 //!
 //! - **Partage** : la feuille à gauche, une barre à tirer, la vue 3D à droite avec sa rangée d'outils. La part de la vue
