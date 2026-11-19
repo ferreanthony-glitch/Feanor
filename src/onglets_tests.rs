@@ -183,7 +183,7 @@ const PARTAGES: &[&str] = &[
     "text_fonts", "text_font_filter", "color_select", "tool_recent", "tool_flyout", "paste_event", "messages", "last_status", "toasts", "messages_window", "palette", "export_hub",
     "prefs_window", "prefs_plus_vignettes", "editorial", "fiche", "liste_plans", "paquet", "journal", "kitsu", "noms_fenetre", "modele_episode", "about_window", "reutiliser", "reglages_droit", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "bande_survolee", "recent_to_open", "recent_presence",
     "maximized_once", "accueil_etat", "fenetre", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
-    "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
+    "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "origine_ici", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
     "fusion_noms_auto", "coupe_versions_auto", "quitter_prevenu", "sortie_confirmee", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
     // Mon panneau (essai du Labo) : un réglage du poste, le même dans tous les onglets.
     "mon_panneau",

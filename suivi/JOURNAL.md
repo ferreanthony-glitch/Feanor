@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **L'origine d'un calque, son vrai pivot** (partie 182, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**), sur
+  le plan qu'Anthony a validé. Un point du dessin que l'on place (outil Transformer : le cercle à croix, Maj s'aimante à la boîte ;
+  champs x, y ; menu « Origine » ; Plus > Origine) : la pose fixe et chaque clé tournent, grandissent et s'étirent autour de lui ;
+  le déplacer ne déplace jamais le dessin (sur la feuille, et dans l'Espace 3D pour une carte inclinée). Ancrage « L'origine du
+  calque » des trajectoires, d'office pour les nouvelles (sur la feuille et dans l'espace) ; le manipulateur de l'Espace 3D tourne
+  autour de l'origine ; « Aimanté au sol » pour les cartes, et sur sa règle : décoché, la carte reste où l'aimant l'a mise.
+  Sans origine, les mêmes images au bit près. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit**
+  (liste 182.4).
+
 - **La banque 3D dans la Bibliothèque, et un décor fait de plusieurs objets** (partie 181, branche `banque-3d` partie de
   `decor-3d` 319e817, format 60 inchangé, aucune dépendance neuve). Le décor d'une séquence devient une liste d'objets (importer
   **ajoute**) ; la Bibliothèque a un onglet **3D** : les 45 modèles Kenney (CC0) par famille, recherche, bulle ; clic ou
@@ -16,6 +25,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   seulement ; décoché, il reste exactement où l'aimant l'avait mis, même après réouverture). Banque rangée dans le programme
   (`include_bytes!`, 1,22 Mio de données, +1,47 Mio sur l'exécutable du Mac) ; essais : les 90 échecs connus, aucun neuf ; crédit Kenney dans « À propos ». Compilé et essayé sur le Mac seulement ; **rien regardé à
   l'écran, pas de commit** (liste 181.5).
+
 - **Le décor 3D d'une séquence** (partie 180, branche `decor-3d` partie de `main` c9c24f6, format 60 inchangé, aucune dépendance
   neuve), première étape du moteur de prévisualisation qu'Anthony a choisi. Un glTF (`.glb`, `.gltf` empaqueté) importé pour une
   séquence : tous ses plans le montrent, derrière les calques, filmé par leur caméra (vue Espace 3D, image du plan, exports) ;

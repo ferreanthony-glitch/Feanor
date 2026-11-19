@@ -164,6 +164,8 @@ fn banc_feuille() -> Banc {
     doc.panels[0].layers = vec![Layer::new("Perso", LayerKind::Vector)];
     doc.panels[0].length = 24;
     let mut b = banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.app.set_mode(crate::app::Mode::Animation);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.set_tool(Tool::Trajectoire);
@@ -331,7 +333,7 @@ fn in_space_ctrl_click_lays_a_handle_and_its_y_arrow_lifts_the_path_the_card_and
     std::fs::create_dir_all(&dir).expect("dossier d'essai");
     let manifest = dir.join("P.shot");
     project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
-    assert!(project::VERSION == 60);
+    assert!(project::VERSION == 61);
     let relu = project::load(&manifest).expect("relu").doc;
     assert_eq!(relu.panels[0].layers[0].trajectoire.as_ref(), Some(&t));
     assert_eq!(relu.panels[0].trajectoire_camera, b.app.doc.panels[0].trajectoire_camera);

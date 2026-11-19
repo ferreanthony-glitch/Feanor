@@ -108,7 +108,7 @@ fn le_format_57_garde_la_liste_et_un_ancien_effet_seul_se_relit() {
     doc.panels[0].effets_camera = vec![effet(Preset::ZoomIn, 0, 20), Vivant { params: Params { seed: 77, ..effet(Preset::Explosion, 12, 10).params }, start: 12 }];
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 60"), "format 60");
+    assert!(texte.contains("\"version\": 61"), "format 61 (partie 182 : l'origine des calques)");
     assert!(texte.contains("\"effets_camera\"") && !texte.contains("\"effet_camera\""), "la liste, plus l'ancien champ");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effets_camera, doc.panels[0].effets_camera, "les deux effets reviennent, dans l'ordre");
@@ -124,7 +124,7 @@ fn le_format_57_garde_la_liste_et_un_ancien_effet_seul_se_relit() {
                 if let Some(serde_json::Value::Array(mut liste)) = m.remove("effets_camera") {
                     m.insert("effet_camera".into(), liste.remove(0));
                 }
-                if m.get("version").and_then(|x| x.as_u64()) == Some(60) {
+                if m.get("version").and_then(|x| x.as_u64()) == Some(61) {
                     m.insert("version".into(), 56.into());
                 }
                 m.values_mut().for_each(vers_l_ancien);

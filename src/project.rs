@@ -302,7 +302,15 @@ pub const FORMAT: &str = "pelure-projet";
 /// refuse donc. Les plans types eux-mêmes ne sont faits que de calques d'avant ; les cinq transitions de plus sont dans
 /// `transitions.json` (version 2 de ce fichier quand l'une d'elles y est). **Un projet de version 59 ou moins s'ouvre tel
 /// quel**, avec les mêmes images.
-pub const VERSION: u32 = 60;
+/// 61 (2026-11-19, `docs/INTERFACE.md` partie 182) : **l'origine d'un calque** — `origine` d'un calque (`origine.rs` : le point de son
+/// dessin, en pixels du dessin, autour duquel sa pose fixe et chacune de ses clés de position se lisent : elle se déplace, s'agrandit,
+/// s'étire et tourne autour de lui ; dans l'Espace 3D, c'est lui qui porte la place de la carte) ; l'ancrage `Origine` d'une
+/// trajectoire (l'origine du calque suit le chemin, sur la feuille comme dans l'espace) ; et `aimante_au_sol` d'un calque (l'origine
+/// de sa carte repose sur le sol de l'Espace 3D, refait à chaque modification). Écrits seulement quand ils servent. Une version
+/// précédente lirait la pose autour du centre de la feuille et laisserait de côté l'ancrage : elle montrerait un autre film, et
+/// perdrait ces réglages en enregistrant ; elle le refuse donc. **Un projet de version 60 ou moins s'ouvre tel quel**, sans
+/// origine, ni aimant, avec les mêmes images.
+pub const VERSION: u32 = 61;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -952,6 +960,13 @@ struct LayerEntry {
     /// Profondeur tenue à la borne d'autrefois (format 56, `Layer::profondeur_bornee` ; absent : faux).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     profondeur_bornee: bool,
+    /// L'origine du calque (format 61, `origine.rs`, partie 182) : le point de son dessin autour duquel sa pose et ses clés se lisent
+    /// (pixels du dessin) ; absente : le centre de la feuille, comme avant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origine: Option<[f32; 2]>,
+    /// Aimanté au sol (format 61, partie 182) : l'origine de la carte repose sur le sol de l'Espace 3D ; absent : faux.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    aimante_au_sol: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2659,6 +2674,8 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 accroche_camera: l.accroche,
                 calque_3d: l.calque_3d.and_then(|c| serde_json::to_value(c).ok()),
                 profondeur_bornee: l.profondeur_bornee,
+                origine: l.origine,
+                aimante_au_sol: l.aimante_au_sol,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3526,6 +3543,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         accroche: l.accroche_camera,
                         calque_3d: l.calque_3d.and_then(crate::espace3ddecor::Calque3d::lire),
                         profondeur_bornee: l.profondeur_bornee,
+                        // (Une origine abîmée redonne le centre de la feuille, partie 182 ; l'aimant n'est pas refait à la lecture.)
+                        origine: crate::origine::assainie(l.origine),
+                        aimante_au_sol: l.aimante_au_sol,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

@@ -1019,6 +1019,9 @@ pub struct App {
     pub(crate) following: bool,
 
     pub(crate) hover_canvas: Option<Pos2>,
+    /// Le dernier point de la feuille sous le pointeur (partie 182) : où l'origine « Ici » se pose, même quand le menu qui la
+    /// demande couvre la feuille.
+    pub(crate) origine_ici: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
     pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
     /// Raccourci en cours d'assignation, et la recherche de la liste des raccourcis
@@ -1533,6 +1536,7 @@ impl App {
             following: false,
 
             hover_canvas: None,
+            origine_ici: None,
             pending_keys: Vec::new(),
             assign: None,
             keys_filter: String::new(),
@@ -1651,7 +1655,13 @@ impl App {
     /// défilement multiplan si le calque est en profondeur et la caméra décalée.
     pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
         let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
-        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or(self.layer().pose(self.cur_frame))
+        // (Rapportée au centre de la feuille, comme ce que pose l'image : `affine(stage_center)`, partie 182.)
+        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or_else(|| self.layer().pose_au_centre(self.cur_frame, self.doc.stage_center()))
+    }
+
+    /// Comme `layer_seen`, autour de l'origine du calque (partie 182) : ce que les gestes comparent à sa pose (`Layer::pose`).
+    pub(crate) fn layer_seen_o(&self) -> crate::document::LayerTransform {
+        self.layer_seen().a_l_origine(self.layer().ecart_origine(self.doc.stage_center()))
     }
 
     /// Transformation du calque courant (de son dessin vers la feuille).
@@ -1674,7 +1684,7 @@ impl App {
         }
         // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
         let world = self.e3_world();
-        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
+        let xf = world.card_xf_de(l, &t, world.profondeur(l, self.cur_frame));
         match repere {
             Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
             None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
@@ -5388,6 +5398,13 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             // Accrocher les calques choisis à la caméra, ou les décrocher (`accroche.rs`).
             "calque.accrocher_camera" => self.basculer_accroche(self.cur_layer),
+            // L'origine du calque et l'aimant au sol (`origine.rs`, partie 182).
+            a if crate::origine::Preset::de_l_action(a).is_some() => {
+                if let Some(p) = crate::origine::Preset::de_l_action(a) {
+                    self.origine_preset(p);
+                }
+            }
+            crate::origine::AIMANT_ACTION => self.basculer_aimant(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.

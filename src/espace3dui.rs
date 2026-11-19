@@ -240,6 +240,33 @@ impl App {
             .collect()
     }
 
+    /// **Le pivot du manipulateur** (partie 182) : l'origine d'une carte seule (`Layer::origine`, le centre de sa feuille sans
+    /// origine) ; pour plusieurs, la moyenne de leurs origines (la caméra comptant pour sa place). Quand aucune carte choisie n'a
+    /// d'origine à elle, le centre de la boîte des positions, comme avant (`espace3dgizmo::pivot_of`).
+    pub(crate) fn e3_pivot(&self, xfs: &[(u64, Xf)]) -> crate::espace3dmath::V3 {
+        let world = self.e3_world();
+        let ecart = |id: u64| self.e3_card_layer(id).and_then(|li| self.layers().get(li)).map_or(eframe::egui::Vec2::ZERO, |l| world.ecart(l));
+        if xfs.iter().all(|(id, _)| ecart(*id) == eframe::egui::Vec2::ZERO) {
+            return crate::espace3dgizmo::pivot_of(xfs);
+        }
+        let n = xfs.len().max(1) as f32;
+        let somme = xfs.iter().fold([0.0f32; 3], |s, (id, xf)| crate::espace3dmath::add(s, world.origine_monde(xf, ecart(*id))));
+        crate::espace3dmath::scale(somme, 1.0 / n)
+    }
+
+    /// Après un étirement sur un axe de la carte (`espace3dgizmo::scale_xfs`, qui garde son centre) : chaque carte qui a une
+    /// origine est remise pour que son origine reste là où elle était dans `avant` (partie 182).
+    pub(crate) fn e3_garder_les_origines(&self, avant: &[(u64, Xf)], apres: &mut [(u64, Xf)]) {
+        let world = self.e3_world();
+        for ((id, a), (_, b)) in avant.iter().zip(apres.iter_mut()) {
+            let Some(l) = self.e3_card_layer(*id).and_then(|li| self.layers().get(li)) else { continue };
+            let e = world.ecart(l);
+            if e != eframe::egui::Vec2::ZERO {
+                *b = world.xf_par_l_origine(b, e, world.origine_monde(a, e));
+            }
+        }
+    }
+
     /// Pose ces placements (sans étape d'annulation : l'appelant s'en charge).
     pub(crate) fn e3_set_xfs(&mut self, new: &[(u64, Xf)]) {
         let world = self.e3_world();
@@ -620,9 +647,16 @@ impl App {
 
     /// Trois champs X, Y, Z pour un vecteur ; vrai si l'un a changé.
     fn vec3_fields(&mut self, ui: &mut egui::Ui, v: &mut V3, speed: f64, name: &str, lo: f64, hi: f64) -> bool {
+        self.vec3_fields_sauf(ui, v, speed, name, lo, hi, None)
+    }
+
+    /// Comme `vec3_fields`, l'axe `tenu` grisé (la hauteur d'une carte aimantée au sol, partie 182).
+    #[allow(clippy::too_many_arguments)]
+    fn vec3_fields_sauf(&mut self, ui: &mut egui::Ui, v: &mut V3, speed: f64, name: &str, lo: f64, hi: f64, tenu: Option<usize>) -> bool {
         let mut changed = false;
         for (k, label) in ["X", "Y", "Z"].into_iter().enumerate() {
-            let r = ui.add(egui::DragValue::new(&mut v[k]).speed(speed).range(lo..=hi).max_decimals(3).prefix(format!("{label} ")));
+            let r = ui.add_enabled(tenu != Some(k), egui::DragValue::new(&mut v[k]).speed(speed).range(lo..=hi).max_decimals(3).prefix(format!("{label} ")));
+            let r = if tenu == Some(k) { r.on_disabled_hover_text("Aimanté au sol : la hauteur est tenue par l'aimant. Décoche « Aimanté au sol » pour la régler.") } else { r };
             changed |= self.edited3d(&r, name);
         }
         changed
@@ -709,6 +743,12 @@ impl App {
         self.e3_comment_il_est_pose(ui, li, !locked);
         self.e3_reglette_distance(ui, li, !locked);
         self.e3_taille_dans_le_cadre(ui, li, !locked);
+        // Aimanté au sol (partie 182) : l'origine de la carte repose sur le sol, à sa pose fixe et à chaque clé.
+        let mut aimant = self.layers()[li].aimante_au_sol;
+        let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut aimant, crate::origine::AIMANT));
+        if self.aide(r, crate::origine::AIMANT, crate::origine::AIMANT_PHRASE, crate::origine::AIMANT_ACTION).clicked() {
+            self.basculer_aimant(li);
+        }
         let mut ouvert = self.espace3d.precis_carte;
         if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {
             self.espace3d_card_fields(ui, li);
@@ -750,7 +790,12 @@ impl App {
         let t0 = layer.pose(frame);
         // (Plan en Espace 3D : la profondeur est libre, la carte peut être derrière la caméra d'origine du plan.)
         let d0 = world.profondeur(layer, frame);
-        let mut xf = world.card_xf(&t0, d0);
+        // (La position montrée est celle de l'origine de la carte, partie 182 : c'est elle qui porte sa place, et la rotation
+        // se fait autour d'elle. Sans origine : le centre de la carte, comme avant.)
+        let e = world.ecart(layer);
+        let aimant = layer.aimante_au_sol;
+        let xf0 = world.card_xf_o(&t0, d0, e);
+        let mut xf = crate::espace3d::Xf { pos: world.origine_monde(&xf0, e), ..xf0 };
         let mut t = t0;
         let mut depth = d0;
         let (mut moved, mut scaled, mut deepened, mut flat) = (false, false, false, false);
@@ -759,8 +804,8 @@ impl App {
         }
         ui.add_enabled_ui(!locked, |ui| {
             egui::Grid::new("espace3d_carte").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
-                ui.label("Position (m)");
-                ui.horizontal(|ui| moved |= self.vec3_fields(ui, &mut xf.pos, 0.02, "Placer le calque", -1e4, 1e4));
+                ui.label("Position (m)").on_hover_text("La place de l'origine du calque dans l'espace (le centre de sa feuille s'il n'a pas d'origine).");
+                ui.horizontal(|ui| moved |= self.vec3_fields_sauf(ui, &mut xf.pos, 0.02, "Placer le calque", -1e4, 1e4, aimant.then_some(1)));
                 ui.end_row();
                 ui.label("Rotation (°)");
                 ui.horizontal(|ui| moved |= self.vec3_fields(ui, &mut xf.rot, 0.5, "Tourner le calque", -1e4, 1e4));
@@ -818,6 +863,8 @@ impl App {
             let libre = true;
             let layer = &mut self.layers_mut()[li];
             if moved {
+                // (Du point de l'origine au placement du centre de la carte : la rotation tourne autour de l'origine.)
+                let xf = world.xf_par_l_origine(&xf, e, xf.pos);
                 world.apply_card_xf_libre(layer, frame, &xf);
             }
             if scaled || flat {

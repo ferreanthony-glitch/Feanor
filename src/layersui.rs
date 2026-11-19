@@ -286,6 +286,8 @@ impl App {
             );
         if self.edited(&resp) {
             self.layers_mut()[li].depth = depth;
+            // (Une carte aimantée au sol y reste à sa nouvelle profondeur, partie 182.)
+            self.aimanter_si(li);
         }
     }
 }

@@ -179,6 +179,8 @@ pub(crate) fn doc_cartes(n: usize) -> Document {
 /// 159 : il est dans l'espace lui aussi ; avant, le bouton « Plan en Espace 3D » faisait la différence).
 pub(crate) fn ouvert(doc: Document, espace: bool) -> Banc {
     let mut b = banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");
@@ -623,7 +625,7 @@ fn both_kinds_of_paths_in_space_survive_a_save_and_a_reload_and_a_format_54_proj
     project::save(&b.app.doc, &manifest, &mut Default::default()).expect("enregistré");
     let texte = std::fs::read_to_string(&manifest).expect("manifeste");
     assert!(texte.contains("\"support\"") && texte.contains("\"trajectoire_camera\""), "les deux champs sont écrits");
-    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 60, "sous le format 60 (partie 176), celui de tout projet d'aujourd'hui");
+    assert!(texte.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 61, "sous le format 61 (partie 182), celui de tout projet d'aujourd'hui");
     let relu = project::load(&manifest).expect("relu").doc;
     assert_eq!(relu.panels[0].layers[1].trajectoire.as_ref(), Some(&carte_avant), "la trajectoire de la carte revient telle quelle");
     assert_eq!(relu.panels[0].trajectoire_camera.as_ref(), Some(&camera_avant), "celle de la caméra aussi");
@@ -755,6 +757,8 @@ fn cutting_trimming_and_inserting_images_keep_the_camera_where_its_path_put_it()
 fn the_order_toggle_that_replaced_the_plan_in_space_toggle_says_what_it_does() {
     // (Partie 159 : le bouton « Plan en Espace 3D » est parti ; reste le choix de l'ordre des calques, dans la vue de la scène.)
     let mut b = banc_taille(doc_cartes(1), false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
     b.app.run_action("espace3d.ordre_distance");
@@ -773,6 +777,8 @@ fn the_ghosts_of_a_sheet_path_are_placed_through_the_camera_of_a_plan_in_space()
     (t.cles, t.fin) = (Cles::Interpolation, Some(23));
     doc.panels[0].layers[0].trajectoire = Some(t);
     let mut b = banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.trajectoire_recalculer(0);
     assert_eq!(b.app.layers()[0].pos_keys.len(), 24);

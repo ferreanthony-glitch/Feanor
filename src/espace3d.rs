@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use eframe::egui::{pos2, vec2, Pos2, Rect};
+use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
 use crate::camera::{ref_distance, Camera, REF_FOCAL};
 use crate::document::{CameraSeen, Layer, LayerTransform};
@@ -449,6 +449,53 @@ impl Monde {
         }
     }
 
+    /// **Le placement 3D d'une carte dont l'origine est à `ecart` du centre de la feuille** (partie 182, coordonnées du
+    /// dessin, `Layer::ecart_origine`). C'est l'origine qui porte la place de la carte : elle est en
+    /// ((e + xy)·s·k, −(e + xy)·s·k, −d0·depth), et la carte tourne (angle, inclinaisons) et s'agrandit autour d'elle. Le
+    /// placement (`Xf`) reste celui du centre de la carte : sa matrice pose toujours le carré unité. Écart nul :
+    /// exactement `card_xf`.
+    pub fn card_xf_o(&self, t: &LayerTransform, depth: f32, ecart: Vec2) -> Xf {
+        let xf = self.card_xf(t, depth);
+        if ecart == Vec2::ZERO {
+            return xf;
+        }
+        let s = 1.0 + depth.max(Layer::MIN_DEPTH);
+        let origine = [(ecart.x + t.x) * s * self.k, -(ecart.y + t.y) * s * self.k, -self.d0 * depth];
+        Xf { pos: m::sub(origine, self.vers_l_origine(&xf, ecart)), ..xf }
+    }
+
+    /// Du centre d'une carte placée en `xf` à son origine (à `ecart` du centre de la feuille, coordonnées du dessin), dans
+    /// le monde : sa rotation et sa taille appliquées au point de l'origine dans le carré unité.
+    pub fn vers_l_origine(&self, xf: &Xf, ecart: Vec2) -> V3 {
+        if ecart == Vec2::ZERO {
+            return [0.0; 3];
+        }
+        let [w, h] = self.stage;
+        let local = [ecart.x / w.max(1.0) * xf.size[0], -ecart.y / h.max(1.0) * xf.size[1], 0.0];
+        m::dir(&m::rotation(xf.rot), local)
+    }
+
+    /// Le point du monde où est l'origine d'une carte placée en `xf` (`ecart` : celui de son calque).
+    pub fn origine_monde(&self, xf: &Xf, ecart: Vec2) -> V3 {
+        m::add(xf.pos, self.vers_l_origine(xf, ecart))
+    }
+
+    /// Le placement d'une carte dont l'origine doit être au point `origine` du monde, la carte ayant la rotation et la
+    /// taille de `xf` : son centre recalculé.
+    pub fn xf_par_l_origine(&self, xf: &Xf, ecart: Vec2, origine: V3) -> Xf {
+        Xf { pos: m::sub(origine, self.vers_l_origine(xf, ecart)), ..*xf }
+    }
+
+    /// L'écart de l'origine du calque `layer` au centre de la feuille de ce monde (`Layer::ecart_origine`).
+    pub fn ecart(&self, layer: &Layer) -> Vec2 {
+        layer.ecart_origine(pos2(self.stage[0] / 2.0, self.stage[1] / 2.0))
+    }
+
+    /// `card_xf_o` avec l'origine du calque `layer` : le placement de la pose `t` de ce calque à la profondeur `depth`.
+    pub fn card_xf_de(&self, layer: &Layer, t: &LayerTransform, depth: f32) -> Xf {
+        self.card_xf_o(t, depth, self.ecart(layer))
+    }
+
     /// La profondeur du calque `layer` à l'image `frame` dans ce monde : libre dans un plan en Espace 3D (`libre`), bornée
     /// à `Layer::MIN_DEPTH` sinon.
     pub fn profondeur(&self, layer: &Layer, frame: usize) -> f32 {
@@ -458,7 +505,7 @@ impl Monde {
     /// Le placement 3D de la carte du calque `layer` à l'image `frame` : `card_xf` de sa pose et de sa profondeur dans ce
     /// monde (`profondeur`). C'est par ici que l'Espace 3D lit une carte, pour la montrer, la choisir ou y dessiner.
     pub fn carte(&self, layer: &Layer, frame: usize) -> Xf {
-        self.card_xf(&layer.pose(frame), self.profondeur(layer, frame))
+        self.card_xf_de(layer, &layer.pose(frame), self.profondeur(layer, frame))
     }
 
     /// La pose du calque qui donne le placement `xf` à une carte dont la pose était `prev` à la profondeur
@@ -480,11 +527,28 @@ impl Monde {
         self.card_from_xf_selon(prev, prev_depth, xf, true)
     }
 
+    /// Comme `card_from_xf_libre`, pour une carte dont l'origine est à `ecart` du centre de la feuille (partie 182) :
+    /// l'inverse exact de `card_xf_o`. Écart nul : exactement `card_from_xf_libre`.
+    pub fn card_from_xf_libre_o(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf, ecart: Vec2) -> (LayerTransform, f32) {
+        self.card_from_xf_selon_o(prev, prev_depth, xf, true, ecart)
+    }
+
+    /// `card_from_xf_libre_o` avec l'origine du calque `layer`.
+    pub fn card_from_xf_libre_de(&self, layer: &Layer, prev: &LayerTransform, prev_depth: f32, xf: &Xf) -> (LayerTransform, f32) {
+        self.card_from_xf_libre_o(prev, prev_depth, xf, self.ecart(layer))
+    }
+
     fn card_from_xf_selon(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf, libre: bool) -> (LayerTransform, f32) {
+        self.card_from_xf_selon_o(prev, prev_depth, xf, libre, Vec2::ZERO)
+    }
+
+    fn card_from_xf_selon_o(&self, prev: &LayerTransform, prev_depth: f32, xf: &Xf, libre: bool, ecart: Vec2) -> (LayerTransform, f32) {
         let borne = if libre { LayerTransform::clamp_tilt_libre } else { LayerTransform::clamp_tilt };
+        // (Partie 182 : la place de la carte est celle de son origine, `card_xf_o` ; sans origine, celle de son centre.)
+        let origine = if ecart == Vec2::ZERO { xf.pos } else { self.origine_monde(xf, ecart) };
         // La profondeur : bornée à `MIN_DEPTH` dans un plan ordinaire, libre dans un plan en Espace 3D. L'agrandissement
         // du multiplan, lui, s'arrête à la borne dans les deux cas (`card_xf`).
-        let d = if libre { Layer::clamp_depth_libre(-xf.pos[2] / self.d0) } else { (-xf.pos[2] / self.d0).max(Layer::MIN_DEPTH) };
+        let d = if libre { Layer::clamp_depth_libre(-origine[2] / self.d0) } else { (-origine[2] / self.d0).max(Layer::MIN_DEPTH) };
         let s = 1.0 + d.max(Layer::MIN_DEPTH);
         let s0 = 1.0 + prev_depth.max(Layer::MIN_DEPTH);
         let [w, h] = self.stage;
@@ -501,8 +565,8 @@ impl Monde {
             ((prev.scale * comp).clamp(0.01, 100.0), LayerTransform::clamp_stretch(prev.stretch_x * kx), LayerTransform::clamp_stretch(prev.stretch_y * ky))
         };
         let t = LayerTransform {
-            x: xf.pos[0] / (s * self.k),
-            y: -xf.pos[1] / (s * self.k),
+            x: origine[0] / (s * self.k) - ecart.x,
+            y: -origine[1] / (s * self.k) - ecart.y,
             scale,
             angle: -xf.rot[2],
             stretch_x,
@@ -531,7 +595,7 @@ impl Monde {
     fn apply_card_xf_selon(&self, layer: &mut Layer, frame: usize, xf: &Xf, libre: bool) {
         let t0 = layer.pose(frame);
         let d0 = layer.depth_selon(frame, libre);
-        let (mut t, d) = self.card_from_xf_selon(&t0, d0, xf, libre);
+        let (mut t, d) = self.card_from_xf_selon_o(&t0, d0, xf, libre, self.ecart(layer));
         t.dz = d - layer.depth;
         layer.set_pose_selon(frame, t, libre);
     }
@@ -658,7 +722,7 @@ struct Bloc {
 fn vu_du_calque(world: &Monde, layer: &Layer, frame: usize, regard: &Regard) -> Vu {
     // (L'ordre par distance ne sert qu'aux plans en Espace 3D : la profondeur de la carte y est libre, elle peut être
     // derrière la caméra de référence. Devant la borne des plans ordinaires, c'est `depth_at`.)
-    let xf = world.card_xf(&layer.pose(frame), layer.depth_libre_at(frame));
+    let xf = world.card_xf_de(layer, &layer.pose(frame), layer.depth_libre_at(frame));
     let (mx, dist) = match regard {
         // (Un calque accroché à la caméra reste dans le cadre : il se lit sans le changement de repère, comme `place_dans`.)
         Regard::Camera(repere) => {
@@ -794,7 +858,7 @@ pub fn place_dans(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSee
     if let Some(repere) = repere.filter(|_| !layer.accroche) {
         // (Un repère veut dire « plan en Espace 3D » : la profondeur de la carte y est libre, elle peut être derrière la
         // caméra de référence, `docs/INTERFACE.md`, partie 148.)
-        let xf = world.card_xf(&layer.pose(frame), layer.depth_libre_at(frame));
+        let xf = world.card_xf_de(layer, &layer.pose(frame), layer.depth_libre_at(frame));
         let warp = world.card_warp_m(world.eye_reference(), &m::mul(repere, &xf.matrix()))?;
         return Some(Placed { transform: None, pre: Some(Pre { aff: Affine::IDENTITY, dims: None, warp: Some(Arc::new(warp)), card: true }) });
     }
@@ -803,7 +867,7 @@ pub fn place_dans(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSee
     if !t.is_tilted() {
         return Some(Placed { transform: (!seen.is_identity()).then_some(seen), pre: None });
     }
-    let xf = world.card_xf(&t, layer.depth_at(frame));
+    let xf = world.card_xf_de(layer, &t, layer.depth_at(frame));
     let warp = world.card_warp(world.eye_seen(camera), &xf)?;
     Some(Placed { transform: None, pre: Some(Pre { aff: Affine::IDENTITY, dims: None, warp: Some(Arc::new(warp)), card: true }) })
 }
