@@ -3,6 +3,52 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-19
+
+- **`main` du 19 novembre (9c422b9 : parties 168 à 177, dont la colonne des calques de la partie 174) fusionné dans
+  `timeline-claire`.** Première tentative annulée sans rien écrire : la colonne des calques de la 174 (en-tête, sept colonnes sur tous
+  les calques, calque courant sur trois rangées) et celle de la timeline plus claire (lignes égales, barre du calque, exception
+  seule) ne tenaient pas ensemble. Trois maquettes cliquables publiées (A : la timeline plus claire ; B : la 174 ; C : la 174 plus ce
+  qui ne la contredit pas) ; Anthony : « C, le mélange ». Gardé de la timeline plus claire : la couleur du rangement sur toute la
+  ligne (colonne et grille), les dossiers en titres, les clés des calques sur un dossier fermé. Retirés : la barre du calque, les
+  lignes « exception seule », les lignes à 28 points ; la colonne est celle de la 174. La partie devient la **179** (168 : les versions
+  d'un plan ; 178 : la plage de lecture du film, branche `plage-lecture`). Essais : ceux de la colonne sont ceux du `main` ;
+  `timeline_claire_tests` garde la teinte et vérifie la couleur d'un calque rangé. Compilé et essayé sur le Mac seulement.
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-reponses` et sa branche locale retirés (elle n'avait jamais
+  été poussée ; tout est dans main, sur GitHub), `Tests\essai 177` mis à la corbeille (il n'avait pas servi). `Chantiers\piste-mode`
+  et `Tests\essai 173`, à l'autre session, pas touchés.
+- **`prereglages-reponses` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e859d56, exe de 1 h 10), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (e561eff), ni ici ni
+  sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 897 réussis, 0 échec, les dix groupes OK) ;
+  le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 0 h 09) : arrêté sans enregistrer, l'exe recompilé
+  dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 60) et de faux réglages : vivant après
+  30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. Le format des projets ne change
+  pas (60). **Pas regardé sur son écran** : liste 177.4. Gardés, retrait proposé (sa décision) : le dossier
+  `Chantiers\prereglages-reponses` et `Tests\essai 177`.
+- **Préréglages : ses neuf réponses** (partie 177, branche `prereglages-reponses` partie de main e561eff, format 60
+  inchangé), sur son « Oui ok pour tout » aux neuf numéros restés sans réponse. Trois transitions de plus : l'iris (T1, sur un
+  centre choisi au clic droit ; il s'ouvre au début du film, se ferme à la fin), le volet en horloge (T2) et le zoom traversant
+  (T5) ; le volet, la poussée et le raccord filé viennent de chacun des quatre côtés (« Sens » au clic droit). Six plans types
+  de plus : titre de séquence (P4), plan manquant (P9), ardoise d'en-tête (P10), compte à rebours avec son bip (P11), mire de
+  couleur et son 1 kHz (P12), fin d'acte (P15) ; les incrustations libres connaissent `{duree}`, `{duree_film}`, `{serie}`,
+  `{episode}`. `transitions.json` passe à la version 3 seulement quand il le faut. Vérificateur : sans avertissement, 4 897
+  réussis, 0 échec, les dix groupes OK (l'essai sur la carte graphique avait trouvé, avant, le volet en horloge pris par le
+  flou du raccord filé : corrigé). Contrôle de lancement de l'exe du chantier sur une copie de « dd » (format 60) avec de faux
+  réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 0 h 09, pas touché).
+  Dossier d'essai pour lui : `Tests\essai 177` (copie de « dd », copie de ses réglages, `Lancer essai 177.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 177.4).
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-montage` et sa branche locale retirés (elle n'avait jamais
+  été poussée ; tout est dans main, sur GitHub), `Tests\essai 175` mis à la corbeille (il n'avait pas servi : la copie de
+  « dd » était encore au format 59). `Chantiers\piste-mode` et `Tests\essai 173`, à l'autre session, pas touchés.
+- **`prereglages-montage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (23efd4c, exe du 19 novembre à
+  0 h 01), sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (93ad4fd),
+  ni ici ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 880 réussis, 0 échec, les dix
+  groupes OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 20 h 39) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 59) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 60 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  176.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-montage` et `Tests\essai 175`.
+
 ## 2026-11-18
 
 - **`main` (95dc93b : vue nette lissée 166.8, `avant-apres-reel` 165.3 à 165.8, nouveau logo 167) fusionné dans
@@ -13,9 +59,202 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   en texte (165.3) ; le calque courant garde sa ligne même dans un groupe caché (165.4) mais elle ne flotte plus. La timeline plus
   claire devient la partie **168** (le logo a pris la 167). Deux essais du `main` adaptés, un retiré (la ligne flottante). Suite sur
   le Mac : les mêmes 89 échecs propres au Mac qu'avant. Pas regardé à l'écran.
+- **Préréglages dans la timeline, lot 4 : les transitions et les plans types** (parties 175 et 176, branche
+  `prereglages-montage` partie de main 93ad4fd, **format 60**), sur son « Ok continue ». Cinq transitions de plus (poussée T3,
+  raccord filé T4, flash de coupe T6, fondu par une couleur T7, volet par un objet T8), à l'écran comme à l'export ; le panneau
+  Préréglages a deux onglets, Caméra et Montage ; dans Montage, les dix transitions (glissées sur une coupe) et dix-huit plans
+  types (P1, P2, P3, P5, P6, P7, P8, P13, P14, P16, P17, P18) qui posent un plan neuf tout prêt entre deux plans, fait de calques
+  ordinaires ; le lieu et la date (une incrustation qui s'écrit lettre à lettre, réglage neuf « Lettre à lettre ») et le
+  générique de début se posent sur un plan. Numérotées 175 et 176 : la session de la branche `piste-mode-liste` a pris la partie
+  173 et `Tests\essai 173` (rien touché de son côté). Vérificateur : sans avertissement, 4 880 réussis, 0 échec, les dix groupes OK (un premier passage avait 8 échecs : le format 60 dans d'anciens essais, les commandes neuves absentes de keymap.toml, le menu d'une transition trop long, ses sortes passées dans un sous-menu). Contrôle de lancement de l'exe du chantier sur une copie de « dd » avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 20 h 39, pas touché). Dossier
+  d'essai pour lui : `Tests\essai 175` (copie de « dd » au format 59, copie de ses réglages, `Lancer essai 175.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 176.4). Restent sans réponse : T1, T2, T5, P4, P9, P10, P11, P12, P15.
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-travellings` (environ 2,5 Go) et sa branche locale retirés
+  (elle n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 172` mis à la corbeille (il n'avait pas
+  servi : la copie de « dd » était encore au format 58).
+- **`prereglages-travellings` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (cd23311, exe de 19 h 21),
+  sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (603851a), ni ici
+  ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 855 réussis, 0 échec, les dix groupes
+  OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 15 h 17) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 58) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 59 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  172.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-travellings` et `Tests\essai 172`.
+- **Préréglages dans la timeline, lot 3 : la caméra dans l'espace** (partie 172, branche `prereglages-travellings` partie de
+  main 603851a, **format 59**), sur son « Oui, le lot 3 ». Quatre préréglages de plus en blocs vivants, qui déplacent vraiment
+  la caméra (travelling latéral C13, orbite C14, grue C15, survol C16, famille « Travellings ») : l'œil bouge, chaque calque
+  glisse à sa vitesse, la caméra peut passer à côté, au-dessus, derrière ; le plan retient que sa caméra est libre. L'orbite et
+  la grue gardent leur sujet à sa place dans l'image (viseur « Sujet » avec l'outil Caméra). Les trajectoires toutes faites
+  (C17 : ligne droite, arc, spirale, en S) deviennent le chemin de la caméra du plan, qui garde son sujet dans le cadre et se
+  retouche avec l'outil Trajectoire dans la vue Espace 3D ; le chemin a sa barre dans la timeline. Les vignettes du panneau
+  Préréglages sont filmées par la vraie caméra. « Convertir en clés » donne la même image pour les trente-quatre (essai).
+  **À juger** : le sujet est pris au plan de référence, pas à la profondeur d'un calque (172.3). Vérificateur : sans avertissement, 4 855 réussis, 0 échec, les dix groupes OK.
+  Contrôle de lancement sur une copie de « dd » (format 58) avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert sur « dd », n'a pas été touché). Dossier d'essai pour lui : `Tests\essai 172` (copie de « dd » au format 58, copie de ses
+  réglages, `Lancer essai 172.cmd`). **Pas fusionné, pas essayé sur son écran** (liste 172.4).
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-camera` (environ 2,5 Go) et sa branche locale retirés (elle
+  n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 171` mis à la corbeille (il n'avait pas servi).
+- **`prereglages-camera` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (ac390e6, exe de 13 h 56), sur son
+  « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (1070912), ni ici ni sur
+  GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 846 réussis, 0 échec, les dix groupes OK) ; le
+  vérificateur n'a pas été relancé. Son FEANOR était ouvert sur « dd » (depuis 11 h 54) : l'exe, déjà à jour dans le dossier du
+  chantier, a été copié après l'arrêt de son FEANOR sans enregistrer (même empreinte aux deux chemins). Contrôle de lancement
+  avec ce nouvel exe sur une copie de « dd » (format 57) et de faux réglages : vivant après 30 s, aucun rapport de plantage, son
+  vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets passent au format 58 quand il les ouvre** (une version
+  précédente les refuserait). **Pas regardé sur son écran** : liste 171.4. Gardés, retrait proposé (sa décision) : le dossier
+  `Chantiers\prereglages-camera` et `Tests\essai 171`.
+- **Préréglages dans la timeline, lot 2 : la caméra 2D** (partie 171, branche `prereglages-camera` partie de main 1070912,
+  **format 58**), sur son « Oui, le lot 2 ». Vingt-deux préréglages de plus en blocs vivants (C1 à C10, C12, C18 à C27 ; C5 en
+  avant et arrière), rangés en cinq familles (panneau Préréglages, liste du panneau Caméra, menu « Ajouter un effet »). La flèche
+  ou la cible se tire dans le cadre avec l'outil Caméra, et dans un petit cadre du panneau Caméra ; champs Angle, Paliers,
+  Avancée, Pas, Rythme. « Convertir en clés » donne la même image pour les trente (essai). **Pas faits** : C11 (suivi d'un
+  calque) et le flou de vitesse du zip pan (171.3). Vérificateur : sans avertissement, 4 846 réussis, 0 échec, les dix groupes
+  OK. Contrôle de lancement sur une copie de « dd » avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » (57)
+  intact. Dossier d'essai pour lui : `Tests\essai 171` (copie de « dd », lanceur aux réglages à part). **Pas fusionné, pas essayé
+  sur son écran** (liste 171.4).
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-socle` (environ 2 Go) et sa branche locale retirés (elle n'avait
+  jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 170` mis à la corbeille.
+- **`vue-reduite` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (baf6476, exe de 11 h 39), sur son
+  « Oui, fusionne » (écrit dans la session principale, qui l'a transmis mot pour mot ; relu dans son fil avant d'agir ; sans essai
+  sur son écran avant). Main n'avait pas bougé depuis la vérification de 10 h 14 (fc908db) : l'arbre fusionné est exactement
+  celui vérifié (sans avertissement, 4 840 réussis, 0 échec, les dix groupes OK) ; le vérificateur n'a pas été relancé. Son
+  FEANOR était ouvert sur « dd » (dernière écriture du projet à 11 h 30) : la compilation s'est faite pendant qu'il restait
+  ouvert (4 min 40, sans avertissement), puis il a été arrêté sans enregistrer à 11 h 39, pour les quelques secondes du
+  remplacement du fichier. Contrôle de lancement sur des copies de « dd » (format 56) et de « afa » (format 52), avec de faux
+  réglages, fenêtre réduite : vivant et répondant après 30 s, titres « dd.shot — FEANOR » et « afa.shot — FEANOR », aucun rapport
+  de plantage ; ses vrais réglages et ses vrais projets n'ont pas été touchés. Il n'a pas été rouvert à sa place. **Pas regardé
+  sur son écran** : à lui de juger (listes « À vérifier à l'écran » des sections 166.9 et 166.10). Le dossier
+  `Chantiers\vue-reduite` et les dossiers `Tests\essai vue-reduite` et `Tests\vue-reduite` sont gardés (retrait proposé, sa
+  décision) ; la branche d'essai `vue-reduite-essai` ne se fusionne pas.
+- **La vue réduite : son verdict, son choix, et les vignettes** (branche `vue-reduite`, sections 166.9 et 166.10). L'image de
+  démonstration de la veille ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image
+  d'après semble encore plus détériorée. » Il avait raison sur l'image (agrandie neuf fois, et pas la même image du plan des deux
+  côtés) ; refaite à l'identique, la comparaison montrait des traits continus mais plus pâles. Rien n'a été fusionné. **L'essai à
+  trois façons** (branche `vue-reduite-essai`, pas pour main ; F8 dans la vue du dessin ; lanceur dans `Tests\essai vue-reduite`) :
+  comme avant, lissée trait pâle, lissée trait plein. **Son choix, l'essai ouvert : « La 3, trait plein », puis « Pardon, la 2 »** :
+  la 166.9 telle qu'elle était. (Claude recommandait la 3 : c'est son œil, sur son écran, qui a tranché.) **Les vignettes ensuite**
+  (166.10) : les cases des Vignettes qu'on ne dessine pas et les vignettes de plans, calculées par le processeur, lisaient 4 à 16
+  points par pixel pour 25 à 100 pixels couverts ; l'encre d'un trait fin y allait de 0 à 1,8 fois la normale d'une ligne à
+  l'autre. Maintenant : la moyenne exacte de tous les pixels couverts (caméra droite, jusqu'à 12 pixels par axe : les cases à six
+  par ligne), des lectures en grille sinon ; un raccourci saute les pixels sans encre. Même espace de moyenne qu'avant (lumière
+  linéaire pour les cases, comme la case qu'on dessine). **Coût mesuré** : cases à six par ligne, de 0,6 à 1,6 fois le temps
+  d'avant selon le projet ; le plan le plus lourd, 0,3 s au lieu de 0,1 ; sur les fils de fond. Un essai existant vérifiait
+  « quatre points par pixel » (l'ancien défaut) : son attendu est maintenant la moyenne de tous les pixels couverts. Capture de
+  contrôle de l'onglet Vignettes sur une copie de « dd », regardée : dans une case voisine les traits fins sont continus, du même
+  poids que dans la case qu'on dessine. Pas regardé sur son écran. **Vérificateur : aucun passage entièrement vert**, trois autres
+  sessions compilant sans arrêt (processeur à 100 %, moins de 1,2 Go de mémoire libre). Premier passage : sans avertissement,
+  suite complète 4 801 réussis et 0 échec, neuf groupes OK, deux essais de temps d'image du groupe Espace 3D en échec. Second : sans
+  avertissement, les dix groupes OK, 4 800 réussis et 1 échec dans la suite (un essai d'aplat calculé en fond). Relancés seuls, ces
+  essais passent quand le processeur n'est pas saturé ; aucun n'appelle le code changé. **Refait après avoir repris main dans la
+  branche** (87db1b0, le panneau Pinceau ; f603c82) : à 3 h 44, la machine plus calme, compilation sans avertissement, **4 802
+  réussis, 0 échec, les dix groupes OK**. Et encore après la trajectoire (60f002e ; d55ffd5), six essais à la fois : à 4 h 17,
+  sans avertissement, **4 806 réussis, 0 échec, les dix groupes OK**. Main a encore avancé dans la nuit (versions de plan, puis
+  Cutter) : repris à chaque fois. Avec les versions de plan, à 4 h 44, sous la charge, un échec dans la suite : l'essai de la
+  planche des Vignettes à trente plans, qui touche à ce chantier ; relancé seul et au milieu de ses voisins, il passe à chaque
+  fois (huit passages), sans que le message de l'échec ait pu être retrouvé. Avec le Cutter (bed74af ; a57da20), à 9 h 55, la
+  machine calme : sans avertissement, **4 830 réussis, 0 échec, les dix groupes OK**. Puis avec les préréglages (fc908db,
+  format 57 ; a4c6368), à 10 h 14 : sans avertissement, **4 840 réussis, 0 échec, les dix groupes OK**. Pas fusionnée : sa
+  décision.
+- **`prereglages-socle` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (d43ea27, exe de 09 h 50), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main avait avancé deux fois pendant le chantier
+  (trajectoire-exposition et versions-plan, puis cutter-reglages) : main ramené dans la branche à chaque fois, seuls
+  INTERFACE.md et le journal en conflit (les deux parties gardées), puis vérificateur complet sur l'ensemble : compilation sans
+  avertissement, **4 833 réussis, 0 échec**, les groupes de fiabilité OK. Son FEANOR était ouvert (depuis 09 h 48) : arrêté
+  sans enregistrer juste avant de remplacer le fichier (la nouvelle version avait été construite et contrôlée à côté). Contrôle de
+  lancement sur une copie de « dd » avec de faux réglages : vivant, aucun plantage ; son vrai « dd » est resté au format 56. Il
+  n'a pas été rouvert à sa place. **Ses projets passent au format 57 dès qu'il les ouvre** avec ce FEANOR. Worktree et branche
+  gardés (retrait proposé, sa décision).
+- **`cutter-reglages` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (bed74af, exe de 04 h 53), sur son
+  « fusionne le cutter ». Partie 169 de docs/INTERFACE.md (numérotée 168 sur la branche ; les versions de plan avaient pris le
+  168) : le Cutter a cinq réglages, réglages du poste (clé `[cutter]` de reglages.toml), format inchangé (56) : écart toléré (0
+  d'origine, comme avant), bouts effilés (0 = net), mode « Dépassements » (bouts libres plus courts que 12 px d'origine ; jamais un
+  morceau entre deux croisements), portée « Calques visibles » (les autres calques coupent sans être modifiés), geste « Lasso » ;
+  plusieurs calques ou clés choisis : tous coupés, une seule étape d'annulation. Panneau sobre validé par lui (segments texte,
+  dessins-curseurs pour l'écart et l'effilé, curseur des dépassements, Précis), après deux essais refusés (tuiles « trop grosses
+  et peu professionnelles »). main fusionnée dans la branche avec --no-ff, le conflit de docs/INTERFACE.md résolu en gardant les
+  deux parties ; les accents de `cutter_tests.rs`, abîmés par une réécriture sous PowerShell, réparés. Vérificateur sur l'arbre
+  fusionné : compilation sans avertissement, passage 2 : 4 823 réussis, 0 échec ; passage 1 : un échec intermittent connu
+  (`camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`, relancé seul trois fois,
+  trois réussites) ; dix groupes de fiabilité OK. Son FEANOR (lancé depuis Source) n'était pas ouvert : rien à arrêter. Contrôle de
+  lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main bed74af`) avec de faux réglages, vivant après
+  22 s, aucun plantage nouveau, puis arrêté. À juger par lui : l'écart d'origine (0 ou 2 à 3 px), les 12 px des dépassements, la
+  pointe effilée (un trait effilé perd ses appuis enregistrés). Worktree `trajectoire-3d` et branche gardés.
+- **`versions-plan` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (b3059ec, exe de 04 h 17), sur son
+  « fusionne les versions de plan ». Partie 168 de docs/INTERFACE.md (numérotée 167 sur la branche ; le nouveau logo avait pris le
+  167) : sur le bloc d'un plan, les autres versions en étiquettes « V2 ▸ » ; clic sur « V2 » = passer à la version ; ▸ déplie la
+  version à côté, en lecture seule, à l'écran seulement ; le son gardé de chaque version est rejoué sous elle (le son du film ne
+  bouge pas quand on change de version ; fondus et volume ne sont pas gardés) ; clic droit = dix teintes douces. Format inchangé (56).
+  main avait avancé deux fois (panneau Pinceau et logo, puis trajectoire-exposition) : fusionnée deux fois dans la branche avec
+  --no-ff, un conflit de docs/INTERFACE.md résolu en gardant les deux parties. Vérificateur sur l'arbre fusionné : compilation sans
+  avertissement, 4 812 réussis au passage 1 ; un échec intermittent au passage 2 (`espace3d_tests::the_view_with_ten_cards_stays_within_the_frame_budget`,
+  relancé seul trois fois, trois réussites). Au passage d'avant, deux essais de temps de l'Espace 3D avaient échoué pendant que le
+  poste était chargé : mesurés tour à tour sur main et sur la branche, mêmes temps. Son FEANOR (lancé depuis Source) n'était pas
+  ouvert : rien à arrêter. Contrôle de lancement : l'exe sur une copie de « retakes brawlydays » (`Tests\lancement main b3059ec`)
+  avec de faux réglages, vivant après 22 s, aucun plantage nouveau, puis arrêté. Le message du commit `ab1c03f` est inexact (les
+  teintes étaient déjà dans `b0f7b4f`). Worktree `aide-animee` et branche gardés.
+- **`trajectoire-exposition` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (223054b, exe de 03 h 29), sur son
+  « Oui, fusionne » à la question « Je fusionne ce changement de la trajectoire et je reconstruis ton FEANOR habituel ? ». main
+  n'avait pas bougé : la fusion a l'arbre vérifié (4 799 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas
+  ouvert : rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après
+  22 s, aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa
+  place. Worktree et branche gardés (retrait proposé, sa décision).
+- **Trajectoire : une marque qu'on glisse emporte son temps** (branche `trajectoire-exposition`, la section du 2026-11-18 de la
+  partie 119). Sa demande : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés
+  sur la trajectoire. » Son plan 10 de « dd » (lu sans y toucher) : sept marques serrées au départ, chaque dessin exposé 8 ou 9
+  images. **Ce qui est fait**, en clés d'images : glisser une marque le long du chemin lui fait prendre l'image de sa place entre
+  ses deux voisines (le dessin d'avant tient plus longtemps quand elle avance, moins quand elle recule ; les autres ne bougent pas ;
+  la barre d'état dit l'image) ; une marque posée quand des temps sont déjà posés prend le temps de sa place ; un bouton « Temps
+  selon le chemin » met toutes les marques d'un coup au temps de leur place (son plan 10 : 3, 2, 2, 8, 11, 19, 5 et 20 images).
+  Sur la feuille et pour les cartes de l'Espace 3D. **Ce qui ne change pas** : les clés d'interpolation (les marques y sont
+  l'espacement), la caméra, les projets à l'ouverture, le format. **Ma lecture, à confirmer par lui** : une marque glissée ne
+  recale qu'elle (le bouton recale tout) ; une marque posée sur un chemin en parts égales repartage le temps comme avant. Quatre
+  essais d'avant, qui décrivaient l'ancien comportement, mis à jour. Vérificateur complet (03 h 17) : compilation sans
+  avertissement, **4 799 réussis, 0 échec**, dix groupes OK, au troisième passage : les deux premiers avaient échoué sur des essais
+  chronométrés sans rapport, la machine étant saturée par les essais d'autres sessions (ils passent seuls). Image de contrôle de la
+  timeline faite sur une copie. Pas regardé sur son écran. Pas fusionnée : sa décision.
+- **Préréglages dans la timeline, lot 1 : le socle** (branche `prereglages-socle`, partie 170, format 57). Sa demande : « des
+  présets d'animation de caméra à intégrer directement dans la timeline » (crash zoom, zip pan, panoramique, travelling) et des
+  présets de plan (color card, titre, crédits). Une liste numérotée lui a été faite, puis une page où chaque préréglage joue en
+  boucle (https://claude.ai/artifact/RaFTcminkjKeDWxMUFVi6J, ses choix gardés dans la page) : 64 Oui, 9 sans réponse (P4, P9,
+  P10, P11, P12, P15, T1, T2, T5). À l'ordre en lots, il a répondu « Oui, le lot 1 ». **Ce qui est fait** : un plan porte
+  plusieurs effets de caméra vivants, des blocs jaunes sous les clés de caméra de la timeline, qui s'ajoutent l'un à l'autre ; on
+  les glisse, on tire leurs bords pour leur durée, Suppr enlève le bloc choisi ; le panneau Préréglages (vignettes qui jouent le
+  vrai mouvement au survol) se glisse sur la timeline ou se clique pour poser à la tête de lecture ; « Convertir en clés » cuit
+  tous les blocs d'un coup, avec la même image. Les huit préréglages de caméra existants seulement : les autres sont les lots
+  suivants.
+
+- **`panneau-pinceau` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (907c92a, exe de 01 h 27), sur son
+  « Oui, fusionne » à la question « Je fusionne ce nouvel ordre du panneau et je reconstruis ton FEANOR habituel ? ». Le main de
+  `Source` était en retard sur GitHub (fd35d4f) : avancé d'abord jusqu'à origin/main (95dc93b, le nouveau logo), puis la fusion,
+  qui a l'arbre vérifié sur la branche (4 795 réussis, 0 échec, compilation sans avertissement). Son FEANOR n'était pas ouvert :
+  rien n'a été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, vivant après 22 s,
+  aucun plantage, puis arrêté ; ses vrais réglages et son vrai projet n'ont pas changé. Son FEANOR n'a pas été rouvert à sa place.
+  Worktree et branche gardés (retrait proposé, sa décision).
+- **Le panneau Pinceau : les réglages d'abord, la liste des brosses tout en bas** (branche `panneau-pinceau`, la section du
+  2026-11-18 de la partie 45). Sa demande : « revoir la disposition du panneau », sur une capture annotée de sa main : 1 les
+  réglages, 2 les trois boutons, 3 la liste, les réglages remontés sous l'aperçu, la liste descendue en bas. **Ce qui est fait** :
+  sous l'aperçu du trait, « Peindre derrière », « Peint sur l'aplat », l'aplat du calque et « Plus de réglages » ; puis la rangée
+  importer / nouvelle brosse / supprimer ; puis la liste dans son cadre, dernière chose du panneau (pinceau, crayon, gomme). Dépliée,
+  la liste ne repousse plus les réglages loin de l'aperçu. Rien d'autre ne change (le bouton « livres », la hauteur de la liste, ce
+  qu'elle offre). Un seul texte visible changé : la fin de la bulle du bouton (« en bas du panneau »). Essais du panneau : 8 réussis,
+  dont un nouveau sur l'ordre ; vérificateur complet (01 h 17) : compilation sans avertissement, **4 795 réussis, 0 échec**, les dix
+  groupes OK. Image de contrôle faite sur le banc (le panneau, replié et déplié), regardée : l'ordre du schéma. Pas regardé sur son
+  écran. Pas fusionnée : sa décision. (Le chantier de la vue réduite est passé le même soir à une session à part.)
 
 ## 2026-11-17
 
+- **La vue réduite : tous les pixels du dessin comptent** (branche `vue-reduite`, section 166.9). Son retour : « Est-ce qu'on peut
+  rajouter une passe d'antialiasing dans le logiciel ? Je vois toujours de la pixelisation de l'image, même avec le vecto propre. »
+  Sa fenêtre lue telle quelle : la vue à 37 %, sa vue ordinaire (le cadre ne tient pas dans la zone du dessin de son écran), où la
+  vue nette ne fait rien. **La cause** : réduite, l'image était lue par points (le filtre de grossissement de l'affichage, qui ne
+  lisse pas) : 4 points pour plus de 7 pixels couverts à 37 %, un seul de 67 à 100 %. Les traits fins se cassaient en pointillés.
+  **Ce qui est fait** : réduite, chaque pixel d'écran est la moyenne exacte de tout ce qu'il couvre du dessin (vue droite), ou de
+  n × n lectures lissées (vue tournée, perspective) ; tournée à 100 %, l'image est lissée ; à 100 % vue droite et au-delà, rien ne
+  change. Tout sur la carte graphique, rien à attendre. **Pas fait** : les cases des Vignettes qu'on ne dessine pas et les
+  vignettes de plans (calcul du processeur, même faiblesse, chantier à part) ; le hors-feuille ; l'affichage sans carte graphique.
+  Mesuré par un essai écrit avant la correction et vu échouer (à 80 %, l'encre d'un trait fin de 0 à 1,25 fois la normale ; après,
+  de 0,94 à 1,04 à tous les zooms). Image de contrôle faite sur une copie de « dd » (plan 10 à 37 %), regardée agrandie : traits
+  continus. Pas regardé sur son écran. Vérificateur complet (20 h 49) : compilation sans avertissement, **4 800 réussis, 0 échec**,
+  les dix groupes de fiabilité OK. Pas fusionnée : sa décision.
 - **`avant-apres-reel` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (0073f65, exe de 20 h 15), sur son
   « vas y ». Contenu : partie 165.6 (deux lignes de boutons en tête de la colonne des calques de l'Animation, colonne à 410 points
   au lieu de 757, règle et en-tête à 58 points), 165.7 (le mode « Trois calques » retiré : toute la pile, toujours ; un réglage
@@ -25,7 +264,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   Vérificateur complet : compilation sans avertissement, 4 796 réussis aux deux passages, 0 échec, aucun intermittent, dix groupes
   OK. Son FEANOR (lancé par la jonction Work\tvpaint-rs) a été arrêté sans enregistrer avant la reconstruction. Contrôle de
   lancement : l'exe ouvert sur une copie de « retakes brawlydays » (Tests\lancement main 0073f65) avec de faux réglages, vivant
-  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
+  après 22 s, aucun plantage, puis arrêté. Son FEANOR n'a pas été rouvert à sa place. Worktree et branche gardés.
+- **`vue-nette-lissage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e8537c3, exe de 16 h 29), sur son
   « Oui, fusionne » à la question « Je fusionne ce lissage et je reconstruis ton FEANOR habituel ? ». main n'avait pas bougé : la
   fusion a l'arbre vérifié (4 787 réussis, 0 échec, compilation sans avertissement). Il avait fermé son FEANOR lui-même : rien n'a
   été arrêté. Contrôle de lancement : l'exe ouvert sur une copie de « dd » avec de faux réglages, aucun plantage, puis refermé ;

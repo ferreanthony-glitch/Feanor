@@ -509,11 +509,14 @@ impl App {
                 self.brush_settings_ui(ui);
                 // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
                 self.griffonner_options_ui(ui);
+                // La liste des brosses, si elle est dépliée : tout en bas, après les réglages (`pinceauxui.rs`).
+                self.brush_list_ui(ui);
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
+                self.brush_list_ui(ui);
             }
             Tool::Eraser => {
                 self.brush_summary_ui(ui);
@@ -529,6 +532,7 @@ impl App {
                 }
                 self.brush_settings_ui(ui);
                 self.griffonner_options_ui(ui);
+                self.brush_list_ui(ui);
             }
             // Le pot de peinture : la tolérance et d'où viennent les contours en haut ; le débord et le
             // mode d'emploi dans « Plus de réglages ».
@@ -553,8 +557,10 @@ impl App {
             Tool::Grab | Tool::Pull => self.sculpt_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
-            // Le Cutter, la pipette et la main n'ont pas de réglages : leur animation les montre.
-            Tool::Cutter | Tool::Picker | Tool::Pan => {}
+            // Le Cutter (partie 169) : mode, geste, écart toléré, bouts effilés, dépassements, portée (`cutterui.rs`).
+            Tool::Cutter => self.cutter_options_ui(ui),
+            // La pipette et la main n'ont pas de réglages : leur animation les montre.
+            Tool::Picker | Tool::Pan => {}
             Tool::Transform => {
                 let peers = self.transform_peers().len();
                 if peers >= 2 {

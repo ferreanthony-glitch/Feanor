@@ -363,6 +363,12 @@ pub struct Trajectoire {
     /// Les hauteurs des points du chemin brut (`brut`), quand le chemin est lissé : lissées avec lui.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hauteurs_brut: Vec<f32>,
+    /// **La caméra garde son sujet dans le cadre** (partie 172, format 59 ; les trajectoires toutes faites du lot 3) : le point
+    /// de l'espace (mètres) que la caméra qui suit ce chemin voit toujours à la même place de l'image, celle où elle le voit
+    /// sans le chemin. Elle tourne donc (panoramique et bascule) en avançant. Rien : elle garde son orientation, comme toujours.
+    /// Seule une trajectoire de caméra s'en sert.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vise: Option<[f32; 3]>,
 }
 
 /// À lissage 1, la demi-fenêtre de la moyenne glissante (`lissage_de`), en fraction de la longueur du chemin.
@@ -413,6 +419,7 @@ impl Trajectoire {
             poignees: Vec::new(),
             hauteurs: Vec::new(),
             hauteurs_brut: Vec::new(),
+            vise: None,
         })
     }
 
@@ -475,6 +482,10 @@ impl Trajectoire {
     /// Le plan porteur vu dans un miroir dressé en x = `x` (`Support::miroir_x`) : la normale du plan s'y retourne, les
     /// hauteurs changent de signe pour que le chemin reste du même côté.
     pub fn miroir_x(&mut self, x: f32) {
+        // (Le sujet visé passe de l'autre côté avec le reste, partie 172.)
+        if let Some(v) = self.vise.as_mut() {
+            v[0] = 2.0 * x - v[0];
+        }
         if let Some(s) = self.support {
             self.support = Some(s.miroir_x(x));
             for h in self.hauteurs.iter_mut().chain(self.hauteurs_brut.iter_mut()) {
@@ -700,6 +711,8 @@ impl Trajectoire {
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
     /// bornes, ses temps dans les leurs. Rien si le chemin ne tient pas debout.
     pub fn assainie(mut self) -> Option<Trajectoire> {
+        // (Un sujet visé abîmé est laissé : la caméra garde alors son orientation, partie 172.)
+        self.vise = self.vise.filter(|v| v.iter().all(|x| x.is_finite() && x.abs() < 1e6));
         // (Les hauteurs hors du plan, partie 154, suivent leurs points ; une par point, finies, ou aucune.)
         (self.points, self.hauteurs) = filtrer3(&self.points, &self.hauteurs);
         if self.points.len() < 2 || longueur_de(&self.points) < LONGUEUR_MIN {
@@ -1197,6 +1210,98 @@ impl Trajectoire {
         let f = if bas <= haut { f.clamp(bas, haut) } else { self.marques[i] };
         self.marques[i] = f;
         f
+    }
+
+    /// Glisse la marque `i` comme `deplacer_marque`, **et son temps avec elle** (Anthony, 2026-11-18 : « L'outil trajectoire doit
+    /// ajuster l'exposition des images dans la timeline quand on décale les clés sur la trajectoire ») : en clés d'images, le
+    /// dessin d'avant est tenu plus longtemps quand la marque avance, moins quand elle recule. Rend la fraction retenue.
+    pub fn deplacer_marque_et_son_temps(&mut self, i: usize, f: f32, duree: usize) -> f32 {
+        if i >= self.marques.len() {
+            return f;
+        }
+        let f = self.deplacer_marque(i, f);
+        self.temps_a_sa_place(i, duree);
+        f
+    }
+
+    /// Pose une marque comme `ajouter_marque` ; quand les temps des marques sont déjà posés, elle prend **le temps de sa place**
+    /// entre ses deux jalons voisins, au lieu du milieu de leur temps. (Des temps en parts égales le restent : une marque de plus
+    /// repartage le temps, comme avant.)
+    pub fn ajouter_marque_a_son_temps(&mut self, f: f32, duree: usize) -> Option<usize> {
+        let poses = self.temps.is_some();
+        let i = self.ajouter_marque(f)?;
+        if poses {
+            self.temps_a_sa_place(i, duree);
+        }
+        Some(i)
+    }
+
+    /// Le temps de la marque `i` mis **à sa place entre ses deux jalons voisins** : à mi-chemin d'eux sur le chemin, à mi-temps
+    /// entre eux ; aux deux tiers du chemin, aux deux tiers du temps. Ce temps ne dépend que de la place de la marque et de ses
+    /// voisins : la glisser puis la remettre rend le même. Comme un recalage sur la timeline (`recaler`), il tombe sur une image
+    /// entière d'un plan de `duree` images, à une image au moins de ses voisins quand il y en a une de libre, et les temps des
+    /// marques deviennent explicites ; ceux des autres marques ne changent pas.
+    fn temps_a_sa_place(&mut self, i: usize, duree: usize) {
+        let k = i + 1;
+        let (jalons, mut temps) = (self.jalons(), self.temps_des_jalons());
+        if k + 1 >= jalons.len() || temps.len() != jalons.len() {
+            return;
+        }
+        let (fa, fb, ta, tb) = (jalons[k - 1], jalons[k + 1], temps[k - 1], temps[k + 1]);
+        if fb <= fa || tb <= ta {
+            return;
+        }
+        let mut t = ta + (jalons[k] - fa) / (fb - fa) * (tb - ta);
+        if let Some(fin) = self.derniere_image(duree) {
+            let portee = (fin - self.depart) as f32;
+            let (bas, haut) = (ta + 1.0 / portee, tb - 1.0 / portee);
+            // (Pas d'image libre entre ses voisins : au milieu de leur temps, comme une marque qu'on pose.)
+            t = if bas <= haut { ((t.clamp(bas, haut) * portee).round() / portee).clamp(bas, haut) } else { (ta + tb) * 0.5 };
+        }
+        temps[k] = t;
+        self.temps = Some(temps[1..jalons.len() - 1].to_vec());
+    }
+
+    /// « Temps selon le chemin » : **chaque marque prend le temps de sa place sur le chemin** (à 30 % du chemin, à 30 % du temps).
+    /// Le calque avance à vitesse constante et, en clés d'images, chaque dessin est exposé selon la distance jusqu'au suivant.
+    /// Dans un plan de `duree` images, chaque marque tombe sur une image entière et garde la sienne quand le chemin dure assez
+    /// d'images pour cela (des marques serrées s'écartent d'une image). Les temps deviennent explicites.
+    pub fn temps_selon_le_chemin(&mut self, duree: usize) {
+        if self.marques.is_empty() {
+            self.temps = None;
+            return;
+        }
+        let mut temps = self.marques.clone();
+        if let Some(fin) = self.derniere_image(duree) {
+            let portee = (fin - self.depart) as f32;
+            if fin - self.depart > temps.len() {
+                let mut images: Vec<f32> = temps.iter().map(|t| (t * portee).round()).collect();
+                // Chacune après la précédente (la première après le départ), puis chacune avant la suivante (la dernière avant la fin).
+                let mut bas = 1.0;
+                for v in images.iter_mut() {
+                    *v = v.max(bas);
+                    bas = *v + 1.0;
+                }
+                let mut haut = portee - 1.0;
+                for v in images.iter_mut().rev() {
+                    *v = v.min(haut);
+                    haut = *v - 1.0;
+                }
+                temps = images.iter().map(|v| v / portee).collect();
+            }
+        }
+        // (Trop peu d'images pour une chacune : les fractions telles quelles, deux marques peuvent tomber sur la même image.)
+        if temps.windows(2).all(|w| w[0] < w[1]) && temps[0] > 0.0 && temps[temps.len() - 1] < 1.0 {
+            self.temps = Some(temps);
+        }
+    }
+
+    /// Les jalons tombent-ils déjà, dans un plan de `duree` images, sur les images de leur place sur le chemin
+    /// (`temps_selon_le_chemin` ne changerait rien) ?
+    pub fn est_selon_le_chemin(&self, duree: usize) -> bool {
+        let mut selon = self.clone();
+        selon.temps_selon_le_chemin(duree);
+        selon.images_des_jalons(duree) == self.images_des_jalons(duree)
     }
 
     /// Tout le chemin déplacé de (`dx`, `dy`).

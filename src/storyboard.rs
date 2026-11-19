@@ -35,6 +35,9 @@ thread_local! {
 pub(crate) const RULER_H: f32 = 18.0;
 const SEQ_H: f32 = 17.0;
 pub(crate) const BANDS_H: f32 = SEQ_H + 2.0;
+/// Partie 173.5 : la barre du montage sur deux lignes en tête de la colonne : la lecture et le temps (groupe 0) sur la première, les
+/// plans, les calques, le son… sur la seconde, avec « Plus… » et la légende des clés.
+const DERNIER_GROUPE_LIGNE1: u8 = 0;
 
 pub fn timecode(frames: usize, fps: u32) -> String {
     let fps = fps.max(1) as usize;
@@ -474,10 +477,9 @@ impl App {
         let barre = crate::barres::Barre::du_montage_dans(self.espace);
         let dans_la_colonne = barre == crate::barres::Barre::Montage;
         if dans_la_colonne {
+            // (Partie 173.5 : entre le minimum, la plus longue des deux lignes de boutons, et la plus grande largeur.)
             let min = crate::montagehead::largeur_min_colonne(barre);
-            if self.montage_head_w < min {
-                self.montage_head_w = min;
-            }
+            self.montage_head_w = self.montage_head_w.clamp(min, crate::montagehead::HEAD_MAX.max(min));
         } else {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
@@ -517,7 +519,13 @@ impl App {
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
                         let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + BANDS_H));
-                        if dans_la_colonne {
+                        // Partie 173.5 (Anthony : « Plus petite et ajustable ») : une colonne trop étroite pour la barre sur une ligne
+                        // la reçoit sur deux, comme la timeline (partie 165.6) : la lecture et le temps, puis le reste, « Plus… » et la
+                        // légende ; l'en-tête de la bande gagne la hauteur de la seconde (`Rows::entete`).
+                        if dans_la_colonne && rows.entete > 0.0 {
+                            let ligne2 = Rect::from_min_size(egui::pos2(ligne.left(), ligne.bottom()), egui::vec2(ligne.width(), rows.entete));
+                            self.barre_dans_la_colonne_deux_lignes(&mut column, ligne, ligne2, barre, DERNIER_GROUPE_LIGNE1);
+                        } else if dans_la_colonne {
                             self.barre_dans_la_colonne(&mut column, ligne, barre);
                         }
                         self.head_width_grip(&mut column, headers);
@@ -773,9 +781,13 @@ impl App {
     }
 
     fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {
+        // Les versions dépliées (partie 168, `versiondepliee.rs`) : la carte des images du film vers celles de l'écran. Sans version
+        // dépliée, elle ne change rien (`d_of(g) == g`).
+        self.depli_nettoyer();
+        let carte = self.depli_carte();
         // « Tout voir » : le film dans la largeur visible de la bande.
         if std::mem::take(&mut self.montage_fit) {
-            let shown = self.doc.total_frames().max(self.doc.audio_end()).max(1);
+            let shown = self.doc.total_frames().max(self.doc.audio_end()).max(1) + carte.en_plus();
             self.montage_zoom = ((ui.available_width() - 40.0) / shown as f32).clamp(0.5, 16.0);
         }
         let block_h = rows.block_h;
@@ -788,14 +800,14 @@ impl App {
         if self.sel_clip.is_some_and(|id| self.doc.clip(id).is_none()) {
             self.sel_clip = None;
         }
-        let width = (shown as f32 * ppf + 260.0).max(ui.available_width());
+        let width = ((shown + carte.en_plus()) as f32 * ppf + 260.0).max(ui.available_width());
         let height = rows.height(n_tracks);
         let (resp, painter) = ui.allocate_painter(vec2(width, height), Sense::click_and_drag());
         let r = resp.rect;
         let left = r.left() + 6.0;
         // Un zoom a eu lieu à l'image d'écran d'avant : la bande défile pour que la tête de lecture
         // reste en place (`zoombande.rs`).
-        let head = self.global_frame() as f32;
+        let head = self.depli_d(&carte) as f32;
         self.follow_strip_anchor(ui, crate::zoombande::Strip::Montage, left, ppf, head);
         // Ctrl + molette sur la bande : zoom du montage (comme sur la grille de la timeline), autour
         // de la tête de lecture ; il compte à l'image d'écran suivante.
@@ -806,14 +818,26 @@ impl App {
                 self.montage_zoom = (self.montage_zoom * zoom).clamp(0.5, 16.0);
             }
         }
-        let x_of = |g: usize| left + g as f32 * ppf;
+        // (Une image du film, à sa place à l'écran : après les versions dépliées avant elle.)
+        let x_of = |g: usize| left + carte.d_of(g) as f32 * ppf;
+        // L'abscisse de l'image 0 pour ce qui se dessine à l'abscisse `x` (le son, les gestes sur ses pistes) : le film y est décalé
+        // des versions dépliées d'avant.
+        let left_at = |x: f32| left + carte.decalage(carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf))) as f32 * ppf;
         let bands_top = r.top() + RULER_H;
         let top = r.top() + rows.blocks_top();
         let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
         let visuals = ui.visuals().clone();
         // Les transitions posées sur les coupes (`transitionsui.rs`) : leurs formes, au milieu des plans.
-        let badges = self.trans_badges(left, ppf, top + block_h * 0.5);
+        let mut badges = self.trans_badges(left, ppf, top + block_h * 0.5);
+        // (Une transition suit sa coupe, décalée des versions dépliées d'avant elle.)
+        if !carte.vide() {
+            for b in &mut badges {
+                let dx = vec2(carte.decalage(b.zone.cut) as f32 * ppf, 0.0);
+                (b.body, b.grip_left, b.grip_right) = (b.body.translate(dx), b.grip_left.translate(dx), b.grip_right.translate(dx));
+            }
+        }
+        let badges = badges;
         // Un clic dans la bande lui donne la main : copier, coller, supprimer visent ses panneaux.
         if resp.is_pointer_button_down_on() {
             self.panel_focus = true;
@@ -826,7 +850,16 @@ impl App {
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
         // (Les seules secondes que la partie visible de la bande montre, plus un repère à gauche dont le texte peut y entrer :
         // tout le film coûtait un `format!` et un texte par repère, à chaque image d'écran.)
-        let (s_lo, s_hi) = if crate::perf::ancien() { (0, shown / fps + 2) } else { visible_seconds(painter.clip_rect(), left, fps, ppf, shown / fps + 2) };
+        let (s_lo, s_hi) = if crate::perf::ancien() {
+            (0, shown / fps + 2)
+        } else if !carte.vide() {
+            // (Des versions dépliées : les secondes du film que montre la partie visible, d'un bord à l'autre.)
+            let clip = painter.clip_rect();
+            let de = |x: f32| carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf));
+            ((de(clip.left()) / fps).saturating_sub(1), (de(clip.right()) / fps + 2).min(shown / fps + 2))
+        } else {
+            visible_seconds(painter.clip_rect(), left, fps, ppf, shown / fps + 2)
+        };
         for s in s_lo..=s_hi {
             let x = x_of(s * fps);
             let major = s % label_every == 0;
@@ -862,14 +895,17 @@ impl App {
         let mut notes_zones: Vec<(Rect, crate::fildecision::PlanMark)> = Vec::new();
         // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
+        // Les étiquettes des autres versions, à côté du nom des plans (partie 168, `versiondeplieeui.rs`).
+        let mut zones_versions: Vec<crate::versiondeplieeui::ZoneVersion> = Vec::new();
         let mut start = 0;
         // (La souris tenue : un geste change peut-être un plan sans étape d'historique, les clés du bloc se recalculent alors.)
         let pointer_tenu = ui.input(|i| i.pointer.any_down());
         for i in 0..self.doc.panels.len() {
             let len = self.doc.panels[i].frame_count();
+            // (La fin du bloc : son début plus sa durée, jamais `x_of(start + len)`, qui est après ses versions dépliées.)
             let rect = Rect::from_min_max(
                 pos2(x_of(start) + 1.0, top + 2.0),
-                pos2(x_of(start + len) - 1.0, top + block_h),
+                pos2(x_of(start) + len as f32 * ppf - 1.0, top + block_h),
             );
             blocks.push(rect);
             start += len;
@@ -927,21 +963,16 @@ impl App {
             if let Some(zone) = self.peindre_pastille(&clip, rect, self.doc.panels[i].id, 1.0) {
                 prises_zones.push((zone, self.doc.panels[i].id));
             }
-            let title = clip.layout_no_wrap(crate::planversui::titre_avec_version_n(&self.doc, &numeros, i), FontId::proportional(12.0), visuals.text_color());
             let duration = clip.layout_no_wrap(
                 duration_label(len, self.doc.fps),
                 FontId::monospace(10.0),
                 visuals.weak_text_color(),
             );
-            // La durée n'est affichée que si elle tient à côté du titre.
+            // Le nom du plan ; s'il a plusieurs versions, « Plan 1 · V1 » puis les autres en étiquettes « V2 ▸ » (partie 168). La durée
+            // n'est affichée que si elle tient à côté.
             let gauche = if bandeau { rect.left() + 3.0 + thumb_h * aspect + 5.0 } else { rect.left() + 5.0 };
-            let y_de = |h: f32| if bandeau { rect.center().y - h * 0.5 - 1.0 } else { rect.bottom() - 7.0 - h };
-            if (gauche - rect.left()) + title.size().x + duration.size().x + 15.0 < rect.width() {
-                let at = pos2(rect.right() - 7.0 - duration.size().x, y_de(duration.size().y));
-                clip.galley(at, duration, visuals.weak_text_color());
-            }
-            let at = pos2(gauche, y_de(title.size().y));
-            clip.galley(at, title, visuals.text_color());
+            let titre = crate::storyboard::panel_title_n(&self.doc, &numeros, i);
+            zones_versions.extend(self.peindre_titre_du_bloc(&clip, rect, i, titre, gauche, bandeau, duration, visuals.text_color(), visuals.weak_text_color()));
             // Les clés de tous les calques du plan, en petits traits le long du bas du bloc (`clesplan.rs`), de la couleur de leur calque ;
             // calculées une fois par changement du document.
             let cles = self.cles_blocs.pour(self.history.serial(), &self.doc.panels[i], pointer_tenu);
@@ -1090,10 +1121,37 @@ impl App {
         };
         let drops = self.drop_view();
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
-        self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
+        if carte.vide() {
+            self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
+        } else {
+            // Le son se dessine par tronçons, chacun décalé des versions dépliées d'avant lui (rien sous une version dépliée).
+            for (g0, g1, decale) in carte.troncons() {
+                let l = left + decale as f32 * ppf;
+                let x1 = if g1 == usize::MAX { r.right() } else { l + g1 as f32 * ppf };
+                let zone = Rect::from_x_y_ranges(l + g0 as f32 * ppf..=x1, r.y_range()).intersect(painter.clip_rect());
+                if zone.width() > 0.0 {
+                    self.paint_lanes(&painter.with_clip_rect(zone), r, l, ppf, lanes_top, theme::contour());
+                }
+            }
+        }
+        // Les versions dépliées : leur bloc et leur colonne (partie 168).
+        let (colonnes, zones_depliees) = if carte.vide() {
+            (Vec::new(), Vec::new())
+        } else {
+            let ctx = ui.ctx().clone();
+            self.peindre_versions_depliees(&ctx, &painter, &carte, left, ppf, r, top, block_h, thumb_h, bandeau, lanes_top)
+        };
+        zones_versions.extend(zones_depliees);
+        self.depli.zones.clone_from(&zones_versions);
+        self.depli.colonnes.clone_from(&colonnes);
         self.paint_transitions(&painter, &badges);
+        // Une transition glissée depuis le panneau Préréglages : sur la coupe la plus proche (partie 175).
+        self.transition_depot(ui, r, &blocks, top, top + block_h);
+        // Un plan type glissé depuis le même panneau : entre deux plans, ou sur un plan (partie 176).
+        self.plan_type_depot(ui, r, &blocks, top, top + block_h);
         // Un bruitage glissé depuis le panneau Bruitages : il se pose là où on le lâche.
-        self.bruitage_drop(ui, &resp, left, ppf, lanes_top);
+        let l = resp.hover_pos().map_or(left, |p| left_at(p.x));
+        self.bruitage_drop(ui, &resp, l, ppf, lanes_top);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
         // Le bord d'un plan sous le point : son début ou sa fin (`rognageui::edge_hit`).
@@ -1103,9 +1161,10 @@ impl App {
             }
             crate::rognageui::edge_hit(&blocks, p.x)
         };
-        let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
+        // (Les images du film sous une abscisse : une version dépliée vise la dernière image de son plan, `Carte::film_de`.)
+        let frame_at = |x: f32| carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf)).min(total - 1);
         // Sans limite à la fin des plans (on peut poser un son plus loin).
-        let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
+        let free_frame_at = |x: f32| carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf));
 
         // Commentaires (`commentairesui.rs`) : leurs fanions dans la règle, le mât au milieu de
         // l'image du film. Un fanion pris garde la souris : la bande ne fait rien d'autre.
@@ -1129,7 +1188,7 @@ impl App {
                 resp.clone().on_hover_text_at_pointer(crate::fildecisionui::marque_phrase(m));
             }
             let clip_edge = matches!(
-                self.lane_hit(p, left, ppf, lanes_top),
+                self.lane_hit(p, left_at(p.x), ppf, lanes_top),
                 Some((_, Some((_, edge)))) if edge.is_resize()
             );
             let resizing = matches!(&self.montage_drag, Some(MontageDrag::Edge(d)) if d.kind != crate::rognageui::EdgeKind::Slip)
@@ -1188,12 +1247,41 @@ impl App {
 
         // Une étiquette de version « V2 » prend le geste qui part d'elle : un clic ouvre la pile (pour un stylet
         // qui ne survole pas), ni glissement ni double-clic ne traversent jusqu'au plan dessous.
-        let on_label = |p: Option<Pos2>| p.is_some_and(|p| etiquettes.iter().any(|e| e.zone.contains(p)));
+        // De même pour les étiquettes des versions à côté du nom des plans et pour les colonnes des versions dépliées (partie 168) :
+        // un clic y passe, y déplie ou y pose la tête ; rien d'autre de la bande ne part de là.
+        let sur_colonne = |p: Pos2| colonnes.iter().any(|(c, _)| c.contains(p));
+        let on_label = |p: Option<Pos2>| p.is_some_and(|p| etiquettes.iter().any(|e| e.zone.contains(p)) || zones_versions.iter().any(|z| z.zone.contains(p)) || sur_colonne(p));
         let label_press = on_label(ui.input(|i| i.pointer.press_origin()));
         let label_click = (resp.clicked() || resp.double_clicked()) && on_label(resp.interact_pointer_pos());
+        if let Some(p) = resp.hover_pos() {
+            if let Some(z) = crate::versiondeplieeui::zone_sous(&zones_versions, p) {
+                ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                self.depli_bulle(&resp, z);
+            } else if let Some(&(_, k)) = colonnes.iter().find(|(c, _)| c.contains(p)) {
+                let nom = crate::planvers::etiquette(carte.inserts[k].numero);
+                resp.clone().on_hover_ui_at_pointer(|ui| {
+                    crate::bulles::contenu(ui, &format!("{nom} dépliée, en lecture seule"), "Clic : la tête de lecture y va (la vue montre son image). Rien ne s'y modifie ; clic droit : couleur, passer à cette version, replier.", "")
+                });
+            }
+        }
         if label_click && resp.clicked() {
-            if let Some(plan) = resp.interact_pointer_pos().and_then(|p| etiquettes.iter().find(|e| e.zone.contains(p))).map(|e| e.plan) {
-                self.pile_epingler(plan);
+            if let Some(p) = resp.interact_pointer_pos() {
+                if let Some(z) = crate::versiondeplieeui::zone_sous(&zones_versions, p) {
+                    self.depli_clic(z);
+                } else if sur_colonne(p) {
+                    self.depli_cliquer(&carte, crate::versiondeplieeui::d_sous(p.x, left, ppf));
+                } else if let Some(plan) = etiquettes.iter().find(|e| e.zone.contains(p)).map(|e| e.plan) {
+                    self.pile_epingler(plan);
+                }
+            }
+        }
+        // Glisser depuis une colonne dépliée : la tête suit, dans le film et dans ses versions dépliées.
+        if resp.dragged() && ui.input(|i| i.pointer.press_origin()).is_some_and(sur_colonne) {
+            if let Some(p) = resp.interact_pointer_pos() {
+                let d = crate::versiondeplieeui::d_sous(p.x, left, ppf);
+                if d != self.depli_d(&carte) {
+                    self.depli_cliquer(&carte, d);
+                }
             }
         }
         // Une transition prend le geste qui part de sa forme (ses bords changent sa durée).
@@ -1253,7 +1341,7 @@ impl App {
                 self.sel_clip = None;
                 let mods = ui.input(|i| i.modifiers);
                 self.begin_cam_rect(origin, mods.shift, mods.command && !mods.shift);
-            } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
+            } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left_at(origin.x), ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
             } else if let Some((i, k, f)) = fx_hit {
                 // Une clé d'effet : elle emmène toutes les clés d'effets choisies (`fxkeys.rs`).
@@ -1457,6 +1545,13 @@ impl App {
         if resp.dragged() && !comment_ptr.busy && self.cam_keys_drag.is_none() && self.ease_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
+                    Some(MontageDrag::Scrub) if !carte.vide() => {
+                        // (Des versions dépliées : la tête passe aussi par leurs images.)
+                        let d = crate::versiondeplieeui::d_sous(p.x, left, ppf);
+                        if d != self.depli_d(&carte) {
+                            self.depli_cliquer(&carte, d);
+                        }
+                    }
                     Some(MontageDrag::Scrub) => {
                         let g = frame_at(p.x);
                         if g != self.global_frame() {
@@ -1547,7 +1642,7 @@ impl App {
                         self.clic_dans_la_piste(k, mods.command || mods.shift);
                     }
                     self.click_key(key, mods.command, mods.shift);
-                } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                } else if let Some((_, hit)) = self.lane_hit(p, left_at(p.x), ppf, lanes_top) {
                     // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête ;
                     // une clé de volume touchée est choisie (Suppr la retire).
                     self.sel_clip = hit.map(|(id, _)| id);
@@ -1635,9 +1730,9 @@ impl App {
                     } else {
                         self.montage_new_key(i, k, f, true);
                     }
-                } else if let Some((track, Some((id, _)))) = self.lane_hit(p, left, ppf, lanes_top) {
+                } else if let Some((track, Some((id, _)))) = self.lane_hit(p, left_at(p.x), ppf, lanes_top) {
                     // Double-clic sur un extrait de son : une clé de volume là où l'on a cliqué.
-                    self.double_click_clip(track, id, p, left, ppf, lanes_top);
+                    self.double_click_clip(track, id, p, left_at(p.x), ppf, lanes_top);
                 }
             }
         }
@@ -1647,10 +1742,17 @@ impl App {
             self.menu_target = Some(MenuTarget::Comment(id));
         } else if resp.secondary_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                self.menu_target = if let Some(target) = self.trans_menu_target(p, &badges, &blocks, top, top + block_h) {
+                self.menu_target = if let Some(z) = crate::versiondeplieeui::zone_sous(&zones_versions, p) {
+                    // L'étiquette d'une version (partie 168) : sa couleur, y passer, la déplier ; « +2 » : toutes celles qui n'ont pas
+                    // trouvé de place (numéro 0).
+                    let numero = if z.sorte == crate::versiondeplieeui::Sorte::Plus { 0 } else { z.numero };
+                    Some(MenuTarget::Version { plan: z.plan, numero })
+                } else if let Some(&(_, k)) = colonnes.iter().find(|(c, _)| c.contains(p)) {
+                    Some(MenuTarget::Version { plan: carte.inserts[k].plan, numero: carte.inserts[k].numero })
+                } else if let Some(target) = self.trans_menu_target(p, &badges, &blocks, top, top + block_h) {
                     // Une transition ou une coupe entre deux plans (`transitionsui.rs`).
                     Some(target)
-                } else if let Some((track, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                } else if let Some((track, hit)) = self.lane_hit(p, left_at(p.x), ppf, lanes_top) {
                     let clip = hit.map(|(id, _)| id);
                     if clip.is_some() {
                         self.sel_clip = clip;
@@ -1753,6 +1855,8 @@ impl App {
                     }
                 },
                 MenuTarget::Comment(id) => self.comment_menu(ui, id),
+                MenuTarget::Version { plan, numero: 0 } => self.depli_menu_toutes(ui, plan),
+                MenuTarget::Version { plan, numero } => self.depli_menu_version(ui, plan, numero),
                 MenuTarget::Transition(id) => self.transition_menu(ui, id),
                 MenuTarget::Cut(cut) => self.cut_menu(ui, cut),
                 MenuTarget::Lane { track, clip, frame } => match track_of(self, track) {
@@ -1872,7 +1976,7 @@ impl App {
         self.pile_versions_ui(ui, &etiquettes, occupe, painter.clip_rect());
 
         // Tête de lecture et repère de déplacement.
-        let gx = x_of(self.global_frame());
+        let gx = left + self.depli_d(&carte) as f32 * ppf;
         painter.line_segment([pos2(gx, r.top()), pos2(gx, r.bottom())], Stroke::new(2.0_f32, cur_frame()));
         painter.add(egui::Shape::convex_polygon(
             vec![pos2(gx - 5.0, r.top()), pos2(gx + 5.0, r.top()), pos2(gx, r.top() + 7.0)],

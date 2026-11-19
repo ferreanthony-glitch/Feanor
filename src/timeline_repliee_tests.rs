@@ -227,12 +227,13 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
         assert_eq!(hs, [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "{espace:?}");
     }
-    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 168 : toutes ses lignes ont la même hauteur).
+    // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 160 : le calque courant y a sa ligne complète, les
+    // autres une ligne fine).
     let mut b = banc_montage();
     b.app.set_espace(Espace::Animation);
     b.chauffer(8);
     let rows = crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, b.app.cur_layer);
-    assert!(rows.iter().all(|r| r.h == crate::layerheads::ROW_FINE), "toutes les lignes pareilles");
+    assert!(rows.iter().all(|r| r.h == if r.li == b.app.cur_layer { crate::layerheads::ROW_FULL } else { crate::layerheads::ROW_FINE }), "le courant complet, les autres fins");
     assert_eq!(rows.len(), 4);
     for nom in ["Perso", "Décor", "Fond", "Vide"] {
         assert!(combien(&b, nom) >= 1, "« {nom} » manque dans la timeline de l'animation");

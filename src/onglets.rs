@@ -133,6 +133,8 @@ etat_projet! {
     key_sel: Vec<crate::montagekeys::KeyRef> = Vec::new(),
     key_anchor: Option<crate::montagekeys::KeyRef> = None,
     cam_key_sel: Vec<crate::camkeys::CamKeyRef> = Vec::new(),
+    // Le bloc choisi de la piste Caméra, celui qu'on fait glisser (partie 170) : ils visent un plan de ce projet.
+    blocs: crate::blocscamera::Etat = Default::default(),
     cam_key_anchor: Option<crate::camkeys::CamKeyRef> = None,
     fx_choice: Option<crate::fxkeys::FxSel> = None,
     fx_multi: Vec<usize> = Vec::new(),
@@ -234,6 +236,8 @@ etat_projet! {
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),
     comparaison: Option<crate::comparerui::Comparaison> = None,
     pile_versions: crate::pilevers::Pile = Default::default(),
+    // Les versions dépliées dans la timeline (partie 168) : de l'affichage de ce projet.
+    depli: crate::versiondeplieeui::Depli = Default::default(),
     purge_versions: Option<Option<u64>> = None,
     variantes_ui: crate::variantesui::VariantesUi = Default::default(),
     // Le tracé droit en cours (Maj tenue) et les clés de position choisies sur la timeline.

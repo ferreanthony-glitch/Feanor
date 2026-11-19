@@ -2,8 +2,12 @@
 //! caméra » (préréglage, intensité, durée, fréquence, graine, « Convertir en clés ») et la liste des
 //! objectifs à côté de la focale. La logique est dans `camfx.rs` (effet vivant, clés) et `camera.rs` (focales).
 //!
-//! Depuis le 8 novembre 2026 (partie 129), l'effet choisi est **vivant** : un réglage du plan (`Panel::effet_camera`),
+//! Depuis le 8 novembre 2026 (partie 129), l'effet choisi est **vivant** : un réglage du plan (`Panel::effets_camera`),
 //! visible tout de suite, que chaque champ change aussitôt, sans clé. « Convertir en clés » le cuit en clés.
+//!
+//! Depuis la partie 170, un plan porte **plusieurs** effets vivants : les blocs de la piste Caméra de la timeline
+//! (`blocscamera.rs`), posés depuis le panneau Préréglages ou d'ici. La section règle l'effet choisi dans la timeline (sinon
+//! le dernier posé) ; « Convertir en clés » les cuit tous.
 
 use eframe::egui::{self, RichText};
 
@@ -23,17 +27,42 @@ impl App {
         }
     }
 
-    /// L'effet de caméra vivant du plan courant (partie 129).
-    pub(crate) fn effet_vivant(&self) -> Option<Vivant> {
-        self.doc.panels.get(self.cur_panel).and_then(|p| p.effet_camera)
+    /// Le rang, dans le plan courant, de l'effet vivant que règle cette section : le bloc choisi dans la timeline (partie
+    /// 170), sinon le dernier posé ; rien si le plan n'a aucun effet vivant.
+    pub(crate) fn rang_effet_vivant(&self) -> Option<usize> {
+        let n = self.doc.panels.get(self.cur_panel)?.effets_camera.len();
+        (n > 0).then(|| self.bloc_camera_choisi().unwrap_or(n - 1))
     }
 
-    /// Range l'effet vivant du plan courant (l'appelant a enregistré l'étape d'annulation).
+    /// L'effet de caméra vivant du plan courant que règle cette section (partie 129 ; voir `rang_effet_vivant`).
+    pub(crate) fn effet_vivant(&self) -> Option<Vivant> {
+        let i = self.rang_effet_vivant()?;
+        self.doc.panels.get(self.cur_panel).and_then(|p| p.effets_camera.get(i).copied())
+    }
+
+    /// Range l'effet vivant que règle cette section (l'appelant a enregistré l'étape d'annulation) : `Some` le remplace (ou
+    /// l'ajoute, si le plan n'en a aucun), `None` le retire ; les autres effets du plan ne bougent pas.
     fn set_effet_vivant(&mut self, v: Option<Vivant>) {
         let fps = self.doc.fps;
+        let rang = self.rang_effet_vivant();
+        let pid = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         if let Some(p) = self.doc.panels.get_mut(self.cur_panel) {
-            p.effet_camera = v.map(|v| v.sanitized(fps));
+            match (rang, v) {
+                (Some(i), Some(v)) => p.effets_camera[i] = v.sanitized(fps),
+                (Some(i), None) => {
+                    p.effets_camera.remove(i);
+                }
+                (None, Some(v)) => p.effets_camera.push(v.sanitized(fps)),
+                (None, None) => return,
+            }
+            // (Un effet du lot 3 déplace la caméra dans l'espace : le plan retient qu'elle est libre, partie 172.)
+            p.camera_libre |= !p.espace && p.a_un_effet_dans_l_espace();
             self.modified = true;
+        }
+        match (v, pid) {
+            (None, _) => self.blocs.choisi = None,
+            (Some(_), Some(pid)) if rang.is_none() => self.blocs.choisi = Some((pid, 0)),
+            _ => {}
         }
         if let Some(v) = v {
             // (Le prochain effet repart de ces réglages.)
@@ -96,6 +125,11 @@ impl App {
     pub(crate) fn apply_camera_effect(&mut self) {
         let fps = self.doc.fps;
         let pi = self.cur_panel;
+        // Des effets vivants sur le plan (partie 170) : ils deviennent tous des clés, celles qu'ils montraient.
+        if self.doc.panels.get(pi).is_some_and(|p| !p.effets_camera.is_empty()) {
+            self.convertir_effets_en_cles(pi);
+            return;
+        }
         let vivant = self.effet_vivant();
         let v = vivant.unwrap_or_else(|| {
             let (start, duration, _) = self.camera_effect_range();
@@ -114,7 +148,7 @@ impl App {
         self.playing = false;
         let snap = self.snapshot();
         self.doc.panels[pi].camera = keys;
-        self.doc.panels[pi].effet_camera = None;
+        self.doc.panels[pi].effets_camera.clear();
         let panel = self.doc.panels[pi].id;
         let n = plan.keys.len();
         let chosen: Vec<CamKeyRef> = plan.keys.iter().map(|k| CamKeyRef { panel, frame: k.frame }).collect();
@@ -141,6 +175,8 @@ impl App {
         use egui_phosphor::regular as ph;
         let fps = self.doc.fps;
         let current = self.effet_vivant();
+        // Plusieurs effets sur le plan (partie 170) : leur liste, pour choisir celui qu'on règle, et de quoi en ajouter un.
+        self.liste_des_effets_ui(ui);
         // La liste : « Aucun effet », puis les préréglages. Choisir, c'est voir tout de suite (sans clé).
         let mut picked: Option<Option<Preset>> = None;
         let resp = egui::ComboBox::from_id_salt("effet_camera")
@@ -150,9 +186,14 @@ impl App {
                 if ui.selectable_label(current.is_none(), "Aucun effet").on_hover_text("Pas d'effet vivant sur ce plan (ses clés de caméra restent).").clicked() {
                     picked = Some(None);
                 }
-                for pr in Preset::ALL {
-                    if ui.selectable_label(current.is_some_and(|v| v.params.preset == pr), pr.label()).on_hover_text(pr.note()).clicked() {
-                        picked = Some(Some(pr));
+                // (Rangés par famille, comme le panneau Préréglages : partie 171.)
+                for famille in camfx::Famille::ALL {
+                    ui.add_space(3.0);
+                    ui.label(RichText::new(famille.label().to_uppercase()).small().weak());
+                    for pr in famille.presets() {
+                        if ui.selectable_label(current.is_some_and(|v| v.params.preset == pr), pr.label()).on_hover_text(pr.note()).clicked() {
+                            picked = Some(Some(pr));
+                        }
                     }
                 }
             })
@@ -169,7 +210,7 @@ impl App {
         let mut changed = false;
         let name = format!("Régler l'effet de caméra : {}", p.preset.label());
         egui::Grid::new("effet_camera_grille").num_columns(2).show(ui, |ui| {
-            if p.preset.is_shake() {
+            if p.preset.a_intensite() {
                 ui.label("Intensité");
                 let mut pct = p.intensity * 100.0;
                 let r = ui
@@ -194,17 +235,19 @@ impl App {
                 ui.label(RichText::new(crate::storyboard::timecode(p.duration, fps)).small().weak());
             });
             ui.end_row();
-            if p.preset.is_shake() {
-                ui.label(if p.preset == Preset::Shoulder { "Vitesse" } else { "Fréquence" });
+            if p.preset.a_intensite() {
+                ui.label(p.preset.nom_frequence());
                 let r = ui
-                    .add(egui::DragValue::new(&mut p.freq).range(0.1..=(fps as f32 / 2.0).max(1.0)).speed(0.05).max_decimals(1).suffix(" Hz"))
-                    .on_hover_text(if p.preset == Preset::Shoulder {
-                        "Vitesse de la dérive : plus haut, la caméra bouge plus vite."
-                    } else {
-                        "Vitesse des à-coups, en secousses par seconde."
-                    });
+                    .add({
+                        // (Une houle ou un souffle, sous 1 Hz : deux décimales.)
+                        let decimales = if p.freq < 1.0 { 2 } else { 1 };
+                        egui::DragValue::new(&mut p.freq).range(0.1..=(fps as f32 / 2.0).max(1.0)).speed(0.05).max_decimals(decimales).suffix(" Hz")
+                    })
+                    .on_hover_text(p.preset.note_frequence());
                 changed |= self.edited_as(&r, &name);
                 ui.end_row();
+            }
+            if p.preset.a_graine() {
                 ui.label("Graine");
                 ui.horizontal(|ui| {
                     let r = ui.add(egui::DragValue::new(&mut p.seed).range(0..=999_999).speed(0.2)).on_hover_text("Même graine, même secousse : elle se refait à l'identique.");
@@ -216,20 +259,78 @@ impl App {
                     }
                 });
                 ui.end_row();
-            } else {
-                ui.label("Zoom");
-                ui.horizontal(|ui| {
+            }
+            if p.preset.a_zoom() {
+                if p.preset.est_une_avancee() {
+                    // (Un travelling, partie 171 : la caméra avance ou recule, la focale ne change pas.)
+                    ui.label("Avancée");
                     let r = ui
                         .add(egui::DragValue::new(&mut p.zoom_factor).range(1.05..=10.0).speed(0.01).max_decimals(2).prefix("× "))
-                        .on_hover_text("Focale d'arrivée / focale de départ (avant : 1,5 donne 35 → 52,5 mm).");
+                        .on_hover_text("Ce qui est au plan de référence grandit (ou rapetisse) d'autant : la caméra s'approche (ou recule) d'autant, la focale ne change pas. Les calques en profondeur bougent chacun à leur vitesse.");
                     changed |= self.edited_as(&r, &name);
-                    let base = self.doc.panel_camera_douce(self.cur_panel, v.start).focal();
-                    let end = if p.preset == Preset::ZoomOut { base / p.zoom_factor } else { base * p.zoom_factor };
-                    ui.label(RichText::new(format!("{base:.0} → {end:.0} mm")).small().weak());
+                } else {
+                    ui.label("Zoom");
+                    ui.horizontal(|ui| {
+                        let r = ui
+                            .add(egui::DragValue::new(&mut p.zoom_factor).range(1.05..=10.0).speed(0.01).max_decimals(2).prefix("× "))
+                            .on_hover_text("Focale d'arrivée / focale de départ (avant : 1,5 donne 35 → 52,5 mm ; le dézoom choc part de cette focale).");
+                        changed |= self.edited_as(&r, &name);
+                        let base = self.doc.panel_camera_douce(self.cur_panel, v.start).focal();
+                        let (de, a) = match p.preset {
+                            Preset::ZoomOut => (base, base / p.zoom_factor),
+                            Preset::DezoomChoc => (base * p.zoom_factor, base),
+                            _ => (base, base * p.zoom_factor),
+                        };
+                        ui.label(RichText::new(format!("{de:.0} → {a:.0} mm")).small().weak());
+                    });
+                }
+                ui.end_row();
+            }
+            if p.preset.a_degres() {
+                ui.label(match p.preset {
+                    Preset::Tonneau => "Rotation",
+                    Preset::Survol => "Bascule",
+                    _ => "Angle",
                 });
+                let r = ui
+                    .add(egui::DragValue::new(&mut p.degres).range(-camfx::DEGRES_MAX..=camfx::DEGRES_MAX).speed(0.5).max_decimals(1).suffix("°"))
+                    .on_hover_text(match p.preset {
+                        Preset::PanoRotation => "De combien la caméra tourne sur elle-même : positif vers la droite, négatif vers la gauche.",
+                        Preset::Penche => "L'angle du cadre à l'arrivée : positif, il penche dans le sens des aiguilles d'une montre.",
+                        Preset::Orbite => "De combien la caméra tourne autour du sujet : positif, elle passe à sa droite ; 90°, elle le voit de côté ; 180°, de dos.",
+                        Preset::Survol => "De combien la caméra bascule vers le sol en avançant.",
+                        _ => "360° : un tour complet ; négatif : dans l'autre sens.",
+                    });
+                changed |= self.edited_as(&r, &name);
+                ui.end_row();
+            }
+            if p.preset.a_hauteur() {
+                ui.label("Hauteur");
+                let r = ui
+                    .add(egui::DragValue::new(&mut p.hauteur).range(-camfx::HAUTEUR_MAX..=camfx::HAUTEUR_MAX).speed(0.02).max_decimals(2).suffix(" × le cadre"))
+                    .on_hover_text("De combien la caméra monte, en hauteurs du cadre (1 : la hauteur de l'image) ; négatif, elle descend.");
+                changed |= self.edited_as(&r, &name);
+                ui.end_row();
+            }
+            if p.preset.a_avancee() {
+                ui.label("Avancée");
+                let r = ui
+                    .add(egui::DragValue::new(&mut p.avancee).range(0.0..=camfx::AVANCEE_MAX).speed(0.02).max_decimals(2).prefix("× "))
+                    .on_hover_text("De combien la caméra avance au-dessus du sol : 1, elle arrive au-dessus des dessins ; plus, elle les dépasse.");
+                changed |= self.edited_as(&r, &name);
+                ui.end_row();
+            }
+            if p.preset.a_paliers() {
+                ui.label("Paliers");
+                let r = ui.add(egui::DragValue::new(&mut p.paliers).range(1..=camfx::PALIERS_MAX).speed(0.05)).on_hover_text("Nombre d'à-coups : le zoom les partage en parts égales.");
+                changed |= self.edited_as(&r, &name);
                 ui.end_row();
             }
         });
+        // La flèche ou la cible (partie 171) : un petit cadre où on la tire, et dans le grand cadre avec l'outil Caméra.
+        if p.preset.poignee() != camfx::Poignee::Aucune {
+            changed |= self.vers_ui(ui, &mut p, &name);
+        }
         if p.preset == Preset::Explosion {
             let r = ui.checkbox(&mut p.punch, "Coup de zoom").on_hover_text("Un petit zoom au moment de l'impact, qui retombe avec la secousse.");
             changed |= self.edited_as(&r, &name);
@@ -242,7 +343,7 @@ impl App {
             let g = Generator::new(&v.params, fps);
             (g.frames().len(), v.params.preset.label(), g.bounds())
         };
-        if v.params.preset.is_shake() {
+        if v.params.preset.a_intensite() && v.params.preset != Preset::Vehicule {
             let punch = if bounds.punch > 0.0 { format!(", zoom +{:.0} %", bounds.punch * 100.0) } else { String::new() };
             ui.label(RichText::new(format!("Au plus ±{:.1} % de la largeur du cadre, ±{:.1}°{punch}.", bounds.pos * 100.0, bounds.angle)).small().weak());
         }
@@ -282,6 +383,88 @@ impl App {
                 self.run_action("camera.effet_appliquer");
             }
         });
+    }
+
+    /// La flèche ou la cible de l'effet (partie 171), dans un petit cadre : le cadre filmé au milieu, une largeur de cadre de
+    /// marge de chaque côté. On la tire (Maj : droite ou verticale) ; un geste, une étape d'annulation. La même se tire dans le
+    /// grand cadre avec l'outil Caméra (`effetpoignee.rs`). Vrai si elle a changé.
+    fn vers_ui(&mut self, ui: &mut egui::Ui, p: &mut Params, name: &str) -> bool {
+        use egui::{vec2, Color32, Rect, Sense, Shape, Stroke};
+        let poignee = p.preset.poignee();
+        let [fw, fh] = self.doc.frame;
+        let ratio = (fh.max(1) as f32 / fw.max(1) as f32).clamp(0.2, 2.0);
+        let largeur = (ui.available_width() - 8.0).clamp(140.0, 280.0);
+        // (Le cadre fait le tiers de la largeur : une flèche d'une largeur de cadre de chaque côté s'y voit entière.)
+        let cadre_w = largeur / 3.0;
+        let hauteur = (cadre_w * ratio * 2.2).max(60.0);
+        ui.label(match poignee {
+            camfx::Poignee::Cible => "Cible",
+            camfx::Poignee::Sujet => "Sujet",
+            camfx::Poignee::Depart => "Départ",
+            _ => "Flèche",
+        });
+        let (rect, mut resp) = ui.allocate_exact_size(vec2(largeur, hauteur), Sense::click_and_drag());
+        let c = rect.center();
+        if resp.dragged() || resp.clicked() {
+            if let Some(pt) = resp.interact_pointer_pos() {
+                let mut v = [(pt.x - c.x) / cadre_w, (pt.y - c.y) / cadre_w];
+                if ui.input(|i| i.modifiers.shift) {
+                    if v[0].abs() >= v[1].abs() {
+                        v[1] = 0.0;
+                    } else {
+                        v[0] = 0.0;
+                    }
+                }
+                let v = v.map(|x| x.clamp(-camfx::VERS_MAX, camfx::VERS_MAX));
+                if v != p.vers {
+                    p.vers = v;
+                    resp.mark_changed();
+                }
+            }
+        }
+        let changed = self.edited_as(&resp, name);
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 3.0, ui.visuals().extreme_bg_color);
+        let couleur = crate::theme::camera();
+        let cadre = Rect::from_center_size(c, vec2(cadre_w, cadre_w * ratio));
+        painter.rect_stroke(cadre, 1.0, Stroke::new(1.5_f32, couleur), egui::StrokeKind::Middle);
+        painter.line_segment([c - vec2(5.0, 0.0), c + vec2(5.0, 0.0)], Stroke::new(1.0_f32, couleur));
+        painter.line_segment([c - vec2(0.0, 5.0), c + vec2(0.0, 5.0)], Stroke::new(1.0_f32, couleur));
+        let bout = c + vec2(p.vers[0], p.vers[1]) * cadre_w;
+        // Le cadre d'arrivée (ou de départ), en pointillés, avec le zoom de l'effet.
+        let zoom = if p.preset.a_zoom() && !p.preset.est_une_avancee() { p.zoom_factor.max(0.05) } else { 1.0 };
+        // (Le sujet d'une orbite ou d'une grue reste à sa place : pas de cadre d'arrivée, partie 172.)
+        if poignee != camfx::Poignee::Sujet {
+            let fantome = Rect::from_center_size(bout, cadre.size() / zoom);
+            let coins = [fantome.left_top(), fantome.right_top(), fantome.right_bottom(), fantome.left_bottom(), fantome.left_top()];
+            painter.extend(Shape::dashed_line(&coins, Stroke::new(1.0_f32, couleur), 5.0, 3.0));
+        }
+        let trait_ = Stroke::new(2.0_f32, couleur);
+        match poignee {
+            camfx::Poignee::Fleche => crate::effetpoignee::fleche(&painter, c, bout, trait_, 9.0),
+            camfx::Poignee::Depart => crate::effetpoignee::fleche(&painter, bout, c, trait_, 9.0),
+            camfx::Poignee::Cible => {
+                painter.line_segment([bout - vec2(7.0, 0.0), bout + vec2(7.0, 0.0)], trait_);
+                painter.line_segment([bout - vec2(0.0, 7.0), bout + vec2(0.0, 7.0)], trait_);
+            }
+            camfx::Poignee::Sujet => {
+                painter.circle_stroke(bout, 9.0, trait_);
+            }
+            _ => {}
+        }
+        painter.circle(bout, 5.0, Color32::WHITE, Stroke::new(1.5_f32, couleur));
+        if resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        }
+        let quoi = match poignee {
+            camfx::Poignee::Cible => "Où va la caméra : le point de l'image qui arrive au centre du cadre.",
+            camfx::Poignee::Sujet => "Le sujet : le point de l'image que la caméra garde à sa place pendant qu'elle tourne autour ou monte.",
+            camfx::Poignee::Depart => "D'où part la caméra : elle vient se poser sur le cadre du plan.",
+            _ => "Le chemin de la caméra : elle va du centre du cadre au bout de la flèche.",
+        };
+        crate::bulles::bulle(resp, "Flèche de l'effet", &format!("{quoi} Clique ou tire ici (Maj : droite ou verticale), ou dans le grand cadre avec l'outil Caméra."), "");
+        ui.label(RichText::new(format!("{:+.2} × {:+.2} largeur de cadre", p.vers[0], p.vers[1])).small().weak());
+        changed
     }
 
     /// Choisit un objectif dans la liste des focales : règle la focale comme le champ de la focale

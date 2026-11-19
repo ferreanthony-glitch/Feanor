@@ -613,6 +613,12 @@ pub(crate) fn incrustation_editor(ui: &mut egui::Ui, inc: &mut Incrustation, sam
             }
         });
         ui.end_row();
+        // (Partie 176.) Le texte qui s'écrit lettre à lettre, depuis le début du plan.
+        ui.label("Lettre à lettre");
+        let suffixe = if inc.lettre_a_lettre == 0 { " (d'un coup)" } else { " images par lettre" };
+        ui.add(egui::DragValue::new(&mut inc.lettre_a_lettre).range(0..=crate::incrustation::LETTRE_A_LETTRE_MAX).suffix(suffixe))
+            .on_hover_text("Le texte apparaît une lettre après l'autre depuis le début du plan, comme tapé à la machine. 0 : tout d'un coup.");
+        ui.end_row();
     });
     ui.label(RichText::new(format!("Ici : « {sample} »")).small().weak());
 }

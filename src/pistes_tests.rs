@@ -218,14 +218,15 @@ fn folding_the_active_track_by_hand_keeps_it_folded_until_the_current_layer_chan
 
 #[test]
 fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
-    use crate::layerheads::{rows_of, ROW_FINE};
+    use crate::layerheads::{rows_of, ROW_FINE, ROW_FULL};
     let mut app = app_with("timeline", doc_with(&[&["A", "B", "C"]]));
     app.pistes_follow_current(false);
-    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 168 : toutes ses lignes ont la même
-    // hauteur).
+    // Les pistes du montage se replient : la timeline de l'animation n'en sait rien (partie 160 : le calque courant y a sa ligne
+    // complète, les autres une ligne fine).
     app.set_all_tracks_folded(true);
     let rows = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
-    assert!(rows.iter().all(|r| r.h == ROW_FINE));
+    assert_eq!(rows.iter().filter(|r| r.h == ROW_FULL).count(), 1, "le calque courant");
+    assert!(rows.iter().filter(|r| r.li != app.cur_layer).all(|r| r.h == ROW_FINE));
     // Le drapeau « réduit » d'un calque (`collapsed`, d'avant) ne change rien aux pistes du montage, ni à la timeline.
     let before = heights(&app);
     let avant = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
@@ -283,7 +284,7 @@ fn a_saved_three_layers_setting_opens_as_the_whole_stack() {
         app.pistes_follow_current(false);
         assert_eq!(heights(&app)[0], (0, LAYER_H), "« {valeur} »");
     }
-    assert_eq!(crate::project::VERSION, 56, "le format des projets ne change pas");
+    assert_eq!(crate::project::VERSION, 60, "le format des projets ne change pas");
 }
 // ------------------------------------------------------------------------------------ les hits
 

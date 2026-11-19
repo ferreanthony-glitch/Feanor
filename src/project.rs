@@ -275,7 +275,29 @@ pub const FORMAT: &str = "pelure-projet";
 /// la borne sont ramenées à la borne si l'image n'en change à aucune image, sinon le calque est marqué `profondeur_bornee` ; un
 /// plan en Espace 3D garde `espace` (et donc son chemin d'image et l'ordre par la distance). Une trajectoire tracée dans l'espace
 /// d'un plan ordinaire d'un projet d'avant reste écartée comme alors ; au format 56 elle vaut pour tout plan.
-pub const VERSION: u32 = 56;
+/// 57 (2026-11-18, `docs/INTERFACE.md` partie 170) : **plusieurs effets de caméra vivants par plan** — `effets_camera` d'un plan,
+/// une liste (les blocs de la piste Caméra de la timeline), à la place du seul `effet_camera` du format 52. Ils se cuisent l'un
+/// après l'autre dans l'ordre de la liste. Une version précédente qui ouvrirait le projet ne verrait aucun de ces effets et les
+/// perdrait à l'enregistrement : elle le refuse donc. **Un projet de version 56 ou moins s'ouvre tel quel** : son `effet_camera`
+/// devient le premier (et seul) effet de la liste, avec la même image ; il est écrit en `effets_camera` au premier enregistrement.
+/// 58 (2026-11-18, `docs/INTERFACE.md` partie 171) : **la caméra 2D du lot 2 des préréglages** — vingt-deux préréglages de plus
+/// dans `effets_camera` (leurs noms : `camfx::Preset::nom`) et trois réglages facultatifs d'un effet, écrits seulement quand ils
+/// servent : `vers` (la flèche ou la cible, en part de la largeur du cadre), `degres` (l'angle) et `paliers`. Une version
+/// précédente laisserait de côté, sans rien dire, un effet au nom inconnu et perdrait ces réglages : elle le refuse donc. **Un
+/// projet de version 57 ou moins s'ouvre tel quel**, avec les mêmes images.
+/// 59 (2026-11-18, `docs/INTERFACE.md` partie 172) : **la caméra dans l'espace, lot 3 des préréglages** — quatre préréglages de
+/// plus dans `effets_camera` (`travelling_lateral`, `orbite`, `grue`, `survol`) et deux réglages facultatifs d'un effet, écrits
+/// seulement quand ils servent : `hauteur` (en hauteurs du cadre) et `avancee` (en distances de la caméra au plan de référence) ;
+/// et `vise` d'une trajectoire de caméra (les trajectoires toutes faites : le point de l'espace, en mètres, que la caméra garde à
+/// sa place dans l'image en suivant son chemin). Une version précédente laisserait de côté ces effets et cette visée : elle le
+/// refuse donc. **Un projet de version 58 ou moins s'ouvre tel quel**, avec les mêmes images.
+/// 60 (2026-11-18, `docs/INTERFACE.md` parties 175 et 176) : **le montage, lot 4 des préréglages** — `lettre_a_lettre` d'une
+/// incrustation (images par lettre : le texte s'écrit lettre à lettre depuis le début du plan, le plan type « Lieu et date »),
+/// écrit seulement quand il sert. Une version précédente montrerait le texte d'un coup, et le perdrait en enregistrant : elle le
+/// refuse donc. Les plans types eux-mêmes ne sont faits que de calques d'avant ; les cinq transitions de plus sont dans
+/// `transitions.json` (version 2 de ce fichier quand l'une d'elles y est). **Un projet de version 59 ou moins s'ouvre tel
+/// quel**, avec les mêmes images.
+pub const VERSION: u32 = 60;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
 /// (`espace` faux) : ±85° pour les deux, la caméra tournée doit encore voir la feuille. **Plan en Espace 3D** : sa caméra est
@@ -595,9 +617,14 @@ pub(crate) struct PanelEntry {
     /// Postérisation temporelle de la caméra (format 37 ; absente : éteinte, cadence 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     saccade: Option<SaccadeEntry>,
-    /// Effet de caméra vivant du plan (format 52, partie 129 ; absent : aucun). Un effet déjà converti est dans `camera`.
+    /// Effet de caméra vivant du plan, tel que l'écrivaient les formats 52 à 56 (partie 129 ; absent : aucun) : relu comme le
+    /// premier de `effets_camera`, jamais écrit depuis le format 57.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     effet_camera: Option<EffetCameraEntry>,
+    /// Effets de caméra vivants du plan (format 57, partie 170 ; absent : aucun), dans l'ordre où ils se cuisent. Un effet déjà
+    /// converti est dans `camera`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    effets_camera: Vec<EffetCameraEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -658,6 +685,37 @@ struct EffetCameraEntry {
     zoom: f32,
     #[serde(default)]
     coup_de_zoom: bool,
+    /// La flèche ou la cible (format 58).
+    #[serde(default, skip_serializing_if = "est_nul_2")]
+    vers: [f32; 2],
+    /// L'angle, en degrés (format 58).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    degres: f32,
+    /// Le nombre de paliers (format 58) ; absent : `camfx::PALIERS`.
+    #[serde(default = "paliers_d_origine", skip_serializing_if = "sont_les_paliers_d_origine")]
+    paliers: u32,
+    /// La hauteur, en hauteurs du cadre (format 59 : la grue, le survol).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    hauteur: f32,
+    /// L'avancée au-dessus du sol, en distances de la caméra au plan de référence (format 59 : le survol).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    avancee: f32,
+}
+
+fn est_nul(v: &f32) -> bool {
+    *v == 0.0
+}
+
+fn est_nul_2(v: &[f32; 2]) -> bool {
+    v[0] == 0.0 && v[1] == 0.0
+}
+
+fn paliers_d_origine() -> u32 {
+    crate::camfx::PALIERS
+}
+
+fn sont_les_paliers_d_origine(v: &u32) -> bool {
+    *v == crate::camfx::PALIERS
 }
 
 fn un() -> f32 {
@@ -1281,6 +1339,8 @@ fn used_sounds(doc: &Document) -> BTreeSet<u64> {
     doc.audio_tracks
         .iter()
         .flat_map(|t| t.clips.iter().map(|c| c.sound))
+        // (Et ceux du son gardé des versions rangées des plans, partie 168 : la version dépliée les rejoue.)
+        .chain(doc.sons_des_versions())
         .filter(|id| doc.sounds.contains_key(id))
         .collect()
 }
@@ -2608,16 +2668,26 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             })
             .collect(),
         saccade: (panel.saccade != crate::camera::Saccade::default()).then(|| SaccadeEntry { actif: panel.saccade.actif, cadence: panel.saccade.cadence }),
-        effet_camera: panel.effet_camera.map(|v| EffetCameraEntry {
-            preset: v.params.preset.nom().into(),
-            debut: v.start,
-            duree: v.params.duration,
-            intensite: v.params.intensity,
-            frequence: v.params.freq,
-            graine: v.params.seed,
-            zoom: v.params.zoom_factor,
-            coup_de_zoom: v.params.punch,
-        }),
+        effet_camera: None,
+        effets_camera: panel
+            .effets_camera
+            .iter()
+            .map(|v| EffetCameraEntry {
+                preset: v.params.preset.nom().into(),
+                debut: v.start,
+                duree: v.params.duration,
+                intensite: v.params.intensity,
+                frequence: v.params.freq,
+                graine: v.params.seed,
+                zoom: v.params.zoom_factor,
+                coup_de_zoom: v.params.punch,
+                vers: v.params.vers,
+                degres: v.params.degres,
+                paliers: v.params.paliers,
+                hauteur: v.params.hauteur,
+                avancee: v.params.avancee,
+            })
+            .collect(),
         marques: panel
             .marks
             .iter()
@@ -3523,20 +3593,31 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     notes: p.notes,
                     camera,
                     saccade: p.saccade.map_or_else(crate::camera::Saccade::default, |s| crate::camera::Saccade { actif: s.actif, cadence: s.cadence }.normalise()),
-                    // (Un préréglage inconnu, d'une version plus récente, est laissé de côté.)
-                    effet_camera: p.effet_camera.and_then(|e| {
-                        let preset = crate::camfx::Preset::du_nom(&e.preset)?;
-                        let params = crate::camfx::Params {
-                            preset,
-                            intensity: e.intensite,
-                            duration: e.duree,
-                            freq: e.frequence,
-                            seed: e.graine,
-                            zoom_factor: e.zoom,
-                            punch: e.coup_de_zoom,
-                        };
-                        Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
-                    }),
+                    // (Le seul effet des formats 52 à 56 vient en premier, puis ceux du format 57. Un préréglage inconnu, d'une
+                    // version plus récente, est laissé de côté.)
+                    effets_camera: p
+                        .effet_camera
+                        .into_iter()
+                        .chain(p.effets_camera)
+                        .filter_map(|e| {
+                            let preset = crate::camfx::Preset::du_nom(&e.preset)?;
+                            let params = crate::camfx::Params {
+                                preset,
+                                intensity: e.intensite,
+                                duration: e.duree,
+                                freq: e.frequence,
+                                seed: e.graine,
+                                zoom_factor: e.zoom,
+                                punch: e.coup_de_zoom,
+                                vers: e.vers,
+                                degres: e.degres,
+                                paliers: e.paliers,
+                                hauteur: e.hauteur,
+                                avancee: e.avancee,
+                            };
+                            Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
+                        })
+                        .collect(),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {

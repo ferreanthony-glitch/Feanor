@@ -490,7 +490,7 @@ impl Behaviour {
 
     pub fn label(self) -> &'static str {
         match self {
-            Behaviour::Nothing => "Rien",
+            Behaviour::Nothing => "Aucun",
             Behaviour::Loop => "Boucle",
             Behaviour::PingPong => "Va-et-vient",
             Behaviour::Hold => "Maintenir",
@@ -994,9 +994,11 @@ pub struct Panel {
     pub camera: Vec<CameraKey>,
     /// Postérisation temporelle de la caméra (« saccade ») : rien dans les clés, tout à l'évaluation.
     pub saccade: camera::Saccade,
-    /// Effet de caméra vivant (tremblement, explosion, zoom…), calculé à l'évaluation de la caméra, sans clé
-    /// (`camfx::Vivant`, partie 129) ; « Convertir en clés » le cuit dans `camera`.
-    pub effet_camera: Option<crate::camfx::Vivant>,
+    /// Effets de caméra vivants (tremblement, explosion, zoom…), calculés à l'évaluation de la caméra, sans clé
+    /// (`camfx::Vivant`, partie 129). Depuis la partie 170, un plan en porte autant qu'on veut : les blocs de la piste Caméra de
+    /// la timeline. Ils se cuisent l'un après l'autre, dans cet ordre (`camfx::cuire_tous`) ; « Convertir en clés » les cuit
+    /// tous dans `camera`.
+    pub effets_camera: Vec<crate::camfx::Vivant>,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
@@ -1158,6 +1160,13 @@ impl Panel {
     /// Espace 3D, `espace`), au lieu de l'ordre de la pile.
     pub fn ordre_par_la_distance(&self) -> bool {
         self.ordre_distance || self.espace
+    }
+
+    /// L'un de ses effets de caméra vivants déplace la caméra dans l'espace (le lot 3 des préréglages, partie 172,
+    /// `camfx::Preset::dans_l_espace`) : comme une caméra posée dans la vue de la scène, elle peut sortir des anciennes
+    /// limites, et l'image passe alors par le changement de repère (`Document::repere_du_plan`).
+    pub fn a_un_effet_dans_l_espace(&self) -> bool {
+        self.effets_camera.iter().any(|v| v.params.preset.dans_l_espace())
     }
 
     pub fn frame_count(&self) -> usize {
@@ -1966,9 +1975,29 @@ impl Document {
 
     fn camera_sur_la_trajectoire_de(&self, p: &Panel, cam: Camera, frame: usize) -> Camera {
         match self.deplacement_de_la_camera(p, frame) {
-            Some(d) => self.camera_deplacee(cam, d, 1.0),
-            None => cam,
+            // (Sans déplacement, avant le départ du chemin : la caméra des clés, au bit près.)
+            Some(d) if d != [0.0; 3] => self.viser_le_sujet(p, &cam, self.camera_deplacee(cam, d, 1.0)),
+            _ => cam,
         }
+    }
+
+    /// Le sujet que vise la trajectoire de caméra du plan `p` (`Trajectoire::vise`, partie 172), en pixels de la feuille dans
+    /// l'espace (`camespace`) ; rien sans visée.
+    fn sujet_vise(&self, p: &Panel) -> Option<crate::camespace::V3> {
+        let v = p.trajectoire_camera.as_ref()?.vise?;
+        let m = crate::espace3d::Monde::of(self);
+        let k = m.k.max(1e-12);
+        Some([v[0] / k + m.stage[0] / 2.0, v[1] / k - m.stage[1] / 2.0, v[2] / k])
+    }
+
+    /// La caméra `apres` (portée par le chemin), tournée pour voir le sujet visé de la trajectoire du plan `p` là où la caméra
+    /// `avant` le voit (partie 172) : c'est elle, sans le chemin, qui dit où il est dans l'image. Sans visée, ou si le sujet
+    /// est derrière la caméra : `apres` telle quelle. Le chemin inverse (`camera_hors_de_sa_trajectoire`) fait la même chose
+    /// dans l'autre sens : la caméra vue, ramenée à ses clés, garde le sujet au même endroit.
+    fn viser_le_sujet(&self, p: &Panel, avant: &Camera, apres: Camera) -> Camera {
+        let Some(sujet) = self.sujet_vise(p) else { return apres };
+        let Some([u, v]) = crate::camespace::image_de(avant, self.frame, sujet) else { return apres };
+        crate::camespace::viser(&apres, self.frame, sujet, u, v).unwrap_or(apres)
     }
 
     /// La caméra `cam` du plan `index` (celle de ses clés à l'image `frame`), portée là où sa trajectoire la met à cette image.
@@ -1981,9 +2010,10 @@ impl Document {
     /// ramenée à ce que ses clés doivent dire. Régler la caméra à n'importe quelle image (`App::set_current_camera`) écrit donc
     /// la clé qui, une fois portée par le chemin, donne la caméra voulue.
     pub fn camera_hors_de_sa_trajectoire(&self, index: usize, cam: Camera, frame: usize) -> Camera {
-        match self.panels.get(index).and_then(|p| self.deplacement_de_la_camera(p, frame)) {
-            Some(d) => self.camera_deplacee(cam, d, -1.0),
-            None => cam,
+        let Some(p) = self.panels.get(index) else { return cam };
+        match self.deplacement_de_la_camera(p, frame) {
+            Some(d) if d != [0.0; 3] => self.viser_le_sujet(p, &cam, self.camera_deplacee(cam, d, -1.0)),
+            _ => cam,
         }
     }
 
@@ -2086,7 +2116,8 @@ impl Document {
         let par_la_camera = if p.espace {
             *cam != self.default_camera()
         } else {
-            p.camera_libre && !self.camera_dans_les_anciennes_limites(cam)
+            // (Un effet du lot 3, partie 172, déplace la caméra dans l'espace : sa caméra est libre, comme posée dans la vue.)
+            (p.camera_libre || p.a_un_effet_dans_l_espace()) && !self.camera_dans_les_anciennes_limites(cam)
         };
         (par_la_camera || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }
@@ -2103,16 +2134,32 @@ impl Document {
         self.panel_camera_selon(index, frame, false, true)
     }
 
-    /// Les clés de caméra du plan `index` telles qu'elles se montrent : les siennes, et son effet vivant cuit dedans
-    /// (`camfx::cuire`), comme le ferait « Convertir en clés ». Sans effet : ses clés, sans copie.
+    /// Les clés de caméra du plan `index` telles qu'elles se montrent : les siennes, et ses effets vivants cuits dedans l'un
+    /// après l'autre (`camfx::cuire_tous`), comme le ferait « Convertir en clés ». Sans effet : ses clés, sans copie.
     pub fn cles_montrees(&self, index: usize) -> std::borrow::Cow<'_, [camera::CameraKey]> {
         use std::borrow::Cow;
         let Some(p) = self.panels.get(index) else { return Cow::Borrowed(&[]) };
-        let Some(v) = p.effet_camera else { return Cow::Borrowed(&p.camera) };
+        if p.effets_camera.is_empty() {
+            return Cow::Borrowed(&p.camera);
+        }
         let base = |f: usize| self.panel_camera_douce(index, f);
-        match crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base) {
+        match crate::camfx::cuire_tous(&p.effets_camera, self.fps, self.frame, p.frame_count(), &p.camera, &base, self.default_camera()) {
             Some(k) => Cow::Owned(k),
             None => Cow::Borrowed(&p.camera),
+        }
+    }
+
+    /// La caméra du plan `index` à l'image `frame` **avant son effet vivant de rang `rang`** : ses clés, avec les effets qui
+    /// le précèdent dans la liste cuits dedans (ni lui ni ceux d'après). C'est le cadre dans lequel la flèche ou la cible de
+    /// cet effet se tire (partie 171) : l'effet part de cette caméra-là.
+    pub fn camera_avant_l_effet(&self, index: usize, rang: usize, frame: usize) -> Camera {
+        let default = self.default_camera();
+        let Some(p) = self.panels.get(index) else { return default };
+        let base = |f: usize| self.panel_camera_douce(index, f);
+        let avant = &p.effets_camera[..rang.min(p.effets_camera.len())];
+        match crate::camfx::cuire_tous(avant, self.fps, self.frame, p.frame_count(), &p.camera, &base, default) {
+            Some(k) => camera::camera_at(&k, frame, default),
+            None => base(frame),
         }
     }
 
@@ -2131,15 +2178,21 @@ impl Document {
         let cuites: Vec<(usize, Vec<camera::CameraKey>)> = indices
             .iter()
             .copied()
-            .filter(|&i| self.panels.get(i).is_some_and(|p| p.effet_camera.is_some()))
+            .filter(|&i| self.panels.get(i).is_some_and(|p| !p.effets_camera.is_empty()))
             .map(|i| (i, self.cles_montrees(i).into_owned()))
             .collect();
         for (i, keys) in &cuites {
             let p = &mut self.panels[*i];
             p.camera = keys.clone();
-            p.effet_camera = None;
+            p.effets_camera.clear();
         }
         !cuites.is_empty()
+    }
+
+    /// La caméra du plan `index` à l'image `frame` sans sa trajectoire de caméra : ses clés, ses paliers et ses effets vivants
+    /// (partie 172 : c'est d'elle que part une trajectoire toute faite, qui remplace celle d'avant).
+    pub(crate) fn camera_sans_trajectoire(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, true, true)
     }
 
     fn panel_camera_selon(&self, index: usize, frame: usize, paliers: bool, effet: bool) -> Camera {
@@ -2149,7 +2202,7 @@ impl Document {
         // l'écran comme pour la caméra douce, base de l'effet d'un plan. Ainsi convertir l'effet du voisin en clés ne change
         // rien chez lui (partie 129). Une seule exception, pour ne pas tourner en rond : la base de l'effet d'un plan sans
         // clé ne lit pas l'effet d'un voisin lui aussi sans clé.
-        let base_d_un_effet_sans_cle = !effet && p.camera.is_empty() && p.effet_camera.is_some();
+        let base_d_un_effet_sans_cle = !effet && p.camera.is_empty() && !p.effets_camera.is_empty();
         let cles = |i: usize| {
             let q = &self.panels[i];
             let lire_effet = if i == index { effet } else { !(base_d_un_effet_sans_cle && q.camera.is_empty()) };
@@ -2192,7 +2245,7 @@ impl Document {
     pub fn camera_reelle_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
         let default = self.default_camera();
         let base = |f: usize| camera::camera_at(&p.camera, f, default);
-        let vivantes = p.effet_camera.and_then(|v| crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base));
+        let vivantes = crate::camfx::cuire_tous(&p.effets_camera, self.fps, self.frame, p.frame_count(), &p.camera, &base, default);
         let keys = vivantes.as_deref().unwrap_or(&p.camera);
         let cam = if keys.is_empty() { default } else { camera::camera_at(keys, p.saccade.image_montree(keys, frame), default) };
         // (Sa trajectoire de caméra, s'il en a une : comme `panel_camera_reelle`.)
@@ -2868,7 +2921,7 @@ impl Document {
             camera: keys_after,
             saccade: source.saccade,
             // (L'effet vivant a été cuit en clés avant la coupe.)
-            effet_camera: None,
+            effets_camera: Vec::new(),
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
@@ -3081,7 +3134,7 @@ impl Document {
             notes: String::new(),
             camera: Vec::new(),
             saccade: camera::Saccade::default(),
-            effet_camera: None,
+            effets_camera: Vec::new(),
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,

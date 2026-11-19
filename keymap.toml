@@ -2576,6 +2576,11 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "calques.replier_tout"
+touches = ["Alt+Maj+C"]
+source = "FEANOR, partie 174 (C comme Calques ; libre partout)"
+
+[[raccourci]]
 action = "piste.deplier_tout"
 touches = []
 source = "FEANOR (sans touche)"
@@ -2711,6 +2716,12 @@ source = "FEANOR (sans touche)"
 # Bibliothèque de bruitages (sans touche : à choisir).
 [[raccourci]]
 action = "vue.bruitages"
+touches = []
+source = "FEANOR (sans touche)"
+
+# Panneau Préréglages, les mouvements de caméra à glisser sur la timeline (partie 170 ; sans touche : à choisir).
+[[raccourci]]
+action = "vue.prereglages"
 touches = []
 source = "FEANOR (sans touche)"
 
@@ -2883,6 +2894,46 @@ source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.noir"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.poussee"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.raccord_file"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.flash"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.couleur"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.objet"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.iris"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.horloge"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.zoom_traversant"
 touches = []
 source = "FEANOR (sans touche)"
 

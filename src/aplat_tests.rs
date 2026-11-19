@@ -185,11 +185,11 @@ fn the_aplat_is_activated_from_the_layer_only() {
     }
     // L'action de bascule du trait / fond n'existe plus.
     assert!(crate::keymap::ACTIONS.iter().all(|a| a.id != "pinceau.strate_fond"));
-    // Le bouton de la ligne du calque (partie 160 : le panneau Calques n'existe plus ; c'est la ligne complète du calque courant
-    // de la timeline qui le porte, les lignes fines des autres calques n'ont que le nom, l'œil, le verrou et les effets).
+    // Le bouton de la ligne du calque (partie 160 : le panneau Calques n'existe plus. Partie 174 : l'aplat est une colonne de la
+    // timeline : son icône dans la rangée d'en-tête, et sur la ligne du seul calque qui en a un ; les autres ont un petit point).
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 1, "{textes:?}");
+    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 2, "{textes:?}");
 }
 
 #[test]

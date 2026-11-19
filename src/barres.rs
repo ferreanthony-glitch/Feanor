@@ -574,9 +574,19 @@ fn rang(b: Barre) -> usize {
     }
 }
 
-/// La largeur mesurée de la barre `b` sur une ligne, légende des clés comprise (0 tant qu'elle n'a pas été dessinée).
+/// Partie 173.5 : la largeur qu'il faut à la barre pour tenir sur **une** ligne, quand elle peut aussi se mettre sur deux (la barre du
+/// montage en tête de la colonne du Storyboard) : mesurée à son dessin sur une ligne, estimée d'après ses deux lignes sinon.
+static UNE_LIGNE: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
+
+/// La largeur mesurée de la barre `b` dans la colonne, légende des clés comprise, dans sa disposition la plus étroite (une ligne, ou
+/// la plus longue de ses deux lignes pour la timeline et le montage du Storyboard) ; 0 tant qu'elle n'a pas été dessinée.
 pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
     MESURES.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
+}
+
+/// Partie 173.5 : la largeur de la barre `b` sur une seule ligne (0 tant qu'elle n'a été ni dessinée ni estimée).
+pub(crate) fn largeur_une_ligne(b: Barre) -> f32 {
+    UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
 }
 
 impl App {
@@ -592,13 +602,11 @@ impl App {
         self.barre_ui(&mut child, barre);
         self.legende_cles_ui(&mut child);
         let w = child.min_rect().width() + 8.0;
-        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        // (Partie 173.5 : cette largeur dit quand la barre tient sur une ligne ; la colonne peut être plus étroite, la barre passe
+        // alors sur deux lignes, `barre_dans_la_colonne_deux_lignes`.)
+        let mut m = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
         if w > m[rang(barre)] + 0.5 {
             m[rang(barre)] = w;
-        }
-        // (Une image de plus seulement si la colonne doit s'élargir pour la contenir : au repos, rien ne repeint.)
-        if w > ligne.width() + 6.5 {
-            ui.ctx().request_repaint();
         }
     }
 
@@ -608,6 +616,7 @@ impl App {
     /// faute de place ; la largeur retenue (`largeur_mesuree`) est celle de la plus longue des deux lignes.
     pub(crate) fn barre_dans_la_colonne_deux_lignes(&mut self, ui: &mut Ui, ligne1: egui::Rect, ligne2: egui::Rect, barre: Barre, dernier_groupe_ligne1: u8) {
         let mut w: f32 = 0.0;
+        let mut somme: f32 = 0.0;
         for (k, ligne) in [ligne1, ligne2].into_iter().enumerate() {
             let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre), k)).layout(egui::Layout::left_to_right(egui::Align::Center)));
@@ -620,10 +629,18 @@ impl App {
                 self.legende_cles_ui(&mut child);
             }
             w = w.max(child.min_rect().width() + 8.0);
+            somme += child.min_rect().width();
         }
         let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
         if w > m[rang(barre)] + 0.5 {
             m[rang(barre)] = w;
+        }
+        drop(m);
+        // (Partie 173.5 : sur une ligne, il faudrait à peu près les deux bout à bout, plus le trait entre deux groupes ; une mesure sur
+        // une ligne, quand elle a lieu, remplace cette estimation.)
+        let mut une = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
+        if une[rang(barre)] == 0.0 {
+            une[rang(barre)] = somme + 2.0 * MARGE_TRAIT + 2.0 * ECART + 8.0;
         }
         if w > ligne1.width() + 6.5 {
             ui.ctx().request_repaint();

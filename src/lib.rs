@@ -166,6 +166,12 @@ mod pilevers;
 #[cfg(test)]
 mod pilevers_tests;
 mod pileversui;
+// Les versions d'un plan dans la timeline (partie 168) : étiquettes « V2 ▸ », version dépliée à côté (affichage seulement), couleur
+// de repère. La carte film ↔ écran (`versiondepliee`) et l'interface (`versiondeplieeui`).
+mod versiondepliee;
+#[cfg(test)]
+mod versiondepliee_tests;
+mod versiondeplieeui;
 // Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) : le calcul (`comparer`),
 // la fenêtre (`comparerui`).
 mod comparer;
@@ -225,6 +231,26 @@ mod biblio_tests;
 #[cfg(test)]
 mod bruitages_tests;
 mod bruitagesui;
+// Les blocs de la piste Caméra (plusieurs effets de caméra vivants par plan) et le panneau Préréglages (partie 170).
+mod blocscamera;
+#[cfg(test)]
+mod blocscamera_tests;
+mod panneauprereglages;
+// Les plans types du montage (lot 4 des préréglages, partie 176) : cartons, titres, génériques, écran partagé, inserts.
+pub mod planstypes;
+mod planstypesui;
+// La flèche ou la cible d'un effet de caméra vivant, dans le cadre, avec l'outil Caméra (partie 171).
+mod effetpoignee;
+#[cfg(test)]
+mod camfx_lot2_tests;
+#[cfg(test)]
+mod camfx_lot3_tests;
+#[cfg(test)]
+mod transitions_lot4_tests;
+#[cfg(test)]
+mod planstypes_tests;
+#[cfg(test)]
+mod reponses_tests;
 // Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
 // proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
 // ligne, les tâches, l'interface et les Préférences.
@@ -259,7 +285,14 @@ mod barrepanneaux_tests;
 mod barrecalques;
 #[cfg(test)]
 mod panneaux_fins_tests;
-// La timeline plus claire (partie 168).
+// La liste du mode de fusion sur la piste du calque actif, la pelure du calque au clic droit (partie 173).
+#[cfg(test)]
+mod piste_mode_tests;
+// La colonne des calques de la timeline dans la disposition validée par Anthony : en-tête, colonnes, comportements (partie 174).
+#[cfg(test)]
+mod colonne_calques_tests;
+// La couleur du rangement sur les lignes de la timeline, les dossiers en titres qui montrent les clés de leurs calques fermés
+// (partie 179, repris de la timeline plus claire).
 #[cfg(test)]
 mod timeline_claire_tests;
 // Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
@@ -489,6 +522,7 @@ mod regle_cadrage_tests;
 mod camera;
 #[cfg(test)]
 mod camera_tests;
+mod camespace;
 mod camfx;
 #[cfg(test)]
 mod camfx_tests;
@@ -546,6 +580,8 @@ mod styletlien_tests;
 // La trajectoire d'un calque (Anthony, 2026-11-07) : le chemin, ses marques et les clés qu'ils posent (`trajectoire`), l'outil à
 // l'écran (`trajectoireui`).
 pub mod trajectoire;
+// Les trajectoires toutes faites de la caméra (partie 172).
+mod trajformes;
 #[cfg(test)]
 mod trajectoire_tests;
 mod trajectoireui;
@@ -658,7 +694,11 @@ mod plantage;
 mod plantage_tests;
 #[cfg(test)]
 mod pasteimage_tests;
+// Les réglages du Cutter (partie 169) : écart toléré, bouts effilés, dépassements, portée, lasso ; leur panneau.
 mod cutter;
+mod cutterui;
+#[cfg(test)]
+mod cutter_reglages_tests;
 #[cfg(test)]
 mod cutter_tests;
 mod sculpt;
@@ -1305,6 +1345,8 @@ mod view;
 mod vuenette;
 #[cfg(test)]
 mod vuenette_tests;
+#[cfg(test)]
+mod vuereduite_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;

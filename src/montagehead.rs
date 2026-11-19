@@ -25,6 +25,9 @@ pub(crate) const HEAD_MIN: f32 = HEADERS_W;
 pub(crate) const HEAD_MAX: f32 = 520.0;
 /// Largeur où tout se voit (double-clic sur la barre).
 pub(crate) const HEAD_ALL: f32 = 330.0;
+/// Partie 173.5 (Anthony : « Reviens sur la taille de la barre latérale. Plus petite et ajustable ») : la largeur d'origine de la
+/// colonne de la bande hors de l'espace Montage, là où il a tracé son trait (environ 72 % des 474 points d'avant).
+pub(crate) const LARGEUR_STORYBOARD: f32 = 340.0;
 /// Largeur de la barre qu'on tire, au bord droit de la colonne.
 const GRIP_W: f32 = 6.0;
 
@@ -37,8 +40,8 @@ pub(crate) fn clamp_head_w(w: f32) -> f32 {
     }
 }
 
-/// Partie 165.5 : la largeur avant la première mesure de la barre (celle de la barre du montage d'origine et de sa légende).
-const LARGEUR_AVANT_MESURE: f32 = 480.0;
+/// Partie 165.5 : la largeur avant la première mesure de la barre (partie 173.5 : la plus longue de ses deux lignes, estimée).
+const LARGEUR_AVANT_MESURE: f32 = 250.0;
 
 /// Partie 165.5 (Anthony : « toujours garder cette colonne avec un maximum d'information. On peut verrouiller la taille minimale
 /// de la colonne s'il faut. ») : la colonne ne descend jamais sous la largeur de la ligne des boutons de `barre` (mesurée à son
@@ -49,15 +52,32 @@ pub(crate) fn largeur_min_colonne(barre: crate::barres::Barre) -> f32 {
     if barre != crate::barres::Barre::Montage {
         return HEAD_MIN;
     }
+    // Partie 173.5 (Anthony : « Plus petite et ajustable ») : la barre passe sur deux lignes quand la colonne est trop étroite pour
+    // une (`barre_sur_deux_lignes`) ; le minimum est la plus longue de ses deux lignes, et la place des options de la piste active.
     let mesure = crate::barres::largeur_mesuree(barre);
     let barre = if mesure > 0.0 { mesure } else { LARGEUR_AVANT_MESURE };
-    barre.max(crate::pistes::LARGEUR_VIGNETTE + 8.0).max(HEAD_MIN)
+    barre.max(crate::pistes::LARGEUR_PISTE_MIN).max(crate::pistes::LARGEUR_VIGNETTE + 8.0).max(HEAD_MIN)
 }
 
-/// Icône d'un pré / post-comportement.
+/// Partie 173.5 : la colonne large de `w` est trop étroite pour la barre du montage sur une ligne : elle est sur deux lignes, et
+/// l'en-tête de la bande gagne la hauteur d'une ligne de boutons (`ENTETE_DEUX_LIGNES`).
+pub(crate) fn barre_sur_deux_lignes(w: f32) -> bool {
+    let une = crate::barres::largeur_une_ligne(crate::barres::Barre::Montage);
+    let une = if une > 0.0 { une } else { LARGEUR_UNE_LIGNE_AVANT_MESURE };
+    w + 0.5 < une
+}
+
+/// Partie 173.5 : la hauteur que l'en-tête de la bande gagne quand la barre du montage est sur deux lignes (une case de bouton, 26
+/// points, et son écart), sous la ligne des séquences.
+pub(crate) const ENTETE_DEUX_LIGNES: f32 = 28.0;
+
+/// Partie 173.5 : la barre du montage sur une ligne avant sa première mesure (celle d'avant : 474 points mesurés).
+const LARGEUR_UNE_LIGNE_AVANT_MESURE: f32 = 480.0;
+
+/// Icône d'un pré / post-comportement (partie 174 : « Aucun » est un rond barré, ∅ ; le montage ne le montre pas).
 pub(crate) fn behaviour_icon(b: Behaviour) -> &'static str {
     match b {
-        Behaviour::Nothing => ph::MINUS,
+        Behaviour::Nothing => ph::PROHIBIT,
         Behaviour::Loop => ph::REPEAT,
         Behaviour::PingPong => ph::ARROWS_LEFT_RIGHT,
         Behaviour::Hold => ph::PAUSE,
@@ -82,6 +102,8 @@ impl App {
         if resp.dragged() {
             self.montage_head_w = clamp_head_w(self.montage_head_w + resp.drag_delta().x).max(min);
         }
+        // (Partie 173.5 : hors de l'espace Montage, la colonne a sa largeur à elle, d'origine plus étroite : `storyboard_head_w`.)
+        let storyboard = self.espace != crate::workspace::Espace::Montage;
         let resp = bulle(
             resp,
             "Largeur de la colonne",
@@ -89,10 +111,20 @@ impl App {
             "",
         );
         if resp.double_clicked() {
-            self.montage_head_w = (if self.montage_head_w < HEAD_ALL.max(min) - 1.0 { HEAD_ALL.max(min + 60.0) } else { HEAD_MIN }).max(min);
+            self.montage_head_w = if storyboard {
+                // (Hors de l'espace Montage : de la largeur d'origine à la plus large, et retour.)
+                if self.montage_head_w < LARGEUR_STORYBOARD + 1.0 { HEAD_MAX } else { LARGEUR_STORYBOARD.max(min) }
+            } else {
+                (if self.montage_head_w < HEAD_ALL.max(min) - 1.0 { HEAD_ALL.max(min + 60.0) } else { HEAD_MIN }).max(min)
+            };
+        }
+        if storyboard {
+            self.settings.storyboard_head_w = self.montage_head_w;
         }
         if resp.drag_stopped() || resp.double_clicked() {
-            self.settings.montage_head_w = self.montage_head_w;
+            if !storyboard {
+                self.settings.montage_head_w = self.montage_head_w;
+            }
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }

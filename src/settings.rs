@@ -110,10 +110,19 @@ pub struct Settings {
     /// voir les réglages des calques (Anthony, 2026-10-17).
     #[serde(default = "default_head_w", rename = "largeur_entetes_montage")]
     pub montage_head_w: f32,
+    /// Partie 173.5 (Anthony : « Plus petite et ajustable ») : la largeur de la colonne de gauche de la bande hors de l'espace
+    /// Montage (Storyboard, Vignettes, Animation), où la barre du montage est en tête de la colonne. L'espace Montage garde la sienne
+    /// (`montage_head_w`).
+    #[serde(default = "default_storyboard_head_w", rename = "largeur_colonne_storyboard")]
+    pub storyboard_head_w: f32,
     /// Pistes repliables du montage (`pistes.rs`) : le calque courant déplie sa piste tout seul
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
+    /// Partie 174 (Anthony : « on peut aussi replier tous les calques ») : la colonne des calques de la timeline montre tous les
+    /// calques sur une ligne, le calque courant compris (⊖ / ⊕ de sa rangée d'en-tête). Un réglage d'affichage du poste.
+    #[serde(default, rename = "timeline_tout_replie")]
+    pub calques_replies: bool,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -322,6 +331,10 @@ pub struct Settings {
     /// clic droit, le stylet retourné prend la Gomme. Allumé d'origine ; à éteindre si une tablette s'en trouve mal.
     #[serde(default = "yes", rename = "stylet_lu_aupres_de_windows", skip_serializing_if = "is_true")]
     pub stylet_windows: bool,
+    /// Les réglages du Cutter (`cutter.rs`, partie 169) : écart toléré, bouts effilés, mode, longueur des dépassements, portée,
+    /// geste. Un réglage du poste, jamais écrit dans le projet. Absent : ceux d'origine (le Cutter d'avant).
+    #[serde(default, rename = "cutter", skip_serializing_if = "crate::cutter::Reglages::est_defaut")]
+    pub cutter: crate::cutter::Reglages,
 }
 
 fn is_true(b: &bool) -> bool {
@@ -364,6 +377,10 @@ fn default_head_w() -> f32 {
     crate::soundtrack::HEADERS_W
 }
 
+fn default_storyboard_head_w() -> f32 {
+    crate::montagehead::LARGEUR_STORYBOARD
+}
+
 fn yes() -> bool {
     true
 }
@@ -402,7 +419,9 @@ impl Default for Settings {
             key_filter: Default::default(),
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
+            storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
+            calques_replies: false,
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,
@@ -458,6 +477,7 @@ impl Default for Settings {
             anneau: Default::default(),
             usage_actif: true,
             stylet_windows: true,
+            cutter: Default::default(),
         }
     }
 }
@@ -529,6 +549,7 @@ impl Settings {
         s.mon_panneau = std::mem::take(&mut s.mon_panneau).nettoye(crate::monpanneau::commande_connue);
         // L'anneau sous le stylet : huit commandes qui existent, toutes différentes, un délai dans ses bornes.
         s.anneau = std::mem::take(&mut s.anneau).nettoyes(crate::monpanneau::commande_connue);
+        s.cutter = s.cutter.nettoyes();
         s.poser_le_panneau_vignettes();
         s.poser_le_panneau_espace3d();
         s

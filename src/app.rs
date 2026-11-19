@@ -174,7 +174,7 @@ impl Tool {
             Tool::Mixer => "Mélanger ce qui est déjà peint : la brosse courante entraîne et étale les couleurs qu'elle traverse, sans en poser de neuve. Sur un calque bitmap.",
             Tool::Pencil => "Dessiner au crayon.",
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
-            Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
+            Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever (ou les entourer au lasso) : ils sont coupés là où ils croisent les autres traits. Réglages : écart toléré, bouts effilés, nettoyer les dépassements, tous les calques visibles.",
             Tool::Fill => "Remplir une zone avec la couleur courante.",
             Tool::Gradient => "Glisser pour tracer l'axe d'un dégradé, de la couleur d'avant-plan à celle d'arrière-plan : dans la sélection, dans la zone fermée où l'on appuie, ou (Alt) sur tout le calque. Sur un calque vectoriel, il reste un réglage de la zone.",
             Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",
@@ -669,6 +669,8 @@ pub struct App {
     /// La pile des versions d'un plan, ouverte en survolant « V2 » sur son bloc du montage, et la
     /// confirmation de « Supprimer les versions non affichées » (`pileversui.rs`).
     pub(crate) pile_versions: crate::pilevers::Pile,
+    /// Les versions dépliées dans la timeline et la tête posée dans l'une d'elles (partie 168 : de l'affichage, jamais enregistré).
+    pub(crate) depli: crate::versiondeplieeui::Depli,
     /// Quand le projet change, le plan dont on propose de supprimer les versions non affichées : le
     /// plan seul (`Some`) ou tout le film (`None`) ; rien : pas de confirmation en cours.
     pub(crate) purge_versions: Option<Option<u64>>,
@@ -764,6 +766,8 @@ pub struct App {
     /// Choix au rectangle des clés de caméra en cours (glisser depuis un espace vide de la piste).
     pub(crate) cam_rect: Option<crate::camkeys::CamRect>,
     pub(crate) cam_fx: crate::camfx::Params,
+    /// Les blocs de la piste Caméra : le bloc choisi, celui qu'on fait glisser (`blocscamera.rs`, partie 170).
+    pub(crate) blocs: crate::blocscamera::Etat,
     /// Aides au cadrage de la caméra (tiers, grille d'or, spirale…, `cadrage.rs`) : les choix,
     /// retenus dans `reglages.toml`, et leur géométrie du dernier cadre.
     pub(crate) cadrage: crate::cadrage::FramingAids,
@@ -1110,7 +1114,9 @@ impl App {
         egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
-        let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
+        // (Partie 173.5 : on ouvre dans le Storyboard, avec la largeur de colonne qui est la sienne ; l'espace Montage a la sienne,
+        // reprise par `set_espace`.)
+        let montage_head_w = crate::montagehead::clamp_head_w(settings.storyboard_head_w);
         // (« Peindre derrière » et « Peint sur l'aplat » sont exclusifs : un fichier de réglages qui aurait les deux garde le premier.)
         let paint_behind = settings.paint_behind;
         let paint_on_aplat = settings.paint_on_aplat && !paint_behind;
@@ -1338,6 +1344,7 @@ impl App {
             envois_ui: Default::default(),
             comparaison: None,
             pile_versions: Default::default(),
+            depli: Default::default(),
             purge_versions: None,
             variantes_ui: Default::default(),
             sfx: Default::default(),
@@ -1386,6 +1393,7 @@ impl App {
             ease_drag: None,
             cam_rect: None,
             cam_fx: crate::camfx::Params::new(crate::camfx::Preset::Shoulder, 24),
+            blocs: Default::default(),
             cadrage_cache: Default::default(),
             handle_drag: None,
             grid_menu: None,
@@ -2067,6 +2075,15 @@ impl App {
     }
 
     pub(crate) fn step_global(&mut self, delta: i64) {
+        // Des versions dépliées dans la timeline (partie 168) : les flèches passent aussi par leurs images.
+        self.depli_nettoyer();
+        if self.depli_actif() {
+            let carte = self.depli_carte();
+            let n = carte.total(self.doc.total_frames().max(1)) as i64;
+            let d = (self.depli_d(&carte) as i64 + delta).clamp(0, n - 1);
+            self.depli_cliquer(&carte, d as usize);
+            return;
+        }
         let total = self.doc.total_frames() as i64;
         let g = (self.global_frame() as i64 + delta).clamp(0, total - 1);
         self.goto_global(g as usize);
@@ -2114,6 +2131,17 @@ impl App {
     pub(crate) fn set_espace(&mut self, espace: crate::workspace::Espace) {
         use crate::workspace::Espace;
         let avant = self.espace;
+        // Partie 173.5 : la colonne de la bande a deux largeurs, celle de l'espace Montage (sa barre au-dessus de la bande) et celle
+        // des autres espaces (la barre en tête de la colonne) ; passer de l'un aux autres reprend la sienne.
+        if (avant == Espace::Montage) != (espace == Espace::Montage) {
+            if avant == Espace::Montage {
+                self.settings.montage_head_w = self.montage_head_w;
+                self.montage_head_w = crate::montagehead::clamp_head_w(self.settings.storyboard_head_w);
+            } else {
+                self.settings.storyboard_head_w = self.montage_head_w;
+                self.montage_head_w = crate::montagehead::clamp_head_w(self.settings.montage_head_w);
+            }
+        }
         self.cancel_montage_drag();
         self.poser_le_geste_de_camera();
         self.poser_la_creation();
@@ -2206,9 +2234,22 @@ impl App {
         }
         self.end_stroke();
         self.play_speed = 1.0;
-        self.play_montage = montage;
+        // La tête dans une version dépliée (partie 168) : c'est le film qu'on lit, avec ses versions dépliées.
+        self.depli_nettoyer();
+        self.play_montage = montage || self.depli.tete.is_some();
         // Dans le plan : entre les points d'entrée et de sortie (13d).
         let (start, end) = self.plan_play_range();
+        if self.play_montage && self.depli_actif() {
+            if self.depli_au_bout() {
+                let carte = self.depli_carte();
+                self.depli_aller(&carte, 0);
+            }
+            self.playing = true;
+            self.last_time = None;
+            self.play_accum = 0.0;
+            self.start_audio_playback();
+            return;
+        }
         let at_end = if self.play_montage {
             self.global_frame() + 1 >= self.doc.total_frames()
         } else {
@@ -2244,8 +2285,18 @@ impl App {
         let vitesse = self.play_speed;
         self.play_accum += (now - last).min(0.25) * vitesse.abs() as f64;
         let frame_duration = 1.0 / self.doc.fps.max(1) as f64;
+        self.depli_nettoyer();
         while self.play_accum >= frame_duration {
             self.play_accum -= frame_duration;
+            // Des versions dépliées (partie 168) : le film se lit avec elles, image d'écran après image d'écran.
+            if self.play_montage && self.depli_actif() {
+                if !self.depli_pas(if vitesse < 0.0 { -1 } else { 1 }, self.looping) {
+                    self.playing = false;
+                    break;
+                }
+                self.follow_frame = true;
+                continue;
+            }
             let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
             if vitesse < 0.0 {
                 // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
@@ -4626,6 +4677,8 @@ impl App {
             "calque.cle_opacite_supprimer" => self.op_keys_delete(),
             "calque.cles_opacite_supprimer" => self.op_keys_clear(),
             "calque.nouveau_couleur_unie" => self.nouveau_calque_couleur_unie(),
+            // Un bloc de la piste Caméra choisi (partie 170), et aucune clé de caméra choisie.
+            "edition.supprimer" if self.bloc_camera_a_le_focus() => self.supprimer_bloc_camera(),
             "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
             "camera.cles_copier" => self.copy_cam_keys(),
             "camera.cles_coller" => self.paste_cam_keys(),
@@ -4996,6 +5049,8 @@ impl App {
             "calque.pochoirs_eteindre" => self.stencils_off(),
             "calque.pochoirs_inverser" => self.stencils_invert(),
             "calque.pelure" => self.toggle_layer_onion(),
+            // Partie 174 : ⊖ / ⊕ de la rangée d'en-tête de la colonne des calques de la timeline.
+            "calques.replier_tout" => self.basculer_calques_replies(),
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),
             "groupes.editer" => self.groups_window = !self.groups_window,

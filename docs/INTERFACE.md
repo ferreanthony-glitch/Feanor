@@ -4227,6 +4227,44 @@ liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
 
+### Les réglages d'abord, la liste tout en bas (2026-11-18, branche `panneau-pinceau`)
+
+Demande d'Anthony : « revoir la disposition du panneau », sur une capture du panneau Pinceau annotée de sa main : **1** sur les réglages
+(« Peindre derrière », « Peint sur l'aplat », l'aplat du calque, « Plus de réglages » et la catégorie dépliée), **2** sur la rangée des
+trois boutons (importer, nouvelle brosse, supprimer), **3** sur la liste des brosses, une flèche qui fait monter les réglages sous l'aperçu
+et une autre qui fait descendre la liste dans le vide du bas du panneau. Le défaut : dépliée juste sous l'aperçu, la liste repoussait de
+300 points les réglages qu'on tourne en regardant l'aperçu du trait.
+
+Ce qui change (`pinceauxui.rs`, `panels.rs`) :
+
+- **1. Les réglages restent sous l'aperçu**, liste dépliée ou non : « Peindre derrière », « Peint sur l'aplat », l'aplat du calque, puis
+  « Plus de réglages » et ses catégories.
+- **2. Les trois boutons** (importer des pinceaux, nouvelle brosse, supprimer la brosse) sont **au-dessus de la liste**, sur leur ligne,
+  hors du cadre (`brush_list_buttons`). Ils étaient en bas de la liste, dans le cadre.
+- **3. La liste des brosses est la dernière chose du panneau** (`brush_list_ui`, appelée par `tool_options_panel` après les réglages et le
+  mode « Griffonner » d'un calque de couleur) : dans son cadre, la recherche, liste ou vignettes, la saisie d'un nom, les dossiers. Pinceau,
+  crayon et gomme.
+
+Ce qui ne change pas : le bouton « livres » à droite de l'aperçu la déplie et la replie, l'état est retenu ; la liste fait toujours 300
+points de haut au plus et défile au-delà (`LIST_H`) ; ce qu'elle offre (recherche, vignettes, clic droit, « Mes brosses » en tête) ; la
+fenêtre des réglages au clic droit montre le même panneau, dans le même ordre.
+
+Un seul texte visible change, la fin de la bulle du bouton « Liste des pinceaux » : « Un clic déplie la liste **en bas du panneau**, un
+autre la replie. » (avant : « sous l'aperçu »). Aucun texte ajouté.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Outil Pinceau, liste dépliée : sous l'aperçu, d'abord les trois icônes puis « Plus de réglages » ; ensuite la rangée importer / + /
+   corbeille ; ensuite la recherche et la liste.
+2. Déplier « Plus de réglages », tourner un réglage : l'aperçu du trait est juste au-dessus, on le voit changer sans faire défiler.
+3. Le « + » : la saisie du nom apparaît en tête de la liste, juste sous lui.
+4. Crayon et gomme : même ordre. Les autres outils : rien ne change.
+5. Clic droit dans le dessin (la fenêtre des réglages) : même ordre.
+
+Essais (`pinceaux_reglages_tests.rs`) : l'ancien essai du dépliage dit maintenant que « Plus de réglages » est au-dessus des boutons et de
+la liste ; un essai de plus, `the_settings_come_first_then_the_three_buttons_then_the_list` : réglages juste sous l'aperçu, les trois
+boutons sur une ligne dessous, la liste sous eux, « Plus de réglages » replié puis déplié (la catégorie dépliée est entre les deux), et
+le même ordre dans le vrai panneau pour le pinceau, le crayon et la gomme.
 ## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
 
 Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
@@ -8427,6 +8465,67 @@ les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` 
   l'intervalle où elle tombe : le temps des marques devient explicite pour cela (« Temps égaux entre les marques » le rend). Un retrait
   à cheval sur un jalon le ramène à l'image du retrait. Recalculer d'après la trajectoire repose alors les clés et les dessins là où ils
   sont déjà. Sans fin posée (un projet du 7 novembre), seul le départ suit.
+
+### Une marque qu'on glisse emporte son temps (2026-11-18, branche `trajectoire-exposition`)
+
+Anthony : « L'outil trajectoire doit ajuster l'exposition des images dans la timeline quand on décale les clés sur la trajectoire. »
+Dans son projet « dd », plan 10 : sept marques à 4, 7, 11, 21, 38, 65 et 71 % du chemin, serrées au départ, et pourtant chaque dessin
+exposé 8 ou 9 images. Glisser une marque le long du chemin changeait sa place, jamais son temps : le temps restait partagé en parts
+égales entre les jalons.
+
+Ce qui change, **en clés d'images** (les dessins posés aux jalons) :
+
+- **Glisser une marque le long du chemin emporte son temps.** Entre ses deux jalons voisins (une marque, le départ ou l'arrivée),
+  elle prend l'image qui correspond à sa place : à mi-chemin d'eux, à mi-temps ; aux deux tiers du chemin, aux deux tiers du temps.
+  Le dessin d'avant est tenu plus longtemps quand elle avance, moins quand elle recule ; les autres marques ne changent pas d'image.
+  Son temps ne dépend que de sa place : la glisser puis la remettre rend la même image. Elle reste à une image au moins de ses
+  voisines. La timeline change au lâcher, comme les dessins (une étape, « Glisser une marque ») ; pendant le geste, le numéro
+  d'image au-dessus de la marque suit, et la barre d'état dit « Marque à 70 % du chemin, image 17. »
+  (`Trajectoire::deplacer_marque_et_son_temps`, `temps_a_sa_place`). Les temps des marques deviennent explicites, comme après un
+  recalage sur la timeline.
+- **Poser une marque** quand des temps sont déjà posés : elle prend le temps de sa place entre ses voisines, et non plus le milieu de
+  leur temps (`ajouter_marque_a_son_temps`). Tant que le temps est en parts égales, une marque de plus le repartage, comme avant.
+- **« Temps selon le chemin »**, un bouton des réglages de l'outil, à côté de « Temps égaux entre les marques » : toutes les marques
+  d'un coup au temps de leur place sur le chemin (à 30 % du chemin, à 30 % du temps). Chaque dessin est alors exposé selon la distance
+  jusqu'au suivant ; des marques serrées gardent chacune leur image (`temps_selon_le_chemin`). Le bouton ne se montre que s'il a
+  quelque chose à changer (`est_selon_le_chemin`). Une étape d'annulation, du même nom. « Temps égaux entre les marques » revient aux
+  parts égales.
+
+Ce qui ne change pas : en **clés d'interpolation**, glisser une marque ne touche pas au temps (les marques sont l'espacement :
+serrées, lent ; espacées, vite) ; **arracher** une marque, **recaler** un jalon sur la timeline (il change de temps sans changer de
+place), le départ et la fin. **Aucun projet ne change à l'ouverture** : une trajectoire garde ses temps tant qu'on ne glisse pas une de
+ses marques ou qu'on n'appuie pas sur le bouton ; le format de projet ne change pas (les temps posés existaient déjà). Dans la vue
+**Espace 3D**, une carte en clés d'images suit la même règle (glisser, poser, le bouton) ; la trajectoire de la caméra, non.
+
+Textes visibles ajoutés ou changés : la barre d'état pendant le geste, en clés d'images (« Marque à N % du chemin, image M. ») ; le
+bouton « Temps selon le chemin » et sa bulle (« Chaque dessin est exposé selon la distance jusqu'au suivant : des marques serrées,
+des dessins brefs ; le calque avance à vitesse constante. ») ; le nom de l'étape d'annulation « Temps selon le chemin ».
+
+À vérifier à l'écran (par Anthony) :
+
+1. Projet « dd », plan 10, calque « Vectoriel 2 », outil Trajectoire : glisse une marque le long du chemin vers la suivante. Au
+   lâcher, dans la timeline, le dessin d'avant s'allonge et le sien raccourcit ; ramène-la : l'exposition revient. Ctrl+Z aussi.
+2. Réglages de l'outil : « Temps selon le chemin ». Les dessins du début, serrés, deviennent brefs ; ceux qui sont loin du suivant,
+   longs. « Temps égaux entre les marques » : tous pareils de nouveau.
+3. Glisser une clé de dessin dans la timeline : elle change de temps, sa marque ne bouge pas sur le chemin (comme avant).
+4. Une trajectoire en « Clés d'interpolation » : glisser une marque change la vitesse, pas les images des jalons (comme avant).
+
+Essais : `trajectoire_tests.rs`, trois de plus (la marque glissée prend l'image de sa place entre ses voisines, revient à la même en
+revenant, garde une image d'écart, laisse les temps recalés des autres ; une marque posée prend le temps de sa place dès que des
+temps sont posés ; « Temps selon le chemin », marques serrées et plan trop court compris) ; `trajectoireui_tests.rs`, un de plus (le
+vrai geste : l'exposition change dans la timeline, la barre d'état dit l'image, Ctrl+Z la rend, les deux boutons ; en clés
+d'interpolation rien ne bouge) et un essai ignoré qui écrit la timeline avant et après sur une copie de projet. Quatre essais
+d'avant décrivaient l'ancien comportement (une marque glissée gardait son image) et sont mis à jour : deux de
+`trajectoireui_tests.rs`, un de `trajectoire3d_images_tests.rs`, et les deux longs scénarios des clés posées à la main de
+`trajectoire_main_tests.rs`, où « Temps égaux entre les marques » est appliqué après les glissés pour que la suite parte du même
+état qu'avant.
+Résultats (18 novembre, 03 h 17) : les 95 essais de la trajectoire réussis ; vérificateur complet : compilation sans avertissement,
+**4 799 réussis, 0 échec**, les dix groupes de fiabilité OK. Deux passages d'avant avaient échoué sur des essais chronométrés sans
+rapport (budgets de temps par image de l'Espace 3D, annulation et export vidéo : 1 puis 6 échecs), la machine étant saturée par les
+suites d'essais d'autres sessions ; relancés seuls ils passent tous, et le passage propre a été fait avec six essais à la fois
+(`RUST_TEST_THREADS=6`) au lieu de tous les cœurs. Image de contrôle (l'essai ignoré sur une copie de « dd », plan 10) : la
+timeline avant (9, 9, 8, 9, 9, 9, 8, 9 images) et après « Temps selon le chemin » (3, 2, 2, 8, 11, 19, 5, 20). Pas regardé sur son
+écran.
 
 ### Comment (le modèle, `trajectoire.rs`)
 
@@ -13782,6 +13881,155 @@ Résultats (17 novembre, 15 h 24) : `vuenette` 11 réussis (l'essai sur la carte
 vérificateur complet : compilation sans avertissement, **4 787 réussis, 0 échec**, les dix groupes de fiabilité OK. Pas regardé à
 l'écran par Claude (Anthony travaillait à son poste : aucune capture) ; l'état de l'écran est lu par l'essai sur la carte graphique.
 
+### 166.9 La vue réduite : tous les pixels du dessin comptent (le même jour, branche `vue-reduite`)
+
+Son retour, le soir, le lissage dans son FEANOR habituel : « Est-ce qu'on peut rajouter une passe d'antialiasing dans le logiciel ?
+Je vois toujours de la pixelisation de l'image, même avec le vecto propre. » Sa fenêtre, lue telle quelle (une copie de l'image de
+la fenêtre, sans y toucher) : l'onglet Storyboard, le plan 10 de « dd », **la vue à 37 %**. C'est la vue ordinaire : sur son écran, un
+cadre de 1920 × 1080 ne tient pas dans la zone du dessin, la vue cadrée d'origine est toujours en dessous de 100 %. Les traits y sont
+en pointillés, d'épaisseur inégale, avec des trous blancs dans les hachures. La vue nette (166.2) n'y fait rien : elle ne travaille
+qu'au-dessus de 100 %.
+
+**La cause.** Réduite, l'image composée est posée par `fs_display` (`gpu.rs`), qui moyenne plusieurs lectures par pixel d'écran. Mais
+ces lectures se font au niveau 0 demandé (`textureSampleLevel`), et la carte y applique le filtre de **grossissement** de
+l'échantillonneur de l'affichage, qui ne lisse pas : chaque lecture ne prenait qu'**un point** de l'image. À 37 %, un pixel d'écran
+couvre 2,7 × 2,7 pixels du dessin (plus de 7) et n'en lisait que 4 ; de 67 à 100 %, un seul. Les pixels sautés sont des morceaux de
+trait qui manquent. Mesuré avant de corriger (l'essai ci-dessous, sur le code d'avant) : à 80 %, l'encre d'un trait d'un pixel va, d'une
+ligne d'écran à l'autre, **de 0 à 1,25 fois** ce qu'elle doit être ; tournée à 37 %, de 0,56 à 1,35 fois.
+
+**Ce qui change** (`fs_display`, `pose_nette`) :
+
+- **Réduite, vue droite** : chaque pixel d'écran est la **moyenne exacte** de tout ce qu'il couvre du dessin, en lumière linéaire.
+  L'image est lue lissée (l'échantillonneur bilinéaire) ; chaque lecture, posée entre deux pixels du dessin, plus près de celui qui
+  compte le plus, les pèse tous les deux comme il faut : (e + 1) / 2 lectures par axe pour e pixels couverts (4 lectures à 37 %,
+  qui en pèsent 16). Exact jusqu'à 23 pixels couverts par axe (la vue à 4,3 %), 12 lectures par axe au plus.
+- **Réduite, vue tournée ou en perspective** : n × n lectures lissées réparties sur ce que couvre le pixel d'écran, n = le nombre de
+  pixels couverts (12 au plus).
+- **À 100 %, vue tournée** (jusqu'à 102 %), **et en perspective** : l'image se pose lissée au lieu de marches.
+- **Rien d'autre ne change** : à 100 % vue droite (retournée ou tournée d'un quart de tour aussi), les pixels de la feuille tels
+  quels ; au-delà, la vue nette et son lissage (166.2, 166.8), ou les pixels nets d'un dessin bitmap grossi.
+
+Aucun calcul de plus sur le processeur, rien à attendre : c'est la carte graphique qui lit, à chaque image d'écran, pendant le trait
+comme pendant un déplacement. La case vivante des Vignettes passe par le même affichage : elle en profite.
+
+**Ce qui ne change pas, et reste à faire si Anthony le veut** :
+
+- **Les cases des Vignettes qu'on ne dessine pas, et les vignettes de plans** : calculées par le processeur, même faiblesse, autre
+  calcul. Faites ensuite : 166.10.
+- Ce qui est dessiné **hors de la feuille** (`monde.rs`) et l'affichage **sans carte graphique** : une lecture lissée par pixel
+  d'écran, comme avant.
+- Un calque **réduit dans la composition** (un calque rétréci par sa transformation, ou éloigné dans l'Espace 3D) : une lecture
+  lissée par pixel du cadre, à l'écran comme à l'export.
+
+À juger par lui : la vue ordinaire (cadrée, vers 35 à 50 %) est-elle propre, traits continus, sans pointillés ? Les traits fins y
+paraissent-ils trop pâles (ils ont maintenant leur vraie valeur : un trait d'un pixel réduit à 37 % est un gris à 37 %, plus
+jamais un point plein sur deux) ? La vue tournée ?
+
+Les essais (`src/vuereduite_tests.rs`, quatre, plus un qui écrit des images à regarder) : sur la carte graphique, une feuille de
+traits d'un pixel, l'écran peint relu. Vue droite à 80, 50, 37, 20 et 11 % : l'encre de chaque trait, à chaque ligne d'écran, vaut
+le zoom (de 0,94 à 1,04 fois, 1,00 en moyenne ; avant : de 0 à 1,25 fois à 80 %). Vue tournée à 37, 60 et 25 % : l'encre le long
+d'un trait reste régulière (de 0,83 à 1,10 fois sa moyenne ; avant : de 0,56 à 1,35 à 37 %) ; tournée à 100 % : lissée (2 818
+pixels intermédiaires pour 29 noirs). À 100 % vue droite : un pixel noir par ligne entre des blancs, comme avant. Et la règle
+`pose_nette`, cas par cas (droite, retournée, quart de tour, tournée, perspective, 1,5 pixel par point).
+Résultats (17 novembre, 20 h 49) : `vuereduite` 4 réussis (les essais sur la carte graphique ont bien tourné) ; vérificateur complet :
+compilation sans avertissement, **4 800 réussis, 0 échec**, les dix groupes de fiabilité OK. Image de contrôle (l'essai ignoré
+`vue_reduite_captures` sur une copie de « dd », plan 10 à 37 %), regardée agrandie neuf fois à côté de la copie de sa fenêtre : les
+traits sont continus, à bords gradués, plus de pointillés ni de trous blancs dans les hachures. Pas regardé sur son écran.
+
+**Son verdict (le même soir).** L'image de démonstration envoyée avec ce compte rendu (sa fenêtre et la capture du banc, agrandies
+neuf fois, côte à côte) ne l'a pas convaincu : « sur l'image de démonstration la pixélisation est la même. Pire, l'image d'après
+semble encore plus détériorée. » Il avait raison sur l'image : agrandie neuf fois, elle montre de gros carrés des deux côtés, et
+les deux moitiés n'étaient pas la même image du plan. Refaite à l'identique (même image du plan, même zoom, taille réelle), la
+comparaison dit ce qui change vraiment : les traits sont continus, mais plus fins et plus pâles qu'avant, parce que la moyenne se
+fait en lumière linéaire. Rien n'a été fusionné sur ce verdict.
+
+**L'essai à trois façons.** Pour qu'il juge sur son écran et non sur une image : une branche d'essai (`vue-reduite-essai`, pas pour
+main) où F8, dans la vue du dessin, passe d'une façon à l'autre, une étiquette disant laquelle. 1, comme avant (lue par points) ;
+2, lissée, trait pâle (la moyenne en lumière linéaire : le code de cette section) ; 3, lissée, trait plein (la moyenne des valeurs
+telles quelles, sans passer en lumière linéaire : le trait garde sa force). Un lanceur dans `Documents\SHOT\Tests\essai vue-reduite`,
+sur une copie de « dd », avec des réglages à part. **Son choix, l'essai ouvert : « La 3, trait plein », puis « Pardon, la 2 ».** La 2
+est le code de cette section, sans changement. (Claude recommandait la 3 d'après ses captures : c'est son œil, sur son écran, qui a
+tranché.) Pour les démonstrations à venir : la même image dans chaque case, à taille réelle, jamais d'agrandissement en gros
+carrés ; et pour une question de rendu, un essai à bascule sur son écran.
+
+### 166.10 Les vignettes : la même moyenne (le 18 novembre, même branche)
+
+Les cases des Vignettes qu'on ne dessine pas, et les vignettes de plans, sont calculées par le processeur
+(`render::thumbnail_marges_until`, sur les fils de fond de `thumbs.rs`). Même faiblesse que l'affichage avant la 166.9 : 2 à 4
+lectures par axe et par pixel (4 à 16 points), alors qu'un pixel d'une case couvre 5 × 5 pixels du dessin à trois cases par ligne,
+10 × 10 à six par ligne. Mesuré (l'essai ci-dessous, le calcul d'avant rallumé par un interrupteur d'essai) : l'encre d'un trait
+d'un pixel va, d'une ligne à l'autre, **de 0 à 1,8 fois** la normale dans une case de 300 pixels, de 0 à 10 fois dans une vignette
+de 80 pixels. Et depuis la 166.9, la case qu'on dessine (carte graphique) était plus lisse que ses voisines.
+
+**Ce qui change** :
+
+- **Caméra droite** (ni roulis ni bascule) : chaque pixel de la vignette est la **moyenne exacte** de tous les pixels de la feuille
+  qu'il couvre, chacun pour sa part (`axes_droits`, `pixels_de_l_axe`, `Moyenne`), jusqu'à 12 pixels couverts par axe (`EXACT_MAX`).
+- **Caméra en roulis ou basculée** : des lectures en grille, une par pixel couvert et par axe (`lectures_en_grille`).
+- **Plus petit** (une vignette de plan de la timeline couvre 20 pixels par axe) : en grille, une lecture pour deux pixels couverts,
+  6 par axe au plus (36 lectures au lieu de 4). Tout y lire coûtait vingt fois plus, pour un trait d'un vingtième de pixel.
+- **L'espace de la moyenne ne change pas** : la lumière linéaire sur le papier pour une case avec sa marge (comme la case vivante,
+  partie 111, et c'est son choix « la 2 »), le gamma pour les autres vignettes. À l'échelle 1 et au demi, les mêmes valeurs qu'avant.
+- **Le raccourci des pixels sans encre** (`sans_encre`) : là où aucun dessin n'a de tuile dessinée, le fond tel quel, sans rien
+  lire. Sur un dessin au trait, c'est la plus grande part de la vignette : c'est ce qui paie les lectures de plus.
+
+**Le coût** (mesuré par l'essai ignoré `cout_des_vignettes` sur des copies de « dd » et de « retakes brawlydays », le meilleur de
+trois passages, pendant que d'autres sessions compilaient : à lire en proportions). Cases à six par ligne : les 10 plans de « dd »,
+316 ms avant, 507 ms maintenant (1,6 fois) ; les 11 de « retakes brawlydays », 329 ms avant, 199 ms maintenant (0,6 fois). Cases
+à trois par ligne : 558 puis 619 ms, et 527 puis 527 ms. Le plan le plus lourd (le plan 1 de « dd » : un calque transformé, lu
+lissé) : 91 puis 289 ms à six par ligne. Vignettes de plan de 96 pixels : 1,4 puis 5 ms en moyenne. Sans le raccourci, ce serait
+2,5 à 4 fois plus. Tout se fait sur les fils de fond, jamais sur celui de l'interface.
+
+**Ce qui ne change pas** : la marge des cases dans l'export de la planche (`marge_seule_until`, quatre lectures par pixel) et les
+images de l'export (le rendu de l'export) ; ce qui est dessiné hors de la feuille à l'écran (`monde.rs`) ; l'affichage sans carte
+graphique ; un calque réduit dans la composition.
+
+**À vérifier à l'écran (par Anthony)** :
+
+1. La vue de dessin réduite (vers 35 à 50 %) : les traits continus, sans pointillés, comme la façon 2 de l'essai.
+2. L'onglet Vignettes : les cases qu'on ne dessine pas ont des traits continus, du même aspect que la case qu'on dessine ; en
+   passant d'une case à l'autre, pas de saut d'aspect.
+3. La planche se remplit-elle assez vite, à l'ouverture d'un projet et après un zoom de la planche ?
+4. Les vignettes de plans de la timeline.
+
+Les essais (`src/vuereduite_tests.rs`, trois de plus, sept en tout, et deux ignorés de plus) : l'encre d'un trait d'un pixel dans
+une vignette, à chaque ligne, vaut ce qu'elle doit, avec marge (lumière linéaire) et sans (gamma), du tiers au dixième (de 0,96 à
+1,02 fois la normale ; le calcul d'avant, rallumé : de 0 à 1,79 et de 0 à 2,68) ; au vingtième, juste en moyenne (1,03 ; avant : de
+0 à 10 fois). Le raccourci ne change aucun pixel (caméra droite, caméra qui zoome et se décale, caméra en roulis, un calque
+transformé, avec et sans marge). Au demi, la moyenne des quatre pixels, tronquée, comme avant. `perf_tests`,
+`the_thumbnail_samples_the_full_composition` : la vignette, à la taille d'une case, est la moyenne de tous les pixels couverts de
+la composition entière (elle vérifiait quatre points par pixel : l'ancien défaut). Les essais ignorés : `cout_des_vignettes`
+(les temps ci-dessus) et `vignettes_captures` (l'onglet Vignettes d'une copie de projet, vignettes comme avant puis maintenant).
+
+Résultats (18 novembre, de 2 h à 3 h ; trois autres sessions compilaient sans arrêt : le processeur à 100 %, moins de 1,2 Go de
+mémoire libre par moments). `vuereduite` : 7 réussis, 3 ignorés. Les 453 essais existants des vignettes, de la planche, des exports
+voisins et de l'Espace 3D : 0 échec. Capture de contrôle de l'onglet Vignettes (copie de « dd », six cases par ligne), regardée :
+dans une case voisine les traits fins sont continus, du même poids que dans la case qu'on dessine ; avec le calcul d'avant ils sont
+pâles et en pointillés. Pas regardé sur son écran.
+Vérificateur complet, deux passages, **aucun entièrement vert** : au premier, compilation sans avertissement, suite complète
+**4 801 réussis, 0 échec**, neuf groupes OK, et dans le groupe Espace 3D deux essais de temps d'image en échec ; au second,
+compilation sans avertissement, les **dix groupes OK** (Espace 3D : 180 essais), et dans la suite complète 4 800 réussis, 1 échec
+(`retours_aplat_tests::a_fill_stays_on_screen_while_it_is_recomputed_even_after_many_other_fills_were_shown`, « le remplissage
+n'est pas arrivé »). Relancés seuls : le groupe Espace 3D passe trois fois sur quatre (180 réussis ; la quatrième, le processeur à
+100 %, ce sont trois autres essais de temps d'image qui échouent, 33 ms par image au lieu de 5) ; l'essai de l'aplat passe en moins
+d'une seconde quand le processeur n'est pas saturé, et attend trente secondes en vain quand il l'est (son calcul se fait sur un fil
+de fond). Aucun de ces essais n'appelle le code changé ici : ce sont des essais de temps, sensibles à la charge de la machine.
+Refait une fois main repris dans la branche (`87db1b0`, le panneau Pinceau de la partie 45 ; `f603c82`) : un troisième passage
+encore sous la charge (4 802 réussis, 0 échec, neuf groupes OK, un essai de temps d'image du groupe Espace 3D en échec ; ce groupe
+relancé seul : 180 réussis, quatre fois sur quatre), puis, la machine plus calme, à 3 h 44 : **compilation sans avertissement,
+4 802 réussis, 0 échec, les dix groupes de fiabilité OK, « RESULTAT : OK »**. Refait encore une fois main repris de nouveau
+(`60f002e`, la trajectoire de la partie 119 ; `d55ffd5`), six essais à la fois (`RUST_TEST_THREADS=6`, pour ne pas dépendre des
+compilations des autres sessions), à 4 h 17 : **compilation sans avertissement, 4 806 réussis, 0 échec, les dix groupes OK,
+« RESULTAT : OK »**. Main a encore avancé dans la nuit (les versions de plan de la partie 168, puis le Cutter de la partie 169) :
+repris à chaque fois. Avec les versions de plan (`d9f72dd`), à 4 h 44, sous la charge : dix groupes OK, 4 818 réussis et 1 échec
+dans la suite (`traits_continus_tests::thirty_drawn_plans_rest_without_repainting_and_a_frame_stays_cheap`, la planche des
+Vignettes à trente plans : un essai qui touche à ce chantier ; relancé seul, trois fois sur trois, et cinq fois sur cinq au milieu
+de ses 331 voisins en parallèle : il passe, 0,9 ms par image, 3 ms par vignette ; le message de l'échec n'a pas été gardé par le
+vérificateur). Avec le Cutter (`bed74af` ; `a57da20`), le 18 novembre à 9 h 55, la machine calme, sans limite de fils :
+**compilation sans avertissement, 4 830 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. Puis, main ayant reçu les
+préréglages de la partie 170 (`fc908db`, format 57 ; `a4c6368`), à 10 h 14, la machine calme : **compilation sans avertissement,
+4 840 réussis, 0 échec, les dix groupes OK, « RESULTAT : OK »**. C'est l'arbre à fusionner.
+
 ## 167. Le nouveau logo : l'étoile de la charte du 17/11/2026 (branche `logo-joyau`)
 
 **Ce qui change.** Le Joyau d'origine (la pierre irrégulière et sa grande étoile) laisse la place à l'étoile de la
@@ -13810,6 +14058,946 @@ gardent l'irisé (`barre.rs`).
 2. Aide > À propos de FEANOR… : l'étoile devant le mot, la devise alignée à droite sur le R.
 3. L'icône de la fenêtre et du fichier `feanor.exe` (Explorateur) : l'étoile blanche sur le carré arrondi en dégradé.
 4. Thème Papier : l'accueil et À propos restent lisibles.
+
+## 168. Les versions d'un plan dans la timeline : « V2 ▸ », la version dépliée à côté, la couleur de repère (2026-11-17, branche `versions-plan` ; numérotée 167 sur la branche, 168 à la fusion : le nouveau logo avait pris le 167)
+
+Anthony, sur une capture de la timeline en vue Storyboard (en-têtes « Plan 1 · V1 », « Plan 2 »…) : « Je veux que la V2 d'un plan
+apparaisse sur le plan et qu'un clic sur une flèche vers la droite la déploie à côté dans la timeline pour la lire et la comparer
+directement à l'autre version. Un clic direct sur le mot V2 (ou V3) change la version en cours pour celle cliquée. » Puis : « Les
+étiquettes V2 peuvent être colorées pour donner un repère visuel avec un clic droit dessus. » À la question posée : la V2 dépliée
+décale les plans suivants **pour l'affichage seulement**, la lecture enchaîne V1 puis V2, le montage et les exports ne changent pas,
+un clic sur ◂ replie.
+
+Le code : `src/versiondepliee.rs` (la carte des images du film vers celles de l'écran), `src/versiondeplieeui.rs` (étiquettes, bloc
+déplié, palette, vue en lecture seule) ; ce qu'il a fallu ailleurs : `src/storyboard.rs` (la bande du montage passe par la carte),
+`src/app.rs` (lecture, flèches), `src/soundtrack.rs` (le son), `src/canvas.rs` (la vue), `src/planvers.rs` (la couleur des versions).
+Les essais : `src/versiondepliee_tests.rs` (onze).
+
+### 168.1 Les étiquettes sur le bloc du plan
+
+- Sur le bloc d'un plan qui a plusieurs versions, le nom reste « Plan 1 · V1 » (la version en cours), suivi des **autres versions en
+  étiquettes texte** : « V2 », « V3 »…, chacune suivie d'une flèche ▸. Du texte, pas de pastille ni de miniature. Un plan à une seule
+  version n'a rien de plus.
+- **Un clic sur « V2 »** : la V2 devient la version en cours. C'est le « Passer à la version » de toujours : une étape d'annulation
+  (« Passer à la version V2 »), le même message dans la barre d'état (« Le plan est maintenant en V2 ; la V1 est gardée. … »).
+  Aucune boîte de dialogue. Un clic sur la version en cours (« V1 » dans le nom) ouvre la pile des versions (`pileversui.rs`).
+- **Faute de place** (plan court, zoom arrière) : les étiquettes qui ne tiennent pas se résument en « +2 » ; un clic dessus ouvre la
+  pile des versions, un clic droit un menu avec chacune (passer, déplier, colorer). Plus étroit encore, il ne reste que le nom. Une
+  étiquette coupée par le bord du bloc ne se pose pas : jamais deux étiquettes l'une sur l'autre, jamais sur la poignée de fin.
+- La durée du plan n'est écrite que s'il reste de la place après les étiquettes.
+- L'étiquette « V2 » au milieu du haut du bloc (la pile au survol, 2026-10-30) reste telle quelle.
+
+### 168.2 La version dépliée
+
+- **Un clic sur ▸** déplie la V2 **juste après la V1** : un bloc à part, bordé (à la couleur de la version, sinon du contour), hachuré
+  légèrement, avec son aperçu, « V2 ◂ dépliée » et sa durée ; sous lui, une colonne hachurée (pas de pistes : rien ne s'y modifie).
+  Les plans suivants, leurs pistes, le son, les transitions, les commentaires glissent **à l'écran** de la durée de la V2. La flèche
+  devient ◂ (dans le nom du plan et sur le bloc déplié) : un clic replie.
+- **Rien n'est écrit** : pas d'étape d'annulation, rien à enregistrer, pas de changement du format du projet. Le montage, les durées,
+  l'export, l'animatique exportée, les envois ne voient que le film. (Essai : l'empreinte du projet, du fichier des versions et de
+  l'export est la même avant, pendant et après.)
+- **Plusieurs versions dépliées** se suivent dans l'ordre de leurs numéros (V1 puis V2 après la V3 en cours, par exemple) ; d'autres
+  plans peuvent avoir les leurs.
+- **Lecture seule** : un clic dans le bloc ou la colonne pose seulement la tête de lecture (un glisser la fait courir) ; la vue montre
+  alors l'image de la version, composée sur les fils des vignettes, avec « Plan 1 · V2 dépliée · lecture seule · image 12 » écrit
+  dessus. On n'y dessine pas ; le clic droit sur le bloc donne la palette, « Passer à la V2 », « Replier la V2 ».
+- **La lecture** traverse la V1, puis chaque version dépliée, puis le plan suivant ; les flèches (image précédente / suivante) aussi.
+- **Le son pendant une version dépliée** (revu le 18, voir 168.7) : le son **tel qu'il était posé sous cette version** quand elle a
+  cessé d'être la version en cours, à la même place dans le plan ; une version sans son gardé rejoue le son du film **depuis le début
+  du plan**. Après elle, le son reprend au début du plan suivant. Sans son, la lecture suit l'horloge comme d'habitude.
+- **Passer à une version dépliée** (clic sur « V2 » quand elle est dépliée, revu le 18) : elle devient la version en cours et se
+  replie ; aucune version ne se déplie à la place de l'ancienne ; les autres versions dépliées le restent.
+- Le dépliage est de l'affichage de la séance : il ne survit pas à la fermeture du projet, et se défait de lui-même si la version
+  disparaît (supprimée, annulée).
+
+### 168.3 La couleur de repère
+
+- **Un clic droit sur une étiquette** (ou sur un bloc déplié) : « Couleur de l'étiquette V2 », dix pastilles **douces** (revu le 18 :
+  bleu, vert, cyan, rouge, rose, orange, violet, brun, jaune doux et gris bleu, moins saturées et plus claires que les couleurs de
+  plan) et « Aucune ». Une étape
+  d'annulation par changement (« Couleur de la V2 »), rien si la couleur ne change pas ; la barre d'état le dit.
+- La couleur colore le fond de l'étiquette « V2 » (le texte passe en clair ou en sombre selon la teinte) ; elle se voit aussi sur
+  « V1 » dans le nom du plan quand cette version est la version en cours, sur le bord et l'étiquette du bloc déplié, et autour de
+  son image dans la vue.
+- Elle **suit le numéro** de la version : passer de l'une à l'autre ne la change pas ; une version supprimée ne laisse pas la sienne.
+- **Fichier** : un champ `couleurs` (numéro → rang de couleur) dans chaque plan de `plans_versions.json`, écrit seulement s'il y a
+  une couleur. **Le format du projet ne change pas** (56), ni celui du fichier des versions (1) : un projet d'avant s'ouvre tel quel
+  (essai : le champ retiré à la main, le projet se rouvre sans avertissement), et une version d'avant qui ouvre un projet de cette
+  branche l'ignore. Seule limite : une version d'avant qui **enregistre** ce projet perd les couleurs (rien d'autre).
+
+### 168.4 Les bulles
+
+- Sur « V2 » : « Passer à la V2 » — le clic en fait la version en cours, Ctrl+Z revient, clic droit = couleur. Sur la version en
+  cours : ce qu'elle est, clic = la pile. Sur ▸ : « Déplier la V2 » (après la V1, lecture seule, les plans suivants glissent à l'écran
+  seulement) ; sur ◂ : « Replier la V2 ». Sur « +2 » : la pile, et le clic droit. Sur la colonne dépliée et sur sa vue : lecture seule.
+  Toutes au délai habituel (`bulles.rs`, une seconde).
+
+### 168.5 Ce qui reste à juger (par Anthony)
+
+- Le bloc déplié est-il assez distinct d'un plan du film (bord, hachures, « dépliée ») sans être trop chargé ?
+- Le son sous une version dépliée : repris au début du plan (choix fait pour comparer à son égal) ; préfère-t-il le silence ?
+- La palette : dix teintes des couleurs de plan ; les veut-il plus douces (pastel) pour des étiquettes ?
+- Passer à une version dépliée déplie l'ancienne à sa place : est-ce ce qu'il attend ?
+
+### 168.6 Regardé à l'écran (par Claude, le 17 novembre au soir)
+
+Exe de la branche, réglages à part, sur une copie de « retakes brawlydays » (`Tests\essai 167`), fenêtre capturée seule. Le plan 1
+(V2 en cours, V1 rangée) montre « Plan 1 · V2 » puis « V1 ▸ » ; un clic sur ▸ pose le bloc « V1 ◂ dépliée » (2 s 13) après lui, les
+plans suivants glissent, la barre de la séquence reste entière ; un clic dans le bloc montre la V1 dans la vue avec « lecture
+seule ». Premier essai : la vue restait sombre (l'image était rangée dans la file des vignettes sous un numéro que son élagage ne
+connaît pas, et lâchée aussitôt) ; corrigé en la rangeant sous le numéro du plan rangé de la version. Le clic droit sur « V1 » ouvre
+la palette ; l'orange colore l'étiquette du nom, celle du bloc déplié, son bord et le cadre de la vue.
+
+Vérificateur (17 novembre, vers 22 h 50, `-Repetitions 2`) : compilation sans avertissement ; passage 2 : **4 807 réussis, 0 échec** ;
+passage 1 : un échec, `camera_traits_tests::a_stroke_stays_whole_at_rest_while_another_is_drawn_and_after_it_is_released`
+(intermittent, sans lien avec la timeline : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Un premier
+passage avait trouvé le champ `depli` d'`App` non rangé dans `onglets.rs` : il est maintenant de l'état du projet de l'onglet.
+
+### 168.7 Ses réponses (18 novembre) et ce qui a changé
+
+1. **Le son** : « Sur la version dépliée le son se rejoue. Si le son a été posé différemment que la version active, la version
+   dépliée garde le son tel qu'il a été posé. »
+   - **Ce qui existait** : une version de plan ne gardait **aucun son**. Les sons sont des extraits sur les pistes du film, en
+     images du montage ; changer de version laisse le son en place (« le son reste en place », message de « Passer à la version »).
+   - **Ce qui est ajouté** : quand une version cesse d'être la version en cours (nouvelle version, passer à une autre, restaurer),
+     les extraits posés sous le plan à ce moment (ceux qui touchent ses images : piste, début par rapport au plan, son, décalage,
+     durée ; pas leurs fondus ni leurs clés de volume) sont **gardés avec elle** (`SonPose`, champ `sons` du plan dans
+     `plans_versions.json`, facultatif, format inchangé). Le son du film, lui, ne change toujours pas.
+   - **À la lecture** : sous une version dépliée qui a son son gardé, on entend **ce son-là, là où il était posé** ; sinon, le son du
+     film depuis le début du plan. La forme d'onde des pistes son sous le bloc déplié montre ce qu'on entend (le son gardé, ou celui
+     du film à partir du début du plan). Les sons qu'écoutent seulement des versions restent dans le projet (`used_sounds`).
+   - Une version qui avait été rangée **avant** ce changement n'a pas de son gardé : elle rejoue le son du film. Une version sous
+     laquelle rien n'était posé non plus.
+2. « Si la version dépliée est sélectionnée, elle remplace la version active et l'autre version se replie » : voir 168.2.
+3. Le dépliage n'est pas gardé à la fermeture : inchangé.
+4. Les teintes « plus douces » : voir 168.3. Les couleurs sont enregistrées **par numéro de teinte** (0 à 9) : un projet qui en
+   avait prend les nouvelles teintes. Essai : chaque teinte garde un contraste d'au moins 4,5 avec son texte, et toutes se
+   distinguent.
+
+Essais (`src/versiondepliee_tests.rs`, treize) : la V1 dépliée choisie devient la version en cours, se replie, la V3 ne se déplie
+pas, la V2 dépliée le reste ; deux versions au son posé différemment : la partie dépliée joue celui de sa version, à sa place, le
+film garde le sien, et tout se retrouve après enregistrement et réouverture ; les teintes douces.
+
+Vérificateur après ces retours (18 novembre, vers 1 h 45, `-Repetitions 2`) : compilation sans avertissement ; passage 1 : **4 809
+réussis, 0 échec** ; passage 2 : 4 808 réussis, un échec, `effets_debord_tests::a_reserve_too_small_does_not_compute_without_end`
+(intermittent, sans lien avec les versions : relancé seul cinq fois, cinq réussites) ; les dix groupes de fiabilité OK. Captures
+refaites sur le banc sans fenêtre (essai ignoré `versions_depliees_captures`, sur une copie de projet) : la fenêtre de l'exe de
+branche, derrière le FEANOR d'Anthony, ne se redessinait pas.
+
+Note de journal : le message du commit `ab1c03f` (« teintes orange et jaune plus distinctes ; captures sur banc ») est inexact sur
+les teintes : leur réglage est déjà dans `b0f7b4f` ; `ab1c03f` n'ajoute que l'essai des captures.
+
+## 169. Le Cutter a des réglages : écart toléré, bouts effilés, dépassements, portée, lasso (2026-11-18, branche `cutter-reglages` ; numérotée 168 sur la branche, 169 à la fusion : les versions de plan avaient pris le 168)
+
+Anthony : le Cutter n'avait aucun réglage (« Le Cutter, la pipette et la main n'ont pas de réglages »). Cinq réglages lui ont été
+proposés ; sa réponse : « On peut tout mettre ? » Les cinq y sont (`src/cutter.rs` pour le calcul, `src/cutterui.rs` pour le panneau).
+Ce sont des réglages du poste (`reglages.toml`, clé `[cutter]`, écrite seulement si l'on a changé quelque chose) : rien n'est écrit
+dans le projet, le format de projet ne change pas (56).
+
+### 169.1 Ce que fait chaque réglage
+
+- **Écart toléré** (0 d'origine, jusqu'à 30 px du dessin) : un trait qui s'arrête à moins de cet écart d'un autre trait compte comme
+  s'il le croisait. Le bout est prolongé dans sa direction jusqu'à l'autre trait (sinon, le point le plus proche) : l'autre trait est
+  coupé là, et ce bout n'est plus un « bout libre » pour le nettoyage des dépassements. Un trait qui revient presque sur lui-même (une
+  boucle pas tout à fait fermée) compte aussi. 0 : seuls les vrais croisements, comme avant. *Défaut 0* : c'est le Cutter d'avant,
+  aucun geste d'Anthony ne change de résultat sans qu'il l'ait choisi.
+- **Bouts effilés** (0 = net d'origine, jusqu'à 80 px) : le bout laissé par une coupe (là où le morceau voisin est parti) s'affine sur
+  cette longueur, jusqu'à 12 % du rayon du trait. Les morceaux qui restent côte à côte ne s'affinent pas. Un trait effilé perd ses
+  appuis enregistrés (les points ajoutés n'en ont pas) : le rendu reprend l'appui d'après les rayons.
+- **Mode** : « Couper » (comme avant) ou « Nettoyer les dépassements » : dans la zone que le geste touche ou entoure, les bouts
+  d'extrémité (entre le bout libre d'un trait et son dernier croisement) plus courts que « Dépassements enlevés jusqu'à » (12 px
+  d'origine, de 1 à 100) partent. Un morceau entre deux croisements ne part jamais ; un trait qui ne croise rien non plus.
+- **Geste** : « Glisser en travers » (comme avant ; un clic prend toujours le bout le plus proche) ou « Lasso » : on entoure, et les
+  morceaux (après la coupe aux croisements) entièrement dans le lasso partent. En mode Dépassements, le lasso délimite la zone.
+- **Portée** : « Calque actif » (comme avant) ou « Tous les calques visibles » : les traits des autres calques vectoriels visibles du
+  plan, à la même image, servent aussi de lignes de coupe (ramenés dans le repère du dessin coupé) ; ils ne sont jamais modifiés. Dans
+  une case des Vignettes, seul le calque actif compte.
+- **La sélection agit sur tout** : plusieurs calques choisis, ou plusieurs clés, et le geste coupe tous les dessins choisis là où on les
+  voit (chacun dans son repère, comme la gomme sur plusieurs calques), en **une seule étape d'annulation** (« Cutter ») ; la barre
+  d'état dit « Cutter sur 3 calques : 5 bouts enlevés dans 3 dessins. » (et les calques laissés de côté). Le dessin qu'on voit coupe
+  toujours, choisi ou non.
+
+Les zones remplies et les textes ne bougent toujours pas ; le clic « retirer la zone fermée de l'aplat » (`fondui.rs`) reste.
+
+### 169.2 Le panneau
+
+Le dessin validé par Anthony le 18 novembre, après deux essais refusés (de grandes tuiles dessinées : « trop grosses et peu
+professionnelles. Revois le design pour rendre ça moins gadget, plus pro » ; puis des segments à icônes). Il tient au-dessus du bloc
+Couleur sans défiler.
+
+- **Mode**, **Geste**, **Portée** : le libellé à gauche (gris discret, colonne de 62 px), un bouton segmenté d'une ligne à droite
+  (20 px, texte seul, filet de 1 px, coins de 4 px) : « Couper » | « Dépassements » ; « Glisser » | « Lasso » ; « Calque actif » |
+  « Calques visibles ». Le segment choisi a un gris un peu plus clair, le texte clair et un trait turquoise (le rehaut) de 2 px
+  dessous ; les autres restent sans fond.
+- Un filet, puis **Écart toléré** et **Bouts effilés** : le libellé et la valeur (« 3 px » ; « net » à 0) sur une ligne, dessous le
+  dessin sur toute la largeur, qui est lui-même le curseur. Écart : un trait horizontal s'arrête avant un vertical, on glisse son
+  bout (la poignée) ; l'écart toléré en pointillés turquoise. Effilé : un trait plein dont le bout droit s'affine, la poignée au début
+  de la pointe, un repère rouge en pointillés au bout (la coupe).
+- En mode Dépassements seulement : **Dépassements enlevés jusqu'à** et sa valeur, puis un curseur ordinaire sur toute la largeur.
+- Un filet, puis le repli « ▸ Précis » : les trois longueurs en chiffres.
+
+Aucune légende sous les contrôles : chaque segment, dessin et curseur a sa bulle (nom et effet ; « à 0, un trait qui ne touche pas
+n'est pas coupé » est dans celle de l'écart).
+
+L'aide de la barre de la vue, l'aide des touches (les gestes du Cutter), la description de l'outil et le texte de l'animation
+« Le Cutter coupe aux croisements » parlent des réglages.
+
+### 169.3 Les essais, la vitesse, ce qui reste à juger
+
+Les essais (`src/cutter_tests.rs`, neuf de plus ; `src/cutter_reglages_tests.rs`, trois) : un presque-croisement compte à 4 px et
+pas à 2 px (écart de 3), et à 0 l'horizontale part en entier comme avant ; les réglages d'origine coupent exactement comme avant ;
+l'effilé réduit le rayon au bout coupé (12 %) et pas ailleurs ; le nettoyage enlève les sept bouts de 5 px d'un dièse au lasso comme
+au balayage, garde la queue de 50 px et les morceaux entre croisements, ne touche pas un trait seul ; le lasso n'enlève que le
+morceau entièrement entouré ; une ligne d'un autre calque coupe sans rien ajouter ; les réglages s'écrivent seulement changés et se
+relisent (une valeur absurde est ramenée) ; sur le banc, la portée « Calques visibles » coupe contre l'autre calque sans le
+modifier (et plus quand il est caché) ; trois calques choisis : trois traits coupés, une seule étape d'annulation, « 3 calques » et
+« 3 bouts » dans la barre d'état ; le panneau montre ses contrôles et la ligne des dépassements en mode Dépassements seulement.
+
+Sans latence : les croisements sont filtrés par la boîte de l'autre trait au niveau de chaque segment (avant : au niveau du trait
+entier, 72 ms). Un dessin de 300 longs traits denses (150 × 150, 40 points chacun, 22 500 croisements) et 100 lignes d'un autre
+calque, un geste qui en traverse une soixantaine : 7 ms (couper), 9 ms (écart toléré de 3 px), 7 ms (dépassements), sur ce poste.
+
+Vérificateur (18 novembre, nuit) : compilation sans avertissement ; passage 2 : 4 807 réussis, 0 échec ; passage 1 (machine très
+chargée, 1 242 s) : deux échecs de minutage, `a_big_drawing_cuts_fast` (rendu depuis plus robuste : le meilleur de cinq mesures) et
+`retours_aplat_tests::a_fill_stays_on_screen…` (sans lien avec le Cutter) ; relancés seuls trois fois : réussis. Les dix groupes de
+fiabilité OK.
+
+Regardé à l'écran (par Claude, exe de la branche, réglages isolés, copie du projet sous `Tests\essai 168`) : le panneau tient sans
+défiler au-dessus de la Couleur, dans les deux modes ; les réglages changés sont retrouvés au lancement suivant. Le nettoyage sur le
+vrai dessin n'a pas pu être montré (le calque courant de la copie est verrouillé).
+
+À juger par Anthony : la valeur d'origine de l'écart toléré (0 aujourd'hui, pour que rien ne change sans lui ; 2 ou 3 px seraient
+plus utiles au quotidien) ; la longueur d'origine des dépassements (12 px du dessin) ; le dessin de la pointe effilée (jusqu'à 12 %
+du rayon) ; un trait effilé perd ses appuis enregistrés (le rendu les reprend des rayons) : à regarder sur un trait texturé.
+
+## 170. Les préréglages dans la timeline, lot 1 : le socle (2026-11-18, branche `prereglages-socle`)
+
+Anthony : « Il faut qu'on crée des présets d'animation de caméra à intégrer directement dans la timeline. Par exemple : krash
+zoom/dézoom, zip pan, panoramique, travelling. Pareil pour des présets de plan type Color Card, Titre, Crédits… » Une liste
+numérotée lui a été proposée (C1–C28 caméra, P1–P18 plans types, T1–T8 transitions, A adoucis, V valeurs de plan, E effets,
+S son, D décors 3D, R les siens, M mouvements de calque), puis une page où chacun joue en boucle. Son verdict : 64 Oui (tous
+les C, P1 P2 P3 P5 P6 P7 P8 P13 P14 P16 P17 P18, T3 T4 T6 T7 T8, A1 A2, V1 V2, E1–E8, S1 S2, D1, R1–R3, M1), aucun Non ; sans
+réponse : P4, P9, P10, P11, P12, P15, T1, T2, T5. L'ordre de travail proposé, en lots : **1 le socle**, 2 la caméra 2D (C1–C12,
+C18–C27), 3 la caméra dans l'Espace 3D (C13–C17), 4 le montage (plans types et transitions), 5 le reste ; C28 attend un flou par
+calque selon la profondeur, M1 l'onglet Animation (le tout dernier chantier). Sa réponse : « Oui, le lot 1 ».
+
+Le code : `src/blocscamera.rs` (les blocs dans la timeline), `src/panneauprereglages.rs` (le panneau), `src/camfx.rs`
+(`cuire_tous`) ; ce qu'il a fallu ailleurs : `src/document.rs` (`Panel::effets_camera`, `cles_montrees`), `src/project.rs` (format
+57), `src/camfxui.rs` (la section « Effets de caméra »), `src/timeline.rs` (la rangée des blocs sous les clés), `src/dock.rs`,
+`src/dockui.rs`, `src/barrepanneaux.rs`, `src/keymap.rs` et `keymap.toml` (le panneau), `src/app.rs` (l'état, Suppr), et quelques
+lectures du champ (`xsheet.rs`, `exportcamera.rs`, `exportrender.rs`, `planannule.rs`, `planvers.rs`, `espace3ddirect.rs`, `io.rs`).
+Les essais : `src/blocscamera_tests.rs` ; ceux de la partie 129 (`camera_retours_tests.rs`) passent à la liste.
+
+### 170.1 Ce qui change pour lui
+
+- **Un plan porte autant d'effets de caméra vivants qu'on veut.** Avant, un seul (partie 129). Chacun est un **bloc jaune** sous la
+  rangée des clés de caméra de la timeline, de son image de départ à sa fin ; quand deux blocs se chevauchent, le second va sur un
+  rang en dessous. Ils **s'ajoutent** : un tremblement posé sur un zoom tremble autour du zoom.
+- **Le panneau Préréglages** (icône pellicule dans la barre des panneaux, en Storyboard et en Animation ; action
+  `vue.prereglages`, sans touche) : les huit préréglages de caméra en vignettes, une petite scène de storyboard vue par la caméra.
+  **Au survol, la vignette joue le vrai mouvement du préréglage** (celui que posera le bloc, avec ses réglages d'origine) ; elle ne
+  bouge pas sinon, pour ne pas faire redessiner FEANOR sans cesse.
+- **Glisser une vignette sur la timeline** (sur la rangée de la caméra ou sur celle des blocs) : un repère jaune montre où le bloc
+  se posera et sa durée ; au lâcher, le bloc est posé, vivant, sans clé. Pendant le glisser, une rangée « Lâche le préréglage ici »
+  s'ouvre sous les clés si le plan n'a encore aucun bloc. **Un clic sur la vignette** pose le bloc à la tête de lecture.
+  Un bloc qui déborderait de la fin du plan recule juste assez pour tenir dedans (s'il est plus long que le plan, il part où l'on
+  vise et la fin du plan le coupe : la partie coupée est pâle).
+- **Le bloc à la souris** : son corps le fait glisser ; un bord change sa durée (l'autre bord ne bouge pas) ; un clic le choisit
+  (contour) ; le clic droit ouvre son menu (« Retirer cet effet », « Convertir les effets en clés ») ; **Suppr** enlève le bloc
+  choisi. Le curseur dit ce que fera la prise. Chaque geste est une étape d'annulation. Un clic dans la grille, ou dans le dessin,
+  lâche le bloc choisi (Suppr revient au dessin).
+- **La section « Effets de caméra » du panneau Caméra** règle le bloc choisi (sinon le dernier posé) : la liste du haut change son
+  préréglage, « Aucun effet » le retire, les champs (intensité, durée, fréquence, graine, zoom) le règlent comme avant. Avec deux
+  blocs ou plus, la liste des effets du plan est au-dessus, chacun se choisit d'un clic. « Ajouter un effet » en pose un de plus à la
+  tête de lecture.
+- **« Convertir en clés » convertit tous les blocs du plan d'un coup**, en une étape : les clés écrites donnent exactement l'image
+  que montraient les blocs, puis les blocs s'en vont ; les clés nouvelles ou changées sont choisies.
+- Aucune boîte de dialogue.
+
+### 170.2 Comment c'est fait
+
+- `Panel::effets_camera: Vec<camfx::Vivant>` remplace `effet_camera: Option<Vivant>`. Un bloc **est** un `Vivant` : préréglage,
+  départ, durée, réglages. Aucune notion nouvelle dans le document.
+- `camfx::cuire_tous` cuit les effets **l'un après l'autre**, dans l'ordre de la liste : le premier part des clés du plan et de sa
+  caméra sans effet (continuité comprise), chacun des suivants part des clés que le précédent a écrites. C'est exactement ce que
+  feraient des « Convertir en clés » successifs : convertir ne change donc aucune image (essai). Chaque cuisson passe par la mémoire
+  de `cuire_vite`. `Document::cles_montrees` et `camera_reelle_du_plan_range` l'appellent ; tout ce qui lisait l'effet unique lit la
+  liste (la feuille d'exposition marque les images de chaque bloc, l'export de la caméra nomme tous les effets).
+- Les gestes qui coupent, réunissent, rognent ou décalent les images d'un plan cuisaient l'effet avant d'agir (partie 129) : ils
+  cuisent maintenant tous les blocs, par le même `cuire_effet_vivant`.
+- **Format 57** : le plan écrit `effets_camera` (une liste) et plus `effet_camera`. Un projet du format 52 à 56 s'ouvre tel quel, son
+  effet devenant le premier (et seul) bloc, avec la même image (essai) ; une version précédente refuse un projet 57.
+- La timeline : `blocscamera::blocs_camera_bande`, appelée juste après la rangée des clés, a sa propre zone de clic posée sur la
+  grille (elle passe devant). La hauteur de la rangée des blocs (`blocs_camera_h`) entre dans celle de la timeline et de la colonne
+  des noms. Le glisser-déposer est celui d'egui, comme les bruitages (`PresetDrag`).
+- Le bloc choisi est `App::blocs.choisi` (id du plan, rang) ; Suppr le vise quand le dernier clic était dans la timeline
+  (`key_focus`) et qu'aucune clé de caméra n'est choisie (choisir un bloc lâche les clés choisies).
+
+### 170.3 Ce qui n'est pas fait (lots suivants)
+
+- Les autres préréglages de la liste (C1 à C27 : le lot 2 et le lot 3) ; les plans types, les transitions, le reste.
+- Les blocs ne se voient pas dans le Montage (seulement dans la timeline du plan) ; ils ne se copient pas d'un plan à l'autre.
+- L'intensité se règle dans le panneau Caméra, pas en tirant le bloc vers le haut (proposé sur la page, à juger).
+
+### 170.4 À tester (sa checklist)
+
+1. Ouvrir le panneau Préréglages (icône pellicule) : passer le pointeur sur chaque vignette, elle joue son mouvement.
+2. Glisser « Zoom avant » sur la timeline d'un plan : le repère jaune suit, le bloc se pose au lâcher, l'image zoome tout de suite.
+3. Glisser « Tremblement léger » par-dessus : un second rang, le tremblement s'ajoute au zoom.
+4. Tirer le bord droit d'un bloc, puis son corps : durée, puis place ; Ctrl+Z défait chaque geste.
+5. Cliquer un bloc, Suppr : il part, les clés de caméra ne bougent pas.
+6. Cliquer une vignette : un bloc à la tête de lecture.
+7. Panneau Caméra, « Effets de caméra » : la liste des effets, choisir l'un, changer son intensité ; « Convertir en clés » : les
+   blocs deviennent des clés, l'image ne change pas.
+8. Enregistrer, rouvrir : les blocs reviennent. (Attention : le projet passe au format 57, refusé par son FEANOR habituel tant
+   que ce n'est pas fusionné.)
+
+## 171. Les préréglages dans la timeline, lot 2 : la caméra 2D (2026-11-18, branche `prereglages-camera`)
+
+Anthony : « Oui, le lot 2 ». C'est le lot 2 de la liste de la partie 170 : C1 à C12 et C18 à C27, la caméra 2D. Vingt-deux
+préréglages de plus (C5 en deux : avant et arrière), en blocs vivants comme ceux du lot 1. **C11 (panoramique de suivi d'un
+calque) n'est pas fait**, et le flou de vitesse du zip pan non plus (171.3).
+
+Le code : `src/camfx.rs` (les préréglages, leurs familles, leurs courbes, leur flèche), `src/effetpoignee.rs` (la flèche ou la
+cible dans le cadre, avec l'outil Caméra), `src/camfxui.rs` (les réglages, le petit cadre de la flèche), `src/panneauprereglages.rs`
+(les familles, la profondeur de la petite scène), `src/blocscamera.rs` (le menu « Ajouter un effet »), `src/document.rs`
+(`camera_avant_l_effet`), `src/camtools.rs` et `src/canvas.rs` (`CamHandle::Effet`), `src/project.rs` (format 58). Les essais :
+`src/camfx_lot2_tests.rs` ; les essais qui citaient le format 57 passent à 58 ; celui de la liste des effets (partie 129) la fait
+défiler, ceux du panneau (partie 170) prennent des vignettes du haut.
+
+### 171.1 Ce qui change pour lui
+
+Les vingt-deux, par famille (son numéro, son nom, ce qu'il fait, ce qui se règle en plus de la durée) :
+
+| | Nom | Ce qu'il fait | Se règle |
+|---|---|---|---|
+| C1 | Dézoom choc | Part serré sur la cible, le cadre s'ouvre d'un coup et ralentit | Zoom, cible |
+| C2 | Zoom par paliers | À-coups secs vers la cible, tenus entre deux | Zoom, paliers, cible |
+| C3 | Zoom lent de tension | Zoom presque imperceptible vers la cible | Zoom, cible |
+| C4 | Zoom vers un point | La cible arrive au centre en zoomant | Zoom, cible |
+| C5 | Travelling avant / arrière | La caméra avance (recule) : le près passe vite, le loin à peine | Avancée |
+| C6 | Ken Burns | Glissement et zoom lents, réguliers | Zoom, flèche |
+| C7 | Panoramique à plat | La caméra glisse dans le sens de la flèche | Flèche |
+| C8 | Zip pan | Panoramique éclair, petit rebond à l'arrivée | Flèche |
+| C9 | Panoramique avec dépassement | Va 12 % plus loin, revient se poser | Flèche |
+| C10 | Panoramique de découverte | Part du bout de la flèche, se pose sur le cadre du plan | Flèche (départ) |
+| C12 | Panoramique en rotation | La caméra tourne sur elle-même, en perspective | Angle |
+| C18 | Plan penché progressif | Le cadre penche peu à peu, puis garde l'angle | Angle |
+| C19 | Tonneau | Un tour complet qui accélère, avec un peu de zoom | Rotation, zoom |
+| C20 | Tremblement de terre | Long, grave : monte, gronde, s'éteint | Intensité, fréquence, graine |
+| C21 | Pas lourds | Une secousse verticale amortie par pas | Intensité, pas par seconde |
+| C22 | Caméra qui marche | Avance avec le balancement de la marche | Intensité, pas, avancée |
+| C23 | Véhicule | Vibration, bosses, et la caméra glisse | Intensité, fréquence, graine, flèche |
+| C24 | Houle | Roulis lent d'un bateau | Intensité, rythme |
+| C25 | Respiration | Dérive infime, un souffle | Intensité, rythme, graine |
+| C26 | Recadrage sec | Saut de cadre sur une image, vers la cible | Zoom, cible |
+| C27 | Arrêt net | Glisse à vitesse constante, se fige d'un coup | Flèche |
+
+- **Rangés par famille** partout : le panneau Préréglages (« CAMÉRA · ZOOMS ET AVANCÉES », « PANORAMIQUES », « ROTATIONS »,
+  « SECOUSSES », « COUPES DANS LE PLAN », les titres de la page de choix), la liste du panneau Caméra, le menu « Ajouter un effet »
+  (un sous-menu par famille).
+- **La flèche ou la cible se tire dans le cadre, avec l'outil Caméra.** Le bloc qu'on règle (choisi dans la timeline, sinon le
+  dernier posé) montre sa flèche (le chemin de la caméra), sa flèche de départ (d'où elle vient) ou sa cible (le point de l'image
+  qu'elle vise), avec un cadre en pointillés là où la caméra arrive (ou d'où elle part, zoom compris). On tire la prise ronde du
+  bout : l'image suit aussitôt, sans clé ; Maj garde la flèche droite ou verticale ; un geste, une étape d'annulation. La caméra
+  du plan ne bouge pas. Ailleurs dans le cadre, l'outil Caméra fait comme avant.
+- **La même flèche dans le panneau Caméra**, section « Effets de caméra » : un petit cadre où on la clique ou la tire, sous les
+  champs. Les champs nouveaux : « Angle » (« Rotation » pour le tonneau), « Paliers », « Avancée » (au lieu de « Zoom » pour les
+  travellings et la marche : la caméra avance, la focale ne change pas), « Pas » et « Rythme » (la fréquence des pas lourds, de la
+  marche, de la houle, du souffle).
+- **Les vignettes** visent le visage du personnage (la maison pour le zoom vers un point), et la petite scène a de la profondeur :
+  au travelling avant, le rocher passe vite et les montagnes bougent à peine.
+- Comme au lot 1 : chacun est un bloc vivant, sans clé, et « Convertir en clés » donne exactement la même image (essai sur les
+  trente préréglages, avec et sans clés de caméra, avec et sans paliers de caméra). Aucune boîte de dialogue.
+
+### 171.2 Comment c'est fait
+
+- **Les préréglages qui posent peu de clés suivent une courbe** (`camfx::courbe_de`) : à quelques images, l'avancement du
+  mouvement (0 : la caméra du plan, 1 : l'arrivée, au-delà : un dépassement) avec ses adoucis en images. Entre deux clés, la
+  caméra suit la même loi que deux clés ordinaires (`camera::ease`) : l'effet vivant et ses clés converties sont la même chose,
+  et les clés converties se règlent ensuite comme les autres (deux clés pour un panoramique, trois pour un dépassement, deux par
+  palier). Les secousses posent une clé par image (toutes les 2 ou 4 images pour la marche, la houle, le souffle).
+- **`Params::vers`** : la flèche ou la cible, en part de la largeur du cadre, **dans l'image** ; `plan` la tourne avec le cadre
+  (un cadre tourné d'un quart de tour glisse vers le bas de la feuille quand la flèche va à droite). Les secousses d'avant gardent
+  leur décalage sur la feuille, au pixel près. La poignée se pose dans la caméra du plan au début de l'effet, sans lui ni ceux
+  d'après (`Document::camera_avant_l_effet`).
+- **L'avancée** (travellings, marche) divise la distance de la caméra au plan de référence (`Sample::avance`, la borne de
+  `Camera::distance` respectée) ; **le panoramique en rotation** tourne `Camera::pan` (ramené comme toujours par `limited` si le
+  cadre ne voyait plus la feuille). `Params::degres` porte l'angle, `Params::paliers` le nombre d'à-coups.
+- **Format 58** : les noms des vingt-deux préréglages, et `vers`, `degres`, `paliers` écrits seulement quand ils servent. Un
+  projet 57 ou moins s'ouvre tel quel ; une version précédente refuse un projet 58 (elle laisserait de côté, sans rien dire, un
+  effet au nom inconnu).
+
+### 171.3 Ce qui n'est pas fait
+
+- **C11, le panoramique de suivi d'un calque** : il faut suivre le dessin d'un calque image par image (son centre à chaque image)
+  et le rendre à la caméra avec un léger retard ; le calcul de la caméra n'a pas encore accès aux dessins. Proposé ensuite.
+- **Le flou de vitesse du zip pan (C8)** : le mouvement est là, pas le flou « posé en même temps ». Il demande un flou de bougé de
+  la caméra dans la composition de l'image (écran, export, vignettes). En attendant, le préréglage d'effet « Flou de vitesse » (un
+  calque d'effet) se pose à la main par-dessus.
+- C28 (bascule de point) attend un flou par calque selon la profondeur ; le lot 3 (C13 à C17, l'Espace 3D) ; les plans types, les
+  transitions et le reste. Les blocs ne se voient toujours pas dans le Montage.
+
+### 171.4 À tester (sa checklist)
+
+1. Panneau Préréglages : les cinq familles ; survoler « Travelling avant » (le rocher passe vite), « Zip pan », « Tonneau »,
+   « Houle ».
+2. Poser « Panoramique à plat » sur un plan, prendre l'outil Caméra : la flèche dans le cadre ; tirer son bout (Maj : droite),
+   l'image suit ; Ctrl+Z défait le geste.
+3. « Zoom vers un point » : tirer la cible sur un visage ; à la fin du bloc, le visage est au centre, serré.
+4. « Panoramique de découverte » : la flèche part d'où vient la caméra (le ciel), le bloc finit sur le cadre du plan.
+5. « Zoom par paliers » : Paliers 2, puis 4.
+6. « Plan penché progressif » et « Panoramique en rotation » : le champ Angle.
+7. Les secousses : tremblement de terre, pas lourds (Pas : 1), caméra qui marche, véhicule (avec sa flèche), houle, respiration.
+8. « Recadrage sec » et « Arrêt net ».
+9. « Convertir en clés » sur un plan à plusieurs blocs : l'image ne change pas.
+10. Enregistrer, rouvrir : les blocs et leurs flèches reviennent. (Le projet passe au format 58, refusé par son FEANOR habituel
+    tant que ce n'est pas fusionné.)
+
+## 172. Les préréglages dans la timeline, lot 3 : la caméra dans l'espace (2026-11-18, branche `prereglages-travellings`)
+
+Anthony : « Oui, le lot 3 ». C'est le lot 3 de la liste de la partie 170 : C13 à C17, les mouvements de caméra dans l'espace.
+Quatre préréglages de plus en blocs vivants (C13 à C16) et quatre trajectoires toutes faites (C17), qui deviennent le chemin
+de la caméra du plan.
+
+Le code : `src/camespace.rs` (nouveau : l'œil de la caméra, ses axes, le rayon d'un point de l'image, la visée), `src/camfx.rs`
+(les quatre préréglages, leur famille, leur calcul dans l'espace), `src/trajformes.rs` (nouveau : les trajectoires toutes
+faites), `src/trajectoire.rs` (`Trajectoire::vise`), `src/document.rs` (la caméra libérée par un effet, la visée du sujet sur
+le chemin), `src/blocscamera.rs` (la barre du chemin de la caméra dans la timeline), `src/panneauprereglages.rs` (les vignettes
+filmées par la vraie caméra, la famille Trajectoires), `src/camfxui.rs` et `src/effetpoignee.rs` (les champs, la poignée du
+sujet), `src/trajectoire3d.rs` (le sujet dans la vue Espace 3D), `src/project.rs` (format 59). Les essais :
+`src/camfx_lot3_tests.rs` ; ceux qui citaient le format 58 passent à 59.
+
+### 172.1 Ce qui change pour lui
+
+| | Nom | Ce qu'il fait | Se règle |
+|---|---|---|---|
+| C13 | Travelling latéral | La caméra se déplace de côté dans le sens de la flèche : ce qui est près passe vite, le lointain à peine. Elle suit ses propres axes, même tournée | Flèche |
+| C14 | Orbite | La caméra tourne autour du sujet, qui reste à sa place dans l'image : les dessins se voient de biais, puis de côté | Sujet, Angle (positif : elle passe à sa droite) |
+| C15 | Grue | La caméra monte en basculant vers le bas, le sujet reste à sa place dans l'image | Sujet, Hauteur (négative : elle descend) |
+| C16 | Survol | La caméra s'élève, bascule vers le sol et avance au-dessus des dessins, comme un drone | Hauteur, Bascule, Avancée |
+| C17 | Trajectoires toutes faites | Ligne droite, Arc, Spirale, En S : le chemin de la caméra du plan, qui garde son sujet dans le cadre ; il se retouche avec l'outil Trajectoire dans la vue Espace 3D | Tout ce que règle l'outil Trajectoire |
+
+- **La famille « Travellings »** partout où sont les autres (panneau Préréglages, liste du panneau Caméra, menu « Ajouter un
+  effet ») ; **la famille « Trajectoires »** dans le panneau Préréglages seulement (ce ne sont pas des effets).
+- **Ils bougent vraiment la caméra dans l'espace** : elle peut passer à côté d'un dessin, au-dessus, derrière, comme une
+  caméra posée dans la vue de la scène. Le plan le retient (sa caméra est libre) : aux images où elle sort de ce que voyait la
+  feuille, l'image passe par le changement de repère (partie 159) ; aux autres, rien ne change. Aucun mot de 3D hors de la vue
+  de la scène : « travelling », « orbite », « grue », « survol » sont des mots de tournage.
+- **La poignée**, avec l'outil Caméra : la flèche du travelling latéral, comme au lot 2 ; pour l'orbite et la grue, un viseur
+  « Sujet » à tirer sur ce que la caméra doit garder à sa place (un visage), sans cadre d'arrivée. Le même dans le petit cadre
+  du panneau Caméra. Champs nouveaux : « Hauteur » (en hauteurs du cadre), « Avancée » du survol (en distances de la caméra aux
+  dessins : 1, elle arrive au-dessus d'eux), « Bascule » du survol, « Angle » de l'orbite.
+- **Une trajectoire toute faite** (glissée sur la piste Caméra, ou cliquée : à la tête de lecture) devient le chemin de la
+  caméra du plan, de la tête de lecture à 4 secondes plus loin (ou la fin du plan), et remplace celui d'avant (Ctrl+Z le rend).
+  Elle est posée à plat, à la hauteur de l'œil, mesurée à la distance du sujet : l'arc fait un sixième de tour autour de lui, la
+  spirale tourne en se rapprochant et en montant, le S avance vers lui en ondulant, la ligne droite passe de côté. Cinq marques,
+  plus serrées aux deux bouts, la font partir et arriver doucement. **La caméra garde son sujet dans le cadre** : le point
+  qu'elle voit au centre du cadre au départ reste au centre, elle tourne en avançant.
+- **Dans la timeline, la barre « Chemin de la caméra »** sous les blocs, en contour : son corps glisse le chemin dans le temps,
+  ses bords recalent son départ ou sa fin (le temps des marques suit) ; clic droit : « La caméra garde son sujet dans le
+  cadre » (à cocher ou non) et « Retirer le chemin de la caméra ». Un chemin tracé à la main dans la vue Espace 3D y a sa barre
+  aussi.
+- **Dans la vue Espace 3D**, avec l'outil Trajectoire et la caméra choisie : la même case « La caméra garde son sujet dans le
+  cadre » dans les réglages, et un viseur « Sujet de la caméra » à sa place dans l'espace. Retracer le chemin garde le sujet.
+- **Les vignettes sont filmées par la vraie caméra** de l'effet, en perspective, chaque trait à sa profondeur : l'orbite, la
+  grue et le survol s'y voient tels que le plan les filmera. Celles des lots 1 et 2 aussi : un panoramique à plat y montre
+  désormais la parallaxe qu'il a dans le plan (le rocher passe plus vite que les montagnes).
+- Comme aux lots 1 et 2 : chacun est un bloc vivant, sans clé, et « Convertir en clés » donne exactement la même image (l'essai
+  de la partie 129 passe sur les trente-quatre). L'orbite et la grue posent une clé par image (leur courbe), le travelling
+  latéral et le survol deux.
+
+### 172.2 Comment c'est fait
+
+- **`camespace.rs`** compte la caméra du plan dans l'espace, en pixels de la feuille, avec les conventions de
+  `Camera::homography` et de `Monde::repere_camera` : l'œil en (x, −y, d0 − avancée), sans la borne de `Camera::distance` ; ses
+  axes (droite, haut, arrière) ; le rayon d'un point de l'image ; `image_de` (où elle voit un point) ; `point_vu` (le point du
+  plan de référence qu'elle voit en un point de l'image) ; `viser` (le panoramique et la bascule qui montrent un point à une
+  place donnée de l'image, la bascule la plus proche de la sienne) ; `tourner_autour` (la caméra entière tournée autour d'une
+  verticale).
+- **`camfx::dans_l_espace`** applique l'avancement d'un préréglage du lot 3 à la caméra de chaque image : l'œil déplacé selon
+  les axes de l'image (travelling latéral), tourné autour du sujet (orbite), monté puis visé sur le sujet (grue), monté et
+  avancé à plat, bascule ajoutée (survol). Le sujet est le point du plan de référence vu à `Params::vers`. Ces préréglages ne
+  passent pas par `Camera::limited` (`Preset::dans_l_espace`). `Params::hauteur` et `Params::avancee` sont nouveaux.
+- **La caméra libérée** : `Panel::a_un_effet_dans_l_espace` compte comme `camera_libre` dans `Document::repere_d_un_plan`, et
+  poser un tel effet (bloc, liste, menu) met `camera_libre` au plan, comme la vue de la scène.
+- **La visée du chemin** : `Trajectoire::vise` (mètres) ; `Document::camera_sur_la_trajectoire_de` tourne la caméra portée par le
+  chemin pour voir le sujet là où la caméra des clés le voit, `camera_hors_de_sa_trajectoire` fait le même chemin en sens
+  inverse (régler la caméra à une image écrit toujours la bonne clé). Sans déplacement (avant le départ), la caméra des clés au
+  bit près. Le miroir gauche-droite retourne le sujet ; un sujet abîmé dans un fichier est laissé.
+- **`trajformes.rs`** : la forme en points dans un plan à plat porté par l'œil, axes vers la droite et vers le sujet, une unité
+  par pixel de la feuille (`Support`), les hauteurs de la spirale le long de sa longueur, cinq marques, des clés d'interpolation.
+- **Format 59** : les noms `travelling_lateral`, `orbite`, `grue`, `survol` ; `hauteur`, `avancee` d'un effet et `vise` d'une
+  trajectoire de caméra, écrits seulement quand ils servent. Un projet 58 ou moins s'ouvre tel quel ; une version précédente
+  refuse un projet 59.
+
+### 172.3 Ce qui n'est pas fait, ou à juger
+
+- **Le sujet est pris au plan de référence**, là où les dessins sont tels qu'ils sont dessinés : un personnage posé sur un calque
+  en profondeur n'est pas pris à sa profondeur (le calcul de la caméra ne lit pas les dessins ; c'est aussi ce qui manque à C11).
+  Une orbite autour d'un tel calque tourne autour d'un point devant ou derrière lui.
+- **Le sujet d'une trajectoire toute faite** est le centre du cadre au départ ; il ne se déplace pas encore à la main dans la vue
+  Espace 3D (la case seulement : le garder ou non).
+- **Le survol** s'élève et bascule sur toute la durée du bloc (il décolle doucement depuis la caméra du plan) : ce n'est pas une
+  caméra déjà en l'air au départ.
+- Une orbite de plus de 80° voit les dessins par la tranche : ce sont des cartes plates.
+- Toujours pas faits : C11 (suivi d'un calque), le flou de vitesse du zip pan (C8), C28 (bascule de point) ; les plans types,
+  les transitions et le reste ; les blocs dans le Montage.
+
+### 172.4 À tester (sa checklist)
+
+1. Panneau Préréglages : la famille Travellings (survoler « Orbite », « Grue », « Survol ») et la famille Trajectoires.
+2. « Travelling latéral » sur un plan qui a des calques en profondeur : le proche passe vite, le loin à peine ; tirer la flèche.
+3. « Orbite » : prendre l'outil Caméra, tirer le viseur « Sujet » sur un visage ; Angle 90 ; le visage reste à sa place.
+4. « Grue » : Hauteur 2, puis −1 (elle descend).
+5. « Survol » : Hauteur, Bascule, Avancée ; elle passe au-dessus des dessins.
+6. Glisser « Arc » sur la piste Caméra : la barre « Chemin de la caméra · garde son sujet » ; lire le plan ; ouvrir la vue
+   Espace 3D : le chemin, ses marques, le viseur du sujet ; avec l'outil Trajectoire, Ctrl+clic sur le chemin pour une poignée,
+   la tirer.
+7. La barre du chemin : la glisser, tirer ses bords ; clic droit : décocher « garde son sujet », puis « Retirer » ; Ctrl+Z.
+8. « Convertir en clés » sur une orbite : l'image ne change pas (une clé par image).
+9. Enregistrer, rouvrir : les blocs, le chemin et son sujet reviennent. (Le projet passe au format 59, refusé par son FEANOR
+   habituel tant que ce n'est pas fusionné.)
+
+## 173. La piste du calque actif : la liste « Normal ▾ » du mode de fusion (2026-11-18, branche `piste-mode-liste`)
+
+(La partie 172 est prise par la branche `prereglages-travellings`, les préréglages du lot 3.)
+
+Anthony a choisi : sur la deuxième rangée de la piste du calque actif (vue Storyboard), **l'icône ◐ devient une vraie liste qui
+écrit le nom du mode**, comme la liste du mode de la timeline. Pour lui faire de la place, l'icône aux trois ronds de cette rangée
+(la pelure d'oignon du calque) passe dans le menu du clic droit de la piste. Rien d'autre ne change ; l'affichage seulement, pas
+le format du projet.
+
+Le code : `src/pistes.rs` (`piste_active_head`), `src/layerheads.rs` (`liste_des_modes`), `src/menucalque.rs` (Apparence). Les
+essais : `src/piste_mode_tests.rs` ; ceux de la partie 160 (`panneaux_fins_tests.rs`) ne cherchent plus la pelure sur la piste du
+Storyboard (ils la cherchent toujours sur la ligne de la timeline).
+
+### 173.1 Ce qui change pour lui
+
+- **La liste du mode** : « Normal ▾ », « Produit ▾ »… Elle a l'aspect de celle de la timeline (même texte, même flèche, mêmes
+  noms). Un nom long est raccourci dans la liste (« Superpos… ▾ ») sans passer sur le losange ni sur la barre « 100 % » ; la
+  bulle donne le nom entier et ce que fait le mode. Ouverte, c'est la liste des modes en texte d'avant (cochée, par familles).
+  Les flèches ‹ › de la timeline ne sont pas sur la piste (elles n'y tiennent pas).
+- Choisir un mode le donne à **tous les calques choisis**, une seule étape d'annulation (Ctrl+Z), comme avant.
+- La liste prend la place qui reste sur la rangée, en laissant au moins 34 points à la barre d'opacité ; elle va de 26 points
+  (la colonne la plus étroite, dans l'espace Montage : la flèche et deux lettres) à 96 (« Superposition » en entier).
+- **La pelure d'oignon du calque** : clic droit sur la piste (ou ⋮) ▸ Apparence ▸ « Pelure d'oignon du calque », une case avec
+  son raccourci (Ctrl+L), la même action qu'avant (tous les calques choisis, une étape). Juste dessous, « Panneau de la pelure
+  d'oignon », que donnait le clic droit de l'ancienne icône. C'est le même menu partout : la timeline l'a aussi. La ligne du
+  calque courant de la timeline (Animation) garde son icône de pelure, ses flèches et sa liste.
+
+### 173.2 Comment c'est fait
+
+- `layerheads::liste_des_modes` : une case encadrée exactement de la taille donnée, le nom du mode (texte de 11, comme
+  `blend_combo`) et la flèche ▾ peints dessus, le nom raccourci à la place qui reste ; au clic, le menu de la piste d'avant
+  (`menu_custom_button`), qui se place de lui-même et montre tous les modes sans défiler. (Une `ComboBox` de egui s'ouvrait sous
+  la piste en défilant, et sa case grandissait au-delà du rectangle à 26 points.) La largeur vient de `pistes.rs` (`LISTE_MIN`,
+  `LISTE_MAX`, `BARRE_MIN`).
+- Apparence : l'entrée de la pelure passe par `entree` (case cochée en icône, raccourci écrit, clic droit pour assigner un
+  raccourci), comme l'accroche à la caméra.
+
+### 173.3 À tester (sa checklist)
+
+1. Storyboard, la piste du calque actif : « Normal ▾ » entre la caméra et le losange.
+2. Choisir « Superposition » : raccourci dans la liste, rien ne passe sur « 100 % » ; élargir la colonne : le nom entier.
+3. Ctrl + clic sur deux autres calques, choisir « Produit » : les trois ; un Ctrl+Z les remet tous.
+4. Clic droit sur la piste ▸ Apparence ▸ « Pelure d'oignon du calque » (Ctrl+L écrit à droite) ; « Panneau de la pelure
+   d'oignon » l'ouvre.
+5. La colonne à sa plus petite largeur, un calque avec des effets (case fx) : rien ne déborde.
+
+### 173.5 Une colonne plus étroite et ajustable, les options de la ligne du calque sur la piste
+
+Anthony, sur la capture de la piste avec « Superposition » (un trait vertical vers 72 % de la colonne, l'accroche à la caméra
+entourée, une flèche vers « ?? + APLAT + AUTRES… ») : « Reviens sur la taille de la barre latérale. Plus petite et ajustable.
+Rajoute les options de calques manquantes, l'aplat et le reste. Tu peux élargir un peu le calque si besoin. Trouve le bon
+équilibre. »
+
+**La colonne de la bande (Storyboard, et partout où la barre du montage est en tête de la colonne)**
+
+- **Largeur d'origine : 340 points** (là où il a tracé son trait ; au moins 474 avant). Elle se règle à la poignée de son bord droit
+  (le trait vertical, le curseur de redimensionnement), comme avant ; le double-clic va de 340 à 520 et retour.
+- **Bornes : de 250 à 520 points.** 250 : la place de toutes les options de la piste active (`pistes::LARGEUR_PISTE_MIN`), et au
+  moins la plus longue des deux lignes de boutons, mesurée à son dessin. 520 : `HEAD_MAX`, comme avant.
+- **Gardée dans les réglages du poste**, à part : `largeur_colonne_storyboard` (`Settings::storyboard_head_w`). L'espace Montage
+  garde la sienne (`largeur_entetes_montage`, de 104 à 520, sa barre restant au-dessus de la bande) ; passer d'un espace à l'autre
+  reprend la largeur de chacun (`App::set_espace`). Rien dans le projet.
+- **La barre du montage passe sur deux lignes quand la colonne est trop étroite pour une** (comme la timeline, partie 165.6) : la
+  lecture et le temps sur la première, en face de la règle ; les plans, les calques, le son, « Plus… » et la légende des clés sur la
+  seconde. L'en-tête de la bande gagne alors 28 points sous la ligne des séquences (`Rows::entete`), dans la colonne comme dans la
+  bande : tout reste aligné. Une colonne assez large (480 points dans les essais) la reprend sur une ligne, et l'en-tête redevient
+  celui d'avant. Rien ne passe sous « Plus… » faute de place.
+
+**La piste du calque actif : trois rangées au lieu de deux (66 points au lieu de 44)**
+
+C'est l'équilibre choisi : la colonne étroite ne peut pas porter toutes les options sur deux rangées ; une rangée de plus (22
+points) les montre toutes à 250 points, et le mode, l'opacité et son losange gardent une rangée entière. (Les pistes dépliées sont
+aussi plus hautes de 22 points dans l'espace Montage.)
+
+1. En haut, comme avant : le filet, l'œil, la pastille de la sorte, le nom, le cadenas, le ⋮.
+2. **Au milieu, les options de la ligne du calque de la timeline**, mêmes icônes, mêmes bulles, mêmes gestes : la vignette, les
+   effets (fx, s'il y en a), l'accroche à la caméra (gardée : c'est elle qu'il a entourée), puis, ajoutés : **l'aplat sous le
+   trait** (le même bouton, avec le raccourci de `pinceau.fond`), **préserver la transparence**, **le pochoir** et **son sens**
+   (+ / −), **verrouiller la position**, **le groupe** (son menu de couleurs), **la pelure d'oignon du calque** (clic droit : le
+   panneau de la pelure ; elle reste aussi au clic droit de la piste, Apparence, avec Ctrl+L) et le **maillon de la planche-mère**
+   (si le calque est dans d'autres plans). Une icône qui ne tient pas n'est pas posée (seulement dans l'espace Montage, sous 250
+   points).
+3. En bas : **la liste « Normal ▾ »**, avec ses **flèches ‹ ›** (mode précédent / suivant) quand il y a la place, **la barre
+   d'opacité, puis le losange des clés d'opacité à sa droite**, comme sur la ligne de la timeline.
+
+**L'inventaire** (la ligne du calque courant de la timeline, `layerheads.rs`, contre la piste d'avant) : manquaient sur la piste
+l'aplat, préserver la transparence, le pochoir, son sens, verrouiller la position, le groupe, la pelure d'oignon (retirée en 173),
+le maillon de la planche-mère et les flèches ‹ › du mode ; tous y sont. Reste seulement sur la ligne de la timeline ce qu'elle écrit
+après le nom (« sous <trait> », ou le nombre de couleurs d'un calque de trait).
+
+Le code : `src/pistes.rs` (`piste_active_head`, les trois rangées), `src/montagehead.rs` (`LARGEUR_STORYBOARD`,
+`largeur_min_colonne`, `barre_sur_deux_lignes`, la poignée), `src/barres.rs` (`largeur_une_ligne`), `src/montagerows.rs`
+(`LAYER_H` = 66, `Rows::entete`), `src/storyboard.rs` (les deux lignes en tête de la colonne), `src/settings.rs`, `src/app.rs`. Les
+essais : `src/piste_mode_tests.rs` ; changés : `avantapres165_tests` (deux lignes au plus étroit, une au plus large),
+`panneaux_fins_tests` (trois rangées), `calquesplace_tests` (l'en-tête).
+
+À tester :
+
+1. Storyboard : la colonne à 340 points, les boutons sur deux lignes ; tirer la poignée : de 250 à 520, les boutons repassent sur une
+   ligne vers 480 ; rouvrir FEANOR : la largeur est gardée ; l'espace Montage garde la sienne.
+2. La piste du calque actif : la rangée des options ; cliquer l'aplat, la transparence, le pochoir et son sens, la punaise, le
+   groupe, la pelure : comme sur la ligne de la timeline (Ctrl+Z défait chacun).
+3. En bas : ‹ Normal ▾ ›, la barre, le losange à sa droite ; à 250 points, « Superposition » raccourci, rien ne déborde.
+
+### 173.6 Les icônes des options plus espacées
+
+Anthony, sur le gros plan de la piste : « les icônes au-dessus des options de fusion et opacité peuvent être plus espacées pour être
+plus lisibles ».
+
+- La rangée du milieu de la piste active (effets, accroche à la caméra, aplat, transparence, pochoir, son sens, position, groupe,
+  pelure, maillon) prend des **cases de la largeur de celles de la ligne du calque de la timeline** (`layerheads::ICON_W`, 19
+  points ; 13 en 173.5), les icônes à la même taille (13), **au moins 2 points entre deux**.
+- **L'écart se répartit sur la largeur de la colonne** : la place de la rangée (moins la vignette et le maillon) divisée par le
+  nombre d'options, de 19 à 30 points de centre à centre (`PAS_MAX`). À 340 points : 30 ; au minimum, 250 : environ 23 ; à 480 :
+  30, le reste de la rangée vide à droite.
+- **Toutes tiennent au minimum, qui ne bouge pas** (250 points) : aucune option n'est cachée, ni à 340 ni à 250. (Dans l'espace
+  Montage, sous 250 points, une icône qui ne tient plus n'est pas posée, comme avant.)
+- La case du groupe se clique tout entière, comme les autres.
+
+Essai : `piste_mode_tests::the_option_icons_of_the_track_are_spaced_like_the_timeline_line_at_every_width` (rouge sur la 173.5, vert
+ensuite) : au minimum, à 340 et à 480, chaque option est là, dans la colonne, dans une case d'au moins 17 points, à 2 points au moins
+de sa voisine et à 19 au moins de centre à centre ; l'écart grandit avec la colonne ; le minimum reste 250.
+
+## 174. La colonne des calques de la timeline dans la disposition validée par Anthony (2026-11-18, branche `piste-mode-liste`)
+
+Anthony a montré une disposition de colonne des calques qu'il aime ; traduite en maquette, il l'a validée : « Garde cette façon de
+montrer les images clés et le plan. Pour le reste, surtout pour les fonctionnalités, tu peux y aller. » Puis, sur la maquette, un ⊖
+dessiné avant « Calques » : « Je pense qu'on peut aussi replier tous les calques. » La bande (les blocs des clés à tons alternés, leurs
+repères, la barre du calque) ne change pas. Rien de nouveau dans le projet : de l'affichage et des actions qui existaient (le format
+ne change pas) ; un seul réglage du poste en plus, « tout replié ».
+
+### 174.1 Ce qui change pour lui (vue Animation, colonne de gauche de la timeline)
+
+1. **Une rangée d'en-tête**, sous les deux lignes de boutons, en face d'une bande vide de la règle : à gauche **⊖ « Calques »**, à
+   droite **une icône par colonne de réglage**, dans cet ordre : afficher (œil), verrouiller (cadenas), pelure d'oignon du calque
+   (trois ronds), préserver la transparence (damier), pochoir, aplat sous le trait, accroché à la caméra. Chaque icône a sa bulle
+   (nom, raccourci s'il y en a un, ce que fait le réglage ; clic droit : assigner un raccourci).
+   **Un clic sur une icône d'en-tête agit comme un clic dans la case du calque courant** : sur lui et, s'il fait partie d'un choix
+   (Ctrl + clic), sur tous les calques choisis, en une étape d'annulation. C'est la règle « la sélection agit sur tout », sans rien de
+   nouveau à apprendre ; un en-tête qui toucherait tous les calques du plan aurait pu surprendre.
+2. **Les colonnes, pour tous les calques**, sur les mêmes x que l'en-tête, dossiers et calques rangés compris (leur retrait ne
+   touche que leur gauche). Allumé : l'icône ; éteint : un petit point discret (l'icône pâle au survol) ; l'œil reste un œil, barré
+   quand le calque est caché. Un clic : la même action qu'avant (mêmes fonctions, annulables). Un dossier n'a que l'œil et le cadenas ;
+   un calque vidéo n'a pas d'aplat ; un calque d'effet ou de couleur liée n'a pas l'accroche (il suit son trait).
+3. **Le calque courant sur trois rangées** (60 points) :
+   (a) ⊖ (replier) et le nom (« sous <trait> » ou le nombre de couleurs après lui), le ⋮ au bout ;
+   (b) la vignette à gauche, les petits indicateurs (fx s'il a des effets, le groupe et son menu de couleurs, le sens du pochoir + / −,
+   la position verrouillée, le maillon de la planche-mère), puis les colonnes ;
+   (c) sous la vignette : **le mode de fusion écrit** (« Normal ▾ », la liste des modes en texte au clic, celle de la piste du
+   Storyboard), ses flèches ‹ › quand la place le permet, la barre d'opacité « 100 % », le losange des clés d'opacité à droite.
+4. **Les autres calques sur une ligne** : ⊕, la lettre de la sorte, le nom, la pastille de sa couleur d'étiquette (son groupe, s'il en
+   a un autre que « Défaut »), ses effets (fx) s'il en a, puis les colonnes. **⊕ déplie le calque : il devient le calque courant**,
+   sur ses trois rangées (depuis la partie 160, seul le calque courant a sa ligne complète ; montrer les trois rangées d'un calque qui
+   n'est pas le courant aurait donné deux calques « actifs »).
+5. **Tout replier** : ⊖ de l'en-tête (ou ⊖ du calque courant) met tous les calques sur une ligne, le courant compris (sa
+   surbrillance reste ; ses réglages restent dans les colonnes et au clic droit) ; ⊕ (en-tête, ou ⊕ de n'importe quelle ligne) les
+   déplie. **Raccourci : Alt+Maj+C** (libre partout ; action `calques.replier_tout`). Gardé dans les réglages du poste
+   (`calques_timeline_replies`), pas dans le projet.
+6. **Dans la bande, avant et après les images de chaque calque, une petite icône** : ∅ Aucun, boucle, va-et-vient, maintenir (les
+   icônes des pistes du montage). Grise, plus claire au survol, juste à gauche de la première image et juste à droite de la dernière,
+   à 6 points des images (les prises du début et de la fin du calque vont jusqu'à 5 points : elles restent prenables). Un clic ouvre
+   le menu « Aucun / Boucle / Va-et-vient / Maintenir » coché ; un choix va à **tous les calques choisis**, une étape d'annulation.
+   Le clic droit du calque (Animation ▸ Avant / Après) fait de même maintenant (avant : le calque cliqué seul). « Rien » s'appelle
+   « Aucun ». Pour qu'un calque qui commence à l'image 0 ait aussi la sienne, **la grille a une marge de 20 points avant l'image 0**
+   (la règle et les rangées s'y prolongent). Rien pour un dossier, un calque vidéo ou un calque de couleur (il suit son trait).
+7. **La piste du calque actif du Storyboard** (partie 173.x, sa largeur ajustable gardée) suit le même ordre et le même aspect : sur
+   la rangée du milieu, d'abord les indicateurs (fx, groupe, sens du pochoir, position, maillon), puis les colonnes dans l'ordre de
+   l'en-tête (pelure, transparence, pochoir, aplat, caméra ; l'œil et le cadenas restent en haut, comme sur toutes les pistes),
+   allumées en icône, éteintes en petit point ; en bas, le même texte du mode.
+
+**Ce qui ne change pas** : « préserver la transparence » et « verrouiller la position » n'agissent toujours que sur le calque cliqué
+(décision en attente d'Anthony) ; l'aplat aussi (son bouton n'a jamais touché que son calque). Les blocs des clés, leurs tons alternés,
+la barre du calque, les miniatures, la caméra : le même dessin.
+
+**Largeur** : la plus petite colonne reste `HEAD_W` = 312 points (tout tient : en-tête, sept colonnes, trois rangées, un calque
+rangé dans un dossier, un nom de mode long) ; d'habitude elle a la largeur de la ligne des boutons de la timeline (environ 410 points,
+partie 165.6), inchangée.
+
+### 174.2 Le code
+
+- `src/layerheads.rs` : `Colonne` (les sept colonnes : icône, nom, description, action, état sur un calque), `case_de_colonne`,
+  `case_de_reglage` (icône ou point), `ENTETE_H`, `ROW_FULL` = 60, `rows_of_en` (tout replié), `App::entete_des_colonnes`,
+  `colonnes_du_calque`, `agir_colonne`, `basculer_calques_replies`, `lignes_de_la_timeline` ; `layer_head` refait (lignes fine et
+  complète). `blend_combo` (la `ComboBox`) et `eye_button` ne servaient plus : retirés.
+- `src/timeline.rs` : `REGLE_H` (la règle) et `HEADER_H` = règle + rangée d'en-tête ; `MARGE_AVANT` ; `comportements_timeline`.
+- `src/choixcalques.rs` : `regler_comportement` (tous les calques choisis, une étape). `src/document.rs` : « Aucun ».
+  `src/montagehead.rs` : l'icône d'« Aucun » (rond barré).
+- `src/pistes.rs` : l'ordre et l'aspect de la rangée du milieu de la piste active.
+- `src/settings.rs` (`calques_replies`, clé `timeline_tout_replie`), `src/keymap.rs` + `keymap.toml` (`calques.replier_tout`,
+  Alt+Maj+C, écrit « Maj+Alt+C » dans les bulles), `src/app.rs`.
+- Un défaut trouvé en chemin, corrigé : dans la rangée horizontale de la timeline, chaque bouton posé dans la colonne (`put`) déplaçait
+  le curseur jusqu'à lui, et la grille commençait après le dernier posé. Avec la ligne du calque courant d'avant, le dernier était
+  tout à droite (la flèche › du mode) ; repliés, il aurait été l'œil, et la grille passait sur les colonnes. La colonne est maintenant
+  posée dans un `scope` (`timeline_panel`) : elle prend toujours sa largeur.
+- `src/perf_tests.rs` : `Banc::capturer` lit l'image à la taille du banc (il la lisait toujours en 1920 × 1080), pour l'image de la
+  plus petite fenêtre.
+
+### 174.3 Les essais
+
+`src/colonne_calques_tests.rs` : l'en-tête et ses sept colonnes dans l'ordre (⊖ avant « Calques », le raccourci) ; les colonnes de
+chaque calque (courant, autres, rangé dans un dossier, le dossier) sur les x de l'en-tête ; un clic dans chaque colonne d'un calque qui
+n'est pas le courant bascule le bon réglage, une étape, Ctrl+Z ; le mode écrit sur la troisième rangée, la liste qui change les deux
+calques choisis ; les icônes avant / après (à côté des images, dans la marge pour un calque qui commence à l'image 0, rien pour un
+dossier), leur menu, deux calques choisis, une étape ; le bloc d'une clé au même endroit qu'avant, les icônes hors de lui ; tout
+replier / déplier (en-tête, raccourci, ⊕ d'une ligne), gardé dans les réglages ; rien ne déborde ni ne se chevauche à 312 points.
+Les essais ignorés `colonne_calques_capture` et `colonne_calques_capture_etroite` font les images.
+
+Les essais d'avant changés pour la nouvelle disposition : `avantapres165_tests::in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_two_lines`
+(le bord gauche de la colonne se lit au ⊖ de l'en-tête, plus à la barre d'opacité, qui a quitté le début de la ligne) ;
+`notes_calques_tests::the_layer_row_and_the_brush_settings_carry_the_aplat_button` (l'aplat est une colonne de chaque calque, pas
+du dossier, un point quand il est éteint ; on clique la case de « C1 ») ; `piste_mode_tests::the_animation_timeline_keeps_its_own_line_untouched`
+(la pelure : une case dans l'en-tête et une par calque, quatre au lieu d'une) ; `aplat_tests::the_aplat_is_activated_from_the_layer_only`
+(l'icône de l'aplat deux fois dans la timeline : l'en-tête et le calque qui en a un).
+
+### 174.4 À tester (sa checklist)
+
+1. Animation : en haut de la colonne des calques, « ⊖ Calques » et les sept icônes ; survoler chacune : son nom, son raccourci.
+2. Sur une ligne fine (pas le calque courant) : cliquer la pelure, le damier, le pochoir, l'aplat, la caméra, le cadenas, l'œil : le
+   réglage change sur ce calque ; Ctrl+Z.
+3. Ctrl + clic sur deux calques, puis une icône d'en-tête (la pelure) : les deux ; Ctrl+Z.
+4. Le calque courant : ⊖ nom ; la vignette, fx, groupe, + / −, punaise, maillon, puis les colonnes ; dessous « Normal ▾ » ‹ ›, la
+   barre, le losange. Choisir « Produit » avec deux calques choisis : les deux.
+5. ⊕ sur une autre ligne : elle devient le calque courant, sur trois rangées.
+6. ⊖ de l'en-tête (ou Alt+Maj+C) : tout sur une ligne ; ⊕ : de nouveau trois rangées ; rouvrir FEANOR : l'état est gardé.
+7. Dans la bande : l'icône grise avant et après les images d'un calque ; clic : « Aucun / Boucle / Va-et-vient / Maintenir » ; choisir
+   « Boucle » après : les images reviennent en pâle après la fin ; Ctrl+Z. Un calque qui commence à l'image 0 : son icône est dans la
+   petite marge avant la grille. Les prises du début et de la fin du calque se tirent toujours.
+8. Rétrécir la timeline au plus étroit : rien ne déborde.
+9. Storyboard, la piste du calque actif : le même ordre (indicateurs, puis pelure, transparence, pochoir, aplat, caméra).
+
+## 175. Les préréglages dans la timeline, lot 4 : les transitions (2026-11-18, branche `prereglages-montage` ; 175 et non 173 : la piste du calque actif, branche `piste-mode-liste`, a pris le 173)
+
+Anthony : « Ok continue », après la fusion du lot 3 : le lot 4 de la liste de la partie 170, le montage. Cette partie-ci, les
+transitions (ses « Oui » : T3, T4, T6, T7, T8) ; la suivante, les plans types. T1 (iris), T2 (volets) et T5 (zoom traversant)
+sont restés sans réponse : pas faits.
+
+Le code : `src/transitions.rs` (les cinq sortes, leurs images, le fichier), `src/gpu.rs` (leur affichage : images glissées et
+coupées, flou, aplat de couleur), `src/transitionsui.rs` (leur forme dans le montage, la couleur, les commandes, le dépôt),
+`src/panneauprereglages.rs` (les onglets du panneau, les vignettes), `src/storyboard.rs` (le dépôt sur une coupe), `src/keymap.rs`.
+Les essais : `src/transitions_lot4_tests.rs`.
+
+### 175.1 Ce qui change pour lui
+
+| | Nom | Ce qu'elle fait | Durée neuve |
+|---|---|---|---|
+| T3 | Poussée | Le plan suivant arrive de la droite et pousse l'autre hors du cadre, doucement aux deux bouts | 12 images |
+| T4 | Raccord filé | La même poussée, lente, puis très vite et floue au milieu (le flou d'un panoramique filé), puis lente | 8 images |
+| T6 | Flash de coupe | Les images qui touchent la coupe sont blanches, le blanc s'éteint de part et d'autre | 4 images |
+| T7 | Fondu par une couleur | Le fondu au noir, par la couleur choisie (bleu nuit d'origine) ; aussi au début et à la fin du film | 12 images |
+| T8 | Volet par un objet | Un tronc sombre passe tout près devant la caméra, de droite à gauche ; derrière lui, le plan suivant | 12 images |
+
+- **Le panneau Préréglages a deux onglets**, « Caméra » (ce qu'il y avait) et « Montage » : les dix transitions (les cinq
+  d'avant et les cinq neuves), puis les plans types (partie 176). Chaque vignette joue sa transition au survol, entre la petite
+  scène et la même scène de près.
+- **Glisser une transition sur le montage** : la coupe la plus proche du pointeur s'éclaire (en rouge si la sorte n'y va pas,
+  au bord du film) ; lâchée, la transition s'y pose (ou remplace celle qui y était). Un clic sur la vignette la pose sur la
+  coupe de la transition choisie, sinon sur la plus proche de la tête de lecture. Une étape d'annulation.
+- Ailleurs, comme les autres sortes : le menu du clic droit sur une coupe ou sur une transition, la palette (Ctrl+K :
+  « Transition : poussée »…), les poignées de durée, le calage. Le clic droit sur un fondu par une couleur a une case de
+  **couleur** (une étape d'annulation tant que la fenêtre de choix reste ouverte).
+- Dans le montage, chaque sorte a sa forme : la poussée, deux moitiés et une flèche ; le raccord filé, des traînées en plus ;
+  le flash, un losange blanc sur la coupe ; le fondu par une couleur, un losange de sa couleur ; le volet par un objet, le tronc.
+- L'écran (lecture, et à l'arrêt) et l'export montrent la même image, à l'arrondi près.
+
+### 175.2 Comment c'est fait
+
+- Un `Mix` dit en plus de combien chaque plan **glisse** (`shift_a`, `shift_b`, en largeurs du cadre), son **flou**
+  horizontal (`blur`) et le milieu de l'**objet** (`objet`). Le processeur (`blend_images`, l'export) floute chaque image
+  (moyenne glissante sur la ligne), puis la décale ; chaque plan est coupé à son propre cadre. L'objet est un trapèze
+  (`objet_coins`), un peu plus large en bas, au bord lissé.
+- La carte graphique (`paint_mix`) pose chaque image glissée de même, coupée par un rectangle de découpe (le « scissor » de
+  la passe d'affichage) ; le flou est un mode du shader d'affichage (32 lectures le long de l'horizontale de l'écran) ; la
+  couche de couleur est un aplat de n'importe quelle couleur (avant : du gris seulement). Le cadre filmé à l'écran vient de la
+  caméra du plan courant.
+- Le flash et le fondu par une couleur passent par la couche de couleur d'avant.
+- `transitions.json` passe à la **version 2 seulement quand une de ces sortes ou une couleur y est** : un projet sans elles
+  reste lisible par une version précédente. Une sorte qui ne va qu'entre deux plans, trouvée au bord du film dans un fichier,
+  devient un fondu au noir (comme avant).
+
+### 175.3 Ce qui n'est pas fait, ou à juger
+
+- La poussée et le raccord filé vont de droite à gauche seulement (les quatre sens étaient dans T2, sans réponse).
+- Le flou du raccord filé ne passe pas d'un plan à l'autre : la jointure reste nette au milieu de la traînée.
+- L'objet est un tronc dessiné par FEANOR ; un objet à soi (un dessin du plan qui passe devant) n'est pas fait.
+- Dans une vue tournée (la vue du dessin, pas la vue caméra), la découpe d'une poussée suit le rectangle qui contient le cadre.
+
+## 176. Les préréglages dans la timeline, lot 4 : les plans types (2026-11-18, branche `prereglages-montage`, **format 60**)
+
+La suite de la partie 175 : ses « Oui » à P1, P2, P3, P5, P6, P7, P8, P13, P14, P16, P17, P18. P4, P9, P10, P11, P12 et P15 sont
+restés sans réponse : pas faits.
+
+Le code : `src/planstypes.rs` (nouveau : ce que pose chaque plan type), `src/planstypesui.rs` (nouveau : le clic, le dépôt),
+`src/incrustation.rs` et `src/calqueffet.rs` (le lettre à lettre d'une incrustation), `src/prereglagesui.rs` (son réglage),
+`src/panneauprereglages.rs` (les vignettes), `src/storyboard.rs` (le dépôt), `src/project.rs` (format 60). Les essais :
+`src/planstypes_tests.rs` ; ceux qui citaient le format 59 passent à 60.
+
+### 176.1 Ce qui change pour lui
+
+Dans l'onglet Montage du panneau Préréglages, sous les transitions, **dix-huit vignettes de plans types**. Glissée entre deux
+plans du montage (un trait et un rond « + » montrent où), une vignette pose **un plan neuf, tout prêt** ; un clic le pose juste
+après le plan courant. Le plan neuf devient le plan courant ; Ctrl+Z le retire.
+
+| | Plan type | Ce qu'il pose | Durée |
+|---|---|---|---|
+| P1 | Color card | Un calque Couleur unie (gris moyen, à changer sur sa ligne de la timeline) | 2 s |
+| P2 | Carton noir, carton blanc | Un calque Couleur unie noir, ou blanc | 1 s |
+| P3 | Titre du film | Un carton noir ; le titre des propriétés du projet (sinon « Titre du film »), qui s'allume et s'éteint en fondu | 4 s |
+| P5 | Intertitre | « Trois jours plus tard… » sur un carton noir, en fondu | 3 s |
+| P6 | Lieu et date | **Sur un plan** : une incrustation en bas à gauche, « Paris, 1962 », qui s'écrit lettre à lettre | le plan |
+| P7 | Générique de début | **Sur un plan** : trois noms en bas du cadre, l'un après l'autre, chacun en fondu (un dessin par nom) | le plan |
+| P8 | Générique de fin | Les noms montent du bas du cadre et sortent par le haut ; allonger le plan les fait monter moins vite | 10 s |
+| P13 | Logo studio | Un carton noir, un calque Logo qui apparaît en douceur ; le choix de l'image s'ouvre tout de suite | 3 s |
+| P14 | Écran partagé en deux, trois, quatre | Les séparations noires, et un calque par case, où dessiner (un dessin sur tout le plan) | 4 s |
+| P16 | Précédemment, À suivre | Le carton de série en haut à gauche, sur les images (du milieu) des quatre plans d'avant, ou d'après | 5 s |
+| P17 | Carte avec trajet | Une carte (rivage, rivière, deux villes), et la ligne du trajet qui se dessine en tirets sur les deux tiers du plan | 5 s |
+| P18 | Inserts : téléphone, ordinateur, journal | Le téléphone et ses trois messages qui arrivent l'un après l'autre ; l'écran et sa fenêtre ; la une d'un journal | 4 s |
+
+- **Tout est fait de calques ordinaires** : Couleur unie, dessins vectoriels avec du texte (l'outil Texte les retouche),
+  clés d'opacité pour les fondus (elles se voient et se retouchent dans la timeline), clés de position pour le générique qui
+  monte, calques bitmap vides où dessiner. On les change comme le reste.
+- Le titre, le générique de fin et le générique de début reprennent le **titre** et l'**auteur** des propriétés du projet.
+- **Le lieu et la date** : son texte se change dans les réglages du calque « Lieu et date » (une incrustation : elle est dans
+  le cadre, par-dessus tout, et ne suit pas la caméra), et le lettre à lettre suit. Le réglage est neuf pour toutes les
+  incrustations : « Lettre à lettre », en images par lettre (0 : d'un coup).
+
+### 176.2 Comment c'est fait
+
+- `Document::poser_plan_type(t, coupe)` fait un plan neuf sur la coupe (`add_scene_before` / `add_scene_after`, comme
+  « Nouveau plan »), à la durée du type, et y pose ses calques ; `Document::poser_sur_le_plan(t, plan)` ajoute ceux du lieu et
+  de la date ou du générique de début en haut de la pile. `App::poser_plan_type` les enveloppe dans une étape d'annulation de
+  structure (`structure_op`).
+- Les textes sont des éléments Texte (`Element::Text`) dans la police intégrée, centrés par leur boîte, réduits pour tenir dans
+  le cadre ; les formes (téléphone, écran, journal, carte) sont des remplissages et des traits vectoriels.
+- « Précédemment » et « À suivre » calculent l'image finale du milieu de chaque plan voisin (`render::camera_image`, comme
+  l'export) et la posent dans un dessin bitmap, dans le cadre.
+- La carte : un dessin par étape de la ligne (dix-huit tirets au plus), exposés sur les deux tiers du plan, le dernier tenu.
+- **Format 60** : `lettre_a_lettre` d'une incrustation, écrit seulement quand il sert. Un projet 59 ou moins s'ouvre tel quel ;
+  une version précédente refuse un projet 60.
+
+### 176.3 Ce qui n'est pas fait, ou à juger
+
+- La ligne de la carte ne se retouche pas avec l'outil Trajectoire : c'est une suite de dessins (le tracé se change en
+  redessinant). Le lier à une vraie trajectoire de calque reste à faire.
+- « Précédemment » prend le milieu de chaque plan voisin, pas des images choisies.
+- Le lettre à lettre part du début du plan, pas de la première exposition du calque.
+- Le logo ne vient pas des Préférences : on choisit l'image à chaque pose.
+
+### 176.4 À tester (sa checklist, transitions et plans types)
+
+1. Panneau Préréglages : l'onglet « Montage » ; survoler « Poussée », « Raccord filé », « Volet par un objet ».
+2. Glisser « Poussée » sur une coupe du montage : la coupe s'éclaire ; lire : le plan suivant pousse l'autre.
+3. Clic droit sur la transition : « Fondu par une couleur », puis sa case Couleur ; Ctrl+Z.
+4. « Flash de coupe » et « Raccord filé » sur deux coupes : les lire en boucle.
+5. Glisser « Titre du film » au début du montage : un plan noir, le titre en fondu ; le retoucher à l'outil Texte.
+6. Cliquer « Générique de fin » : il monte ; allonger le plan, il monte moins vite.
+7. Glisser « Lieu et date » sur un plan : le texte s'écrit lettre à lettre ; changer le texte dans les réglages du calque.
+8. « Écran partagé en quatre » : dessiner dans chaque case (choisir le calque de la case).
+9. « Précédemment » après trois plans : leurs images défilent sous le carton.
+10. « Logo studio » : choisir une image ; elle apparaît en douceur.
+11. Exporter une vidéo du passage : l'export montre les mêmes transitions que l'écran.
+12. Enregistrer, rouvrir (le projet passe au format 60).
+
+## 177. Les préréglages : ses neuf réponses, trois transitions et six plans types de plus (2026-11-19, branche `prereglages-reponses`)
+
+Anthony, sur les neuf numéros restés sans réponse (T1, T2, T5, P4, P9, P10, P11, P12, P15) : « Oui ok pour tout ». Avec T2, la
+poussée et le raccord filé gagnent les quatre sens (ils allaient de droite à gauche seulement, partie 175.3). Le reste de la
+partie 175.3 et de 176.3 (un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire) n'est pas
+fait ici.
+
+Le code : `src/transitions.rs` (les trois sortes, le sens, le centre, le fichier), `src/gpu.rs` (leur affichage : deux modes de
+plus dans le shader d'affichage, un réglage de plus par image posée), `src/transitionsui.rs` (formes, sous-menu du sens, cadre du
+centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), `src/incrustation.rs` (quatre mots de plus),
+`src/panneauprereglages.rs` (vignettes), `src/keymap.rs` et `keymap.toml`. Les essais : `src/reponses_tests.rs`.
+
+### 177.1 Ce qui change pour lui
+
+| | Nom | Ce que c'est |
+|---|---|---|
+| T1 | Iris | Le rond de cartoon se ferme sur un point choisi, puis se rouvre sur le plan suivant. Au début du film il s'ouvre seulement, à la fin il se ferme. 16 images |
+| T2 | Volet en horloge | Le plan suivant balaie le cadre comme l'aiguille d'une montre, depuis midi |
+| T2 | Les volets dans les quatre sens | Le volet, la poussée et le raccord filé : « Sens : de la gauche, de la droite, du haut, du bas » au clic droit |
+| T5 | Zoom traversant | On plonge dans le plan (il grossit jusqu'à quatre fois), on ressort du suivant (il arrive de quatre fois et se pose), fondus au milieu |
+| P4 | Titre de séquence | Un carton noir et le nom de la séquence qui commence, rempli tout seul (il ouvre la séquence du plan d'après) ; 3 s |
+| P9 | Plan manquant | « Plan 12 — À VENIR » et sa durée sur un carton gris barré, remplis tout seuls (allonger le plan change la durée écrite) ; 3 s |
+| P10 | Ardoise d'en-tête | Titre, série, épisode, version, date et durée du film, remplis depuis le projet (Fichier > Propriétés) ; la version se tape ; 4 s |
+| P11 | Compte à rebours | 8, 7, 6, 5, 4, 3 (une seconde chacun, l'aiguille fait un tour), le 2 une seule image avec le bip à 1 kHz, puis du noir ; 8 s |
+| P12 | Mire de couleur | Les barres, et un son à 1 kHz sur tout le plan (à −20 dB) ; 5 s |
+| P15 | Fin d'acte | « Fin de l'acte 1 » sur un carton noir, en fondu ; le numéro suit les fins d'acte d'avant ; 3 s |
+
+- **Le centre** d'un iris ou d'un zoom traversant se choisit au clic droit sur la transition : un petit cadre où l'on clique (ou
+  tire) le point. Une étape d'annulation par geste.
+- Les textes du titre de séquence, du plan manquant et de l'ardoise sont des **incrustations** : ils se mettent à jour tout seuls
+  (renommer la séquence, allonger le plan, changer le titre du projet), et se retouchent dans les réglages du calque. Les
+  incrustations libres connaissent quatre mots de plus : `{duree}` (la durée du plan), `{duree_film}`, `{serie}`, `{episode}`.
+- **Les sons** du compte à rebours et de la mire sont des extraits du montage (piste son), posés au temps du plan neuf, faits par
+  FEANOR (pas de fichier à chercher) ; Ctrl+Z les retire avec leur plan.
+- Comme les autres : glissés depuis l'onglet Montage du panneau Préréglages (sur une coupe, ou entre deux plans), ou cliqués ;
+  la palette (Ctrl+K : « Transition : iris »…).
+
+### 177.2 Comment c'est fait
+
+- `transitions::Mix` dit en plus : l'**iris** (centre, rayon), l'angle balayé de l'**horloge**, les grossissements du **zoom**
+  et son centre, le glissement **vertical** d'une poussée, le côté d'où vient un **volet**. Le processeur (export) et la carte
+  graphique (écran) font la même image : l'iris est un aplat hors d'un rond (mode 5 du shader d'affichage), l'horloge une image
+  vue seulement dans un angle (mode 6), le zoom et les volets des images grossies ou coupées au cadre. Chaque image posée a un
+  réglage de plus (`extra`, 16 octets), pour ces deux modes.
+- `Transition::depuis` (le côté) et `Transition::centre` (en parts du cadre) ; sans eux, les sens d'avant (le volet de la gauche,
+  la poussée de la droite) et le milieu du cadre. `transitions.json` passe à la **version 3 seulement quand l'une des trois
+  sortes, un sens ou un centre y est** ; un centre abîmé revient dans le cadre.
+- Les plans types neufs sont faits des mêmes calques qu'à la partie 176 (Couleur unie, dessins vectoriels, clés d'opacité et de
+  position, incrustations) ; le son à 1 kHz est un WAV fait en mémoire (`planstypes::wav_1khz`), rangé dans le projet comme un
+  son importé.
+- **Pas de changement du format des projets** (60).
+- Corrigé en chemin : sur la carte graphique, le volet en horloge passait par le flou du raccord filé et montrait tout le plan
+  suivant (l'essai sur la carte graphique l'a trouvé).
+
+### 177.3 Ce qui n'est pas fait, ou à juger
+
+- Le compte à rebours suppose le cadre au milieu de la feuille (l'aiguille tourne autour du milieu de la feuille).
+- Dans les vignettes du montage, les cartons faits d'incrustations (titre de séquence, plan manquant, ardoise) se voient
+  noirs, sans leur texte : une incrustation est posée sur l'image finale, pas dans le dessin.
+- L'horloge part de midi et tourne dans le sens des aiguilles seulement ; l'iris n'a pas de forme autre que le rond.
+- Toujours pas faits : un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire ; C11, le flou
+  de vitesse du zip pan (C8), C28 ; le lot 5 (A, V, E, S, D, R).
+
+### 177.4 À tester (sa checklist)
+
+1. Onglet Montage du panneau Préréglages : survoler « Iris », « Volet en horloge », « Zoom traversant ».
+2. Glisser « Iris » sur une coupe ; clic droit sur la transition : cliquer dans le petit cadre sur un visage ; lire.
+3. « Iris » au début du film, puis à la fin : il s'ouvre, il se ferme.
+4. Un volet, une poussée : clic droit, « Sens : du haut », « du bas » ; lire.
+5. « Zoom traversant » : le point du centre, puis lire.
+6. « Titre de séquence » entre deux séquences ; renommer la séquence : le carton suit.
+7. « Plan manquant » : allonger le plan, la durée écrite suit.
+8. « Ardoise d'en-tête » : remplir le titre, la série, l'épisode dans les propriétés du projet ; changer la version dans les
+   réglages du calque « Ardoise ».
+9. « Compte à rebours » : lire avec le son, le bip sur le 2.
+10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
+11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.
 
 ## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
 
@@ -13922,7 +15110,23 @@ Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et
     sur la feuille par la caméra : la carte suit.
 12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
 
-## 168. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+## 179. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+
+### 179.0 Ce qui en reste après la fusion du `main` du 19 novembre (le choix d'Anthony)
+
+Le `main` du 19 novembre (9c422b9) apportait la colonne des calques de la partie 174, validée par Anthony le 18 novembre, qui prend
+l'autre chemin que celle-ci : une rangée d'en-tête et sept colonnes de réglages sur tous les calques, le calque courant déplié sur
+trois rangées. Les deux ne tenaient pas ensemble. Sur trois maquettes cliquables (A : celle-ci, B : la 174, C : la 174 plus ce qui ne la
+contredit pas d'ici), **Anthony a choisi C**. La partie, numérotée 168 sur la branche, devient la 179 (le `main` a pris le 168 pour les
+versions d'un plan, et la plage de lecture du film a pris le 178).
+
+- **Gardé** : la couleur du rangement (celle du dossier, sinon du groupe) sur toute la ligne, dans la colonne et dans la grille
+  (`layerheads::fond_teinte`) ; les dossiers en titres, l'icône de leur couleur et le nom en demi-gras ; un dossier fermé qui montre les
+  clés de ses calques en traits fins (`timeline.rs`). Ci-dessous, points 4 et 5 de 179.1.
+- **Pas gardé** : la barre du calque au-dessus des lignes (point 2), les lignes qui ne montrent que l'exception (point 3) et les lignes
+  toutes pareilles à 28 points (point 1, et 179.4) : les colonnes et la ligne dépliée du calque courant de la partie 174 les remplacent.
+- Essais : `timeline_claire_tests.rs` garde la teinte et ajoute la couleur d'un calque rangé ; ceux de la barre et des exceptions sont
+  retirés ; les essais de la colonne sont ceux de la partie 174.
 
 Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
 quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
@@ -13930,7 +15134,7 @@ reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout s
 « Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
 se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
 
-### 168.1 Ce qui a changé
+### 179.1 Ce qui a changé
 
 1. **Toutes les lignes ont la même hauteur, 28 points** (`layerheads::ROW_FINE` ; 22 avant la partie 168.4), calque courant et dossiers compris. Avant
    (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
@@ -13955,7 +15159,7 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
    en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
    caché, plus pâle). Avant : une rangée sombre et vide.
 
-### 168.2 Choix faits sans Anthony (à confirmer)
+### 179.2 Choix faits sans Anthony (à confirmer)
 
 - Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
   que disent les données ; la question est restée ouverte sur la page des pistes).
@@ -13963,7 +15167,7 @@ se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit au
   moins 40 points. Les clés elles-mêmes ne changent pas.
 - La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
 
-### 168.4 Après la fusion du `main` du 18 novembre (parties 165 à 167)
+### 179.4 Après la fusion du `main` du 18 novembre (parties 165 à 167)
 
 Le `main` avait pris l'autre chemin : la ligne complète du calque courant « toujours visible, jamais repliée » (165.4), les boutons
 de la timeline en haut de la colonne sur deux lignes (165.5, 165.6), « 100 % » et « Normal ▾ » en texte (165.3). Sur deux maquettes
@@ -13977,7 +15181,7 @@ côte à côte, Anthony a choisi la barre du calque (« B mais la taille d'une l
 4. Essais adaptés : `multicalques_tests` prend le « 37 % » de la barre (la ligne fine le dit aussi, l'exception) ;
    `avantapres165_tests` trouve le bord de la colonne par la barre du calque ; l'essai de la ligne flottante est retiré.
 
-### 168.3 Comment Anthony teste (sur une copie de projet)
+### 179.3 Comment Anthony teste (sur une copie de projet)
 
 1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
    calques, rien ne bouge.

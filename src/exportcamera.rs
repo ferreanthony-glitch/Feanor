@@ -105,8 +105,10 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
         // en clés »), et les valeurs image par image même si elles ne sont pas demandées. Le nom de l'effet est dit.
         let mut keys = doc.cles_montrees(p).into_owned();
         keys.sort_by_key(|k| k.frame);
-        if let Some(v) = panel.effet_camera {
-            plan.insert("effet_vivant".into(), json!(v.params.preset.label()));
+        // (Plusieurs effets vivants sur le plan, partie 170 : leurs noms, dans l'ordre où ils se cuisent.)
+        if !panel.effets_camera.is_empty() {
+            let noms: Vec<&str> = panel.effets_camera.iter().map(|v| v.params.preset.label()).collect();
+            plan.insert("effet_vivant".into(), json!(noms.join(", ")));
         }
         for k in &keys {
             let v = key_json(k);
@@ -138,7 +140,7 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
         if panel.trajectoire_camera.is_some() {
             plan.insert("trajectoire_dans_l_espace".into(), Value::Bool(true));
         }
-        if s.per_frame || panel.effet_camera.is_some() || panel.trajectoire_camera.is_some() {
+        if s.per_frame || !panel.effets_camera.is_empty() || panel.trajectoire_camera.is_some() {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {
                 let c = doc.panel_camera_reelle(p, f);

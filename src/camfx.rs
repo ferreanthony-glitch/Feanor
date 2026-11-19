@@ -18,8 +18,21 @@
 //!
 //! Les fonctions sont pures (`Generator`, `plan`, `write`) ; `camfxui.rs` les branche sur le
 //! document, l'historique et le panneau de la caméra.
+//!
+//! Le lot 2 de la liste des préréglages (partie 171, Anthony, 2026-11-18 : « Oui, le lot 2 ») ajoute la caméra 2D : dézoom
+//! choc, zooms par paliers, de tension et vers un point, travellings avant et arrière, Ken Burns, panoramiques (à plat, zip
+//! pan, avec dépassement, de découverte, en rotation), cadre penché, tonneau, tremblement de terre, pas lourds, marche,
+//! véhicule, houle, respiration, recadrage sec, arrêt net. Ceux qui posent peu de clés suivent une courbe (`courbe_de`) aux
+//! adoucis de clés ordinaires ; ceux qui vont quelque part ont une flèche ou une cible (`Params::vers`), tirée dans le cadre
+//! avec l'outil Caméra (`effetpoignee.rs`).
+//!
+//! Le lot 3 (partie 172, Anthony, 2026-11-18 : « Oui, le lot 3 ») fait bouger la caméra **dans l'espace** : travelling
+//! latéral (C13), orbite (C14), grue (C15), survol (C16). Leur œil se déplace pour de bon (`camespace.rs`) : chaque calque
+//! glisse à sa vitesse selon sa profondeur, la caméra peut passer à côté d'un dessin, au-dessus, derrière. Ils ne sont pas
+//! bridés à ce qui voit la feuille (`Preset::dans_l_espace`) ; leur plan le retient (`Panel::camera_libre`).
 
 use crate::camera::{self, Camera, CameraKey};
+use crate::camespace;
 
 /// Les préréglages proposés.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,11 +54,147 @@ pub enum Preset {
     /// Vertigo (dolly zoom) : la focale change, la caméra recule en même temps, le sujet (au plan
     /// de référence) garde sa taille et le fond se déforme.
     Vertigo,
+    // Lot 2 de la liste des préréglages (partie 171, 2026-11-18) : ses numéros entre parenthèses.
+    /// Dézoom choc (C1) : on part serré sur la cible, le cadre s'ouvre d'un coup.
+    DezoomChoc,
+    /// Zoom par paliers (C2) : des à-coups secs vers la cible, tenus entre deux.
+    ZoomPaliers,
+    /// Zoom lent de tension (C3).
+    ZoomTension,
+    /// Zoom vers un point (C4) : la cible arrive au centre du cadre.
+    ZoomPoint,
+    /// Travelling avant (C5) : la caméra avance (la distance change, pas la focale).
+    TravellingAvant,
+    /// Travelling arrière (C5).
+    TravellingArriere,
+    /// Ken Burns (C6) : glissement et zoom lents, réguliers.
+    KenBurns,
+    /// Panoramique à plat (C7) : la caméra glisse dans le sens de la flèche.
+    PanoPlat,
+    /// Zip pan (C8) : panoramique éclair.
+    ZipPan,
+    /// Panoramique avec dépassement (C9).
+    PanoDepassement,
+    /// Panoramique de découverte (C10) : la caméra part du bout de la flèche et vient se poser.
+    PanoDecouverte,
+    /// Panoramique en rotation (C12) : la caméra tourne sur elle-même, en perspective.
+    PanoRotation,
+    /// Plan penché progressif (C18).
+    Penche,
+    /// Tonneau (C19) : un tour complet qui accélère.
+    Tonneau,
+    /// Tremblement de terre (C20).
+    Seisme,
+    /// Pas lourds (C21).
+    PasLourds,
+    /// Caméra qui marche (C22).
+    Marche,
+    /// Véhicule (C23).
+    Vehicule,
+    /// Houle (C24).
+    Houle,
+    /// Respiration (C25).
+    Respiration,
+    /// Recadrage sec (C26) : un saut de cadre sur une seule image.
+    Recadrage,
+    /// Arrêt net (C27) : la caméra glisse à vitesse constante et se fige.
+    ArretNet,
+    // Lot 3 (partie 172, 2026-11-18) : la caméra dans l'espace.
+    /// Travelling latéral (C13) : l'œil se déplace de côté, chaque calque glisse à sa vitesse.
+    TravellingLateral,
+    /// Orbite (C14) : la caméra tourne autour du sujet, qui reste à sa place dans l'image.
+    Orbite,
+    /// Grue (C15) : la caméra monte en basculant, le sujet reste à sa place dans l'image.
+    Grue,
+    /// Survol (C16) : la caméra s'élève, bascule vers le sol et avance.
+    Survol,
+}
+
+/// Les familles du panneau Préréglages et des listes (les titres de la page de choix du 18 novembre 2026).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Famille {
+    Zooms,
+    Panoramiques,
+    /// Le lot 3 (partie 172) : la caméra se déplace dans l'espace.
+    Travellings,
+    Rotations,
+    Secousses,
+    Coupes,
+}
+
+impl Famille {
+    pub const ALL: [Famille; 6] = [Famille::Zooms, Famille::Panoramiques, Famille::Travellings, Famille::Rotations, Famille::Secousses, Famille::Coupes];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Famille::Zooms => "Zooms et avancées",
+            Famille::Panoramiques => "Panoramiques",
+            Famille::Travellings => "Travellings",
+            Famille::Rotations => "Rotations",
+            Famille::Secousses => "Secousses",
+            Famille::Coupes => "Coupes dans le plan",
+        }
+    }
+
+    /// Les préréglages de la famille, dans l'ordre de `Preset::ALL`.
+    pub fn presets(self) -> impl Iterator<Item = Preset> {
+        Preset::ALL.into_iter().filter(move |p| p.famille() == self)
+    }
+}
+
+/// Ce que l'outil Caméra montre dans le cadre pour régler `Params::vers` (partie 171) : rien, une flèche (le chemin de la
+/// caméra), une flèche qui revient (d'où part la caméra) ou une cible (où va la caméra).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Poignee {
+    Aucune,
+    /// La caméra va du centre du cadre au bout de la flèche.
+    Fleche,
+    /// La caméra part du bout de la flèche et revient au cadre du plan.
+    Depart,
+    /// La caméra va vers ce point de l'image.
+    Cible,
+    /// Le sujet : le point de l'image que la caméra garde à sa place pendant qu'elle bouge (orbite, grue, partie 172).
+    Sujet,
 }
 
 impl Preset {
-    pub const ALL: [Preset; 8] =
-        [Preset::Shoulder, Preset::LightShake, Preset::Explosion, Preset::Jolt, Preset::ZoomIn, Preset::ZoomOut, Preset::CrashZoom, Preset::Vertigo];
+    /// Tous les préréglages, rangés par famille (`Famille`).
+    pub const ALL: [Preset; 34] = [
+        Preset::ZoomIn,
+        Preset::ZoomOut,
+        Preset::CrashZoom,
+        Preset::DezoomChoc,
+        Preset::ZoomPaliers,
+        Preset::ZoomTension,
+        Preset::ZoomPoint,
+        Preset::TravellingAvant,
+        Preset::TravellingArriere,
+        Preset::Vertigo,
+        Preset::KenBurns,
+        Preset::PanoPlat,
+        Preset::ZipPan,
+        Preset::PanoDepassement,
+        Preset::PanoDecouverte,
+        Preset::PanoRotation,
+        Preset::TravellingLateral,
+        Preset::Orbite,
+        Preset::Grue,
+        Preset::Survol,
+        Preset::Penche,
+        Preset::Tonneau,
+        Preset::Shoulder,
+        Preset::LightShake,
+        Preset::Explosion,
+        Preset::Jolt,
+        Preset::Seisme,
+        Preset::PasLourds,
+        Preset::Marche,
+        Preset::Vehicule,
+        Preset::Houle,
+        Preset::Respiration,
+        Preset::Recadrage,
+        Preset::ArretNet,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -57,6 +206,129 @@ impl Preset {
             Preset::ZoomOut => "Zoom arrière",
             Preset::CrashZoom => "Zoom choc (crash zoom)",
             Preset::Vertigo => "Vertigo (dolly zoom)",
+            Preset::DezoomChoc => "Dézoom choc",
+            Preset::ZoomPaliers => "Zoom par paliers",
+            Preset::ZoomTension => "Zoom lent de tension",
+            Preset::ZoomPoint => "Zoom vers un point",
+            Preset::TravellingAvant => "Travelling avant",
+            Preset::TravellingArriere => "Travelling arrière",
+            Preset::KenBurns => "Ken Burns",
+            Preset::PanoPlat => "Panoramique à plat",
+            Preset::ZipPan => "Zip pan",
+            Preset::PanoDepassement => "Panoramique avec dépassement",
+            Preset::PanoDecouverte => "Panoramique de découverte",
+            Preset::PanoRotation => "Panoramique en rotation",
+            Preset::Penche => "Plan penché progressif",
+            Preset::Tonneau => "Tonneau",
+            Preset::Seisme => "Tremblement de terre",
+            Preset::PasLourds => "Pas lourds",
+            Preset::Marche => "Caméra qui marche",
+            Preset::Vehicule => "Véhicule",
+            Preset::Houle => "Houle",
+            Preset::Respiration => "Respiration",
+            Preset::Recadrage => "Recadrage sec",
+            Preset::ArretNet => "Arrêt net",
+            Preset::TravellingLateral => "Travelling latéral",
+            Preset::Orbite => "Orbite",
+            Preset::Grue => "Grue",
+            Preset::Survol => "Survol",
+        }
+    }
+
+    /// Sa famille (le panneau Préréglages et les listes les rangent ainsi).
+    pub fn famille(self) -> Famille {
+        use Preset::*;
+        match self {
+            ZoomIn | ZoomOut | CrashZoom | DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | TravellingAvant | TravellingArriere | Vertigo | KenBurns => Famille::Zooms,
+            PanoPlat | ZipPan | PanoDepassement | PanoDecouverte | PanoRotation => Famille::Panoramiques,
+            Penche | Tonneau => Famille::Rotations,
+            Shoulder | LightShake | Explosion | Jolt | Seisme | PasLourds | Marche | Vehicule | Houle | Respiration => Famille::Secousses,
+            Recadrage | ArretNet => Famille::Coupes,
+            TravellingLateral | Orbite | Grue | Survol => Famille::Travellings,
+        }
+    }
+
+    /// Ce que l'outil Caméra montre dans le cadre pour régler `Params::vers`.
+    pub fn poignee(self) -> Poignee {
+        use Preset::*;
+        match self {
+            DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | Recadrage => Poignee::Cible,
+            KenBurns | PanoPlat | ZipPan | PanoDepassement | Vehicule | ArretNet | TravellingLateral => Poignee::Fleche,
+            PanoDecouverte => Poignee::Depart,
+            Orbite | Grue => Poignee::Sujet,
+            _ => Poignee::Aucune,
+        }
+    }
+
+    /// Se règle par une intensité et une fréquence (les secousses).
+    pub fn a_intensite(self) -> bool {
+        self.famille() == Famille::Secousses
+    }
+
+    /// Tire des nombres au hasard (graine).
+    pub fn a_graine(self) -> bool {
+        matches!(self, Preset::Shoulder | Preset::LightShake | Preset::Explosion | Preset::Jolt | Preset::Seisme | Preset::Vehicule | Preset::Respiration)
+    }
+
+    /// Se règle par un facteur (zoom, ou avancée de la caméra : `est_une_avancee`).
+    pub fn a_zoom(self) -> bool {
+        use Preset::*;
+        matches!(self, ZoomIn | ZoomOut | CrashZoom | Vertigo | DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | TravellingAvant | TravellingArriere | KenBurns | Tonneau | Recadrage | Marche)
+    }
+
+    /// Le facteur est celui de l'avancée de la caméra (le sujet grandit d'autant), pas de la focale.
+    pub fn est_une_avancee(self) -> bool {
+        matches!(self, Preset::TravellingAvant | Preset::TravellingArriere | Preset::Marche)
+    }
+
+    /// Se règle par un angle (`Params::degres`).
+    pub fn a_degres(self) -> bool {
+        matches!(self, Preset::PanoRotation | Preset::Penche | Preset::Tonneau | Preset::Orbite | Preset::Survol)
+    }
+
+    /// Se règle par une hauteur (`Params::hauteur`, partie 172) : la grue et le survol.
+    pub fn a_hauteur(self) -> bool {
+        matches!(self, Preset::Grue | Preset::Survol)
+    }
+
+    /// Se règle par une avancée au-dessus du sol (`Params::avancee`, partie 172) : le survol.
+    pub fn a_avancee(self) -> bool {
+        self == Preset::Survol
+    }
+
+    /// **Déplace la caméra dans l'espace** (le lot 3, partie 172) : son œil va de côté, autour du sujet, en hauteur, au-dessus
+    /// du sol. Elle n'est pas bridée à ce qui voit la feuille (`Camera::limited`), et le plan qui porte l'effet passe par le
+    /// changement de repère aux images où elle en sort (`Document::repere_du_plan`), comme une caméra posée dans la vue de la
+    /// scène.
+    pub fn dans_l_espace(self) -> bool {
+        self.famille() == Famille::Travellings
+    }
+
+    /// Se règle par un nombre de paliers.
+    pub fn a_paliers(self) -> bool {
+        self == Preset::ZoomPaliers
+    }
+
+    /// Le nom de la fréquence dans le panneau Caméra.
+    pub fn nom_frequence(self) -> &'static str {
+        match self {
+            Preset::Shoulder => "Vitesse",
+            Preset::PasLourds | Preset::Marche => "Pas",
+            Preset::Houle | Preset::Respiration => "Rythme",
+            _ => "Fréquence",
+        }
+    }
+
+    /// Ce que dit la fréquence, en une phrase (bulle du champ).
+    pub fn note_frequence(self) -> &'static str {
+        match self {
+            Preset::Shoulder => "Vitesse de la dérive : plus haut, la caméra bouge plus vite.",
+            Preset::PasLourds | Preset::Marche => "Pas par seconde.",
+            Preset::Houle => "Vagues par seconde : 0,3 Hz, une vague toutes les 3 secondes.",
+            Preset::Respiration => "Souffles par seconde : 0,25 Hz, un souffle toutes les 4 secondes.",
+            Preset::Seisme => "Vitesse du grondement.",
+            Preset::Vehicule => "Vitesse de la vibration du moteur.",
+            _ => "Vitesse des à-coups, en secousses par seconde.",
         }
     }
 
@@ -71,6 +343,34 @@ impl Preset {
             Preset::ZoomOut => "zoom_arriere",
             Preset::CrashZoom => "zoom_choc",
             Preset::Vertigo => "vertigo",
+            // (Format 58, partie 171.)
+            Preset::DezoomChoc => "dezoom_choc",
+            Preset::ZoomPaliers => "zoom_paliers",
+            Preset::ZoomTension => "zoom_tension",
+            Preset::ZoomPoint => "zoom_point",
+            Preset::TravellingAvant => "travelling_avant",
+            Preset::TravellingArriere => "travelling_arriere",
+            Preset::KenBurns => "ken_burns",
+            Preset::PanoPlat => "pano_plat",
+            Preset::ZipPan => "zip_pan",
+            Preset::PanoDepassement => "pano_depassement",
+            Preset::PanoDecouverte => "pano_decouverte",
+            Preset::PanoRotation => "pano_rotation",
+            Preset::Penche => "penche",
+            Preset::Tonneau => "tonneau",
+            Preset::Seisme => "seisme",
+            Preset::PasLourds => "pas_lourds",
+            Preset::Marche => "marche",
+            Preset::Vehicule => "vehicule",
+            Preset::Houle => "houle",
+            Preset::Respiration => "respiration",
+            Preset::Recadrage => "recadrage",
+            Preset::ArretNet => "arret_net",
+            // (Format 59, partie 172.)
+            Preset::TravellingLateral => "travelling_lateral",
+            Preset::Orbite => "orbite",
+            Preset::Grue => "grue",
+            Preset::Survol => "survol",
         }
     }
 
@@ -90,17 +390,44 @@ impl Preset {
             Preset::ZoomOut => "Élargit le cadre (la focale baisse), doucement au départ et à l'arrivée. Deux clés.",
             Preset::CrashZoom => "Zoom avant brutal qui ralentit en arrivant. Deux clés.",
             Preset::Vertigo => "La focale monte et la caméra recule d'autant : le sujet au plan de référence garde sa taille, les calques en profondeur bougent. Deux douzaines de clés.",
+            Preset::DezoomChoc => "On part serré sur la cible, le cadre s'ouvre d'un coup et ralentit en arrivant. La cible se tire dans le cadre avec l'outil Caméra. Deux clés.",
+            Preset::ZoomPaliers => "Des à-coups secs vers la cible, tenus entre deux, façon anime. Deux clés par palier.",
+            Preset::ZoomTension => "Un zoom presque imperceptible vers la cible, sur toute la durée. Deux clés.",
+            Preset::ZoomPoint => "La caméra va vers la cible en zoomant : la cible arrive au centre du cadre. La cible se tire dans le cadre avec l'outil Caméra. Deux clés.",
+            Preset::TravellingAvant => "La caméra avance au lieu de zoomer : ce qui est près grandit vite, le lointain à peine (calques en profondeur). Deux clés.",
+            Preset::TravellingArriere => "La caméra recule au lieu de dézoomer : ce qui est près rapetisse vite, le lointain à peine. Deux clés.",
+            Preset::KenBurns => "Glissement et zoom lents et réguliers, dans le sens de la flèche : une image fixe qui vit. Deux clés.",
+            Preset::PanoPlat => "La caméra glisse sur le décor dans le sens de la flèche, doucement au départ et à l'arrivée. La flèche se tire dans le cadre avec l'outil Caméra. Deux clés.",
+            Preset::ZipPan => "Panoramique éclair dans le sens de la flèche, qui se pose avec un petit rebond. Trois clés.",
+            Preset::PanoDepassement => "La caméra va un peu plus loin que la flèche, puis revient se poser. Trois clés.",
+            Preset::PanoDecouverte => "La caméra part du bout de la flèche (le ciel, par exemple) et vient se poser sur le cadre du plan en ralentissant. Deux clés.",
+            Preset::PanoRotation => "La caméra tourne sur elle-même, en perspective, de l'angle réglé (vers la droite s'il est positif). Deux clés.",
+            Preset::Penche => "Le cadre penche peu à peu jusqu'à l'angle réglé, puis le garde. Deux clés.",
+            Preset::Tonneau => "Le cadre fait un tour complet qui accélère, en zoomant un peu. Deux clés.",
+            Preset::Seisme => "Long et grave : il monte, gronde, puis s'éteint. Une clé par image.",
+            Preset::PasLourds => "Des secousses verticales amorties, une à chaque pas : un géant marche. Une clé par image.",
+            Preset::Marche => "La caméra avance avec le balancement régulier de la marche. Une clé toutes les 2 images.",
+            Preset::Vehicule => "Vibration fine, une bosse de temps en temps, et la caméra glisse dans le sens de la flèche. Une clé par image.",
+            Preset::Houle => "Roulis lent d'un bateau, qui monte et descend. Une clé toutes les 2 images.",
+            Preset::Respiration => "Une dérive infime, à peine un souffle, pour qu'un plan fixe ne soit pas mort. Une clé toutes les 4 images.",
+            Preset::Recadrage => "Un saut de cadre sur une seule image, vers la cible, dans le même plan. Deux clés, et une calme juste avant.",
+            Preset::ArretNet => "La caméra glisse à vitesse constante dans le sens de la flèche et se fige d'un coup. Deux clés.",
+            Preset::TravellingLateral => "La caméra se déplace de côté, dans le sens de la flèche : ce qui est près passe vite, le lointain à peine. Elle suit ses propres axes, même tournée. Deux clés.",
+            Preset::Orbite => "La caméra tourne autour du sujet, qui reste à sa place dans l'image : on voit les dessins de biais, puis de côté. Positif : elle passe à sa droite. Une clé par image.",
+            Preset::Grue => "La caméra monte en basculant vers le bas : le sujet reste à sa place dans l'image, on le découvre d'en haut. Une hauteur négative la fait descendre. Une clé par image.",
+            Preset::Survol => "La caméra s'élève, bascule vers le sol et avance au-dessus des dessins, comme un drone. Deux clés.",
         }
     }
 
-    /// Un tremblement ou une secousse (intensité, fréquence, graine).
+    /// Un tremblement ou une secousse d'avant le lot 2 (intensité, fréquence, graine) : ceux que le préréglage d'effet
+    /// « Tremblement de l'image » propose aussi.
     pub fn is_shake(self) -> bool {
         matches!(self, Preset::Shoulder | Preset::LightShake | Preset::Explosion | Preset::Jolt)
     }
 
     /// Commence d'un coup (la caméra est calme juste avant) plutôt que de monter doucement.
     pub fn is_abrupt(self) -> bool {
-        matches!(self, Preset::Explosion | Preset::Jolt | Preset::CrashZoom)
+        matches!(self, Preset::Explosion | Preset::Jolt | Preset::CrashZoom | Preset::DezoomChoc | Preset::PanoDecouverte | Preset::Recadrage | Preset::PasLourds)
     }
 
     /// Durée proposée, en secondes.
@@ -113,6 +440,26 @@ impl Preset {
             Preset::ZoomIn | Preset::ZoomOut => 2.0,
             Preset::CrashZoom => 0.3,
             Preset::Vertigo => 3.0,
+            Preset::DezoomChoc => 0.6,
+            Preset::ZoomPaliers => 2.4,
+            Preset::ZoomTension => 5.0,
+            Preset::ZoomPoint => 2.6,
+            Preset::TravellingAvant | Preset::TravellingArriere => 3.0,
+            Preset::KenBurns => 6.0,
+            Preset::PanoPlat => 3.0,
+            Preset::ZipPan => 0.6,
+            Preset::PanoDepassement => 2.2,
+            Preset::PanoDecouverte => 3.2,
+            Preset::PanoRotation | Preset::Penche => 3.0,
+            Preset::Tonneau => 2.4,
+            Preset::Seisme => 4.0,
+            Preset::PasLourds | Preset::Marche | Preset::Vehicule => 3.0,
+            Preset::Houle => 6.0,
+            Preset::Respiration => 8.0,
+            Preset::Recadrage => 1.0,
+            Preset::ArretNet => 2.0,
+            Preset::TravellingLateral | Preset::Grue => 3.6,
+            Preset::Orbite | Preset::Survol => 4.5,
         }
     }
 
@@ -123,25 +470,85 @@ impl Preset {
             Preset::LightShake => 7.0,
             Preset::Explosion => 12.0,
             Preset::Jolt => 10.0,
+            Preset::Seisme => 6.0,
+            Preset::PasLourds => 1.3,
+            Preset::Marche => 1.8,
+            Preset::Vehicule => 9.0,
+            Preset::Houle => 0.3,
+            Preset::Respiration => 0.25,
             _ => 0.0,
         }
     }
 
-    /// Facteur de zoom proposé (focale d'arrivée / focale de départ).
+    /// Facteur de zoom proposé (focale d'arrivée / focale de départ), ou d'avancée (`est_une_avancee`).
     pub fn default_factor(self) -> f32 {
         match self {
             Preset::ZoomIn | Preset::ZoomOut => 1.5,
             Preset::CrashZoom => 3.0,
             Preset::Vertigo => 2.0,
+            Preset::DezoomChoc => 2.6,
+            Preset::ZoomPaliers => 2.5,
+            Preset::ZoomTension => 1.3,
+            Preset::ZoomPoint => 3.0,
+            Preset::TravellingAvant | Preset::TravellingArriere => 1.6,
+            Preset::KenBurns | Preset::Tonneau | Preset::Marche => 1.25,
+            Preset::Recadrage => 2.0,
             _ => 1.0,
         }
     }
 
-    /// Écart entre deux clés, en images, avant le plafond du nombre de clés.
+    /// Angle proposé, en degrés (`a_degres`).
+    pub fn default_degres(self) -> f32 {
+        match self {
+            Preset::PanoRotation => 35.0,
+            Preset::Penche => 14.0,
+            Preset::Tonneau => 360.0,
+            Preset::Orbite => 40.0,
+            Preset::Survol => 20.0,
+            _ => 0.0,
+        }
+    }
+
+    /// Flèche ou cible proposée (`Params::vers`), en part de la largeur du cadre depuis son centre (x vers la droite, y vers
+    /// le bas).
+    pub fn default_vers(self) -> [f32; 2] {
+        match self {
+            Preset::ZoomPoint => [0.22, -0.08],
+            Preset::KenBurns => [0.1, -0.03],
+            Preset::PanoPlat => [0.6, 0.0],
+            Preset::ZipPan => [1.0, 0.0],
+            Preset::PanoDepassement => [0.5, 0.0],
+            Preset::PanoDecouverte => [0.0, -0.45],
+            Preset::Vehicule => [0.3, 0.0],
+            Preset::ArretNet => [0.4, 0.0],
+            Preset::TravellingLateral => [0.5, 0.0],
+            _ => [0.0, 0.0],
+        }
+    }
+
+    /// Hauteur proposée (`a_hauteur`), en hauteurs du cadre filmé au plan de référence.
+    pub fn default_hauteur(self) -> f32 {
+        match self {
+            Preset::Grue => 1.5,
+            Preset::Survol => 0.8,
+            _ => 0.0,
+        }
+    }
+
+    /// Avancée proposée (`a_avancee`), en distances de la caméra au plan de référence (1 : elle arrive au-dessus des dessins).
+    pub fn default_avancee(self) -> f32 {
+        if self == Preset::Survol { 1.6 } else { 0.0 }
+    }
+
+    /// Écart entre deux clés, en images, avant le plafond du nombre de clés (`usize::MAX` : les clés de sa courbe, ou les
+    /// deux du début et de la fin).
     fn step(self) -> usize {
         match self {
-            Preset::Shoulder => 2,
-            Preset::LightShake | Preset::Explosion | Preset::Jolt => 1,
+            Preset::Shoulder | Preset::Marche | Preset::Houle => 2,
+            Preset::LightShake | Preset::Explosion | Preset::Jolt | Preset::Seisme | Preset::PasLourds | Preset::Vehicule => 1,
+            Preset::Respiration => 4,
+            // (L'orbite et la grue tournent la caméra autour du sujet : une courbe, qu'une clé par image suit exactement.)
+            Preset::Orbite | Preset::Grue => 1,
             _ => usize::MAX,
         }
     }
@@ -163,10 +570,27 @@ pub struct Params {
     pub zoom_factor: f32,
     /// Coup de zoom avec l'explosion.
     pub punch: bool,
+    /// La flèche ou la cible (`Preset::poignee`), en part de la largeur du cadre depuis son centre, dans l'image (x vers la
+    /// droite, y vers le bas) : le chemin de la caméra, son point de départ ou le point qu'elle vise (partie 171).
+    pub vers: [f32; 2],
+    /// Angle, en degrés (`Preset::a_degres`) : du panoramique en rotation (positif : vers la droite), du cadre penché ou du
+    /// tonneau.
+    pub degres: f32,
+    /// Nombre d'à-coups du zoom par paliers.
+    pub paliers: u32,
+    /// De combien la caméra monte (`Preset::a_hauteur`, partie 172), en hauteurs du cadre filmé au plan de référence ;
+    /// négatif : elle descend.
+    pub hauteur: f32,
+    /// De combien elle avance au-dessus du sol (`Preset::a_avancee`), en distances de la caméra au plan de référence.
+    pub avancee: f32,
 }
 
 /// Plafond du nombre de clés posées d'un coup (un effet très long espace ses clés).
 pub const MAX_KEYS: usize = 1000;
+
+/// Nombre de paliers proposé (zoom par paliers), et le plus grand.
+pub const PALIERS: u32 = 3;
+pub const PALIERS_MAX: u32 = 12;
 
 impl Params {
     /// Les réglages proposés pour `preset` à `fps` images par seconde.
@@ -179,11 +603,16 @@ impl Params {
             seed: 1,
             zoom_factor: preset.default_factor(),
             punch: preset == Preset::Explosion,
+            vers: preset.default_vers(),
+            degres: preset.default_degres(),
+            paliers: PALIERS,
+            hauteur: preset.default_hauteur(),
+            avancee: preset.default_avancee(),
         }
     }
 
-    /// Les mêmes réglages pour un autre préréglage : durée, fréquence et facteur repartent de ses
-    /// valeurs, l'intensité et la graine restent.
+    /// Les mêmes réglages pour un autre préréglage : durée, fréquence, facteur, flèche et angle repartent de ses valeurs,
+    /// l'intensité et la graine restent.
     pub fn with_preset(&self, preset: Preset, fps: u32) -> Params {
         Params { intensity: self.intensity, seed: self.seed, ..Params::new(preset, fps) }
     }
@@ -191,15 +620,28 @@ impl Params {
     /// Réglages ramenés dans des bornes sûres.
     pub fn sanitized(&self, fps: u32) -> Params {
         let ok = |v: f32, lo: f32, hi: f32, d: f32| if v.is_finite() { v.clamp(lo, hi) } else { d };
+        let d = self.preset.default_vers();
         Params {
             intensity: ok(self.intensity, 0.0, 10.0, 1.0),
             duration: self.duration.clamp(1, 100_000),
             freq: ok(self.freq, 0.0, (fps as f32 / 2.0).max(1.0), self.preset.default_freq()),
             zoom_factor: ok(self.zoom_factor, 1.0, 20.0, self.preset.default_factor().max(1.0)),
+            vers: [ok(self.vers[0], -VERS_MAX, VERS_MAX, d[0]), ok(self.vers[1], -VERS_MAX, VERS_MAX, d[1])],
+            degres: ok(self.degres, -DEGRES_MAX, DEGRES_MAX, self.preset.default_degres()),
+            paliers: self.paliers.clamp(1, PALIERS_MAX),
+            hauteur: ok(self.hauteur, -HAUTEUR_MAX, HAUTEUR_MAX, self.preset.default_hauteur()),
+            avancee: ok(self.avancee, 0.0, AVANCEE_MAX, self.preset.default_avancee()),
             ..*self
         }
     }
 }
+
+/// Bornes de la flèche (en largeurs de cadre) et de l'angle (en degrés : trois tours).
+pub const VERS_MAX: f32 = 4.0;
+pub const DEGRES_MAX: f32 = 1080.0;
+/// Bornes de la hauteur (en hauteurs de cadre) et de l'avancée au-dessus du sol (en distances de la caméra), partie 172.
+pub const HAUTEUR_MAX: f32 = 50.0;
+pub const AVANCEE_MAX: f32 = 50.0;
 
 /// Une clé d'effet : le décalage ajouté à la caméra de base à l'image `frame` (comptée depuis le
 /// début de l'effet).
@@ -216,6 +658,29 @@ pub struct Sample {
     /// Adoucis à poser sur la clé (images), pour les zooms.
     pub ease_in: f32,
     pub ease_out: f32,
+    /// Panoramique ajouté, en degrés (la caméra tourne sur elle-même, en perspective).
+    pub pan: f32,
+    /// Avancée de la caméra : sa distance au plan de référence est divisée par ce facteur (1 : inchangée ; plus grand : elle
+    /// avance, le plan de référence grandit d'autant).
+    pub avance: f32,
+    // La caméra dans l'espace (partie 172, `Preset::dans_l_espace`) ; `plan` les applique à la caméra de chaque image.
+    /// L'œil se déplace de côté (travelling latéral) : dans l'image, en part de la largeur du cadre filmé.
+    pub lateral: [f32; 2],
+    /// L'œil tourne autour du sujet, en degrés (orbite).
+    pub orbite: f32,
+    /// L'œil monte, en hauteurs du cadre filmé (grue, survol).
+    pub monte: f32,
+    /// L'œil avance au-dessus du sol, en distances de la caméra au plan de référence (survol).
+    pub avant: f32,
+    /// Bascule ajoutée, en degrés (survol : négative, vers le sol).
+    pub bascule: f32,
+}
+
+impl Sample {
+    /// Rien d'ajouté à la caméra, à l'image `frame` de l'effet.
+    pub fn neutre(frame: usize) -> Sample {
+        Sample { frame, dx: 0.0, dy: 0.0, angle: 0.0, zoom: 1.0, ease_in: 0.0, ease_out: 0.0, pan: 0.0, avance: 1.0, lateral: [0.0, 0.0], orbite: 0.0, monte: 0.0, avant: 0.0, bascule: 0.0 }
+    }
 }
 
 /// Les bornes de ce qu'un effet peut ajouter à la caméra.
@@ -312,6 +777,98 @@ const JOLT_ANGLE: f32 = 1.5;
 /// Durée de vie d'une secousse de la caméra à l'épaule, et sa fréquence (Hz).
 const JOLT_DECAY: f32 = 0.12;
 const JOLT_FREQ: f32 = 5.0;
+// Les secousses du lot 2 (partie 171), à 100 %.
+const SEISME_X: f32 = 0.012;
+const SEISME_Y: f32 = 0.03;
+const SEISME_ANGLE: f32 = 1.2;
+/// Hauteur du sommet de l'enveloppe du tremblement de terre (`smoothstep(3,5 u) (1 - u)^1,3`), pour la ramener à 1.
+const SEISME_PIC: f32 = 0.6457;
+const PAS_Y: f32 = 0.028;
+const PAS_ANGLE: f32 = 0.35;
+/// Durée de vie de la secousse d'un pas, et sa fréquence (Hz).
+const PAS_DECAY: f32 = 0.11;
+const PAS_FREQ: f32 = 5.0;
+const MARCHE_X: f32 = 0.006;
+const MARCHE_Y: f32 = 0.014;
+const MARCHE_ANGLE: f32 = 0.6;
+const VEHICULE_VIB: f32 = 0.0025;
+const VEHICULE_ANGLE: f32 = 0.08;
+const VEHICULE_BOSSE: f32 = 0.012;
+const VEHICULE_BOSSE_ANGLE: f32 = 0.4;
+const HOULE_X: f32 = 0.004;
+const HOULE_Y: f32 = 0.025;
+const HOULE_ANGLE: f32 = 3.0;
+const SOUFFLE_POS: f32 = 0.004;
+const SOUFFLE_ZOOM: f32 = 0.02;
+
+/// Une clé de la courbe d'un préréglage du lot 2 qui pose peu de clés : à l'image `frame` de l'effet, l'avancement `valeur`
+/// de son mouvement (0 : la caméra du plan ; 1 : à l'arrivée ; au-delà : un dépassement), avec ses adoucis en images.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Cle {
+    frame: usize,
+    valeur: f32,
+    ease_in: f32,
+    ease_out: f32,
+}
+
+/// La courbe des préréglages qui posent peu de clés, adoucis compris (vide pour les autres) : entre deux clés, la caméra suit
+/// la même loi que deux clés de caméra ordinaires (`camera::ease`), si bien que l'effet vivant et ses clés converties
+/// montrent la même chose.
+fn courbe_de(p: &Params, fps: f32) -> Vec<Cle> {
+    use Preset::*;
+    let d = p.duration;
+    let df = d as f32;
+    let cle = |frame: usize, valeur: f32, ease_in: f32, ease_out: f32| Cle { frame, valeur, ease_in, ease_out };
+    let deux = |de: f32, a: f32, sortie: f32, entree: f32| vec![cle(0, de, 0.0, sortie), cle(d, a, entree, 0.0)];
+    match p.preset {
+        // (Le dézoom choc part serré et ralentit en arrivant, comme le zoom choc à l'envers.)
+        DezoomChoc => deux(1.0, 0.0, 0.0, df),
+        ZoomTension => deux(0.0, 1.0, 0.3 * df, 0.3 * df),
+        ZoomPoint | TravellingAvant | TravellingArriere | PanoPlat | PanoRotation | Penche | TravellingLateral => deux(0.0, 1.0, 0.5 * df, 0.5 * df),
+        // (Le survol décolle doucement, puis file à vitesse constante jusqu'au bout.)
+        Survol => deux(0.0, 1.0, 0.4 * df, 0.0),
+        KenBurns => deux(0.0, 1.0, 0.15 * df, 0.15 * df),
+        PanoDecouverte => deux(1.0, 0.0, 0.3 * df, 0.6 * df),
+        // (Le tonneau accélère jusqu'au bout.)
+        Tonneau => deux(0.0, 1.0, df, 0.0),
+        Recadrage => deux(1.0, 1.0, 0.0, 0.0),
+        ArretNet => deux(0.0, 1.0, 0.0, 0.0),
+        ZipPan | PanoDepassement => {
+            let de_trop = if p.preset == ZipPan { 1.06 } else { 1.12 };
+            let k = ((df * 0.7).round() as usize).max(1);
+            if k >= d {
+                return deux(0.0, 1.0, 0.5 * df, 0.5 * df);
+            }
+            let (a, b) = (k as f32, (d - k) as f32);
+            vec![cle(0, 0.0, 0.0, 0.5 * a), cle(k, de_trop, 0.5 * a, 0.5 * b), cle(d, 1.0, 0.5 * b, 0.0)]
+        }
+        ZoomPaliers => {
+            // Un à-coup de 0,12 s qui ralentit en arrivant, puis le palier tient jusqu'au suivant.
+            let r = ((0.12 * fps).round() as usize).max(1);
+            let mut n = p.paliers.max(1) as usize;
+            while n > 1 && d / n <= r {
+                n -= 1;
+            }
+            let seg = d / n;
+            if seg <= r {
+                return deux(0.0, 1.0, 0.0, df);
+            }
+            let mut v = vec![cle(0, 0.0, 0.0, 0.0)];
+            for i in 0..n {
+                let a = i * seg;
+                if i > 0 {
+                    v.push(cle(a, i as f32 / n as f32, 0.0, 0.0));
+                }
+                v.push(cle(a + r, (i + 1) as f32 / n as f32, r as f32, 0.0));
+            }
+            if v.last().is_some_and(|c| c.frame < d) {
+                v.push(cle(d, 1.0, 0.0, 0.0));
+            }
+            v
+        }
+        _ => Vec::new(),
+    }
+}
 
 /// Calcule les clés d'un effet, image par image.
 #[derive(Clone, Debug)]
@@ -323,6 +880,8 @@ pub struct Generator {
     dir: (f32, f32),
     phase: f32,
     jolts: Vec<Jolt>,
+    /// La courbe des préréglages qui posent peu de clés (`courbe_de`).
+    courbe: Vec<Cle>,
 }
 
 impl Generator {
@@ -349,18 +908,96 @@ impl Generator {
                 t += rng.range(0.9, 2.4);
             }
         }
-        Generator { p, fps: fps_f, step, waves, dir: (theta.cos(), theta.sin()), phase, jolts }
+        if p.preset == Preset::Vehicule {
+            // Les bosses de la route : de temps en temps, jamais dans la dernière demi-seconde.
+            let total = p.duration as f32 / fps_f;
+            let mut t = rng.range(0.3, 0.9);
+            while t < total - 0.5 {
+                let snapped = (t * fps_f / step as f32).round() * step as f32 / fps_f;
+                jolts.push(Jolt { t0: snapped, dir: (0.0, 1.0), mag: rng.range(0.5, 1.0), sign: if rng.unit() < 0.5 { -1.0 } else { 1.0 } });
+                t += rng.range(0.7, 1.6);
+            }
+        }
+        let courbe = courbe_de(&p, fps_f);
+        Generator { p, fps: fps_f, step, waves, dir: (theta.cos(), theta.sin()), phase, jolts, courbe }
     }
 
     pub fn params(&self) -> &Params {
         &self.p
     }
 
-    /// Les images (depuis le début de l'effet) où l'effet pose une clé : 0, de `step` en `step`, et la dernière.
+    /// Les images (depuis le début de l'effet) où l'effet pose une clé : 0, de `step` en `step`, et la dernière (ou les clés
+    /// de sa courbe).
     pub fn frames(&self) -> Vec<usize> {
+        if !self.courbe.is_empty() {
+            return self.courbe.iter().map(|c| c.frame).collect();
+        }
         let mut out: Vec<usize> = (0..self.p.duration).step_by(self.step).collect();
         out.push(self.p.duration);
         out
+    }
+
+    /// Ses décalages sont dans l'image (la flèche, la cible) : `plan` les tourne avec le cadre.
+    pub fn dans_l_image(&self) -> bool {
+        self.p.preset.poignee() != Poignee::Aucune
+    }
+
+    /// L'avancement du mouvement à l'image `frame`, sur la courbe (`courbe_de`) ; ses adoucis si une clé y est.
+    fn sur_la_courbe(&self, frame: usize) -> Sample {
+        let c = &self.courbe;
+        let i = c.partition_point(|k| k.frame < frame);
+        let (e, ease_in, ease_out) = if i < c.len() && c[i].frame == frame {
+            (c[i].valeur, c[i].ease_in, c[i].ease_out)
+        } else if i == 0 {
+            (c[0].valeur, 0.0, 0.0)
+        } else if i >= c.len() {
+            (c[c.len() - 1].valeur, 0.0, 0.0)
+        } else {
+            let (a, b) = (c[i - 1], c[i]);
+            let span = (b.frame - a.frame).max(1) as f32;
+            let t = (frame - a.frame) as f32 / span;
+            (a.valeur + (b.valeur - a.valeur) * camera::ease(t, span, a.ease_out, b.ease_in), 0.0, 0.0)
+        };
+        Sample { ease_in, ease_out, ..self.pose(e, frame) }
+    }
+
+    /// Ce qu'ajoute à la caméra un préréglage à courbe, à l'avancement `e` de son mouvement.
+    fn pose(&self, e: f32, frame: usize) -> Sample {
+        use Preset::*;
+        let p = &self.p;
+        let [vx, vy] = p.vers;
+        let f = p.zoom_factor;
+        let mut s = Sample::neutre(frame);
+        match p.preset {
+            // (Le centre va vers la cible pendant que le cadre se resserre : à l'arrivée, la cible est au centre.)
+            DezoomChoc | ZoomPaliers | ZoomTension | ZoomPoint | Recadrage | KenBurns => {
+                s.dx = vx * e;
+                s.dy = vy * e;
+                s.zoom = f.powf(e);
+            }
+            PanoPlat | ZipPan | PanoDepassement | PanoDecouverte | ArretNet => {
+                s.dx = vx * e;
+                s.dy = vy * e;
+            }
+            TravellingAvant => s.avance = f.powf(e),
+            TravellingArriere => s.avance = f.powf(-e),
+            PanoRotation => s.pan = p.degres * e,
+            Penche => s.angle = p.degres * e,
+            Tonneau => {
+                s.angle = p.degres * e;
+                s.zoom = f.powf(e);
+            }
+            TravellingLateral => s.lateral = [vx * e, vy * e],
+            Orbite => s.orbite = p.degres * e,
+            Grue => s.monte = p.hauteur * e,
+            Survol => {
+                s.monte = p.hauteur * e;
+                s.avant = p.avancee * e;
+                s.bascule = -p.degres * e;
+            }
+            _ => {}
+        }
+        s
     }
 
     /// Les bornes de ce que l'effet ajoute à la caméra.
@@ -375,6 +1012,16 @@ impl Generator {
             Preset::LightShake => Bounds { pos: i * LIGHT_X.max(LIGHT_Y), angle: i * LIGHT_ANGLE, punch: 0.0 },
             Preset::Explosion => Bounds { pos: i * EXPLOSION_POS, angle: i * EXPLOSION_ANGLE, punch: if self.p.punch { i * EXPLOSION_PUNCH } else { 0.0 } },
             Preset::Jolt => Bounds { pos: i * JOLT_POS, angle: i * JOLT_ANGLE, punch: 0.0 },
+            Preset::Seisme => Bounds { pos: i * SEISME_X.max(SEISME_Y), angle: i * SEISME_ANGLE, punch: 0.0 },
+            Preset::PasLourds => Bounds { pos: i * PAS_Y, angle: i * PAS_ANGLE, punch: 0.0 },
+            Preset::Marche => Bounds { pos: i * MARCHE_X.max(MARCHE_Y * 0.5), angle: i * MARCHE_ANGLE, punch: 0.0 },
+            Preset::Vehicule => Bounds {
+                pos: self.p.vers[0].abs().max(self.p.vers[1].abs()) + i * (VEHICULE_VIB * 1.2 + VEHICULE_BOSSE * 1.01),
+                angle: i * (VEHICULE_ANGLE + VEHICULE_BOSSE_ANGLE * 1.01),
+                punch: 0.0,
+            },
+            Preset::Houle => Bounds { pos: i * HOULE_X.max(HOULE_Y), angle: i * HOULE_ANGLE, punch: 0.0 },
+            Preset::Respiration => Bounds { pos: i * SOUFFLE_POS, angle: 0.0, punch: i * SOUFFLE_ZOOM },
             _ => Bounds { pos: 0.0, angle: 0.0, punch: 0.0 },
         }
     }
@@ -386,11 +1033,112 @@ impl Generator {
         let last = frame == self.p.duration;
         let t = frame as f32 / self.fps;
         let total = self.p.duration as f32 / self.fps;
-        let neutral = Sample { frame, dx: 0.0, dy: 0.0, angle: 0.0, zoom: 1.0, ease_in: 0.0, ease_out: 0.0 };
+        let neutral = Sample::neutre(frame);
+        if !self.courbe.is_empty() {
+            return self.sur_la_courbe(frame);
+        }
         let i = self.p.intensity;
         let f = self.p.freq;
         let [wx, wy, wa] = self.waves;
+        // L'enveloppe des secousses continues : elles montent et s'éteignent sans à-coup, sur `ramp` secondes.
+        let env = |ramp: f32| {
+            let ramp = ramp.min(total / 3.0).max(1e-3);
+            smoothstep(t / ramp) * smoothstep((total - t) / ramp)
+        };
+        // Où en est l'effet, de 0 à 1.
+        let u = frame as f32 / self.p.duration.max(1) as f32;
         match self.p.preset {
+            // (L'orbite et la grue : adoucies au départ et à l'arrivée, une clé par image le long de leur courbe.)
+            Preset::Orbite | Preset::Grue => {
+                let dur = self.p.duration.max(1) as f32;
+                let e = if last { 1.0 } else { camera::ease(frame as f32 / dur, dur, 0.5 * dur, 0.5 * dur) };
+                self.pose(e, frame)
+            }
+            Preset::Seisme => {
+                if last {
+                    return neutral;
+                }
+                let u = t / total.max(1e-3);
+                // Il monte sur le premier quart, gronde, puis s'éteint jusqu'à la fin.
+                let e = (smoothstep(u * 3.5) * (1.0 - u).max(0.0).powf(1.3) / SEISME_PIC).min(1.0);
+                Sample {
+                    dx: i * SEISME_X * e * (0.7 * wx.at(f, t) + 0.3 * wx.at(f * 0.31, t + 1.7)),
+                    dy: i * SEISME_Y * e * (0.7 * wy.at(f, t) + 0.3 * wy.at(f * 0.31, t + 0.9)),
+                    angle: i * SEISME_ANGLE * e * wa.at(f * 0.6, t),
+                    ..neutral
+                }
+            }
+            Preset::PasLourds => {
+                if last {
+                    return neutral;
+                }
+                // Un pas toutes les 1 / f secondes : une secousse verticale qui s'éteint vite, le cadre penche d'un côté puis
+                // de l'autre.
+                let periode = 1.0 / f.max(0.05);
+                let n = (t / periode).floor();
+                let dt = t - n * periode;
+                let k = (-dt / PAS_DECAY).exp() * (TAU * PAS_FREQ * dt).cos();
+                let pied = if (n as i64) % 2 == 0 { 1.0 } else { -1.0 };
+                Sample { dy: i * PAS_Y * k, angle: i * PAS_ANGLE * k * pied, ..neutral }
+            }
+            Preset::Marche => {
+                // La caméra avance à vitesse constante : sa distance passe de d à d / facteur.
+                let avance = 1.0 / (1.0 - (1.0 - 1.0 / self.p.zoom_factor) * u.min(1.0));
+                if last {
+                    return Sample { avance, ..neutral };
+                }
+                let e = env(0.3);
+                let pas = (std::f32::consts::PI * f * t).sin();
+                Sample {
+                    dx: i * MARCHE_X * e * (std::f32::consts::PI * f * 0.5 * t).sin(),
+                    dy: i * MARCHE_Y * e * (pas.abs() - 0.5),
+                    angle: i * MARCHE_ANGLE * e * pas,
+                    avance,
+                    ..neutral
+                }
+            }
+            Preset::Vehicule => {
+                let [vx, vy] = self.p.vers;
+                if last {
+                    return Sample { dx: vx, dy: vy, ..neutral };
+                }
+                let e = env(0.3);
+                let mut s = Sample {
+                    dx: vx * u + i * VEHICULE_VIB * e * wx.at(f, t),
+                    dy: vy * u + i * VEHICULE_VIB * 1.2 * e * wy.at(f * 1.13, t),
+                    angle: i * VEHICULE_ANGLE * e * wa.at(f * 0.5, t),
+                    ..neutral
+                };
+                for j in &self.jolts {
+                    let dt = t - j.t0;
+                    if (0.0..1.0).contains(&dt) {
+                        let k = (-dt / 0.1).exp() * (TAU * 4.0 * dt).cos() * j.mag * i * e;
+                        s.dy += VEHICULE_BOSSE * k;
+                        s.angle += VEHICULE_BOSSE_ANGLE * k * j.sign;
+                    }
+                }
+                s
+            }
+            Preset::Houle => {
+                if last {
+                    return neutral;
+                }
+                let e = env(0.8);
+                let a = TAU * f * t;
+                Sample { dx: i * HOULE_X * e * (a * 0.77 + self.phase).sin(), dy: i * HOULE_Y * e * (a + 1.0).sin(), angle: i * HOULE_ANGLE * e * a.sin(), ..neutral }
+            }
+            Preset::Respiration => {
+                if last {
+                    return neutral;
+                }
+                let e = env(1.0);
+                Sample {
+                    dx: i * SOUFFLE_POS * e * wx.at(f * 0.8, t),
+                    dy: i * SOUFFLE_POS * 0.75 * e * wy.at(f * 0.72, t),
+                    zoom: 1.0 + i * SOUFFLE_ZOOM * e * (0.5 - 0.5 * (TAU * f * t).cos()),
+                    ..neutral
+                }
+            }
             Preset::Shoulder | Preset::LightShake => {
                 if last {
                     return neutral;
@@ -455,6 +1203,8 @@ impl Generator {
                 };
                 Sample { zoom, ease_in, ease_out, ..neutral }
             }
+            // (Les préréglages à courbe sont rendus plus haut, par `sur_la_courbe`.)
+            _ => neutral,
         }
     }
 
@@ -543,8 +1293,30 @@ pub fn plan(g: &Generator, frame: [usize; 2], start: usize, plan_len: usize, ext
             mul = mul.clamp(lo, hi.max(lo));
         }
         let zoom = (b.zoom * mul).clamp(0.05, 50.0);
-        let dolly = if g.keeps_subject_size() { d0 - b.distance(frame) * (zoom / b.zoom) } else { b.dolly };
-        let cam = Camera { x: b.x + s.dx * width, y: b.y + s.dy * width, angle: b.angle + s.angle, zoom, dolly, ..b }.limited(frame);
+        let dolly = if g.keeps_subject_size() {
+            d0 - b.distance(frame) * (zoom / b.zoom)
+        } else if s.avance != 1.0 {
+            // (Un travelling, partie 171 : la distance divisée par l'avancée, jamais plus près que la borne de `distance`.)
+            let dist = b.distance(frame);
+            let a = s.avance.clamp(0.05, (dist / (0.02 * d0)).max(0.05));
+            d0 - dist / a
+        } else {
+            b.dolly
+        };
+        // Une flèche ou une cible est tirée dans l'image (partie 171) : son décalage tourne avec le cadre. Les secousses d'avant
+        // gardent le leur sur la feuille, comme toujours.
+        let (ox, oy) = if g.dans_l_image() {
+            let (sn, cs) = b.angle.to_radians().sin_cos();
+            (s.dx * cs - s.dy * sn, s.dx * sn + s.dy * cs)
+        } else {
+            (s.dx, s.dy)
+        };
+        let cam = if g.params().preset.dans_l_espace() {
+            // (La caméra dans l'espace, partie 172 : ni bridée à ce qui voit la feuille, ni à la borne de `distance`.)
+            dans_l_espace(g.params(), &s, &b, frame)
+        } else {
+            Camera { x: b.x + ox * width, y: b.y + oy * width, angle: b.angle + s.angle, zoom, dolly, pan: b.pan + s.pan, ..b }.limited(frame)
+        };
         out.keys.push(PlannedKey { frame: at, cam, ease_in: (s.ease_in > 0.0).then_some(s.ease_in), ease_out: (s.ease_out > 0.0).then_some(s.ease_out) });
     }
     if g.abrupt() && start > 0 {
@@ -554,6 +1326,40 @@ pub fn plan(g: &Generator, frame: [usize; 2], start: usize, plan_len: usize, ext
         out.home = Some((0, base(0)));
     }
     out
+}
+
+/// La caméra `b` d'une image, déplacée dans l'espace par l'avancement `s` d'un préréglage du lot 3 (`Preset::dans_l_espace`,
+/// partie 172). Le sujet de l'orbite et de la grue est le point de l'image `p.vers`, au plan de référence, vu par `b` : il
+/// reste à cette place dans l'image.
+pub(crate) fn dans_l_espace(p: &Params, s: &Sample, b: &Camera, frame: [usize; 2]) -> Camera {
+    let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+    let mag = b.magnification(frame).max(1e-3);
+    // Le cadre filmé au plan de référence, en pixels de la feuille.
+    let (largeur, hauteur) = (fw / mag, fh / mag);
+    let (u0, v0) = (fw / 2.0 + p.vers[0] * fw, fh / 2.0 + p.vers[1] * fw);
+    match p.preset {
+        Preset::TravellingLateral => {
+            let (droite, bas) = camespace::axes_de_l_image(b);
+            let d = [0, 1, 2].map(|i| (s.lateral[0] * droite[i] + s.lateral[1] * bas[i]) * largeur);
+            camespace::deplacer(b, frame, d)
+        }
+        Preset::Orbite => {
+            let sujet = camespace::point_vu(b, frame, u0, v0);
+            camespace::tourner_autour(b, frame, sujet, s.orbite)
+        }
+        Preset::Grue => {
+            let sujet = camespace::point_vu(b, frame, u0, v0);
+            let montee = camespace::deplacer(b, frame, [0.0, s.monte * hauteur, 0.0]);
+            camespace::viser(&montee, frame, sujet, u0, v0).unwrap_or(montee)
+        }
+        Preset::Survol => {
+            let devant = camespace::devant_a_plat(b);
+            let pas = s.avant * b.distance(frame);
+            let c = camespace::deplacer(b, frame, [devant[0] * pas, s.monte * hauteur, devant[2] * pas]);
+            Camera { tilt: b.tilt + s.bascule, ..c }
+        }
+        _ => *b,
+    }
 }
 
 // ---------------------------------------------------------------------- l'effet vivant
@@ -612,6 +1418,7 @@ pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys
     };
     let p = &v.params;
     (p.preset as u8, p.intensity.to_bits(), p.duration, p.freq.to_bits(), p.seed, p.zoom_factor.to_bits(), p.punch, v.start).hash(&mut h);
+    (p.vers[0].to_bits(), p.vers[1].to_bits(), p.degres.to_bits(), p.paliers, p.hauteur.to_bits(), p.avancee.to_bits()).hash(&mut h);
     (fps, frame, plan_len, keys.len()).hash(&mut h);
     for k in keys {
         (k.frame, k.smooth, k.ease_in.to_bits(), k.ease_out.to_bits()).hash(&mut h);
@@ -643,6 +1450,31 @@ pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys
 
 /// Nombre de cuissons gardées par fil (`cuire_vite`).
 pub const MEMOIRE_MAX: usize = 4096;
+
+/// Tous les effets vivants d'un plan, **cuits l'un après l'autre** dans l'ordre de la liste (partie 170 : les blocs de la piste
+/// Caméra). Le premier part des clés du plan (`keys`) et de sa caméra sans effet (`base`, continuité comprise) ; chacun des
+/// suivants part des clés que le précédent a écrites, et de la caméra qu'elles donnent : un tremblement posé sur un zoom tremble
+/// autour du zoom. C'est exactement ce que ferait « Convertir en clés » sur chaque effet à tour de rôle : convertir ne change
+/// donc aucune image. Rien si aucun effet ne pose de clé (liste vide, ou tous commencent après la fin du plan).
+pub fn cuire_tous(effets: &[Vivant], fps: u32, frame: [usize; 2], plan_len: usize, keys: &[CameraKey], base: &dyn Fn(usize) -> Camera, default: Camera) -> Option<Vec<CameraKey>> {
+    let mut cuites: Option<Vec<CameraKey>> = None;
+    for v in effets {
+        let suivantes = {
+            let k: &[CameraKey] = cuites.as_deref().unwrap_or(keys);
+            if cuites.is_none() || k.is_empty() {
+                // (Rien n'a encore été écrit : la base est la caméra du plan sans effet, continuité comprise.)
+                cuire_vite(v, fps, frame, plan_len, k, base)
+            } else {
+                let deja = |f: usize| camera::camera_at(k, f, default);
+                cuire_vite(v, fps, frame, plan_len, k, &deja)
+            }
+        };
+        if suivantes.is_some() {
+            cuites = suivantes;
+        }
+    }
+    cuites
+}
 
 /// Écrit `plan` dans les clés d'un plan : les clés posées remplacent celles de la même image (en
 /// gardant leurs adoucis, sauf ceux que l'effet pose), les autres restent.

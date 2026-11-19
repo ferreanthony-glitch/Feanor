@@ -24,6 +24,10 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
+            // La tête de lecture dans une version dépliée de la timeline (partie 168) : son image, en lecture seule.
+            if self.depli_vue(ui, rect) {
+                return;
+            }
             // Espace 3D : à la place du dessin à plat, avec ses réglages dans le panneau « Espace 3D » (`espace3dpanneau.rs`).
             if self.espace3d_plein() {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
@@ -834,6 +838,7 @@ impl App {
                 Some(crate::camtools::CamHandle::Move) => CursorIcon::Move,
                 Some(crate::camtools::CamHandle::Zoom) => CursorIcon::ResizeNwSe,
                 Some(crate::camtools::CamHandle::Rotate) => CursorIcon::Alias,
+                Some(crate::camtools::CamHandle::Effet) => CursorIcon::Grab,
                 None => CursorIcon::Default,
             });
             return;

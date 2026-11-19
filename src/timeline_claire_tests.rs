@@ -1,32 +1,29 @@
-//! La timeline plus claire (partie 168) : des lignes toutes pareilles, seulement l'exception à droite du nom, la couleur du
-//! rangement sur toute la ligne, et la barre du calque courant au-dessus des lignes.
+//! La couleur du rangement sur les lignes de la timeline, et les dossiers qui servent de titres (partie 179, repris de la timeline
+//! plus claire de la branche `timeline-claire`). Ce qui n'a pas été gardé de cette branche, sur le choix d'Anthony entre trois maquettes
+//! (2026-11-19) : la barre du calque au-dessus des lignes et les lignes qui ne montrent que l'exception ; les colonnes et la ligne
+//! dépliée du calque courant de la partie 174 les remplacent.
 
 use eframe::egui::Color32;
 
-use crate::blend::BlendMode;
 use crate::pistes_tests::{app_with, doc_with};
 
 #[test]
-fn a_normal_layer_shows_nothing_and_each_exception_says_what_it_is() {
-    let mut app = app_with("exceptions", doc_with(&[&["A", "B"]]));
-    assert!(app.exceptions_du_calque(0).is_empty(), "un calque normal : rien à droite du nom");
-    // (L'œil et le cadenas ont leur propre case : un calque caché ou verrouillé n'ajoute rien ici.)
-    app.layers_mut()[0].visible = false;
-    app.layers_mut()[0].locked = true;
-    assert!(app.exceptions_du_calque(0).is_empty());
-    {
-        let l = &mut app.layers_mut()[0];
-        l.opacity = 0.6;
-        l.blend = BlendMode::Multiply;
-        l.stencil = true;
-        l.keep_alpha = true;
-        l.position_locked = true;
-    }
-    let textes: Vec<String> = app.exceptions_du_calque(0).into_iter().map(|(_, t)| t).collect();
-    assert_eq!(textes[0], "60 %");
-    assert_eq!(textes[1], BlendMode::Multiply.label());
-    assert!(textes.contains(&"Pochoir".to_string()) && textes.contains(&"Position verrouillée".to_string()), "{textes:?}");
-    assert!(app.exceptions_du_calque(1).is_empty(), "l'autre calque reste normal");
+fn a_layer_in_a_folder_takes_its_colour_and_a_free_layer_keeps_the_grey() {
+    use crate::document::Layer;
+    let mut doc = doc_with(&[&["Libre", "Rangé"]]);
+    // (La pile du plan va du bas vers le haut : le dossier au-dessus de « Rangé », qui y est rangé.)
+    let dossier = Layer::new_folder("Personnage");
+    let id = dossier.id;
+    doc.panels[0].layers.push(dossier);
+    let li = doc.panels[0].layers.iter().position(|l| l.name == "Rangé").unwrap();
+    doc.panels[0].layers[li].parent = Some(id);
+    let app = app_with("rangement", doc);
+    let layers = app.layers();
+    let i = |nom: &str| layers.iter().position(|l| l.name == nom).unwrap();
+    let du_dossier = crate::folders::couleur_du_rangement(layers, i("Personnage"), &app.doc.groups);
+    assert!(du_dossier.is_some(), "un dossier a une couleur d'office");
+    assert_eq!(crate::folders::couleur_du_rangement(layers, i("Rangé"), &app.doc.groups), du_dossier, "le calque rangé prend celle de son dossier");
+    assert_eq!(crate::folders::couleur_du_rangement(layers, i("Libre"), &app.doc.groups), None, "un calque libre, sans groupe : le gris");
 }
 
 #[test]

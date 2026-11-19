@@ -181,6 +181,7 @@ impl App {
             Pane::History => self.history_panel(ui),
             Pane::Comments => self.comments_panel(ui),
             Pane::Bruitages => self.bruitages_panel(ui),
+            Pane::Prereglages => self.prereglages_panel(ui),
             Pane::SuggestionsSonores => self.suggestions_panel(ui),
             Pane::References => self.references_panel(ui),
             Pane::Personnages => self.personnages_panel(ui),

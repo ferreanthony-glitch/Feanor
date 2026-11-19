@@ -953,7 +953,7 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     (Plan { paper, items }, ranges)
 }
 
-/// Image réduite de ce que voit la caméra `cam` (moyenne de 4 échantillons par pixel).
+/// Image réduite de ce que voit la caméra `cam` : chaque pixel est la moyenne de tout ce qu'il couvre de la feuille (`thumbnail_marges_until`).
 pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize) -> ColorImage {
     thumbnail_until(doc, plan, cam, tw, th, &|| false).expect("jamais interrompue")
 }
@@ -1087,25 +1087,94 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
     let seul = propre.filter(|(_, mini)| marges.iter().any(|v| v > mini)).and_then(|(sauf, _)| plan_propre(plan, sauf));
     let loin = seul.as_ref().map(|p| resolve(doc, p));
     let paper = paper_color(plan);
-    // Une case de la planche (avec sa marge) se lit comme le dessin vivant de la case courante (`gpu.rs`, `fs_display`) : plus de lectures quand on
-    // réduit fort, moyennées en lumière linéaire. (En 4 lectures moyennées en gamma, un trait fin était deux fois plus foncé ici que dans
-    // la case qu'on dessine : le dernier trait tracé y paraissait pâle à côté des autres, partie 111.)
+    // Une case de la planche (avec sa marge) se lit comme le dessin vivant de la case courante (`gpu.rs`, `fs_display`) : moyennée en lumière
+    // linéaire. (En 4 lectures moyennées en gamma, un trait fin était deux fois plus foncé ici que dans la case qu'on dessine : le dernier
+    // trait tracé y paraissait pâle à côté des autres, partie 111.)
     let comme_le_vivant = marges.iter().any(|v| *v > 0);
-    let n: usize = if comme_le_vivant { ((sx.max(sy) / 2.5).ceil() as usize).clamp(2, 4) } else { 2 };
+    // Un pixel de la vignette couvre plusieurs pixels de la feuille : **tous doivent compter**, sinon un trait fin se casse en pointillés
+    // (partie 166.10 ; avant : 4 à 16 points lus par pixel, pour 20 à 40 pixels couverts dans une case des Vignettes).
+    // - Caméra droite (ni roulis ni bascule) : la **moyenne exacte**, comme l'affichage (`gpu.rs`, `fs_display`). Chaque pixel de la feuille
+    //   couvert est lu une fois, pour la part de lui que couvre le pixel de la vignette (`pixels_de_l_axe`, un axe après l'autre).
+    // - Sinon (caméra en roulis ou basculée), ou si un pixel en couvre plus de `EXACT_MAX` par axe (les toutes petites vignettes) : des
+    //   lectures en grille (`lectures_en_grille`).
+    // (Essais : `COMME_AVANT` refait la vignette d'avant la partie 166.10, pour mesurer ce qui a changé, à l'œil et au chronomètre.)
+    #[cfg(test)]
+    let avant = COMME_AVANT.with(|c| c.get()) || COMME_AVANT_PARTOUT.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(test))]
+    let avant = false;
+    let axes = if avant { None } else { axes_droits(&map) };
+    let colonnes: Option<Vec<Vec<(f32, i64, f32)>>> = axes.and_then(|[ax, bx, _, _]| (0..ow).map(|x| pixels_de_l_axe(ax, bx, (x as f32 - mx) * sx, (x as f32 + 1.0 - mx) * sx)).collect());
+    let n = if avant {
+        if comme_le_vivant { ((sx.max(sy) / 2.5).ceil() as usize).clamp(2, 4) } else { 2 }
+    } else {
+        lectures_en_grille(pixels_couverts(&map, [fw, fh], sx, sy))
+    };
     let hauteurs: Vec<f32> = (0..n).map(|k| (k as f32 + 0.5) / n as f32).collect();
     let mut lus: Vec<Color32> = Vec::with_capacity(n * n);
+    #[cfg(test)]
+    let raccourci = !avant && !SANS_RACCOURCI.with(|c| c.get());
+    #[cfg(not(test))]
+    let raccourci = true;
     for y in 0..oh {
         if cancelled() {
             return None;
         }
         // (Le masque : à chaque hauteur d'échantillon, l'intervalle en x où le papier se voit.)
         let bandes: Vec<_> = hauteurs.iter().map(|oy| masque.map(|poly| crate::vignettecam::intervalle_a(poly, (y as f32 - m + oy) * sy))).collect();
+        // La moyenne exacte : les pixels de la feuille que cette ligne de la vignette couvre, et le masque à la hauteur de chacun.
+        let exact = match (&colonnes, axes) {
+            (Some(colonnes), Some([_, _, ay, by])) => pixels_de_l_axe(ay, by, (y as f32 - m) * sy, (y as f32 + 1.0 - m) * sy).map(|ligne| {
+                let masques: Vec<_> = ligne.iter().map(|(fy, _, _)| masque.map(|poly| crate::vignettecam::intervalle_a(poly, *fy))).collect();
+                (colonnes, ligne, masques)
+            }),
+            _ => None,
+        };
         for x in 0..ow {
             lus.clear();
             let layers = match &loin {
                 Some(l) if au_dela(x, y, tw, th, marges, mini) => l,
                 _ => &layers,
             };
+            // Le raccourci : là où aucun dessin n'a d'encre (d'après ses tuiles dessinées, aucun pixel lu), toutes les lectures rendraient le
+            // fond tel quel. La plus grande part d'une vignette au trait : c'est ce qui paie les lectures de plus là où il y a de l'encre.
+            let (gauche, haut, droite, bas) = ((x as f32 - mx) * sx, (y as f32 - m) * sy, (x as f32 + 1.0 - mx) * sx, (y as f32 + 1.0 - m) * sy);
+            let vide = raccourci
+                && match &exact {
+                    // (Caméra droite : le rectangle de la feuille que ce pixel couvre se lit dans les listes déjà faites.)
+                    Some((colonnes, ligne, _)) => match (colonnes[x].first(), colonnes[x].last(), ligne.first(), ligne.last()) {
+                        (Some(a), Some(b), Some(c), Some(d)) => sans_encre_sur_la_feuille(layers, a.1 as f32, c.1 as f32, b.1 as f32 + 1.0, d.1 as f32 + 1.0),
+                        _ => false,
+                    },
+                    None => sans_encre(layers, &map, gauche, haut, droite, bas),
+                };
+            if vide && masque.is_none() {
+                // (Tout le pixel dans le cadre : le papier. Tout dehors : rien. À cheval : lecture par lecture, plus bas.)
+                if gauche >= 0.0 && haut >= 0.0 && droite <= fw as f32 && bas <= fh as f32 {
+                    pixels.push(paper);
+                    continue;
+                }
+                if droite <= 0.0 || bas <= 0.0 || gauche >= fw as f32 || haut >= fh as f32 {
+                    pixels.push(Color32::TRANSPARENT);
+                    continue;
+                }
+            }
+            if let Some((colonnes, ligne, masques)) = &exact {
+                let mut moyenne = Moyenne::new(comme_le_vivant);
+                for (&(fy, iy, hy), bande) in ligne.iter().zip(masques) {
+                    for &(fx, ix, hx) in &colonnes[x] {
+                        let dans_masque = match bande {
+                            None => true,
+                            Some(None) => false,
+                            Some(Some((lo, hi))) => fx >= *lo && fx <= *hi,
+                        };
+                        // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
+                        let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
+                        moyenne.ajouter(if vide { base } else { pixel_of(layers, base, ix, iy) }, hx * hy);
+                    }
+                }
+                pixels.push(moyenne.couleur());
+                continue;
+            }
             for (j, oy) in hauteurs.iter().enumerate() {
                 for ox in &hauteurs {
                     // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
@@ -1118,7 +1187,13 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
                     let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
                     // (Toile infinie : le cadre peut filmer hors de la feuille.)
                     lus.push(match map.at(fx, fy) {
-                        Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(layers, base, p.x.floor() as i64, p.y.floor() as i64),
+                        Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => {
+                            if vide {
+                                base
+                            } else {
+                                pixel_of(layers, base, p.x.floor() as i64, p.y.floor() as i64)
+                            }
+                        }
                         _ => Color32::TRANSPARENT,
                     });
                 }
@@ -1129,6 +1204,189 @@ pub fn thumbnail_marges_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usi
     Some(ColorImage {
         size: [ow, oh],
         pixels,
+    })
+}
+
+/// Le plus de lectures par axe et par pixel d'une toute petite vignette, quand elles se font en grille (`lectures_en_grille`).
+const LECTURES_VIGNETTE: usize = 6;
+
+/// Le nombre de lectures en grille, par axe, pour un pixel de vignette qui couvre `couverts` pixels de la feuille par axe : une par pixel
+/// couvert jusqu'à `EXACT_MAX` (la caméra en roulis d'une case des Vignettes : autant de lectures que la moyenne exacte) ; au-delà, une
+/// pour deux, `LECTURES_VIGNETTE` au plus (une vignette de plan : 36 lectures par pixel au lieu de 4, pas 400).
+fn lectures_en_grille(couverts: f32) -> usize {
+    if couverts <= EXACT_MAX as f32 {
+        (couverts.ceil() as usize).clamp(2, EXACT_MAX)
+    } else {
+        ((couverts / 2.0).ceil() as usize).clamp(4, LECTURES_VIGNETTE)
+    }
+}
+/// Le plus de pixels de la feuille qu'un pixel de vignette peut couvrir, par axe, pour être moyenné exactement : une case des Vignettes
+/// en couvre 5 (trois cases par ligne) à 10 (six par ligne, sur un écran de 1 920 pixels). Au-delà (une vignette de plan de la timeline en
+/// couvre 20, un pixel d'un trait y est invisible), des lectures en grille : tout lire coûtait vingt fois plus pour rien (mesuré : 2 ms
+/// avant, 100 à 200 ms, pour une vignette de 96 pixels).
+const EXACT_MAX: usize = 12;
+
+/// Caméra droite, ni roulis ni bascule : chaque axe du cadre filmé suit un axe de la feuille. Rend alors [ax, bx, ay, by] :
+/// `x de la feuille = ax × x du cadre + bx`, de même en y. Rien sinon.
+fn axes_droits(map: &crate::camera::FrameMap) -> Option<[f32; 4]> {
+    let (o, i, j) = (map.at(0.0, 0.0)?, map.at(1024.0, 0.0)?, map.at(0.0, 1024.0)?);
+    let (ax, ay) = ((i.x - o.x) / 1024.0, (j.y - o.y) / 1024.0);
+    // (Au bout de 1 024 pixels de cadre, moins d'un centième de pixel d'écart sur l'autre axe.)
+    let droits = (i.y - o.y).abs() < 0.01 && (j.x - o.x).abs() < 0.01 && matches!(map, crate::camera::FrameMap::Level(..));
+    (droits && [ax, ay, o.x, o.y].iter().all(|v| v.is_finite()) && ax.abs() > 1e-6 && ay.abs() > 1e-6).then_some([ax, o.x, ay, o.y])
+}
+
+/// Les pixels de la feuille que couvre, sur un axe, l'intervalle [`lo`, `hi`] du cadre filmé (`feuille = a × cadre + b`) : pour chacun,
+/// le point du cadre au milieu de sa part couverte, son rang, et cette part (en pixels de la feuille). Rien si l'intervalle sort du
+/// monde ou couvre plus de `EXACT_MAX` pixels.
+fn pixels_de_l_axe(a: f32, b: f32, lo: f32, hi: f32) -> Option<Vec<(f32, i64, f32)>> {
+    // (Un bord à un millième d'un pixel entier est ce pixel entier : une vignette au demi, au quart… lit des pixels entiers, à poids
+    // égaux, et rend au demi les mêmes valeurs que les quatre lectures d'avant.)
+    let rond = |v: f32| if (v - v.round()).abs() < 1e-3 { v.round() } else { v };
+    let (p, q) = (rond(a * lo + b), rond(a * hi + b));
+    let (p, q) = (p.min(q), p.max(q));
+    if !(p.is_finite() && q.is_finite()) || p.abs() >= WORLD as f32 || q.abs() >= WORLD as f32 || q - p > EXACT_MAX as f32 {
+        return None;
+    }
+    let mut out = Vec::with_capacity((q - p) as usize + 2);
+    let mut i = p.floor();
+    while i < q {
+        let (d, f) = (p.max(i), q.min(i + 1.0));
+        if f - d > 1e-4 {
+            out.push((((d + f) * 0.5 - b) / a, i as i64, f - d));
+        }
+        i += 1.0;
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// La moyenne des lectures d'un pixel de vignette, chacune pour son poids : en gamma (`moyenne_gamma`), ou telle qu'elle se voit posée
+/// sur le papier blanc de la planche, en lumière linéaire (`moyenne_sur_le_papier`).
+struct Moyenne {
+    sur_le_papier: bool,
+    premier: Option<Color32>,
+    pareils: bool,
+    opaques: bool,
+    /// Rouge, vert, bleu (en gamma, ou en lumière linéaire sur le papier) et opacité, pondérés.
+    somme: [f32; 4],
+    poids: f32,
+}
+
+impl Moyenne {
+    fn new(sur_le_papier: bool) -> Self {
+        Moyenne { sur_le_papier, premier: None, pareils: true, opaques: true, somme: [0.0; 4], poids: 0.0 }
+    }
+
+    fn ajouter(&mut self, c: Color32, poids: f32) {
+        match self.premier {
+            None => self.premier = Some(c),
+            Some(p) if p != c => self.pareils = false,
+            _ => {}
+        }
+        self.opaques &= c.a() == 255;
+        if self.sur_le_papier {
+            let reste = 255 - c.a();
+            for (s, v) in self.somme.iter_mut().zip([c.r(), c.g(), c.b()]) {
+                *s += poids * lineaire_de(v.saturating_add(reste));
+            }
+        } else {
+            for (s, v) in self.somme.iter_mut().zip([c.r(), c.g(), c.b()]) {
+                *s += poids * v as f32;
+            }
+        }
+        self.somme[3] += poids * c.a() as f32;
+        self.poids += poids;
+    }
+
+    fn couleur(&self) -> Color32 {
+        let Some(premier) = self.premier else { return Color32::TRANSPARENT };
+        // (Le plus souvent : du papier, ou rien.)
+        if self.pareils && (!self.sur_le_papier || matches!(premier.a(), 0 | 255)) {
+            return premier;
+        }
+        let p = self.poids.max(1e-6);
+        if !self.sur_le_papier {
+            // (Tronqué comme `moyenne_gamma` ; le millième : une somme de flottants qui tombe un cheveu sous l'entier.)
+            let v = |k: usize| (self.somme[k] / p + 1e-3) as u8;
+            return Color32::from_rgba_premultiplied(v(0), v(1), v(2), v(3));
+        }
+        let t = [0, 1, 2].map(|k| egui::ecolor::gamma_u8_from_linear_f32(self.somme[k] / p));
+        if self.opaques {
+            return Color32::from_rgb(t[0], t[1], t[2]);
+        }
+        let bas = t[0].min(t[1]).min(t[2]);
+        Color32::from_rgba_premultiplied(t[0] - bas, t[1] - bas, t[2] - bas, 255 - bas)
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais : composer les vignettes sans le raccourci des pixels sans encre (`sans_encre`), pour comparer les deux images.
+    pub(crate) static SANS_RACCOURCI: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Essais : composer les vignettes comme avant la partie 166.10 (2 à 4 lectures en grille par axe, sans raccourci), pour mesurer
+    /// ce qui a changé.
+    pub(crate) static COMME_AVANT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Essais : `COMME_AVANT` pour tous les fils, ceux des vignettes de l'application compris. Seulement dans un essai ignoré, lancé seul
+/// (`vignettes_captures`) : allumé pendant la suite, il changerait les vignettes des essais qui tournent à côté.
+#[cfg(test)]
+pub(crate) static COMME_AVANT_PARTOUT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Combien de pixels de la feuille un pixel de la vignette couvre, par axe (le plus grand des deux), au milieu du cadre : `sx` et `sy` sont
+/// les pixels du cadre par pixel de la vignette, la caméra `map` dit ce qu'ils valent sur la feuille (un zoom avant en couvre moins).
+fn pixels_couverts(map: &crate::camera::FrameMap, [fw, fh]: [usize; 2], sx: f32, sy: f32) -> f32 {
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    let mesure = || {
+        let (o, a, b) = (map.at(cx, cy)?, map.at(cx + sx, cy)?, map.at(cx, cy + sy)?);
+        let v = o.distance(a).max(o.distance(b));
+        v.is_finite().then_some(v)
+    };
+    mesure().unwrap_or(sx.max(sy))
+}
+
+/// Le rectangle (`gauche`, `haut`, `droite`, `bas`) du cadre filmé, vu sur la feuille par `map`, est-il **sans encre** dans tous les
+/// éléments ? D'après leurs tuiles dessinées : aucun pixel lu. Vrai : `pixel_of` y rend partout le fond tel quel. Dans le doute (un coin
+/// derrière la caméra, des valeurs énormes, un rectangle qui couvre beaucoup de tuiles) : faux, on lit.
+fn sans_encre(layers: &[Resolved], map: &crate::camera::FrameMap, gauche: f32, haut: f32, droite: f32, bas: f32) -> bool {
+    // Le rectangle sur la feuille : la boîte de ses quatre coins, un pixel de plus (les lectures tombent sur des pixels entiers).
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for (u, v) in [(gauche, haut), (droite, haut), (droite, bas), (gauche, bas)] {
+        let Some(p) = map.at(u, v) else { return false };
+        if !(p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32) {
+            return false;
+        }
+        (x0, y0, x1, y1) = (x0.min(p.x), y0.min(p.y), x1.max(p.x), y1.max(p.y));
+    }
+    sans_encre_sur_la_feuille(layers, x0 - 1.0, y0 - 1.0, x1 + 1.0, y1 + 1.0)
+}
+
+/// Le rectangle (`x0`, `y0`, `x1`, `y1`) de la feuille (du monde), en pixels, est-il sans encre dans tous les éléments ? Comme `sans_encre` ;
+/// le rectangle doit contenir tous les pixels qui seront lus.
+fn sans_encre_sur_la_feuille(layers: &[Resolved], x0: f32, y0: f32, x1: f32, y1: f32) -> bool {
+    const T: f32 = TILE as f32;
+    layers.iter().all(|l| {
+        let r = l.laid.as_ref().unwrap_or(&l.cel.raster);
+        // Le rectangle dans le dessin de l'élément, avec la marge de ses lectures (lissées s'il est transformé).
+        let (a, b, c, d) = match &l.inv {
+            Some(inv) => {
+                let (mut a, mut b, mut c, mut d) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+                for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
+                    let p = inv.apply(egui::pos2(x, y));
+                    (a, b, c, d) = (a.min(p.x * l.kx), b.min(p.y * l.ky), c.max(p.x * l.kx), d.max(p.y * l.ky));
+                }
+                (a - 2.0, b - 2.0, c + 2.0, d + 2.0)
+            }
+            None => (x0 * l.kx - 1.0, y0 * l.ky - 1.0, x1 * l.kx + 1.0, y1 * l.ky + 1.0),
+        };
+        if ![a, b, c, d].iter().all(|v| v.is_finite() && v.abs() < 1e7) {
+            return false;
+        }
+        let (ta, tb, tc, td) = ((a / T).floor() as i32, (b / T).floor() as i32, (c / T).floor() as i32, (d / T).floor() as i32);
+        if (tc - ta + 1) as i64 * (td - tb + 1) as i64 > 64 {
+            return false;
+        }
+        (tb..=td).all(|ty| (ta..=tc).all(|tx| r.tile_at(tx, ty).is_none()))
     })
 }
 

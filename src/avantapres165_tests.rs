@@ -286,11 +286,19 @@ fn the_current_layer_row_stays_whole_in_the_smallest_timeline() {
     b.app.layers_mut()[0].group = g as _;
     b.app.set_group_shown(g, false);
     b.chauffer(4);
-    assert!(crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, 0).iter().any(|r| r.li == 0 && r.h == crate::layerheads::ROW_FINE), "groupe caché");
+    assert!(crate::layerheads::rows_of(b.app.layers(), &b.app.doc.groups, 0).iter().any(|r| r.li == 0 && r.h == crate::layerheads::ROW_FULL), "groupe caché");
     assert!(!vus::ou("Mode suivant").is_empty());
 }
 
-// (Partie 168.4 : la ligne du calque courant ne flotte plus au bord de la vue ; ses réglages sont dans la barre du calque, fixe.)
+#[test]
+fn the_current_row_is_pulled_back_into_view() {
+    use crate::layerheads::ligne_toujours_visible as v;
+    let vue = Rect::from_min_max(pos2(0.0, 100.0), pos2(300.0, 300.0));
+    let r = |y: f32| Rect::from_min_size(pos2(0.0, y), eframe::egui::vec2(300.0, 56.0));
+    assert_eq!(v(r(150.0), vue), r(150.0), "à sa place quand elle tient");
+    assert_eq!(v(r(400.0), vue), r(244.0), "sous la vue : collée en bas");
+    assert_eq!(v(r(20.0), vue), r(100.0), "au-dessus : collée en haut");
+}
 
 // ------------------------------------------------------------------------------------ 165.5 : les boutons montés dans la colonne
 
@@ -348,9 +356,12 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     let haut_des_pistes = camera.map_or(grip.top() + 40.0, |c| c.top());
     let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), haut_des_pistes);
     assert!(boutons.len() >= 7, "{boutons:?}");
-    // Une seule ligne, en haut de la colonne, en face de la règle : la barre du haut n'existe plus.
+    // En haut de la colonne, en face de la règle : la barre du haut n'existe plus. (Partie 173.5 : la colonne réglée au plus étroit,
+    // la barre est sur deux lignes, la lecture et le temps sur la première ; une colonne assez large la reprend sur une ligne, plus
+    // bas.)
     let y = boutons[0].1.center().y;
-    assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {boutons:?}");
+    let y2 = boutons.iter().map(|(_, r)| r.center().y).fold(y, f32::max);
+    assert!(y2 - y > 20.0 && boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0 || (r.center().y - y2).abs() < 2.0), "deux lignes : {boutons:?}");
     assert!(boutons.iter().all(|(_, r)| r.top() >= grip.top() - 1.0), "aucun bouton au-dessus de la colonne (plus de barre en haut) : {boutons:?} / {grip:?}");
     let min = crate::montagehead::largeur_min_colonne(Barre::Montage);
     assert!(b.app.montage_head_w >= min - 0.5 && min >= crate::barres::largeur_mesuree(Barre::Montage) - 0.5, "{} / {min}", b.app.montage_head_w);
@@ -365,6 +376,15 @@ fn in_the_storyboard_the_band_buttons_sit_in_the_column_on_one_line_and_the_colu
     let boucle = b.app.looping;
     clic(&mut b, ou("Lecture en boucle").center(), Modifiers::NONE);
     assert_ne!(b.app.looping, boucle, "la boucle répond au clic");
+    // Partie 173.5 : la colonne élargie au plus (si la fenêtre le permet, la ligne entière tient) : une seule ligne.
+    b.app.montage_head_w = crate::montagehead::HEAD_MAX;
+    b.chauffer(6);
+    if !crate::montagehead::barre_sur_deux_lignes(b.app.montage_head_w) {
+        let grip = ou("Largeur de la colonne");
+        let boutons = boutons_dans_la_colonne(&b, Barre::Montage, (grip.left() - b.app.montage_head_w, grip.right()), grip.top() + 80.0);
+        let y = boutons[0].1.center().y;
+        assert!(boutons.iter().all(|(_, r)| (r.center().y - y).abs() < 2.0), "une seule ligne : {boutons:?}");
+    }
 }
 
 /// Le haut de la première ligne de calque dans la colonne de la timeline, à la dernière image.
@@ -395,10 +415,8 @@ fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_two_lines() 
         let mesure = crate::barres::largeur_mesuree(Barre::Timeline);
         assert!(w >= mesure - 0.5 && w >= crate::layerheads::HEAD_W, "{disposition} : {w} / {mesure}");
         assert!(w <= 420.0, "{disposition} : la colonne des calques ne fait plus qu'environ 400 points : {w}");
-        // (Partie 168 : le bord gauche de la colonne est celui de la barre du calque, au-dessus de la timeline ; ses commandes « ⋮ »,
-        // les plus hautes de l'écran, sont à 190 points de ce bord quand le nom est court.)
-        let barre = vus::ou("Commandes du calque").into_iter().min_by(|a, c| a.top().total_cmp(&c.top())).expect("la barre du calque");
-        let gauche = barre.left() - 190.0 - 1.0;
+        // (Partie 174 : le bord gauche de la colonne, depuis le ⊖ de sa rangée d'en-tête.)
+        let gauche = vus::ou("Replier tous les calques").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 10.0;
         let sous = haut_des_calques();
         let boutons = boutons_dans_la_colonne(&b, Barre::Timeline, (gauche, gauche + w + 90.0), sous);
         assert!(boutons.len() >= 15, "{disposition} : tous les boutons : {boutons:?}");

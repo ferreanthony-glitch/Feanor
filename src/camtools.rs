@@ -72,6 +72,8 @@ pub(crate) enum CamHandle {
     /// Un coin : on resserre ou élargit le cadre autour de son centre.
     Zoom,
     Rotate,
+    /// La flèche ou la cible de l'effet de caméra vivant (partie 171, `effetpoignee.rs`) : elle passe devant le reste.
+    Effet,
 }
 
 /// Rang de la clé sous l'abscisse `x` dans une rangée de clés : la plus proche, à `tol` près.
@@ -97,6 +99,8 @@ pub(crate) struct CamDrag {
     /// L'image se composait par le changement de repère à l'appui (`Document::repere_du_plan`) : la feuille montre ce que la
     /// caméra filme, le cadre est au centre. Glisser dedans déplace alors la caméra dans son propre plan (`camera_glissee`).
     libre: bool,
+    /// La poignée d'un effet vivant (`CamHandle::Effet`) : son rang dans le plan et sa flèche à l'appui.
+    effet: Option<(usize, [f32; 2])>,
 }
 
 /// Vue de l'écran qui montre exactement le cadre de la caméra `cam` dans la zone `rect`.
@@ -270,6 +274,10 @@ impl App {
 
     /// Partie du cadre caméra sous le pointeur (position écran).
     pub(crate) fn camera_handle_at(&self, screen: Pos2) -> Option<CamHandle> {
+        // (La flèche ou la cible d'un effet vivant d'abord : elle est souvent dans le cadre, partie 171.)
+        if self.poignee_effet_at(screen).is_some() {
+            return Some(CamHandle::Effet);
+        }
         // Le cadre tel qu'il est peint (`paint_camera`, effet de caméra vivant compris, partie 129) : on attrape ce qu'on voit.
         let corners = self.camera_montree().corners(self.doc.frame);
         if self.rotate_handle(&corners).distance(screen) <= GRAB {
@@ -298,6 +306,7 @@ impl App {
         };
         let [fw, fh] = self.doc.frame;
         let centre = self.camera_montree().to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
+        let effet = if handle == CamHandle::Effet { self.poignee_effet_at(screen) } else { None };
         self.cam_drag = Some(CamDrag {
             handle,
             start: p,
@@ -306,6 +315,7 @@ impl App {
             snap: self.snapshot(),
             changed: false,
             libre,
+            effet,
         });
     }
 
@@ -330,11 +340,21 @@ impl App {
 
     pub(crate) fn camera_drag(&mut self, p: Pos2, shift: bool) {
         let Some(d) = &self.cam_drag else { return };
-        let (cam0, start, libre) = (d.cam0, d.start, d.libre);
         // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil), tel qu'il était peint à l'appui : sans
         // effet vivant, celui de `cam0` comme avant ; avec, le geste part de ce qu'on voit, l'effet garde son décalage par-dessus.
-        let c = d.centre;
-        let cam = match d.handle {
+        let (cam0, start, libre, c, handle, effet) = (d.cam0, d.start, d.libre, d.centre, d.handle, d.effet);
+        // La poignée d'un effet vivant : seul l'effet change, pas la caméra du plan (partie 171).
+        if handle == CamHandle::Effet {
+            if let Some((rang, vers0)) = effet {
+                if self.tirer_poignee_effet(rang, vers0, start, p, shift) {
+                    if let Some(d) = &mut self.cam_drag {
+                        d.changed = true;
+                    }
+                }
+            }
+            return;
+        }
+        let cam = match handle {
             CamHandle::Move => {
                 let mut delta = p - start;
                 if shift {
@@ -366,6 +386,8 @@ impl App {
                 }
                 Camera { angle, ..cam0 }
             }
+            // (Traitée plus haut.)
+            CamHandle::Effet => return,
         };
         if let Some(d) = &mut self.cam_drag {
             d.changed = true;
@@ -508,6 +530,8 @@ impl App {
             let c = to_s(cam.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0));
             painter.line_segment([c - vec2(6.0, 0.0), c + vec2(6.0, 0.0)], Stroke::new(1.0_f32, camera_color()));
             painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, camera_color()));
+            // La flèche ou la cible de l'effet vivant qu'on règle (partie 171).
+            self.peindre_poignee_effet(painter, rect);
         }
     }
 

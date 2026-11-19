@@ -353,7 +353,7 @@ impl Document {
             || !p.notes.is_empty()
             || !p.marks.is_empty()
             || !p.camera.is_empty()
-            || p.effet_camera.is_some()
+            || !p.effets_camera.is_empty()
             || p.trajectoire_camera.is_some()
             || p.layers.len() > 1
             || p.layers.iter().any(|l| l.frames.iter().flatten().any(|c| self.cel_a_du_trait(*c)))
@@ -582,7 +582,7 @@ pub(crate) fn document_de_la_planche(doc: &Document) -> (Document, Vec<Rang>) {
                 notes: String::new(),
                 camera: p.camera.clone(),
                 saccade: p.saccade,
-                effet_camera: p.effet_camera,
+                effets_camera: p.effets_camera.clone(),
                 marks: p.marks.clone(),
                 cues: Default::default(),
                 color: None,
@@ -770,7 +770,7 @@ pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<P
                     crate::planvers::Rangee { numero: a.numero, date: a.date, panel: p }
                 })
                 .collect();
-            VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres }
+            VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres, couleurs: vf.couleurs.clone(), sons: vf.sons.clone() }
         });
         let mut ids: Vec<u64> = vec![panel.id, pf.scene.id, pf.sequence.id];
         ids.extend(panel.marks.iter().map(|m| m.id));

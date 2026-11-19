@@ -59,6 +59,7 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::Effects, "fx.panneau", "Effets", "La pile d'effets du calque courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Sheet, "vue.fiche", "Fiche du plan", "Textes, durée et caméra du plan. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::XSheet, "vue.feuille_exposition", "Feuille d'exposition", "Le plan image par image, calque par calque. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::Prereglages, "vue.prereglages", "Préréglages", "Les mouvements de caméra tout faits, en vignettes qui bougent au survol : les glisser sur la piste Caméra de la timeline, ou cliquer pour les poser à la tête de lecture. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
         entree(Pane::Scenario, "vue.scenario", "Scénario", "Le scénario importé, lisible comme un scénario ; le passage du plan courant est surligné, un clic sur une ligne mène au plan. Un clic l'ouvre ou le met devant, un autre le ferme."),
@@ -84,13 +85,14 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// - Storyboard, Animation et Montage : la bibliothèque de fichiers (explorer, aperçu des images, vidéos et sons).
 /// - Storyboard et Animation : le panneau Espace 3D (les réglages de la vue Espace 3D), qui est dans leur disposition
 ///   d'origine, à côté de la couleur.
+/// - Storyboard et Animation : le panneau Préréglages (partie 170), les mouvements de caméra à glisser sur la timeline.
 ///
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
         Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
-        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::Prereglages, Pane::Scenario, Pane::References, Pane::Bibliotheque],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::Prereglages, Pane::References, Pane::Bibliotheque],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History, Pane::Bibliotheque],
     }
 }

@@ -1082,9 +1082,6 @@ fn champ_opacite(b: &mut Banc) -> Pos2 {
         }
     }
     b.garder_formes = false;
-    // (Partie 168 : la ligne fine du calque dit aussi « 37 % », l'exception ; le champ est celui de la barre du calque.)
-    let champ = crate::bulles::vus::ou("Opacité du calque");
-    trouves.retain(|p| champ.iter().any(|r| r.contains(*p)));
     let mut seuls: Vec<Pos2> = Vec::new();
     for p in trouves.iter().copied() {
         if !seuls.iter().any(|q| q.distance(p) < 1.0) {

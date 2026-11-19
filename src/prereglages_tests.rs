@@ -85,7 +85,7 @@ fn the_shake_offsets_are_bounded_by_the_intensity_and_come_from_the_camera_gener
             let e = effect(&c);
             assert_eq!(e.kind, EffectKind::Shake);
             // Les mêmes bornes que celles de l'effet de caméra de même intensité.
-            let params = Params { preset: style, intensity: intensite, duration: 24, freq: style.default_freq(), seed: 5, zoom_factor: 1.0, punch: style == Preset::Explosion };
+            let params = Params { preset: style, intensity: intensite, duration: 24, freq: style.default_freq(), seed: 5, zoom_factor: 1.0, punch: style == Preset::Explosion, ..Params::new(style, 24) };
             let g = Generator::new(&params, 24);
             let b = g.bounds();
             assert!(!e.keys.is_empty());

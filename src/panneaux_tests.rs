@@ -284,12 +284,10 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     assert!(include_str!("menucalque.rs").contains("fx_switch_item") && include_str!("menucalque.rs").contains("aplat_item"));
 }
 
-/// Ouvre le menu ⋮ du calque courant (dans la barre du calque, partie 168 ; avant, sur sa ligne de la timeline : le même menu que
-/// l'ancien « … » du panneau Calques, qui n'existe plus depuis la partie 160) et rend tous les textes que ses sous-menus montrent au
-/// survol.
+/// Ouvre le menu ⋮ du calque courant (sur sa ligne de la timeline : le même menu que l'ancien « … » du panneau Calques, qui n'existe
+/// plus depuis la partie 160) et rend tous les textes que ses sous-menus montrent au survol.
 fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
-        a.barre_du_calque(ui);
         a.timeline_heads(ui, 24.0, 0.0);
     };
     let mut vus: Vec<String> = Vec::new();
@@ -324,12 +322,11 @@ fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
 
 #[test]
 fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer() {
-    // (Partie 168 : la barre du calque courant les porte, au-dessus des lignes ; avant, partie 160, sa ligne complète. Les lignes
-    // des calques ne les ont pas : un calque normal ne montre rien à droite de son nom.)
+    // (Partie 160 : la ligne complète du calque courant de la timeline les porte, comme le haut de l'ancien panneau Calques ; les
+    // lignes fines des autres calques ne les ont pas.)
     let mut app = app_layers("fusion", &[LayerKind::Bitmap, LayerKind::Vector, LayerKind::Vector]);
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
-        a.barre_du_calque(ui);
         a.timeline_heads(ui, 24.0, 0.0);
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);

@@ -677,6 +677,9 @@ impl App {
                         if *i < t.marques.len() {
                             if loin {
                                 t.retirer_marque(*i);
+                            } else if matches!(a.sujet, Sujet::Carte(_)) && t.cles == Cles::Images {
+                                // (Une carte en clés d'images : la marque emporte son temps, comme sur la feuille, 2026-11-18.)
+                                t.deplacer_marque_et_son_temps(*i, f, self.e3_traj_duree(a.sujet));
                             } else {
                                 t.deplacer_marque(*i, f);
                             }
@@ -771,7 +774,8 @@ impl App {
             let mut posees = 0;
             for &s in &sujets {
                 let Some(mut t) = self.e3_traj_de(s).cloned() else { continue };
-                if t.ajouter_marque(f).is_some() {
+                let posee = if matches!(s, Sujet::Carte(_)) && t.cles == Cles::Images { t.ajouter_marque_a_son_temps(f, self.e3_traj_duree(s)) } else { t.ajouter_marque(f) };
+                if posee.is_some() {
                     self.e3_traj_poser(s, t);
                     posees += 1;
                 }
@@ -801,6 +805,8 @@ impl App {
                     (t.marques, t.depart, t.fin, t.temps, t.cles, t.source, t.dessins) = (e.marques, e.depart, e.fin, e.temps, e.cles, e.source, e.dessins);
                     // (Les poignées aussi, à leurs fractions ; le trait neuf est posé à plat, partie 154.)
                     t.poignees = e.poignees;
+                    // (Et le sujet que garde la caméra, partie 172.)
+                    t.vise = e.vise;
                     t.lisser_a(e.lissage);
                 }
                 None => {
@@ -1033,6 +1039,17 @@ impl App {
             peindre_chemin(painter, t, &t.images_des_jalons(duree), courante, &ecran, tenue, choisie);
             vues.push(t.clone());
         }
+        // Le sujet que la caméra garde dans le cadre (partie 172) : un viseur à sa place dans l'espace.
+        if sujets.contains(&Sujet::Camera) {
+            if let Some(q) = self.e3_traj_de(Sujet::Camera).and_then(|t| t.vise).and_then(|v| regard.ecran(v)) {
+                let trait_ = Stroke::new(1.5_f32, COULEUR);
+                painter.circle_stroke(q, 9.0, trait_);
+                for d in [vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0)] {
+                    painter.line_segment([q + d * 5.0, q + d * 14.0], trait_);
+                }
+                painter.text(q + vec2(14.0, -12.0), Align2::LEFT_BOTTOM, "Sujet de la caméra", FontId::proportional(11.0), COULEUR);
+            }
+        }
         // Les flèches x, y, z de la poignée choisie (partie 154).
         let sur_poignee = self.e3_traj_peindre_fleches(painter, &regard, survol);
         if survol.is_none() {
@@ -1152,10 +1169,30 @@ impl App {
                     true
                 });
             }
+            // Les cartes en clés d'images : toutes leurs marques au temps de leur place sur le chemin (2026-11-18).
+            let cartes: Vec<Sujet> = avec.iter().copied().filter(|&s| matches!(s, Sujet::Carte(_)) && self.e3_traj_de(s).is_some_and(|t| t.cles == Cles::Images && !t.marques.is_empty() && !t.est_selon_le_chemin(self.e3_traj_duree(s)))).collect();
+            if !cartes.is_empty() && ui.button(crate::trajectoireui::TEMPS_SELON_LE_CHEMIN).on_hover_text(crate::trajectoireui::TEMPS_SELON_LE_CHEMIN_AIDE).clicked() {
+                self.e3_traj_pour_tous(&cartes, crate::trajectoireui::TEMPS_SELON_LE_CHEMIN, |t, duree| {
+                    t.temps_selon_le_chemin(duree);
+                    true
+                });
+            }
         });
         let mut cles = t.cles;
         if cles_espace_ui(ui, &mut cles) {
             self.e3_traj_sorte(&avec, cles);
+        }
+        // La caméra garde son sujet dans le cadre (partie 172 : les trajectoires toutes faites le posent).
+        if avec.contains(&Sujet::Camera) {
+            let vise = self.e3_traj_de(Sujet::Camera).is_some_and(|t| t.vise.is_some());
+            let mut garde = vise;
+            if ui
+                .checkbox(&mut garde, "La caméra garde son sujet dans le cadre")
+                .on_hover_text("Elle tourne en suivant son chemin, pour voir toujours au même endroit le point qu'elle voit au centre du cadre au départ (le viseur dans la vue).")
+                .changed()
+            {
+                self.chemin_camera_garde_le_sujet(garde);
+            }
         }
         // Le lissage du chemin, pour tout ce qui est choisi (partie 151).
         self.trajectoire_lissage_ui(ui, true);
