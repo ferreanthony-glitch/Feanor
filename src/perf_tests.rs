@@ -392,11 +392,11 @@ impl Banc {
         Mesure { construction, decoupage, carte, textures, octets, sommets, formes, reveil, detail }
     }
 
-    /// L'image peinte par la dernière `image` (1920 × 1080, RGBA), pour voir une mise en page ;
-    /// rien sans carte graphique.
+    /// L'image peinte par la dernière `image` (à la taille du banc, 1920 × 1080 d'ordinaire, RGBA), pour voir une mise en page ;
+    /// rien sans carte graphique. (Partie 174 : la taille du banc, pas toujours 1920 × 1080, pour la plus petite fenêtre.)
     pub(crate) fn capturer(&self) -> Option<Vec<u8>> {
         let (rs, cible) = (self.rs.as_ref()?, self.cible.as_ref()?);
-        let (w, h) = (1920u32, 1080u32);
+        let (w, h) = (self.taille.x as u32, self.taille.y as u32);
         let row = (w * 4).div_ceil(256) * 256;
         let lecture = rs.device.create_buffer(&wgpu::BufferDescriptor { label: Some("lecture"), size: (row * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
         let mut encoder = rs.device.create_command_encoder(&Default::default());

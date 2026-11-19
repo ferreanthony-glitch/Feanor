@@ -5005,6 +5005,8 @@ impl App {
             "calque.pochoirs_eteindre" => self.stencils_off(),
             "calque.pochoirs_inverser" => self.stencils_invert(),
             "calque.pelure" => self.toggle_layer_onion(),
+            // Partie 174 : ⊖ / ⊕ de la rangée d'en-tête de la colonne des calques de la timeline.
+            "calques.replier_tout" => self.basculer_calques_replies(),
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),
             "groupes.editer" => self.groups_window = !self.groups_window,

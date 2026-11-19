@@ -199,9 +199,10 @@ fn the_onion_of_the_layer_left_the_track_for_its_right_click_menu() {
 
 #[test]
 fn the_animation_timeline_keeps_its_own_line_untouched() {
-    // La ligne du calque courant de la timeline (Animation) garde sa pelure, ses flèches ‹ › et sa liste : rien n'y change.
+    // La ligne du calque courant de la timeline (Animation) garde sa pelure, ses flèches ‹ › et sa liste. (Partie 174 : la pelure
+    // est une colonne de l'en-tête et de chaque calque : quatre cases pour trois calques ; la liste écrit le mode, comme ici.)
     let b = banc_dans(Espace::Animation);
-    assert_eq!(vus::ou("Pelure d'oignon du calque").len(), 1);
+    assert_eq!(vus::ou("Pelure d'oignon du calque").len(), 4);
     assert_eq!(vus::ou("Mode précédent").len(), 1);
     assert_eq!(vus::ou("Mode suivant").len(), 1);
     assert!(texte_dans(&b, "Normal", ou("Mode de fusion")).is_some());

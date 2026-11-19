@@ -570,9 +570,9 @@ impl App {
     pub(crate) fn piste_active_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32) {
         let layers = self.layers();
         let Some(l) = layers.get(li) else { return };
-        let (id, name, visible, dot, locked, accroche, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.locked, l.accroche, l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
+        let (id, name, visible, dot, locked, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.locked, l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
         // (Partie 173.5 : ce que montre la rangée des options, comme la ligne du calque de la timeline.)
-        let (keep_alpha, stencil, negative, fixe, onion) = (l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.onion);
+        let (stencil, negative, fixe) = (l.stencil, l.stencil_negative, l.position_locked);
         let groupe = self.doc.groups.get(l.group as usize).cloned();
         let opacity = l.opacity_at(self.cur_frame);
         let accrochable = !l.folder && l.effet.is_none() && !l.keys_follow_line();
@@ -673,6 +673,10 @@ impl App {
             }
             x += VIGNETTE_W;
         }
+        // Partie 174 : l'ordre de la ligne du calque courant de la timeline (la disposition validée par Anthony) : d'abord les petits
+        // indicateurs (effets, groupe, sens du pochoir, position verrouillée, maillon de la planche-mère), puis les colonnes de
+        // réglages dans l'ordre de l'en-tête de la timeline (pelure, transparence, pochoir, aplat, caméra ; l'œil et le cadenas sont
+        // en haut), avec le même aspect : allumé, l'icône ; éteint, un petit point.
         if self.fx_switch_shown(li) && tient(x, pas) {
             if let Some(resp) = self.fx_switch(ui, li, Some(case(x)), fg) {
                 if resp.clicked() {
@@ -681,41 +685,17 @@ impl App {
             }
             x += pas;
         }
-        if accrochable && tient(x, pas) {
-            let resp = crate::layerheads::icon_at(ui, case(x), ph::VIDEO_CAMERA, shade(accroche));
-            if self.aide(resp, crate::accroche::NOM, crate::accroche::PHRASE, crate::accroche::ACTION).clicked() {
-                self.basculer_accroche(li);
-            }
+        if let Some(g) = groupe.filter(|_| tient(x, pas)) {
+            let place = case(x);
+            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("groupe_piste", id)));
+            c.spacing_mut().button_padding = vec2(0.0, 0.0);
+            // (La case entière se clique, comme les autres icônes de la rangée.)
+            let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(crate::layerheads::group_color(g.color))).frame(false).min_size(place.size());
+            let resp = egui::menu::menu_custom_button(&mut c, button, |ui| self.group_menu(ui, li)).response;
+            crate::bulles::bulle(resp, &format!("Groupe : {}", g.name), "Ranger le calque dans un groupe de couleur.", "");
             x += pas;
-        }
-        // L'aplat sous le trait (le même bouton que sur la ligne de la timeline ; seulement pour un calque qui en prend un).
-        if crate::fondui::takes_fond(&self.layers()[li]) && tient(x, pas) {
-            let place = Rect::from_center_size(pos2(x + pas * 0.5, y), vec2(18.0, 16.0));
-            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("aplat_piste", id)));
-            c.spacing_mut().interact_size = vec2(18.0, 16.0);
-            c.spacing_mut().button_padding = vec2(1.0, 0.0);
-            if let Some(resp) = self.fond_layer_button(&mut c, li, true) {
-                if resp.clicked() {
-                    self.toggle_fond(li);
-                }
-                x += pas;
-            }
         }
         if tient(x, pas) {
-            let resp = crate::layerheads::icon_at(ui, case(x), ph::CHECKERBOARD, shade(keep_alpha));
-            let resp = crate::bulles::bulle(resp, "Préserver la transparence", "Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide. La gomme gomme normalement.", "");
-            if resp.clicked() {
-                self.set_layer_flag(li, |l| l.keep_alpha = !l.keep_alpha);
-            }
-            x += pas;
-        }
-        if tient(x, 2.0 * pas) {
-            let resp = crate::layerheads::icon_at(ui, case(x), if negative { ph::EXCLUDE } else { ph::INTERSECT }, shade(stencil));
-            let resp = crate::bulles::bulle(resp, "Pochoir", "Le dessin de ce calque limite où l'on peint sur les autres calques (pinceau, crayon, gomme bitmap).", "");
-            if resp.clicked() {
-                self.basculer_calques(li, "Pochoir", |l| l.stencil, |l, v| l.stencil = v, false);
-            }
-            x += pas;
             let resp = crate::layerheads::icon_at(ui, case(x), if negative { ph::MINUS } else { ph::PLUS }, shade(stencil));
             let resp = crate::bulles::bulle(
                 resp,
@@ -736,39 +716,30 @@ impl App {
             }
             x += pas;
         }
-        if let Some(g) = groupe.filter(|_| tient(x, pas)) {
-            let place = case(x);
-            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("groupe_piste", id)));
-            c.spacing_mut().button_padding = vec2(0.0, 0.0);
-            // (La case entière se clique, comme les autres icônes de la rangée.)
-            let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(crate::layerheads::group_color(g.color))).frame(false).min_size(place.size());
-            let resp = egui::menu::menu_custom_button(&mut c, button, |ui| self.group_menu(ui, li)).response;
-            crate::bulles::bulle(resp, &format!("Groupe : {}", g.name), "Ranger le calque dans un groupe de couleur.", "");
-            x += pas;
-        }
-        // La pelure d'oignon du calque (elle reste aussi au clic droit, Apparence, avec Ctrl+L).
-        if tient(x, pas) {
-            let resp = crate::layerheads::icon_at(ui, case(x), ph::CIRCLES_THREE, shade(onion));
-            let resp = crate::bulles::bulle(
-                resp,
-                "Pelure d'oignon du calque",
-                "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant. Clic droit : le panneau de la pelure.",
-                "",
-            );
-            if resp.clicked() {
-                self.basculer_calques(li, "Pelure d'oignon", |l| l.onion, |l, v| l.onion = v, false);
-            }
-            if resp.secondary_clicked() {
-                self.onion_window = true;
-            }
-            x += pas;
-        }
         // Le maillon de la planche-mère (rien si le calque n'est dans aucun autre plan).
-        if tient(x, 16.0) {
-            let place = Rect::from_min_max(pos2(x + 2.0, y - 8.0), pos2(fin, y + 8.0));
+        if partage && tient(x, MAILLON_W) {
+            let place = Rect::from_min_max(pos2(x + 2.0, y - 8.0), pos2(x + MAILLON_W, y + 8.0));
             let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("maillon_piste", id)).layout(egui::Layout::left_to_right(egui::Align::Center)));
             c.set_clip_rect(place.intersect(ui.clip_rect()));
             self.maillon_partage(&mut c, li);
+            x += MAILLON_W;
+        }
+        use crate::layerheads::Colonne;
+        for col in [Colonne::Pelure, Colonne::Transparence, Colonne::Pochoir, Colonne::Aplat, Colonne::Camera] {
+            let Some(on) = self.layers().get(li).and_then(|l| col.etat(l)) else { continue };
+            if !tient(x, pas) {
+                break;
+            }
+            let icone = if col == Colonne::Pochoir && negative { ph::EXCLUDE } else { col.icone() };
+            let resp = crate::layerheads::case_de_reglage(ui, case(x), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg);
+            let resp = self.aide(resp, col.nom(), col.description(), col.action());
+            if resp.clicked() {
+                self.agir_colonne(col, li);
+            }
+            if col == Colonne::Pelure && resp.secondary_clicked() {
+                self.onion_window = true;
+            }
+            x += pas;
         }
         // ---- En bas : la liste du mode de fusion (partie 173, « Normal ▾ » ; ses flèches ‹ › s'il y a la place), la barre d'opacité,
         // puis le losange des clés d'opacité à sa droite, comme sur la ligne de la timeline.

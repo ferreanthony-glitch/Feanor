@@ -14681,3 +14681,109 @@ plus lisibles ».
 Essai : `piste_mode_tests::the_option_icons_of_the_track_are_spaced_like_the_timeline_line_at_every_width` (rouge sur la 173.5, vert
 ensuite) : au minimum, à 340 et à 480, chaque option est là, dans la colonne, dans une case d'au moins 17 points, à 2 points au moins
 de sa voisine et à 19 au moins de centre à centre ; l'écart grandit avec la colonne ; le minimum reste 250.
+
+## 174. La colonne des calques de la timeline dans la disposition validée par Anthony (2026-11-18, branche `piste-mode-liste`)
+
+Anthony a montré une disposition de colonne des calques qu'il aime ; traduite en maquette, il l'a validée : « Garde cette façon de
+montrer les images clés et le plan. Pour le reste, surtout pour les fonctionnalités, tu peux y aller. » Puis, sur la maquette, un ⊖
+dessiné avant « Calques » : « Je pense qu'on peut aussi replier tous les calques. » La bande (les blocs des clés à tons alternés, leurs
+repères, la barre du calque) ne change pas. Rien de nouveau dans le projet : de l'affichage et des actions qui existaient (le format
+ne change pas) ; un seul réglage du poste en plus, « tout replié ».
+
+### 174.1 Ce qui change pour lui (vue Animation, colonne de gauche de la timeline)
+
+1. **Une rangée d'en-tête**, sous les deux lignes de boutons, en face d'une bande vide de la règle : à gauche **⊖ « Calques »**, à
+   droite **une icône par colonne de réglage**, dans cet ordre : afficher (œil), verrouiller (cadenas), pelure d'oignon du calque
+   (trois ronds), préserver la transparence (damier), pochoir, aplat sous le trait, accroché à la caméra. Chaque icône a sa bulle
+   (nom, raccourci s'il y en a un, ce que fait le réglage ; clic droit : assigner un raccourci).
+   **Un clic sur une icône d'en-tête agit comme un clic dans la case du calque courant** : sur lui et, s'il fait partie d'un choix
+   (Ctrl + clic), sur tous les calques choisis, en une étape d'annulation. C'est la règle « la sélection agit sur tout », sans rien de
+   nouveau à apprendre ; un en-tête qui toucherait tous les calques du plan aurait pu surprendre.
+2. **Les colonnes, pour tous les calques**, sur les mêmes x que l'en-tête, dossiers et calques rangés compris (leur retrait ne
+   touche que leur gauche). Allumé : l'icône ; éteint : un petit point discret (l'icône pâle au survol) ; l'œil reste un œil, barré
+   quand le calque est caché. Un clic : la même action qu'avant (mêmes fonctions, annulables). Un dossier n'a que l'œil et le cadenas ;
+   un calque vidéo n'a pas d'aplat ; un calque d'effet ou de couleur liée n'a pas l'accroche (il suit son trait).
+3. **Le calque courant sur trois rangées** (60 points) :
+   (a) ⊖ (replier) et le nom (« sous <trait> » ou le nombre de couleurs après lui), le ⋮ au bout ;
+   (b) la vignette à gauche, les petits indicateurs (fx s'il a des effets, le groupe et son menu de couleurs, le sens du pochoir + / −,
+   la position verrouillée, le maillon de la planche-mère), puis les colonnes ;
+   (c) sous la vignette : **le mode de fusion écrit** (« Normal ▾ », la liste des modes en texte au clic, celle de la piste du
+   Storyboard), ses flèches ‹ › quand la place le permet, la barre d'opacité « 100 % », le losange des clés d'opacité à droite.
+4. **Les autres calques sur une ligne** : ⊕, la lettre de la sorte, le nom, la pastille de sa couleur d'étiquette (son groupe, s'il en
+   a un autre que « Défaut »), ses effets (fx) s'il en a, puis les colonnes. **⊕ déplie le calque : il devient le calque courant**,
+   sur ses trois rangées (depuis la partie 160, seul le calque courant a sa ligne complète ; montrer les trois rangées d'un calque qui
+   n'est pas le courant aurait donné deux calques « actifs »).
+5. **Tout replier** : ⊖ de l'en-tête (ou ⊖ du calque courant) met tous les calques sur une ligne, le courant compris (sa
+   surbrillance reste ; ses réglages restent dans les colonnes et au clic droit) ; ⊕ (en-tête, ou ⊕ de n'importe quelle ligne) les
+   déplie. **Raccourci : Alt+Maj+C** (libre partout ; action `calques.replier_tout`). Gardé dans les réglages du poste
+   (`calques_timeline_replies`), pas dans le projet.
+6. **Dans la bande, avant et après les images de chaque calque, une petite icône** : ∅ Aucun, boucle, va-et-vient, maintenir (les
+   icônes des pistes du montage). Grise, plus claire au survol, juste à gauche de la première image et juste à droite de la dernière,
+   à 6 points des images (les prises du début et de la fin du calque vont jusqu'à 5 points : elles restent prenables). Un clic ouvre
+   le menu « Aucun / Boucle / Va-et-vient / Maintenir » coché ; un choix va à **tous les calques choisis**, une étape d'annulation.
+   Le clic droit du calque (Animation ▸ Avant / Après) fait de même maintenant (avant : le calque cliqué seul). « Rien » s'appelle
+   « Aucun ». Pour qu'un calque qui commence à l'image 0 ait aussi la sienne, **la grille a une marge de 20 points avant l'image 0**
+   (la règle et les rangées s'y prolongent). Rien pour un dossier, un calque vidéo ou un calque de couleur (il suit son trait).
+7. **La piste du calque actif du Storyboard** (partie 173.x, sa largeur ajustable gardée) suit le même ordre et le même aspect : sur
+   la rangée du milieu, d'abord les indicateurs (fx, groupe, sens du pochoir, position, maillon), puis les colonnes dans l'ordre de
+   l'en-tête (pelure, transparence, pochoir, aplat, caméra ; l'œil et le cadenas restent en haut, comme sur toutes les pistes),
+   allumées en icône, éteintes en petit point ; en bas, le même texte du mode.
+
+**Ce qui ne change pas** : « préserver la transparence » et « verrouiller la position » n'agissent toujours que sur le calque cliqué
+(décision en attente d'Anthony) ; l'aplat aussi (son bouton n'a jamais touché que son calque). Les blocs des clés, leurs tons alternés,
+la barre du calque, les miniatures, la caméra : le même dessin.
+
+**Largeur** : la plus petite colonne reste `HEAD_W` = 312 points (tout tient : en-tête, sept colonnes, trois rangées, un calque
+rangé dans un dossier, un nom de mode long) ; d'habitude elle a la largeur de la ligne des boutons de la timeline (environ 410 points,
+partie 165.6), inchangée.
+
+### 174.2 Le code
+
+- `src/layerheads.rs` : `Colonne` (les sept colonnes : icône, nom, description, action, état sur un calque), `case_de_colonne`,
+  `case_de_reglage` (icône ou point), `ENTETE_H`, `ROW_FULL` = 60, `rows_of_en` (tout replié), `App::entete_des_colonnes`,
+  `colonnes_du_calque`, `agir_colonne`, `basculer_calques_replies`, `lignes_de_la_timeline` ; `layer_head` refait (lignes fine et
+  complète). `blend_combo` (la `ComboBox`) et `eye_button` ne servaient plus : retirés.
+- `src/timeline.rs` : `REGLE_H` (la règle) et `HEADER_H` = règle + rangée d'en-tête ; `MARGE_AVANT` ; `comportements_timeline`.
+- `src/choixcalques.rs` : `regler_comportement` (tous les calques choisis, une étape). `src/document.rs` : « Aucun ».
+  `src/montagehead.rs` : l'icône d'« Aucun » (rond barré).
+- `src/pistes.rs` : l'ordre et l'aspect de la rangée du milieu de la piste active.
+- `src/settings.rs` (`calques_replies`, clé `timeline_tout_replie`), `src/keymap.rs` + `keymap.toml` (`calques.replier_tout`,
+  Alt+Maj+C, écrit « Maj+Alt+C » dans les bulles), `src/app.rs`.
+- Un défaut trouvé en chemin, corrigé : dans la rangée horizontale de la timeline, chaque bouton posé dans la colonne (`put`) déplaçait
+  le curseur jusqu'à lui, et la grille commençait après le dernier posé. Avec la ligne du calque courant d'avant, le dernier était
+  tout à droite (la flèche › du mode) ; repliés, il aurait été l'œil, et la grille passait sur les colonnes. La colonne est maintenant
+  posée dans un `scope` (`timeline_panel`) : elle prend toujours sa largeur.
+- `src/perf_tests.rs` : `Banc::capturer` lit l'image à la taille du banc (il la lisait toujours en 1920 × 1080), pour l'image de la
+  plus petite fenêtre.
+
+### 174.3 Les essais
+
+`src/colonne_calques_tests.rs` : l'en-tête et ses sept colonnes dans l'ordre (⊖ avant « Calques », le raccourci) ; les colonnes de
+chaque calque (courant, autres, rangé dans un dossier, le dossier) sur les x de l'en-tête ; un clic dans chaque colonne d'un calque qui
+n'est pas le courant bascule le bon réglage, une étape, Ctrl+Z ; le mode écrit sur la troisième rangée, la liste qui change les deux
+calques choisis ; les icônes avant / après (à côté des images, dans la marge pour un calque qui commence à l'image 0, rien pour un
+dossier), leur menu, deux calques choisis, une étape ; le bloc d'une clé au même endroit qu'avant, les icônes hors de lui ; tout
+replier / déplier (en-tête, raccourci, ⊕ d'une ligne), gardé dans les réglages ; rien ne déborde ni ne se chevauche à 312 points.
+Les essais ignorés `colonne_calques_capture` et `colonne_calques_capture_etroite` font les images.
+
+Les essais d'avant changés pour la nouvelle disposition : `avantapres165_tests::in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_two_lines`
+(le bord gauche de la colonne se lit au ⊖ de l'en-tête, plus à la barre d'opacité, qui a quitté le début de la ligne) ;
+`notes_calques_tests::the_layer_row_and_the_brush_settings_carry_the_aplat_button` (l'aplat est une colonne de chaque calque, pas
+du dossier, un point quand il est éteint ; on clique la case de « C1 ») ; `piste_mode_tests::the_animation_timeline_keeps_its_own_line_untouched`
+(la pelure : une case dans l'en-tête et une par calque, quatre au lieu d'une).
+
+### 174.4 À tester (sa checklist)
+
+1. Animation : en haut de la colonne des calques, « ⊖ Calques » et les sept icônes ; survoler chacune : son nom, son raccourci.
+2. Sur une ligne fine (pas le calque courant) : cliquer la pelure, le damier, le pochoir, l'aplat, la caméra, le cadenas, l'œil : le
+   réglage change sur ce calque ; Ctrl+Z.
+3. Ctrl + clic sur deux calques, puis une icône d'en-tête (la pelure) : les deux ; Ctrl+Z.
+4. Le calque courant : ⊖ nom ; la vignette, fx, groupe, + / −, punaise, maillon, puis les colonnes ; dessous « Normal ▾ » ‹ ›, la
+   barre, le losange. Choisir « Produit » avec deux calques choisis : les deux.
+5. ⊕ sur une autre ligne : elle devient le calque courant, sur trois rangées.
+6. ⊖ de l'en-tête (ou Alt+Maj+C) : tout sur une ligne ; ⊕ : de nouveau trois rangées ; rouvrir FEANOR : l'état est gardé.
+7. Dans la bande : l'icône grise avant et après les images d'un calque ; clic : « Aucun / Boucle / Va-et-vient / Maintenir » ; choisir
+   « Boucle » après : les images reviennent en pâle après la fin ; Ctrl+Z. Un calque qui commence à l'image 0 : son icône est dans la
+   petite marge avant la grille. Les prises du début et de la fin du calque se tirent toujours.
+8. Rétrécir la timeline au plus étroit : rien ne déborde.
+9. Storyboard, la piste du calque actif : le même ordre (indicateurs, puis pelure, transparence, pochoir, aplat, caméra).

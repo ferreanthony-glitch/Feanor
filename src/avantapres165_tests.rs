@@ -415,7 +415,8 @@ fn in_the_animation_the_timeline_buttons_sit_in_the_layer_column_on_two_lines() 
         let mesure = crate::barres::largeur_mesuree(Barre::Timeline);
         assert!(w >= mesure - 0.5 && w >= crate::layerheads::HEAD_W, "{disposition} : {w} / {mesure}");
         assert!(w <= 420.0, "{disposition} : la colonne des calques ne fait plus qu'environ 400 points : {w}");
-        let gauche = vus::ou("Opacité du calque").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 80.0;
+        // (Partie 174 : le bord gauche de la colonne, depuis le ⊖ de sa rangée d'en-tête.)
+        let gauche = vus::ou("Replier tous les calques").iter().map(|r| r.left()).fold(f32::MAX, f32::min) - 10.0;
         let sous = haut_des_calques();
         let boutons = boutons_dans_la_colonne(&b, Barre::Timeline, (gauche, gauche + w + 90.0), sous);
         assert!(boutons.len() >= 15, "{disposition} : tous les boutons : {boutons:?}");

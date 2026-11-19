@@ -119,6 +119,10 @@ pub struct Settings {
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
+    /// Partie 174 (Anthony : « on peut aussi replier tous les calques ») : la colonne des calques de la timeline montre tous les
+    /// calques sur une ligne, le calque courant compris (⊖ / ⊕ de sa rangée d'en-tête). Un réglage d'affichage du poste.
+    #[serde(default, rename = "timeline_tout_replie")]
+    pub calques_replies: bool,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -417,6 +421,7 @@ impl Default for Settings {
             montage_head_w: default_head_w(),
             storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
+            calques_replies: false,
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

@@ -74,10 +74,10 @@ pub(crate) const ENTETE_DEUX_LIGNES: f32 = 28.0;
 /// Partie 173.5 : la barre du montage sur une ligne avant sa première mesure (celle d'avant : 474 points mesurés).
 const LARGEUR_UNE_LIGNE_AVANT_MESURE: f32 = 480.0;
 
-/// Icône d'un pré / post-comportement.
+/// Icône d'un pré / post-comportement (partie 174 : « Aucun » est un rond barré, ∅ ; le montage ne le montre pas).
 pub(crate) fn behaviour_icon(b: Behaviour) -> &'static str {
     match b {
-        Behaviour::Nothing => ph::MINUS,
+        Behaviour::Nothing => ph::PROHIBIT,
         Behaviour::Loop => ph::REPEAT,
         Behaviour::PingPong => ph::ARROWS_LEFT_RIGHT,
         Behaviour::Hold => ph::PAUSE,

@@ -428,6 +428,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     // Pistes repliables du montage (`pistes.rs`).
     act("piste.basculer", "Pistes du montage : replier / déplier la piste du calque courant", true, false),
     act("piste.replier_tout", "Pistes du montage : replier toutes les pistes", true, false),
+    act("calques.replier_tout", "Colonne des calques de la timeline : replier tous les calques sur une ligne (ou les déplier)", true, false),
     act("piste.deplier_tout", "Pistes du montage : déplier toutes les pistes", true, false),
     act("piste.auto_deplier", "Pistes du montage : déplier tout seul le calque courant (oui / non)", true, false),
     act("bande.plans_en_bandeau", "Plans du montage : en bandeau / de hauteur moyenne", true, false),
