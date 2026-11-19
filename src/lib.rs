@@ -238,6 +238,8 @@ mod blocscamera_tests;
 mod timelinesb;
 #[cfg(test)]
 mod timelinesb_tests;
+#[cfg(test)]
+mod timeline_serree_tests;
 mod panneauprereglages;
 // Les plans types du montage (lot 4 des préréglages, partie 176) : cartons, titres, génériques, écran partagé, inserts.
 pub mod planstypes;

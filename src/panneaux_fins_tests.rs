@@ -153,18 +153,18 @@ const DU_PANNEAU: &[&str] = &[
 /// calque courant. Ses cases ne se touchent pas (partie 161 : au moins `barrecalques::ECART` points entre deux) ; elle tient
 /// dans la colonne quand la colonne a la place de ses six cases lisibles, sinon elle la déborde juste de ce qu'il faut.
 fn la_colonne_porte_tout(debut: f32, colonne: f32, ligne_du_calque: Rect) {
-    use crate::barrecalques::{ECART, LARGEUR_LISIBLE};
+    use crate::barrecalques::ECART_EN_LIGNE as ECART;
     for nom in DU_PANNEAU {
         assert!(present(nom), "« {nom} » n'est plus à l'écran : {:?}", vus::noms());
     }
     let barre: Vec<Rect> = crate::barrecalques::NOMS.iter().map(|n| *vus::ou(n).last().unwrap_or_else(|| panic!("« {n} » : {:?}", vus::noms()))).collect();
-    // (La barre part du bord gauche de la bande, sous la colonne ; elle va au bout de la colonne, ou de ses six cases lisibles.)
-    let fin = colonne.max(barre[0].left() + LARGEUR_LISIBLE);
-    assert!(barre[0].left() >= debut - 2.0 && barre[0].left() < colonne, "la barre commence sous la colonne : {barre:?} / {debut}");
+    // (Partie 179, Anthony : les boutons de la barre du bas montés sur la ligne « Calques » : la barre est en haut de la colonne,
+    // au-dessus du calque courant, dans la colonne.)
+    assert!(barre[0].left() >= debut - 2.0 && barre[0].left() < colonne, "la barre commence dans la colonne : {barre:?} / {debut}");
     for (k, r) in barre.iter().enumerate() {
         assert!((r.center().y - barre[0].center().y).abs() < 2.0, "une seule rangée : {barre:?}");
-        assert!(r.center().y > ligne_du_calque.bottom(), "sous la colonne des calques : {barre:?}");
-        assert!(r.right() <= fin + 2.0, "sous la colonne, pas plus large qu'il ne faut : {r:?} / {fin}");
+        assert!(r.center().y < ligne_du_calque.top(), "sur la ligne « Calques », au-dessus des calques : {barre:?}");
+        assert!(r.right() <= colonne + 2.0, "dans la colonne : {r:?} / {colonne}");
         assert!(r.width() >= crate::barrecalques::CASE[0] - 0.5, "une case lisible : {r:?}");
         if k > 0 {
             assert!(r.center().x > barre[k - 1].center().x, "dans l'ordre : {barre:?}");
@@ -185,7 +185,8 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
     assert!(present("Pelure d'oignon du calque"), "la pelure reste sur la ligne de la timeline");
     // L'en-tête de la colonne n'a plus ses boutons (ils sont dans la barre d'actions) ni « Tout réduire ».
     let haut_des_lignes = fusion[0].top() - crate::layerheads::ROW_FULL;
-    for nom in ["Nouveau dossier", "Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
+    // (Partie 179 : « Nouveau dossier » est revenu en haut, sur la rangée « Calques », avec les autres commandes des calques.)
+    for nom in ["Groupes de calques", "Opérations sur les calques", "Réduire toutes les lignes", "Agrandir toutes les lignes", "Réduire la ligne", "Agrandir la ligne"] {
         assert!(vus::ou(nom).iter().all(|r| r.top() > haut_des_lignes), "« {nom} » n'est plus en haut de la colonne : {:?}", vus::ou(nom));
     }
     // Un autre calque devient courant : c'est sa ligne qui est complète, l'autre est fine.
@@ -202,8 +203,8 @@ fn in_the_animation_the_current_layer_carries_everything_and_the_others_are_fine
 fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    // La piste du calque actif : trois rangées de 22 (partie 173.5 ; deux depuis la partie 160).
-    assert_eq!(crate::montagerows::LAYER_H, 3.0 * crate::pistes::RANGEE_ACTIVE);
+    // La piste du calque actif : deux rangées de 20 (partie 179 ; trois de 22 en partie 173.5).
+    assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
     let fusion = vus::ou("Mode de fusion");
     assert_eq!(fusion.len(), 1, "seule la piste du calque actif : {fusion:?}");
     // (Le bord droit de la colonne : sa poignée pour l'élargir.)
@@ -216,9 +217,10 @@ fn in_the_storyboard_the_active_track_carries_everything_on_two_rows() {
     }
     // (Partie 178 : la pelure de la piste active, posée après celle de la ligne « Calques » du Storyboard.)
     let milieu = *vus::ou("Pelure d'oignon du calque").last().expect("la pelure de la piste active");
-    let (haut, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
+    // (Partie 179 : la pelure sur la rangée du nom, l'opacité et le ⋮ sur la seconde.)
+    let (menu, bas) = (ou("Commandes du calque"), ou("Opacité du calque"));
     let pas = crate::pistes::RANGEE_ACTIVE;
-    assert!((milieu.center().y - haut.center().y - pas).abs() < 3.0 && (bas.center().y - milieu.center().y - pas).abs() < 3.0, "trois rangées : {haut:?} {milieu:?} {bas:?}");
+    assert!((bas.center().y - milieu.center().y - pas).abs() < 3.0 && (menu.center().y - bas.center().y).abs() < 3.0, "deux rangées : {milieu:?} {bas:?} {menu:?}");
     // (La barre du bas de la bande part de son bord gauche, à gauche des en-têtes de la colonne.)
     la_colonne_porte_tout(0.0, colonne, fusion[0]);
     // La barre d'actions est à gauche du zoom de la bande.

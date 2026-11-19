@@ -565,6 +565,13 @@ pub(crate) struct Vue {
 /// de la bande (la plus grande vue pendant la séance : la colonne ne rétrécit pas quand un time code ou un nom de plan raccourcit).
 static MESURES: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
 
+#[cfg(test)]
+thread_local! {
+    /// Partie 179, pour les essais : les commandes de la barre du montage du Storyboard passées sous « Plus… » faute de place, à la
+    /// dernière image.
+    pub(crate) static DEBORDENT: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 fn rang(b: Barre) -> usize {
     match b {
         Barre::Commandes => 0,
@@ -574,40 +581,129 @@ fn rang(b: Barre) -> usize {
     }
 }
 
-/// Partie 173.5 : la largeur qu'il faut à la barre pour tenir sur **une** ligne, quand elle peut aussi se mettre sur deux (la barre du
-/// montage en tête de la colonne du Storyboard) : mesurée à son dessin sur une ligne, estimée d'après ses deux lignes sinon.
-static UNE_LIGNE: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
-
-/// La largeur mesurée de la barre `b` dans la colonne, légende des clés comprise, dans sa disposition la plus étroite (une ligne, ou
-/// la plus longue de ses deux lignes pour la timeline et le montage du Storyboard) ; 0 tant qu'elle n'a pas été dessinée.
+/// La largeur mesurée de la barre `b` dans la colonne, légende des clés comprise, dans sa disposition la plus étroite (la plus
+/// longue de ses deux lignes pour la timeline ; pour la barre du montage du Storyboard, sur une ligne depuis la partie 179, ce qui ne
+/// passe jamais sous « Plus… » : la lecture, le temps, « Plus… » et la légende) ; 0 tant qu'elle n'a pas été dessinée.
 pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
     MESURES.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
 }
 
-/// Partie 173.5 : la largeur de la barre `b` sur une seule ligne (0 tant qu'elle n'a été ni dessinée ni estimée).
-pub(crate) fn largeur_une_ligne(b: Barre) -> f32 {
-    UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
+/// Partie 179 (Anthony : « Bouge les éléments pour resserrer les choses et éviter les pertes d'espace », la seconde ligne de boutons
+/// barrée) : quand la barre du montage du Storyboard n'a pas la place de toutes ses commandes sur sa ligne, celles qui passent sous
+/// « Plus… » sont les moins utilisées, pas les dernières. Le rang de chaque commande vient de son compteur d'usage (partie 112,
+/// `usage.json` de son poste, le 2026-11-19 : nouveau plan 12 fois, déplier ou replier toutes les pistes 3, comparer 2… ; nouvelle
+/// séquence, le menu Son, importer un son, l'aimantation, les envois : jamais au clic) ; un plus grand rang reste plus longtemps
+/// dans la barre. Le rang est fixe (la barre ne change pas d'elle-même d'un jour à l'autre). La lecture et le temps (groupe 0) ne
+/// passent jamais sous « Plus… ».
+pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
+    match id {
+        "panneau.nouveau" => 90,
+        "mode.basculer" => 85,
+        "edition.supprimer" => 80,
+        "plans" => 70,
+        "piste.deplier_tout" => 62,
+        "piste.replier_tout" => 61,
+        "comparer.ouvrir" => 55,
+        "storyboard.verrouiller" => 50,
+        "edition.copier" | "edition.coller" => 45,
+        "son" => 40,
+        "sequence.nouvelle" => 35,
+        "son.importer" => 30,
+        "version.nouvelle" => 28,
+        "transition.ajouter" => 26,
+        "commentaire.ajouter" => 24,
+        "montage.aimanter" => 22,
+        // (La même action que le « + » de la ligne « Calques », juste dessous : la première à passer sous « Plus… ».)
+        "calque.nouveau_vectoriel" => 1,
+        _ => 10,
+    }
+}
+
+/// Partie 179 : la place d'un trait entre deux groupes de la barre (ses marges, le trait, les écarts).
+const TRAIT_W: f32 = 2.0 * MARGE_TRAIT + 6.0 + 2.0 * ECART;
+
+/// Partie 179 : parmi `cmds` (dans l'ordre de la barre), celles qui tiennent dans `place` points, les plus utilisées d'abord
+/// (`rang_dans_la_barre`) ; `groupe_avant` : le groupe de la commande déjà posée juste avant (un trait la sépare d'un autre groupe).
+/// Les rangs (dans `cmds`) de celles qui tiennent.
+pub(crate) fn qui_tient(cmds: &[&Cmd], place: f32, groupe_avant: Option<u8>) -> Vec<usize> {
+    let largeur = |pris: &[usize]| -> f32 {
+        let mut w = 0.0;
+        let mut g = groupe_avant;
+        for &k in pris {
+            if g.is_some_and(|g| g != cmds[k].groupe) {
+                w += TRAIT_W;
+            }
+            g = Some(cmds[k].groupe);
+            w += cmds[k].largeur;
+        }
+        w
+    };
+    let mut ordre: Vec<usize> = (0..cmds.len()).collect();
+    ordre.sort_by_key(|&k| std::cmp::Reverse(rang_dans_la_barre(cmds[k].id)));
+    let mut pris: Vec<usize> = Vec::new();
+    for k in ordre {
+        let mut essai = pris.clone();
+        essai.push(k);
+        essai.sort_unstable();
+        if largeur(&essai) <= place + 0.5 {
+            pris = essai;
+        }
+    }
+    pris
 }
 
 impl App {
-    /// Partie 165.5 (Anthony : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre les boutons sur la même
-    /// ligne que la timeline ») : la barre `barre` et la légende des clés, sur une seule ligne, dans `ligne`, la place vide de la
-    /// colonne de gauche en face de la règle des temps. Rien ne passe sous « Plus… » faute de place : la ligne est dessinée à sa
-    /// largeur entière, et cette largeur est retenue (`largeur_mesuree`) pour que la colonne la contienne.
-    pub(crate) fn barre_dans_la_colonne(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
-        let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    /// Partie 179 (Anthony : la seconde ligne de boutons barrée, ses boutons dans la place vide à droite du temps) : la barre `barre`
+    /// et la légende des clés sur **une** ligne, dans `ligne` (la place vide de la colonne de gauche, en face de la règle des temps et
+    /// de la ligne des séquences). La lecture et le temps d'abord ; puis, tant qu'il y a la place, les autres commandes de la barre,
+    /// les plus utilisées d'abord (`qui_tient`) ; celles qui ne tiennent pas sont sous « Plus… », avec leur icône, leur nom, leur
+    /// raccourci et leur épingle (rien n'est perdu). La largeur de ce qui ne passe jamais sous « Plus… » est retenue
+    /// (`largeur_mesuree`) : la colonne ne descend pas en dessous.
+    pub(crate) fn barre_dans_la_colonne_serree(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(ligne).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
         child.set_clip_rect(ligne.intersect(ui.clip_rect()));
-        child.add_space(4.0);
-        self.barre_ui(&mut child, barre);
-        self.legende_cles_ui(&mut child);
-        let w = child.min_rect().width() + 8.0;
-        // (Partie 173.5 : cette largeur dit quand la barre tient sur une ligne ; la colonne peut être plus étroite, la barre passe
-        // alors sur deux lignes, `barre_dans_la_colonne_deux_lignes`.)
-        let mut m = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
-        if w > m[rang(barre)] + 0.5 {
-            m[rang(barre)] = w;
+        let ui = &mut child;
+        ui.add_space(4.0);
+        ui.spacing_mut().item_spacing.x = ECART;
+        let debut = ui.cursor().left();
+        let reglage = self.settings.bars.de(barre).clone();
+        // (Une commande qui ne s'applique pas à l'instant n'est pas dans la barre : elle reste, grisée et expliquée, sous « Plus… ».)
+        let montrees: Vec<&'static Cmd> = dans_la_barre(barre, &reglage).into_iter().filter(|c| !(matches!(c.genre, Genre::Bouton | Genre::Etat) && !self.vue_de(barre, c).actif)).collect();
+        let (premieres, autres): (Vec<&'static Cmd>, Vec<&'static Cmd>) = montrees.into_iter().partition(|c| c.groupe == 0);
+        let mut groupe: Option<u8> = None;
+        for c in &premieres {
+            groupe = Some(c.groupe);
+            self.commande_dans_la_barre(ui, barre, c);
         }
+        // La place qui reste, une fois gardées celle de « Plus… » et celle de la légende des clés au bout de la ligne.
+        let fin = ligne.right() - 4.0;
+        let reserve = PLUS_LARGEUR + CASE[0] + ECART;
+        let essentiel = ui.cursor().left() - debut + reserve + 8.0;
+        let place = fin - ui.cursor().left() - reserve;
+        let tiennent = qui_tient(&autres, place, groupe);
+        let mut debordent: Vec<&'static Cmd> = Vec::new();
+        for (k, c) in autres.iter().enumerate() {
+            if !tiennent.contains(&k) {
+                debordent.push(c);
+                continue;
+            }
+            if groupe.is_some_and(|g| g != c.groupe) {
+                ui.add_space(MARGE_TRAIT);
+                ui.separator();
+                ui.add_space(MARGE_TRAIT);
+            }
+            groupe = Some(c.groupe);
+            self.commande_dans_la_barre(ui, barre, c);
+        }
+        let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(ICONE), |ui| self.plus_menu(ui, barre, &debordent)).response;
+        bulle(resp, "Plus…", "Les autres commandes de la barre. L'épingle d'une ligne la remet dans la barre.", "");
+        self.legende_cles_ui(ui);
+        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        if essentiel > m[rang(barre)] + 0.5 {
+            m[rang(barre)] = essentiel;
+        }
+        #[cfg(test)]
+        DEBORDENT.with(|d| *d.borrow_mut() = debordent.iter().map(|c| c.id).collect());
     }
 
     /// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre `barre` sur deux lignes, dans `ligne1` (en face de la règle des
@@ -616,7 +712,6 @@ impl App {
     /// faute de place ; la largeur retenue (`largeur_mesuree`) est celle de la plus longue des deux lignes.
     pub(crate) fn barre_dans_la_colonne_deux_lignes(&mut self, ui: &mut Ui, ligne1: egui::Rect, ligne2: egui::Rect, barre: Barre, dernier_groupe_ligne1: u8) {
         let mut w: f32 = 0.0;
-        let mut somme: f32 = 0.0;
         for (k, ligne) in [ligne1, ligne2].into_iter().enumerate() {
             let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre), k)).layout(egui::Layout::left_to_right(egui::Align::Center)));
@@ -629,19 +724,12 @@ impl App {
                 self.legende_cles_ui(&mut child);
             }
             w = w.max(child.min_rect().width() + 8.0);
-            somme += child.min_rect().width();
         }
         let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
         if w > m[rang(barre)] + 0.5 {
             m[rang(barre)] = w;
         }
         drop(m);
-        // (Partie 173.5 : sur une ligne, il faudrait à peu près les deux bout à bout, plus le trait entre deux groupes ; une mesure sur
-        // une ligne, quand elle a lieu, remplace cette estimation.)
-        let mut une = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
-        if une[rang(barre)] == 0.0 {
-            une[rang(barre)] = somme + 2.0 * MARGE_TRAIT + 2.0 * ECART + 8.0;
-        }
         if w > ligne1.width() + 6.5 {
             ui.ctx().request_repaint();
         }

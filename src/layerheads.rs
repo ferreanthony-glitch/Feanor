@@ -22,14 +22,20 @@ pub(crate) const HEAD_W: f32 = 312.0;
 /// de calque réduite à la main, avant la partie 160).
 pub(crate) const ROW_SMALL: f32 = 24.0;
 /// Hauteur d'une ligne fine (partie 160) : tout calque qui n'est pas le calque courant, et tout dossier qui ne l'est pas
-/// (nom, œil, verrou, effets ; le triangle d'un dossier).
-pub(crate) const ROW_FINE: f32 = 22.0;
-/// Hauteur d'une ligne complète, celle du calque courant, sur trois rangées (partie 174) : ⊖ et le nom (20) ; la vignette, les
-/// indicateurs et les colonnes (21) ; le mode, l'opacité et le losange (19).
-pub(crate) const ROW_FULL: f32 = 60.0;
-/// Partie 174 : le haut de la deuxième et de la troisième rangée de la ligne complète, depuis le haut de la ligne.
+/// (nom, œil, verrou, effets ; le triangle d'un dossier). Partie 179 (Anthony : « Réduis un peu l'épaisseur des calques ») : 18 (22
+/// avant).
+pub(crate) const ROW_FINE: f32 = 18.0;
+/// Hauteur d'une ligne complète, celle du calque courant. Partie 179 (Anthony, sur la timeline du Storyboard : la rangée des icônes
+/// remontée sur la ligne du nom ; la même chose ici) : deux rangées de 20 (trois avant, 60 points, partie 174) : ⊖, le nom, les
+/// indicateurs et les colonnes ; la vignette, le mode, l'opacité, le losange et le ⋮.
+pub(crate) const ROW_FULL: f32 = 40.0;
+/// Partie 174 : le haut de la deuxième rangée de la ligne complète, depuis le haut de la ligne.
 const RANGEE_B: f32 = 20.0;
-const RANGEE_C: f32 = 41.0;
+/// Partie 179 : la place que garde au moins le nom sur la première rangée de la ligne complète ; les indicateurs qui ne tiennent pas
+/// avec lui passent sur la seconde rangée, après la vignette.
+const NOM_MIN: f32 = 44.0;
+/// Partie 179 : la place du maillon de la planche-mère parmi les indicateurs (« ⛓ 2 »).
+const MAILLON_W: f32 = 28.0;
 /// Partie 174 : la hauteur de la rangée d'en-tête de la colonne des calques (« Calques » et une icône par colonne), sous les deux
 /// lignes de boutons ; la règle des images a la même hauteur en plus, en face (`timeline::HEADER_H`).
 pub(crate) const ENTETE_H: f32 = 20.0;
@@ -353,6 +359,16 @@ pub(crate) fn liste_des_modes(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: Bl
     (mode != blend).then_some(mode)
 }
 
+/// Partie 179 : les indicateurs de la ligne complète du calque courant (avant les colonnes, ou sur la seconde rangée).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IndicateurDeLigne {
+    Effets,
+    Groupe,
+    SensDuPochoir,
+    Position,
+    Maillon,
+}
+
 /// Ce que la ligne d'un calque montre (copié pour ne pas garder le calque emprunté).
 struct Head {
     id: u64,
@@ -549,7 +565,6 @@ impl App {
             (false, false) => visuals.weak_text_color(),
         };
         let off = fg.gamma_multiply(0.35);
-        let shade = |on: bool| if on { fg } else { off };
         let group = self.doc.groups[h.group].clone();
         // Le filet de gauche : la couleur du rangement du calque — celle de son dossier, sinon celle de son groupe (la même règle que
         // dans le Storyboard et le Montage, `folders::couleur_du_rangement`, 2026-11-11).
@@ -566,14 +581,36 @@ impl App {
         // tout le reste de la ligne s'arrête avant elles.
         let cols = debut_des_colonnes(r.right());
         let x0 = if h.folder { r.left() + 22.0 } else { r.left() + 24.0 };
+        // Partie 179 : la première rangée (la ligne fine entière ; les 20 premiers points d'une ligne complète).
+        let line1 = if fine { r.center().y } else { r.top() + RANGEE_B * 0.5 };
+        let bas1 = if fine { r.bottom() } else { r.top() + RANGEE_B };
+        // Partie 179 (Anthony : la rangée des icônes remontée sur la ligne du nom) : sur la ligne complète d'un calque, les indicateurs
+        // (effets, groupe, sens du pochoir, position, maillon) sont collés aux colonnes, sur la rangée du nom ; ceux qui laisseraient
+        // moins de `NOM_MIN` au nom descendent sur la seconde rangée, après la vignette.
+        let indicateurs: Vec<IndicateurDeLigne> = if fine || h.folder {
+            Vec::new()
+        } else {
+            let partage = self.doc.plans_du_partage(self.cur_panel, li).iter().any(|&i| i != self.cur_panel);
+            [(self.fx_switch_shown(li), IndicateurDeLigne::Effets), (true, IndicateurDeLigne::Groupe), (true, IndicateurDeLigne::SensDuPochoir), (true, IndicateurDeLigne::Position), (partage, IndicateurDeLigne::Maillon)]
+                .into_iter()
+                .filter_map(|(oui, i)| oui.then_some(i))
+                .collect()
+        };
+        let largeur = |i: &IndicateurDeLigne| if *i == IndicateurDeLigne::Maillon { MAILLON_W } else { ICON_W };
+        let mut en_haut = indicateurs.len();
+        while en_haut > 0 && indicateurs[..en_haut].iter().map(largeur).sum::<f32>() > cols - 2.0 - (x0 + 14.0) - NOM_MIN {
+            en_haut -= 1;
+        }
+        let debut_indicateurs = cols - 2.0 - indicateurs[..en_haut].iter().map(largeur).sum::<f32>();
         // (Sur la ligne fine d'un dossier, le nombre de ses calques est juste avant les colonnes ; sur la ligne fine d'un calque, la
-        // pastille de sa couleur d'étiquette et ses effets ; sur la ligne complète, le ⋮ du menu est au bout de la première rangée.)
+        // pastille de sa couleur d'étiquette et ses effets ; sur la ligne complète, les indicateurs.)
         let fin_du_nom = match (h.folder, fine) {
             (true, true) => cols - 22.0,
             (false, true) => cols - 4.0 - if h.group > 0 { 10.0 } else { 0.0 } - if self.fx_switch_shown(li) { 20.0 } else { 0.0 },
-            (_, false) => r.right() - 22.0,
+            (true, false) => r.right() - 22.0,
+            (false, false) => debut_indicateurs - 2.0,
         };
-        let name_rect = Rect::from_min_max(pos2(x0 + 14.0, r.top() + 2.0), pos2(fin_du_nom.max(x0 + 15.0), r.top() + 20.0_f32.min(r.height())));
+        let name_rect = Rect::from_min_max(pos2(x0 + 14.0, if fine { r.top() } else { r.top() + 1.0 }), pos2(fin_du_nom.max(x0 + 15.0), bas1));
         if resp.clicked() {
             let m = ui.input(|i| i.modifiers);
             self.click_layer_head(li, m.command, m.shift);
@@ -592,9 +629,9 @@ impl App {
 
         // Triangle d'un dossier : montrer ou cacher ses calques. (Plus de triangle sur les calques, partie 160 : leur ligne est
         // complète quand ils sont le calque courant, fine sinon, d'elle-même.)
+        let bouton = Rect::from_center_size(pos2(r.left() + 13.0, line1), vec2(16.0, 18.0_f32.min(bas1 - r.top())));
         if h.folder {
-            let caret = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 2.0), vec2(16.0, 18.0));
-            let resp = icon_at(ui, caret, if h.collapsed { ph::CARET_RIGHT } else { ph::CARET_DOWN }, off.gamma_multiply(2.0));
+            let resp = icon_at(ui, bouton.translate(vec2(-1.0, 0.0)), if h.collapsed { ph::CARET_RIGHT } else { ph::CARET_DOWN }, off.gamma_multiply(2.0));
             let (what, why) = if h.collapsed {
                 ("Ouvrir le dossier", "Montrer les lignes de ses calques.")
             } else {
@@ -606,13 +643,12 @@ impl App {
             }
         } else {
             // Partie 174 : ⊖ replie la ligne du calque courant (tous les calques sur une ligne) ; ⊕ sur une ligne fine la déplie : le
-            // calque devient le calque courant, sur ses trois rangées (seul le calque courant a sa ligne complète, partie 160).
-            let bouton = Rect::from_min_size(pos2(r.left() + 5.0, r.top() + 2.0), vec2(16.0, 18.0));
+            // calque devient le calque courant, sur ses deux rangées (seul le calque courant a sa ligne complète, partie 160).
             let resp = icon_at(ui, bouton, if fine { ph::PLUS_CIRCLE } else { ph::MINUS_CIRCLE }, off.gamma_multiply(2.2));
             let key = self.raccourci(ACTION_REPLIER);
             crate::raccourcisui::shortcut_menu(&resp, ACTION_REPLIER, &key);
             let resp = if fine {
-                bulle(resp, "Déplier le calque", "Il devient le calque courant, sa ligne sur trois rangées : la vignette, les réglages, le mode, l'opacité.", &key)
+                bulle(resp, "Déplier le calque", "Il devient le calque courant, sa ligne sur deux rangées : les réglages, la vignette, le mode, l'opacité.", &key)
             } else {
                 bulle(resp, "Replier le calque", "Tous les calques sur une ligne, le calque courant compris (ses réglages restent dans les colonnes et au clic droit). ⊕ le déplie.", &key)
             };
@@ -629,7 +665,6 @@ impl App {
         }
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
-        let line1 = r.top() + 11.0;
         let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else if h.annotation { theme::palette().dessin_annotation } else if h.unie { theme::palette().dessin_unie } else { theme::couleur_calque(h.kind, h.couleur) };
         if h.folder {
             let icon = if h.collapsed { ph::FOLDER } else { ph::FOLDER_OPEN };
@@ -653,7 +688,7 @@ impl App {
                 pos2(name_rect.left(), line1),
                 Align2::LEFT_CENTER,
                 &h.name,
-                FontId::proportional(13.0),
+                FontId::proportional(if fine { 12.0 } else { 13.0 }),
                 fg,
             );
             // Le calque courant : ce que sa ligne du panneau Calques disait sous son nom (partie 160) : « sous <trait> » pour un calque
@@ -661,28 +696,32 @@ impl App {
             if !fine && !h.folder {
                 if let Some(petit) = self.sous_le_nom(li) {
                     let at = pos2(nom.right() + 8.0, line1);
-                    let resp = ui.interact(Rect::from_min_max(pos2(at.x, r.top() + 2.0), pos2(name_rect.right(), r.top() + 20.0)), egui::Id::new(("sous_le_nom", h.id)), Sense::hover());
+                    let resp = ui.interact(Rect::from_min_max(pos2(at.x, name_rect.top()), name_rect.max), egui::Id::new(("sous_le_nom", h.id)), Sense::hover());
                     painter.with_clip_rect(name_rect).text(at, Align2::LEFT_CENTER, &petit.0, FontId::proportional(10.5), off.gamma_multiply(2.2));
                     bulle(resp, &petit.0, petit.1, "");
                 }
             }
         }
 
-        // Les colonnes de réglages : sur la première (et seule) rangée d'une ligne fine, sur la deuxième d'une ligne complète.
-        let y_cols = if fine { r.top() + 2.0 } else { r.top() + RANGEE_B };
+        // Les colonnes de réglages : sur la rangée du nom (partie 179 : aussi sur la ligne complète d'un calque) ; sur la seconde
+        // rangée de la ligne complète d'un dossier, avec son opacité.
+        let y_cols = match (fine, h.folder) {
+            (false, true) => r.top() + RANGEE_B,
+            _ => line1 - 8.5,
+        };
         self.colonnes_du_calque(ui, r.right(), y_cols, li, h.id, h.negative, fg);
 
         if fine && !h.folder {
             // La pastille de sa couleur d'étiquette (son groupe, s'il en a un), puis ses effets, juste avant les colonnes.
             let mut x = cols - 2.0;
-            if let Some(resp) = self.fx_switch(ui, li, Some(Rect::from_min_size(pos2(x - 20.0, r.top() + 2.0), vec2(20.0, 18.0))), fg) {
+            if let Some(resp) = self.fx_switch(ui, li, Some(Rect::from_center_size(pos2(x - 10.0, line1), vec2(20.0, 18.0_f32.min(r.height())))), fg) {
                 if resp.clicked() {
                     self.toggle_layer_fx(li);
                 }
                 x -= 20.0;
             }
             if h.group > 0 {
-                let c = Rect::from_center_size(pos2(x - 5.0, line1), vec2(10.0, 18.0));
+                let c = Rect::from_center_size(pos2(x - 5.0, line1), vec2(10.0, r.height()));
                 painter.circle_filled(c.center(), 3.5, group_color(group.color));
                 let resp = ui.interact(c, egui::Id::new(("etiquette_calque", h.id)), Sense::hover());
                 bulle(resp, &format!("Groupe : {}", group.name), "La couleur d'étiquette du calque (son groupe). Le changer : sur la ligne du calque courant, ou clic droit.", "");
@@ -695,7 +734,9 @@ impl App {
             painter.text(pos2(cols - 6.0, line1), Align2::RIGHT_CENTER, h.children.to_string(), FontId::monospace(10.5), off.gamma_multiply(2.0));
             return;
         }
-        let opts = Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 2.0), vec2(18.0, 18.0));
+        // Le ⋮ du menu : au bout de la première rangée d'un dossier ; au bout de la seconde rangée d'un calque (partie 179 : les
+        // colonnes ont pris le bout de la première).
+        let opts = if h.folder { Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 1.0), vec2(18.0, 18.0)) } else { Rect::from_min_size(pos2(r.right() - 17.0, r.top() + RANGEE_B), vec2(16.0, 18.0_f32.min(r.bottom() - r.top() - RANGEE_B))) };
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(opts).id_salt(("options_calque", h.id)));
         let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0).color(fg)).frame(false);
         let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_head_menu(ui, li)).response;
@@ -713,11 +754,19 @@ impl App {
             return;
         }
 
-        // ---- La deuxième rangée : la vignette du dessin à l'image courante (vide : cadre gris), les petits indicateurs (effets,
-        // groupe, sens du pochoir, position verrouillée, maillon de la planche-mère), puis les colonnes (posées plus haut).
+        // ---- Les indicateurs de la rangée du nom, collés aux colonnes.
+        let mut x = debut_indicateurs;
+        for i in &indicateurs[..en_haut] {
+            let case = Rect::from_min_size(pos2(x, line1 - 8.5), vec2(largeur(i), 17.0));
+            self.indicateur_de_ligne(ui, *i, case, li, &h, &group, fg, off);
+            x += largeur(i);
+        }
+
+        // ---- La seconde rangée : la vignette du dessin à l'image courante (vide : cadre gris), les indicateurs descendus, le mode de
+        // fusion écrit (la liste des modes en texte au clic), ses flèches ‹ ›, la barre d'opacité, le losange des clés d'opacité, le ⋮.
         let yb = r.top() + RANGEE_B;
-        let hb = RANGEE_C - RANGEE_B - 1.0;
-        let thumb = Rect::from_min_size(pos2(r.left() + 7.0, yb), vec2(hb * 16.0 / 9.0, hb));
+        let hb = (r.bottom() - yb - 1.0).clamp(8.0, 17.0);
+        let thumb = Rect::from_min_size(pos2(r.left() + 7.0, yb + 0.5), vec2(hb * 16.0 / 9.0, hb));
         // Un calque Couleur unie : sa couleur à la place de la vignette, qu'un clic change (partie 160 : elle était sous l'opacité du
         // panneau Calques).
         if h.unie {
@@ -736,56 +785,19 @@ impl App {
             }
             painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
         }
-        let slot = |x: f32| Rect::from_min_size(pos2(x, yb + 1.0), vec2(ICON_W, 17.0));
-        let mut x = thumb.right() + 4.0;
-        // Les effets du calque, d'un coup (seulement s'il en a : `fxui.rs`).
-        if let Some(resp) = self.fx_switch(ui, li, Some(slot(x)), fg) {
-            if resp.clicked() {
-                self.toggle_layer_fx(li);
-            }
-            x += ICON_W;
-        }
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(slot(x)).id_salt(("groupe_calque", h.id)));
-        let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(group_color(group.color))).frame(false);
-        let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.group_menu(ui, li)).response;
-        bulle(resp, &format!("Groupe : {}", group.name), "Ranger le calque dans un groupe de couleur.", "");
-        x += ICON_W;
-        let resp = icon_at(ui, slot(x), if h.negative { ph::MINUS } else { ph::PLUS }, shade(h.stencil));
-        let resp = bulle(
-            resp,
-            if h.negative { "Pochoir négatif" } else { "Pochoir positif" },
-            "Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors. Clic : changer.",
-            "",
-        );
-        if resp.clicked() {
-            self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
-        }
-        x += ICON_W;
-        let resp = icon_at(ui, slot(x), ph::PUSH_PIN, shade(h.fixed));
-        let resp = bulle(resp, "Verrouiller la position", "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.", "");
-        if resp.clicked() {
-            self.set_layer_flag(li, |l| l.position_locked = !l.position_locked);
-        }
-        x += ICON_W;
-        // Le maillon de la planche-mère (rien si le calque n'est dans aucun autre plan), jusqu'aux colonnes.
-        {
-            let bout = Rect::from_min_max(pos2(x + 2.0, yb), pos2(cols - 2.0, yb + 19.0));
-            if bout.width() > 8.0 {
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bout).id_salt(("bout_calque", h.id)).layout(Layout::left_to_right(Align::Center)));
-                child.set_clip_rect(bout.intersect(ui.clip_rect()));
-                self.maillon_partage(&mut child, li);
-            }
-        }
-
-        // ---- La troisième rangée, sous la vignette : le mode de fusion écrit (la liste des modes en texte au clic), ses flèches
-        // ‹ ›, la barre d'opacité, puis le losange des clés d'opacité à droite.
-        let yc = r.top() + RANGEE_C;
+        let yc = yb + 1.0;
         let hc = 17.0_f32.min(r.bottom() - yc);
+        let mut x = thumb.right() + 4.0;
+        for i in &indicateurs[en_haut..] {
+            let case = Rect::from_min_size(pos2(x, yc), vec2(largeur(i), hc));
+            self.indicateur_de_ligne(ui, *i, case, li, &h, &group, fg, off);
+            x += largeur(i);
+        }
         let modes = BlendMode::ALL;
         let at = modes.iter().position(|m| *m == h.blend).unwrap_or(0);
         let mut mode = h.blend;
-        let gauche = r.left() + 6.0;
-        let losange = Rect::from_min_size(pos2(r.right() - 18.0, yc), vec2(16.0, hc));
+        let gauche = x + 2.0;
+        let losange = Rect::from_min_size(pos2(opts.left() - 17.0, yc), vec2(16.0, hc));
         let reste = losange.left() - 2.0 - gauche;
         // (Les flèches quand la liste entière et une barre lisible tiennent à côté d'elles.)
         let fleches = reste >= LISTE_W + 2.0 * FLECHE_W + 60.0;
@@ -797,12 +809,12 @@ impl App {
             }
             x += FLECHE_W;
         }
-        let largeur = LISTE_W.min((reste - if fleches { 2.0 * FLECHE_W } else { 0.0 } - 40.0).max(26.0));
-        let liste = Rect::from_min_size(pos2(x, yc), vec2(largeur, hc));
+        let largeur_liste = LISTE_W.min((reste - if fleches { 2.0 * FLECHE_W } else { 0.0 } - 40.0).max(26.0));
+        let liste = Rect::from_min_size(pos2(x, yc), vec2(largeur_liste, hc));
         if let Some(m) = liste_des_modes(ui, liste, egui::Id::new(("fusion_tete", h.id)), h.blend) {
             mode = m;
         }
-        x += largeur;
+        x += largeur_liste;
         if fleches {
             let next = Rect::from_min_size(pos2(x, yc), vec2(FLECHE_W, hc));
             if bulle(icon_at(ui, next, ph::CARET_RIGHT, fg), "Mode suivant", "", "").clicked() {
@@ -814,9 +826,57 @@ impl App {
             // (Plusieurs calques choisis : tous prennent ce mode, partie 136.)
             self.regler_mode_calques(li, mode);
         }
-        let bar = Rect::from_min_max(pos2(x + 4.0, yc + 2.0), pos2((losange.left() - 2.0).max(x + 20.0), yc + 15.0));
+        let bar = Rect::from_min_max(pos2(x + 4.0, yc + 2.0), pos2((losange.left() - 2.0).max(x + 20.0), yc + hc - 2.0));
         self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
         self.losange_opacite(ui, losange, fg, off);
+    }
+
+    /// Partie 179 : un indicateur de la ligne complète du calque courant, dans `case` : les effets (fx), le groupe (son menu de
+    /// couleurs), le sens du pochoir (+ / −), la position verrouillée (la punaise), le maillon de la planche-mère. Les mêmes bulles et
+    /// les mêmes gestes qu'avant.
+    #[allow(clippy::too_many_arguments)]
+    fn indicateur_de_ligne(&mut self, ui: &mut Ui, quoi: IndicateurDeLigne, case: Rect, li: usize, h: &Head, group: &LayerGroup, fg: Color32, off: Color32) {
+        let shade = |on: bool| if on { fg } else { off };
+        match quoi {
+            IndicateurDeLigne::Effets => {
+                if let Some(resp) = self.fx_switch(ui, li, Some(case), fg) {
+                    if resp.clicked() {
+                        self.toggle_layer_fx(li);
+                    }
+                }
+            }
+            IndicateurDeLigne::Groupe => {
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("groupe_calque", h.id)));
+                let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(group_color(group.color))).frame(false);
+                let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.group_menu(ui, li)).response;
+                bulle(resp, &format!("Groupe : {}", group.name), "Ranger le calque dans un groupe de couleur.", "");
+            }
+            IndicateurDeLigne::SensDuPochoir => {
+                let resp = icon_at(ui, case, if h.negative { ph::MINUS } else { ph::PLUS }, shade(h.stencil));
+                let resp = bulle(
+                    resp,
+                    if h.negative { "Pochoir négatif" } else { "Pochoir positif" },
+                    "Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors. Clic : changer.",
+                    "",
+                );
+                if resp.clicked() {
+                    self.basculer_calques(li, "Pochoir négatif", |l| l.stencil_negative, |l, v| l.stencil_negative = v, false);
+                }
+            }
+            IndicateurDeLigne::Position => {
+                let resp = icon_at(ui, case, ph::PUSH_PIN, shade(h.fixed));
+                let resp = bulle(resp, "Verrouiller la position", "L'outil Transformer ne bouge plus le calque, et on ne peut plus dessiner dessus.", "");
+                if resp.clicked() {
+                    self.set_layer_flag(li, |l| l.position_locked = !l.position_locked);
+                }
+            }
+            IndicateurDeLigne::Maillon => {
+                let bout = case.shrink2(vec2(1.0, 0.0));
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bout).id_salt(("bout_calque", h.id)).layout(Layout::left_to_right(Align::Center)));
+                child.set_clip_rect(bout.intersect(ui.clip_rect()));
+                self.maillon_partage(&mut child, li);
+            }
+        }
     }
 
     /// Partie 174 : les sept colonnes de réglages du calque `li` (`Colonne::TOUTES`), sur les x de l'en-tête (`case_de_colonne`) d'une
@@ -866,6 +926,9 @@ impl App {
     /// calques), « Calques », puis une icône par colonne, sur les mêmes x que les colonnes des calques. Un clic sur une icône agit
     /// comme un clic dans la case du calque courant : sur lui et, s'il fait partie d'un choix, sur tous les calques choisis.
     fn entete_des_colonnes(&mut self, ui: &mut Ui, rect: Rect) {
+        // (Partie 179 : le clic droit de la rangée, hors d'un bouton, est celui de l'ancienne barre du bas : nouveau calque, coller.)
+        let vide = ui.interact(rect, ui.id().with("entete_des_colonnes_vide"), Sense::click());
+        self.menu_vide_des_calques(&vide);
         let painter = ui.painter_at(rect);
         painter.line_segment([pos2(rect.left(), rect.bottom() - 0.5), pos2(rect.right(), rect.bottom() - 0.5)], Stroke::new(1.0_f32, theme::bord()));
         let doux = ui.visuals().weak_text_color();
@@ -873,14 +936,18 @@ impl App {
         let bouton = Rect::from_min_size(pos2(rect.left() + 5.0, rect.top() + 1.0), vec2(16.0, rect.height() - 2.0));
         let resp = icon_at(ui, bouton, if replie { ph::PLUS_CIRCLE } else { ph::MINUS_CIRCLE }, doux);
         let (nom, quoi) = if replie {
-            ("Déplier les calques", "Le calque courant retrouve sa ligne sur trois rangées : la vignette, les réglages, le mode, l'opacité.")
+            ("Déplier les calques", "Le calque courant retrouve sa ligne sur deux rangées : les réglages, la vignette, le mode, l'opacité.")
         } else {
             ("Replier tous les calques", "Tous les calques sur une ligne, le calque courant compris : ses réglages restent dans les colonnes et au clic droit.")
         };
         if self.aide(resp, nom, quoi, ACTION_REPLIER).clicked() {
             self.basculer_calques_replies();
         }
-        painter.text(pos2(bouton.right() + 4.0, rect.center().y), Align2::LEFT_CENTER, "Calques", FontId::proportional(12.0), doux);
+        let mot = painter.text(pos2(bouton.right() + 4.0, rect.center().y), Align2::LEFT_CENTER, "Calques", FontId::proportional(12.0), doux);
+        // Partie 179 (Anthony, sur la timeline du Storyboard : les boutons de la barre du bas de la colonne montés sur la ligne
+        // « Calques » ; la même chose ici) : les commandes des calques juste après « Calques », jusqu'aux icônes des colonnes.
+        let rangee = rect.shrink2(vec2(0.0, 1.0));
+        self.actions_des_calques_en_ligne(ui, rangee, mot.right() + 6.0, debut_des_colonnes(rect.right()) - 4.0);
         self.icones_des_colonnes(ui, rect);
     }
 

@@ -85,7 +85,9 @@ fn rien_ne_deborde(b: &Banc, label: &str, quoi: &str) {
     icones.sort_by(|a, c| a.left().total_cmp(&c.left()));
     for (k, r) in icones.iter().enumerate() {
         assert!(r.right() <= colonne.right() + 0.5, "{quoi} : une icône sort de la colonne : {r:?} / {colonne:?}");
-        assert!(r.bottom() <= liste.top() + 1.0, "{quoi} : les icônes au-dessus de la rangée du mode : {r:?} / {liste:?}");
+        // (Partie 179 : à la colonne la plus étroite, un indicateur qui laisserait trop peu de place au nom descend sur la rangée du
+        // mode, après la vignette : à gauche de la liste, sans la toucher.)
+        assert!(r.bottom() <= liste.top() + 1.0 || r.right() <= liste.left() + 0.5, "{quoi} : les icônes au-dessus de la rangée du mode, ou à gauche de la liste : {r:?} / {liste:?}");
         if k > 0 {
             assert!(r.left() >= icones[k - 1].right() - 0.5, "{quoi} : deux icônes se touchent : {icones:?}");
         }
@@ -219,10 +221,10 @@ fn the_animation_timeline_keeps_its_own_line_untouched() {
 // ------------------------------------------------------------------------------------ 173.5 : la colonne, les options de la piste
 
 /// Les boutons de la barre du montage, en tête de la colonne du Storyboard (noms de leurs bulles).
-const BOUTONS_DE_LA_COLONNE: &[&str] = &["Début du montage", "Lire le montage / pause", "Lecture en boucle", "Nouveau plan", "Nouvelle séquence", "Plans"];
+const BOUTONS_DE_LA_COLONNE: &[&str] = &["Début du montage", "Lire le montage / pause", "Lecture en boucle", "Plus…"];
 
-/// Chaque bouton de la barre du montage est entier dans la colonne, au-dessus de « Caméra » (rien ne passe sous « Plus… » faute
-/// de place).
+/// Chaque bouton de la barre du montage qui ne passe jamais sous « Plus… » est entier dans la colonne, au-dessus de « Caméra »
+/// (partie 179 : les autres y passent quand la place manque, les moins utilisés d'abord ; `timeline_serree_tests`).
 fn les_boutons_tiennent(quoi: &str) {
     let colonne = ou("Largeur de la colonne");
     for nom in BOUTONS_DE_LA_COLONNE {
@@ -245,8 +247,8 @@ fn the_storyboard_column_is_narrower_by_default_and_everything_still_fits() {
     for nom in ICONES_DE_LA_PISTE {
         assert!(icone(nom).is_some(), "« {nom} » sur la piste : {:?}", vus::noms());
     }
-    // La piste du calque actif a trois rangées.
-    assert_eq!(crate::montagerows::LAYER_H, 3.0 * crate::pistes::RANGEE_ACTIVE);
+    // La piste du calque actif a deux rangées (trois en partie 173.5 ; deux de 20 depuis la partie 179).
+    assert_eq!(crate::montagerows::LAYER_H, 2.0 * crate::pistes::RANGEE_ACTIVE);
 }
 
 #[test]
@@ -337,7 +339,9 @@ fn icones_espacees(b: &mut Banc, w: f32, quoi: &str) -> f32 {
         assert!(r.width() >= 19.0 - 2.0 - 0.5, "{quoi} : « {n} » dans une case presque aussi large que dans la timeline (19) : {r:?}");
         if k > 0 {
             let (m, p) = &icones[k - 1];
-            assert!(r.left() - p.right() >= 1.5, "{quoi} : « {m} » et « {n} » à moins de 2 points : {p:?} {r:?}");
+            // (Partie 179 : les cases se suivent, collées à droite comme celles de la timeline ; les icônes de 13 points y gardent 6
+            // points entre elles.)
+            assert!(r.left() - p.right() >= -0.5, "{quoi} : « {m} » et « {n} » se chevauchent : {p:?} {r:?}");
             assert!(r.center().x - p.center().x >= 19.0 - 0.5, "{quoi} : « {m} » et « {n} » trop serrés : {p:?} {r:?}");
         }
     }
@@ -351,10 +355,12 @@ fn the_option_icons_of_the_track_are_spaced_like_the_timeline_line_at_every_widt
     let a_min = icones_espacees(&mut b, min, "minimum");
     let a_defaut = icones_espacees(&mut b, crate::montagehead::LARGEUR_STORYBOARD, "défaut");
     let a_large = icones_espacees(&mut b, 480.0, "480");
-    assert!(a_defaut >= a_min - 0.5 && a_large >= a_defaut - 0.5, "plus large, plus espacées : {a_min} {a_defaut} {a_large}");
-    assert!(a_defaut >= 19.0 + 6.0, "à la largeur d'origine, nettement plus espacées que les 13 points de 173.5 : {a_defaut}");
-    // Le minimum n'a pas eu à remonter : toutes tiennent à 250 points.
-    assert!((min - crate::pistes::LARGEUR_PISTE_MIN).abs() < 0.5, "{min}");
+    // (Partie 179, Anthony : « Justifie toutes les icônes à droite », « resserrer » : les icônes sont dans les cases de la timeline,
+    // 19 points de centre à centre, collées au bord droit, à toute largeur ; l'écart ne grandit plus avec la colonne.)
+    assert!(a_min >= 19.0 - 0.5 && a_defaut >= 19.0 - 0.5 && a_large >= 19.0 - 0.5, "des cases de 19 : {a_min} {a_defaut} {a_large}");
+    // (Partie 179 : le minimum est maintenant celui de la ligne des boutons, sur une ligne : la lecture, le temps, « Plus… » et la
+    // légende, un peu plus que les 250 points de la piste.)
+    assert!(min >= crate::pistes::LARGEUR_PISTE_MIN - 0.5 && min <= 300.0, "{min}");
 }
 
 /// Les images de la partie 173, à taille réelle (un pixel de l'écran du banc pour un point, aucun agrandissement), dans le dossier
@@ -430,7 +436,7 @@ fn piste_mode_capture() {
     let bande = |b: &mut Banc, nom: &str| {
         b.chauffer(6);
         let g = ou("Largeur de la colonne");
-        println!("CAPTURE {nom} : colonne de {:.0} points, barre sur {} ligne(s)", b.app.montage_head_w, if b.app.barre_montage_sur_deux_lignes() { 2 } else { 1 });
+        println!("CAPTURE {nom} : colonne de {:.0} points, barre sur {} ligne(s)", b.app.montage_head_w, 1);
         sauver(b, nom, Rect::from_min_max(pos2(0.0, g.top() - 2.0), pos2(g.right() + 260.0, g.bottom())));
     };
     bande(&mut b, "173-6-storyboard-largeur-origine.png");

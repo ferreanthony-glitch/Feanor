@@ -29,7 +29,8 @@ fn grands(app: &crate::app::App, lanes: &[Lane]) -> Vec<String> {
         .iter()
         .filter(|l| l.sorte == Sorte::Calque && !l.folded)
         .map(|l| {
-            assert_eq!(l.h, LAYER_H, "un calque déplié a la grande hauteur");
+            // (Partie 179 : la grande hauteur de l'espace où l'on est, Storyboard ou Montage.)
+            assert_eq!(l.h, crate::pistes::Hauteurs::de(app.timeline_du_storyboard()).grande, "un calque déplié a la grande hauteur");
             layers[layer_in_row(layers, l.row).expect("le calque de la rangée")].name.clone()
         })
         .collect()
@@ -106,7 +107,7 @@ fn the_rows_of_the_strip_use_the_height_of_the_panel_when_the_setting_is_on() {
     // Ce que la bande montre sans les pistes de calques, et la place gardée sous elle.
     // (Partie 178 : la disposition de l'espace où l'on est, Storyboard ou Montage, comme `montage_rows`.)
     let r0 = app.montage_rows(0.0);
-    let sans = Rows { block_h: r0.block_h, lanes: Vec::new(), entete: r0.entete, sb: r0.sb }.height(n_son);
+    let sans = Rows { block_h: r0.block_h, lanes: Vec::new(), sb: r0.sb }.height(n_son);
     let haut = sans + SOUS_LA_BANDE + total(&base) + 2.0 * (LAYER_H - FOLDED_H);
     // Dans les essais, le réglage est éteint d'office : les hauteurs fixes d'avant.
     assert!(!app.settings.montage_grands);
@@ -143,7 +144,8 @@ fn on_screen_the_layers_fill_the_strip_without_making_it_scroll() {
     assert!(contenu <= vue + 0.5, "la bande ne défile pas à cause d'eux : {contenu} dans {vue}");
     // La place est prise : il n'en reste pas pour un calque de plus (sauf si tous sont déjà grands).
     if n < 9 {
-        assert!(vue - contenu < (LAYER_H - FOLDED_H) + SOUS_LA_BANDE, "il reste {} points", vue - contenu);
+        let h = crate::pistes::Hauteurs::de(b.app.timeline_du_storyboard());
+        assert!(vue - contenu < (h.grande - h.fine) + SOUS_LA_BANDE, "il reste {} points", vue - contenu);
     }
     // Le calque actif n'a pas changé.
     assert_eq!(b.app.layers()[b.app.cur_layer].name, "V5");

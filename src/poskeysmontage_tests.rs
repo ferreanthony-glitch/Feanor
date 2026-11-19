@@ -491,7 +491,7 @@ fn hit_testing_is_pure_and_cheap_to_call_on_every_frame() {
     // Les blocs des deux plans, comme la bande les pose (`x_of(début) + 1` à `x_of(fin) - 1`).
     let blocks = vec![egui::Rect::from_min_max(pos2(l.x(0) - 5.0, 100.0), pos2(l.x(24) - 7.0, 200.0)), egui::Rect::from_min_max(pos2(l.x(24) - 5.0, 100.0), pos2(l.x(48) - 7.0, 200.0))];
     let top = 0.0;
-    let centre = rows.layers_top() + crate::montagerows::LAYER_H * 0.5;
+    let centre = rows.layers_top() + crate::montagerows::LAYER_H_MONTAGE * 0.5;
     assert_eq!(b.app.montage_pos_key_at(pos2(l.x(10), top + centre), top, &blocks, PPF, &rows), Some((0, 0, 10)));
     assert_eq!(b.app.montage_pos_key_at(pos2(l.x(24 + 9), top + centre), top, &blocks, PPF, &rows), Some((1, 0, 9)));
     assert_eq!(b.app.montage_pos_key_at(pos2(l.x(7), top + centre), top, &blocks, PPF, &rows), None, "entre deux losanges");

@@ -28,6 +28,9 @@ pub(crate) const SYMBOLE: [f32; 2] = [18.0, 16.0];
 /// La largeur d'une icône d'en-tête de rangée, et l'écart de centre à centre.
 const CASE_W: f32 = 18.0;
 const PAS: f32 = 21.0;
+/// Partie 179 : la marge entre la dernière icône d'un en-tête et le bord droit de la rangée (celle des colonnes de la ligne
+/// « Calques », `layerheads::MARGE_COLONNES`).
+const MARGE_DROITE: f32 = 3.0;
 
 /// La forme d'une transition, dans le Storyboard, devient son symbole : un petit rectangle centré sur sa coupe (`left` : l'abscisse
 /// de l'image 0 du film, `ppf` : la largeur d'une image), sans poignées. Elle ne couvre plus les plans.
@@ -96,9 +99,12 @@ impl App {
         crate::bulles::bulle(resp, nom, description, "");
     }
 
-    /// Les cases des icônes d'un en-tête de rangée `r`, de gauche à droite à partir de `x`.
-    fn cases_d_entete(r: Rect, x: f32, n: usize) -> Vec<Rect> {
-        (0..n).map(|k| Rect::from_min_size(pos2(x + k as f32 * PAS, r.top() + 1.0), vec2(CASE_W, (r.height() - 2.0).max(10.0)))).collect()
+    /// Les cases des `n` icônes d'un en-tête de rangée `r`, de gauche à droite, collées au bord droit de la rangée (partie 179,
+    /// Anthony : « Justifie toutes les icônes à droite » : la dernière finit où finissent les colonnes de la ligne « Calques »,
+    /// `layerheads::case_de_colonne`).
+    fn cases_d_entete(r: Rect, n: usize) -> Vec<Rect> {
+        let derniere = r.right() - MARGE_DROITE - CASE_W;
+        (0..n).map(|k| Rect::from_min_size(pos2(derniere - (n - 1 - k) as f32 * PAS, r.top() + 1.0), vec2(CASE_W, (r.height() - 2.0).max(10.0)))).collect()
     }
 
     /// Le mot d'une rangée (« Plans », « Caméra »…) à l'abscisse `x` de `r` ; rend son bord droit.
@@ -116,8 +122,8 @@ impl App {
         child.set_clip_rect(r.intersect(ui.clip_rect()));
         let ui = &mut child;
         let doux = ui.visuals().weak_text_color();
-        let x = Self::mot_d_entete(ui, r, r.left() + 6.0, "Plans", doux) + 6.0;
-        let c = Self::cases_d_entete(r, x, 6);
+        Self::mot_d_entete(ui, r, r.left() + 6.0, "Plans", doux);
+        let c = Self::cases_d_entete(r, 6);
         let mut lancer: Option<&str> = None;
         if self.icone_d_entete(ui, c[0], ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau", true) {
             lancer = Some("panneau.nouveau");
@@ -212,8 +218,8 @@ impl App {
             self.basculer_camera_sb();
         }
         let encre = if camera_seule { ui.visuals().strong_text_color() } else { ui.visuals().text_color() };
-        let x = Self::mot_d_entete(ui, r, plie.right() + 3.0, "Caméra", encre) + 6.0;
-        let c = Self::cases_d_entete(r, x, 4);
+        Self::mot_d_entete(ui, r, plie.right() + 3.0, "Caméra", encre);
+        let c = Self::cases_d_entete(r, 4);
         let ici = self.camera_key_here().is_none();
         let mut lancer: Option<&str> = None;
         let quoi = if ici { "Une clé de caméra à l'image courante : elle se pose sur la ligne de la caméra." } else { "Il y a déjà une clé de caméra à cette image." };
@@ -278,9 +284,12 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("entete_calques_sb"));
         child.set_clip_rect(r.intersect(ui.clip_rect()));
         let ui = &mut child;
+        // (Partie 179 : le clic droit de la ligne, hors d'un bouton, est celui de l'ancienne barre du bas : nouveau calque, coller.)
+        let vide = ui.interact(r, ui.id().with("entete_calques_sb_vide"), Sense::click());
+        self.menu_vide_des_calques(&vide);
         let plie = Rect::from_min_size(pos2(r.left() + 3.0, r.top() + 1.0), vec2(16.0, r.height() - 2.0));
         let (nom, quoi) = if replies {
-            ("Déplier la rangée Calques", "Les pistes des calques du plan courant (le calque actif sur trois rangées).")
+            ("Déplier la rangée Calques", "Les pistes des calques du plan courant (le calque actif sur deux rangées).")
         } else {
             ("Replier la rangée Calques", "Une seule ligne de résumé (les clés de chaque plan) : la timeline laisse plus de place au dessin.")
         };
@@ -290,11 +299,14 @@ impl App {
         }
         let n = self.layers().iter().filter(|l| !l.folder).count();
         let mot = if replies { format!("Calques · {n}") } else { "Calques".to_string() };
-        Self::mot_d_entete(ui, r, plie.right() + 3.0, &mot, ui.visuals().weak_text_color());
+        let apres_le_mot = Self::mot_d_entete(ui, r, plie.right() + 3.0, &mot, ui.visuals().weak_text_color());
+        // Partie 179 (Anthony : la barre du bas de la colonne entourée, une flèche vers cette ligne) : les commandes des calques juste
+        // après « Calques » (`barrecalques.rs`), jusqu'aux icônes des colonnes.
+        let colonnes = if replies { r.right() } else { crate::layerheads::debut_des_colonnes(r.right()) };
+        self.actions_des_calques_en_ligne(ui, r, apres_le_mot + 6.0, colonnes - 4.0);
         if !replies {
-            let haut = Rect::from_min_max(pos2(r.left(), r.top()), pos2(r.right() + 6.0, r.bottom()));
-            // (Les colonnes de la partie 174, alignées sur le bord droit de la colonne, comme dans la timeline de l'Animation.)
-            self.icones_des_colonnes(ui, haut);
+            // (Les colonnes de la partie 174, collées au bord droit de la rangée, au-dessus de celles de la piste active : partie 179.)
+            self.icones_des_colonnes(ui, r);
         }
     }
 

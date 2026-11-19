@@ -29,7 +29,7 @@ const DT: f64 = 1.0 / 60.0;
 const PPF: f32 = 8.0;
 
 /// Trois plans de 24 images : trois calques dessinés, deux, un.
-fn film() -> Document {
+pub(crate) fn film() -> Document {
     let mut doc = doc_with(&[&["Décor", "Perso", "Ombre"], &["Seul", "Fond"], &["Trois"]]);
     for pi in 0..doc.panels.len() {
         for li in 0..doc.panels[pi].layers.len() {
@@ -46,7 +46,7 @@ fn effet(preset: Preset, start: usize, duration: usize) -> Vivant {
 }
 
 /// Un banc dans l'espace Storyboard, à la taille `w` × `h`, les formes gardées.
-fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
+pub(crate) fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
     let mut b = banc_taille(doc, false, w, h);
     b.app.set_espace(Espace::Storyboard);
     b.app.settings.storyboard_camera_depliee = camera_depliee;
@@ -58,16 +58,16 @@ fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
     b
 }
 
-fn blocs() -> Vec<Rect> {
+pub(crate) fn blocs() -> Vec<Rect> {
     crate::storyboard::BLOCS_DU_MONTAGE.with(|b| b.borrow().clone())
 }
 
-fn rangees(b: &Banc) -> Rows {
+pub(crate) fn rangees(b: &Banc) -> Rows {
     b.app.montage_rows(300.0)
 }
 
 /// Le haut de la bande à l'écran (le bloc d'un plan commence 2 points sous le haut de la rangée des plans).
-fn haut(b: &Banc) -> f32 {
+pub(crate) fn haut(b: &Banc) -> f32 {
     blocs()[0].top() - 2.0 - rangees(b).blocks_top()
 }
 
@@ -77,13 +77,13 @@ fn x_image(pi: usize, f: usize) -> f32 {
 }
 
 /// Le seul élément à l'écran dont la bulle est `nom`, dans la bande horizontale `y0..y1` de l'écran.
-fn ou_dans(nom: &str, y0: f32, y1: f32) -> Rect {
+pub(crate) fn ou_dans(nom: &str, y0: f32, y1: f32) -> Rect {
     let v: Vec<Rect> = vus::ou(nom).into_iter().filter(|r| r.center().y > y0 && r.center().y < y1).collect();
     assert_eq!(v.len(), 1, "« {nom} » : un seul entre {y0} et {y1} : {:?} ({:?})", vus::ou(nom), vus::noms());
     v[0]
 }
 
-fn colonne() -> Rect {
+pub(crate) fn colonne() -> Rect {
     let v = vus::ou("Largeur de la colonne");
     assert_eq!(v.len(), 1, "la poignée de la colonne");
     v[0]
@@ -180,8 +180,8 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
     assert!(rows.camera_top() + rows.cam_h() <= rows.calques_top() + 0.01);
     assert!(rows.calques_top() + SB_CALQUES_H <= rows.layers_top() + 0.01);
     // Plus contenue qu'avant (la caméra de 16 au-dessus de plans de 56 : les calques commençaient à 111 points).
-    // (`entete` : la seconde ligne de boutons de la colonne, quand la barre du montage y est sur deux lignes, partie 173.5.)
-    assert!(rows.layers_top() - rows.entete <= 103.5, "le haut des calques : {} (en-tête {})", rows.layers_top(), rows.entete);
+    // (Partie 179 : plus de seconde ligne de boutons, plus de bande sous la règle.)
+    assert!(rows.layers_top() <= 103.5, "le haut des calques : {}", rows.layers_top());
     // À l'écran : les plans, leurs en-têtes et celui de la caméra sur ces rangées.
     let h = haut(&b);
     assert!(blocs().iter().all(|r| (r.height() - (SB_PLAN_H - 2.0)).abs() < 0.6), "des plans de 24 points : {:?}", blocs());

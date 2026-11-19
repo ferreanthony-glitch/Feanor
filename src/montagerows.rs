@@ -29,8 +29,12 @@ use crate::theme;
 pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
 /// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
-/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7).
-pub(crate) const LAYER_H: f32 = 66.0;
+/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7 ;
+/// 66, trois rangées de 22, partie 173.5). Partie 179 (Anthony : « Réduis un peu l'épaisseur des calques ») : dans le Storyboard, 40,
+/// deux rangées de 20 (`pistes::piste_active_head_sb`) ; l'espace Montage garde la sienne (`LAYER_H_MONTAGE`).
+pub(crate) const LAYER_H: f32 = 40.0;
+/// La piste dépliée dans l'espace Montage (trois rangées de 22, partie 173.5), inchangée par la partie 179.
+pub(crate) const LAYER_H_MONTAGE: f32 = 66.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
@@ -112,9 +116,6 @@ pub(crate) struct Rows {
     /// Les pistes de calques visibles, de haut en bas : dépliées ou repliées, sans celles d'un
     /// dossier fermé (`pistes.rs`).
     pub lanes: Vec<Lane>,
-    /// Partie 173.5 : la hauteur que l'en-tête gagne sous la ligne des séquences quand la barre du montage est sur deux lignes en
-    /// tête de la colonne (`montagehead::barre_sur_deux_lignes`) ; 0 sinon.
-    pub entete: f32,
     /// Partie 178 : la disposition de la timeline du Storyboard ; `None` : celle de l'espace Montage.
     pub sb: Option<DispoStoryboard>,
 }
@@ -148,12 +149,12 @@ impl Rows {
         match self.sb {
             // (Partie 178 : la caméra sous les plans.)
             Some(_) => self.blocks_top() + self.block_h + 1.0,
-            None => RULER_H + BANDS_H + self.entete,
+            None => RULER_H + BANDS_H,
         }
     }
     pub fn blocks_top(&self) -> f32 {
         match self.sb {
-            Some(_) => RULER_H + SB_SEQ_H + self.entete,
+            Some(_) => RULER_H + SB_SEQ_H,
             None => self.camera_top() + CAM_H,
         }
     }
@@ -235,27 +236,22 @@ impl App {
         let mut lanes = if replies {
             Vec::new()
         } else {
-            crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis())
+            crate::pistes::lanes_in_h(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis(), crate::pistes::Hauteurs::de(sb.is_some()))
         };
         // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
         // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »). Partie 178, dans le
         // Storyboard : la plus fine possible, toujours (« Les rangées Séquences et plans doivent prendre le moins de place possible »).
         let block_h = if sb.is_some() { SB_PLAN_H } else { self.settings.montage_plans.points() };
-        let entete = if self.barre_montage_sur_deux_lignes() { crate::montagehead::ENTETE_DEUX_LIGNES } else { 0.0 };
+
         if self.settings.montage_grands {
             // Ce que la bande montre en plus des pistes de calques : la règle, les séquences, la caméra, les plans, les pistes son,
             // et la barre de défilement horizontale sous la bande. Le reste est aux calques.
-            let sans_calques = Rows { block_h, lanes: Vec::new(), entete, sb }.height(self.doc.audio_tracks.len());
-            crate::pistes::agrandir(&mut lanes, available - sans_calques - SOUS_LA_BANDE);
+            let sans_calques = Rows { block_h, lanes: Vec::new(), sb }.height(self.doc.audio_tracks.len());
+            crate::pistes::agrandir_h(&mut lanes, available - sans_calques - SOUS_LA_BANDE, crate::pistes::Hauteurs::de(sb.is_some()).grande);
         }
-        Rows { block_h, lanes, entete, sb }
+        Rows { block_h, lanes, sb }
     }
 
-    /// Partie 173.5 : la barre du montage est en tête de la colonne (hors de l'espace Montage) et la colonne est trop étroite pour
-    /// qu'elle tienne sur une ligne : elle est sur deux.
-    pub(crate) fn barre_montage_sur_deux_lignes(&self) -> bool {
-        crate::barres::Barre::du_montage_dans(self.espace) == crate::barres::Barre::Montage && crate::montagehead::barre_sur_deux_lignes(self.montage_head_w)
-    }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
     /// le rend courant.
@@ -422,8 +418,11 @@ impl App {
                 }
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
-            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160) ; les autres, l'œil, la pastille, le nom.
-            if current && !track.folded && track.h >= 3.0 * crate::pistes::RANGEE_ACTIVE {
+            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160 ; trois dans l'espace Montage depuis la
+            // partie 173.5 ; deux de 20 dans le Storyboard depuis la partie 179) ; les autres, l'œil, la pastille, le nom.
+            if current && !track.folded && rows.sb.is_some() && track.h >= 2.0 * crate::pistes::RANGEE_ACTIVE {
+                self.piste_active_head_sb(ui, r, k, color);
+            } else if current && !track.folded && rows.sb.is_none() && track.h >= 3.0 * crate::pistes::RANGEE_MONTAGE {
                 self.piste_active_head(ui, r, k, color);
             } else {
                 self.montage_head(ui, r, k, color, track.folded);

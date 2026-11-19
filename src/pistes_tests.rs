@@ -527,7 +527,7 @@ pub(crate) fn etapes(b: &Banc) -> usize {
 fn only_the_active_layer_is_drawn_tall_with_its_diamonds_and_the_others_are_thin() {
     let mut b = banc_montage();
     let rows = b.app.montage_rows(300.0);
-    assert_eq!(rows.lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "Perso, le calque courant, est seul déplié");
+    assert_eq!(rows.lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [crate::montagerows::LAYER_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE], "Perso, le calque courant, est seul déplié");
     let diamonds = losanges(&b, crate::theme::POIGNEE_CALQUE);
     assert_eq!(diamonds.len(), 3, "trois clés de position de Perso ; celles de Décor et de Fond sont de petits traits : {diamonds:?}");
     assert!(diamonds.iter().all(|d| d.height() > 8.0), "des losanges de piste dépliée");
@@ -543,7 +543,7 @@ fn only_the_active_layer_is_drawn_tall_with_its_diamonds_and_the_others_are_thin
     let avant = y_in(&b, &l, 3, 0.0);
     b.app.set_track_folded(1, false);
     b.chauffer(4);
-    assert!((y_in(&b, &lieu(&b), 3, 0.0) - avant - (LAYER_H - FOLDED_H)).abs() < 0.6, "déplier « Décor » à la main pousse « Vide » vers le bas");
+    assert!((y_in(&b, &lieu(&b), 3, 0.0) - avant - (crate::montagerows::LAYER_H_MONTAGE - crate::pistes::FOLDED_H_MONTAGE)).abs() < 0.6, "déplier « Décor » à la main pousse « Vide » vers le bas");
 }
 
 #[test]
@@ -555,7 +555,7 @@ fn clicking_the_name_of_a_folded_layer_makes_it_active_and_unfolds_it() {
     assert_eq!(b.app.cur_layer, 2, "« Décor » est le rang 2 (de bas en haut : Vide, Fond, Décor, Perso)");
     assert!(!b.app.track_is_folded(1), "Décor se déplie");
     assert!(b.app.track_is_folded(0), "Perso, l'ancien actif, se replie");
-    assert_eq!(b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [FOLDED_H, LAYER_H, FOLDED_H, FOLDED_H]);
+    assert_eq!(b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [crate::pistes::FOLDED_H_MONTAGE, crate::montagerows::LAYER_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE]);
     // Le panneau Calques suit : c'est le même calque courant ; et choisir dans ce panneau déplie la piste.
     b.app.select_layer(1);
     b.chauffer(4);
@@ -595,7 +595,7 @@ fn the_gestures_of_the_timeline_work_on_a_thin_band() {
     b.chauffer(4);
     let l = lieu(&b);
     let before = etapes(&b);
-    let cy = y_in(&b, &l, 0, LAYER_H * 0.5);
+    let cy = y_in(&b, &l, 0, crate::montagerows::LAYER_H_MONTAGE * 0.5);
     glisser(&mut b, pos2(l.x(10), cy), pos2(l.x(11), cy));
     let keys: Vec<usize> = b.app.doc.panels[0].layers[3].pos_keys.iter().map(|k| k.frame).collect();
     assert_eq!(keys, vec![4, 11, 16]);

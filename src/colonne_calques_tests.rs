@@ -185,7 +185,8 @@ fn the_blend_mode_of_the_current_layer_is_written_and_its_list_sets_every_chosen
     let barre = vus::ou("Opacité du calque").into_iter().find(|r| r.center().y > haut && r.center().y < bas).expect("la barre");
     let losange = vus::ou("Créer une clé").into_iter().find(|r| r.center().y > haut && r.center().y < bas).expect("le losange");
     assert!(liste.right() <= barre.left() + 0.5 && barre.right() <= losange.left() + 0.5, "mode, opacité, losange : {liste:?} {barre:?} {losange:?}");
-    assert!(liste.top() >= haut + 38.0, "sur la troisième rangée : {liste:?} / {haut}");
+    // (Partie 179 : la ligne complète sur deux rangées, le mode sur la seconde ; la troisième avant.)
+    assert!(liste.top() >= haut + 19.0, "sur la seconde rangée : {liste:?} / {haut}");
     // Deux calques choisis : un mode de la liste va aux deux, en une étape.
     b.app.layer_sel = vec![b.app.layers()[perso].id, b.app.layers()[ombre].id];
     b.chauffer(2);

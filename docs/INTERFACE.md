@@ -15078,3 +15078,114 @@ glisser (repliée et dépliée) et par clic, comme `ajouter_effet_camera` de l'A
 6. ⊖ Caméra : la ligne seule, un trait jaune sous les préréglages ; glisser un préréglage dessus : il se pose quand même.
 7. ⊖ Calques (ou Maj+Alt+C) : une ligne de résumé ; ⊕ : les pistes ; rouvrir FEANOR : les deux états gardés.
 8. La plus petite fenêtre : rien ne déborde.
+
+## 179. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+
+Anthony a annoté au feutre rouge une capture de la timeline du Storyboard (colonne de 432 points, la barre sur deux lignes) :
+« Bouge les éléments pour resserrer les choses et éviter les pertes d'espace. Réduis un peu l'épaisseur des calques. Justifie toutes
+les icônes à droite. » Ses traits : la seconde ligne de boutons barrée, la place vide à droite du temps hachurée ; les boutons de la
+barre du bas de la colonne entourés, une flèche vers la ligne « ⊖ Calques » ; sur le calque actif, la rangée d'icônes sous le nom
+entourée, une flèche vers la place vide après le nom ; un trait vertical vers 347 points et toute la droite de la colonne hachurée.
+Rien dans le projet (format inchangé) ; l'espace Montage garde sa disposition.
+
+### 179.1 Ce qui change pour lui
+
+**Storyboard**
+
+| | Avant | Maintenant |
+|---|---|---|
+| Barre de la colonne | deux lignes sous 480 points (la seconde ajoutait 28 points sous la règle) | **une ligne**, à toute largeur |
+| Boutons des calques | une barre de 18 points sous la colonne | sur la ligne « ⊖ Calques », juste après le mot |
+| Calque actif | 66 (trois rangées de 22) | **40** (deux rangées de 20) |
+| Autres calques | 17 | **15** |
+| Icônes des colonnes du calque actif | réparties sur la rangée du milieu | **sous leurs icônes de la ligne « Calques »**, collées à droite |
+| Icônes des en-têtes Plans et Caméra | après le mot | **collées à droite** |
+
+1. **La barre en une ligne** : la lecture (début, lire, boucle) et le temps, puis les autres commandes tant qu'il y a la place,
+   « ⋯ » et la légende des clés. Ce qui ne tient pas passe sous « ⋯ » (avec son icône, son nom, son raccourci, son épingle), **les
+   moins utilisées d'abord** : le rang de chaque commande vient de son compteur d'usage (`usage.json` de son poste au 19/11 : nouveau
+   plan 12 clics, déplier / replier toutes les pistes 3, comparer 2 ; nouvelle séquence, Son, importer un son, l'aimantation, les
+   envois : jamais au clic). « Nouveau calque vectoriel » passe le premier sous « ⋯ » : le « + » de la ligne « Calques » fait la même
+   chose juste dessous. Le rang est fixe (la barre ne change pas d'elle-même d'un jour à l'autre).
+   La bande hachurée sous la règle (la seconde ligne) a disparu : les calques remontent de 28 points.
+2. **La ligne « ⊖ Calques »** : ⊖, « Calques », puis + (nouveau calque, son menu), nouveau dossier, calque d'effet (son menu),
+   dupliquer, supprimer, ⋯ (groupes, opérations) ; à droite, les sept icônes des colonnes. Les mêmes bulles, raccourcis et clics
+   droits qu'en bas ; le clic droit dans le vide de la ligne : nouveau calque, coller le calque (c'était celui de la barre du bas).
+   Colonne étroite : supprimer, puis dupliquer, effet, dossier passent en tête de « ⋯ » (le + et « ⋯ » restent).
+   Sous la colonne, plus rien ; le zoom reste à sa place.
+3. **Le calque actif sur deux rangées** : en haut l'œil, la pastille, le nom, puis collés à droite les indicateurs (fx s'il y en a,
+   groupe, sens du pochoir + / −, punaise, maillon s'il est dans d'autres plans) et les colonnes verrou, pelure, transparence,
+   pochoir, aplat, caméra, chacune sous son icône de la ligne « Calques » ; en bas la vignette, « ‹ Normal ▾ › », l'opacité, son
+   losange et le ⋮. L'œil reste à gauche, comme sur les autres calques (pas en double à droite) : la case sous l'œil de la ligne
+   « Calques » reste vide, aucune icône n'est sous une colonne qui n'est pas la sienne. Quand le nom n'aurait plus 44
+   points, les indicateurs descendent sur la seconde rangée, après la vignette.
+
+**Animation** (même sorte de colonne, même traitement) : les commandes des calques montent sur la rangée « ⊖ Calques » (les
+onglets du bas, Notes, Son…, restent à leur place) ; le calque courant passe de trois rangées (60) à deux (40) : ⊖, le nom, les
+indicateurs et les colonnes en haut ; la vignette, le mode, l'opacité, le losange et le ⋮ en bas ; les autres lignes de 22 à 18.
+**La barre de la timeline de l'Animation reste sur deux lignes** : elle a une vingtaine de commandes image par image ; sur une
+ligne, la moitié passerait sous « ⋯ ». À lui de dire s'il la veut aussi sur une ligne.
+
+**Ce qui ne change pas** : l'aspect des blocs de plans et de calques dans la bande (ils suivent seulement la hauteur de leur
+rangée), les couleurs, l'espace Montage (pistes de 66 et 17, sa barre au-dessus de la bande, sa barre des calques en bas).
+
+### 179.2 Le code
+
+- `src/barres.rs` : `barre_dans_la_colonne_serree`, `qui_tient`, `rang_dans_la_barre` (le rang d'usage) ; retirés :
+  `barre_dans_la_colonne` (la ligne à pleine largeur) et la mesure « sur une ligne ».
+- `src/montagehead.rs` : `largeur_min_colonne` (ce qui ne passe jamais sous « ⋯ ») ; retirés : `barre_sur_deux_lignes`,
+  `ENTETE_DEUX_LIGNES`. `src/montagerows.rs` : `Rows::entete` retiré ; `LAYER_H` = 40, `LAYER_H_MONTAGE` = 66.
+- `src/pistes.rs` : `Hauteurs`, `lanes_in_h`, `agrandir_h`, `FOLDED_H` = 15 (`FOLDED_H_MONTAGE` = 17), `RANGEE_ACTIVE` = 20
+  (`RANGEE_MONTAGE` = 22), `piste_active_head_sb`, `indicateur_de_piste` ; `piste_active_head` (trois rangées) reste celle du Montage.
+- `src/barrecalques.rs` : `actions_des_calques_en_ligne`, `plus_des_calques`, `menu_vide_des_calques`.
+- `src/timelinesb.rs` : la ligne « Calques », les icônes des en-têtes collées à droite (`cases_d_entete`).
+- `src/layerheads.rs` : `ROW_FINE` = 18, `ROW_FULL` = 40, la ligne complète sur deux rangées, `indicateur_de_ligne`, la rangée
+  d'en-tête avec les commandes. `src/bottomtabs.rs`, `src/storyboard.rs` : plus de barre des calques en bas (sauf au Montage).
+
+**Les hauteurs, avant → après** : Storyboard, ligne de boutons 2 × 28 → 1 (−28 sous la règle quand la colonne fait moins de 480
+points, comme sa colonne de 432) ; calque actif 66 → 40 (−26) ; chaque autre calque 17 → 15 (−2) ; la barre de 18 points sous la
+colonne disparaît (le zoom reste). Sur la timeline de sa capture (un calque actif, cinq autres, un dossier) : la même timeline fait
+**64 points de moins** (381 → 317 sur les images ci-dessous), dont 36 pour les calques seuls (26 + 5 × 2). Animation : calque courant
+60 → 40, lignes 22 → 18 ; sur six calques, 44 points de moins (342 → 298).
+
+**La largeur la plus petite de la colonne** passe de 250 à 286 points : la lecture, le temps, « ⋯ » et la légende des clés doivent
+tenir sur l'unique ligne (avant, la seconde ligne les séparait). La largeur d'origine (340) et la plus grande (520) ne changent pas.
+
+**Une autre lecture de son dessin** : le trait vertical vers 347 points, avec toute la droite de la colonne hachurée, peut vouloir
+dire « la colonne pourrait s'arrêter là » (c'est à peu près la largeur d'origine, 340 ; sa colonne est réglée à 432). Rien n'est
+forcé : avec tout collé à droite et la barre sur une ligne, la colonne ramenée à 340 (double-clic sur sa poignée) ne perd plus de
+place ; à lui de dire s'il veut que sa largeur revienne d'office à 340.
+
+### 179.3 Les essais
+
+`src/timeline_serree_tests.rs` (lancés d'abord sur le code d'avant : 5 rouges sur 6, le Montage inchangé déjà vert ; verts
+ensuite) : la barre sur une seule ligne à 1920 × 1080 et 960 × 600, colonne d'origine, la plus étroite, 432 et 520, rien de perdu
+(chaque commande sur la ligne ou sous « ⋯ »), les moins utilisées cachées d'abord, plus de bande sous la règle ; les commandes des
+calques sur la ligne « Calques », dans l'ordre, avant les colonnes, et qui marchent (dossier, dupliquer, Ctrl+Z) ; le calque actif
+sur 40 points, les autres sur 15, les indicateurs et les colonnes sur la ligne du nom, chaque colonne sous son icône d'en-tête, le
+mode, l'opacité et le ⋮ dessous ; les icônes collées au même bord droit (piste, « Calques », Plans, Caméra) ; l'espace Montage
+garde ses pistes de 66 / 17 et sa barre du bas ; l'Animation (lignes de 40 et 18, commandes sur la rangée « Calques », une seule
+fois à l'écran, « Nouveau dossier » qui marche) ; la plus petite fenêtre sans débordement ni chevauchement.
+`timeline_serree_179_captures` (ignoré) fait les images (avant / après, même projet, même cadrage).
+
+Changés pour la nouvelle disposition : `avantapres165_tests` (la barre du Storyboard sur une ligne au plus étroit comme au plus large,
+ce qui est sous « ⋯ » n'est plus cherché sur la ligne) ; `piste_mode_tests` (deux rangées ; les boutons qui ne passent jamais sous
+« ⋯ » ; les cases des icônes se suivent à 19 points, sans écart qui grandit avec la colonne : 173.6 est remplacé par « collé à
+droite » ; le minimum de la colonne entre 250 et 300) ; `panneaux_fins_tests` (deux rangées ; la barre d'actions en haut de la
+colonne) ; `panneaux_tests`, `notes_calques_tests` (le « + » et le dossier sur la rangée « Calques ») ; `colonne_calques_tests` (le
+mode sur la seconde rangée) ; `timelinesb_tests`, `calquesplace_tests` (plus de `Rows::entete`) ; `pistes_tests`,
+`poskeysmontage_tests`, `timeline_repliee_tests`, `calquesplace_tests` (les hauteurs du Montage, 66 et 17, quand l'essai est dans
+l'espace Montage).
+
+### 179.4 À tester (sa checklist)
+
+1. Storyboard, colonne à sa largeur : une seule ligne de boutons ; « ⋯ » : ce qui n'y tient pas (avec l'épingle). Plus de bande vide
+   sous la règle.
+2. La ligne « ⊖ Calques » : + (son menu), dossier, effet (son menu), dupliquer, supprimer, ⋯ ; survoler (nom, raccourci) ; clic droit
+   dans le vide de la ligne : nouveau calque, coller.
+3. Le calque actif : le nom, puis dossier, + / −, punaise, puis les colonnes sous leurs icônes ; dessous la vignette, ‹ Normal ▾ ›,
+   100 %, le losange, ⋮. Cliquer chaque colonne : Ctrl+Z.
+4. Les calques sont-ils assez épais pour la main (15 et 40) ? Assez lisibles ?
+5. Tirer la colonne au plus étroit : rien ne déborde, les boutons passent sous les « ⋯ ».
+6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
+7. Montage : rien n'a changé.

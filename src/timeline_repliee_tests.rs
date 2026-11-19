@@ -225,7 +225,9 @@ fn only_the_active_layer_is_unfolded_in_the_storyboard_and_the_montage_but_every
         b.app.set_espace(espace);
         b.chauffer(8);
         let hs: Vec<f32> = b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect();
-        assert_eq!(hs, [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "{espace:?}");
+        // (Partie 179 : les pistes du Storyboard sont moins épaisses ; le Montage garde les siennes.)
+        let h = crate::pistes::Hauteurs::de(espace != Espace::Montage);
+        assert_eq!(hs, [h.grande, h.fine, h.fine, h.fine], "{espace:?}");
     }
     // L'Animation : sa timeline ne lit pas l'état des pistes du montage (partie 160 : le calque courant y a sa ligne complète, les
     // autres une ligne fine).
