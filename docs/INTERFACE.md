@@ -16481,8 +16481,9 @@ version 2). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé
 7. **Une séquence née d'une autre emporte son décor** : « Couper la séquence ici » (la planche des séquences) et « Nouvelle séquence
    avec les plans choisis / les cases choisies » donnent à la séquence neuve (et à la suite d'une séquence coupée en deux) **une copie
    du décor que ses plans montraient** : les mêmes objets aux mêmes places, les mêmes modèles, mais un décor à elle — déplacer un
-   objet de l'une ne touche pas l'autre. FEANOR n'a pas de commande qui duplique ou copie une séquence entière (copier-coller des plans
-   les colle dans la séquence où l'on colle) ; ce sont les deux seules qui font naître une séquence des plans d'une autre.
+   objet de l'une ne touche pas l'autre. FEANOR n'avait pas de commande qui duplique ou copie une séquence entière (copier-coller des
+   plans les colle dans la séquence où l'on colle) ; c'étaient les deux seules qui font naître une séquence des plans d'une autre.
+   Depuis la partie 191, **« Dupliquer la séquence »** en est une troisième : sa copie a aussi une copie indépendante du décor.
 8. **Le budget de cet ordinateur** (partie 181) vaut pour la somme du décor : un collage, une copie ou un envoi qui le ferait dépasser
    est **refusé**, avec un message (« le décor de la séquence aurait N triangles… »). Jamais de ralentissement.
 9. **Supprimer une séquence** (ses plans) garde son décor pour Ctrl+Z, comme avant.
@@ -16545,7 +16546,7 @@ refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests`
 - **Glisser un objet d'une séquence à l'autre** (à la souris) : pas fait ; « Envoyer vers la séquence… » ou Ctrl+X / Ctrl+V le
   remplacent.
 - **Pas de commande « Dupliquer la séquence »** dans FEANOR : rien à faire emporter. `Document::copier_decor_de_sequence` est prêt
-  pour elle.
+  pour elle. (Faite à la partie 191 : `Document::dupliquer_sequence` l'appelle.)
 - **Édition > Copier / Coller (le menu)** ne vise pas les objets : un clic dans le menu est un appui hors du décor (comme pour le
   panneau Calques et le panneau Effets). Les boutons du panneau et les touches les visent.
 - **La main au décor ne se voit pas** (pas de cadre autour de la vue ou du panneau, comme pour le montage) ; la barre d'état dit ce
@@ -16577,9 +16578,142 @@ refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests`
    montrent **le même décor** ; déplace un objet dans la nouvelle : l'ancienne ne bouge pas. Ctrl+Z. De même pour « Nouvelle séquence
    avec les plans choisis ».
 9. Un décor au bout du budget de ton PC : Ctrl+V d'un gros objet y est **refusé** (le message) ; rien ne ralentit.
-## 191. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
 
-(Partie 191, appelée 179 dans les commits de `timeline-serree` : le numéro 179 était pris par « Une timeline plus claire », venue du main de GitHub.)
+## 191. Dupliquer la séquence (2026-11-19, branche `dupliquer-sequence` partie de `main` b27db77, format 61 inchangé)
+
+Le choix d'Anthony (« Dupliquer la séquence »). FEANOR dupliquait un plan (« Dupliquer le plan », Ctrl+Maj+D), copiait et collait
+des plans dans la séquence où l'on colle, coupait une séquence en deux, faisait une séquence des plans choisis, mais **ne savait pas
+dupliquer une séquence entière** (190.1, point 7). Maintenant **« Dupliquer la séquence »** pose, juste après elle, une séquence
+neuve qui en est une **copie indépendante** : ses plans, tout ce qui tient à eux, ses autres versions de séquence et son décor 3D.
+Format du projet inchangé (61) : la copie s'enregistre avec les fichiers de toujours. Compilé et essayé sur le Mac seulement ;
+**rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 191.1 Ce qui change pour Anthony
+
+1. **Où la trouver** — partout où l'on montre une séquence :
+   - le menu **⋯** (« Autres commandes des plans ») de l'en-tête de la timeline du Storyboard, sous « Renommer la séquence… » ;
+   - le **clic droit sur la bande d'une séquence** dans le montage (sous « Nouvelle séquence ») et le menu **⋯** de l'en-tête du
+     montage ;
+   - sur la planche des Vignettes : le **clic droit sur le titre d'une séquence**, sur **son nom dans la liste des séquences**, et le
+     menu « Séquence » du **clic droit sur une case** ;
+   - le menu **Storyboard** de la barre des menus (sous « Nouvelle séquence ») ;
+   - la **palette des commandes** (Ctrl+K) : « Dupliquer la séquence (une copie indépendante, juste après elle) ». **Pas de touche
+     d'origine** (Ctrl+D duplique un dessin, Ctrl+Maj+D le plan ; aucune autre n'est d'usage pour une séquence) : clic droit sur
+     l'entrée de menu > « Assigner un raccourci… » pour en donner une.
+   Depuis un titre ou la liste de la planche, c'est **cette séquence-là** qui est dupliquée ; ailleurs, celle du plan courant.
+2. **Ce qu'elle fait** : une séquence neuve **juste après l'originale** (avant la séquence qui la suivait), avec **les mêmes plans**
+   dans le même ordre — mêmes durées, mêmes noms de plans, mêmes calques et réglages, mêmes dessins au pixel près, même caméra (clés,
+   saccade, effets de caméra, trajectoire), mêmes textes, mêmes couleurs de repère, mêmes marques d'image, mêmes calques de toute la
+   scène. **Elle devient la séquence courante** (son premier plan), comme la copie d'un plan devient le plan courant ; la planche s'y
+   rend. La barre d'état : « Séquence Poursuite dupliquée : sa copie, Poursuite (copie), la suit (2 plans). Ctrl+Z la retire. »
+3. **Une étape d'annulation** (« Dupliquer la séquence ») : Ctrl+Z retire la copie et tout ce qu'elle avait apporté, Ctrl+Y la rend.
+4. **Le nom** : « Poursuite » donne « Poursuite (copie) », puis « Poursuite (copie 2) », « Poursuite (copie 3) »… (la copie d'une
+   copie aussi : jamais deux fois le même nom) ; une séquence **sans nom** donne une copie sans nom, que son numéro automatique
+   distingue. En **numérotation verrouillée**, la copie et ses plans reçoivent des numéros neufs entre leurs voisins (un numéro est
+   unique dans le projet) ; en numérotation suivie, les séquences qui suivent glissent d'un rang, comme pour « Nouvelle séquence ».
+5. **Indépendantes** : retoucher un dessin, un calque, une clé de caméra, un nom de plan ou un objet du décor dans l'une ne touche
+   jamais l'autre.
+6. **Ce qui est copié avec les plans** :
+   - leurs **versions** (V1, V2…, partie 168) : les mêmes numéros, la même version en cours, leurs couleurs de repère, le son posé
+     sous chacune ; passer la copie en V1 laisse l'originale en V2 ;
+   - leurs **commentaires** de la timeline, leur **contenu rogné** (les poignées du rognage) ;
+   - les **transitions** entre deux plans de la séquence ; et **la coupe de sortie** : la transition qui menait de la fin de
+     l'originale à la séquence suivante (ou à la fin du film) est posée à la fin de la copie, qui est maintenant devant elle — le film
+     passe toujours dans la séquence suivante de la même façon. **La coupe entre l'originale et sa copie est franche** ;
+   - les **liens des références** (une référence liée à un plan l'est aussi à sa copie) ;
+   - les **notes et annotations de la planche** attachées à leurs vignettes (à la même place sur la vignette copiée) ;
+   - la **planche-mère** (partie 126, `partage.rs`) : deux calques liés dans la séquence le restent entre leurs copies ; une copie
+     n'est jamais liée à l'original ni à un plan d'une autre séquence (comme « Dupliquer le plan » : lier se demande).
+7. **Les autres versions de la séquence** (A, B…, `variantes.rs`) sont copiées aussi : la copie a les mêmes lettres, la même version
+   choisie, et des copies des plans que ses versions rangées montrent hors du film ; passer la copie à une autre version ne touche
+   pas l'originale.
+8. **Le décor 3D** : une copie indépendante (mêmes objets aux mêmes places, numéros neufs ; **les modèles restent partagés**, rien
+   n'est relu ni renvoyé à la carte graphique, un seul fichier par modèle à l'enregistrement). Une séquence sans décor donne une
+   copie sans décor.
+9. **Refusé** sous le verrou du storyboard, dans un film partagé sans le jeton du montage (comme toute commande du montage), et quand
+   tout le film est écarté (le message de toujours).
+
+### 191.2 Comment c'est fait
+
+- **`dupliquerseq.rs`** (nouveau) : `Document::dupliquer_sequence(seq)` fait toute la copie, `App::sequence_dupliquer(seq)` la
+  passe par `structure_op_dessins` (une étape d'annulation, les sélections soulevées posées d'abord, refus du verrou et du jeton)
+  sous le nom d'étape « Dupliquer la séquence » ; `sequence_dupliquer_courante` sert la commande `sequence.dupliquer`.
+- **Une table de correspondances** (`Correspondances`) suit toute la copie : les scènes, les plans (du film et du garage des
+  versions de séquence), les clés de partage (une neuve par clé d'origine) et **les dessins** — un même dessin n'est copié qu'une
+  fois pour toute la séquence (`duplicate_cel` : les tuiles restent partagées jusqu'à la première retouche), si bien que deux calques
+  qui montraient le même dessin en montrent encore un même, à eux. Les plans sont copiés comme `duplicate_panel` et `copie_de` le
+  font (numéros neufs de plan, de marques, de calques ; griffonnages des calques de couleur ; `relink_copies`), puis
+  `adopt_scene_layers` donne à chaque scène neuve ses calques de toute la scène.
+- **Les scènes** neuves gardent le nom de plan, pas le numéro propre (unique dans le projet : `assign_numbers` en donne un à la fin
+  de `normalize`) ; les scènes des versions rangées de la copie reprennent ensuite le numéro de la même scène du film.
+- **Ce qui tient aux plans** est renuméroté : `versions` (les plans rangés copiés dans la scène de la copie), `reserves` (le calque
+  de chaque pièce suit sa copie, par rang ; dessins, marques et commentaires sortis neufs), `comments`, `transitions` (internes, et
+  celle de la coupe de sortie, `out` sur le dernier plan de la copie ; celle de l'originale reste et ne joue plus tant que ses deux
+  plans ne se suivent pas, `transitions::zones`), `references` (liens ajoutés), `board` (notes attachées) et `annotations` (les traits
+  attachés à une vignette, hors du calque du dessin hors des cases).
+- **Les versions de séquence** (`variantes_de_la_copie`) : le garage d'abord (chaque plan copié avec ses versions, son contenu rogné,
+  ses commentaires), puis chaque version rangée : ses scènes dans la séquence neuve, ses emplacements, ses transitions et ses liens
+  de références sur les plans copiés. Un emplacement qui montre un plan que le film a mis dans une autre séquence le montre toujours
+  (`accorder_au_film` en fera une copie au besoin). `origines` reste vide : les copies ne sont pas des plans d'un envoi.
+- **Les traits** des dessins copiés prennent des numéros neufs (partie 125), **une même table pour toute la copie** : les parts d'un
+  trait réparti sur plusieurs dessins de la séquence en gardent un commun, sans lien avec l'original.
+- **Le décor** : `Document::copier_decor_de_sequence(seq, neuve)` (partie 190). Tout est dans `Structure` : l'instantané de l'étape
+  rétablit tout. Les plans entrent par `insert_and_normalize` à la fin de l'originale ; le nom vient de `nom_de_copie` (la règle des
+  personnages, « (copie) », « (copie 2) »…, coupé à `NOM_MAX`).
+- **Les menus** : `timelinesb.rs`, `storyboard.rs` (la rangée des séquences), `montagerows.rs`, `panels.rs` (menu Storyboard),
+  `planchesequencesui.rs` (titre, liste, menu d'une case) ; la commande dans `keymap.rs` et `keymap.toml` (sans touche).
+
+### 191.3 Essais (`src/dupliquerseq_tests.rs`, 13)
+
+La copie juste après l'originale et avant la suivante, courante sur son premier plan, mêmes plans (durées, noms, caméra, couleurs,
+calques et réglages, dessins au pixel près, numéros et dessins neufs), le message ; **une étape d'annulation** (Ctrl+Z retire plans,
+séquence, scènes, transitions, versions, commentaires et décor ; Ctrl+Y rend les mêmes plans) ; **l'indépendance** après un trait
+dans un dessin (dans les deux sens), un réglage et un nom de calque, une clé de caméra, un objet du décor déplacé, un nom de plan ; le
+décor copié (autre `uid`, numéros neufs, **le même `Arc` de modèle**, mêmes places) ; une séquence sans décor et sans nom (pas de
+décor, pas de nom, un autre numéro) ; deux copies, deux noms, la copie d'une copie, un nom au bout de la longueur ; les **versions des
+plans** (mêmes numéros, plans rangés dans la scène de la copie, dessins à eux ; passer la copie en V1 laisse l'originale en V2) ; les
+**transitions** (celle du milieu, celle de la sortie, aucune entre l'originale et la copie ; trois jouent), les commentaires, le
+contenu rogné, la référence liée aux quatre plans, la note et l'annotation de la planche ; la **planche-mère** (liés entre copies sous
+une clé neuve, mêmes dessins entre elles, rien avec l'original ni l'autre séquence) ; les **versions de séquence** (mêmes lettres, un
+garage à elle, les emplacements de la version partagée sur les plans de la copie, passer la copie à B puis à A, l'originale
+immobile) ; la **numérotation verrouillée** (numéros de plans et de séquences tous uniques) ; la commande (palette, bloc dans
+`keymap.toml` sans touche, refus sous le verrou du storyboard) ; **l'enregistrement** (un seul fichier pour le modèle des deux bancs,
+relu sans avertissement : six plans, le nom, les dessins au pixel près, le modèle partagé, versions, transitions, commentaires, et les
+deux garages des versions de séquence avec leurs dessins).
+Le reste des essais : les 90 échecs connus du Mac, aucun neuf.
+
+### 191.4 Ce qui n'est pas fait (ou limité)
+
+- **Le son ne se copie pas** : les pistes sont en temps du montage et ne bougent avec aucun plan (comme pour « Dupliquer le plan ») ;
+  le son posé sous l'originale reste où il est, la copie arrive sans son, et ce qui suit est décalé de sa durée par rapport au son.
+- **Les plans écartés** de la séquence (partie 115) restent à l'originale ; la corbeille, les envois, les sons proposés aussi.
+- **La transition d'entrée** de l'originale (depuis la séquence d'avant) n'est pas reprise sur la coupe originale → copie, qui reste
+  franche ; celle de la sortie de l'originale est gardée, endormie (elle rejoue si la copie part ailleurs).
+- **Les annotations** au rang de secours (`Ancre::rank`) gardent celui de l'original : il ne sert que si la vignette copiée disparaît.
+- Une séquence **très lourde** se copie en une fois (les dessins sont des copies légères tant qu'on n'y touche pas, mais chaque plan,
+  chaque version, chaque note est recopié) ; pas mesuré sur un vrai film.
+- **Pas de touche** d'origine (aucune n'est d'usage) ; pas de « Dupliquer la séquence » dans la liste du panneau Espace 3D (rien à y
+  voir).
+
+### 191.5 À essayer (sa checklist)
+
+1. Sur un projet de copie : une séquence nommée « Poursuite », deux ou trois plans dessinés, une caméra animée, une V2 sur un plan, un
+   commentaire, un fondu enchaîné entre deux plans et un fondu au noir à la sortie, un décor 3D (deux objets de la banque).
+2. Timeline du Storyboard, menu **⋯** > **« Dupliquer la séquence »** : « Poursuite (copie) » arrive juste après, avec les mêmes
+   plans ; elle est courante. Lis le film : les deux séquences sont identiques, la coupe entre elles est franche, le fondu au noir est
+   à la fin de la copie.
+3. Dans la copie : un trait, l'opacité d'un calque, une clé de caméra, un objet du décor déplacé. Reviens à l'originale : rien n'a
+   bougé. Et l'inverse.
+4. **Ctrl+Z** : la copie disparaît d'un coup (plans, décor, commentaires) ; **Ctrl+Y** : elle revient.
+5. Planche des Vignettes : clic droit sur le titre « Poursuite » > « Dupliquer la séquence » : « Poursuite (copie 2) » ; puis depuis
+   la liste des séquences ; puis le menu d'une case. Clic droit sur la bande d'une séquence dans le montage, et le menu Storyboard.
+6. Sur la V2 de la copie, « Passer à la version » V1 : l'originale reste en V2.
+7. Une séquence qui a deux versions de séquence (A, B) : duplique-la, passe la copie de A à B : l'originale ne bouge pas.
+8. Enregistre, ferme, rouvre : les deux séquences, leurs dessins, leurs décors ; dans `decors/`, un seul fichier par modèle.
+9. Ctrl+K, « dupliquer la séquence » : la commande est là ; donne-lui une touche par clic droit sur l'entrée de menu si tu veux.
+## 192. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+
+(Partie 192, appelée 179 dans les commits de `timeline-serree` : le numéro 179 était pris par « Une timeline plus claire », venue du main de GitHub.)
 
 Anthony a annoté au feutre rouge une capture de la timeline du Storyboard (colonne de 432 points, la barre sur deux lignes) :
 « Bouge les éléments pour resserrer les choses et éviter les pertes d'espace. Réduis un peu l'épaisseur des calques. Justifie toutes
@@ -16588,7 +16722,7 @@ barre du bas de la colonne entourés, une flèche vers la ligne « ⊖ Calques �
 entourée, une flèche vers la place vide après le nom ; un trait vertical vers 347 points et toute la droite de la colonne hachurée.
 Rien dans le projet (format inchangé) ; l'espace Montage garde sa disposition.
 
-### 191.1 Ce qui change pour lui
+### 192.1 Ce qui change pour lui
 
 **Storyboard**
 
@@ -16629,7 +16763,7 @@ ligne, la moitié passerait sous « ⋯ ». À lui de dire s'il la veut aussi su
 **Ce qui ne change pas** : l'aspect des blocs de plans et de calques dans la bande (ils suivent seulement la hauteur de leur
 rangée), les couleurs, l'espace Montage (pistes de 66 et 17, sa barre au-dessus de la bande, sa barre des calques en bas).
 
-### 191.2 Le code
+### 192.2 Le code
 
 - `src/barres.rs` : `barre_dans_la_colonne_serree`, `qui_tient`, `rang_dans_la_barre` (le rang d'usage) ; retirés :
   `barre_dans_la_colonne` (la ligne à pleine largeur) et la mesure « sur une ligne ».
@@ -16656,7 +16790,7 @@ dire « la colonne pourrait s'arrêter là » (c'est à peu près la largeur d'o
 forcé : avec tout collé à droite et la barre sur une ligne, la colonne ramenée à 340 (double-clic sur sa poignée) ne perd plus de
 place ; à lui de dire s'il veut que sa largeur revienne d'office à 340.
 
-### 191.3 Les essais
+### 192.3 Les essais
 
 `src/timeline_serree_tests.rs` (lancés d'abord sur le code d'avant : 5 rouges sur 6, le Montage inchangé déjà vert ; verts
 ensuite) : la barre sur une seule ligne à 1920 × 1080 et 960 × 600, colonne d'origine, la plus étroite, 432 et 520, rien de perdu
@@ -16677,7 +16811,7 @@ mode sur la seconde rangée) ; `timelinesb_tests`, `calquesplace_tests` (plus de
 `poskeysmontage_tests`, `timeline_repliee_tests`, `calquesplace_tests` (les hauteurs du Montage, 66 et 17, quand l'essai est dans
 l'espace Montage).
 
-### 191.4 À tester (sa checklist)
+### 192.4 À tester (sa checklist)
 
 1. Storyboard, colonne à sa largeur : une seule ligne de boutons ; « ⋯ » : ce qui n'y tient pas (avec l'épingle). Plus de bande vide
    sous la règle.
@@ -16690,7 +16824,7 @@ l'espace Montage).
 6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
 7. Montage : rien n'a changé.
 
-### 191.5 Sa demande sur la capture d'après 179
+### 192.5 Sa demande sur la capture d'après 179
 
 Sur la capture du Storyboard après 179, Anthony a entouré, sur la ligne « ⊖ Calques », le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯, tracé une flèche vers la droite jusqu'aux icônes des colonnes (œil, verrou, pelure, transparence, pochoir, aplat,
@@ -16699,7 +16833,7 @@ taille que sur le reste des autres lignes. Pareil pour les icônes de l'interfac
 icônes doivent avoir cette taille. La taille des icônes et de l'interface doit être réglable dans les préférences. »
 Rien dans le projet (format inchangé, 60).
 
-### 191.6 Ce qui a bougé
+### 192.6 Ce qui a bougé
 
 **La ligne « ⊖ Calques »** (Storyboard et Animation) : ⊖ et « Calques » restent à gauche ; le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯ est **collé au bord droit**, à la place des icônes des colonnes, au même bord que le ⋯ des lignes Plans et Caméra. Le
@@ -16733,7 +16867,7 @@ réglage et quelques icônes de ses pistes (`layerheads::icon_at`, `case_de_regl
 Barre de lecture : les commandes qui passent sous « ⋯ » sont maintenant strictement les moins utilisées (avant, un trait de groupe
 pouvait faire entrer une commande moins utilisée à la place d'une plus utilisée).
 
-### 191.7 Les réglages
+### 192.7 Les réglages
 
 Préférences > Apparence > **Tailles** (le groupe s'appelait « Taille de l'interface ») :
 
@@ -16748,7 +16882,7 @@ Le code : `src/tailleicones.rs` (la taille en cours, `mesure`, `case_de_barre`, 
 droite) ; `layerheads::case_de_reglage_en` (l'icône pâle), `icon_w` ; `icones_des_colonnes` retirée ; `timeline::LIGNE1_H` /
 `LIGNE2_H` = 24.
 
-### 191.8 Les essais
+### 192.8 Les essais
 
 `src/tailleicones_tests.rs` (lancés d'abord sur le code d'avant : 8 rouges sur 9 ; le neuvième, l'écriture du réglage, était déjà
 vert, le champ ayant été ajouté avant ; verts ensuite) : la ligne « Calques » sans icônes des colonnes, ses commandes collées à droite
@@ -16768,7 +16902,7 @@ et le « ⋯ » des calques, collé à son bord, passait au-dessus de « Notes �
 Vérificateur (`-Repetitions 2`) : RESULTAT : OK, 4938 essais à chaque passage, aucun intermittent. Captures (banc headless, taille
 réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179b-6-preferences-tailles.png`.
 
-### 191.9 À tester (sa checklist)
+### 192.9 À tester (sa checklist)
 
 1. Storyboard : la ligne « ⊖ Calques » : « Calques » à gauche, +, dossier, effet, dupliquer, supprimer, ⋯ à droite ; plus d'icônes
    de colonnes dessus.
@@ -16781,7 +16915,7 @@ réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179
 6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
 7. Montage : rien n'a changé.
 
-### 191.10 Le repli du calque actif devient une option
+### 192.10 Le repli du calque actif devient une option
 
 Anthony : « Ok maintenant je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille que l'on
 soit sur le calque actif ou non. Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur effet
@@ -16790,7 +16924,7 @@ et opacité. »
 **D'origine**, le calque actif a la hauteur des autres : une ligne de 15 points dans le Storyboard, 18 dans l'Animation. Il reste
 surligné (son cadre) ; dans le Storyboard, ses réglages (verrou, pelure, transparence, pochoir, aplat, caméra) sont en icônes collées
 à droite, pâles quand ils sont éteints, un clic les bascule (mêmes bulles, Ctrl+Z) ; dans l'Animation, la ligne du calque courant
-les avait déjà (191.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
+les avait déjà (192.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
 que si le calque actif se déplie).
 
 **Où sont le mode et l'opacité** quand le calque est replié : clic droit sur sa piste (ou sa ligne dans l'Animation) > Apparence
@@ -16815,7 +16949,7 @@ Le code : `settings.rs` (`deplier_calque_actif`), `pistes.rs` (`pistes_auto_open
 rouges sur 6 ; l'essai d'alignement, mesuré d'abord à la boîte, était vert : il mesure maintenant l'encre). Le banc d'essai
 (`perf_tests::banc_taille`) allume le réglage pour les essais d'avant, qui décrivent le calque déplié.
 
-### 191.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
+### 192.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
 
 Anthony : « C'est vrai qu'il manque une ligne de séquence. La ligne des icônes de lecture se placerait au-dessus de tout dans ce
 cas. »
@@ -16838,7 +16972,7 @@ Le code : `montagerows.rs` (`SB_SEQ_H` = 20, `sb_regle_h`, `Rows::regle_h`), `st
 `timelinesb.rs` (`entete_sequences_sb`), `barres.rs` (`HORS_DE_LA_BARRE_DE_LECTURE`). Essais : `src/ligne_sequence_tests.rs` (5
 rouges sur le code d'avant, verts ensuite).
 
-### 191.12 À tester (sa checklist)
+### 192.12 À tester (sa checklist)
 
 1. Storyboard : tous les calques de la même hauteur ; le calque actif surligné, ses réglages en icônes à droite ; clic droit >
    Apparence pour le mode et l'opacité.
@@ -16849,7 +16983,7 @@ rouges sur le code d'avant, verts ensuite).
 5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
 6. Montage : rien n'a changé.
 
-### 191.13 Tous les calques épais d'origine, la hauteur de chaque ligne
+### 192.13 Tous les calques épais d'origine, la hauteur de chaque ligne
 
 Anthony, sur la capture du calque déplié (deux rangées de 20 points) : « Il faut que tous les calques aient cette épaisseur de base.
 Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan, caméra, calques. »
@@ -16863,7 +16997,7 @@ courant). **Les dossiers** gardent leur ligne fine (13 points dans le Storyboard
 mode ; leur opacité est au clic droit (Apparence). Dans l'Animation, un dossier courant avait avant sa ligne de 40 (son opacité) :
 il garde maintenant la ligne fine, comme les autres.
 
-**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 191.10, éteint d'origine, clé `replier_calques` ; un
+**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 192.10, éteint d'origine, clé `replier_calques` ; un
 ancien `deplier_calque_actif` n'est pas repris) met tous les calques sur une ligne fine (15 points dans le Storyboard, 18 dans
 l'Animation), le calque actif avec ses réglages en icônes à droite. Mêmes places : le ⋯ de la ligne « Calques », Préférences >
 Montage > Pistes du montage, ⊖ / ⊕ et Maj+Alt+C dans l'Animation.
@@ -16888,7 +17022,7 @@ Le code : `src/hauteurstimeline.rs` (hauteurs, couleurs, la page des Préférenc
 `sb_cam_h`, `calques_du_storyboard`), `pistes.rs` (la piste de chaque calque, `regler_replier_calques`), `layerheads.rs`,
 `opacitecleselui.rs` (`losange_opacite_de`), `settings.rs`.
 
-### 191.14 La couleur de chaque ligne
+### 192.14 La couleur de chaque ligne
 
 Anthony : « Ajoute aussi dans les réglages la possibilité de donner une couleur à chaque ligne. »
 
@@ -16902,9 +17036,9 @@ recalculé) : une couleur claire éclaircit un peu le fond, sans le rendre blanc
 couleur d'étiquette d'un calque et les teintes des versions de plan gardent les leurs. Dans l'espace Montage, rien n'est teinté (le
 code des en-têtes et des rangées est partagé : la teinte n'y joue que pour la disposition du Storyboard).
 
-Essais (191.13 et 191.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
+Essais (192.13 et 192.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
 
-### 191.15 À tester (sa checklist)
+### 192.15 À tester (sa checklist)
 
 1. Storyboard : tous les calques sur deux rangées ; changer de calque actif : rien ne bouge, il est surligné.
 2. Sur un calque qui n'est pas l'actif : son mode, son opacité ; avec deux calques choisis (Ctrl + clic) : les deux.
@@ -16914,7 +17048,7 @@ Essais (191.13 et 191.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calq
 5. Animation : tous les calques sur leur ligne complète, les dossiers fins.
 6. Montage : rien n'a changé.
 
-### 191.16 Trois indicateurs en moins sur la ligne des calques
+### 192.16 Trois indicateurs en moins sur la ligne des calques
 
 Anthony, sur les trois indicateurs de la rangée 1 d'un calque (le dossier du groupe de couleur, le + / − du sens du pochoir, la
 punaise de la position verrouillée) : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit ».
@@ -16932,10 +17066,10 @@ punaise de la position verrouillée) : « Non supprime les carrément. Ça sera 
 Essais : `src/indicateurs_tests.rs` (3 rouges sur le code d'avant, verts ensuite) ; adaptés : ceux qui cherchaient « Pochoir
 positif » ou « Verrouiller la position » sur la ligne du calque.
 
-(La checklist de la partie 191.15 ci-dessus vaut pour 191.13 et 191.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
+(La checklist de la partie 192.15 ci-dessus vaut pour 192.13 et 192.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
 de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)
 
-### 191.17 Des listes déroulantes, alignées
+### 192.17 Des listes déroulantes, alignées
 
 Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les » ; puis : « pour le choix des valeurs dans réglages,
 propose plutôt un menu déroulant plutôt que plusieurs boutons. on gagnera de l'espace ».

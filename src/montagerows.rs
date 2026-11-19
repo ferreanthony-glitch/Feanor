@@ -547,13 +547,14 @@ impl App {
             self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
             ui.separator();
             self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+            self.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
             ui.separator();
             self.action_item(ui, if locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" }, "storyboard.verrouiller");
         });
         let aide = if locked {
             "Le storyboard est verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus. Ce menu le déverrouille."
         } else {
-            "Nouveau plan avant, dupliquer, supprimer, nouvelle séquence, verrouiller le storyboard. Aussi au clic droit sur un plan."
+            "Nouveau plan avant, dupliquer, supprimer, nouvelle séquence, dupliquer la séquence, verrouiller le storyboard. Aussi au clic droit sur un plan."
         };
         crate::bulles::bulle(menu.response, "Plans", aide, "");
         let title = self.doc.properties.title.trim().to_string();

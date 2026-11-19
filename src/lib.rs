@@ -859,6 +859,10 @@ mod sequencesnoms_tests;
 mod sequenceplans;
 #[cfg(test)]
 mod sequenceplans_tests;
+// Dupliquer la séquence : une copie indépendante juste après elle (partie 191).
+mod dupliquerseq;
+#[cfg(test)]
+mod dupliquerseq_tests;
 // Fusionner deux plans en glissant l'un sur l'autre dans le montage.
 mod fusionglisse;
 #[cfg(test)]

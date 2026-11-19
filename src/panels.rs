@@ -186,6 +186,7 @@ impl App {
             if menu_actif(ui, sans_projet, "Storyboard") { ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                self.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
                 ui.separator();
                 ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");

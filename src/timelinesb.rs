@@ -140,7 +140,9 @@ impl App {
                 app.variantes_menu_contenu(ui, seq);
             });
         }
-        self.menu_d_entete(ui, c[3], ph::DOTS_THREE, "Autres commandes des séquences", "Nouvelle séquence avec les plans choisis, couper la séquence au plan courant. Aussi au clic droit sur une séquence.", |app, ui| {
+        self.menu_d_entete(ui, c[3], ph::DOTS_THREE, "Autres commandes des séquences", "Dupliquer la séquence, nouvelle séquence avec les plans choisis, couper la séquence au plan courant. Aussi au clic droit sur une séquence.", |app, ui| {
+            // (Fusion du 20 novembre : « Dupliquer la séquence », partie 191 de la session du décor 3D, a sa place ici aussi.)
+            app.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
             app.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
             app.action_item(ui, "Couper la séquence ici (le plan courant la commence)", "sequence.couper_ici");
         });
@@ -203,6 +205,7 @@ impl App {
             ui.separator();
             app.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
             app.action_item(ui, "Renommer la séquence…", "sequence.renommer");
+            app.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
             ui.separator();
             app.action_item(ui, "Réglages du projet…", "projet.proprietes");
             app.action_item(ui, if app.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" }, "storyboard.verrouiller");

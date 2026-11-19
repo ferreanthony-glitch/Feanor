@@ -275,6 +275,10 @@ impl App {
             ui.close_menu();
             self.sequence_renommer_ouvrir(seq);
         }
+        if ui.button("Dupliquer la séquence").clicked() {
+            ui.close_menu();
+            self.sequence_dupliquer(seq);
+        }
         ui.separator();
     }
 
@@ -403,6 +407,7 @@ impl App {
         let mut va_a: Option<u64> = None;
         let mut a_basculer: Option<u64> = None;
         let mut a_renommer: Option<u64> = None;
+        let mut a_dupliquer: Option<u64> = None;
         for &(id, montree) in &liste {
             let n = ids.iter().filter(|&&q| q == id).count();
             let nom = self.doc.sequence_label(id);
@@ -433,6 +438,10 @@ impl App {
                             ui.close_menu();
                             a_renommer = Some(id);
                         }
+                        if ui.button("Dupliquer la séquence").clicked() {
+                            ui.close_menu();
+                            a_dupliquer = Some(id);
+                        }
                     });
                     if resp.dragged() {
                         self.vignettes.seq_glisse = Some(id);
@@ -454,6 +463,9 @@ impl App {
         }
         if let Some(id) = a_renommer {
             self.titre_ouvrir_fenetre(id);
+        }
+        if let Some(id) = a_dupliquer {
+            self.sequence_dupliquer(id);
         }
         if let Some(id) = va_a {
             if let Some(i) = ids.iter().position(|&q| q == id) {
@@ -494,5 +506,6 @@ impl App {
         self.action_item(ui, &texte, "sequence.nouvelle_avec_cases");
         self.action_item(ui, "Couper la séquence ici", "sequence.couper_ici");
         self.action_item(ui, "Renommer la séquence…", "sequence.renommer");
+        self.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
     }
 }

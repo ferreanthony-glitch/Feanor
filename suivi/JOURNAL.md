@@ -5,6 +5,19 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Dupliquer la séquence** (partie 191, branche `dupliquer-sequence` partie de `main` b27db77, format 61 inchangé), le choix
+  d'Anthony (« Dupliquer la séquence »). Une commande neuve, `sequence.dupliquer`, sans touche d'origine (aucune n'est d'usage) :
+  menu ⋯ de la timeline du Storyboard, clic droit sur la bande d'une séquence du montage et menu ⋯ de son en-tête, titre et liste
+  des séquences de la planche, menu « Séquence » d'une case, menu Storyboard, palette Ctrl+K. **Juste après l'originale**, une
+  séquence neuve qui en est une **copie indépendante** : mêmes plans (durées, noms, calques, dessins au pixel près, caméra, textes,
+  couleurs), avec leurs **versions** (partie 168), commentaires, contenu rogné, transitions internes, liens des références, notes et
+  annotations de la planche ; **la coupe de sortie** garde sa transition (posée à la fin de la copie), la coupe originale → copie est
+  franche ; les **autres versions de la séquence** (A, B…) avec un garage à elle ; **le décor 3D** copié par
+  `copier_decor_de_sequence` (partie 190), les modèles partagés ; la planche-mère liée entre copies sous une clé neuve, jamais avec
+  l'original. Nom « Poursuite (copie) », puis « (copie 2) »… ; sans nom, sans nom. Une étape d'annulation ; la copie devient la
+  séquence courante. Pas copiés : le son (en temps du montage), les plans écartés. Essais : 13 nouveaux ; les 90 échecs connus du Mac, aucun neuf ; la version optimisée se construit. Compilé et
+  essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste 191.5).
+
 - **Copier les objets du décor 3D** (partie 190, branche `copier-decor` partie de `main` 4481e66, format 61 inchangé), le choix
   d'Anthony (« Copier les objets du décor »). Après un clic dans la vue Espace 3D ou dans le décor du panneau, **Ctrl+C, Ctrl+X,
   Ctrl+V** (les commandes de toujours) visent les objets du décor choisis : collés dans la même séquence, **à côté** ; ailleurs (une
