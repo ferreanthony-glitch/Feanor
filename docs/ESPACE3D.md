@@ -304,3 +304,14 @@ vue), jamais refait par le processeur quand la caméra bouge ; un **budget mesur
 ce qu'un décor peut peser sans ralentir, et un décor trop lourd est allégé ou simplifié (la copie du projet seulement), jamais
 accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes, les ombres
 portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront ensuite.
+
+**Partie 181 (2026-11-19, branche `banque-3d`)** : le décor d'une séquence est une **liste d'objets** (`Objet3d` : un modèle, une
+place, une **origine** — le point que la position place, autour duquel il tourne et change d'échelle, d'office le centre du dessous
+de sa boîte — et « Aimanté au sol », `decor3daimant.rs` : la hauteur calculée, posée sur le sol ou sur les objets sous lui, sans
+pénétration). Importer un fichier ou prendre un modèle de la **banque 3D** (45 modèles CC0 de Kenney, rangés dans le programme,
+onglet « 3D » de la Bibliothèque) ajoute un objet, par le même chemin (budget de la machine pour **la somme** des objets, fenêtre
+« Ce décor est lourd », ou refus). Les objets d'un même contenu partagent un modèle : un fichier `decors/<empreinte>.glb`, une
+lecture, un envoi à la carte. Tous les objets sont dans le même tampon de profondeur (justes entre eux), toujours derrière les
+cartes. `decors3d.json` passe en version 2 ; un fichier de la partie 180 se lit comme un objet, à la même place. L'origine
+modifiable et l'aimant viendront aussi aux calques dessinés (chantier suivant, avec un repère d'origine dans la vue partagé par les
+deux) ; `docs/INTERFACE.md`, partie 181.

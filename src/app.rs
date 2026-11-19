@@ -5940,6 +5940,7 @@ impl App {
             self.poll_brushes();
             self.poll_bruitages(ctx);
             self.poll_bibliotheque(ctx);
+            self.poll_banque3d(ctx);
             self.poll_suggestions(ctx);
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);

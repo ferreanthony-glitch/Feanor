@@ -429,6 +429,13 @@ pub mod decor3dgpu;
 pub mod decor3drendu;
 pub mod decor3dsimplifier;
 mod decor3dui;
+pub mod decor3daimant;
+// La banque 3D (partie 181) : 45 modèles CC0 de Kenney, rangés dans le programme, montrés dans la Bibliothèque.
+pub mod banque3d;
+mod banque3dfichiers;
+mod banque3dui;
+#[cfg(test)]
+mod banque3d_tests;
 #[cfg(test)]
 mod decor3d_tests;
 mod brossesdediees;

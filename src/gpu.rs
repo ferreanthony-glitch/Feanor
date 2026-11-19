@@ -573,7 +573,9 @@ struct CanvasResources {
 /// Un décor 3D à dessiner dans sa texture (la feuille vue de l'œil de la caméra) avant la composition.
 struct DecorJob {
     out: CelId,
-    dessin: crate::decor3dgpu::Dessin,
+    /// Un dessin par objet du décor (partie 181) ; les objets d'un même modèle partagent ce qui est dans la carte.
+    dessins: Vec<crate::decor3dgpu::Dessin>,
+    ciel: bool,
     prise: crate::decor3drendu::Prise,
     taille: [u32; 2],
     qualite: crate::decor3dbudget::Qualite,
@@ -1902,7 +1904,7 @@ impl CallbackTrait for CanvasPaint {
             if let Some(res) = resources.get_mut::<CanvasResources>() {
                 for j in jobs {
                     let Some(view) = res.textures.get(&j.out).map(|t| t.texture.create_view(&Default::default())) else { continue };
-                    moteur.dessiner_feuille(device, queue, encoder, j.out, std::slice::from_ref(&j.dessin), &j.prise, j.taille, &view, j.dessin.aspect.ciel, j.qualite);
+                    moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, j.ciel, j.qualite);
                     if let Some(state) = res.textures.get_mut(&j.out).and_then(|t| t.fx.as_mut()) {
                         state.done = j.sig;
                     }
@@ -2255,13 +2257,15 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
 }
 
 /// La texture du décor 3D de la clé `key` (`decor3d.rs`) : une par décor, de la taille de la feuille, redessinée par la carte
-/// quand la clé change (la caméra a bougé) — jamais remplie par le processeur. Rien : le modèle n'est plus dans le projet.
+/// quand la clé change (la caméra ou un objet a bougé) — jamais remplie par le processeur. Rien : le décor a changé depuis la
+/// clé, ou n'est plus dans le projet.
 #[allow(clippy::too_many_arguments)]
 fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key: &crate::decor3d::DecorCle, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
-    let (modele, aspect) = crate::decor3d::modele(doc, key.modele)?;
+    let objets = crate::decor3d::objets_de(doc, key)?;
+    let aspect = key.aspect;
     let prise = key.prise()?;
-    let out = crate::decor3d::id_texture(key.modele);
-    let qualite = if aspect.ombres { crate::decor3d::qualite(&modele.scene) } else { crate::decor3dbudget::Qualite::Sans };
+    let out = crate::decor3d::id_texture(key.decor);
+    let qualite = if aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
     let sig = crate::decor3d::id_of(key) ^ (qualite as u64) << 1;
     let want = [0, 0, sheet.0, sheet.1];
     if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.rect == want) {
@@ -2285,8 +2289,8 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
     }
     if entry.fx.is_some_and(|s| s.done != sig) {
         res.decor_jobs.retain(|j| j.out != out);
-        let dessin = crate::decor3dgpu::Dessin { id: key.modele, scene: modele.scene.clone(), matrice: key.pose, aspect };
-        res.decor_jobs.push(DecorJob { out, dessin, prise, taille: [sheet.0, sheet.1], qualite, sig });
+        let dessins = crate::decor3d::dessins_gpu(&objets, aspect);
+        res.decor_jobs.push(DecorJob { out, dessins, ciel: aspect.ciel, prise, taille: [sheet.0, sheet.1], qualite, sig });
     }
     Some(out)
 }

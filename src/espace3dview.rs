@@ -154,7 +154,7 @@ impl App {
     }
 
     /// La vue d'édition, ou la vue de la caméra du plan.
-    fn e3_view(&self, draw: Rect) -> View {
+    pub(crate) fn e3_view(&self, draw: Rect) -> View {
         if self.espace3d.through_camera {
             self.e3_world().scene_cam(&self.current_camera()).view(draw.width())
         } else {

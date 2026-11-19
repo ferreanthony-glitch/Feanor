@@ -198,11 +198,12 @@ fn lire_texture(t: &Texture3d, u: f32, v: f32) -> [f32; 4] {
 }
 
 /// Un triangle prêt : sommets (x, y en échantillons, 1/z), normales et coordonnées de texture divisées par z (interpolation
-/// juste en perspective), sa primitive.
+/// juste en perspective), son objet (partie 181 : un décor en a plusieurs) et sa primitive.
 struct Tri {
     p: [[f32; 3]; 3],
     n: [V3; 3],
     uv: [[f32; 2]; 3],
+    obj: u32,
     prim: u32,
     y: (f32, f32),
 }
@@ -224,12 +225,12 @@ fn clip_proche(poly: &[(V3, V3, [f32; 2])], proche: f32) -> Vec<(V3, V3, [f32; 2
     out
 }
 
-fn triangles(scene: &Scene3d, matrice: &M4, o: &Prise, taille: [usize; 2], ss: usize, facettes: bool) -> Vec<Tri> {
+#[allow(clippy::too_many_arguments)]
+fn triangles(tris: &mut Vec<Tri>, obj: u32, scene: &Scene3d, matrice: &M4, o: &Prise, taille: [usize; 2], ss: usize, facettes: bool) {
     let s = o.px_par_unite;
     let ssf = ss as f32;
     let (wmax, hmax) = ((taille[0] * ss) as f32, (taille[1] * ss) as f32);
     let nm = normal_matrix(matrice);
-    let mut tris = Vec::new();
     for (pi, prim) in scene.primitives.iter().enumerate() {
         let monde: Vec<V3> = prim.positions.iter().map(|p| m::point(matrice, *p)).collect();
         let cam: Vec<V3> = monde.iter().map(|p| o.vers_oeil(*p)).collect();
@@ -266,11 +267,10 @@ fn triangles(scene: &Scene3d, matrice: &M4, o: &Prise, taille: [usize; 2], ss: u
             for k in 1..v.len() - 1 {
                 let p = [v[0].0, v[k].0, v[k + 1].0];
                 let y = (p[0][1].min(p[1][1]).min(p[2][1]), p[0][1].max(p[1][1]).max(p[2][1]));
-                tris.push(Tri { p, n: [v[0].1, v[k].1, v[k + 1].1], uv: [v[0].2, v[k].2, v[k + 1].2], prim: pi as u32, y });
+                tris.push(Tri { p, n: [v[0].1, v[k].1, v[k + 1].1], uv: [v[0].2, v[k].2, v[k + 1].2], obj, prim: pi as u32, y });
             }
         }
     }
-    tris
 }
 
 /// La matrice des normales (inverse transposée de la partie 3×3).
@@ -303,7 +303,8 @@ struct Bande {
     couvert: Vec<bool>,
 }
 
-fn raster(t: &Tri, b: &mut Bande, scene: &Scene3d, om: &Ombrage) {
+fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], om: &Ombrage) {
+    let scene = scenes[t.obj as usize].0;
     let p = &t.p;
     let (x0, x1) = (p[0][0].min(p[1][0]).min(p[2][0]), p[0][0].max(p[1][0]).max(p[2][0]));
     let (ya, yb) = t.y;
@@ -363,6 +364,12 @@ fn raster(t: &Tri, b: &mut Bande, scene: &Scene3d, om: &Ombrage) {
 /// `ss` : sur-échantillonnage par côté (1 à 4) ; `fils` : fils de calcul (0 : tous les cœurs). Avec le ciel (`aspect.ciel`),
 /// toute l'image est couverte : le dégradé derrière le décor.
 pub fn rendre(scene: &Scene3d, matrice: &M4, prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> Vec<u8> {
+    rendre_objets(&[(scene, *matrice)], prise, taille, ss, fils, aspect)
+}
+
+/// Comme `rendre`, pour plusieurs objets (partie 181) : chacun sa scène et sa matrice, tous dans le même tampon de profondeur
+/// (un arbre derrière une maison est caché par elle).
+pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> Vec<u8> {
     let [w, h] = taille;
     let mut out = vec![0u8; w * h * 4];
     if w == 0 || h == 0 {
@@ -371,10 +378,19 @@ pub fn rendre(scene: &Scene3d, matrice: &M4, prise: &Prise, taille: [usize; 2], 
     let ss = ss.clamp(1, 4);
     // Les normales tournées vers l'œil : on retourne celles des faces vues de dos avant de rasteriser, sommet par sommet
     // (dans le repère de l'œil, la normale d'une face visible pointe vers l'œil, z < 0).
-    let mut tris = triangles(scene, matrice, prise, taille, ss, aspect.facettes);
-    // La brume, d'après le coin du décor le plus loin de l'œil (comme sur la carte graphique).
-    let (lo, hi) = scene.bornes();
-    let dist_max = (0..8).map(|i| m::length(m::sub(m::point(matrice, [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] })), prise.oeil))).fold(0.0f32, f32::max).max(1e-3);
+    let mut tris = Vec::new();
+    for (i, (scene, matrice)) in objets.iter().enumerate() {
+        triangles(&mut tris, i as u32, scene, matrice, prise, taille, ss, aspect.facettes);
+    }
+    // La brume, d'après le coin des objets le plus loin de l'œil (comme sur la carte graphique).
+    let dist_max = objets
+        .iter()
+        .flat_map(|(scene, matrice)| {
+            let (lo, hi) = scene.bornes();
+            (0..8).map(move |i| m::length(m::sub(m::point(matrice, [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] })), prise.oeil)))
+        })
+        .fold(0.0f32, f32::max)
+        .max(1e-3);
     let om = Ombrage { aspect: *aspect, brume: aspect.brume_de(dist_max), centre: prise.centre, s: prise.px_par_unite, ss: ss as f32 };
     let rot = [prise.droite, prise.haut, prise.avant];
     for t in &mut tris {
@@ -412,7 +428,7 @@ pub fn rendre(scene: &Scene3d, matrice: &M4, prise: &Prise, taille: [usize; 2], 
                 let n = w * ss * lignes_px * ss;
                 let mut b = Bande { w: w * ss, y0, lignes: lignes_px * ss, invz: vec![0.0; n], couleur: vec![[0.0; 3]; n], couvert: vec![false; n] };
                 for &ti in &bins[bi] {
-                    raster(&tris[ti as usize], &mut b, scene, &om);
+                    raster(&tris[ti as usize], &mut b, objets, &om);
                 }
                 for ry in 0..lignes_px {
                     for x in 0..w {

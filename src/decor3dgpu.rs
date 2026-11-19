@@ -269,6 +269,9 @@ pub struct Moteur {
     modeles: HashMap<u64, ModeleGpu>,
     prises: HashMap<u64, Prise3>,
     tic: u64,
+    /// Le tic au début de la passe en cours : un modèle qu'elle dessine n'est jamais renvoyé de la carte pour en faire entrer un
+    /// autre (un décor de plus de huit modèles ne les renverrait pas à chaque image).
+    debut: u64,
     max_texture: u32,
     /// Triangles dessinés par la dernière passe (essais, mesures).
     pub dessines: usize,
@@ -504,6 +507,7 @@ impl Moteur {
             modeles: HashMap::new(),
             prises: HashMap::new(),
             tic: 0,
+            debut: 0,
             max_texture: device.limits().max_texture_dimension_2d,
             dessines: 0,
         }
@@ -596,9 +600,11 @@ impl Moteur {
         }
         let matieres = scene.primitives.iter().map(|p| (p.couleur, p.texture, p.seuil_alpha.unwrap_or(0.0))).collect();
         self.modeles.insert(id, ModeleGpu { morceaux, textures, matieres, octets, triangles: scene.triangles(), utilise: tic });
-        // Les décors qui ne se montrent plus depuis longtemps partent (un autre projet, un décor enlevé).
+        // Les modèles qui ne se montrent plus depuis longtemps partent (un autre projet, un objet enlevé) ; jamais un de la
+        // passe en cours.
         if self.modeles.len() > 8 {
-            let plus_vieux = self.modeles.iter().filter(|(k, _)| **k != id).min_by_key(|(_, mg)| mg.utilise).map(|(k, _)| *k);
+            let debut = self.debut;
+            let plus_vieux = self.modeles.iter().filter(|(k, mg)| **k != id && mg.utilise < debut).min_by_key(|(_, mg)| mg.utilise).map(|(k, _)| *k);
             if let Some(k) = plus_vieux {
                 self.modeles.remove(&k);
             }
@@ -650,6 +656,7 @@ impl Moteur {
         ciel: bool,
         qualite: crate::decor3dbudget::Qualite,
     ) {
+        self.debut = self.tic + 1;
         for d in dessins {
             self.assurer(device, queue, d.id, &d.scene);
         }

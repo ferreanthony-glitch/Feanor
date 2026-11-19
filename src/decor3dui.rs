@@ -1,7 +1,8 @@
-//! Le décor 3D d'une séquence, côté interface (partie 180, `docs/INTERFACE.md`) : Fichier > Importer > « Décor 3D de la
-//! séquence (glTF, .glb)… », la fenêtre « Ce décor est lourd », « Enlever le décor 3D de la séquence », la retouche de sa place et
-//! de son aspect dans le panneau Espace 3D, le décor dans la vue Espace 3D, et le budget de cette machine (Préférences >
-//! Performance).
+//! Le décor 3D d'une séquence, côté interface (parties 180 et 181, `docs/INTERFACE.md`) : Fichier > Importer > « Objet 3D pour
+//! le décor de la séquence (glTF, .glb)… » et les modèles de la banque 3D (`banque3dui.rs`), qui **ajoutent** un objet par le
+//! même chemin (lecture, mesure, budget de la machine pour tout le décor, fenêtre « Ce décor est lourd ») ; « Enlever le décor
+//! 3D de la séquence » ; la liste des objets et la retouche de l'objet choisi (place, origine, aimanté au sol) et de l'aspect
+//! dans le panneau Espace 3D ; le décor dans la vue Espace 3D ; le budget de cette machine (Préférences > Performance).
 //!
 //! **Rien n'attend sur le fil de l'interface** : la lecture, la mesure, l'étalonnage de la machine, l'allègement et la
 //! simplification tournent sur d'autres fils ; l'écran montre l'avancement et reste libre. Le fichier d'origine n'est jamais
@@ -13,27 +14,41 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use eframe::egui::{self, pos2, Align2, Color32, FontId, Rect, RichText, Stroke};
+use egui_phosphor::regular as ph;
 
 use crate::app::App;
-use crate::decor3d::{Allege, Analyse, Decor3d, Modele3d, Options, Place3d, Verdict};
+use crate::decor3d::{Allege, Analyse, Decor3d, Modele3d, Objet3d, Options, Place3d, Poids, Verdict};
 use crate::decor3dbudget::{grand_nombre, BudgetMachine};
 use crate::decor3dsimplifier::Suivi;
 use crate::espace3d::Monde;
 use crate::espace3dmath::{self as m, View, V3};
 
+/// Où va l'objet qu'on ajoute : la séquence (celle du plan courant au début de l'import : changer de plan pendant la lecture
+/// ne l'envoie pas ailleurs), et, lâché sur la vue Espace 3D, le point du sol sous le pointeur (x, z) ; rien : devant la caméra
+/// du plan.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Cible3d {
+    pub seq: u64,
+    pub xz: Option<[f32; 2]>,
+}
+
 /// Ce que l'interface du décor retient (un par projet ouvert).
 #[derive(Default)]
 pub(crate) struct Etat3d {
-    /// La lecture et la mesure d'un fichier, sur un autre fil.
+    /// La lecture et la mesure d'un fichier (ou d'un modèle de la banque), sur un autre fil.
     lecture: Option<JoinHandle<Result<Analyse, String>>>,
+    /// Où ira l'objet lu.
+    cible: Option<Cible3d>,
     /// Un fichier lu, qui attend la fin de l'étalonnage de la machine pour être jugé.
     lu: Option<Analyse>,
     /// La fenêtre « Ce décor est lourd ».
     lourd: Option<Lourd>,
     /// Les modèles déjà comparés au budget de cette machine (`Modele3d::uid`).
     vus: BTreeSet<u64>,
-    /// La retouche en cours de la place ou de l'aspect : les décors d'avant (pour l'étape d'annulation, au lâcher).
+    /// La retouche en cours d'un objet ou de l'aspect : les décors d'avant (pour l'étape d'annulation, au lâcher).
     retouche: Option<crate::decor3d::Decors3d>,
+    /// L'objet choisi dans la liste du panneau Espace 3D (`Objet3d::id`) : ses champs se retouchent.
+    pub(crate) choisi: Option<u64>,
 }
 
 impl Etat3d {
@@ -47,6 +62,11 @@ impl Etat3d {
     #[cfg(test)]
     pub(crate) fn en_attente(&self) -> bool {
         self.lecture.is_some() || self.lu.is_some()
+    }
+
+    /// Un import est en cours (lecture, étalonnage, fenêtre ouverte) : un autre attend qu'il finisse.
+    pub(crate) fn occupe(&self) -> bool {
+        self.lecture.is_some() || self.lu.is_some() || self.lourd.is_some()
     }
 }
 
@@ -74,12 +94,36 @@ struct Lourd {
     simplifier: bool,
     cible: Cible,
     calcul: Option<Calcul>,
-    /// Un décor déjà dans le projet (ouvert sur cet ordinateur-ci) : sa séquence.
+    /// Un modèle déjà dans le projet (ouvert sur cet ordinateur-ci) : son `Modele3d::uid` ; rien : un objet qu'on ajoute.
     existant: Option<u64>,
+    /// Où va l'objet qu'on ajoute.
+    ajout: Option<Cible3d>,
+    /// Ce que pèse déjà le décor de la séquence, sans lui (le budget vaut pour la somme).
+    deja: Poids,
+    /// Il reprend un modèle déjà dans la séquence (ses textures ne comptent pas deux fois).
+    partage: bool,
 }
 
 /// Le titre de la fenêtre.
 pub(crate) const TITRE_LOURD: &str = "Ce décor est lourd";
+
+/// Pourquoi on juge un modèle.
+enum Quoi {
+    /// Un objet qu'on ajoute au décor de la séquence `Cible3d::seq`.
+    Ajout(Cible3d),
+    /// Un modèle déjà dans le projet (`Modele3d::uid`), dans un décor qui pèse déjà `deja` sans lui.
+    Existant { uid: u64, deja: Poids },
+}
+
+/// Ce qu'on pose : un modèle lu (tel quel ou allégé), et d'où il vient.
+struct Pose {
+    nom: String,
+    source: String,
+    glb: Arc<Vec<u8>>,
+    scene: Arc<crate::decor3dgltf::Scene3d>,
+    empreinte: String,
+    allege: Vec<String>,
+}
 
 impl App {
     /// La clé de cette machine (`decor3dbudget::cle_machine`).
@@ -112,25 +156,45 @@ impl App {
         self.decor3d_etalonner();
     }
 
-    /// Fichier > Importer > « Décor 3D de la séquence (glTF, .glb)… ».
+    /// Fichier > Importer > « Objet 3D pour le décor de la séquence (glTF, .glb)… » : ajoute un objet (partie 181 ; il ne
+    /// remplace plus le décor).
     pub(crate) fn decor3d_importer(&mut self) {
         if self.sans_projet() || self.content_refuses() {
             return;
         }
-        if self.decor3d.lecture.is_some() || self.decor3d.lourd.is_some() {
-            self.status = "Un décor 3D est déjà en cours d'import.".into();
+        if self.decor3d.occupe() {
+            self.status = "Un objet 3D est déjà en cours d'import.".into();
             return;
         }
-        let Some(chemin) = rfd::FileDialog::new().set_title("Importer le décor 3D de la séquence").add_filter("glTF 2.0", &["glb", "gltf"]).pick_file() else { return };
+        let Some(chemin) = rfd::FileDialog::new().set_title("Ajouter un objet 3D au décor de la séquence").add_filter("glTF 2.0", &["glb", "gltf"]).pick_file() else { return };
         self.decor3d_importer_chemin(chemin);
     }
 
-    /// Lit et mesure `chemin` sur un autre fil ; la suite à `decor3d_tick`.
+    /// La séquence du plan courant, comme cible d'un ajout (devant la caméra).
+    pub(crate) fn decor3d_cible_ici(&self) -> Cible3d {
+        Cible3d { seq: self.doc.sequence_of(self.cur_panel), xz: None }
+    }
+
+    /// Lit et mesure `chemin` sur un autre fil, pour l'ajouter au décor de la séquence du plan courant ; la suite à
+    /// `decor3d_tick`.
     pub(crate) fn decor3d_importer_chemin(&mut self, chemin: PathBuf) {
+        let cible = self.decor3d_cible_ici();
+        self.decor3d_lancer(cible, move || crate::decor3d::analyser(&chemin));
+    }
+
+    /// Le chemin commun de tout ajout (un fichier, un modèle de la banque 3D) : `lire` tourne sur un autre fil, puis le temps
+    /// d'une image est mesuré sur la carte, puis le modèle est jugé contre le budget (`decor3d_juger`). Faux : un autre import
+    /// est en cours (la barre d'état le dit).
+    pub(crate) fn decor3d_lancer(&mut self, cible: Cible3d, lire: impl FnOnce() -> Result<Analyse, String> + Send + 'static) -> bool {
+        if self.decor3d.occupe() {
+            self.status = "Un objet 3D est déjà en cours d'import : attends qu'il soit posé.".into();
+            return false;
+        }
         let carte = self.gpu.as_ref().map(|g| g.render_state().clone());
         let (feuille, cadre) = ([self.doc.width, self.doc.height], self.doc.frame);
+        self.decor3d.cible = Some(cible);
         self.decor3d.lecture = Some(std::thread::spawn(move || {
-            let mut a = crate::decor3d::analyser(&chemin)?;
+            let mut a = lire()?;
             // Le temps réel d'une image de ce décor sur la carte de cette machine (s'il n'est pas d'emblée hors budget).
             if let Some(rs) = carte.filter(|_| a.mesures.triangles <= 4_000_000) {
                 a.cout_ms = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mesurer_cout(&rs, &a.scene, feuille, cadre))).ok().flatten();
@@ -140,8 +204,9 @@ impl App {
         if self.decor3d_budget().is_none() {
             self.decor3d_etalonner();
         } else {
-            self.status = "Décor 3D : lecture du fichier…".into();
+            self.status = "Décor 3D : lecture du modèle…".into();
         }
+        true
     }
 
     /// À chaque image d'écran : l'étalonnage, la lecture, la fenêtre, la vérification des décors du projet.
@@ -161,7 +226,10 @@ impl App {
             let r = self.decor3d.lecture.take().and_then(|h| h.join().ok()).unwrap_or_else(|| Err("lecture interrompue".into()));
             match r {
                 Ok(a) => self.decor3d.lu = Some(a),
-                Err(e) => self.status = format!("Décor 3D refusé : {e}"),
+                Err(e) => {
+                    self.decor3d.cible = None;
+                    self.status = format!("Décor 3D refusé : {e}");
+                }
             }
         } else if self.decor3d.lecture.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
@@ -170,27 +238,18 @@ impl App {
         if self.decor3d.lu.is_some() {
             if let Some(b) = self.decor3d_budget().cloned() {
                 let a = self.decor3d.lu.take().expect("fichier lu");
-                self.decor3d_juger(a, &b, None);
+                let cible = self.decor3d.cible.take().unwrap_or_else(|| self.decor3d_cible_ici());
+                self.decor3d_juger(a, &b, Quoi::Ajout(cible));
             } else if !crate::decor3dbudget::en_cours() {
                 self.decor3d_etalonner();
             }
         }
-        // Les décors du projet (ouvert sur cet ordinateur, ou rétablis) : comparés au budget d'ici une fois.
-        let nouveaux: Vec<(u64, Decor3d)> = self.doc.decors3d.par_sequence.iter().filter(|(_, d)| !self.decor3d.vus.contains(&d.modele.uid)).map(|(s, d)| (*s, d.clone())).collect();
-        if !nouveaux.is_empty() && self.decor3d.lourd.is_none() {
+        // Les décors du projet (ouvert sur cet ordinateur, ou rétablis) : chaque modèle comparé au budget d'ici une fois, avec
+        // ce qui le précède dans le décor de sa séquence (le budget vaut pour la somme).
+        let a_voir = self.doc.decors3d.par_sequence.values().flat_map(|d| &d.objets).any(|o| !self.decor3d.vus.contains(&o.modele.uid));
+        if a_voir && self.decor3d.lourd.is_none() {
             match self.decor3d_budget().cloned() {
-                Some(b) => {
-                    for (seq, d) in nouveaux {
-                        self.decor3d.vus.insert(d.modele.uid);
-                        let mesures = mesures_de(&d.modele);
-                        if self.decor3d.lourd.is_none() && matches!(crate::decor3d::verdict(&mesures, &b, None), Verdict::Lourd { tel_quel: false, .. }) {
-                            let a = Analyse { nom: d.nom.clone(), origine: d.origine.clone(), glb: d.modele.octets.clone(), scene: d.modele.scene.clone(), mesures, cout_ms: None };
-                            self.status = format!("Le décor 3D « {} » est plus lourd que ce que cet ordinateur dessine sans ralentir : il est masqué en attendant ton choix.", d.nom);
-                            crate::decor3d::masquer(d.modele.uid, true);
-                            self.decor3d_juger(a, &b, Some(seq));
-                        }
-                    }
-                }
+                Some(b) => self.decor3d_verifier_projet(&b),
                 None if !crate::decor3dbudget::en_cours() => self.decor3d_etalonner(),
                 None => {}
             }
@@ -198,36 +257,105 @@ impl App {
         self.decor3d_fenetre(ctx);
     }
 
-    /// Le fichier lu, comparé au budget : importé tout de suite, ou la fenêtre « Ce décor est lourd ».
-    fn decor3d_juger(&mut self, a: Analyse, b: &BudgetMachine, existant: Option<u64>) {
-        match crate::decor3d::verdict(&a.mesures, b, a.cout_ms) {
-            Verdict::Direct => self.decor3d_poser(a.nom.clone(), a.origine.clone(), a.glb.clone(), a.scene.clone(), Vec::new()),
+    /// Compare au budget `b` les modèles du projet pas encore vus : un modèle qui ferait dépasser le décor de sa séquence est
+    /// masqué sur cet ordinateur et la fenêtre « Ce décor est lourd » s'ouvre pour lui (une à la fois).
+    fn decor3d_verifier_projet(&mut self, b: &BudgetMachine) {
+        let mut trouve: Option<(Analyse, u64, Poids)> = None;
+        'seq: for d in self.doc.decors3d.par_sequence.values() {
+            let mut deja = Poids::default();
+            let mut modeles: BTreeSet<u64> = BTreeSet::new();
+            for o in &d.objets {
+                let uid = o.modele.uid;
+                if crate::decor3d::masque(uid) {
+                    continue;
+                }
+                let partage = modeles.contains(&uid);
+                if !self.decor3d.vus.contains(&uid) {
+                    let mesures = mesures_de(&o.modele);
+                    let v = crate::decor3d::verdict_sequence(&mesures, deja, partage, b, None);
+                    if matches!(v, Verdict::Lourd { tel_quel: false, .. }) {
+                        let a = Analyse { nom: o.nom.clone(), origine: o.source.clone(), glb: o.modele.octets.clone(), scene: o.modele.scene.clone(), mesures, cout_ms: None, empreinte: o.modele.empreinte.clone() };
+                        trouve = Some((a, uid, deja));
+                        break 'seq;
+                    }
+                    self.decor3d.vus.insert(uid);
+                }
+                deja.triangles += o.modele.scene.triangles() as u64;
+                if !partage {
+                    deja.octets_textures += o.modele.scene.octets_textures();
+                }
+                modeles.insert(uid);
+            }
+        }
+        if let Some((a, uid, deja)) = trouve {
+            self.decor3d.vus.insert(uid);
+            self.status = format!("L'objet 3D « {} » fait dépasser ce que cet ordinateur dessine sans ralentir : il est masqué en attendant ton choix.", a.nom);
+            crate::decor3d::masquer(uid, true);
+            self.decor3d_juger(a, b, Quoi::Existant { uid, deja });
+        }
+    }
+
+    /// Le modèle lu, comparé au budget avec ce que pèse déjà le décor de sa séquence : posé tout de suite, la fenêtre « Ce décor
+    /// est lourd », ou refusé si la séquence est déjà au bout du budget (jamais de ralentissement).
+    fn decor3d_juger(&mut self, a: Analyse, b: &BudgetMachine, quoi: Quoi) {
+        let (deja, partage, ajout, existant) = match quoi {
+            Quoi::Ajout(c) => {
+                let d = self.doc.decors3d.par_sequence.get(&c.seq);
+                let deja = d.map(|d| d.poids()).unwrap_or_default();
+                if let Some(raison) = crate::decor3d::sequence_pleine(deja, b) {
+                    self.status = format!("Objet 3D « {} » refusé : {raison}", a.nom);
+                    return;
+                }
+                (deja, d.is_some_and(|d| d.modele_d_empreinte(&a.empreinte).is_some()), Some(c), None)
+            }
+            Quoi::Existant { uid, deja } => (deja, false, None, Some(uid)),
+        };
+        match crate::decor3d::verdict_sequence(&a.mesures, deja, partage, b, a.cout_ms) {
+            Verdict::Direct => {
+                if let Some(c) = ajout {
+                    let p = Pose { nom: a.nom.clone(), source: a.origine.clone(), glb: a.glb.clone(), scene: a.scene.clone(), empreinte: a.empreinte.clone(), allege: Vec::new() };
+                    self.decor3d_poser(p, c);
+                }
+            }
             Verdict::Lourd { raisons, tel_quel, simplifier } => {
-                let trop_textures = a.mesures.octets_textures > b.textures_mo << 20 || a.mesures.plus_grand_cote > 4096;
-                self.decor3d.lourd = Some(Lourd { analyse: a, raisons, tel_quel, alleger: true, cote: if trop_textures { 2048 } else { 4096 }, simplifier, cible: Cible::Budget, calcul: None, existant });
+                let trop_textures = a.mesures.octets_textures + deja.octets_textures > b.textures_mo << 20 || a.mesures.plus_grand_cote > 4096;
+                self.decor3d.lourd = Some(Lourd { analyse: a, raisons, tel_quel, alleger: true, cote: if trop_textures { 2048 } else { 4096 }, simplifier, cible: Cible::Budget, calcul: None, existant, ajout, deja, partage });
             }
         }
     }
 
-    /// Pose le décor (une étape d'annulation) pour la séquence du plan courant.
-    fn decor3d_poser(&mut self, nom: String, origine: String, glb: Arc<Vec<u8>>, scene: Arc<crate::decor3dgltf::Scene3d>, allege: Vec<String>) {
-        let seq = self.doc.sequence_of(self.cur_panel);
-        let monde = Monde::of(&self.doc);
-        let place = Place3d::d_origine(&scene, &monde);
-        let (lo, hi) = scene.bornes();
-        let triangles = scene.triangles();
-        let modele = Arc::new(Modele3d::new(scene, glb));
+    /// Pose un objet neuf dans le décor de la séquence `c.seq` (une étape d'annulation) : son origine au centre du dessous de sa
+    /// boîte, posée sur le sol devant la caméra du plan (ou au point lâché), aimanté au sol. Un modèle de même contenu déjà dans le
+    /// projet est repris (un fichier, une lecture, un envoi à la carte).
+    fn decor3d_poser(&mut self, p: Pose, c: Cible3d) {
+        let modele = self.doc.decors3d.modele_d_empreinte(&p.empreinte).unwrap_or_else(|| Arc::new(Modele3d::avec_empreinte(p.scene.clone(), p.glb.clone(), p.empreinte.clone())));
         self.decor3d.vus.insert(modele.uid);
+        let monde = Monde::of(&self.doc);
         let snap = self.snapshot();
         let id = self.doc.alloc();
-        let ancien = self.doc.decors3d.par_sequence.insert(seq, Decor3d { id, nom: nom.clone(), origine, allege: allege.clone(), place, aspect: Default::default(), modele });
-        let before = self.history.context.replace(if ancien.is_some() { "Remplacer le décor 3D".into() } else { "Importer le décor 3D".into() });
+        let mut o = Objet3d::neuf(id, p.nom.clone(), p.source, p.allege.clone(), modele);
+        let (lo, hi) = o.modele.bornes;
+        let [x, z] = c.xz.unwrap_or_else(|| {
+            // Devant la caméra du plan : en face de son œil, le devant de l'objet contre la feuille (tout entier derrière).
+            let oeil = monde.eye_seen(&self.doc.camera_seen(self.cur_panel.min(self.doc.panels.len().saturating_sub(1)), self.cur_frame));
+            [oeil[0], -(hi[2] - lo[2]) / 2.0]
+        });
+        o.poser_au_sol(x, z, monde.sol_y());
+        let triangles = o.modele.scene.triangles();
+        let d = self.doc.decors3d.par_sequence.entry(c.seq).or_insert_with(|| Decor3d::new(Default::default()));
+        d.objets.push(o);
+        let n = d.objets.len();
+        let notes = crate::decor3daimant::aimanter(d, monde.sol_y());
+        let before = self.history.context.replace("Ajouter un objet 3D".into());
         self.commit_structure(snap);
         self.history.context = before;
+        self.decor3d.choisi = Some(id);
         let taille = [0, 1, 2].map(|k| hi[k] - lo[k]);
         let plus_grand = taille.iter().cloned().fold(0.0f32, f32::max);
         self.status = format!(
-            "Décor 3D « {nom} » posé pour la séquence : {:.2} × {:.2} × {:.2} m (largeur, hauteur, profondeur), {} triangles{}{}.",
+            "Objet 3D « {} » posé dans le décor de la séquence ({n} objet{}) : {:.2} × {:.2} × {:.2} m (largeur, hauteur, profondeur), {} triangles{}{}{}.",
+            p.nom,
+            if n > 1 { "s" } else { "" },
             taille[0],
             taille[1],
             taille[2],
@@ -239,28 +367,83 @@ impl App {
             } else {
                 ""
             },
-            if allege.is_empty() { String::new() } else { format!(" ; {}", allege.join(", ")) }
+            if p.allege.is_empty() { String::new() } else { format!(" ; {}", p.allege.join(", ")) },
+            if notes.is_empty() { String::new() } else { format!(" ; {}", notes.join(" ")) }
         );
     }
 
-    /// « Enlever le décor 3D de la séquence » (une étape d'annulation).
-    pub(crate) fn decor3d_enlever(&mut self) {
-        let seq = self.doc.sequence_of(self.cur_panel);
-        if !self.doc.decors3d.par_sequence.contains_key(&seq) {
-            self.status = "Cette séquence n'a pas de décor 3D.".into();
-            return;
-        }
+    /// Une retouche structurelle du décor de la séquence `seq` (enlever, dupliquer…) : `f` change le décor, les objets aimantés
+    /// se reposent, une étape d'annulation nommée `nom`. Le texte de `f` va dans la barre d'état.
+    fn decor3d_changer(&mut self, seq: u64, nom: &str, f: impl FnOnce(&mut Decor3d, &mut crate::document::Document) -> Option<String>) {
         if self.content_refuses() {
             return;
         }
+        self.decor3d_retouche_finir();
+        let Some(mut d) = self.doc.decors3d.par_sequence.get(&seq).cloned() else { return };
         let snap = self.snapshot();
-        let ancien = self.doc.decors3d.par_sequence.remove(&seq);
-        let before = self.history.context.replace("Enlever le décor 3D".into());
+        let Some(texte) = f(&mut d, &mut self.doc) else { return };
+        let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
+        if d.objets.is_empty() {
+            self.doc.decors3d.par_sequence.remove(&seq);
+        } else {
+            self.doc.decors3d.par_sequence.insert(seq, d);
+        }
+        let before = self.history.context.replace(nom.into());
         self.commit_structure(snap);
         self.history.context = before;
-        self.status = format!("Décor 3D « {} » enlevé de la séquence (Ctrl+Z le rend).", ancien.map(|d| d.nom).unwrap_or_default());
+        self.status = if notes.is_empty() { texte } else { format!("{texte} {}", notes.join(" ")) };
     }
 
+    /// « Enlever le décor 3D de la séquence » : tous ses objets (une étape d'annulation).
+    pub(crate) fn decor3d_enlever(&mut self) {
+        let seq = self.doc.sequence_of(self.cur_panel);
+        if self.doc.decor_du_plan(self.cur_panel).is_none() {
+            self.status = "Cette séquence n'a pas de décor 3D.".into();
+            return;
+        }
+        self.decor3d_changer(seq, "Enlever le décor 3D", |d, _| {
+            let n = d.objets.len();
+            d.objets.clear();
+            Some(format!("Décor 3D de la séquence enlevé ({n} objet{}) (Ctrl+Z le rend).", if n > 1 { "s" } else { "" }))
+        });
+    }
+
+    /// « Enlever » un objet du décor de la séquence du plan courant (une étape d'annulation) ; ceux qui reposaient sur lui
+    /// redescendent.
+    pub(crate) fn decor3d_enlever_objet(&mut self, id: u64) {
+        let seq = self.doc.sequence_of(self.cur_panel);
+        self.decor3d_changer(seq, "Enlever un objet 3D", |d, _| {
+            let i = d.objets.iter().position(|o| o.id == id)?;
+            let o = d.objets.remove(i);
+            Some(format!("Objet 3D « {} » enlevé du décor (Ctrl+Z le rend).", o.nom))
+        });
+        if self.decor3d.choisi == Some(id) {
+            self.decor3d.choisi = None;
+        }
+    }
+
+    /// « Dupliquer » un objet : la copie (même modèle, partagé : rien n'est relu ni renvoyé à la carte) posée juste à côté, à sa
+    /// droite (une étape d'annulation).
+    pub(crate) fn decor3d_dupliquer_objet(&mut self, id: u64) {
+        let seq = self.doc.sequence_of(self.cur_panel);
+        let mut neuf = None;
+        self.decor3d_changer(seq, "Dupliquer un objet 3D", |d, doc| {
+            let o = d.objet(id)?.clone();
+            let (lo, hi) = o.bornes_monde();
+            let mut copie = o.clone();
+            copie.id = doc.alloc();
+            copie.nom = format!("{} (copie)", o.nom);
+            copie.place.position[0] += ((hi[0] - lo[0]) * 1.1).max(0.3);
+            neuf = Some(copie.id);
+            d.objets.push(copie);
+            Some(format!("Objet 3D « {} » dupliqué à côté.", o.nom))
+        });
+        if neuf.is_some() {
+            self.decor3d.choisi = neuf;
+        }
+    }
+
+    // ------------------------------------------------------------------------------------- la fenêtre « lourd »
     // ------------------------------------------------------------------------------------- la fenêtre « lourd »
 
     fn decor3d_fenetre(&mut self, ctx: &egui::Context) {
@@ -292,6 +475,9 @@ impl App {
         egui::Window::new(TITRE_LOURD).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
             ui.set_max_width(520.0);
             ui.label(RichText::new(format!("« {} » ({})", l.analyse.nom, l.analyse.origine)).strong());
+            if l.deja.triangles > 0 {
+                ui.label(RichText::new(format!("Le décor de la séquence a déjà {} triangles : le budget de cet ordinateur vaut pour tous ses objets ensemble.", grand_nombre(l.deja.triangles))).small().weak());
+            }
             egui::Grid::new("decor3d_mesures").num_columns(2).spacing([12.0, 2.0]).show(ui, |ui| {
                 let mut ligne = |a: &str, b: String| {
                     ui.label(a);
@@ -344,7 +530,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut l.cible, Cible::Moitie, "50 %");
                     ui.radio_value(&mut l.cible, Cible::Quart, "25 %");
-                    let b = budget.as_ref().map_or("le budget".to_string(), |b| grand_nombre(b.triangles));
+                    let b = budget.as_ref().map_or("le budget".to_string(), |b| grand_nombre(b.triangles.saturating_sub(l.deja.triangles)));
                     ui.radio_value(&mut l.cible, Cible::Budget, format!("jusqu'à {b} triangles"));
                 });
                 ui.label(RichText::new("Contraction d'arêtes guidée par l'erreur : les bords, les coutures de texture et les frontières de matière restent.").small().weak());
@@ -372,7 +558,7 @@ impl App {
                             grand_nombre(mm.triangles as u64),
                             grand_nombre(apres.triangles as u64),
                         ));
-                        let tient = budget.as_ref().is_none_or(|b| matches!(crate::decor3d::verdict(apres, b, None), Verdict::Direct | Verdict::Lourd { tel_quel: true, .. }));
+                        let tient = budget.as_ref().is_none_or(|b| matches!(crate::decor3d::verdict_sequence(apres, l.deja, l.partage, b, None), Verdict::Direct | Verdict::Lourd { tel_quel: true, .. }));
                         if tient {
                             pret = Some(r.clone());
                         } else {
@@ -402,19 +588,24 @@ impl App {
         match choix {
             Some("alleger") => {
                 if let Some(r) = pret {
-                    match l.existant {
-                        Some(seq) => self.decor3d_remplacer(seq, r),
-                        None => self.decor3d_poser(l.analyse.nom.clone(), l.analyse.origine.clone(), r.glb.clone(), r.scene.clone(), r.notes.clone()),
+                    match (l.existant, l.ajout) {
+                        (Some(uid), _) => self.decor3d_remplacer(uid, r),
+                        (None, Some(c)) => {
+                            let p = Pose { nom: l.analyse.nom.clone(), source: l.analyse.origine.clone(), glb: r.glb.clone(), scene: r.scene.clone(), empreinte: r.empreinte.clone(), allege: r.notes.clone() };
+                            self.decor3d_poser(p, c);
+                        }
+                        (None, None) => {}
                     }
                 }
             }
-            Some("tel_quel") => match l.existant {
-                Some(_) => {
-                    if let Some(d) = self.doc.decors3d.par_sequence.values().find(|d| Arc::ptr_eq(&d.modele.scene, &l.analyse.scene)) {
-                        crate::decor3d::masquer(d.modele.uid, false);
-                    }
+            Some("tel_quel") => match (l.existant, l.ajout) {
+                (Some(uid), _) => crate::decor3d::masquer(uid, false),
+                (None, Some(c)) => {
+                    let a = &l.analyse;
+                    let p = Pose { nom: a.nom.clone(), source: a.origine.clone(), glb: a.glb.clone(), scene: a.scene.clone(), empreinte: a.empreinte.clone(), allege: Vec::new() };
+                    self.decor3d_poser(p, c);
                 }
-                None => self.decor3d_poser(l.analyse.nom.clone(), l.analyse.origine.clone(), l.analyse.glb.clone(), l.analyse.scene.clone(), Vec::new()),
+                (None, None) => {}
             },
             Some(_) => {
                 if let Some(c) = l.calcul {
@@ -428,71 +619,135 @@ impl App {
         }
     }
 
-    /// Le décor de la séquence `seq`, remplacé par sa version allégée (une étape d'annulation) ; son nom et sa place restent.
-    fn decor3d_remplacer(&mut self, seq: u64, r: Allege) {
-        let Some(mut d) = self.doc.decors3d.par_sequence.get(&seq).cloned() else { return };
+    /// Le modèle `uid`, remplacé par sa version allégée dans tous les objets qui le montrent (une étape d'annulation) ; leurs
+    /// noms, places et origines restent, les aimantés se reposent.
+    fn decor3d_remplacer(&mut self, uid: u64, r: Allege) {
+        if !self.doc.decors3d.par_sequence.values().flat_map(|d| &d.objets).any(|o| o.modele.uid == uid) {
+            return;
+        }
         let snap = self.snapshot();
-        d.modele = Arc::new(Modele3d::new(r.scene.clone(), r.glb.clone()));
-        d.id = self.doc.alloc();
-        d.allege.extend(r.notes.iter().cloned());
-        self.decor3d.vus.insert(d.modele.uid);
-        let nom = d.nom.clone();
-        self.doc.decors3d.par_sequence.insert(seq, d);
-        let before = self.history.context.replace("Alléger le décor 3D".into());
+        let modele = Arc::new(Modele3d::avec_empreinte(r.scene.clone(), r.glb.clone(), r.empreinte.clone()));
+        self.decor3d.vus.insert(modele.uid);
+        let sol = Monde::of(&self.doc).sol_y();
+        let mut nom = String::new();
+        for d in self.doc.decors3d.par_sequence.values_mut() {
+            if !d.objets.iter().any(|o| o.modele.uid == uid) {
+                continue;
+            }
+            for o in d.objets.iter_mut().filter(|o| o.modele.uid == uid) {
+                o.modele = modele.clone();
+                o.allege.extend(r.notes.iter().cloned());
+                nom = o.nom.clone();
+            }
+            crate::decor3daimant::aimanter(d, sol);
+        }
+        crate::decor3d::masquer(uid, false);
+        let before = self.history.context.replace("Alléger un objet 3D".into());
         self.commit_structure(snap);
         self.history.context = before;
-        self.status = format!("Décor 3D « {nom} » allégé : {}.", r.notes.join(", "));
+        self.status = format!("Objet 3D « {nom} » allégé : {}.", r.notes.join(", "));
     }
 
     // ---------------------------------------------------------------------------------- la vue Espace 3D
 
-    /// Le décor de la séquence dans une vue Espace 3D (entre le quadrillage et les cartes) : dessiné par la carte graphique ;
-    /// sans elle, sa boîte en fil de fer et une légende. `cle` : la prise (une par vue).
+    /// Le décor de la séquence dans une vue Espace 3D (entre le quadrillage et les cartes) : tous ses objets, dessinés par la
+    /// carte graphique dans le même tampon de profondeur ; sans elle, leurs boîtes en fil de fer et une légende. L'objet choisi
+    /// dans le panneau a sa boîte en clair. `cle` : la prise (une par vue).
     pub(crate) fn e3_peindre_decor(&self, painter: &egui::Painter, draw: Rect, view: &View, cle: u64) {
         let Some(d) = self.doc.decor_du_plan(self.cur_panel) else { return };
-        if crate::decor3d::masque(d.modele.uid) {
-            return;
-        }
         let center = [draw.width() / 2.0, draw.height() / 2.0];
-        match self.gpu.as_ref() {
-            Some(g) => {
-                let qualite = if d.aspect.ombres { crate::decor3d::qualite(&d.modele.scene) } else { crate::decor3dbudget::Qualite::Sans };
-                let cb = crate::decor3dgpu::VueDecor {
-                    cle,
-                    dessins: vec![crate::decor3dgpu::Dessin { id: d.modele.uid, scene: d.modele.scene.clone(), matrice: d.place.matrice(), aspect: d.aspect }],
-                    vue: crate::decor3dgpu::Vue::de_view(view, center),
-                    taille_pts: [draw.width(), draw.height()],
-                    cible_egui: g.render_state().target_format,
-                    qualite,
-                };
-                painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
-            }
-            None => {
-                // Sans carte graphique : la boîte du décor, en fil de fer.
-                let (lo, hi) = d.modele.scene.bornes();
-                let mx = d.place.matrice();
-                let coin = |i: usize| m::point(&mx, [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] }));
-                let proj = |p: V3| view.project(p, center).map(|q| pos2(draw.left() + q[0], draw.top() + q[1]));
-                let trait_ = Stroke::new(1.0_f32, Color32::from_rgb(150, 170, 200));
-                for (a, b) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
-                    if let (Some(p), Some(q)) = (proj(coin(a)), proj(coin(b))) {
-                        painter.line_segment([p, q], trait_);
-                    }
+        let proj = |p: V3| view.project(p, center).map(|q| pos2(draw.left() + q[0], draw.top() + q[1]));
+        let boite = |o: &crate::decor3d::Objet3d, trait_: Stroke| {
+            let (lo, hi) = o.modele.bornes;
+            let mx = o.matrice();
+            let coin = |i: usize| m::point(&mx, [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] }));
+            for (a, b) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
+                if let (Some(p), Some(q)) = (proj(coin(a)), proj(coin(b))) {
+                    painter.line_segment([p, q], trait_);
                 }
-                painter.text(draw.left_bottom() + egui::vec2(8.0, -22.0), Align2::LEFT_BOTTOM, format!("Décor 3D « {} » : sa boîte (sans carte graphique, la vue ne le dessine pas)", d.nom), FontId::proportional(11.0), Color32::from_gray(170));
+            }
+        };
+        let objets: Vec<crate::decor3d::Pose3d> = d.vus().map(|o| (o.modele.clone(), o.matrice())).collect();
+        if !objets.is_empty() {
+            match self.gpu.as_ref() {
+                Some(g) => {
+                    let qualite = if d.aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
+                    let cb = crate::decor3dgpu::VueDecor {
+                        cle,
+                        dessins: crate::decor3d::dessins_gpu(&objets, d.aspect),
+                        vue: crate::decor3dgpu::Vue::de_view(view, center),
+                        taille_pts: [draw.width(), draw.height()],
+                        cible_egui: g.render_state().target_format,
+                        qualite,
+                    };
+                    painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
+                }
+                None => {
+                    // Sans carte graphique : les boîtes des objets, en fil de fer.
+                    for o in d.vus() {
+                        boite(o, Stroke::new(1.0_f32, Color32::from_rgb(150, 170, 200)));
+                    }
+                    painter.text(draw.left_bottom() + egui::vec2(8.0, -22.0), Align2::LEFT_BOTTOM, format!("Décor 3D ({} objets) : leurs boîtes (sans carte graphique, la vue ne les dessine pas)", objets.len()), FontId::proportional(11.0), Color32::from_gray(170));
+                }
             }
         }
+        if let Some(o) = self.decor3d.choisi.and_then(|id| d.objet(id)).filter(|_| d.objets.len() > 1) {
+            boite(o, Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 220, 120, 170)));
+        }
+    }
+
+    /// Le point du sol (x, z) sous `pos` dans la vue Espace 3D (une seule vue, ouverte) : là où un modèle lâché se pose.
+    pub(crate) fn decor3d_sol_sous(&self, pos: egui::Pos2) -> Option<[f32; 2]> {
+        if !self.espace3d_vue_ouverte() || self.e3_vues_multiples() || !self.espace3d.rect.contains(pos) {
+            return None;
+        }
+        let rect = self.espace3d.rect;
+        let draw = if self.espace3d.through_camera { crate::espace3dview::letterbox(rect, self.doc.frame) } else { rect };
+        let view = self.e3_view(draw);
+        let ray = view.ray([pos.x - draw.left(), pos.y - draw.top()], [draw.width() / 2.0, draw.height() / 2.0]);
+        let sol = Monde::of(&self.doc).sol_y();
+        let t = m::ray_plane(&ray, [0.0, sol, 0.0], [0.0, 1.0, 0.0]).filter(|t| *t > 0.0 && t.is_finite())?;
+        let p = ray.at(t);
+        // (Au ras de l'horizon, le point fuirait à des kilomètres : pas plus loin que 200 m.)
+        (p[0].abs() < 200.0 && p[2].abs() < 200.0).then_some([p[0], p[2]])
     }
 
     // ------------------------------------------------------------------------------- le panneau Espace 3D
 
-    /// Le décor de la séquence dans le panneau Espace 3D : son nom, ce qui a été allégé, sa place (position, rotation autour de
-    /// la verticale, échelle), son aspect, « Remettre au sol », « Enlever ».
+    /// Termine la retouche en cours (une étape d'annulation pour toute la retouche).
+    pub(crate) fn decor3d_retouche_finir(&mut self) {
+        if let Some(avant) = self.decor3d.retouche.take() {
+            let maintenant = std::mem::replace(&mut self.doc.decors3d, avant);
+            let snap = self.snapshot();
+            self.doc.decors3d = maintenant;
+            let before = self.history.context.replace("Retoucher le décor 3D".into());
+            self.commit_structure(snap);
+            self.history.context = before;
+        }
+    }
+
+    /// Applique une retouche du décor de la séquence `seq` (champs du panneau) : les objets aimantés se reposent, l'étape
+    /// d'annulation viendra au lâcher (`decor3d_retouche_finir`).
+    pub(crate) fn decor3d_retoucher(&mut self, seq: u64, mut d: Decor3d) {
+        if self.decor3d.retouche.is_none() {
+            self.decor3d.retouche = Some(self.doc.decors3d.clone());
+        }
+        let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
+        if !notes.is_empty() {
+            self.status = notes.join(" ");
+        }
+        self.doc.decors3d.par_sequence.insert(seq, d);
+        self.modified = true;
+    }
+
+    /// Le décor de la séquence dans le panneau Espace 3D : son aspect, la liste de ses objets (choisir, renommer, dupliquer,
+    /// enlever, en ajouter), et les champs de l'objet choisi (position de son origine, rotation, échelle, origine, aimanté au
+    /// sol).
     pub(crate) fn decor3d_reglages(&mut self, ui: &mut egui::Ui) {
         let seq = self.doc.sequence_of(self.cur_panel);
-        let Some(mut d) = self.doc.decors3d.par_sequence.get(&seq).cloned() else {
+        let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else {
             ui.add_space(6.0);
-            if ui.button("Importer le décor 3D de la séquence…").on_hover_text("Un modèle glTF (.glb, .gltf) que tous les plans de la séquence montrent, derrière les calques.").clicked() {
+            if ui.button("Ajouter un objet 3D au décor de la séquence…").on_hover_text("Un modèle glTF (.glb, .gltf) que tous les plans de la séquence montrent, derrière les calques. Ou glisse un modèle de la Bibliothèque, onglet 3D.").clicked() {
                 self.run_action("fichier.importer_decor3d");
             }
             return;
@@ -500,34 +755,17 @@ impl App {
         ui.add_space(6.0);
         let avant = d.clone();
         let budget = self.decor3d_budget().cloned();
-        let mut enlever = false;
-        egui::CollapsingHeader::new(RichText::new(format!("Décor 3D : {}", d.nom)).strong()).id_salt("decor3d_reglages").default_open(true).show(ui, |ui| {
-            if !d.origine.is_empty() {
-                ui.label(RichText::new(format!("Fichier d'origine : {}", d.origine)).small().weak());
-            }
-            if !d.allege.is_empty() {
-                ui.label(RichText::new(format!("Allégé : {}", d.allege.join(", "))).small().weak());
-            }
-            egui::Grid::new("decor3d_place").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
-                ui.label("Position (m)");
-                ui.horizontal(|ui| {
-                    for v in d.place.position.iter_mut() {
-                        ui.add(egui::DragValue::new(v).speed(0.02).max_decimals(3));
-                    }
-                });
-                ui.end_row();
-                ui.label("Rotation (°)");
-                ui.add(egui::DragValue::new(&mut d.place.rotation_y).speed(0.5).suffix("°"));
-                ui.end_row();
-                ui.label("Échelle");
-                ui.add(egui::DragValue::new(&mut d.place.echelle).speed(0.005).range(0.001..=1000.0));
-                ui.end_row();
+        let choisi = self.decor3d.choisi.filter(|id| d.objet(*id).is_some()).or_else(|| d.objets.last().map(|o| o.id));
+        let mut nouveau_choix = choisi;
+        let (mut enlever, mut dupliquer, mut ajouter) = (None, None, false);
+        let monde = Monde::of(&self.doc);
+        let poids = d.poids();
+        egui::CollapsingHeader::new(RichText::new(format!("Décor 3D de la séquence ({} objet{})", d.objets.len(), if d.objets.len() > 1 { "s" } else { "" })).strong()).id_salt("decor3d_reglages").default_open(true).show(ui, |ui| {
+            // L'aspect : commun à tous les objets (une lumière, un ciel).
+            ui.horizontal_wrapped(|ui| {
                 ui.label("Soleil");
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
-                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
-                });
-                ui.end_row();
+                ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
+                ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
             });
             ui.horizontal_wrapped(|ui| {
                 ui.checkbox(&mut d.aspect.facettes, "Facettes");
@@ -536,40 +774,138 @@ impl App {
                 ui.checkbox(&mut d.aspect.ombres, "Ombres");
             });
             if let Some(b) = &budget {
-                let q = if d.aspect.ombres { b.qualite_pour(d.modele.scene.triangles() as u64) } else { crate::decor3dbudget::Qualite::Sans };
-                ui.label(RichText::new(format!("{} triangles · sur cet ordinateur : {}", grand_nombre(d.modele.scene.triangles() as u64), q.nom())).small().weak());
+                let q = if d.aspect.ombres { b.qualite_pour(poids.triangles) } else { crate::decor3dbudget::Qualite::Sans };
+                ui.label(RichText::new(format!("{} triangles en tout · sur cet ordinateur : {} (jusqu'à {})", grand_nombre(poids.triangles), q.nom(), grand_nombre(b.triangles))).small().weak());
             }
-            ui.horizontal(|ui| {
-                if ui.button("Remettre au sol").on_hover_text("Le bas du décor sur le sol, centré, derrière la feuille ; rotation et échelle d'origine.").clicked() {
-                    d.place = Place3d::d_origine(&d.modele.scene, &Monde::of(&self.doc));
+            ui.separator();
+            // La liste des objets.
+            egui::ScrollArea::vertical().id_salt("decor3d_objets").max_height(140.0).auto_shrink([false, true]).show(ui, |ui| {
+                for o in &d.objets {
+                    let masque = crate::decor3d::masque(o.modele.uid);
+                    let texte = if masque { format!("{} (masqué)", o.nom) } else { o.nom.clone() };
+                    let r = ui.selectable_label(Some(o.id) == choisi, texte).on_hover_text(format!("{} · {} triangles", o.source, grand_nombre(o.modele.scene.triangles() as u64)));
+                    if r.clicked() {
+                        nouveau_choix = Some(o.id);
+                    }
                 }
-                if ui.button("Enlever").clicked() {
-                    enlever = true;
+            });
+            ui.horizontal(|ui| {
+                if ui.button("Ajouter…").on_hover_text("Un fichier glTF (.glb, .gltf) de plus dans le décor. Les modèles de la Bibliothèque (onglet 3D) se glissent sur le dessin ou sur cette vue.").clicked() {
+                    ajouter = true;
+                }
+                if let Some(id) = choisi {
+                    if ui.button("Dupliquer").on_hover_text("Une copie de l'objet choisi, posée à côté (le même modèle : rien de plus à lire ni à envoyer à la carte).").clicked() {
+                        dupliquer = Some(id);
+                    }
+                    if ui.button("Enlever").on_hover_text("Enlève l'objet choisi du décor (Ctrl+Z le rend).").clicked() {
+                        enlever = Some(id);
+                    }
+                }
+            });
+            let Some(o) = choisi.and_then(|id| d.objet_mut(id)) else { return };
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Nom");
+                ui.add(egui::TextEdit::singleline(&mut o.nom).desired_width(f32::INFINITY));
+            });
+            if !o.source.is_empty() {
+                ui.label(RichText::new(format!("Fichier d'origine : {}", o.source)).small().weak());
+            }
+            if !o.allege.is_empty() {
+                ui.label(RichText::new(format!("Allégé : {}", o.allege.join(", "))).small().weak());
+            }
+            let aimante = o.aimante;
+            egui::Grid::new("decor3d_place").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                ui.label("Position (m)").on_hover_text("Où est l'origine de l'objet dans l'espace : x, y (hauteur), z.");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut o.place.position[0]).speed(0.02).max_decimals(3));
+                    ui.add_enabled(!aimante, egui::DragValue::new(&mut o.place.position[1]).speed(0.02).max_decimals(3)).on_disabled_hover_text("Aimanté au sol : la hauteur est calculée (décoche « Aimanté au sol » pour la régler).");
+                    if aimante {
+                        ui.label(RichText::new("aimanté").small().weak());
+                    }
+                    ui.add(egui::DragValue::new(&mut o.place.position[2]).speed(0.02).max_decimals(3));
+                });
+                ui.end_row();
+                ui.label("Rotation (°)");
+                ui.add(egui::DragValue::new(&mut o.place.rotation_y).speed(0.5).suffix("°")).on_hover_text("Autour de la verticale, autour de l'origine.");
+                ui.end_row();
+                ui.label("Échelle");
+                ui.add(egui::DragValue::new(&mut o.place.echelle).speed(0.005).range(0.001..=1000.0)).on_hover_text("Autour de l'origine.");
+                ui.end_row();
+                ui.label("Origine").on_hover_text("Le point de l'objet que sa position place, autour duquel il tourne et change d'échelle : x, y, z dans le repère du modèle. La changer ne bouge pas l'objet.");
+                ui.horizontal(|ui| {
+                    let mut p = o.origine;
+                    for v in p.iter_mut() {
+                        ui.add(egui::DragValue::new(v).speed(0.01).max_decimals(3));
+                    }
+                    if p != o.origine {
+                        o.changer_origine(p);
+                    }
+                    let (lo, hi) = o.modele.bornes;
+                    let centre = [0, 1, 2].map(|k| (lo[k] + hi[k]) / 2.0);
+                    ui.menu_button(ph::CROSSHAIR, |ui| {
+                        let choix: [(&str, [f32; 3]); 6] = [
+                            ("Au sol (centre du dessous)", crate::decor3d::origine_au_sol((lo, hi))),
+                            ("Au centre de la boîte", centre),
+                            ("Coin bas, gauche, arrière", [lo[0], lo[1], lo[2]]),
+                            ("Coin bas, droite, arrière", [hi[0], lo[1], lo[2]]),
+                            ("Coin bas, gauche, devant", [lo[0], lo[1], hi[2]]),
+                            ("Coin bas, droite, devant", [hi[0], lo[1], hi[2]]),
+                        ];
+                        for (nom, q) in choix {
+                            if ui.button(nom).clicked() {
+                                o.changer_origine(q);
+                                ui.close_menu();
+                            }
+                        }
+                        if ui.button("Le point (0, 0, 0) du fichier").clicked() {
+                            o.changer_origine([0.0; 3]);
+                            ui.close_menu();
+                        }
+                    })
+                    .response
+                    .on_hover_text("Origine : au sol (centre), au centre, à un coin… (l'objet ne bouge pas).");
+                });
+                ui.end_row();
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.checkbox(&mut o.aimante, "Aimanté au sol").on_hover_text("Sa hauteur est calculée : il repose sur le sol, ou sur le dessus des objets sous lui, sans y entrer. Décoché, il garde sa hauteur.");
+                if ui.button("Recentrer l'origine").on_hover_text("Ramène l'origine au milieu de l'objet en largeur et en profondeur, à sa hauteur actuelle (il tourne alors sur lui-même) ; l'objet ne bouge pas.").clicked() {
+                    let (lo, hi) = o.modele.bornes;
+                    o.changer_origine([(lo[0] + hi[0]) / 2.0, o.origine[1], (lo[2] + hi[2]) / 2.0]);
+                }
+                if ui.button("Remettre au sol").on_hover_text("Rotation et échelle d'origine, l'origine au centre du dessous, posé sur le sol au même endroit.").clicked() {
+                    let x = o.place.position[0];
+                    let z = o.place.position[2];
+                    o.origine = crate::decor3d::origine_au_sol(o.modele.bornes);
+                    o.place.rotation_y = 0.0;
+                    o.place.echelle = 1.0;
+                    o.poser_au_sol(x, z, monde.sol_y());
                 }
             });
         });
-        if enlever {
-            self.run_action("decor3d.enlever");
+        self.decor3d.choisi = nouveau_choix;
+        if ajouter {
+            self.decor3d_retouche_finir();
+            self.run_action("fichier.importer_decor3d");
             return;
         }
-        if d.place != avant.place || d.aspect != avant.aspect {
-            if self.decor3d.retouche.is_none() {
-                self.decor3d.retouche = Some(self.doc.decors3d.clone());
-            }
-            self.doc.decors3d.par_sequence.insert(seq, d);
-            self.modified = true;
+        if let Some(id) = enlever {
+            self.decor3d_enlever_objet(id);
+            return;
+        }
+        if let Some(id) = dupliquer {
+            self.decor3d_dupliquer_objet(id);
+            return;
+        }
+        let change = d.aspect != avant.aspect || d.objets.len() != avant.objets.len() || d.objets.iter().zip(&avant.objets).any(|(a, b)| a.place != b.place || a.origine != b.origine || a.aimante != b.aimante || a.nom != b.nom);
+        if change {
+            self.decor3d_retoucher(seq, d);
         }
         // Le geste fini (rien n'est tenu, aucun champ n'est en saisie) : une étape d'annulation pour toute la retouche.
         let tenu = ui.input(|i| i.pointer.any_down()) || ui.ctx().memory(|mem| mem.focused().is_some());
         if !tenu {
-            if let Some(avant) = self.decor3d.retouche.take() {
-                let maintenant = std::mem::replace(&mut self.doc.decors3d, avant);
-                let snap = self.snapshot();
-                self.doc.decors3d = maintenant;
-                let before = self.history.context.replace("Déplacer le décor 3D".into());
-                self.commit_structure(snap);
-                self.history.context = before;
-            }
+            self.decor3d_retouche_finir();
         }
     }
 
@@ -598,7 +934,7 @@ impl Lourd {
         let triangles = self.simplifier.then(|| match self.cible {
             Cible::Moitie => t / 2,
             Cible::Quart => t / 4,
-            Cible::Budget => budget.map_or(t / 2, |b| (b.triangles as usize).min(t)),
+            Cible::Budget => budget.map_or(t / 2, |b| (b.triangles.saturating_sub(self.deja.triangles) as usize).clamp(1, t.max(1))),
         });
         Options { cote_max: self.alleger.then_some(self.cote), triangles }
     }

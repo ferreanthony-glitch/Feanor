@@ -15450,3 +15450,170 @@ partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banqu
    note les chiffres de ton PC.
 12. En `PELURE_AFFICHAGE=opengl` : la vue montre la boîte du décor en fil de fer ; l'image du plan le montre (rendu un instant
    après).
+
+## 181. La banque 3D dans la Bibliothèque, et un décor fait de plusieurs objets (2026-11-19, branche `banque-3d`)
+
+Suite de la partie 180 (branche `banque-3d`, partie de `decor-3d` 319e817). Le décor 3D d'une séquence devient une **liste
+d'objets** (pour que la banque ait un sens : dix arbres, une route, des maisons), et les 45 modèles low poly choisis par Anthony
+(Kenney, CC0, `assets/banque3d/`) arrivent dans la Bibliothèque, onglet **3D**. En cours de route, deux demandes d'Anthony : une
+**origine** modifiable par objet, et **« Aimanté au sol »**. Format du projet inchangé (60) ; `decors3d.json` passe à sa
+version 2. **Rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR) ; compilé et essayé sur le Mac seulement.
+
+### 181.1 Ce qui change pour Anthony
+
+1. **Importer ajoute un objet** : Fichier > Importer > « Objet 3D pour le décor de la séquence (glTF, .glb)… »
+   (`fichier.importer_decor3d`) ne remplace plus le décor, il y ajoute un objet. Chaque objet a son modèle, son nom, sa place
+   (position, rotation autour de la verticale, échelle), son **origine** et sa case « Aimanté au sol ». Tous les objets d'une
+   séquence partagent l'aspect (facettes, ciel, brume, ombres, soleil) : une lumière, un ciel. Ils sont justes en profondeur
+   entre eux (un arbre derrière une maison est caché par elle) ; toujours derrière les cartes, comme à la partie 180.
+2. **Où il arrive** : son origine sur le sol, **devant la caméra du plan** (en face de son œil, le devant de l'objet contre la
+   feuille) ; lâché sur la vue Espace 3D, **au point du sol sous le pointeur**. Aimanté au sol d'office.
+3. **Le panneau Espace 3D**, « Décor 3D de la séquence (N objets) » : l'aspect et le poids de tout le décor (« 3 412 triangles en
+   tout · sur cet ordinateur : ombres douces (hautes) (jusqu'à …) ») ; **la liste des objets** (clic : le choisir ; un objet masqué
+   sur cet ordinateur le dit) ; **Ajouter…**, **Dupliquer** (une copie du même modèle, posée juste à sa droite), **Enlever** ;
+   puis les champs de l'objet choisi : **Nom** (renommer), fichier d'origine, ce qui a été allégé, **Position (m)** (celle de
+   l'origine ; la hauteur grisée avec « aimanté » quand la case est cochée), **Rotation (°)** et **Échelle** (autour de
+   l'origine), **Origine** (x, y, z dans le repère du modèle, et le menu ⌖ : « Au sol (centre du dessous) », « Au centre de la
+   boîte », quatre coins du bas, « Le point (0, 0, 0) du fichier »), **Aimanté au sol**, **Recentrer l'origine** (au milieu en
+   largeur et en profondeur, à sa hauteur : l'objet tourne alors sur lui-même), **Remettre au sol** (rotation et échelle
+   d'origine, l'origine au centre du dessous, posé au même endroit). Changer l'origine **ne bouge jamais l'objet** : sa position
+   est recalculée pour que rien ne se déplace (comme « origine vers la géométrie » d'un outil 3D). Une retouche (un glisser, une
+   saisie, un nom tapé) est une étape d'annulation, posée au lâcher ; Ajouter, Dupliquer, Enlever : une étape chacun.
+4. **Aimanté au sol** (Anthony : « Tout objet peut être aimanté dans la scène 3D pour se fixer directement au sol sans
+   pénétration ») : la hauteur de l'objet est calculée, il repose sur le sol ou sur le dessus des objets sous lui (un banc sur une
+   dalle de route, un arbre sur un morceau de terrain), sans y entrer, à 1 mm près. Recalculé à chaque retouche (déplacer, tourner,
+   mettre à l'échelle, changer l'origine, ajouter, dupliquer, enlever un objet : ceux qui reposaient dessus redescendent), jamais
+   à chaque image. **Décocher le laisse exactement où l'aimant l'avait mis** : la hauteur calculée est celle que le projet
+   garde, le champ Y se dégrise sur cette valeur ; une étape d'annulation ; elle reste après enregistrement et réouverture.
+5. **Ce qu'il fait quand plusieurs objets se touchent** : un objet prend, parmi les hauteurs où il ne rentre dans rien, **la plus
+   proche de là où il est** — glisser une dalle sous un banc fait monter le banc ; un feu de camp glissé sous la ramure d'un arbre
+   reste au sol ; sous un pont, un objet qui y était reste dessous. Les objets se posent les plus bas d'abord, à égalité la plus
+   grande empreinte (le terrain avant l'arbre, la dalle avant le banc) : pas de boucle, deux calculs de suite donnent la même chose.
+6. **La Bibliothèque a deux onglets** : « Fichiers » (l'explorateur de toujours) et **« 3D »** : les 45 modèles en vignettes,
+   par famille (Nature 21, Routes 8, Ville rétro 7, Banlieue 6, Commerces 3, repliables), une recherche (nom, famille, kit), une
+   bulle (nom, triangles, kit, « CC0 · Kenney »). **Un clic** pose le modèle dans le décor de la séquence du plan courant, devant
+   la caméra ; **le glisser** sur le dessin (devant la caméra) ou sur la vue Espace 3D (au point du sol). Les aperçus se décodent
+   sur un autre fil à la première ouverture de l'onglet.
+7. **Le même chemin qu'un fichier**, et le budget vaut pour **tout le décor** de la séquence (la somme de ses objets : chaque
+   objet compte ses triangles, un modèle partagé ses textures une fois) : un objet qui ferait dépasser ce que l'ordinateur dessine
+   sans ralentir ouvre « Ce décor est lourd » pour lui (alléger, simplifier jusqu'à ce qui reste du budget ; la fenêtre dit ce que
+   pèse déjà la séquence) ; une séquence déjà au bout du budget **refuse** l'objet, avec un message (« enlève ou simplifie un objet
+   avant d'en ajouter un autre »). Jamais de ralentissement.
+8. **À propos** : « Banque 3D : modèles de Kenney (www.kenney.nl), licence CC0 (domaine public) » (un clic ouvre le site). La
+   licence ne demande pas de crédit ; FEANOR le donne (`assets/banque3d/LICENCES.md`).
+9. « Enlever le décor 3D de la séquence » (`decor3d.enlever`) enlève tous ses objets (une étape).
+
+### 181.2 Comment c'est fait
+
+- **`decor3d.rs`** : `Decor3d { uid, aspect, objets: Vec<Objet3d> }` ; `Objet3d { id, nom, source, allege, place: Place3d,
+  origine, aimante, modele: Arc<Modele3d> }` ; la matrice d'un objet est `place.matrice() × translation(−origine)` (la position est
+  celle de l'origine, rotation et échelle autour d'elle) ; `changer_origine` recalcule la position. `Modele3d` porte son
+  **empreinte** (16 chiffres hexadécimaux du SHA-256 de ses octets, `sha256.rs`, stable d'une machine à l'autre) et sa boîte
+  (calculée une fois). Un modèle de même empreinte déjà dans le projet est **repris** (`Decors3d::modele_d_empreinte`) : un seul
+  `Arc`, un seul envoi à la carte. L'empreinte se calcule sur le fil de la lecture ou de l'allègement, jamais sur celui de
+  l'interface.
+- **Le fichier** : `decors3d.json` version 2 (`VERSION_FICHIER`), par séquence `{ sequence, aspect, objets: [{ id, nom,
+  fichier_d_origine, fichier, position, rotation_y, echelle, origine, aimante, allege }] }`, les modèles dans
+  `decors/<empreinte>.glb` : **dix objets du même contenu, un fichier** ; à la lecture, un fichier se lit une fois et ses objets
+  partagent le modèle. Une entrée de version 1 (partie 180) se lit comme un objet : origine au centre du dessous de sa boîte, la
+  position corrigée pour que la matrice soit **la même** (au 1e-5 près), pas aimanté (Anthony l'avait placé à la main). Au prochain
+  enregistrement, le fichier passe en version 2, le modèle est réécrit sous son empreinte et `decors/<id>.glb`, plus cité, est
+  effacé par le ménage (qui n'efface que les noms que FEANOR écrit : un numéro ou une empreinte). Un objet illisible est gardé tel
+  quel (un objet à la fois, les autres de la séquence se montrent) et le ménage n'efface alors rien. `project::VERSION` ne change
+  pas ; un FEANOR de la partie 180 voit la version 2 « plus récente », montre les plans sans décor et n'efface rien.
+- **Le rendu** : toujours **un** élément de décor par plan (`render::FondPart::Decor`) ; sa clé (`DecorCle`) porte le décor
+  (`uid`, qui nomme la texture de la carte : un objet qui bouge la redessine, il n'en crée pas), l'empreinte des objets vus et de
+  leurs matrices (`contenu`), le repère du plan en Espace 3D, l'œil, la feuille, l'aspect ; `objets_de` rend les objets d'une clé
+  (rien si le décor a changé depuis). Carte graphique : un `Dessin` par objet, le même `id` pour les objets d'un même modèle
+  (`decor3dgpu` l'envoie une fois ; une passe ne renvoie plus de la carte un modèle qu'elle dessine, même au-delà de huit) ;
+  `gpu.rs` (`DecorJob.dessins`), la vue Espace 3D, l'export par la carte. Processeur : `decor3drendu::rendre_objets`, tous les
+  objets dans le même tampon de profondeur. La qualité des ombres suit les triangles de tout le décor (`decor3d::qualite`).
+- **Le budget** : `Decor3d::poids`, `decor3d::verdict_sequence` (la somme), `decor3d::sequence_pleine` (le refus) ; la fenêtre
+  « Ce décor est lourd » garde ce que pèse déjà la séquence (`Lourd::deja`), simplifie « jusqu'à » ce qui en reste, et ne pose
+  qu'un résultat qui tient avec les autres. À l'ouverture sur un autre ordinateur, chaque modèle est jugé avec ce qui le précède
+  dans sa séquence ; celui qui fait dépasser est masqué (« Le masquer sur cet ordinateur » / « Simplifier, alléger et
+  remplacer », qui remplace le modèle dans tous les objets qui le montrent).
+- **L'import** (`decor3dui.rs`) : un seul chemin, `App::decor3d_lancer(cible, lire)` — un fichier (`decor3d::analyser`) ou un
+  modèle de la banque (`banque3d::analyser`) se lit sur un autre fil, le temps d'une image se mesure sur la carte, puis
+  `decor3d_juger` : posé (`decor3d_poser`), fenêtre, ou refus. La séquence visée est prise au début (`Cible3d`).
+- **L'aimant** (`decor3daimant.rs`) : le dessous de l'objet est le plus bas de ses sommets (la rotation n'est qu'autour de la
+  verticale et l'échelle uniforme : c'est le bas de la boîte du modèle, à l'échelle) ; neuf verticales à travers son empreinte
+  (coins, milieux des bords, centre, un peu rentrés) traversent les **triangles** des autres objets, dans leur propre repère (où
+  la verticale reste verticale : un point dans un triangle, à plat) ; une hauteur convient si aucune surface ne passe dans
+  l'épaisseur de l'objet sur aucune verticale et s'il n'est pas enfermé dans un autre (nombre pair de traversées au-dessus de son
+  milieu) ; parmi le sol et les surfaces traversées, la plus proche de là où il est. Une verticale hors de la boîte d'un objet ne
+  regarde pas ses triangles ; un objet de plus de 150 000 triangles (`TRIANGLES_EXACTS`) sert d'appui par sa boîte, et la barre
+  d'état le dit.
+- **La banque** (`banque3d.rs`, `banque3dfichiers.rs`, `banque3dui.rs`) : **rangée dans le programme** (`include_bytes!` de
+  chaque `.glb` et `.png` cité par `catalogue.json`, `include_str!` du catalogue). La bibliothèque de bruitages, à qui la consigne
+  renvoyait, ne livre aucun son : elle liste les dossiers d'Anthony (`bruitages.rs`). Ce que FEANOR livre avec lui (polices,
+  licence de ffmpeg, page de relecture) est déjà rangé ainsi : un seul `feanor.exe`, rien qui puisse manquer ou être d'une autre
+  version, la banque présente même lancée depuis une clé. Le prix : **1 278 471 octets** de données (1,22 Mio) ; mesuré
+  sur l'exécutable du Mac (version optimisée), 51 264 920 → 52 808 616 octets, **+1,47 Mio** (les données et le code de la partie). Le catalogue (`feanor-banque3d` v1) est vérifié : un autre format ou une version plus récente est refusé.
+  L'onglet est dans `BiblioUi` (`onglet`, `banque` : partagés entre les onglets de projet, comme le reste de la Bibliothèque) ;
+  l'objet choisi est dans `Etat3d::choisi` (par projet, déjà classé `decor3d`). Aucun champ neuf dans `App`.
+
+### 181.3 Essais
+
+`decor3d_tests` (mis à jour, et 19 de plus) : deux fichiers importés font deux objets, qui partagent le modèle, et Ctrl+Z
+retire le dernier puis le premier ; Dupliquer (à côté, le même modèle, la copie choisie) et Enlever, une étape chacun ; dix objets du
+même contenu font **un** fichier, relus identiques et partageant un modèle, rien de plus au second enregistrement ; un
+`decors3d.json` de la partie 180 se lit comme un objet à la même matrice, se réécrit en version 2 sous l'empreinte, l'ancien fichier
+effacé ; le budget de la somme (`verdict_sequence`, textures d'un modèle partagé comptées une fois, `sequence_pleine`, le poids d'un
+décor) ; par l'interface, le second carré ouvre « Ce décor est lourd » (budget de 3 triangles) ou est refusé (budget de 2) ;
+l'image exportée d'un plan à deux carrés les montre tous deux (rendu par le processeur), une seule entrée de décor dans le plan,
+une autre clé quand un objet bouge et la même texture ; sur la carte graphique, les deux carrés d'un même modèle et le poids d'un
+seul modèle dans la carte (sauté sans carte) ; rotation et échelle autour de l'origine ; changer l'origine ne bouge aucun sommet ;
+l'aimant : le plus bas sommet sur le sol (origine loin au-dessus), une boîte penchée dans son modèle puis tournée de 30° et agrandie
+touche le sol sans y entrer, un petit objet sur un grand repose sur son dessus, un banc qui dépasse d'une dalle reste dessus,
+l'objet du dessous qui monte ou s'en va fait suivre celui du dessus, décoché il garde sa hauteur, deux objets au même endroit
+s'empilent dans un ordre fixe et trois recalculs ne changent rien, un feu de camp sous une ramure reste au sol, un objet de
+180 000 triangles sert d'appui par sa boîte (et le dit) en moins de 100 ms ; **décocher « Aimanté »** : coché il repose sur le sol,
+décoché sa place ne change pas (une étape), enregistré et relu elle ne change pas, Ctrl+Z le rend aimanté à la même place.
+`banque3d_tests` (6) : le catalogue rangé est celui du disque, ses 45 modèles et 45 aperçus sont rangés identiques et se lisent
+(lecteur glTF de FEANOR, triangles du catalogue ; PNG), rien de plus ; un autre format ou une version plus récente refusé ; 45
+modèles en 5 familles dans l'ordre (21, 8, 7, 6, 3), la recherche, la bulle ; chaque modèle s'analyse comme un fichier importé ; un
+modèle de la banque se pose (nom lisible, « Banque 3D », aimanté, sur le sol, une étape), au point lâché, et au-delà du budget
+ouvre « Ce décor est lourd » ; le crédit Kenney est dans « À propos ».
+
+### 181.4 Ce qui n'est pas fait (ou limité)
+
+- Pas de manipulateur des objets dans la vue Espace 3D (ni pour l'origine : le chantier de l'origine des calques l'ajoutera,
+  partagé) ; l'objet choisi a seulement sa boîte en clair dans la vue quand le décor en a plusieurs. Pas de clic dans la vue pour
+  choisir un objet.
+- Sur le dessin, un modèle lâché se pose **devant la caméra**, pas au point lâché (seule la vue Espace 3D, une vue, sait le point
+  du sol sous le pointeur).
+- L'aimant échantillonne neuf verticales : une pointe fine d'un objet du dessous, entre deux verticales, peut entrer un peu dans
+  l'objet du dessus ; un dessous d'objet qui n'est pas plat peut flotter un peu au-dessus d'un appui irrégulier. Un objet ouvert
+  (une surface sans épaisseur) peut tromper le test « enfermé dedans ». Le sol de l'aimant est celui du cadre : changer la taille du
+  cadre ne repose pas les objets (une retouche le fait).
+- Copier, coller, glisser un objet d'une séquence à l'autre : pas encore. Copier ou dupliquer une séquence n'emporte toujours pas
+  son décor.
+- Pas de vignette de la banque dans les vignettes des plans (le décor y est, comme partie 180).
+- La recherche de la banque porte sur les noms anglais des fichiers (« tree », « road »), les familles et les kits.
+
+### 181.5 À tester (sa checklist)
+
+1. Un projet de copie. Bibliothèque > **3D** : les cinq familles, les vignettes, la recherche (« tree », « road »), la bulle.
+2. Clique un arbre : il apparaît dans le décor de la séquence, sur le sol, devant la caméra ; la barre d'état dit sa taille et
+   « N objets ». Clique-le encore deux fois, puis une route : quatre objets. Ctrl+Z les retire un par un.
+3. Glisse une maison sur la vue Espace 3D : elle se pose au point du sol sous le pointeur. Glisse-la sur le dessin : devant la
+   caméra. Lâchée ailleurs : la barre d'état le dit.
+4. Panneau Espace 3D : la liste ; choisis un objet, renomme-le, déplace-le, tourne-le, change son échelle ; **Dupliquer**,
+   **Enlever** ; Ctrl+Z à chaque fois (une étape par geste).
+5. **Origine** : menu ⌖ « Au centre de la boîte », puis tourne : l'objet tourne sur lui-même ; « Coin bas, gauche, arrière »,
+   puis tourne : autour du coin. Changer l'origine ne bouge jamais l'objet. « Recentrer l'origine », « Remettre au sol ».
+6. **Aimanté au sol** : la hauteur grisée « aimanté ». Pose une dalle de route, puis un banc dessus (glisse le banc sur la dalle) :
+   il monte dessus sans y entrer ; glisse la dalle ailleurs : le banc redescend. Un arbre sur un morceau de terrain. Un feu de camp
+   sous un arbre : il reste au sol. **Décoche « Aimanté »** sur le banc posé sur la dalle : il ne bouge pas, le champ Y montre sa
+   hauteur ; enregistre, rouvre : toujours là. Déplace-le : il garde sa hauteur.
+7. Tous les objets se cachent entre eux comme il faut (une maison devant un arbre), dans la vue Espace 3D et dans l'image du
+   plan ; exporte une image : pareil.
+8. Enregistre, rouvre : tout est là ; dans `decors/`, **un seul fichier** pour les trois arbres pareils.
+9. Un projet de la partie 180 (un décor importé avant) : il s'ouvre, le décor est **exactement à la même place**, comme un objet
+   (pas aimanté) ; enregistre : `decors3d.json` passe en version 2.
+10. Le budget : pose beaucoup de modèles (ou un gros fichier puis des modèles de la banque) jusqu'à la limite de ton PC :
+   « Ce décor est lourd » pour l'objet de trop, puis le refus quand la séquence est pleine. **Rien ne doit ralentir** (lecture à
+   24 i/s, J/K/L, glisser la caméra, glisser un champ de position d'un objet aimanté).
+11. À propos : la ligne « Banque 3D : modèles de Kenney… », un clic ouvre le site.
+12. La taille de `feanor.exe` : environ 1,5 Mo de plus que la partie 180 (mesuré sur le Mac : +1,47 Mio).
