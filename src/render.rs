@@ -862,7 +862,8 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         return None;
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
-    let t = l.pose(frame);
+    // (Un élément de plan se pose autour du centre de la feuille : la pose y est rapportée, partie 182.)
+    let t = l.pose_au_centre(frame, doc.stage_center());
     let line = PlanItem {
         cel,
         opacity: 255,

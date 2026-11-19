@@ -969,6 +969,52 @@ action = "calque.accrocher_camera"
 touches = []
 source = "FEANOR (sans touche ; le petit bouton caméra du calque dans le panneau Calques, ou Plus > Réglages avancés)"
 
+# L'origine du calque (partie 182) : le point du dessin autour duquel il se déplace, s'agrandit et tourne ; et l'aimant au sol des cartes.
+[[raccourci]]
+action = "origine.centre_dessin"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_centre"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.haut_gauche"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.haut_droite"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_gauche"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_droite"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.ici"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.feuille"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "calque.aimante_au_sol"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
 [[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]

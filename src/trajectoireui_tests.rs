@@ -17,6 +17,8 @@ pub(crate) fn banc() -> Banc {
     doc.panels[0].layers = vec![Layer::new("Perso", LayerKind::Vector)];
     doc.panels[0].length = 24;
     let mut b = banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.app.set_mode(Mode::Animation);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.set_tool(Tool::Trajectoire);

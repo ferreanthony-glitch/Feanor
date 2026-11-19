@@ -15450,3 +15450,106 @@ partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banqu
    note les chiffres de ton PC.
 12. En `PELURE_AFFICHAGE=opengl` : la vue montre la boîte du décor en fil de fer ; l'image du plan le montre (rendu un instant
    après).
+
+## 182. L'origine d'un calque, son vrai pivot (2026-11-19, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**)
+
+Chaque calque dessiné a maintenant **une origine** : un point de son dessin que l'on place, et autour duquel le calque se déplace,
+s'agrandit, s'étire et tourne, à sa pose fixe comme à chacune de ses clés de position. Une tête tourne autour du cou ; un
+personnage dont l'origine est aux pieds se pose sur un chemin par les pieds, et dans l'Espace 3D, sur le sol. Sans origine
+choisie, l'origine est le centre de la feuille : **tout est comme avant, au bit près**. Compilé et essayé sur le Mac seulement ;
+**rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 182.1 Ce qui change pour Anthony
+
+1. **Outil Transformer** : l'origine du calque courant est toujours là, un petit cercle à croix (comme le pivot de la boîte de la
+   Sélection). **La tirer déplace l'origine, jamais le dessin** ; Maj l'aimante au centre, aux coins et aux milieux des côtés de
+   la boîte du dessin. Le lâcher est une étape d'annulation (« Déplacer l'origine »). Sa bulle le dit, le pointeur devient une croix.
+2. **Avec une origine**, la poignée ronde tourne le calque autour d'elle, et un coin ou un côté tiré avec le point fixe « au
+   centre » (réglage « Point fixe », ou Ctrl) garde l'origine en place. Sans origine, la poignée ronde et le point fixe au centre
+   restent ceux d'avant (le centre de la boîte). La rotation prise hors d'un coin ne change pas (centre ou coin opposé).
+3. **Les champs de l'outil** : sous x, y, largeur, hauteur et angle, une ligne « Origine » : x et y de l'origine en pixels du dessin
+   (les changer ne déplace pas le dessin), et le menu **« Origine ▾ »** : « Au centre du dessin », « En bas au centre », « En haut à
+   gauche », « En haut à droite », « En bas à gauche », « En bas à droite », « Ici » (le point de la feuille sous le dernier clic ou
+   le pointeur), « Au centre de la feuille » (plus d'origine à soi). Les points du dessin se lisent sur la boîte de ce qui est
+   dessiné à l'image courante. Chaque choix est une étape d'annulation.
+4. **Le menu du calque** : Plus > **Origine**, le même menu. Les huit commandes sont dans la palette (Ctrl+K), sans touche par défaut
+   (`origine.centre_dessin`, `origine.bas_centre`, `origine.haut_gauche`, `origine.haut_droite`, `origine.bas_gauche`,
+   `origine.bas_droite`, `origine.ici`, `origine.feuille`), à assigner au clic droit comme les autres.
+5. **Les clés** : entre deux clés, le calque tourne et grandit autour de son origine (elle reste immobile si seules l'échelle ou
+   l'angle changent entre les deux clés). Déplacer l'origine d'un calque animé recalcule sa pose fixe et chacune de ses clés pour
+   que **rien ne bouge à aucune clé** ; entre deux clés, le mouvement tourne désormais autour de la nouvelle origine.
+6. **Trajectoire** : « Ce qui suit le chemin » propose en tête **« L'origine du calque »** : c'est elle qui est posée sur le chemin,
+   et avec « Le dessin tourne avec le chemin », le dessin tourne autour d'elle (les copies des clés d'images aussi). **Une
+   trajectoire neuve part avec ce choix** ; le dernier ancrage choisi dans la liste est proposé à la suivante. Une trajectoire d'un
+   projet d'avant garde le sien (« Là où part le trait » quand le fichier n'en dit rien). Déplacer l'origine d'un calque dont
+   l'origine suit le chemin déplace le chemin avec elle : le dessin ne bouge pas, et un nouveau calcul redonne les mêmes clés.
+7. **Espace 3D** : la carte choisie montre son origine ; **le manipulateur tourne et met à l'échelle autour d'elle** (plusieurs
+   cartes : autour de la moyenne de leurs origines ; aucune origine choisie : le centre de la boîte, comme avant). « Position » du
+   panneau Précis est la place de l'origine dans l'espace, et la rotation saisie, comme « Comment il est posé », tourne la carte
+   autour d'elle. Une trajectoire tracée dans la vue pose l'origine de la carte sur le chemin (case **« L'origine du calque suit
+   le chemin »** dans les réglages de l'outil ; décochée, le déplacement relatif d'avant). La carte n'y tourne pas avec le chemin :
+   vue par la tranche, elle disparaîtrait.
+8. **« Aimanté au sol »** (panneau de la carte dans l'Espace 3D, sous « Taille dans le cadre » ; menu du calque, Plus > Réglages
+   avancés ; `calque.aimante_au_sol`, sans touche) : l'origine de la carte repose sur le sol de l'Espace 3D, à sa pose fixe et à
+   chacune de ses clés. Coché, la hauteur (Y de « Position », y de l'outil Transformer) est grisée : l'aimant la tient. L'aimant
+   est refait après chaque geste (manipulateur, champs, réglette de distance, taille, clé posée, trajectoire, origine déplacée,
+   profondeur), jamais pendant la lecture. **Décoché, la carte reste exactement où l'aimant l'avait posée**, maintenant et après
+   enregistrement ; la hauteur redevient réglable. Cocher et décocher sont chacun une étape d'annulation. Un calque accroché à la
+   caméra ne se pose pas au sol (l'entrée le dit).
+
+### 182.2 Comment c'est fait
+
+- **Les données** (`document.rs`) : `Layer::origine: Option<[f32; 2]>` (pixels du dessin : l'origine suit le dessin ; rien = le
+  centre de la feuille), `Layer::aimante_au_sol`. `Layer::pivot(centre)` donne le pivot effectif, `Layer::ecart_origine` son écart
+  au centre, `Layer::affine_at` l'affinité du dessin vers la feuille à une image.
+- **L'origine est le pivot** : la pose est l'affinité `affine(origine)` (étirement, échelle, rotation autour de l'origine, puis le
+  décalage). Tout ce qui fabrique une image (écran, carte graphique, vignettes, exports, pelure d'oignon, calques d'effet, vue
+  réduite, vue de dessus) passe par `Layer::pose_seen`, qui **rapporte la pose au centre de la feuille**
+  (`LayerTransform::au_centre`, x' = x + e − A·e, la même affinité) : les éléments de plan gardent leur sens (`affine(centre)`) et
+  le multiplan, l'accroche à la caméra, la profondeur s'appliquent comme avant. Écart nul : la pose elle-même, au bit près.
+  `CameraSeen` porte le centre de la feuille. Les gestes (outil Transformer, retourner, miroir des calques choisis, trajectoire)
+  travaillent autour de `Layer::pivot` ; l'accroche à la caméra repasse par le centre (`accrocher`, `decrocher`,
+  `poser_du_geste`). Deux plans réunis : les poses du second sont rendues à l'origine des calques du premier.
+- **Les cartes** (`espace3d.rs`, `docs/ESPACE3D.md` partie 15) : `Monde::card_xf_o` place l'origine, `card_from_xf_libre_o` en est
+  l'inverse exacte ; `Monde::carte`, `place_dans`, l'ordre par distance, la carte inclinée de la feuille, la trajectoire dans
+  l'espace passent par elles.
+- **Déplacer l'origine** (`origine::deplacer_origine`) : à plat, xy2 = xy1 + A·Δ − Δ à la pose fixe et à chaque clé ; une clé
+  inclinée garde son placement 3D (profondeur et échelle recalculées) ; le chemin d'une trajectoire ancrée à l'origine suit
+  l'origine (sur la feuille : sous la pose du départ ; dans l'espace : le plan porteur suit l'origine de la carte). L'outil repose
+  l'origine depuis le calque du début du geste à chaque pas (rien ne s'accumule) et refait l'aimant au lâcher.
+- **L'ancrage** `Ancre::Origine` (`trajectoire.rs`) : `pose_tournee` tourne autour de l'origine du calque (le pivot passé est
+  `Layer::pivot`) ; avec l'origine pour point d'ancrage, rien n'est à compenser. `assainie` le garde dans l'espace (« le dessin
+  tourne » y reste refusé).
+- **L'aimant** (`origine.rs`) : `hauteur_du_sol_sous(monde, x, z)` est la seule lecture du sol (le plan `Monde::sol_y` ; le dessus
+  des objets d'un décor s'y branchera) ; `aimanter_au_sol` ne change que `y` de la pose fixe et de chaque clé.
+- **Le format 61** (`project.rs`) : `origine` (absente sans origine) et `aimante_au_sol` (absent s'il est faux) d'un calque,
+  l'ancrage `"Origine"` d'une trajectoire. Une version précédente lirait la pose autour du centre de la feuille (un autre film) :
+  elle refuse. Un projet de version 60 ou moins s'ouvre tel quel, sans origine ni aimant, avec les mêmes images. Une origine
+  abîmée se relit au centre de la feuille. Dupliquer, copier-coller (même d'un projet d'une autre taille : l'origine suit le
+  dessin, `adaptation.rs`), les projets partagés, les calques de toute la scène emportent l'origine ; un calque de couleur a celle
+  de son trait ; l'exemplaire d'une planche-mère garde la sienne.
+
+### 182.3 Les essais
+
+`src/origine_tests.rs` (16) : sans origine, la pose vue, l'élément du plan et sa matrice sont ceux d'avant au bit près (poses
+variées, multiplan) et une carte se place comme avant ; déplacer l'origine garde l'affinité de la pose fixe et de chaque clé ; une
+carte inclinée garde ses coins dans l'espace et son point sur la feuille (aller-retour exact du placement) ; entre deux clés de
+rotation, l'origine reste immobile ; les origines toutes faites lues sur la boîte du dessin, « Ici », « Au centre de la feuille »,
+l'aimantation de Maj, les commandes ; une étape d'annulation qui s'annule ; la poignée ronde et le point fixe au centre ; l'ancrage
+à l'origine sur la feuille (tourné ou non) et un ancrage d'avant qui reste juste ; une origine déplacée sous une trajectoire ;
+l'origine sur le chemin dans l'espace ; le pivot du manipulateur ; l'aimant (pose fixe et clés au sol, décoché : affinités et cartes
+identiques à chaque clé, puis après enregistrement), l'aimant après un geste et une origine déplacée ; l'enregistrement, un projet
+60, un projet 62 refusé ; la copie, la couleur et la planche-mère ; une trajectoire neuve ancrée à l'origine. Les essais d'avant
+des trajectoires gardent le déplacement relatif (`ancre_propose`), et ceux du format passent à 61.
+
+### 182.4 À tester (sa checklist)
+
+1. Transformer sur un personnage : le cercle à croix au centre de la feuille. Le tirer aux pieds (Maj : il s'accroche au milieu
+   du bas de la boîte) : rien ne bouge. Tourner par la poignée ronde : il tourne autour des pieds. Ctrl+Z : l'origine revient.
+2. Deux clés d'angle sur une tête, origine au cou : entre les clés, le cou ne bouge pas.
+3. Menu du calque > Plus > Origine > « En bas au centre », puis « Au centre de la feuille » : le dessin ne bouge jamais.
+4. Trajectoire neuve sur ce personnage : les pieds sur le chemin ; « Le dessin tourne avec le chemin » : il tourne autour des pieds.
+   Déplacer l'origine ensuite : rien ne bouge, le chemin suit.
+5. Espace 3D : choisir la carte, l'origine s'y voit ; tourner avec le manipulateur : autour d'elle. Cocher « Aimanté au sol » : les
+   pieds sur le sol, à chaque clé ; le Y de Position est grisé. Décocher : rien ne bouge ; enregistrer, rouvrir : toujours là.
+6. Un projet d'avant : les mêmes images, les trajectoires gardent leur ancrage.

@@ -45,7 +45,9 @@ Les habitants : les **cartes** (un calque du plan = un rectangle de la taille de
 
 ### 3.1 Pose d'une carte
 
-Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe (`Xf`). La carte tourne autour de son centre. Rotation : l'ordre
+Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe (`Xf`). La carte tourne autour de son centre — **de son origine**
+depuis la partie 182, quand le calque en a une (`Layer::origine`, partie 15 ci-dessous ; sans origine, l'origine est le centre de
+la feuille, donc de la carte : comme avant). Rotation : l'ordre
 `Ry · Rx · Rz` ; Z est le tour dans le plan de la carte (le « angle » du calque), X et Y sont **l'inclinaison**. Inclinaison
 X positive : le haut de la carte vient vers la caméra. Inclinaison Y positive : le bord droit s'éloigne.
 
@@ -304,3 +306,41 @@ vue), jamais refait par le processeur quand la caméra bouge ; un **budget mesur
 ce qu'un décor peut peser sans ralentir, et un décor trop lourd est allégé ou simplifié (la copie du projet seulement), jamais
 accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes, les ombres
 portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront ensuite.
+
+## 15. L'origine des cartes et l'aimant au sol (2026-11-19, branche `origine-calques`, partie 182 de `docs/INTERFACE.md`)
+
+**L'origine** d'un calque (`Layer::origine`, en pixels de son dessin, `origine.rs`) est le point de la carte qui porte sa place.
+Avec `e` l'écart de l'origine au centre de la feuille (`Monde::ecart`), les champs du calque donnent (`Monde::card_xf_o`) :
+
+| Carte (monde) | depuis le calque, avec une origine |
+|---|---|
+| place de l'origine | `((e.x + x) · s · k, −(e.y + y) · s · k, −d0 · d)` |
+| rotation, taille | comme au point 3.2, autour de l'origine |
+| centre de la carte (`Xf::pos`) | la place de l'origine moins `R · (taille ⊙ e / (W, H))` |
+
+La profondeur `d` est donc celle de **l'origine** (pour une carte à plat, c'est aussi celle de son centre). Sans origine, `e` est
+nul et `card_xf_o` est exactement `card_xf`, au bit près ; `card_from_xf_libre_o` en est l'inverse exacte (un essai fait l'aller
+et retour sur des cartes inclinées). Une carte à plat posée par l'affinité de la feuille (`Layer::transform_seen_at`) a la même
+image : la pose y est rapportée au centre de la feuille (`LayerTransform::au_centre`, x' = x + e − A·e).
+
+- **Déplacer l'origine ne déplace pas la carte** (`origine::deplacer_origine`) : à plat, la pose est recalculée sur la feuille
+  (xy2 = xy1 + A·Δ − Δ) ; **inclinée**, son placement 3D est recalculé (`card_xf_o` avec l'ancienne origine, puis
+  `card_from_xf_libre_o` avec la nouvelle) : la profondeur, celle de l'origine, peut changer, et l'échelle avec elle (la taille
+  dans le monde est gardée) ; les quatre coins de la carte restent au même endroit de l'espace, à la pose fixe et à chaque clé.
+- **Le manipulateur** (`App::e3_pivot`) : une carte seule tourne et grandit autour de son origine ; plusieurs, autour de la
+  moyenne de leurs origines (la caméra comptant pour sa place) ; aucune carte choisie n'a d'origine : le centre de la boîte des
+  positions, comme avant. Étirer une carte sur un de ses axes garde son origine en place. Le champ « Position » du panneau
+  (Précis) est la place de l'origine ; la rotation saisie, et « Comment il est posé », tournent la carte autour d'elle. La carte
+  choisie montre son origine, un petit cercle à croix.
+- **La trajectoire dans l'espace** (`trajectoire3d::cles_dans_l_espace`) : avec l'ancrage `Origine`, l'origine de la carte est posée
+  sur le chemin à chaque image ou jalon (au lieu du déplacement relatif d'avant, gardé pour `Depart`). La carte n'y tourne pas avec
+  le chemin (vue par la tranche, elle disparaîtrait). Une trajectoire neuve tracée dans la vue part avec l'ancrage `Origine`.
+- **Aimanté au sol** (`Layer::aimante_au_sol`, `origine::aimanter_au_sol`) : l'origine de la carte repose sur le sol, à sa pose
+  fixe et à chacune de ses clés : seul `y` change, `y = −sol / (s · k) − e.y`, à la profondeur de la pose. Le sol se lit par **une
+  seule fonction**, `origine::hauteur_du_sol_sous(monde, x, z)` : aujourd'hui le plan `Monde::sol_y`, partout ; le dessus des
+  objets d'un décor se branchera là. L'aimant est refait **après chaque modification** (manipulateur, champs, réglette de
+  distance, taille, clé posée, trajectoire recalculée, origine déplacée, profondeur dans le panneau Calques ou la vue de dessus),
+  jamais à la lecture d'un fichier ni pendant la lecture du film. Coché, la hauteur (Y) est grisée dans le panneau. Décoché,
+  rien ne bouge : la carte reste où l'aimant l'a mise, maintenant et après enregistrement. Un calque accroché à la caméra ne se
+  pose pas au sol.
+

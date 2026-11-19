@@ -364,6 +364,10 @@ mod nouvellescles;
 mod accroche;
 #[cfg(test)]
 mod accroche_tests;
+// L'origine d'un calque, son vrai pivot, et l'aimant au sol des cartes (partie 182).
+mod origine;
+#[cfg(test)]
+mod origine_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;

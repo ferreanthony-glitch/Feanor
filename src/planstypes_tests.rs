@@ -289,7 +289,7 @@ fn le_format_60_garde_le_lettre_a_lettre_et_les_plans_types() {
     doc.poser_sur_le_plan(PlanType::LieuEtDate, 1);
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 60") && texte.contains("\"lettre_a_lettre\": 2"), "format 60");
+    assert!(texte.contains("\"version\": 61") && texte.contains("\"lettre_a_lettre\": 2"), "format 61");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels.len(), 4);
     let inc = |d: &Document| d.panels[2].layers.iter().find(|l| l.name == "Lieu et date").and_then(|l| l.overlay().cloned());

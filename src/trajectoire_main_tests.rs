@@ -254,6 +254,8 @@ fn on_the_sheet_a_drawing_key_placed_by_hand_between_two_marks_stays_at_its_imag
     std::fs::remove_dir_all(&dir).ok();
     let attendu = exposes(&b, 0);
     let mut r = banc_taille(relu, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    r.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     (r.app.cur_panel, r.app.cur_layer, r.app.cur_frame) = (0, 0, 0);
     r.app.trajectoire_recalculer_dans(0, 0);
     r.chauffer(3);

@@ -170,7 +170,8 @@ impl App {
         }
         let xfs = self.e3_xfs(&self.espace3d.sel);
         let first = xfs.first()?;
-        let origin = gz::pivot_of(&xfs);
+        // (L'origine d'une carte seule, la moyenne de celles de plusieurs : partie 182.)
+        let origin = self.e3_pivot(&xfs);
         // (L'échelle se fait sur les axes de la carte : ses cubes suivent donc toujours la carte.)
         let local = (self.espace3d.local || mode == GizmoMode::Scale) && xfs.len() == 1;
         Some(Gizmo { origin, axes: gz::axes_for(local, &first.1), len: Gizmo::size_for(view, origin), mode })
@@ -524,7 +525,7 @@ impl App {
                 return;
             }
             let xfs = self.e3_xfs(&self.espace3d.sel);
-            let origin = gz::pivot_of(&xfs);
+            let origin = self.e3_pivot(&xfs);
             let gizmo = Gizmo { origin, axes: gz::axes_for(false, &xfs.first().map_or_else(Default::default, |x| x.1)), len: 1.0, mode: GizmoMode::Move };
             let is_card = espace3d::card_of(id).is_some();
             let handle = match (is_card, mods.shift) {
@@ -626,6 +627,8 @@ impl App {
                         xf.size[k] = s * xf.size[k].signum();
                     }
                 }
+                // (Une carte qui a une origine s'étire autour d'elle, partie 182 : son origine reste où elle était.)
+                self.e3_garder_les_origines(&originals, &mut out);
                 message = format!("Taille ×{factor:.2}");
                 out
             }
@@ -842,6 +845,13 @@ impl App {
             for k in 0..4 {
                 if let (Some(a), Some(b)) = (view.project(corners[k], center), view.project(corners[(k + 1) % 4], center)) {
                     painter.line_segment([to_screen(a), to_screen(b)], stroke);
+                }
+            }
+            // L'origine de la carte choisie (partie 182) : là où est sa place, et autour d'elle qu'elle tourne.
+            if selected {
+                let o = world.origine_monde(&xf, world.ecart(&self.layers()[li]));
+                if let Some(p) = view.project(o, center).map(to_screen) {
+                    crate::origine::peindre_repere(painter, p, ACCENT, false);
                 }
             }
             if let Some(p) = view.project(corners[0], center).map(to_screen) {

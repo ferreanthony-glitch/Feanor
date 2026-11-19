@@ -62,6 +62,9 @@ impl Layer {
             collapsed: self.collapsed,
             position_locked: self.position_locked,
             accroche: self.accroche,
+            // (L'origine va avec la pose, l'aimant avec la carte : chaque exemplaire garde les siens, partie 182.)
+            origine: self.origine,
+            aimante_au_sol: self.aimante_au_sol,
             partage: self.partage,
             ..modele.clone()
         }

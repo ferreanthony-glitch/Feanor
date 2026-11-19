@@ -201,7 +201,8 @@ impl App {
         let pivot = self.doc.stage_center();
         self.end_stroke();
         self.record_step();
-        let miroir = |t: crate::document::LayerTransform| {
+        // (Chaque calque autour de son origine, partie 182 : le centre de la feuille s'il n'en a pas.)
+        let miroir = |t: crate::document::LayerTransform, pivot: eframe::egui::Pos2| {
             if horizontal {
                 crate::flip::mirror_transform_x(t, pivot, centre.x)
             } else {
@@ -210,9 +211,10 @@ impl App {
         };
         for &li in &lis {
             let l = &mut self.layers_mut()[li];
-            l.transform = miroir(l.transform);
+            let o = l.pivot(pivot);
+            l.transform = miroir(l.transform, o);
             for k in &mut l.pos_keys {
-                k.t = miroir(k.t);
+                k.t = miroir(k.t, o);
             }
             // Un calque à trajectoire : son chemin est retourné autour du même milieu, et le déplacement noté au départ change de
             // sens, pour qu'un nouveau calcul des clés retrouve la même pose (partie 136). (Un chemin tracé dans l'espace n'est pas sur
