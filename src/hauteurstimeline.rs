@@ -17,7 +17,7 @@
 
 use std::cell::Cell;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, Color32};
 
 use crate::app::App;
 use crate::settings::Settings;
@@ -179,41 +179,43 @@ pub fn teinte(l: Ligne, base: Color32) -> Color32 {
 }
 
 impl App {
-    /// Préférences > Apparence > Tailles > Hauteur et couleur des lignes de la timeline : pour chaque ligne, ses hauteurs (la choisie
-    /// allumée), sa pastille de couleur (le champ de couleur commun de FEANOR) et « Par défaut » quand elle en a une.
+    /// Préférences > Apparence > Tailles > Lignes de la timeline : une ligne de la grille des tailles par ligne de la timeline, sa
+    /// hauteur (une liste déroulante, partie 179.17), sa pastille de couleur (le champ de couleur commun de FEANOR) et « Par défaut »
+    /// quand elle en a une, chacun dans sa colonne.
     pub(crate) fn lignes_timeline_prefs_ui(&mut self, ui: &mut egui::Ui) {
         ui.label("Lignes de la timeline");
+        ui.end_row();
         let mut change = false;
         for l in Ligne::TOUTES {
             ui.horizontal(|ui| {
                 ui.add_space(12.0);
                 ui.label(format!("Ligne {}", l.nom()));
-                let actuelle = valide(l, l.reglee(&self.settings));
-                for &v in l.choix() {
-                    let r = ui.selectable_label(actuelle == v, RichText::new(format!("{v}")));
-                    let nom = if v == l.defaut() { format!("{} : {v} points (d'origine)", l.nom()) } else { format!("{} : {v} points", l.nom()) };
-                    if crate::bulles::bulle(r, &nom, "La hauteur de cette ligne de la timeline du Storyboard, tout de suite. Elle ne descend jamais sous la taille des icônes.", "").clicked() && actuelle != v {
-                        l.regler(&mut self.settings, v);
-                        change = true;
-                    }
-                }
-                ui.add_space(8.0);
-                let theme = Color32::from_gray(90);
-                let mut c = l.couleur(&self.settings).unwrap_or([theme.r(), theme.g(), theme.b()]);
-                let resp = crate::champcouleur::srgb(ui, &mut c);
-                let resp = crate::bulles::bulle(resp, &format!("Couleur de la ligne {}", l.nom()), "Teinte le fond de la ligne, dans la colonne et dans la bande (fondue avec le fond, pour garder le texte lisible). Les plans, les séquences, les clés et les calques gardent leurs couleurs.", "");
-                if self.edited(&resp) {
-                    l.colorer(&mut self.settings, Some(c));
+            });
+            let actuelle = valide(l, l.reglee(&self.settings));
+            let choix: Vec<(String, u8)> = l.choix().iter().map(|&v| (if v == l.defaut() { format!("{v} pt (d'origine)") } else { format!("{v} pt") }, v)).collect();
+            let aide = "La hauteur de cette ligne de la timeline du Storyboard, tout de suite. Elle ne descend jamais sous la taille des icônes.";
+            if let Some(v) = crate::echelle::liste_de_valeurs(ui, &format!("prefs_ligne_{}", l.nom()), &format!("Ligne {}", l.nom()), aide, &choix, actuelle) {
+                l.regler(&mut self.settings, v);
+                change = true;
+            }
+            let theme = Color32::from_gray(90);
+            let mut c = l.couleur(&self.settings).unwrap_or([theme.r(), theme.g(), theme.b()]);
+            let resp = crate::champcouleur::srgb(ui, &mut c);
+            let resp = crate::bulles::bulle(resp, &format!("Couleur de la ligne {}", l.nom()), "Teinte le fond de la ligne, dans la colonne et dans la bande (fondue avec le fond, pour garder le texte lisible). Les plans, les séquences, les clés et les calques gardent leurs couleurs.", "");
+            if self.edited(&resp) {
+                l.colorer(&mut self.settings, Some(c));
+                change = true;
+            }
+            if l.couleur(&self.settings).is_some() {
+                let r = ui.small_button("Par défaut");
+                if crate::bulles::bulle(r, &format!("Couleur d'origine de la ligne {}", l.nom()), "La couleur du thème, comme avant.", "").clicked() {
+                    l.colorer(&mut self.settings, None);
                     change = true;
                 }
-                if l.couleur(&self.settings).is_some() {
-                    let r = ui.small_button("Par défaut");
-                    if crate::bulles::bulle(r, &format!("Couleur d'origine de la ligne {}", l.nom()), "La couleur du thème, comme avant.", "").clicked() {
-                        l.colorer(&mut self.settings, None);
-                        change = true;
-                    }
-                }
-            });
+            } else {
+                ui.label("");
+            }
+            ui.end_row();
         }
         if change {
             poser(&self.settings);

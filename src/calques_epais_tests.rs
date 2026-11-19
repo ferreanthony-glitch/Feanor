@@ -212,17 +212,19 @@ fn les_preferences_montrent_la_hauteur_et_la_couleur_de_chaque_ligne_et_agissent
     for l in Ligne::TOUTES {
         assert!(textes(&b).iter().any(|(t, _)| *t == format!("Ligne {}", l.nom())), "« Ligne {} »", l.nom());
         assert_eq!(vus::ou(&format!("Couleur de la ligne {}", l.nom())).len(), 1, "la pastille de la ligne {}", l.nom());
-        for &v in l.choix() {
-            let nom = if v == l.defaut() { format!("{} : {v} points (d'origine)", l.nom()) } else { format!("{} : {v} points", l.nom()) };
-            assert_eq!(vus::ou(&nom).len(), 1, "« {nom} »");
-        }
+        assert_eq!(vus::ou(&format!("Ligne {}", l.nom())).len(), 1, "la liste de la ligne {}", l.nom());
     }
-    // (Un premier clic dans la fenêtre : le banc ne livrait pas le premier, partie 179.5.)
-    let r = vus::ou("Plans : 26 points (d'origine)")[0];
-    clic(&mut b, r.center(), Modifiers::NONE);
-    let r = vus::ou("Plans : 40 points")[0];
-    clic(&mut b, r.center(), Modifiers::NONE);
-    assert_eq!(b.app.settings.hauteur_plans, 40);
+    // (Partie 179.17 : chaque hauteur se choisit dans la liste de sa ligne.)
+    for l in Ligne::TOUTES {
+        let v = l.choix()[l.choix().len() - 1];
+        let ouvert = crate::tailleicones_tests::choisir_dans_la_liste(&mut b, &format!("Ligne {}", l.nom()), &format!("{v} pt"));
+        for &c in l.choix() {
+            let t = if c == l.defaut() { format!("{c} pt (d'origine)") } else { format!("{c} pt") };
+            assert!(ouvert.contains(&t), "{} : « {t} » dans la liste : {ouvert:?}", l.nom());
+        }
+        assert_eq!(l.reglee(&b.app.settings), v, "{} : la liste choisit {v}", l.nom());
+    }
+    crate::tailleicones_tests::choisir_dans_la_liste(&mut b, "Ligne Plans", "40 pt");    assert_eq!(b.app.settings.hauteur_plans, 40);
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(disque.contains("hauteur_ligne_plans = 40"), "{disque}");
     // « Par défaut » n'est là que quand la ligne a une couleur ; il la rend.
@@ -341,4 +343,25 @@ fn sur_la_seconde_rangee_les_fleches_le_losange_et_le_menu_sont_au_niveau_du_mod
     // que lui (au point près, l'arrondi au pixel ; mesuré avant : ‹ › et le losange 0,5 point plus haut, le ⋮ de l'Animation 1,5 à 2
     // points plus haut).
     assert!(tout.iter().all(|(_, e)| e.iter().all(|(_, d)| d.abs() <= 0.75 && *d <= 0.3)), "écart au milieu du mode et de l'opacité : {tout:?}");
+}
+// ------------------------------------------------------------------------------------------------ 179.17 : les pastilles alignées
+
+#[test]
+fn les_pastilles_et_les_boutons_par_defaut_des_lignes_sont_alignes_en_colonne() {
+    // (Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les ».)
+    let mut b = crate::perf_tests::banc_taille(crate::document::Document::with_frame(320, 180, 24), false, 1600, 900);
+    b.garder_formes = true;
+    b.app.settings.couleur_ligne_sequence = Some([70, 110, 220]);
+    b.app.settings.couleur_ligne_calques = Some([60, 190, 110]);
+    b.chauffer(6);
+    b.app.settings.prefs_onglet = crate::prefsonglets::Onglet::Apparence;
+    b.app.run_action("fichier.preferences");
+    b.chauffer(8);
+    let x: Vec<f32> = Ligne::TOUTES.iter().map(|l| vus::ou(&format!("Couleur de la ligne {}", l.nom()))[0].left()).collect();
+    assert!(x.iter().all(|v| (v - x[0]).abs() < 0.5), "les quatre pastilles au même x : {x:?}");
+    let d: Vec<f32> = ["Séquence", "Calques"].iter().map(|n| vus::ou(&format!("Couleur d'origine de la ligne {n}"))[0].left()).collect();
+    assert!((d[0] - d[1]).abs() < 0.5, "les « Par défaut » au même x : {d:?}");
+    // Les six listes de la même largeur.
+    let w: Vec<f32> = ["Taille de l'interface", "Taille des icônes", "Ligne Séquence", "Ligne Plans", "Ligne Caméra", "Ligne Calques"].iter().map(|n| vus::ou(n)[0].width()).collect();
+    assert!(w.iter().all(|v| (v - w[0]).abs() < 0.5), "les listes de la même largeur : {w:?}");
 }

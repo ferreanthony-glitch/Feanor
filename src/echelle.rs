@@ -56,21 +56,42 @@ impl App {
     }
 
     /// Préférences > Apparence > Tailles : la taille de l'interface, puis (partie 179.5) celle des icônes de la timeline.
+    /// Partie 179.17 (Anthony : « pour le choix des valeurs dans réglages, propose plutôt un menu déroulant plutôt que plusieurs
+    /// boutons. on gagnera de l'espace » ; « Aligne les ») : une grille de quatre colonnes, le nom, une liste déroulante de la même
+    /// largeur pour chaque réglage, puis la pastille de couleur et « Par défaut » des lignes de la timeline, chacun dans sa colonne.
     pub(crate) fn echelle_prefs_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        egui::Grid::new("prefs_tailles").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Taille de l'interface");
             let actuelle = echelle_valide(self.settings.echelle);
-            for e in ECHELLES {
-                let r = ui.selectable_label(actuelle == e, RichText::new(format!("{e} %")));
-                if crate::bulles::bulle(r, &format!("{e} %"), "Agrandit ou rapetisse les textes, les boutons et les panneaux, tout de suite. Le dessin garde sa taille.", "").clicked() && actuelle != e {
-                    self.settings.echelle = e;
-                    let _ = self.settings.save();
-                }
+            let choix: Vec<(String, u16)> = ECHELLES.iter().map(|&e| (format!("{e} %"), e)).collect();
+            let aide = "Agrandit ou rapetisse les textes, les boutons et les panneaux, tout de suite. Le dessin garde sa taille.";
+            if let Some(e) = liste_de_valeurs(ui, "prefs_taille_interface", "Taille de l'interface", aide, &choix, actuelle) {
+                self.settings.echelle = e;
+                let _ = self.settings.save();
             }
+            ui.end_row();
+            self.taille_icones_prefs_ui(ui);
+            // (Parties 179.13 et 179.14 : la hauteur et la couleur de chaque ligne de la timeline.)
+            self.lignes_timeline_prefs_ui(ui);
         });
-        self.taille_icones_prefs_ui(ui);
-        // (Parties 179.13 et 179.14 : la hauteur et la couleur de chaque ligne de la timeline.)
-        self.lignes_timeline_prefs_ui(ui);
         ui.label(RichText::new("100 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 125 % ou 150 %.").small().weak());
     }
+}
+
+/// Partie 179.17 : la largeur commune des listes déroulantes de Préférences > Apparence > Tailles (elles sont alignées en colonne).
+/// (Assez large pour « 40 pt (d'origine) » : toutes les listes ont la même largeur.)
+pub(crate) const LARGEUR_LISTE: f32 = 128.0;
+
+/// Partie 179.17 : une liste déroulante compacte (`egui::ComboBox`) de `choix` (texte, valeur), la valeur `actuelle` écrite dessus ;
+/// sa bulle a le nom `nom`. Rend la valeur choisie quand elle change.
+pub(crate) fn liste_de_valeurs<T: Copy + PartialEq>(ui: &mut egui::Ui, id: &str, nom: &str, aide: &str, choix: &[(String, T)], actuelle: T) -> Option<T> {
+    let texte = choix.iter().find(|(_, v)| *v == actuelle).map_or_else(String::new, |(t, _)| t.clone());
+    let mut nouvelle = actuelle;
+    let resp = egui::ComboBox::from_id_salt(id).width(LARGEUR_LISTE).selected_text(texte).show_ui(ui, |ui| {
+        for (t, v) in choix {
+            ui.selectable_value(&mut nouvelle, *v, t.as_str());
+        }
+    });
+    crate::bulles::bulle(resp.response, nom, aide, "");
+    (nouvelle != actuelle).then_some(nouvelle)
 }

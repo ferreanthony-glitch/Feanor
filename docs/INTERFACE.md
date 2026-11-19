@@ -15434,3 +15434,22 @@ positif » ou « Verrouiller la position » sur la ligne du calque.
 
 (La checklist de la partie 179.15 ci-dessus vaut pour 179.13 et 179.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
 de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)
+
+### 179.17 Des listes déroulantes, alignées
+
+Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les » ; puis : « pour le choix des valeurs dans réglages,
+propose plutôt un menu déroulant plutôt que plusieurs boutons. on gagnera de l'espace ».
+
+Préférences > Apparence > Tailles est une grille de quatre colonnes : le nom ; une liste déroulante (la valeur courante écrite
+dessus), toutes de la même largeur ; la pastille de couleur ; « Par défaut ». Les listes : Taille de l'interface (90, 100, 125,
+150 %), Taille des icônes (11 à 16 pt, la petite icône à la taille choisie à côté), et les quatre lignes de la timeline (« 20 pt
+(d'origine) »…). Les pastilles et les « Par défaut » sont donc au même x pour les quatre lignes. Rien d'autre ne change (mêmes
+valeurs, mêmes clés, effet immédiat).
+
+Les autres réglages ajoutés pendant la partie 179 n'ont pas de rangée de boutons (« Replier les calques » est une case). Les réglages
+plus anciens qui choisissent encore une valeur par une rangée de boutons ou d'icônes, laissés tels quels : le thème (Apparence >
+Thème et couleurs), la hauteur des plans et celle des pistes son (Montage > Pistes du montage), les commandes de l'anneau (Dessin),
+la génération sonore (ses services).
+
+Essais : `calques_epais_tests` (les pastilles et les « Par défaut » au même x : rouge d'abord, quatre x différents ; chaque hauteur
+choisie par sa liste), `tailleicones_tests` et `echelle_tests` (les tailles choisies par leur liste ; `choisir_dans_la_liste`).

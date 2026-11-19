@@ -71,23 +71,20 @@ pub fn case_de_barre() -> [f32; 2] {
 }
 
 impl App {
-    /// Préférences > Apparence > Tailles > Taille des icônes : une petite icône par taille, à sa taille, la taille choisie allumée.
+    /// Préférences > Apparence > Tailles > Taille des icônes : une ligne de la grille des tailles (partie 179.17 : une liste
+    /// déroulante, « 13 pt », plus une rangée d'icônes).
     pub(crate) fn taille_icones_prefs_ui(&mut self, ui: &mut egui::Ui) {
-        // (Le nom sur sa ligne, les six choix dessous : sur une seule ligne, les plus grandes sortaient de la fenêtre.)
         ui.label("Taille des icônes");
-        ui.horizontal(|ui| {
-            ui.add_space(12.0);
-            ui.spacing_mut().item_spacing.x = 3.0;
-            let actuelle = taille_valide(self.settings.taille_icones);
-            for t in TAILLES {
-                let r = ui.selectable_label(actuelle == t, RichText::new(egui_phosphor::regular::PLUS_SQUARE).size(f32::from(t)));
-                let nom = if t == TAILLE_DEFAUT { format!("Icônes de {t} points (d'origine)") } else { format!("Icônes de {t} points") };
-                if crate::bulles::bulle(r, &nom, "Toutes les icônes de la timeline et de sa barre de lecture, dans le Storyboard et l'Animation, tout de suite. La hauteur des rangées ne change pas : pour tout agrandir, la taille de l'interface.", "").clicked() && actuelle != t {
-                    self.settings.taille_icones = t;
-                    poser(t);
-                    let _ = self.settings.save();
-                }
-            }
-        });
+        let actuelle = taille_valide(self.settings.taille_icones);
+        let choix: Vec<(String, u8)> = TAILLES.iter().map(|&t| (if t == TAILLE_DEFAUT { format!("{t} pt (d'origine)") } else { format!("{t} pt") }, t)).collect();
+        let aide = "Toutes les icônes de la timeline et de sa barre de lecture, dans le Storyboard et l'Animation, tout de suite. La hauteur des rangées ne change pas : pour tout agrandir, la taille de l'interface.";
+        if let Some(t) = crate::echelle::liste_de_valeurs(ui, "prefs_taille_icones", "Taille des icônes", aide, &choix, actuelle) {
+            self.settings.taille_icones = t;
+            poser(t);
+            let _ = self.settings.save();
+        }
+        // (L'icône du nouveau plan, à la taille choisie.)
+        ui.label(RichText::new(egui_phosphor::regular::PLUS_SQUARE).size(f32::from(actuelle)));
+        ui.end_row();
     }
 }

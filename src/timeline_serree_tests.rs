@@ -518,7 +518,17 @@ fn timeline_serree_179_captures() {
     p.chauffer(10);
     if let Some(r) = crate::pistes_tests::textes(&p).into_iter().find(|(t, _)| t == "Taille des icônes").map(|(_, r)| r) {
         let z = Rect::from_min_max(pos2((r.left() - 30.0).max(0.0), (r.top() - 90.0).max(0.0)), pos2(r.left() + 660.0, r.bottom() + 190.0));
-        sauver(&mut p, &format!("{prefixe}-6-preferences-tailles.png"), z, [1920, 1080]);
+        // (Partie 179.17 : les listes déroulantes alignées ; puis une liste ouverte.)
+        sauver(&mut p, &format!("{prefixe}-6b-preferences-alignees.png"), z, [1920, 1080]);
+        if let Some(l) = vus::ou("Ligne Plans").first().copied() {
+            for _ in 0..2 {
+                crate::pistes_tests::clic(&mut p, l.center(), Modifiers::NONE);
+                if crate::pistes_tests::textes(&p).iter().any(|(t, _)| t == "56 pt") {
+                    break;
+                }
+            }
+            sauver(&mut p, &format!("{prefixe}-6c-liste-ouverte.png"), z.expand2(vec2(0.0, 80.0)), [1920, 1080]);
+        }
     }
     crate::tailleicones::poser(crate::tailleicones::TAILLE_DEFAUT);
 }

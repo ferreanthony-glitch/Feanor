@@ -264,27 +264,41 @@ fn les_preferences_montrent_la_taille_de_l_interface_et_la_taille_des_icones_cot
     let interface = t.iter().find(|(x, _)| x == "Taille de l'interface").expect("« Taille de l'interface »").1;
     let icones = t.iter().find(|(x, _)| x == "Taille des icônes").expect("« Taille des icônes »").1;
     assert!(icones.top() > interface.top() && icones.top() - interface.bottom() < 30.0, "l'une sous l'autre : {interface:?} / {icones:?}");
+    // (Partie 179.17 : des listes déroulantes ; la taille de l'interface, juste au-dessus, marche toujours, puis revient à 100 %.)
+    let ouvert = choisir_dans_la_liste(&mut b, "Taille des icônes", "15 pt");
     for t in TAILLES {
-        let nom = if t == TAILLE_DEFAUT { format!("Icônes de {t} points (d'origine)") } else { format!("Icônes de {t} points") };
-        assert_eq!(vus::ou(&nom).len(), 1, "« {nom} »");
+        let texte = if t == TAILLE_DEFAUT { format!("{t} pt (d'origine)") } else { format!("{t} pt") };
+        assert!(ouvert.contains(&texte), "« {texte} » dans la liste : {ouvert:?}");
     }
-    // La taille de l'interface, juste au-dessus, marche toujours (puis revient à 100 %). (Sans un premier clic dans la fenêtre, le
-    // banc ne livrait pas le clic sur la première icône : la fenêtre ne prenait la main qu'au clic suivant.)
-    let e = vus::ou("125 %").into_iter().find(|q| (q.center().y - interface.center().y).abs() < 8.0).expect("« 125 % » sur sa ligne");
-    clic(&mut b, e.center(), Modifiers::NONE);
-    assert_eq!(b.app.settings.echelle, 125);
-    b.app.settings.echelle = 100;
-    b.chauffer(3);
-    let r = vus::ou("Icônes de 15 points")[0];
-    clic(&mut b, r.center(), Modifiers::NONE);
-    assert_eq!(b.app.settings.taille_icones, 15, "le clic choisit 15 : {r:?}, la ligne {icones:?}");
+    assert_eq!(b.app.settings.taille_icones, 15, "la liste choisit 15");
     assert_eq!(crate::tailleicones::icone(), 15.0, "tout de suite");
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(disque.contains("taille_icones = 15"), "{disque}");
-    let r = vus::ou("Icônes de 13 points (d'origine)")[0];
-    clic(&mut b, r.center(), Modifiers::NONE);
+    choisir_dans_la_liste(&mut b, "Taille des icônes", "13 pt (d'origine)");
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(!disque.contains("taille_icones"), "13 : plus de clé : {disque}");
-    b.image(vec![Event::PointerMoved(eframe::egui::pos2(5.0, 5.0))], 1.0 / 60.0);
+    choisir_dans_la_liste(&mut b, "Taille de l'interface", "125 %");
+    assert_eq!(b.app.settings.echelle, 125);
+    b.app.settings.echelle = 100;
+    b.chauffer(3);    b.image(vec![Event::PointerMoved(eframe::egui::pos2(5.0, 5.0))], 1.0 / 60.0);
     crate::tailleicones::poser(TAILLE_DEFAUT);
+}
+
+/// Partie 179.17 : ouvre la liste déroulante dont la bulle est `nom` (Préférences > Apparence > Tailles) et y choisit `texte` ; rend
+/// les textes de la liste ouverte. (Le banc ne livre pas toujours le premier clic dans la fenêtre : une seconde fois au besoin.)
+pub(crate) fn choisir_dans_la_liste(b: &mut Banc, nom: &str, texte: &str) -> Vec<String> {
+    let ouvrir = |b: &mut Banc| -> Vec<(String, eframe::egui::Rect)> {
+        let liste = vus::ou(nom).first().copied().unwrap_or_else(|| panic!("la liste « {nom} »"));
+        // (Les textes de la liste ouverte : ceux qui n'étaient pas à l'écran avant le clic.)
+        let avant = textes(b);
+        clic(b, liste.center(), Modifiers::NONE);
+        textes(b).into_iter().filter(|(t, r)| !avant.iter().any(|(u, q)| u == t && q.center().distance(r.center()) < 1.0)).collect()
+    };
+    let mut ouvert = ouvrir(b);
+    if !ouvert.iter().any(|(t, _)| t == texte) {
+        ouvert = ouvrir(b);
+    }
+    let r = ouvert.iter().find(|(t, _)| t == texte).unwrap_or_else(|| panic!("« {texte} » dans la liste « {nom} » : {ouvert:?}")).1;
+    clic(b, r.center(), Modifiers::NONE);
+    ouvert.into_iter().map(|(t, _)| t).collect()
 }
