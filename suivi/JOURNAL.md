@@ -3,6 +3,18 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-20
+
+- **La timeline resserrée** (partie 192 dans INTERFACE.md, appelée 179 dans les commits de `timeline-serree`) fusionnée dans
+  `main` puis poussée (9b63079), après trois intégrations du `main` de GitHub (parties 180 à 191 de la session du décor 3D, format 61) :
+  barre de lecture tout en haut, vraie ligne Séquence, commandes des calques justifiées à droite sur « Calques », tous les calques
+  sur deux rangées d'origine (« Replier les calques » en option), une seule taille d'icônes, Préférences > Tailles (taille de
+  l'interface, des icônes, hauteur et couleur des lignes Séquence / Plans / Caméra / Calques, en listes déroulantes alignées),
+  groupe / sens du pochoir / position verrouillée passés au clic droit > Apparence. « Dupliquer la séquence » ajouté au ⋯ de la
+  ligne Séquence. Vérificateur complet OK sur l'intégration des parties 180 à 190 (seul l'avertissement `decor3d_objets_vises`,
+  venu de GitHub, tu ensuite) ; essais ciblés OK après la partie 191. FEANOR habituel reconstruit (0 h 26), contrôle de lancement OK.
+- En attente d'Anthony : son essai à l'écran (checklist 192.x), le premier clic perdu dans les Préférences (vu sur le banc seulement).
+
 ## 2026-11-19
 
 - **Dupliquer la séquence** (partie 191, branche `dupliquer-sequence` partie de `main` b27db77, format 61 inchangé), le choix
