@@ -1924,6 +1924,11 @@ touches = []
 source = "FEANOR (Espace 3D, agrandir la vue sous le pointeur ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.a_cote"
+touches = []
+source = "FEANOR (Espace 3D à côté du dessin ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.outil_choisir"
 touches = []
 source = "FEANOR (Espace 3D, outil choisir ; aucune touche choisie)"
@@ -2472,6 +2477,27 @@ source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "lecture.boucle"
+touches = []
+source = "FEANOR (sans touche)"
+
+# Plage de lecture du film (`plagefilm.rs`) : clic droit sur la règle du montage.
+[[raccourci]]
+action = "plage.debut"
+touches = []
+source = "FEANOR (sans touche : clic droit sur la règle du montage)"
+
+[[raccourci]]
+action = "plage.fin"
+touches = []
+source = "FEANOR (sans touche : clic droit sur la règle du montage)"
+
+[[raccourci]]
+action = "plage.plans_choisis"
+touches = []
+source = "FEANOR (sans touche : clic droit sur un plan ou la règle du montage)"
+
+[[raccourci]]
+action = "plage.enlever"
 touches = []
 source = "FEANOR (sans touche)"
 

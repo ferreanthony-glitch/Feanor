@@ -141,6 +141,8 @@ etat_projet! {
     fx_key_sel: Vec<crate::fxkeys::FxKeyRef> = Vec::new(),
     fx_key_anchor: Option<crate::fxkeys::FxKeyRef> = None,
     board_sel: Vec<u64> = Vec::new(),
+    // (La plage de lecture du film est accrochée aux plans de ce projet : `plagefilm.rs`.)
+    plage_film: crate::plagefilm::PlageFilm = Default::default(),
     board_notes: Vec<crate::board::NoteRef> = Vec::new(),
     sel_clip: Option<u64> = None,
     vsel: Option<crate::vtools::VSelection> = None,

@@ -1264,6 +1264,13 @@ impl App {
         self.head_drag = None;
         self.panel_layer_drag = None;
         self.montage_layer_drag = None;
+        // La bande de montage ne finit son glisser que si elle voit le lâcher (`end_montage_drag`) ; cachée ou refaite pendant
+        // le geste, elle ne le voit pas : le geste est fini ici, comme au lâcher (Anthony, 2026-11-16 : « les raccourcis
+        // manquent parfois »). Un extrait tiré depuis la timeline aussi.
+        self.timeline_sound_track = None;
+        if self.montage_drag.is_some() {
+            self.end_montage_drag();
+        }
         if self.handle_drag.is_some() {
             self.end_handle_drag();
         }

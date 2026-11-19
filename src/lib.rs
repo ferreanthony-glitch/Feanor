@@ -15,6 +15,8 @@ mod accueil_tests;
 mod aidetouches;
 #[cfg(test)]
 mod aidetouches_tests;
+#[cfg(test)]
+mod raccourcis_muets_tests;
 // L'aide animée (partie 153) : les animations des outils à la place des textes gris, et le registre des explications.
 mod aideanim;
 #[cfg(test)]
@@ -289,6 +291,10 @@ mod piste_mode_tests;
 // La colonne des calques de la timeline dans la disposition validée par Anthony : en-tête, colonnes, comportements (partie 174).
 #[cfg(test)]
 mod colonne_calques_tests;
+// La couleur du rangement sur les lignes de la timeline, les dossiers en titres qui montrent les clés de leurs calques fermés
+// (partie 179, repris de la timeline plus claire).
+#[cfg(test)]
+mod timeline_claire_tests;
 // Des panneaux plus visuels (partie 163) : les dessins (`panneauxvisuels`) et ce qu'ils changent dans le projet (`panneauxvisuelsui`).
 mod panneauxvisuels;
 mod panneauxvisuelsui;
@@ -606,6 +612,9 @@ mod couleur;
 #[cfg(test)]
 mod couleur_tests;
 mod cues;
+mod plagefilm;
+#[cfg(test)]
+mod plagefilm_tests;
 #[cfg(test)]
 mod cues_tests;
 #[cfg(test)]
@@ -1267,6 +1276,10 @@ mod stencil;
 mod tabs_tests;
 // Espace 3D (`docs/ESPACE3D.md`) : les calques (cartes) et la caméra du plan dans un seul espace, sans objets 3D.
 mod espace3d;
+// La vue 3D à côté de la feuille (`docs/ESPACE3D.md`, partie 13).
+mod espace3dcote;
+#[cfg(test)]
+mod espace3dcote_tests;
 mod espace3dgizmo;
 mod espace3dmath;
 #[cfg(test)]

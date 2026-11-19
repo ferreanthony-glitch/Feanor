@@ -14998,3 +14998,246 @@ centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), 
 9. « Compte à rebours » : lire avec le son, le bip sur le 2.
 10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
 11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.
+
+## 178. La plage de lecture du film (2026-11-19, branche `plage-lecture`, partie de `main` 6b1b99c)
+
+Anthony, en comparant la timeline de FEANOR à celle d'un autre logiciel de storyboard : il manquait une plage de lecture sur
+plusieurs plans. Les points d'entrée et de sortie (13d) ne valent que pour la lecture d'un plan seul ; la lecture du film entier
+allait toujours du début à la fin.
+
+### 178.1 Ce qui change pour lui
+
+- **La lecture du montage reste entre deux images du film**, qui peuvent être dans des plans différents (de l'image 12 du plan 3 à
+  l'image 5 du plan 7). Arrêt au bout, ou boucle si la lecture en boucle est allumée ; en arrière (J) de même ; le son suit.
+- **Clic droit sur la règle du montage** (la tête de lecture y va) : « Début de la plage de lecture ici », « Fin de la plage de
+  lecture ici », « Plage de lecture : ce plan » ou « les N plans choisis », « Enlever la plage de lecture ». Les quatre commandes
+  sont aussi dans la palette (Ctrl+K), sans touche par défaut (comme « Lecture en boucle »).
+- **Sur la règle** : un crochet à chaque bout, le film hors de la plage assombri (règle et plans).
+- Un bout seul suffit : sans fin, la plage va jusqu'au bout du film ; sans début, elle part de son début. Une fin posée avant le
+  début enlève le début (et inversement), la barre d'état le dit.
+- Les points d'entrée et de sortie d'un plan ne changent pas : ils bornent toujours la lecture du plan seul.
+
+### 178.2 Comment c'est fait
+
+- `src/plagefilm.rs` : chaque bout est accroché à un plan (son identifiant) et à une image de ce plan (`Ancre`), pas à un numéro
+  d'image du film : allonger, raccourcir, ajouter ou supprimer un plan avant la plage la déplace avec son contenu, comme les
+  signets. Un bout dont le plan a disparu ne compte plus ; un bout au-delà de la fin de son plan se pose sur sa dernière image ;
+  des bouts croisés ne bornent plus rien.
+- `App::tick_playback` lit le film image par image en images du film entre les bouts (`film_play_range`), `toggle_play_scope` part
+  du début de la plage quand la tête est dehors ; `soundtrack::play_range` donne la même plage au son. Les versions dépliées
+  (partie 168) se lisent sans la plage.
+- **Un réglage de la séance**, comme la boucle : ni dans le projet ni dans l'annulation ; rangé avec l'onglet de son projet
+  (`etat_projet!`), remis à zéro quand un autre projet est chargé (`load_doc` : les numéros de plans recommencent d'un projet à
+  l'autre). **Le format des projets ne change pas** (60).
+
+### 178.3 Les essais
+
+`src/plagefilm_tests.rs` (9) : les bornes (un bout, deux, croisés, tout le film), les bouts qui suivent leurs plans (plan allongé,
+raccourci, supprimé), la lecture une fois à travers trois plans puis l'arrêt, la boucle qui reste dedans, la lecture en arrière qui
+s'arrête au début de la plage, les plans choisis, la fin posée avant le début, un autre projet sans plage, la lecture sans plage
+inchangée. Compilé et essayé sur le Mac seulement (les mêmes 90 échecs que `main` sur ce Mac, aucun de plus) ; à l'écran sur le Mac :
+la commande dans la palette, le crochet et le voile sur la règle.
+
+### 178.4 À tester (sa checklist)
+
+1. Montage : clic droit sur la règle au milieu du plan 2, « Début de la plage de lecture ici » ; au milieu du plan 5, « Fin… ici ».
+   Le crochet, et le film assombri hors de la plage.
+2. Lire (Entrée) : la lecture part du début de la plage, traverse les plans, s'arrête à la fin ; boucle allumée, elle reprend au début.
+3. Allonger le plan 1 : la plage suit son contenu.
+4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
+5. « Enlever la plage de lecture » : la lecture reprend tout le film.
+
+## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
+
+Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas
+reproduit à l'écran ; trois causes trouvées en lisant le code, corrigées, et la barre d'état dit désormais pourquoi une touche
+de raccourci n'a rien fait, pour que la prochaine fois on sache laquelle c'était.
+
+### 162.1 Ce qui change
+
+- **Un glisser de la bande de montage dont le lâcher s'est perdu ne bloque plus tous les raccourcis.** Pendant un glisser,
+  FEANOR met les touches de côté jusqu'au lâcher (seuls Échap et Ctrl+Z passent, pour l'abandonner). Les glisser de la bande
+  de montage (un plan déplacé ou fusionné, un bord tiré, un extrait de son, y compris tiré depuis la timeline) ne se finissaient
+  que si la bande voyait elle-même le lâcher ; cachée ou refaite pendant le geste, elle ne le voyait pas, et toutes les touches
+  restaient muettes jusqu'au glisser suivant. Ils sont maintenant finis comme au lâcher dès qu'aucun bouton n'est plus appuyé
+  (`App::end_montage_drag`, appelé par la bande et par `drop_stale_drags`, qui couvrait déjà les autres glisser).
+- **Un bouton qui a pris le clavier le rend.** Le code prévu pour cela ne jouait jamais (il demandait que rien n'ait le clavier
+  avant de rendre le clavier). Maintenant, tout ce qui a le clavier sans être une case où l'on écrit le rend aussitôt ; une case
+  où l'on écrit le garde, comme avant.
+- **La barre d'état dit pourquoi un raccourci n'a rien fait** :
+  « « Zoom avant » n'a pas été fait : un glisser est en cours. » (Lâche-le, ou Échap l'abandonne) ;
+  « … : une case où l'on écrit a le clavier. » (Échap ou un clic sur la feuille le rend), seulement quand la souris n'est pas sur
+  cette case (sinon on y écrit, ce n'est pas un raccourci manqué) ;
+  « … : une fenêtre attend une réponse. » Échap, Entrée et Tab ne déclenchent jamais ce message.
+- Vu en lisant, sans défaut : la case qui renomme un calque d'annotation (Vignettes) valide le nom dès qu'on clique ailleurs ;
+  les touches 1 et 2 sont reconnues à leur place sur le clavier (« & » et « é » en AZERTY), quelle que soit la disposition.
+- **Dans l'Espace 3D, 1 et 2 zooment la vue 3D** (avant : la feuille cachée, rien ne se voyait). Même pas que la feuille (× 1,25),
+  comme des crans de molette (`App::espace3d.molette_clavier`, `espace3dview::CRAN_CLAVIER`) : la vue sous la souris, sinon la
+  dernière vue active ; une vue par la caméra du plan avance ou recule la caméra, comme la molette. Marche aussi la souris hors
+  de la vue (sur un panneau).
+- Rappel, pas changé : la souris sur la bande du bas (montage ou timeline), 1 et 2 zooment la bande, pas le dessin (sa demande
+  du 2026-11-11).
+
+### 162.2 Essais
+
+`raccourcis_muets_tests.rs` (5) : le glisser du montage resté en cours sans bouton appuyé est fini et la touche 2 zoome de nouveau
+(rouge avant) ; pendant un vrai glisser la touche attend et la barre le dit, puis zoome une fois lâché (rouge avant) ; une case
+où l'on écrit garde le clavier et la barre le dit quand la souris est sur la feuille ; une fenêtre ouverte, la barre le dit ; un
+bouton qui a le clavier le rend, une case où l'on écrit le garde (rouge avant). Et (2) : dans l'Espace 3D à une vue, 2 rapproche
+la vue d'un facteur 1,25 et la feuille ne bouge pas, 1 la ramène, la souris sur un panneau aussi ; à quatre vues, seule la vue
+sous la souris zoome, et la souris hors des vues, la vue active.
+
+### 162.3 Comment Anthony teste (sur une copie de projet)
+
+1. Travaille comme d'habitude. Quand un raccourci ne répond pas, regarde la barre d'état tout de suite : elle dit pourquoi.
+   Note la phrase (ou fais une capture) et ce que tu venais de faire.
+2. Si la barre ne dit rien du tout alors que la touche ne fait rien : c'est une autre cause, encore inconnue. Note ce que tu
+   venais de faire juste avant.
+3. Déplace un plan dans le montage, tire un bord, puis tape 2 sur la feuille : le zoom répond.
+4. Espace 3D : tape 2 puis 1, la souris sur la vue, puis sur un panneau. À plusieurs vues : la vue sous la souris zoome seule.
+   Par la caméra du plan : 2 avance la caméra (une étape d'annulation, comme la molette).
+
+## 163. Espace 3D à côté du dessin (2026-11-16, branche `espace-a-cote`, partie d'`espace-libre` puis remise sur `main` e1f18b2)
+
+(Écrite d'abord comme partie 144 ; le `main` avait déjà sa partie 144, les vues multiples : elle a pris le numéro 163.)
+
+Demandé par Anthony : la vue 3D ouverte à côté de la feuille, pendant qu'on dessine ; quand on trace ou qu'on anime un
+calque, sa carte se met à jour dans la vue 3D ; on l'ouvre et la ferme d'un geste ; la 3D à la place de la feuille reste.
+Conception, mesures, essais et limites : `docs/ESPACE3D.md`, partie 13. **Rien de cette partie n'a été regardé à l'écran.**
+
+**Où ça se trouve.**
+
+| Élément | Où | Commande | Ce qu'il fait |
+|---|---|---|---|
+| Bouton « Espace 3D à côté » (carré coupé en deux) | barre au-dessus du dessin, juste après le cube | `espace3d.a_cote` | ouvre ou ferme la vue 3D à droite de la feuille ; depuis le plein écran, y remet la vue |
+| Entrée « Espace 3D à côté du dessin » | menu Affichage > Plateau | `espace3d.a_cote` | la même chose |
+| Barre verticale entre la feuille et la vue | entre les deux | | la tirer règle la largeur de la vue (20 à 80 %) ; double-clic : moitié-moitié ; retenue |
+| Rangée d'outils de la vue | en haut de la vue 3D | `espace3d.outil_*`, `espace3d.cadrer`, `espace3d.vue_camera` | Choisir, Déplacer, Tourner, Échelle, Caméra · Recadrer, Regarder par la caméra · **Agrandir** (le plein écran d'avant ; le refermer rend le côte à côte) · **Fermer** |
+
+Aucune touche par défaut (à choisir par Anthony) ; dans la palette (Ctrl+K) et `keymap.toml`.
+
+**Les gestes.** Un geste va à la vue où il commence, jusqu'au relâché.
+
+- Sur la feuille : tout comme d'habitude (stylet, outils, molette, bouton du milieu, clic droit). Un trait qui file dans
+  la vue 3D continue sur la feuille.
+- Dans la vue 3D : les gestes de l'Espace 3D (clic : choisir une carte ou la caméra ; glisser : déplacer ; poignées ; clic
+  droit ou Alt + glisser : tourner la vue ; milieu : la glisser ; molette : avancer). Le stylet n'y dessine jamais.
+  Choisir une carte fait de son calque le calque courant : on clique une carte à droite, on dessine dessus à gauche.
+- Raccourcis : ceux du dessin ; les outils de l'Espace 3D règlent la vue d'à côté sans passer en plein écran. Le zoom 1 et 2
+  suit la souris : sur la vue 3D, il la rapproche ou l'éloigne (même pas que la feuille, × 1,25) ; ailleurs, la feuille zoome
+  (`App::souris_sur_la_vue_a_cote`, après la fusion de `raccourcis-muets` dans la branche, partie 162).
+- Panneau Réglages : l'outil en main, toujours (décision d'Anthony de la partie 150). Les réglages de la vue 3D (cartes,
+  caméra, repère, grille…) sont dans l'onglet « Espace 3D », à côté de Réglages ; le côte à côte ne le fait pas passer
+  devant (on dessine sur la feuille). Avant la remise sur `main` : « Réglages de la dernière vue cliquée ».
+- Le côte à côte n'arrête ni le trait ni la lecture ; la carte suit les images du film.
+
+**Messages** (barre d'état) : « Espace 3D à côté du dessin : dessine à gauche, les cartes suivent à droite… », « Espace 3D
+à côté : masqué. ».
+
+À vérifier à l'écran (par Anthony), dans les trois thèmes :
+
+1. Le bouton « Espace 3D à côté » après le cube : icône lisible, bulle à une seconde, couleur d'accent quand il est ouvert.
+2. Ouvert : feuille à gauche, vue 3D à droite, barre entre les deux ; la feuille est cadrée dans sa moitié. La rangée
+   d'outils de la vue tient sur une ligne ; trop étroite, elle est coupée (le dire si c'est gênant).
+3. Tirer la barre : la largeur suit, s'arrête à 20 % et 80 % ; double-clic : moitié-moitié ; fermer et rouvrir FEANOR :
+   la largeur est retenue.
+4. Dessiner au stylet sur la feuille : **aucun retard du trait** par rapport à la vue fermée ; à droite, la carte suit le
+   trait (un léger retard, 1/30 s au plus, est voulu). Au relâché, la carte a tout le trait.
+5. Un trait qui part de la feuille et file dans la vue 3D : il continue sur la feuille, la vue 3D ne bouge pas.
+6. Dans la vue 3D, cliquer une carte : son calque devient courant ; l'onglet « Espace 3D » montre la carte, Réglages
+   garde l'outil.
+7. Tourner la vue 3D (clic droit), la glisser (milieu), avancer (molette) : la feuille ne bouge pas. Molette sur la
+   feuille : seule la feuille zoome. Touches 1 et 2, souris
+   sur la vue 3D : elle zoome seule ; souris sur la feuille : la feuille seule.
+8. Lire le plan, vue ouverte : la lecture est aussi fluide que vue fermée ; les cartes animées changent de dessin et de
+   place avec le film.
+9. « Agrandir » : la vue 3D prend toute la zone (comme avant) ; le cube la referme et rend le côte à côte. « Fermer » :
+   la feuille reprend toute la zone.
+10. Un pot de peinture ou une gomme sur toute une grande feuille, vue ouverte : signaler un à-coup.
+11. Un plan en Espace 3D (partie 143), caméra tournée : la vue d'à côté montre les cartes comme en plein écran ; dessiner
+    sur la feuille par la caméra : la carte suit.
+12. Vue Vignettes : rien ne change (pas de vue 3D dans les cases).
+
+## 179. Une timeline plus claire : des lignes toutes pareilles, les réglages dans une barre, l'exception seule, la couleur du rangement (2026-11-17, branche `timeline-claire`, partie d'`espace-a-cote`)
+
+### 179.0 Ce qui en reste après la fusion du `main` du 19 novembre (le choix d'Anthony)
+
+Le `main` du 19 novembre (9c422b9) apportait la colonne des calques de la partie 174, validée par Anthony le 18 novembre, qui prend
+l'autre chemin que celle-ci : une rangée d'en-tête et sept colonnes de réglages sur tous les calques, le calque courant déplié sur
+trois rangées. Les deux ne tenaient pas ensemble. Sur trois maquettes cliquables (A : celle-ci, B : la 174, C : la 174 plus ce qui ne la
+contredit pas d'ici), **Anthony a choisi C**. La partie, numérotée 168 sur la branche, devient la 179 (le `main` a pris le 168 pour les
+versions d'un plan, et la plage de lecture du film a pris le 178).
+
+- **Gardé** : la couleur du rangement (celle du dossier, sinon du groupe) sur toute la ligne, dans la colonne et dans la grille
+  (`layerheads::fond_teinte`) ; les dossiers en titres, l'icône de leur couleur et le nom en demi-gras ; un dossier fermé qui montre les
+  clés de ses calques en traits fins (`timeline.rs`). Ci-dessous, points 4 et 5 de 179.1.
+- **Pas gardé** : la barre du calque au-dessus des lignes (point 2), les lignes qui ne montrent que l'exception (point 3) et les lignes
+  toutes pareilles à 28 points (point 1, et 179.4) : les colonnes et la ligne dépliée du calque courant de la partie 174 les remplacent.
+- Essais : `timeline_claire_tests.rs` garde la teinte et ajoute la couleur d'un calque rangé ; ceux de la barre et des exceptions sont
+  retirés ; les essais de la colonne sont ceux de la partie 174.
+
+Demande d'Anthony : repenser l'interface autour des clés de la timeline (pas les clés elles-mêmes) pour qu'elle reste lisible avec une
+quinzaine de calques. Ses gênes : retrouver un calque, lire le timing, la place, les en-têtes chargés. Ses règles : la ligne du haut
+reste le calque du dessus, le temps reste à l'horizontale, rien ne bouge tout seul. Sur deux séries de pistes en maquettes (page
+« Timeline de Feanor, dix pistes »), il a gardé quatre pistes : 1, 2, 6, et la 5 en dossiers repliables (« c'est un dossier qui peut
+se replier, pas un intercalaire »). Aucun format nouveau : rien n'est écrit autrement dans les projets.
+
+### 179.1 Ce qui a changé
+
+1. **Toutes les lignes ont la même hauteur, 28 points** (`layerheads::ROW_FINE` ; 22 avant la partie 168.4), calque courant et dossiers compris. Avant
+   (partie 160) : le calque courant avait une ligne complète de 56 points, un dossier courant une ligne de 40. Changer de calque ne
+   fait plus bouger la timeline. Le calque courant garde son fond d'accent.
+2. **La barre du calque**, au-dessus de la timeline, sur toute sa largeur (`App::barre_du_calque`, 24 points, elle ne défile pas avec
+   les calques ; les boutons de la timeline sont en haut de la colonne des calques depuis la partie 165.5) : le nom du calque courant (et « sous <trait> », le nombre de couleurs), le ⋮, puis sur une ligne : afficher, verrouiller,
+   pelure d'oignon, préserver la transparence, pochoir et son sens, position verrouillée, groupe, effets, accroche à la caméra, aplat
+   et planche-mère, la couleur d'un calque Couleur unie, l'opacité et son losange de clés, le mode de fusion (précédent, liste,
+   suivant). Depuis la partie 165.3 du `main` (Anthony préfère la version texte), l'opacité s'y règle
+   par la barre « 100 % » et le mode par la liste « Normal ▾ » ; la miniature du calque, devant, ne fait que montrer son dessin. Le ⋮ (les commandes du calque) est juste après le nom, pour rester visible dans une timeline étroite. Pour un dossier courant : afficher, verrouiller, opacité, le nombre de ses calques.
+   Mêmes bulles, mêmes gestes qu'avant ; seule la place change.
+3. **Une ligne ne montre que l'exception** (`App::exceptions_du_calque`). L'œil n'apparaît que si le calque est caché, le cadenas
+   que s'il est verrouillé ; sous la souris, leur case montre l'icône en pâle et un clic agit comme avant. À droite du nom, en
+   petit : l'opacité si elle est sous 100 %, le mode s'il n'est pas Normal, et une icône pour le pochoir, la transparence préservée,
+   la pelure d'oignon du calque, la position verrouillée, l'accroche à la caméra (la bulle dit ce que c'est ; on le change dans la
+   barre du calque). L'interrupteur des effets reste là quand le calque en a.
+4. **La couleur du rangement sur toute la ligne** (`layerheads::fond_teinte`) : la couleur du dossier du calque, sinon celle de
+   son groupe (la règle de `folders::couleur_du_rangement`, déjà celle du filet de gauche), teinte légèrement la ligne, dans
+   l'en-tête et dans la grille. Un calque sans dossier ni groupe garde le gris.
+5. **Les dossiers servent de titres** : leur ligne est plus teintée, l'icône du dossier prend sa couleur, le nom est en demi-gras
+   suivi du nombre de ses calques ; triangle pour ouvrir ou fermer (inchangé). **Un dossier fermé montre les clés de ses calques**
+   en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile, avec un petit écart au début de chaque dessin (un calque
+   caché, plus pâle). Avant : une rangée sombre et vide.
+
+### 179.2 Choix faits sans Anthony (à confirmer)
+
+- Un dossier caché ou verrouillé ne l'affiche que sur sa propre ligne : ses calques gardent leur œil et leur cadenas à eux (c'est ce
+  que disent les données ; la question est restée ouverte sur la page des pistes).
+- La miniature dans les clés du calque courant (13d, « dans une ligne complète ») ne se voit plus : elle demandait une ligne d'au
+  moins 40 points. Les clés elles-mêmes ne changent pas.
+- La pelure d'oignon du calque compte comme une exception (elle est éteinte d'office).
+
+### 179.4 Après la fusion du `main` du 18 novembre (parties 165 à 167)
+
+Le `main` avait pris l'autre chemin : la ligne complète du calque courant « toujours visible, jamais repliée » (165.4), les boutons
+de la timeline en haut de la colonne sur deux lignes (165.5, 165.6), « 100 % » et « Normal ▾ » en texte (165.3). Sur deux maquettes
+côte à côte, Anthony a choisi la barre du calque (« B mais la taille d'une ligne de calque est plus épaisse »). Ce qui en résulte :
+
+1. Les lignes passent de 22 à 28 points.
+2. Les boutons de la timeline restent en haut de la colonne des calques, sur deux lignes (165.6) ; la barre du calque est
+   au-dessus de la timeline, où était l'ancienne barre de boutons.
+3. Le calque courant garde toujours sa ligne, même dans un groupe caché ou un dossier fermé (165.4), mais une ligne fine comme les
+   autres, à sa place : elle ne flotte plus au bord de la vue (`ligne_toujours_visible` retirée), la barre suffit.
+4. Essais adaptés : `multicalques_tests` prend le « 37 % » de la barre (la ligne fine le dit aussi, l'exception) ;
+   `avantapres165_tests` trouve le bord de la colonne par la barre du calque ; l'essai de la ligne flottante est retiré.
+
+### 179.3 Comment Anthony teste (sur une copie de projet)
+
+1. Un plan avec une quinzaine de calques, dans des dossiers. Animation : toutes les lignes ont la même hauteur ; clique d'autres
+   calques, rien ne bouge.
+2. Au-dessus de la timeline, la barre du calque : tous ses réglages. Change l'opacité, le mode, le pochoir : la ligne du calque le dit
+   à droite de son nom. Remets tout à la normale : la ligne redevient nue.
+3. Survole l'œil ou le cadenas d'une ligne : l'icône apparaît en pâle ; clique pour cacher ou verrouiller ; elle reste alors
+   affichée.
+4. Les lignes des calques d'un dossier ont sa couleur ; un calque rangé dans un groupe de couleur, celle du groupe.
+5. Ferme un dossier : sa ligne montre les clés de ses calques en petit. Rouvre-le.
+6. Un dossier courant : la barre montre son œil, son cadenas, son opacité et le nombre de ses calques.
+7. Dans les trois thèmes : la teinte reste lisible, le texte de la barre aussi. Dis si la teinte est trop forte ou trop faible.

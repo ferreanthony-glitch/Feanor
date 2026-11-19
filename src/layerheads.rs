@@ -194,6 +194,16 @@ pub(crate) fn peindre_cible(painter: &egui::Painter, x: egui::Rangef, top: f32, 
     }
 }
 
+/// Le fond d'une ligne de calque (en-tête et grille), teinté de la couleur du rangement du calque (partie 179, venue de la timeline
+/// plus claire) : celle de son dossier, sinon celle de son groupe ; rien, le fond d'origine. Un dossier est teinté plus fort : sa
+/// ligne sert de titre.
+pub(crate) fn fond_teinte(base: Color32, rangement: Option<Color32>, dossier: bool) -> Color32 {
+    let Some(c) = rangement else { return base };
+    let t = if dossier { 0.24 } else { 0.11 };
+    let m = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
+    Color32::from_rgb(m(base.r(), c.r()), m(base.g(), c.g()), m(base.b(), c.b()))
+}
+
 /// Couleur d'un groupe.
 pub(crate) fn group_color(rgb: [u8; 3]) -> Color32 {
     Color32::from_rgb(rgb[0], rgb[1], rgb[2])
@@ -526,10 +536,14 @@ impl App {
         let r = rect.shrink2(vec2(0.0, 1.0));
         let painter = ui.painter_at(r);
         // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
+        // La couleur du rangement du calque — celle de son dossier, sinon celle de son groupe (la même règle que dans le Storyboard et
+        // le Montage, `folders::couleur_du_rangement`, 2026-11-11) : le filet de gauche, et une teinte sur toute la ligne (partie 179,
+        // venue de la timeline plus claire ; la grille fait de même, `timeline.rs`).
+        let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
         let bg = match (current, choisi) {
             (true, _) => theme::surface_active(crate::theme::accent(), 1.0),
             (false, true) => theme::surface_active(crate::theme::accent(), 0.45),
-            (false, false) => theme::etiquette(),
+            (false, false) => fond_teinte(if h.folder { theme::rangee_sombre() } else { theme::etiquette() }, rangement, h.folder),
         };
         painter.rect_filled(r, 2.0, bg);
         // (Thèmes de la marque : le calque courant est un panneau teinté avec un bord jade, pas un grand aplat jade.)
@@ -553,7 +567,7 @@ impl App {
         let group = self.doc.groups[h.group].clone();
         // Le filet de gauche : la couleur du rangement du calque — celle de son dossier, sinon celle de son groupe (la même règle que
         // dans le Storyboard et le Montage, `folders::couleur_du_rangement`, 2026-11-11).
-        let filet = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups).unwrap_or_else(|| group_color(group.color));
+        let filet = rangement.unwrap_or_else(|| group_color(group.color));
         painter.rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, filet);
 
         // Le fond de la ligne : choisir, glisser, menu, double-clic sur le nom. Posé avant les
@@ -632,8 +646,9 @@ impl App {
         let line1 = r.top() + 11.0;
         let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else if h.annotation { theme::palette().dessin_annotation } else if h.unie { theme::palette().dessin_unie } else { theme::couleur_calque(h.kind, h.couleur) };
         if h.folder {
+            // (Partie 179 : l'icône du dossier prend sa couleur, sa ligne sert de titre.)
             let icon = if h.collapsed { ph::FOLDER } else { ph::FOLDER_OPEN };
-            painter.text(pos2(x0 - 2.0, line1), Align2::LEFT_CENTER, icon, FontId::proportional(14.0), fg);
+            painter.text(pos2(x0 - 2.0, line1), Align2::LEFT_CENTER, icon, FontId::proportional(14.0), if current { fg } else { filet });
         } else if h.cfx {
             painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(13.0), badge);
         } else if h.annotation {
@@ -649,13 +664,14 @@ impl App {
             let done = self.layer_rename_field(&mut child, name_rect.width());
             self.finish_layer_rename(done);
         } else {
-            let nom = painter.with_clip_rect(name_rect).text(
-                pos2(name_rect.left(), line1),
-                Align2::LEFT_CENTER,
-                &h.name,
-                FontId::proportional(13.0),
-                fg,
-            );
+            // Un dossier : son nom en titre (partie 179, venue de la timeline plus claire), dans la famille des titres — demi-gras quand
+            // les polices Plex sont chargées (`theme::densifier_avec`).
+            let police = if h.folder {
+                FontId::new(12.5, ui.style().text_styles.get(&egui::TextStyle::Heading).map_or(egui::FontFamily::Proportional, |f| f.family.clone()))
+            } else {
+                FontId::proportional(13.0)
+            };
+            let nom = painter.with_clip_rect(name_rect).text(pos2(name_rect.left(), line1), Align2::LEFT_CENTER, &h.name, police, fg);
             // Le calque courant : ce que sa ligne du panneau Calques disait sous son nom (partie 160) : « sous <trait> » pour un calque
             // de couleur, le nombre de couleurs d'un calque de trait.
             if !fine && !h.folder {

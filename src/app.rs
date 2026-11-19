@@ -643,6 +643,8 @@ pub struct App {
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
     pub(crate) looping: bool,
+    /// Plage de lecture du film (`plagefilm.rs`) : la lecture du montage reste entre ses deux bouts.
+    pub(crate) plage_film: crate::plagefilm::PlageFilm,
     pub(crate) play_accum: f64,
     /// Vitesse de la lecture, signée (J, K, L du montage, jkl.rs) : 1 = la cadence du film, négative = en arrière.
     pub(crate) play_speed: f32,
@@ -1330,6 +1332,7 @@ impl App {
             playing: false,
             play_montage: false,
             looping: true,
+            plage_film: Default::default(),
             play_accum: 0.0,
             play_speed: 1.0,
             last_time: None,
@@ -2250,15 +2253,17 @@ impl App {
             self.start_audio_playback();
             return;
         }
+        // Dans le film : entre les bouts de la plage de lecture du film (`plagefilm.rs`), tout le film sans elle.
+        let (film_a, film_b) = self.film_play_range();
         let at_end = if self.play_montage {
-            self.global_frame() + 1 >= self.doc.total_frames()
+            let g = self.global_frame();
+            g + 1 >= film_b || g < film_a
         } else {
             self.cur_frame + 1 >= end || self.cur_frame < start
         };
         if at_end {
             if self.play_montage {
-                self.set_panel(0);
-                self.cur_frame = 0;
+                self.place_global(film_a);
             } else {
                 self.cur_frame = start;
             }
@@ -2297,36 +2302,44 @@ impl App {
                 self.follow_frame = true;
                 continue;
             }
-            let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
+            if self.play_montage {
+                // Le film, image par image d'un plan à l'autre, entre les bouts de la plage de lecture du film (tout le film
+                // sans elle) ; en arrière (J) de même.
+                let (a, b) = self.film_play_range();
+                let g = self.global_frame();
+                let suivante = if vitesse < 0.0 {
+                    if g > a && g < b {
+                        Some(g - 1)
+                    } else {
+                        self.looping.then(|| b - 1)
+                    }
+                } else if g + 1 < b && g >= a {
+                    Some(g + 1)
+                } else {
+                    self.looping.then_some(a)
+                };
+                let Some(g) = suivante else {
+                    self.playing = false;
+                    break;
+                };
+                self.place_global(g);
+                self.follow_frame = true;
+                continue;
+            }
+            let (start, end) = self.plan_play_range();
             if vitesse < 0.0 {
-                // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
+                // En arrière (J) : image par image jusqu'au début du plan.
                 if self.cur_frame > start {
                     self.cur_frame -= 1;
-                } else if self.play_montage && self.cur_panel > 0 {
-                    let prev = self.cur_panel - 1;
-                    self.set_panel(prev);
-                    self.cur_frame = self.frame_count().saturating_sub(1);
                 } else if self.looping {
-                    if self.play_montage {
-                        let last = self.doc.panels.len() - 1;
-                        self.set_panel(last);
-                        self.cur_frame = self.frame_count().saturating_sub(1);
-                    } else {
-                        self.cur_frame = end.max(1) - 1;
-                    }
+                    self.cur_frame = end.max(1) - 1;
                 } else {
                     self.playing = false;
                     break;
                 }
             } else if self.cur_frame + 1 < end {
                 self.cur_frame += 1;
-            } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
-                let next = self.cur_panel + 1;
-                self.set_panel(next);
             } else if self.looping {
-                if self.play_montage {
-                    self.set_panel(0);
-                }
                 self.cur_frame = start;
             } else {
                 self.playing = false;
@@ -3980,6 +3993,8 @@ impl App {
         // Ce qui était choisi ou visé l'était dans l'ancien projet, dont les numéros de plans et de calques reviennent dans le
         // nouveau (chaque projet compte depuis le début) : rien ne reste choisi, aucun menu ne vise plus rien.
         self.board_sel.clear();
+        // (La plage de lecture du film aussi : ses bouts sont accrochés à des numéros de plans, `plagefilm.rs`.)
+        self.plage_film = Default::default();
         self.board_notes.clear();
         self.board_text = None;
         self.layer_sel.clear();
@@ -4157,10 +4172,37 @@ impl App {
 
     // ------------------------------------------------------------------ clavier
 
+    /// Le raccourci de la première touche appuyée à cette image (pas une répétition), s'il y en a un : son action et son nom
+    /// (« Zoom avant »). Pour dire dans la barre d'état pourquoi il n'a rien fait (`handle_shortcuts`).
+    pub(crate) fn raccourci_tape(&self, ctx: &egui::Context) -> Option<(String, String)> {
+        let mode = self.key_mode();
+        let montage = self.espace == crate::workspace::Espace::Montage;
+        ctx.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                // (Échap, Entrée et Tab ferment ou valident une fenêtre ou une case : jamais un raccourci « manqué ».)
+                Event::Key { key, physical_key, pressed: true, repeat: false, modifiers, .. } if !matches!(key, Key::Escape | Key::Enter | Key::Tab) => {
+                    let action = self.keymap.find_in(*key, *physical_key, *modifiers, mode, montage)?;
+                    let nom = keymap::action_info(action).map_or(action, |a| a.label);
+                    Some((action.to_string(), nom.to_string()))
+                }
+                _ => None,
+            })
+        })
+    }
+
+    /// La souris est ailleurs que sur la case qui a le clavier : une touche tapée alors visait sans doute un raccourci.
+    fn souris_hors_de_la_saisie(&self, ctx: &egui::Context) -> bool {
+        let Some(id) = ctx.memory(|m| m.focused()) else { return false };
+        let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return false };
+        ctx.read_response(id).is_some_and(|r| !r.rect.contains(p))
+    }
+
     pub(crate) fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        // Un bouton cliqué garde le focus clavier : Entrée ou Espace le « recliqueraient ».
-        if !ctx.wants_keyboard_input() {
-            if let Some(id) = ctx.memory(|m| m.focused()) {
+        // Un bouton (tout ce qui a pris le clavier sans être une case où l'on écrit) le rend : Entrée ou Espace le
+        // « recliqueraient », et les raccourcis seraient muets tant qu'il le garde. (Avant le 2026-11-16, ce test demandait
+        // `!wants_keyboard_input()`, qui est faux dès que quelque chose a le clavier : il ne rendait jamais rien.)
+        if let Some(id) = ctx.memory(|m| m.focused()) {
+            if egui::text_edit::TextEditState::load(ctx, id).is_none() {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
         }
@@ -4173,12 +4215,25 @@ impl App {
         // Ctrl+N, Ctrl+W, F1, F11…, passent quand même ; `accueilfenetre::raccourci_hors_saisie`.)
         let saisie = ctx.wants_keyboard_input() && !(self.accueil_visible() && crate::accueilfenetre::raccourci_hors_saisie(ctx));
         if saisie || self.modal_open() {
+            // La barre d'état dit pourquoi la touche n'a rien fait (Anthony, 2026-11-16 : « les raccourcis manquent parfois,
+            // notamment le zoom »). Pendant une saisie, seulement quand la souris n'est pas sur la case : on y écrit, ce n'est
+            // pas un raccourci manqué.
+            if let Some((_, nom)) = self.raccourci_tape(ctx) {
+                if !saisie {
+                    self.status = format!("« {nom} » n'a pas été fait : une fenêtre attend une réponse.");
+                } else if self.souris_hors_de_la_saisie(ctx) {
+                    self.status = format!("« {nom} » n'a pas été fait : une case où l'on écrit a le clavier. Échap ou un clic sur la feuille le rend.");
+                }
+            }
             self.pending_keys.clear();
             return;
         }
         // Pendant un glisser (chantier 2) : Échap ou Ctrl+Z l'abandonnent, tout revient comme
         // avant ; les autres touches attendent la fin du geste.
         if self.dragging() {
+            if let Some((_, nom)) = self.raccourci_tape(ctx).filter(|(a, _)| a != "edition.annuler") {
+                self.status = format!("« {nom} » n'a pas été fait : un glisser est en cours. Lâche-le, ou Échap l'abandonne.");
+            }
             let mode = self.key_mode();
             let cancel = ctx.input(|i| {
                 i.events.iter().any(|e| match e {
@@ -4840,6 +4895,10 @@ impl App {
             // la bande. `bande.zoom_avant` / `bande.zoom_arriere` gardent leurs touches à elles, où que soit le pointeur.
             "vue.zoom_avant" if self.bande_survolee => self.zoom_strip(1.25),
             "vue.zoom_arriere" if self.bande_survolee => self.zoom_strip(1.0 / 1.25),
+            // Dans l'Espace 3D, le zoom est celui de la vue 3D, comme la molette (avant : la feuille cachée zoomait).
+            // (La vue 3D à côté du dessin, `espace3dcote.rs` : quand la souris est sur elle ; sur la feuille, la feuille zoome.)
+            "vue.zoom_avant" if self.espace3d_plein() || self.souris_sur_la_vue_a_cote() => self.espace3d.molette_clavier += crate::espace3dview::CRAN_CLAVIER,
+            "vue.zoom_arriere" if self.espace3d_plein() || self.souris_sur_la_vue_a_cote() => self.espace3d.molette_clavier -= crate::espace3dview::CRAN_CLAVIER,
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
             "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),
@@ -5123,6 +5182,10 @@ impl App {
                 self.looping = !self.looping;
                 self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
             }
+            "plage.debut" => self.plage_ici(false),
+            "plage.fin" => self.plage_ici(true),
+            "plage.plans_choisis" => self.plage_plans_choisis(),
+            "plage.enlever" => self.enlever_plage(),
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             // Rognage des plans (`rognageui.rs`).
             "montage.duree" => self.open_duration_dialog(),

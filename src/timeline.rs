@@ -98,7 +98,8 @@ impl App {
         self.bande_survolee = ui.rect_contains_pointer(ui.max_rect());
         // Partie 165.5 (Anthony : « Monter les boutons ») : plus de barre au-dessus de la timeline ; ses commandes sont sur une ligne
         // en haut de la colonne des calques, en face de la règle des images (`layerheads::timeline_heads`). La timeline gagne la
-        // hauteur de l'ancienne barre.
+        // hauteur de l'ancienne barre. (La barre du calque courant de la timeline plus claire n'a pas été gardée : les colonnes et la
+        // ligne dépliée du calque courant de la partie 174 la remplacent ; partie 179.)
         // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
         egui::TopBottomPanel::bottom("onglets_timeline")
             .resizable(false)
@@ -379,11 +380,12 @@ impl App {
                 theme::surface_active(crate::theme::accent(), 0.35)
             } else if !camera_seule && self.is_chosen_layer(li) {
                 theme::surface_active(crate::theme::accent(), 0.18)
-            } else if self.layers()[li].folder {
-                // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
-                theme::rangee_sombre()
             } else {
-                theme::rangee()
+                // Dossier (13b-5) : pas de dessin, une rangée plus sombre. Toute la ligne prend la couleur du rangement du calque, celle
+                // de son dossier ou de son groupe (partie 179, venue de la timeline plus claire).
+                let dossier = self.layers()[li].folder;
+                let rangement = crate::folders::couleur_du_rangement(self.layers(), li, &self.doc.groups);
+                crate::layerheads::fond_teinte(if dossier { theme::rangee_sombre() } else { theme::rangee() }, rangement, dossier)
             };
             large.rect_filled(rect, 0.0, bg);
         }
@@ -595,6 +597,36 @@ impl App {
                     }
                 }
                 f = end;
+            }
+        }
+        // Un dossier fermé (partie 179, venue de la timeline plus claire) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
+        // un petit écart au début de chaque dessin. On voit encore où ça bouge sans rouvrir le dossier.
+        for row in &rows {
+            let layers = self.layers();
+            if !layers.get(row.li).is_some_and(|l| l.folder && l.collapsed) {
+                continue;
+            }
+            let mut enfants = crate::folders::children_of(layers, row.li);
+            enfants.reverse();
+            if enfants.is_empty() {
+                continue;
+            }
+            let (haut, bas) = (grid_top + row.top + 4.0, grid_top + row.top + row.h - 4.0);
+            let pas = ((bas - haut) / enfants.len() as f32).min(4.0);
+            let epaisseur = (pas - 1.0).max(1.0);
+            for (k, &ci) in enfants.iter().enumerate() {
+                let layer = &layers[ci];
+                let y = haut + k as f32 * pas;
+                let couleur = if layer.visible { theme::couleur_du_calque(layer) } else { theme::couleur_du_calque(layer).gamma_multiply(0.45) };
+                let mut f = if c0 < layer.frames.len() { layer.run_bounds(c0).0 } else { layer.frames.len() };
+                while f < layer.frames.len().min(c1 + 1) {
+                    let (start, end) = layer.run_bounds(f);
+                    if layer.frames[start].is_some() {
+                        let trait_ = Rect::from_min_max(pos2(r.left() + start as f32 * cell + 1.0, y), pos2(r.left() + end as f32 * cell, y + epaisseur));
+                        painter.rect_filled(trait_, 0.0, couleur);
+                    }
+                    f = end.max(f + 1);
+                }
             }
         }
         // Barre de chaque calque (chantier 1) : de son premier dessin à la fin du dernier ; ses

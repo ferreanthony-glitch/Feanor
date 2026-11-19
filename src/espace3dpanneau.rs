@@ -63,7 +63,9 @@ impl App {
         if self.panneau_film_vide(ui) {
             return;
         }
-        if self.espace3d_vue_ouverte() {
+        // (La vue à côté du dessin, `espace3dcote.rs`, aussi : ses réglages sont ici ; Réglages garde l'outil en main. Elle ne
+        // fait pas passer cet onglet devant : on dessine sur la feuille d'à côté.)
+        if self.espace3d_vue_ouverte() || (self.espace3d_a_cote_visible() && !self.board_shown()) {
             self.espace3d_options_panel(ui);
             return;
         }

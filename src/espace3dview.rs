@@ -117,6 +117,10 @@ pub(crate) fn traits_a_l_ecran(view: &View, center: [f32; 2], origine: Pos2, zon
     out
 }
 
+/// Un appui sur 1 ou 2 dans l'Espace 3D vaut ce nombre de points de molette : le même pas que la feuille (× 1,25), puisque la
+/// molette zoome de `exp(0,002 × points)`.
+pub(crate) const CRAN_CLAVIER: f32 = 111.571_77; // ln(1,25) / 0,002
+
 impl App {
     /// La hauteur (mètres) où se pose le quadrillage du sol. Le seul endroit qui la donne, pour la vue seule comme pour
     /// chaque vue (`espace3dvues.rs`).
@@ -272,8 +276,13 @@ impl App {
         if through {
             self.e3_nav_camera(draw, response, scroll.y, delta);
         } else {
+            // (Le zoom au clavier vaut des crans de molette, la souris sur la vue ou non.)
+            let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
             if response.hovered() && scroll.y != 0.0 {
                 cam.dolly((-scroll.y * 0.002).exp());
+            }
+            if clavier != 0.0 {
+                cam.dolly((-clavier * 0.002).exp());
             }
             if response.dragged_by(PointerButton::Middle) {
                 cam.pan(delta.x, delta.y, draw.width());
@@ -295,7 +304,10 @@ impl App {
     /// Par la caméra du plan : la molette l'avance, le bouton du milieu la déplace, le clic droit la tourne (sa clé de
     /// l'image courante si elle est animée), en une étape d'annulation par geste.
     pub(crate) fn e3_nav_camera(&mut self, draw: Rect, response: &egui::Response, scroll_y: f32, delta: egui::Vec2) {
-        let moving_camera = response.hovered() && (scroll_y != 0.0 || response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary));
+        // Le zoom au clavier (`molette_clavier`) avance la caméra comme la molette, la souris sur la vue ou non.
+        let clavier = std::mem::take(&mut self.espace3d.molette_clavier);
+        let scroll_y = if response.hovered() { scroll_y } else { 0.0 } + clavier;
+        let moving_camera = scroll_y != 0.0 || (response.hovered() && (response.dragged_by(PointerButton::Middle) || response.dragged_by(PointerButton::Secondary)));
         if moving_camera {
             self.gesture_change(GESTURE_CAMERA, |s| {
                 let snap = s.snapshot();
@@ -669,6 +681,8 @@ impl App {
 
     /// La zone du dessin, en mode Espace 3D.
     pub(crate) fn espace3d_panel(&mut self, ui: &mut egui::Ui, rect: Rect, response: &egui::Response) {
+        // (Plein écran ou à côté de la feuille : `espace3d_fit` cadre dans cette zone.)
+        self.espace3d.rect = rect;
         if self.espace3d.cam.is_none() {
             self.espace3d_fit();
         }
@@ -788,7 +802,18 @@ impl App {
                     Some(f) => Some(f.base),
                     None => cel,
                 };
-                if let Some(dessin) = image.and_then(|c| self.e3_card_texture(ctx, c)).and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                // (Un nouveau dessin qui attend son image, `espace3dcote.rs` : la carte montre le dessin d'avant.)
+                let tex = image.and_then(|c| self.e3_card_texture(ctx, c)).or_else(|| {
+                    if flottante.is_some() {
+                        return None;
+                    }
+                    let avant = self.espace3d.vu_par_calque.get(&id)?;
+                    Some(self.espace3d.card_textures.get(avant)?.tex.id())
+                });
+                if let Some(c) = cel.filter(|c| self.espace3d.card_textures.get(c).is_some_and(|t| t.version == self.doc.cels.get(c).map_or(0, |d| d.version))) {
+                    self.espace3d.vu_par_calque.insert(id, c);
+                }
+                if let Some(dessin) = tex.and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
                     painter.add(Shape::mesh(dessin));
                 }
                 if let Some(f) = flottante {
@@ -826,28 +851,7 @@ impl App {
                 painter.galley(pos, galley, Color32::WHITE);
             }
         }
-    }
-
-    /// Texture du dessin `cel` (refaite quand il change).
-    fn e3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
-        // La carte sur laquelle on dessine : sa texture suit le trait, tuile par tuile (`espace3ddessin.rs`).
-        if let Some(id) = self.e3_texture_vive(ctx, cel) {
-            return Some(id);
-        }
-        let c = self.doc.cels.get(&cel)?;
-        if let Some((v, t)) = self.espace3d.card_textures.get(&cel) {
-            if *v == c.version {
-                return Some(t.id());
-            }
-        }
-        let image = crate::render::cel_image(&c.raster, 1024);
-        let tex = ctx.load_texture(format!("espace 3d {cel}"), image, egui::TextureOptions::LINEAR);
-        if self.espace3d.card_textures.len() > 256 {
-            self.espace3d.card_textures.clear();
-        }
-        let id = tex.id();
-        self.espace3d.card_textures.insert(cel, (c.version, tex));
-        Some(id)
+        self.e3_lacher_les_cliches(ctx.cumulative_pass_nr());
     }
 
     /// La caméra du plan : pyramide de vision, cadre, haut de l'image, et sa course pendant le plan si elle est animée.
