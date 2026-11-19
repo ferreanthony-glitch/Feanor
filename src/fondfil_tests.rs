@@ -105,7 +105,7 @@ fn a_known_shape_is_composed_without_the_line() {
 // ------------------------------------------------------------------ le fond affiché (fx)
 
 fn fond_item(cel: CelId, r: FondReglages) -> PlanItem {
-    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: Some(FondPart::Forme(r)), pre: None }
+    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: Some(FondPart::Forme(r)), pre: None, profondeur: None }
 }
 
 fn arc_of(doc: &Document, item: &PlanItem) -> Arc<Cel> {

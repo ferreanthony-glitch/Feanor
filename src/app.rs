@@ -1953,10 +1953,15 @@ impl App {
         let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
         let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
         let mut portees = crate::calqueffet::Portees::new(par_distance);
+        // Le décor 3D de la séquence (partie 180), sous tous les calques comme dans les sorties (`render::panel_plan_at`), et la
+        // profondeur qu'il partage avec les cartes (partie 183, `profondeur.rs`) : sans décor, aucune carte ne porte de plan.
+        let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, &camera, repere.as_ref());
+        let avec_decor = decor.is_some();
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
             portees.visiter(layers, li, items.len());
+            items.extend(decor.take());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1995,6 +2000,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: card_pre.clone(),
+                            profondeur: None,
                         });
                     }
                 }
@@ -2017,6 +2023,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: pl.pre,
+                            profondeur: None,
                         });
                     }
                 }
@@ -2045,6 +2052,7 @@ impl App {
                     ctg: None,
                     fond: None,
                     pre: card_pre.clone(),
+                    profondeur: if avec_decor { crate::profondeur::plan_du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
                 };
                 // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
                 // (`fond.rs`), la peinture libre ou le trait par-dessus.
@@ -2061,12 +2069,14 @@ impl App {
                 // (c'est ce qu'on pose avec le pinceau ; le remplissage est dessous).
                 if onion && li == cur && !self.playing {
                     if let Some(g) = layer.couleur.as_ref().filter(|c| c.griffonner).and_then(|c| c.griffonnages.get(&cel).copied()) {
-                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
+                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone(), profondeur: None });
                     }
                 }
             }
             items.append(&mut onion_items);
         }
+        // (Une pile sans calque : le décor seul.)
+        items.extend(decor);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2920,7 +2930,11 @@ impl App {
         // (Un calque accroché à la caméra, `accroche.rs` : « transformé » se lit sur ce qu'on voit, la caméra comprise.)
         let a_plat = if self.layer().accroche { self.layer_seen().is_identity() } else { self.layer().pose(self.cur_frame).is_identity() };
         if self.fill.sample_all && a_plat {
-            return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
+            let mut plan = self.build_plan(self.cur_frame, false, false);
+            // (Le décor 3D de la séquence n'est pas un calque : ses bords ne ferment pas une zone ; sans lui, aucune carte n'est
+            // cachée, les contours sont ceux d'avant, partie 183.)
+            plan.items.retain(|i| !matches!(i.fond, Some(crate::render::FondPart::Decor(_))));
+            return render::composite_full(&self.doc, &plan);
         }
         match self.cel_here() {
             Some(id) => self.doc.cels[&id].raster.to_flat(),
@@ -5405,6 +5419,8 @@ impl App {
                 }
             }
             crate::origine::AIMANT_ACTION => self.basculer_aimant(self.cur_layer),
+            // Toujours devant le décor 3D (`profondeur.rs`, partie 183).
+            crate::profondeur::ACTION => self.basculer_devant_decor(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.

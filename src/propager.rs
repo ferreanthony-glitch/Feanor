@@ -358,6 +358,7 @@ fn guide_items(doc: &Document, panel: usize, paint: usize, guide: Guide, frame: 
             ctg: crate::ctg::input(&p.layers, li, frame),
             fond: None,
             pre: None,
+            profondeur: None,
         })
     };
     match guide {

@@ -1016,6 +1016,11 @@ touches = []
 source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
 
 [[raccourci]]
+action = "calque.devant_decor_3d"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
+[[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]
 source = "réglage perso d'origine : LayerUp"

@@ -724,10 +724,10 @@ impl App {
             Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
 
-        // Le décor 3D de la séquence (partie 180) : derrière toutes les cartes.
-        self.e3_peindre_decor(&painter, draw, &view, 1);
+        // Le décor 3D de la séquence (partie 180), dessous ; les cartes s'y cachent selon leur distance (partie 183).
+        let decor = self.e3_peindre_decor(&painter, draw, &view, 1).then_some((1, draw));
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
-        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
+        self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
@@ -783,12 +783,18 @@ impl App {
 
     /// Les cartes : pour chaque calque visible du plan, du fond vers le dessus de la pile (l'ordre de l'image), le voile
     /// de sa feuille, son dessin, son contour (en couleur de sélection si elle est choisie) et son nom.
-    pub(crate) fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2) {
+    ///
+    /// `decor` : la prise du décor 3D de cette vue et sa zone, si la carte graphique l'a dessiné. Chaque carte qui partage sa
+    /// profondeur (`profondeur::partage`) reçoit alors, juste après son dessin, le voile du décor qui est devant elle
+    /// (`decor3dgpu::VoileCarte`, partie 183).
+    pub(crate) fn e3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, decor: Option<(u64, Rect)>) {
         if !self.espace3d.show_cards {
             return;
         }
         let world = self.e3_world();
         let frame = self.cur_frame;
+        let cible_egui = self.gpu.as_ref().map(|g| g.render_state().target_format);
+        let mut rang = 0u32;
         for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
             let xf = world.carte(layer, frame);
@@ -830,6 +836,14 @@ impl App {
                     };
                     if let Some(feuille) = self.e3_card_texture(ctx, f.feuille).and_then(|tex| card_mesh(view, center, to_screen, &sur_la_carte, Some(tex), crate::viewbar::veil(opacity))) {
                         painter.add(Shape::mesh(feuille));
+                    }
+                }
+                // La profondeur partagée avec le décor 3D (partie 183) : là où le décor est plus près que la carte, il la recouvre.
+                if let (Some((cle, zone)), Some(cible_egui)) = (decor, cible_egui) {
+                    if crate::profondeur::partage(&self.layers()[li]) {
+                        let coins = world.card_corners(&xf);
+                        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(zone, crate::decor3dgpu::VoileCarte { cle, rang, coins, cible_egui }));
+                        rang += 1;
                     }
                 }
             }

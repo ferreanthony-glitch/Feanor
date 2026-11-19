@@ -749,6 +749,14 @@ impl App {
         if self.aide(r, crate::origine::AIMANT, crate::origine::AIMANT_PHRASE, crate::origine::AIMANT_ACTION).clicked() {
             self.basculer_aimant(li);
         }
+        // Toujours devant le décor 3D (partie 183) : seulement quand la séquence a un décor (sinon, rien ne cache la carte).
+        if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.vus().next().is_some()) && !self.layers()[li].accroche {
+            let mut devant = self.layers()[li].devant_decor;
+            let r = ui.add_enabled(!self.layers()[li].locked, egui::Checkbox::new(&mut devant, crate::profondeur::NOM));
+            if self.aide(r, crate::profondeur::NOM, crate::profondeur::PHRASE, crate::profondeur::ACTION).clicked() {
+                self.basculer_devant_decor(li);
+            }
+        }
         let mut ouvert = self.espace3d.precis_carte;
         if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {
             self.espace3d_card_fields(ui, li);

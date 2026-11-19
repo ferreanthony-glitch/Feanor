@@ -802,7 +802,7 @@ fn a_vector_layer_with_every_effect_gives_the_same_image_on_screen_and_in_the_ex
 fn a_stack_with_the_pixel_effects_stays_on_the_processor_and_the_vector_ones_split_off() {
     let doc = drawing_doc(six_lines(), Vec::new(), 1);
     let id = doc.panels[0].layers[0].frames[0].unwrap();
-    let item = |fx: Vec<FxStep>| PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx, ctg: None, fond: None, pre: None };
+    let item = |fx: Vec<FxStep>| PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx, ctg: None, fond: None, pre: None, profondeur: None };
     let blur = FxStep { kind: EffectKind::GaussianBlur, values: vec![6.0] };
     // Le liseré et l'encre n'ont pas de passe sur la carte graphique (décision de cette série) : tout le calcul de fond.
     for kind in [EffectKind::Outline, EffectKind::Bleed, EffectKind::Dry] {

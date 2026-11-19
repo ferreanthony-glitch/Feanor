@@ -370,10 +370,18 @@ pub fn rendre(scene: &Scene3d, matrice: &M4, prise: &Prise, taille: [usize; 2], 
 /// Comme `rendre`, pour plusieurs objets (partie 181) : chacun sa scène et sa matrice, tous dans le même tampon de profondeur
 /// (un arbre derrière une maison est caché par elle).
 pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> Vec<u8> {
+    rendre_objets_prof(objets, prise, taille, ss, fils, aspect).0
+}
+
+/// Comme `rendre_objets`, avec **la profondeur** de l'image (partie 183, `profondeur.rs`) : à chaque pixel, l'inverse de la
+/// distance à l'œil (le long de son axe) de ce que le décor y montre, 0 là où il ne couvre pas la moitié du pixel (le ciel n'y
+/// compte pas : il ne cache rien). Avec plusieurs échantillons par pixel, le plus proche de ceux qui le couvrent.
+pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> (Vec<u8>, Vec<f32>) {
     let [w, h] = taille;
     let mut out = vec![0u8; w * h * 4];
+    let mut prof = vec![0.0f32; w * h];
     if w == 0 || h == 0 {
-        return out;
+        return (out, prof);
     }
     let ss = ss.clamp(1, 4);
     // Les normales tournées vers l'œil : on retourne celles des faces vues de dos avant de rasteriser, sommet par sommet
@@ -416,12 +424,13 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
         }
     }
     let fils = if fils == 0 { std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16) } else { fils };
-    let travail = Mutex::new(out.chunks_mut(BANDE * w * 4).enumerate());
+    let travail = Mutex::new(out.chunks_mut(BANDE * w * 4).zip(prof.chunks_mut(BANDE * w)).enumerate());
+    let moitie = (ss * ss).div_ceil(2) as f32;
     std::thread::scope(|sc| {
         for _ in 0..fils.min(bandes) {
             sc.spawn(|| loop {
                 let next = travail.lock().ok().and_then(|mut it| it.next());
-                let Some((bi, dst)) = next else { break };
+                let Some((bi, (dst, dprof))) = next else { break };
                 let lignes_px = dst.len() / (w * 4);
                 let py0 = bi * BANDE;
                 let y0 = py0 * ss;
@@ -432,7 +441,7 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
                 }
                 for ry in 0..lignes_px {
                     for x in 0..w {
-                        let (mut somme, mut couv) = ([0.0f32; 3], 0.0f32);
+                        let (mut somme, mut couv, mut pres) = ([0.0f32; 3], 0.0f32, 0.0f32);
                         for sy in 0..ss {
                             for sx in 0..ss {
                                 let at = (ry * ss + sy) * b.w + x * ss + sx;
@@ -440,8 +449,12 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
                                     let c = b.couleur[at];
                                     somme = [somme[0] + c[0], somme[1] + c[1], somme[2] + c[2]];
                                     couv += 1.0;
+                                    pres = pres.max(b.invz[at]);
                                 }
                             }
+                        }
+                        if couv >= moitie {
+                            dprof[ry * w + x] = pres;
                         }
                         let a = couv / (ss * ss) as f32;
                         let px = &mut dst[(ry * w + x) * 4..(ry * w + x) * 4 + 4];
@@ -470,5 +483,5 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
         }
     });
     drop(travail);
-    out
+    (out, prof)
 }

@@ -5,6 +5,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **La profondeur partagée entre le décor 3D et les cartes** (partie 183, branche `profondeur-partagee` partie de `banque-3d`
+  d3b7ab0, format 61 inchangé), le chantier choisi par Anthony. Les cartes et les objets du décor se cachent selon leur vraie
+  distance à la caméra : un personnage passe derrière un arbre et devant un banc, une carte inclinée qui traverse un objet en sort,
+  rien n'est rogné aux pieds d'une carte aimantée sur une dalle. Le décor garde sa profondeur (une seconde cible de sa passe sur la
+  carte graphique, son tampon de profondeur sur le processeur et à l'export) ; chaque carte porte son plan, et un pixel de carte est
+  caché où le décor est plus près (une lecture par pixel d'encre). Image du plan à l'écran, exports, rendu de secours, et vue
+  Espace 3D (un voile du décor posé après chaque carte). Jamais cachés : calques accrochés à la caméra, d'effet, d'annotation, et
+  la case **« Toujours devant le décor 3D »** (menu du calque, panneau de la carte, palette ; `devant_decor_3d`, sans changer
+  `VERSION` : 61 n'est encore sur aucune version distribuée). Trouvé en route : la vue de dessin ne montrait pas le décor (seuls
+  les sorties et la vue Espace 3D) ; il y est maintenant. Sans décor, les mêmes images par les mêmes chemins. Essais : 13 nouveaux
+  (et un de mesure, ignoré) ; les 90 échecs connus du Mac, aucun neuf. Mesures (Mac) : la passe du décor avec sa seconde cible, comme avant dans le bruit ; la composition, +1,0 à 1,4 ms
+  pour huit cartes pleines d'encre sur une feuille 4K (le pire cas), rien de mesurable pour huit cartes de personnage ; à refaire
+  sur son PC. Compilé et essayé sur le Mac seulement ;
+  **rien regardé à l'écran, pas de commit** (liste 183.6).
+
 - **L'origine d'un calque, son vrai pivot** (partie 182, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**), sur
   le plan qu'Anthony a validé. Un point du dessin que l'on place (outil Transformer : le cercle à croix, Maj s'aimante à la boîte ;
   champs x, y ; menu « Origine » ; Plus > Origine) : la pose fixe et chaque clé tournent, grandissent et s'étirent autour de lui ;

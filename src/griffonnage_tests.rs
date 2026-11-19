@@ -418,6 +418,7 @@ pub(crate) fn doc_fill(base: u64) -> (Document, CelId, CelId, PlanItem) {
         ctg: Some(GriffonInput { sources: vec![lines], gap: 0 }),
         fond: None,
         pre: None,
+        profondeur: None,
     };
     (doc, lines, g, item)
 }

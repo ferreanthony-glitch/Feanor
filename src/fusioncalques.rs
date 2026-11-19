@@ -304,6 +304,7 @@ fn items_de(l: &Layer, cel: Option<CelId>, f: usize, bas: bool, centre: eframe::
         ctg: None,
         fond: None,
         pre: None,
+        profondeur: None,
     };
     render::fond_item(l, &line).into_iter().chain([line]).collect()
 }

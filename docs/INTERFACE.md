@@ -15729,3 +15729,175 @@ des trajectoires gardent le déplacement relatif (`ancre_propose`), et ceux du f
    elle suit ; annuler, les deux reviennent ; une carte sous un arbre reste au sol.
 6. Un projet d'avant : les mêmes images, les trajectoires gardent leur ancrage.
 
+
+## 183. La profondeur partagée entre le décor 3D et les cartes (2026-11-19, branche `profondeur-partagee` partie de `banque-3d` d3b7ab0, format 61 inchangé)
+
+Jusqu'ici le décor 3D d'une séquence (parties 180 à 182) était toujours derrière toutes les cartes : un personnage posé derrière
+un arbre passait quand même devant lui. Maintenant **les cartes et les objets du décor se cachent selon leur vraie distance** à
+la caméra du plan : un personnage passe derrière un arbre et devant un banc. Dans l'image du plan à l'écran, dans les exports,
+dans le rendu de secours sans carte graphique, et dans la vue Espace 3D. Format du projet inchangé (61). Compilé et essayé sur
+le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 183.1 Ce qui change pour Anthony
+
+1. **Une carte derrière un objet du décor est cachée par lui**, là où il la couvre ; devant, elle le couvre. Rien à régler :
+   c'est la distance de la carte (sa profondeur, sa place dans l'Espace 3D) qui décide, à chaque image. Une carte qui avance
+   pendant le plan passe d'abord derrière l'arbre, puis devant.
+2. **Une carte inclinée** (sol, mur, carte tournée dans l'Espace 3D) est juste en chaque point : la partie derrière un objet est
+   cachée, la partie devant se voit. Une carte qui traverse un objet en sort.
+3. **Aux pieds d'une carte aimantée** sur une dalle, un rocher, une marche du décor (« Aimanté au sol », partie 182) : rien n'est
+   rogné, rien ne scintille. Une petite tolérance (0,4 % de la distance, plus 1 cm) laisse devant ce qui touche le décor ; ce qui
+   du dessin descend sous l'origine, dans l'objet, est caché par lui, comme des pieds dans l'herbe.
+4. **Entre elles, les cartes gardent l'ordre de toujours** (la pile, ou la distance d'un plan dont « ce qui est devant cache ce
+   qui est derrière »). Le ciel et le vide du décor ne cachent jamais rien.
+5. **Jamais cachés par le décor** : un calque accroché à la caméra (il est dans le cadre, pas dans le décor), les calques d'effet
+   (ajustements, incrustations de texte), les dossiers, les calques d'annotation, la couleur unie d'un calque, les pelures
+   d'oignon et les silhouettes de la trajectoire.
+6. **« Toujours devant le décor 3D »**, une case par calque, décochée d'office : la carte de ce calque n'est jamais cachée par
+   le décor, comme avant, mais elle reste dans le monde : sa place, sa profondeur, sa parallaxe quand la caméra bouge, sa
+   trajectoire et l'aimant restent ceux d'une carte ordinaire. Pour un décor approximatif (une herbe ou une marche qui mangerait
+   les pieds du personnage), ou un personnage qu'on veut garder lisible même un peu derrière un poteau. Ce n'est pas
+   « Accroché à la caméra » : un calque accroché sort du monde et reste collé au cadre quoi que fasse la caméra (un titre, un
+   sous-titre, une salissure d'objectif) ; il n'est pas caché par le décor non plus, mais il ne le suit plus. Dans le menu du calque,
+   Plus > Réglages avancés, sous « Aimanté au sol » ; dans le panneau de la carte de l'Espace 3D, sous « Aimanté au sol » (quand
+   la séquence a un décor) ; et dans la palette (Ctrl+K), `calque.devant_decor_3d`, sans touche, à assigner au clic droit. Une
+   étape d'annulation. Un calque accroché à la caméra est devant de toute façon (l'entrée le dit).
+7. **La vue Espace 3D** (plein écran, à côté, vues multiples) montre la même chose : là où un objet du décor est plus près qu'une
+   carte, il la recouvre, de quelque côté qu'on regarde. Sans carte graphique, la vue montre toujours les boîtes du décor en fil
+   de fer, et ne cache rien.
+8. **Le décor se voit sur le dessin.** L'image de travail (la vue de dessin) ne montrait pas le décor 3D : seules les sorties
+   du film (exports, vignettes) et la vue Espace 3D le dessinaient. Il est maintenant sous les calques sur le dessin aussi, comme
+   dans les exports, et les cartes s'y cachent pareil. Du même coup, « Exporter l'image courante » l'a (elle passait par l'image
+   de travail), et la pipette prend la couleur du décor là où on le voit. Le pot de peinture, lui, ne le voit pas : ses bords ne
+   ferment pas une zone (comme avant).
+9. **Un plan sans décor ne change pas** : les mêmes images au bit près, par les mêmes chemins, au même coût.
+
+### 183.2 Comment c'est fait
+
+- **Le décor garde sa profondeur** (`profondeur.rs`). Il est rendu une fois par image, comme avant (la clé `DecorCle` et la
+  texture du décor sont celles de toujours : il n'est redessiné que quand la caméra ou un objet bouge), et reste l'élément le plus
+  bas du plan. Son rendu garde, à chaque pixel de la feuille, l'inverse de la distance à l'œil de la caméra (le long de son axe)
+  de ce que le décor y montre, 0 là où il n'y a rien.
+  - Carte graphique (`decor3dgpu.rs`) : une seconde cible de la passe de l'image du plan, `PROF` (`R16Float` : à 0,05 % près, deux octets à lire par pixel de carte), écrite par
+    `fs_main_feuille` et `fs_sky_feuille` (le ciel y écrit 0) ; dans `gpu.rs`, une texture de profondeur à côté de celle du décor
+    (`CelTexture::prof`), créée et dessinée avec elle, comptée dans la mémoire du cache.
+  - Processeur (`decor3drendu::rendre_objets_prof`) : le tampon de profondeur du rasteriseur, ramené au pixel (le plus proche
+    des échantillons, si au moins la moitié du pixel est couverte). Exports avec une carte graphique : relue d'elle
+    (`rendre_hors_ecran_prof`). Gardée avec le rendu (`decor3d::profondeur_du_rendu`, par le numéro du rendu : la profondeur est
+    toujours celle de l'image montrée, même du rendu d'avant qu'on montre en attendant le suivant).
+- **Le plan de chaque carte** : l'élément du plan d'une carte porte maintenant le plan où elle est posée, vu du même œil que le
+  décor (`PlanItem::profondeur`, `profondeur::plan_du_calque`, comme `espace3d::place_dans` : l'œil de la caméra, ou l'œil de
+  référence et le changement de repère d'un plan en Espace 3D) : trois nombres (a, b, c), l'inverse de la distance du point de la
+  carte vu au pixel (x, y) de la feuille étant a·x + b·y + c (le regard qui passe par ce pixel, coupé par le plan de la carte ;
+  pour un plan, l'inverse de la profondeur est linéaire sur l'image, une carte inclinée est donc juste partout). Son remplissage
+  au griffonnage et son fond sous le trait ont le même plan. Seulement quand le plan a un décor.
+- **À la composition**, un pixel de carte est caché si le décor y est plus près (`profondeur::cache`, la tolérance de 183.1.3) :
+  le décor, dessous, se voit à travers. Carte graphique : quatre composeurs de plus (`fs_compose_p`, `fs_blend_p`, à plat et par
+  maillage) qui lisent la profondeur du décor (groupe 3) ; les autres éléments passent par les composeurs de toujours, inchangés.
+  Processeur : `composite_tile_into`, `composite_world_tile` et `pixel_of` (vignettes, pipette) laissent ces pixels. L'image
+  composée gardée (`ItemKey`) compte le plan de la carte.
+- **La vue Espace 3D** : ses cartes sont dessinées par egui, par-dessus l'image du décor. Juste après chaque carte qui partage la
+  profondeur, un **voile** (`decor3dgpu::VoileCarte`) redessine sur le quadrilatère de la carte le décor là où il est plus près
+  qu'elle (la part des quatre échantillons du tampon de profondeur de la vue qui sont devant), lu dans les cibles de la passe du
+  décor de cette vue (sa couleur lissée et son tampon de profondeur, maintenant gardé).
+- **Ce qui n'est jamais caché** : `profondeur::partage` (une carte, ni accrochée, ni d'annotation, ni « Toujours devant le
+  décor 3D ») ; le reste ne porte pas de plan.
+- **Le dessin** (`App::build_plan_avec`) pose le décor sous les calques comme `render::panel_plan_at` (il y manquait depuis la
+  partie 180 ; l'essai qui compare les deux plans le vérifie maintenant avec un décor).
+- **Le fichier** : `devant_decor_3d` d'un calque, écrit seulement s'il est coché, **sans changer `VERSION`** (61). Une version
+  qui ne le connaît pas n'a pas de profondeur partagée : elle montre déjà toute carte devant le décor, c'est-à-dire l'image de la
+  case cochée ; elle perdrait la case en enregistrant. La règle du projet monte le numéro pour une perte en enregistrant, mais le
+  format 61 n'est encore sur aucune version distribuée (`main` est en 60, la partie 182 n'y est pas) : la case est notée sous le
+  numéro 61 (`project.rs`), comme les ajouts « sous ce même numéro » du format 55. Un projet de version 60 ou moins s'ouvre tel
+  quel, la case décochée.
+
+### 183.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai (`opt-level` 1, dépendances optimisées), la carte graphique
+étant ce qui compte. `profondeur_perf` (nouveau, ignoré) et `decor3d_perf` (partie 180), lancés seuls.
+
+- **La composition** (`profondeur_perf` : huit cartes, feuille 3840 × 2160, cadre 1920 × 1080, une image composée puis affichée,
+  la meilleure de trois séries de vingt, trois passages) :
+
+  | Huit cartes | sans décor | décor, cartes sans plan | décor, profondeur partagée | ce que coûte la profondeur |
+  |---|---|---|---|---|
+  | pleines (de l'encre sur toute la feuille : le pire cas) | 1,32 à 1,43 ms | 1,31 à 1,58 ms | 2,59 à 2,73 ms | **+1,0 à 1,4 ms** |
+  | de personnage (un huitième de la feuille chacune) | 1,32 à 1,39 ms | 1,33 à 1,39 ms | 1,32 à 1,34 ms | **non mesurable** (± 0,07 ms) |
+
+  Le coût est bien une lecture par pixel d'encre : la profondeur n'est lue que là où la carte n'est pas transparente, et une
+  lecture de plus par pixel coûte, sur cette carte, à peu près ce que coûte la lecture du dessin lui-même (l'essai l'a vérifié :
+  sans la lecture, les composeurs de la profondeur coûtent comme les autres, +0,01 à 0,06 ms). Huit cartes pleines d'encre sur
+  toute une feuille 4K sont un cas extrême ; des personnages, des accessoires, un décor dessiné de quelques cartes ne se voient
+  pas dans la mesure. La composition n'est refaite que quand l'image change (lecture, caméra qui bouge, trait) ; l'image gardée
+  reste gardée (son empreinte compte le plan des cartes).
+- **Le décor lui-même** (`decor3d_perf`, la grille d'essai à la feuille 3840 × 2160, la base d3b7ab0 et cette branche lancées
+  tour à tour, cinq passages chacune, le plus rapide gardé) : la seconde cible (deux octets par pixel) ne se voit pas dans le bruit
+  de mesure de la carte (± 25 %, partie 180.3) :
+
+  | Triangles | base : sans / basses / hautes | profondeur partagée : sans / basses / hautes |
+  |---|---|---|
+  | 20 000 | 0,52 / 0,30 / 0,55 ms | 0,29 / 0,31 / 0,52 ms |
+  | 180 000 | 0,37 / 0,63 / 0,63 ms | 0,37 / 0,63 / 0,62 ms |
+  | 980 000 | 1,06 / 1,26 / 1,52 ms | 1,02 / 1,27 / 1,75 ms |
+  | 2 000 000 | 1,76 / 2,04 / 2,54 ms | 1,77 / 2,03 / 2,49 ms |
+
+  Budget tiré par l'étalonnage : 1,5 à 4,1 M triangles sur la base, 1,4 à 2,0 M sur la branche (le même bruit). **La règle des
+  4 ms par image d'écran tient** : l'étalonnage de la machine mesure maintenant la passe avec sa seconde cible, le budget est donc
+  celui de ce que FEANOR dessine vraiment ; le décor n'est pas redessiné plus souvent qu'avant (la même clé `DecorCle`, la même
+  texture, la profondeur dessinée dans la même passe).
+- **L'export par le processeur** : la profondeur est le tampon que le rasteriseur avait déjà ; ramenée au pixel, sans calcul de plus
+  qui compte (`decor3d_perf` : 7 à 8 ms à 20 000 triangles, 152 à 173 ms à 2 millions, comme la base). Avec une carte graphique,
+  l'export relit en plus la profondeur (16 Mo à 3840 × 2160), une fois par image exportée où le décor a bougé.
+- L'essai de durée `espace3dcote_tests::a_stroke_with_the_side_view_open_stays_within_the_frame_budget`, seul, trois fois de
+  chaque côté : 3,09 à 3,21 ms sur la base, 3,15 à 5,51 ms sur la branche (une image lente sur trois, puis 3,15) ; il réussit, et
+  il a réussi dans le passage complet.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony** (`cargo test --lib profondeur_perf -- --ignored --nocapture`),
+avec la superposition « Performance » ouverte et un décor au budget.
+
+### 183.4 Essais (`src/profondeur_tests.rs`, 14 essais dont un ignoré)
+
+Le plan d'une carte donne l'inverse de sa distance en chaque pixel (à plat, inclinée), rien vue par la tranche, la tolérance ;
+les tolérances écrites dans les composeurs de la carte graphique sont celles du programme ; seules les cartes du monde portent un
+plan, et seulement avec un décor (accrochée, « Toujours devant », annotation : non), le dessin pose le décor comme les sorties.
+**Par le processeur** (l'image exportée) : une carte derrière la boîte est cachée là où la boîte la couvre et visible ailleurs,
+devant elle la couvre ; une carte inclinée qui traverse la boîte, cachée derrière, visible devant ; une carte aimantée sur une
+dalle, aucun pixel caché au-dessus de son origine, ses « pieds » rentrés dans la dalle cachés ; accrochée à la caméra et
+« Toujours devant le décor 3D », jamais cachées. **Par la carte graphique** (l'image composée de `GpuCanvas`, le décor dessiné par
+elle) : derrière, devant, inclinée, en mode de fusion, « Toujours devant » ; la profondeur du décor de la carte graphique est celle
+du processeur (à 0,1 % près, loin des bords). **Sans décor** : aucun plan, et la même image (processeur et carte graphique) qu'un
+plan dont les éléments porteraient un plan ; avec un décor et une carte toute devant, la même image que la case cochée. **La vue
+Espace 3D** : le voile d'une carte derrière la boîte remet la boîte là où elle couvre la carte, rien ailleurs ; devant, aucun
+voile. **La case** : une étape d'annulation, la commande de la palette, son bloc dans `keymap.toml` ; écrite pour le seul calque
+coché, relue, un fichier d'avant s'ouvre décochée, le format reste 61. Le pot de peinture prend les mêmes contours avec ou sans
+décor. `profondeur_perf` (ignoré) : les mesures de 183.3.
+
+### 183.5 Ce qui n'est pas fait (ou limité)
+
+- Un **calque d'ajustement résolu par le processeur** (sans carte graphique, ou dans un dossier) compose ce qu'il couvre sans la
+  profondeur partagée : les cartes qu'il couvre passent devant le décor dans son résultat. Sur la carte graphique, hors dossier,
+  il agit sur l'image déjà cachée.
+- Le bord du décor qui cache une carte est **net, au pixel** (pas lissé) : sur la feuille, deux fois plus fine que l'image, il
+  se voit peu ; dans la vue Espace 3D, il suit les quatre échantillons du décor.
+- **Dans la vue Espace 3D**, le voile d'une carte couvre tout son quadrilatère : là où elle est transparente et qu'une autre
+  carte, posée plus tôt dans la pile mais plus près que le décor, se voit à travers, le décor peut recouvrir cette autre carte
+  (seulement si l'ordre de la pile n'est pas celui des distances). L'image du plan, elle, est juste pixel par pixel.
+- Les cartes ne portent ni ne reçoivent d'**ombres** du décor (étape suivante) ; les **effets** d'une carte (lueur, flou)
+  sont cachés avec elle, sur son plan.
+
+### 183.6 À tester (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor : un arbre et un banc de la banque 3D. Un personnage sur une carte, entre les
+   deux : **derrière l'arbre, il est caché par le tronc** ; devant le banc, il le couvre. Le dessin le montre aussi (le décor est
+   maintenant sous les calques de la vue de dessin).
+2. Anime sa profondeur (deux clés) : il passe derrière l'arbre puis devant ; lecture à 24 i/s, J/K/L : **rien ne saccade**.
+3. Aimanté au sol sur une dalle de route : ses pieds touchent la dalle, **aucun bord rogné ni scintillement** quand la caméra
+   bouge.
+4. Une carte inclinée (un sol dessiné, un mur) qui traverse un objet : la partie derrière est cachée, l'autre se voit.
+5. Coche « Toujours devant le décor 3D » (menu du calque > Plus > Réglages avancés, ou le panneau de la carte) : il repasse
+   devant l'arbre ; Ctrl+Z. Un calque accroché à la caméra et un titre (incrustation) ne sont jamais cachés.
+6. Vue Espace 3D (plein écran, à côté, vues multiples) : tourne autour, la carte derrière l'arbre est cachée par lui de tous les
+   côtés.
+7. Exporte une image et un film : comme à l'écran.
+8. Un plan sans décor : les mêmes images qu'avant.
+9. Enregistre, ferme, rouvre : la case est restée cochée.

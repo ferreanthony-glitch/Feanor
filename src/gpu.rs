@@ -34,7 +34,8 @@ use crate::render::Plan;
 /// Réglages d'un dessin dans le tampon : 4 coins (position, coordonnées de texture), une couleur,
 /// des paramètres = 6 vec4 = 96 octets.
 // (Partie 177 : un vec4 de plus, `extra`, pour l'iris et le volet en horloge.)
-const ITEM_BYTES: u64 = 112;
+/// (Coins, couleur, réglages, réglage de plus, et le plan de la carte pour la profondeur partagée avec le décor 3D, partie 183.)
+const ITEM_BYTES: u64 = 128;
 /// Au-delà, les textures les moins récemment affichées sont libérées.
 const CACHE_BYTES: u64 = 1 << 30;
 /// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
@@ -52,6 +53,9 @@ struct Item {
     color: vec4<f32>,
     params: vec4<f32>,
     extra: vec4<f32>,
+    // La profondeur partagée avec le décor 3D (partie 183, `profondeur.rs`) : le plan de la carte, l'inverse de sa distance à l'œil
+    // au pixel (x, y) de la feuille étant prof.x · x + prof.y · y + prof.z. Lu seulement par `fs_compose_p` et `fs_blend_p`.
+    prof: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> item: Item;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -230,9 +234,66 @@ fn dissolve_noise(x: u32, y: u32) -> f32 {
 // remplace (pas de mélange matériel). params.x : opacité ; params.z : le mode.
 @fragment
 fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
+    return fusionner(v, item.params.x);
+}
+
+// La profondeur du décor 3D posé dessous (partie 183) : l'inverse de la distance à l'œil de ce qu'il montre à chaque pixel de la
+// feuille, 0 là où il n'y a rien (le ciel ne cache rien).
+@group(3) @binding(0) var decor_prof: texture_2d<f32>;
+
+// Les tolérances de `profondeur.rs` (`TOLERANCE_RELATIVE`, `TOLERANCE_METRES`) : le décor ne cache une carte que s'il est plus
+// près qu'elle d'au moins cela.
+const TOLERANCE_RELATIVE: f32 = 0.004;
+const TOLERANCE_METRES: f32 = 0.01;
+
+// Le pixel de la carte se voit-il (1) ou le décor, plus près, le cache-t-il (0) ? Comme `profondeur::cache`.
+fn visible(pos: vec4<f32>) -> f32 {
+    let taille = vec2<i32>(textureDimensions(decor_prof));
+    let p = vec2<i32>(floor(pos.xy));
+    if (p.x < 0 || p.y < 0 || p.x >= taille.x || p.y >= taille.y) {
+        return 1.0;
+    }
+    let decor = textureLoad(decor_prof, p, 0).r;
+    if (decor <= 0.0) {
+        return 1.0;
+    }
+    let carte = item.prof.x * pos.x + item.prof.y * pos.y + item.prof.z;
+    if (carte <= 0.0) {
+        return 1.0;
+    }
+    // (1 / décor < (1 − r) / carte − m, multiplié par décor · carte, tous deux positifs : sans division.)
+    if (carte * (1.0 + TOLERANCE_METRES * decor) < decor * (1.0 - TOLERANCE_RELATIVE)) {
+        return 0.0;
+    }
+    return 1.0;
+}
+
+// Une carte qui partage la profondeur du décor (partie 183) : composée comme `fs_compose` ou `fs_blend`, cachée là où le décor
+// est plus près (le décor, dessous, se voit alors).
+// (La profondeur n'est lue que là où la carte a de l'encre : une carte est surtout transparente.)
+@fragment
+fn fs_compose_p(v: VOut) -> @location(0) vec4<f32> {
+    let c = composer(v);
+    if (c.a <= 0.0) {
+        return c;
+    }
+    return c * visible(v.pos);
+}
+
+@fragment
+fn fs_blend_p(v: VOut) -> @location(0) vec4<f32> {
+    let encre = textureSample(tex, samp, v.uv).a;
+    var vis = 1.0;
+    if (encre > 0.0) {
+        vis = visible(v.pos);
+    }
+    return fusionner(v, item.params.x * vis);
+}
+
+fn fusionner(v: VOut, opacite: f32) -> vec4<f32> {
     let raw = textureSample(tex, samp, v.uv);
     let b = textureLoad(back_tex, vec2<i32>(floor(v.pos.xy)), 0);
-    let sa = raw.a * item.params.x;
+    let sa = raw.a * opacite;
     if (sa <= 0.0) {
         return b;
     }
@@ -260,6 +321,10 @@ fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_compose(v: VOut) -> @location(0) vec4<f32> {
+    return composer(v);
+}
+
+fn composer(v: VOut) -> vec4<f32> {
     let s = textureSample(tex, samp, v.uv);
     let op = item.params.x;
     if (item.params.y < 0.5) {
@@ -413,6 +478,9 @@ struct CelTexture {
     /// Résultat des effets sur la carte graphique d'un calque (`gpufx.rs`) : la texture est dessinée
     /// par des passes, jamais remplie de tuiles, et ne sert pas à recycler celle d'un dessin.
     fx: Option<FxState>,
+    /// Le décor 3D (partie 183) : la texture de sa profondeur, de même taille (`decor3dgpu::PROF`), dessinée avec lui, et ce que
+    /// la composition des cartes en lit (groupe 3 de `fs_compose_p`, `fs_blend_p`).
+    prof: Option<(wgpu::Texture, wgpu::BindGroup)>,
 }
 
 /// Où en est la texture résultat des effets d'un calque.
@@ -426,7 +494,8 @@ struct FxState {
 impl CelTexture {
     /// Poids de la texture sur la carte.
     fn bytes(&self) -> u64 {
-        self.rect[2] as u64 * self.rect[3] as u64 * 4
+        // (Le décor 3D : sa profondeur à côté, deux octets par pixel, partie 183.)
+        self.rect[2] as u64 * self.rect[3] as u64 * if self.prof.is_some() { 6 } else { 4 }
     }
 }
 
@@ -517,6 +586,13 @@ struct CanvasResources {
     /// Les mêmes, pour une feuille posée par un maillage (sommets au lieu de quatre coins).
     compose_mesh: wgpu::RenderPipeline,
     blend_mesh: wgpu::RenderPipeline,
+    /// Les mêmes quatre, pour une carte qui partage la profondeur du décor 3D (partie 183, `profondeur.rs`) : ils lisent aussi la
+    /// profondeur du décor (groupe 3) et cachent la carte là où il est plus près. Un plan sans décor ne s'en sert jamais.
+    compose_p: wgpu::RenderPipeline,
+    blend_p: wgpu::RenderPipeline,
+    compose_mesh_p: wgpu::RenderPipeline,
+    blend_mesh_p: wgpu::RenderPipeline,
+    prof_layout: wgpu::BindGroupLayout,
     /// Sommets des maillages de l'image, et sa taille en octets.
     mesh_vertices: Option<(wgpu::Buffer, u64)>,
     display: wgpu::RenderPipeline,
@@ -879,6 +955,44 @@ impl GpuCanvas {
         };
         let compose_mesh = mesh_pipeline("fs_compose", &layout, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
         let blend_mesh = mesh_pipeline("fs_blend", &blend_layout, None);
+        // La profondeur partagée avec le décor 3D (partie 183) : un quatrième groupe, la profondeur du décor (le troisième est le
+        // fond des modes de fusion, posé aussi pour les autres).
+        let prof_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("calques : profondeur du décor 3D"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                count: None,
+            }],
+        });
+        let p_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("calques : profondeur partagée"),
+            bind_group_layouts: &[&uniform_layout, &texture_layout, &texture_layout, &prof_layout],
+            push_constant_ranges: &[],
+        });
+        let quad_pipeline = |entry: &str, blend: Option<wgpu::BlendState>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&p_layout),
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState { format: FRAME_FORMAT, blend, write_mask: wgpu::ColorWrites::ALL })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let compose_p = quad_pipeline("fs_compose_p", Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let blend_p = quad_pipeline("fs_blend_p", None);
+        let compose_mesh_p = mesh_pipeline("fs_compose_p", &p_layout, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let blend_mesh_p = mesh_pipeline("fs_blend_p", &p_layout, None);
         // Bilinéaire : un calque transformé est lissé ; un calque tel quel tombe pile sur les pixels.
         let nearest = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composer"),
@@ -903,6 +1017,11 @@ impl GpuCanvas {
             blend,
             compose_mesh,
             blend_mesh,
+            compose_p,
+            blend_p,
+            compose_mesh_p,
+            blend_mesh_p,
+            prof_layout,
             mesh_vertices: None,
             display,
             uniform_layout,
@@ -1006,6 +1125,14 @@ impl GpuCanvas {
         if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
             res.whole_textures = whole;
             res.textures.clear();
+        }
+    }
+
+    /// Essais et mesures (partie 183) : l'image composée gardée est oubliée, la prochaine commande de dessin recompose tout.
+    #[cfg(test)]
+    pub fn oublier_composition(&self) {
+        if let Some(f) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>().and_then(|r| r.frame.as_mut()) {
+            f.composed = None;
         }
     }
 
@@ -1523,11 +1650,14 @@ impl GpuCanvas {
         };
         // Ce que montre la texture de chaque dessin : sa place dans l'image du dessin (`rect`) et la
         // taille de cette image.
-        let places: Vec<Option<([u32; 4], (u32, u32))>> = {
+        // (Et, pour le décor 3D, s'il a sa profondeur : partie 183.)
+        let places: Vec<Option<([u32; 4], (u32, u32), bool)>> = {
             let renderer = self.render_state.renderer.read();
             let textures = renderer.callback_resources.get::<CanvasResources>().map(|res| &res.textures);
-            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims))).collect()
+            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims, t.prof.is_some()))).collect()
         };
+        // Le décor 3D posé dessous, s'il a sa profondeur sur la carte : les cartes qui portent leur plan s'y cachent (partie 183).
+        let mut decor: Option<CelId> = None;
         let mut items = Vec::with_capacity(plan.items.len() + 1);
         if let Some(p) = plan.paper {
             items.push(GpuItem {
@@ -1538,6 +1668,7 @@ impl GpuCanvas {
                 blend: 0,
                 mesh: None,
                 adjust: None,
+                prof: None,
             });
         }
         for ((item, id), place) in plan.items.iter().zip(resolved).zip(&places) {
@@ -1555,14 +1686,18 @@ impl GpuCanvas {
                         blend: r.blend.index(),
                         mesh: None,
                         adjust: Some(r.steps.clone()),
+                        prof: None,
                     });
                 }
                 continue;
             }
             // Un élément sans dessin n'est pas composé.
             let Some(id) = *id else { continue };
+            if let Some(crate::render::FondPart::Decor(_)) = &item.fond {
+                decor = place.is_some_and(|p| p.2).then_some(id);
+            }
             // (Sans texture, rien à poser : la passe de composition saute l'élément.)
-            let (rect, rdims) = place.unwrap_or(([0, 0, stage[0] as u32, stage[1] as u32], (stage[0] as u32, stage[1] as u32)));
+            let (rect, rdims) = place.map_or(([0, 0, stage[0] as u32, stage[1] as u32], (stage[0] as u32, stage[1] as u32)), |p| (p.0, p.1));
             let whole = rect == [0, 0, rdims.0, rdims.1];
             let (color, tinted) = match item.tint {
                 Some(t) => ([t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0], 1.0),
@@ -1615,6 +1750,7 @@ impl GpuCanvas {
                 blend,
                 mesh,
                 adjust: None,
+                prof: decor.zip(item.profondeur),
             });
         }
         items
@@ -1706,6 +1842,9 @@ struct GpuItem {
     /// Calque d'effet d'ajustement (`calqueffet.rs`) : ses effets s'appliquent à l'image composée
     /// jusque-là, le résultat est posé dessus avec l'opacité et le mode de l'élément.
     adjust: Option<Vec<crate::fx::FxStep>>,
+    /// La profondeur partagée avec le décor 3D (partie 183) : la texture du décor posé dessous (sa profondeur est à côté d'elle)
+    /// et le plan de la carte (`PlanItem::profondeur`).
+    prof: Option<(CelId, crate::profondeur::PlanCarte)>,
 }
 
 /// Ce qui fait un élément de l'image composée : le dessin et la version de sa texture, sa place, sa
@@ -1721,6 +1860,8 @@ struct ItemKey {
     mesh: Option<(usize, u64)>,
     /// Empreinte des effets d'un calque d'ajustement.
     adjust: Option<u64>,
+    /// La profondeur partagée avec le décor 3D : le décor et le plan de la carte (partie 183).
+    prof: Option<(CelId, [u32; 3])>,
 }
 
 impl ItemKey {
@@ -1744,7 +1885,8 @@ impl ItemKey {
             }
             std::hash::Hasher::finish(&h)
         });
-        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust }
+        let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits)));
+        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust, prof }
     }
 }
 
@@ -1853,11 +1995,23 @@ fn compose_span(
             pass = compose_pass(encoder, &frame.target, false);
             pass.set_bind_group(2, &frame.backdrop_group, &[]);
         }
-        pass.set_pipeline(match (item.blend != 0, meshed) {
-            (false, false) => &res.compose,
-            (false, true) => &res.compose_mesh,
-            (true, false) => &res.blend,
-            (true, true) => &res.blend_mesh,
+        // Une carte qui partage la profondeur du décor 3D (partie 183) : les mêmes, qui lisent aussi la profondeur du décor.
+        let prof = item.prof.and_then(|(decor, _)| res.textures.get(&decor)).and_then(|t| t.prof.as_ref()).map(|p| &p.1);
+        if let Some(group) = prof {
+            if item.blend == 0 {
+                pass.set_bind_group(2, &frame.backdrop_group, &[]);
+            }
+            pass.set_bind_group(3, group, &[]);
+        }
+        pass.set_pipeline(match (item.blend != 0, meshed, prof.is_some()) {
+            (false, false, false) => &res.compose,
+            (false, true, false) => &res.compose_mesh,
+            (true, false, false) => &res.blend,
+            (true, true, false) => &res.blend_mesh,
+            (false, false, true) => &res.compose_p,
+            (false, true, true) => &res.compose_mesh_p,
+            (true, false, true) => &res.blend_p,
+            (true, true, true) => &res.blend_mesh_p,
         });
         pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
         pass.set_bind_group(1, group, &[]);
@@ -1882,6 +2036,12 @@ fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params:
     put_item_extra(bytes, corners, color, params, &[0.0; 4]);
 }
 
+fn put_floats(bytes: &mut [u8], values: &[f32]) {
+    for (k, v) in values.iter().enumerate() {
+        bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_ne_bytes());
+    }
+}
+
 fn put_item_extra(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4], extra: &[f32; 4]) {
     for (k, v) in corners.iter().flatten().chain(color).chain(params).chain(extra).enumerate() {
         bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_ne_bytes());
@@ -1903,8 +2063,8 @@ impl CallbackTrait for CanvasPaint {
             let mut moteur = resources.remove::<crate::decor3dgpu::Moteur>().unwrap_or_else(|| crate::decor3dgpu::Moteur::new(device, queue));
             if let Some(res) = resources.get_mut::<CanvasResources>() {
                 for j in jobs {
-                    let Some(view) = res.textures.get(&j.out).map(|t| t.texture.create_view(&Default::default())) else { continue };
-                    moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, j.ciel, j.qualite);
+                    let Some((view, prof)) = res.textures.get(&j.out).and_then(|t| Some((t.texture.create_view(&Default::default()), t.prof.as_ref()?.0.create_view(&Default::default())))) else { continue };
+                    moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, &prof, j.ciel, j.qualite);
                     if let Some(state) = res.textures.get_mut(&j.out).and_then(|t| t.fx.as_mut()) {
                         state.done = j.sig;
                     }
@@ -1941,6 +2101,10 @@ impl CallbackTrait for CanvasPaint {
         let mut bytes = vec![0u8; n as usize * stride];
         for (i, item) in self.items.iter().enumerate() {
             put_item(&mut bytes[i * stride..], &item.corners, &item.color, &item.params);
+            // (Le plan de la carte, après le réglage de plus : la profondeur partagée avec le décor 3D, partie 183.)
+            if let Some((_, plan)) = item.prof {
+                put_floats(&mut bytes[i * stride + 112..], &[plan[0], plan[1], plan[2], 0.0]);
+            }
         }
         let [w, h] = screen.size_in_pixels.map(|v| v.max(1) as f32);
         let ppp = screen.pixels_per_point;
@@ -2237,6 +2401,7 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
             filled: Vec::new(),
             partial: None,
             fx: Some(FxState::default()),
+            prof: None,
         };
         *bytes += entry.bytes();
         res.textures.insert(out, entry);
@@ -2268,14 +2433,16 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
     let qualite = if aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
     let sig = crate::decor3d::id_of(key) ^ (qualite as u64) << 1;
     let want = [0, 0, sheet.0, sheet.1];
-    if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.rect == want) {
+    if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.prof.is_some() && t.rect == want) {
         if let Some(old) = res.textures.remove(&out) {
             *bytes -= old.bytes();
         }
         let texture = crate::gpufx::target_texture(&rs.device, sheet.0, sheet.1);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()) };
+        // (Sa profondeur, dessinée avec lui : les cartes s'y cachent, partie 183.)
+        let prof = prof_texture(&rs.device, &res.prof_layout, sheet);
+        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()), prof: Some(prof) };
         *bytes += entry.bytes();
         res.textures.insert(out, entry);
     }
@@ -2338,10 +2505,28 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let texture = cel_texture(&rs.device, rect[2], rect[3]);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None }
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None, prof: None }
     });
     *bytes += entry.bytes();
     res.textures.insert(id, entry);
+}
+
+/// La texture de la profondeur du décor 3D (partie 183, `decor3dgpu::PROF`), de la taille de la feuille, et ce que la composition
+/// des cartes en lit.
+fn prof_texture(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, size: (u32, u32)) -> (wgpu::Texture, wgpu::BindGroup) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("décor 3D : profondeur"),
+        size: extent(size.0, size.1),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: crate::decor3dgpu::PROF,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    let group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("décor 3D : profondeur"), layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }] });
+    (texture, group)
 }
 
 /// Texture d'un dessin : valeurs gamma prémultipliées, telles qu'elles sont en mémoire.

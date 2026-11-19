@@ -351,7 +351,7 @@ fn doc_and_item(id: u64, steps: Vec<FxStep>) -> (Document, PlanItem) {
     let mut cel = crate::document::Cel::bitmap(random_raster(320, 256, id as u32));
     cel.version = 1;
     doc.cels.insert(id, cel);
-    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None };
+    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None, profondeur: None };
     (doc, item)
 }
 
@@ -480,7 +480,7 @@ fn at_rest_only_the_layers_that_animate_follow_the_clock() {
     assert_eq!(t::variant_for(&animated, 5, rest), t::variant_at(24, 2, 3), "allumé : celle de l'horloge");
     assert_eq!(t::variant_for(&animated, 5, None), t::variant_at(5, 2, 3), "en lecture ou à l'export : toujours l'image");
     // Le plan de l'écran : un élément qui anime à l'arrêt réveille l'écran, pas les autres.
-    let item = |v: Vec<f32>| PlanItem { cel: 1, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: vec![step(v)], ctg: None, fond: None, pre: None };
+    let item = |v: Vec<f32>| PlanItem { cel: 1, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: vec![step(v)], ctg: None, fond: None, pre: None, profondeur: None };
     assert_eq!(t::rest_wake(&[item(still.clone())], 24, 1234), None, "image fixe : l'écran ne se redessine pas");
     assert_eq!(t::rest_wake(&[], 24, 1234), None);
     let wake = t::rest_wake(&[item(animated.clone())], 24, 1234).expect("réveil");
@@ -504,7 +504,7 @@ fn at_rest_only_the_layers_that_animate_follow_the_clock() {
 
 #[test]
 fn the_other_variants_are_prefetched_only_for_layers_that_animate_at_rest() {
-    let item = |v: Vec<f32>| PlanItem { cel: 1, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: vec![step(v)], ctg: None, fond: None, pre: None };
+    let item = |v: Vec<f32>| PlanItem { cel: 1, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: vec![step(v)], ctg: None, fond: None, pre: None, profondeur: None };
     assert!(t::other_variants(&[item(values(4.0, 50.0, 3.0, 2.0, 0.0, false, 1))]).is_empty());
     let others = t::other_variants(&[item(values(4.0, 50.0, 4.0, 2.0, 0.0, true, 1))]);
     let ids: Vec<u64> = others.iter().map(fx::shown_id).collect();

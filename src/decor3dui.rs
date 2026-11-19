@@ -660,9 +660,11 @@ impl App {
 
     /// Le décor de la séquence dans une vue Espace 3D (entre le quadrillage et les cartes) : tous ses objets, dessinés par la
     /// carte graphique dans le même tampon de profondeur ; sans elle, leurs boîtes en fil de fer et une légende. L'objet choisi
-    /// dans le panneau a sa boîte en clair. `cle` : la prise (une par vue).
-    pub(crate) fn e3_peindre_decor(&self, painter: &egui::Painter, draw: Rect, view: &View, cle: u64) {
-        let Some(d) = self.doc.decor_du_plan(self.cur_panel) else { return };
+    /// dans le panneau a sa boîte en clair. `cle` : la prise (une par vue). Vrai : la carte graphique dessine le décor de cette vue
+    /// (les cartes peuvent alors s'y cacher, partie 183 : `e3_paint_cards`).
+    pub(crate) fn e3_peindre_decor(&self, painter: &egui::Painter, draw: Rect, view: &View, cle: u64) -> bool {
+        let Some(d) = self.doc.decor_du_plan(self.cur_panel) else { return false };
+        let mut sur_la_carte = false;
         let center = [draw.width() / 2.0, draw.height() / 2.0];
         let proj = |p: V3| view.project(p, center).map(|q| pos2(draw.left() + q[0], draw.top() + q[1]));
         let boite = |o: &crate::decor3d::Objet3d, trait_: Stroke| {
@@ -689,6 +691,7 @@ impl App {
                         qualite,
                     };
                     painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
+                    sur_la_carte = true;
                 }
                 None => {
                     // Sans carte graphique : les boîtes des objets, en fil de fer.
@@ -702,6 +705,7 @@ impl App {
         if let Some(o) = self.decor3d.choisi.and_then(|id| d.objet(id)).filter(|_| d.objets.len() > 1) {
             boite(o, Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 220, 120, 170)));
         }
+        sur_la_carte
     }
 
     /// Le point du sol (x, z) sous `pos` dans la vue Espace 3D (une seule vue, ouverte) : là où un modèle lâché se pose.

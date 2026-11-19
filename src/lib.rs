@@ -368,6 +368,10 @@ mod accroche_tests;
 mod origine;
 #[cfg(test)]
 mod origine_tests;
+// La profondeur partagée entre le décor 3D et les cartes dessinées (partie 183).
+mod profondeur;
+#[cfg(test)]
+mod profondeur_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;

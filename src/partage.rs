@@ -65,6 +65,8 @@ impl Layer {
             // (L'origine va avec la pose, l'aimant avec la carte : chaque exemplaire garde les siens, partie 182.)
             origine: self.origine,
             aimante_au_sol: self.aimante_au_sol,
+            // (« Toujours devant le décor 3D » va avec la carte, partie 183.)
+            devant_decor: self.devant_decor,
             partage: self.partage,
             ..modele.clone()
         }

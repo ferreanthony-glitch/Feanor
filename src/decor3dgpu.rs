@@ -30,10 +30,17 @@ use crate::espace3dmath::{self as m, M4, V3};
 
 const COULEUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PROFONDEUR: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// La profondeur partagée avec les cartes (partie 183, `profondeur.rs`) : l'inverse de la distance à l'œil, le long de son axe, de ce
+/// que le décor montre à chaque pixel de la feuille (0 : rien). Une seconde cible de la passe de l'image du plan. Sur 16 bits : à
+/// 0,05 % près (la tolérance est de 0,4 %), et la moitié moins à lire par pixel de carte à la composition.
+pub const PROF: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
 /// Lissage des bords de la vue Espace 3D (l'image du plan, à la taille de la feuille, n'en a pas besoin : elle est réduite à
 /// l'écran).
 const ECHANTILLONS_VUE: u32 = 4;
 const GLOBAL: u64 = 512;
+/// Les réglages du voile d'une carte (`VOILE`) et leur pas dans le tampon (partie 183).
+const VOILE_OCTETS: u64 = 192;
+const PAS_VOILE: u64 = 256;
 const OBJET: u64 = 160;
 const PAS_OBJET: u64 = 256;
 /// Triangles au plus par morceau envoyé à la carte (3 millions de sommets × 32 octets : sous les 256 Mo de tampon que toute
@@ -126,6 +133,25 @@ fn finish(c: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
+    return ombrer(in);
+}
+
+// L'image du plan (partie 183) : la couleur, et l'inverse de la distance à l'œil le long de son axe (la profondeur que les
+// cartes partagent avec le décor, `profondeur.rs`).
+struct Feuille {
+    @location(0) c: vec4<f32>,
+    @location(1) p: vec4<f32>,
+};
+
+@fragment
+fn fs_main_feuille(in: VOut) -> Feuille {
+    var out: Feuille;
+    out.c = ombrer(in);
+    out.p = vec4<f32>(1.0 / max(dot(in.wpos - g.eye.xyz, g.cam_f.xyz), 1e-6), 0.0, 0.0, 1.0);
+    return out;
+}
+
+fn ombrer(in: VOut) -> vec4<f32> {
     // (Calculés avant tout `discard` : les dérivées veulent un flot uniforme.)
     let flat_n = normalize(cross(dpdx(in.wpos), dpdy(in.wpos)));
     let tex = textureSampleLevel(t_base, s_base, in.uv, 0.0);
@@ -158,6 +184,19 @@ fn vs_sky(@builtin(vertex_index) i: u32) -> SkyOut {
 
 @fragment
 fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
+    return ciel(in);
+}
+
+// Le ciel de l'image du plan : il ne cache rien (profondeur 0).
+@fragment
+fn fs_sky_feuille(in: SkyOut) -> Feuille {
+    var out: Feuille;
+    out.c = ciel(in);
+    out.p = vec4<f32>(0.0);
+    return out;
+}
+
+fn ciel(in: SkyOut) -> vec4<f32> {
     if (g.fog.z < 0.5) { discard; }
     let s = g.cam_r.w;
     var dir = g.cam_f.xyz;
@@ -200,6 +239,87 @@ fn fs(in: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Le voile d'une carte de la vue Espace 3D (partie 183) : sur le quadrilatère de la carte, le décor là où il est plus près
+/// qu'elle, lu dans les cibles de la passe du décor de cette vue (sa couleur lissée et son tampon de profondeur à quatre
+/// échantillons). Posé juste après le dessin de la carte : le décor qui est devant la carte la recouvre.
+const VOILE: &str = r#"
+struct Voile {
+    vp: mat4x4<f32>,
+    coins: array<vec4<f32>, 4>,
+    oeil: vec4<f32>,     // xyz ; w : orthographique (1/0)
+    avant: vec4<f32>,    // xyz ; w : proche
+    lin: vec4<f32>,      // loin, taille de la cible (pixels), sortie sRGB (1/0)
+};
+@group(0) @binding(0) var<uniform> v: Voile;
+@group(1) @binding(0) var t_couleur: texture_2d<f32>;
+@group(1) @binding(1) var t_prof: texture_depth_multisampled_2d;
+
+// Les tolérances de `profondeur.rs` (`TOLERANCE_RELATIVE`, `TOLERANCE_METRES`).
+const TOLERANCE_RELATIVE: f32 = 0.004;
+const TOLERANCE_METRES: f32 = 0.01;
+
+struct Out {
+    @builtin(position) pos: vec4<f32>,
+    // (La position de découpe et la distance à l'œil, linéaires dans l'espace : interpolées en perspective, elles sont justes en
+    // chaque point de la carte.)
+    @location(0) decoupe: vec3<f32>,
+    @location(1) dist: f32,
+};
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> Out {
+    var ordre = array<u32, 6>(0u, 1u, 2u, 0u, 2u, 3u);
+    let p = v.coins[ordre[i]].xyz;
+    let c = v.vp * vec4<f32>(p, 1.0);
+    var out: Out;
+    // (La profondeur de découpe au milieu : une carte plus loin que le décor, au-delà de son plan lointain, n'est pas coupée ;
+    // ce qui passe derrière l'œil l'est toujours.)
+    out.pos = vec4<f32>(c.x, c.y, 0.5 * c.w, c.w);
+    out.decoupe = vec3<f32>(c.x, c.y, c.w);
+    out.dist = dot(p - v.oeil.xyz, v.avant.xyz);
+    return out;
+}
+
+// La distance à l'œil d'une profondeur du tampon (`Vue::decoupe`).
+fn distance_du_decor(z: f32) -> f32 {
+    let proche = v.avant.w;
+    let loin = v.lin.x;
+    if (v.oeil.w > 0.5) {
+        return proche + z * (loin - proche);
+    }
+    let k = loin / (loin - proche);
+    return proche / max(1.0 - z / k, 1e-9);
+}
+
+@fragment
+fn fs(in: Out) -> @location(0) vec4<f32> {
+    let ndc = in.decoupe.xy / in.decoupe.z;
+    let taille = vec2<f32>(v.lin.y, v.lin.z);
+    let q = vec2<i32>(floor(vec2<f32>((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * taille));
+    if (q.x < 0 || q.y < 0 || q.x >= i32(taille.x) || q.y >= i32(taille.y)) {
+        discard;
+    }
+    let seuil = in.dist * (1.0 - TOLERANCE_RELATIVE) - TOLERANCE_METRES;
+    var devant = 0.0;
+    for (var s = 0; s < 4; s = s + 1) {
+        let z = textureLoad(t_prof, q, s);
+        if (z < 1.0 && distance_du_decor(z) < seuil) {
+            devant = devant + 1.0;
+        }
+    }
+    let c = textureLoad(t_couleur, q, 0);
+    if (devant <= 0.0 || c.a <= 0.0) {
+        discard;
+    }
+    var rgb = min(c.rgb / c.a, vec3<f32>(1.0));
+    if (v.lin.w > 0.5) {
+        rgb = pow(rgb, vec3<f32>(2.2));
+    }
+    let f = devant / 4.0;
+    return vec4<f32>(rgb * f, f);
+}
+"#;
+
 /// Une texture de couleur de base dans la carte.
 struct TextureGpu {
     groupe: wgpu::BindGroup,
@@ -236,6 +356,23 @@ struct Prise3 {
     cibles: Option<Cibles>,
     ombre: Option<(u32, wgpu::TextureView)>,
     utilise: u64,
+    /// La dernière passe de cette prise (partie 183) : sa matrice monde → découpe, son œil et son axe, et de quoi ramener sa
+    /// profondeur à une distance (proche, loin, orthographique) ; le voile des cartes de la vue s'en sert (`VoileCarte`).
+    passe: Option<Passe>,
+    /// Les réglages des voiles des cartes de cette vue, un pas de `PAS_VOILE` par carte, et leur capacité (partie 183).
+    voiles: Option<(wgpu::Buffer, wgpu::BindGroup, u64)>,
+}
+
+/// Ce que le voile d'une carte de la vue lit de la passe du décor (`Prise3::passe`).
+#[derive(Clone, Copy, Debug)]
+struct Passe {
+    vp: M4,
+    oeil: V3,
+    avant: V3,
+    proche: f32,
+    loin: f32,
+    ortho: bool,
+    taille_px: [u32; 2],
 }
 
 struct Cibles {
@@ -244,6 +381,8 @@ struct Cibles {
     couleur: wgpu::TextureView,
     profondeur: wgpu::TextureView,
     resolue: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    /// La vue (partie 183) : sa couleur lissée et son tampon de profondeur, tels que le voile des cartes les lit (`VoileCarte`).
+    voile: Option<wgpu::BindGroup>,
 }
 
 /// Le moteur du décor : pipelines, décors envoyés, prises.
@@ -258,6 +397,11 @@ pub struct Moteur {
     blit_shader: wgpu::ShaderModule,
     blit_layout: wgpu::BindGroupLayout,
     blit_uniform: wgpu::Buffer,
+    /// Le voile des cartes de la vue (partie 183), fait à la première vue comme le poser : son format, son pipeline.
+    voile: Option<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
+    voile_shader: wgpu::ShaderModule,
+    voile_layout_reglages: wgpu::BindGroupLayout,
+    voile_layout_cibles: wgpu::BindGroupLayout,
     layout_global: wgpu::BindGroupLayout,
     layout_objet: wgpu::BindGroupLayout,
     layout_texture: wgpu::BindGroupLayout,
@@ -352,6 +496,33 @@ impl Moteur {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Moteur {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : poser"), source: wgpu::ShaderSource::Wgsl(BLIT.into()) });
+        let voile_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : voile des cartes"), source: wgpu::ShaderSource::Wgsl(VOILE.into()) });
+        let voile_layout_reglages = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : voile, réglages"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: NonZeroU64::new(VOILE_OCTETS) },
+                count: None,
+            }],
+        });
+        let voile_layout_cibles = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : voile, cibles"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: true },
+                    count: None,
+                },
+            ],
+        });
         let uniforme = |binding: u32, size: u64, dynamic: bool| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -387,15 +558,20 @@ impl Moteur {
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D"), bind_group_layouts: &[&layout_global, &layout_objet, &layout_texture], push_constant_ranges: &[] });
         const ATTR: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
         let tampons = [wgpu::VertexBufferLayout { array_stride: 32, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTR }];
+        // (Une échantillon : l'image du plan, avec sa seconde cible, la profondeur partagée avec les cartes, partie 183 ; quatre : la
+        // vue Espace 3D.)
+        let cibles_feuille = [Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL }), Some(wgpu::ColorTargetState { format: PROF, blend: None, write_mask: wgpu::ColorWrites::ALL })];
+        let cibles_vue = [Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL })];
         let principal = |samples: u32| {
+            let feuille = samples == 1;
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("décor 3D"),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), buffers: &tampons, compilation_options: Default::default() },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                    entry_point: Some(if feuille { "fs_main_feuille" } else { "fs_main" }),
+                    targets: if feuille { &cibles_feuille } else { &cibles_vue },
                     compilation_options: Default::default(),
                 }),
                 primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
@@ -406,14 +582,15 @@ impl Moteur {
             })
         };
         let ciel = |samples: u32| {
+            let feuille = samples == 1;
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("décor 3D : ciel"),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_sky"), buffers: &[], compilation_options: Default::default() },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs_sky"),
-                    targets: &[Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                    entry_point: Some(if feuille { "fs_sky_feuille" } else { "fs_sky" }),
+                    targets: if feuille { &cibles_feuille } else { &cibles_vue },
                     compilation_options: Default::default(),
                 }),
                 primitive: wgpu::PrimitiveState::default(),
@@ -496,6 +673,10 @@ impl Moteur {
             blit_shader,
             blit_layout,
             blit_uniform,
+            voile: None,
+            voile_shader,
+            voile_layout_reglages,
+            voile_layout_cibles,
             layout_global,
             layout_objet,
             layout_texture,
@@ -622,7 +803,7 @@ impl Moteur {
             let globals = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D globale"), size: GLOBAL, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
             let groupe_global = groupe_global(device, &self.layout_global, &globals, &self.ombre_vide, &self.echant_ombre);
             let (objets, groupe_objets) = tampon_objets(device, &self.layout_objet, 16);
-            Prise3 { globals, groupe_global, objets, groupe_objets, capacite: 16, cibles: None, ombre: None, utilise: tic }
+            Prise3 { globals, groupe_global, objets, groupe_objets, capacite: 16, cibles: None, ombre: None, utilise: tic, passe: None, voiles: None }
         });
         entry.utilise = tic;
         if n > entry.capacite {
@@ -652,6 +833,7 @@ impl Moteur {
         couleur: &wgpu::TextureView,
         resolue: Option<&wgpu::TextureView>,
         profondeur: &wgpu::TextureView,
+        prof: Option<&wgpu::TextureView>,
         echantillons: u32,
         ciel: bool,
         qualite: crate::decor3dbudget::Qualite,
@@ -748,6 +930,7 @@ impl Moteur {
             }
         }
         let p = self.prise(device, cle, n);
+        p.passe = Some(Passe { vp, oeil: oe, avant: f, proche, loin, ortho: est_ortho, taille_px });
         queue.write_buffer(&p.globals, 0, &g);
         queue.write_buffer(&p.objets, 0, &objets);
         let (groupe_global, groupe_objets) = (p.groupe_global.clone(), p.groupe_objets.clone());
@@ -769,14 +952,21 @@ impl Moteur {
             pass.set_bind_group(2, &self.blanc, &[]);
             self.poser(&mut pass, dessins, &groupe_objets, &mut 0, false);
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("décor 3D"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+        // (L'image du plan a une seconde cible : la profondeur partagée avec les cartes, partie 183, 0 là où rien n'est dessiné. La
+        // vue garde son tampon de profondeur : le voile de ses cartes le lit, `VoileCarte`.)
+        let cible_prof = prof.map(|v| wgpu::RenderPassColorAttachment { view: v, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } });
+        let attaches = [
+            Some(wgpu::RenderPassColorAttachment {
                 view: couleur,
                 resolve_target: resolue,
                 ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: if resolue.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store } },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: profondeur, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
+            }),
+            cible_prof,
+        ];
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("décor 3D"),
+            color_attachments: if prof.is_some() { &attaches } else { &attaches[..1] },
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: profondeur, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: if echantillons > 1 { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard } }), stencil_ops: None }),
             timestamp_writes: None,
             occlusion_query_set: None,
         });
@@ -817,17 +1007,21 @@ impl Moteur {
     /// feuille, `gpufx::target_texture`), vue de l'œil de la caméra, alignée sur la feuille. Pas de lissage : l'image est
     /// réduite à l'écran.
     #[allow(clippy::too_many_arguments)]
-    pub fn dessiner_feuille(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], cible: &wgpu::TextureView, ciel: bool, qualite: crate::decor3dbudget::Qualite) {
+    ///
+    /// `prof` : la texture de même taille (`PROF`) où va la profondeur que les cartes partagent avec le décor (partie 183).
+    pub fn dessiner_feuille(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], cible: &wgpu::TextureView, prof: &wgpu::TextureView, ciel: bool, qualite: crate::decor3dbudget::Qualite) {
         let profondeur = self.cibles(device, cle, taille, 1, false).profondeur.clone();
-        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur, 1, ciel, qualite);
+        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur, Some(prof), 1, ciel, qualite);
     }
 
     fn cibles(&mut self, device: &wgpu::Device, cle: u64, taille: [u32; 2], echantillons: u32, avec_couleur: bool) -> &Cibles {
         let layout = self.blit_layout.clone();
+        let voile_cibles = self.voile_layout_cibles.clone();
         let (uniform, echant) = (self.blit_uniform.clone(), self.echant_blit.clone());
         let p = self.prise(device, cle, 1);
         if p.cibles.as_ref().is_none_or(|c| c.taille != taille || c.echantillons != echantillons) {
-            let profondeur = texture_profondeur(device, taille, echantillons, false);
+            // (La vue garde son tampon de profondeur lisible : le voile de ses cartes le lit, partie 183.)
+            let profondeur = texture_profondeur(device, taille, echantillons, avec_couleur);
             let (couleur, resolue) = if avec_couleur {
                 let couleur = texture_couleur(device, taille, echantillons, false);
                 let resolue = texture_couleur(device, taille, 1, true);
@@ -844,7 +1038,14 @@ impl Moteur {
             } else {
                 (profondeur.clone(), None)
             };
-            p.cibles = Some(Cibles { taille, echantillons, couleur, profondeur, resolue });
+            let voile = resolue.as_ref().filter(|_| echantillons == ECHANTILLONS_VUE).map(|(r, _)| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("décor 3D : voile, cibles"),
+                    layout: &voile_cibles,
+                    entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(r) }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&profondeur) }],
+                })
+            });
+            p.cibles = Some(Cibles { taille, echantillons, couleur, profondeur, resolue, voile });
         }
         p.cibles.as_ref().expect("cibles")
     }
@@ -854,7 +1055,7 @@ impl Moteur {
     pub fn dessiner_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], vue: &Vue, taille_pts: [f32; 2], taille_px: [u32; 2], qualite: crate::decor3dbudget::Qualite) {
         let c = self.cibles(device, cle, taille_px, ECHANTILLONS_VUE, true);
         let (couleur, profondeur, resolue) = (c.couleur.clone(), c.profondeur.clone(), c.resolue.as_ref().map(|r| r.0.clone()));
-        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, ECHANTILLONS_VUE, false, qualite);
+        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, None, ECHANTILLONS_VUE, false, qualite);
     }
 
     /// Pose l'image de la vue `cle` dans la passe d'egui.
@@ -863,6 +1064,73 @@ impl Moteur {
         pass.set_pipeline(blit);
         pass.set_bind_group(0, groupe, &[]);
         pass.draw(0..3, 0..1);
+    }
+
+    /// Le voile des cartes de la vue, au format `format` de l'écran d'egui (la première fois, ou si le format change).
+    fn assurer_voile(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) {
+        if self.voile.as_ref().is_some_and(|v| v.0 == format) {
+            return;
+        }
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : voile"), bind_group_layouts: &[&self.voile_layout_reglages, &self.voile_layout_cibles], push_constant_ranges: &[] });
+        let pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("décor 3D : voile des cartes"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState { module: &self.voile_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState {
+                module: &self.voile_shader,
+                entry_point: Some("fs"),
+                targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        self.voile = Some((format, pipe));
+    }
+
+    /// Les réglages du voile de la carte `rang` de la vue `cle` (ses quatre coins dans le monde), d'après la dernière passe du décor
+    /// de cette vue. Faux : la vue n'a pas de décor dessiné (rien à voiler).
+    fn preparer_voile(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, cle: u64, rang: u32, coins: &[V3; 4], srgb: bool) -> bool {
+        let layout = self.voile_layout_reglages.clone();
+        let Some(p) = self.prises.get_mut(&cle) else { return false };
+        let (Some(passe), Some(_)) = (p.passe, p.cibles.as_ref().and_then(|c| c.voile.as_ref())) else { return false };
+        let besoin = rang as u64 + 1;
+        if p.voiles.as_ref().is_none_or(|v| v.2 < besoin) {
+            let cap = besoin.next_power_of_two().max(8);
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D : voiles"), size: PAS_VOILE * cap, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("décor 3D : voiles"),
+                layout: &layout,
+                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &buffer, offset: 0, size: NonZeroU64::new(VOILE_OCTETS) }) }],
+            });
+            p.voiles = Some((buffer, groupe, cap));
+        }
+        let mut b = vec![0u8; VOILE_OCTETS as usize];
+        put(&mut b, 0, &passe.vp);
+        for (k, c) in coins.iter().enumerate() {
+            put(&mut b, 64 + k * 16, &[c[0], c[1], c[2], 1.0]);
+        }
+        put(&mut b, 128, &[passe.oeil[0], passe.oeil[1], passe.oeil[2], if passe.ortho { 1.0 } else { 0.0 }]);
+        put(&mut b, 144, &[passe.avant[0], passe.avant[1], passe.avant[2], passe.proche]);
+        put(&mut b, 160, &[passe.loin, passe.taille_px[0] as f32, passe.taille_px[1] as f32, if srgb { 1.0 } else { 0.0 }]);
+        if let Some((buffer, _, _)) = &p.voiles {
+            queue.write_buffer(buffer, rang as u64 * PAS_VOILE, &b);
+        }
+        true
+    }
+
+    /// Pose le voile de la carte `rang` de la vue `cle` dans la passe d'egui.
+    fn poser_voile(&self, pass: &mut wgpu::RenderPass<'static>, cle: u64, rang: u32) {
+        let Some((_, pipe)) = self.voile.as_ref() else { return };
+        let Some(p) = self.prises.get(&cle) else { return };
+        let (Some((_, reglages, _)), Some(cibles)) = (p.voiles.as_ref(), p.cibles.as_ref().and_then(|c| c.voile.as_ref())) else { return };
+        pass.set_pipeline(pipe);
+        pass.set_bind_group(0, reglages, &[(rang as u64 * PAS_VOILE) as u32]);
+        pass.set_bind_group(1, cibles, &[]);
+        pass.draw(0..6, 0..1);
     }
 
     /// Les prises qui ne servent plus (une vue multiple fermée) rendent leurs cibles.
@@ -969,6 +1237,34 @@ impl CallbackTrait for VueDecor {
     }
 }
 
+/// Le voile d'une carte de la vue Espace 3D (partie 183, `profondeur.rs`) : posé juste après le dessin de la carte, il y remet le
+/// décor de la vue `cle` là où le décor est plus près que la carte. Les cartes et les objets du décor se cachent ainsi selon leur
+/// distance dans la vue comme dans l'image du plan.
+pub struct VoileCarte {
+    pub cle: u64,
+    /// Le rang de la carte parmi celles de la vue à cette image (chacune son pas dans le tampon des réglages).
+    pub rang: u32,
+    /// Ses quatre coins dans le monde.
+    pub coins: [V3; 4],
+    pub cible_egui: wgpu::TextureFormat,
+}
+
+impl CallbackTrait for VoileCarte {
+    fn prepare(&self, device: &wgpu::Device, queue: &wgpu::Queue, _screen: &egui_wgpu::ScreenDescriptor, _encoder: &mut wgpu::CommandEncoder, resources: &mut CallbackResources) -> Vec<wgpu::CommandBuffer> {
+        if let Some(mt) = resources.get_mut::<Moteur>() {
+            mt.assurer_voile(device, self.cible_egui);
+            mt.preparer_voile(device, queue, self.cle, self.rang, &self.coins, self.cible_egui.is_srgb());
+        }
+        Vec::new()
+    }
+
+    fn paint(&self, _info: egui::PaintCallbackInfo, pass: &mut wgpu::RenderPass<'static>, resources: &CallbackResources) {
+        if let Some(mt) = resources.get::<Moteur>() {
+            mt.poser_voile(pass, self.cle, self.rang);
+        }
+    }
+}
+
 // ------------------------------------------------------------------------------------------- rendu hors écran, mesures
 
 /// Rend `dessins` vus par `prise` à `taille` pixels, hors de l'écran, et relit l'image (RGBA prémultiplié, sRGB) : les exports
@@ -976,24 +1272,36 @@ impl CallbackTrait for VueDecor {
 /// aussi la durée d'une image, en millisecondes (si `fois` > 1 ; première image, celle de l'envoi des maillages, exclue).
 #[allow(clippy::too_many_arguments)]
 pub fn rendre_hors_ecran(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize) -> Option<(Vec<u8>, f32)> {
+    rendre_hors_ecran_prof(device, queue, mt, dessins, prise, taille, ciel, qualite, fois, false).map(|(c, t, _)| (c, t))
+}
+
+/// Comme `rendre_hors_ecran`, et, si `avec_prof`, relit aussi la profondeur que les cartes partagent avec le décor (partie 183 :
+/// l'inverse de la distance à l'œil à chaque pixel, 0 là où rien n'est dessiné), pour la composition des exports.
+#[allow(clippy::too_many_arguments)]
+pub fn rendre_hors_ecran_prof(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize, avec_prof: bool) -> Option<(Vec<u8>, f32, Option<Vec<f32>>)> {
     let max = device.limits().max_texture_dimension_2d;
     if taille[0] > max || taille[1] > max || taille[0] == 0 || taille[1] == 0 {
         return None;
     }
-    let tex = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("décor 3D hors écran"),
-        size: wgpu::Extent3d { width: taille[0], height: taille[1], depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: COULEUR,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
+    let cible = |format: wgpu::TextureFormat, label: &str| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d { width: taille[0], height: taille[1], depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+    };
+    let tex = cible(COULEUR, "décor 3D hors écran");
+    let tex_prof = cible(PROF, "décor 3D hors écran : profondeur");
     let view = tex.create_view(&Default::default());
+    let view_prof = tex_prof.create_view(&Default::default());
     // Une première image : les maillages et les textures partent à la carte (une fois), rien n'est compté.
     let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("décor 3D hors écran") });
-    mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, ciel, qualite);
+    mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, ciel, qualite);
     queue.submit([enc.finish()]);
     let _ = device.poll(wgpu::Maintain::Wait);
     // Les mesures : `fois` images dans une seule soumission (comme à l'écran, où la carte enchaîne les images sans attendre le
@@ -1005,7 +1313,7 @@ pub fn rendre_hors_ecran(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Mo
             let debut = std::time::Instant::now();
             let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("décor 3D mesure") });
             for _ in 0..fois {
-                mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, ciel, qualite);
+                mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, ciel, qualite);
             }
             queue.submit([enc.finish()]);
             let _ = device.poll(wgpu::Maintain::Wait);
@@ -1013,11 +1321,18 @@ pub fn rendre_hors_ecran(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Mo
         }
     }
     let total = if meilleur.is_finite() { meilleur } else { 0.0 };
-    let ligne = (taille[0] * 4).div_ceil(256) * 256;
+    let out = relire(device, queue, &tex, taille, 4)?;
+    let prof = if avec_prof { Some(relire(device, queue, &tex_prof, taille, 2)?.chunks_exact(2).map(|b| de_16_bits(u16::from_ne_bytes([b[0], b[1]]))).collect()) } else { None };
+    Some((out, total, prof))
+}
+
+/// Les pixels d'une texture de `octets` octets par pixel (`COULEUR` : 4, `PROF` : 2), ligne par ligne.
+fn relire(device: &wgpu::Device, queue: &wgpu::Queue, tex: &wgpu::Texture, taille: [u32; 2], octets: u32) -> Option<Vec<u8>> {
+    let ligne = (taille[0] * octets).div_ceil(256) * 256;
     let lecture = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D relu"), size: ligne as u64 * taille[1] as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("décor 3D relu") });
     enc.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+        wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
         wgpu::TexelCopyBufferInfo { buffer: &lecture, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(ligne), rows_per_image: Some(taille[1]) } },
         wgpu::Extent3d { width: taille[0], height: taille[1], depth_or_array_layers: 1 },
     );
@@ -1030,11 +1345,22 @@ pub fn rendre_hors_ecran(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Mo
     let _ = device.poll(wgpu::Maintain::Wait);
     rx.recv().ok()?.ok()?;
     let data = tranche.get_mapped_range();
-    let mut out = Vec::with_capacity((taille[0] * taille[1] * 4) as usize);
+    let mut out = Vec::with_capacity((taille[0] * taille[1] * octets) as usize);
     for y in 0..taille[1] as usize {
-        out.extend_from_slice(&data[y * ligne as usize..y * ligne as usize + taille[0] as usize * 4]);
+        out.extend_from_slice(&data[y * ligne as usize..y * ligne as usize + (taille[0] * octets) as usize]);
     }
     drop(data);
     lecture.unmap();
-    Some((out, total))
+    Some(out)
+}
+
+/// Un flottant de 16 bits (IEEE 754, `PROF`) en flottant de 32 bits.
+fn de_16_bits(h: u16) -> f32 {
+    let (signe, exp, frac) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as u32, (h & 0x3ff) as u32);
+    let v = match exp {
+        0 => frac as f32 * (1.0 / 16_777_216.0),
+        31 => if frac == 0 { f32::INFINITY } else { f32::NAN },
+        _ => f32::from_bits(((exp + 112) << 23) | (frac << 13)),
+    };
+    if signe == 1 { -v } else { v }
 }

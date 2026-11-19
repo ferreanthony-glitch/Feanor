@@ -316,6 +316,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("origine.ici", "Origine du calque ici (au point de la feuille sous le pointeur)", true, false),
     act("origine.feuille", "Origine du calque au centre de la feuille (comme d'origine)", true, false),
     act("calque.aimante_au_sol", "Aimanté au sol : l'origine du calque repose sur le sol de l'Espace 3D (oui / non)", true, false),
+    act("calque.devant_decor_3d", "Toujours devant le décor 3D : aucun objet du décor ne cache la carte du calque (oui / non)", true, false),
     act("calque.dessus", "Calque du dessus", true, true),
     act("calque.dessous", "Calque du dessous", true, true),
     act("calque.nouveau", "Nouveau calque… (nom, sorte, groupe, mode, place)", true, false),

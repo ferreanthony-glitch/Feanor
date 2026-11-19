@@ -351,6 +351,15 @@ impl App {
                 self.basculer_aimant(li);
             }
         }
+        // Toujours devant le décor 3D (partie 183) : la carte n'est jamais cachée par les objets du décor de la séquence.
+        if let Some(l) = self.layers().get(li).filter(|l| crate::espace3d::is_card(l)) {
+            let on = l.devant_decor;
+            let raison = (l.accroche && !on).then(|| "Un calque accroché à la caméra est dans le cadre, pas dans le décor : il passe toujours devant lui.".to_string());
+            let case = if on { egui_phosphor::regular::CHECK_SQUARE } else { egui_phosphor::regular::SQUARE };
+            if self.entree(ui, case, crate::profondeur::NOM, crate::profondeur::ACTION, raison, crate::profondeur::PHRASE) {
+                self.basculer_devant_decor(li);
+            }
+        }
         // La grille de repère d'un calque Sol, Mur ou Ciel (`espace3ddecor.rs`, partie 157) : jamais dans le dessin.
         if let Some(c) = self.layers().get(li).and_then(|l| l.calque_3d) {
             if ui.checkbox(&mut c.grille.clone(), "Grille de repère").on_hover_text("Une grille de repère sur ce calque, à l'écran. Un repère seulement : jamais dans le dessin, ni sous la gomme, ni dans les exports.").clicked() {

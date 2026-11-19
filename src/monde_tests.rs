@@ -36,7 +36,7 @@ fn dessin(doc: &mut Document, fenetre: &[usize], dehors: &[(i32, i32)], c: [u8; 
 }
 
 fn item(cel: CelId) -> PlanItem {
-    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: BlendMode::Normal, fx: Vec::new(), ctg: None, fond: None, pre: None }
+    PlanItem { cel, opacity: 255, tint: None, transform: None, blend: BlendMode::Normal, fx: Vec::new(), ctg: None, fond: None, pre: None, profondeur: None }
 }
 
 /// Une feuille 400 × 300 (ses tuiles de bord dépassent : 400 = 6 × 64 + 16) : deux calques qui dépassent (deux dessins

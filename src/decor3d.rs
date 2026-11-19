@@ -3,9 +3,11 @@
 //! exports).
 //!
 //! Première étape du moteur de prévisualisation qu'Anthony a choisi le 2026-11-19 (`docs/ESPACE3D.md`) :
-//! - **Derrière toutes les cartes** : le décor est l'élément le plus bas de l'image du plan (`render::plan_with_camera_layers`),
-//!   juste au-dessus du papier ; chaque calque se pose dessus. Juste en profondeur en lui-même (tampon de profondeur partagé par
-//!   tous ses objets), pas avec les cartes : la profondeur partagée entre le décor et les cartes est une étape suivante.
+//! - **L'élément le plus bas** de l'image du plan (`render::plan_with_camera_layers`, et le dessin à l'écran,
+//!   `App::build_plan_avec`), juste au-dessus du papier ; chaque calque se pose dessus. Juste en profondeur en lui-même (tampon
+//!   de profondeur partagé par tous ses objets) et, depuis la partie 183, **avec les cartes** (`profondeur.rs`) : son rendu garde
+//!   sa profondeur (`calculer`, `profondeur_du_rendu`, la seconde cible de `decor3dgpu`), et une carte est cachée là où le décor
+//!   est plus près qu'elle.
 //! - **Vu de l'œil de la caméra, aligné sur la feuille** (`decor3drendu::Prise::de_la_feuille`), comme une carte en
 //!   profondeur : l'homographie de la caméra 2D (panoramique, bascule, zoom, rotation) s'applique ensuite à tout le plan, le décor
 //!   défile avec la parallaxe des cartes. Un plan « en Espace 3D » (`Document::repere_du_plan`) pose le décor comme ses cartes :
@@ -708,6 +710,7 @@ pub fn item(doc: &Document, index: usize, camera: &crate::document::CameraSeen, 
         ctg: None,
         fond: Some(crate::render::FondPart::Decor(key)),
         pre: None,
+        profondeur: None,
     })
 }
 
@@ -786,10 +789,11 @@ fn sur_echantillonnage(feuille: [usize; 2]) -> usize {
     }
 }
 
-/// L'image du décor pour la clé `key` et ses objets : la feuille entière, transparente hors du décor (opaque avec le ciel).
-pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> Raster {
+/// L'image du décor pour la clé `key` et ses objets : la feuille entière, transparente hors du décor (opaque avec le ciel), et sa
+/// profondeur (partie 183, `profondeur.rs` : l'inverse de la distance à l'œil à chaque pixel, 0 là où rien n'est dessiné).
+pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Option<Vec<f32>>) {
     let [w, h] = key.feuille;
-    let Some(prise) = key.prise() else { return Raster::new(w, h) };
+    let Some(prise) = key.prise() else { return (Raster::new(w, h), None) };
     // La carte graphique d'abord, si l'application en a une (la même image qu'à l'écran).
     {
         let mut g = CARTE.lock().unwrap_or_else(|e| e.into_inner());
@@ -797,15 +801,15 @@ pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> Raster {
             let mt = mt.get_or_insert_with(|| crate::decor3dgpu::Moteur::new(device, queue));
             let d = dessins_gpu(objets, key.aspect);
             let q = if key.aspect.ombres { qualite(triangles_de(objets)) } else { crate::decor3dbudget::Qualite::Sans };
-            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1)));
-            if let Ok(Some((rgba, _))) = r {
-                return Raster::from_rgba(w, h, &rgba);
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran_prof(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1, true)));
+            if let Ok(Some((rgba, _, prof))) = r {
+                return (Raster::from_rgba(w, h, &rgba), prof);
             }
         }
     }
     let scenes: Vec<(&Scene3d, M4)> = objets.iter().map(|(mdl, mx)| (&*mdl.scene, *mx)).collect();
-    let rgba = crate::decor3drendu::rendre_objets(&scenes, &prise, [w, h], sur_echantillonnage(key.feuille), fils, &key.aspect);
-    Raster::from_rgba(w, h, &rgba)
+    let (rgba, prof) = crate::decor3drendu::rendre_objets_prof(&scenes, &prise, [w, h], sur_echantillonnage(key.feuille), fils, &key.aspect);
+    (Raster::from_rgba(w, h, &rgba), Some(prof))
 }
 
 fn cel_of(raster: Raster, key: &DecorCle) -> Arc<Cel> {
@@ -813,9 +817,15 @@ fn cel_of(raster: Raster, key: &DecorCle) -> Arc<Cel> {
     Arc::new(Cel { raster, vector: None, version: id_of(key), fond: None })
 }
 
+/// La profondeur du rendu du décor dont le dessin porte la version `version` (`cel_of` : le numéro du rendu), s'il est gardé :
+/// la composition par le processeur y cache les cartes (partie 183, `profondeur.rs`).
+pub fn profondeur_du_rendu(version: u64) -> Option<crate::profondeur::Profondeurs> {
+    garde(|g| g.profs.get(&version).cloned())
+}
+
 struct Travail {
     key: DecorCle,
-    handle: std::thread::JoinHandle<Option<Raster>>,
+    handle: std::thread::JoinHandle<Option<(Raster, Option<Vec<f32>>)>>,
 }
 
 #[derive(Default)]
@@ -824,6 +834,8 @@ struct Garde {
     ordre: VecDeque<CelId>,
     /// Le dernier rendu fini de chaque décor : ce que l'écran montre en attendant le suivant.
     dernier: HashMap<u64, Arc<Cel>>,
+    /// La profondeur de chaque rendu gardé (dans `finis` ou `dernier`), par le numéro du rendu (partie 183).
+    profs: HashMap<CelId, crate::profondeur::Profondeurs>,
     en_cours: Option<Travail>,
     attente: Option<(DecorCle, Vec<Pose3d>)>,
     arrive: bool,
@@ -848,10 +860,18 @@ fn garde<R>(f: impl FnOnce(&mut Garde) -> R) -> R {
     f(g.get_or_insert_with(Garde::default))
 }
 
-fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>) {
+fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<Vec<f32>>) {
     let id = id_of(key);
     if g.finis.insert(id, cel.clone()).is_none() {
         g.ordre.push_back(id);
+    }
+    match prof {
+        Some(p) => {
+            g.profs.insert(id, Arc::new(p));
+        }
+        None => {
+            g.profs.remove(&id);
+        }
     }
     while g.ordre.len() > GARDES {
         if let Some(old) = g.ordre.pop_front() {
@@ -859,6 +879,9 @@ fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>) {
         }
     }
     g.dernier.insert(key.decor, cel);
+    // (Une profondeur ne reste que pour un rendu encore gardé.)
+    let (finis, dernier) = (&g.finis, &g.dernier);
+    g.profs.retain(|v, _| finis.contains_key(v) || dernier.values().any(|c| c.version == *v));
 }
 
 fn coeurs() -> usize {
@@ -894,8 +917,9 @@ pub fn montre(doc: &Document, key: &DecorCle) -> Option<crate::fx::Shown<'static
             g.dernier.get(&key.decor).cloned().map(crate::fx::Shown::Fx)
         });
     }
-    let cel = cel_of(calculer(&objets, key, coeurs().max(2)), key);
-    garde(|g| ranger(g, key, cel.clone()));
+    let (raster, prof) = calculer(&objets, key, coeurs().max(2));
+    let cel = cel_of(raster, key);
+    garde(|g| ranger(g, key, cel.clone(), prof));
     Some(crate::fx::Shown::Fx(cel))
 }
 
@@ -905,9 +929,9 @@ pub fn poll() -> bool {
     garde(|g| {
         if g.en_cours.as_ref().is_some_and(|t| t.handle.is_finished()) {
             if let Some(t) = g.en_cours.take() {
-                if let Ok(Some(raster)) = t.handle.join() {
+                if let Ok(Some((raster, prof))) = t.handle.join() {
                     let cel = cel_of(raster, &t.key);
-                    ranger(g, &t.key, cel);
+                    ranger(g, &t.key, cel, prof);
                     g.arrive = true;
                     crate::fx::decor_arrive();
                 }
@@ -929,6 +953,7 @@ pub fn forget_all() {
         g.finis.clear();
         g.ordre.clear();
         g.dernier.clear();
+        g.profs.clear();
         g.attente = None;
     });
 }

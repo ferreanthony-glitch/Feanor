@@ -520,6 +520,10 @@ pub struct Layer {
     /// clé (`origine::aimanter_au_sol`, refait après chaque modification, jamais à la lecture). Décoché : la carte garde la
     /// hauteur que l'aimant lui a donnée.
     pub aimante_au_sol: bool,
+    /// **Toujours devant le décor 3D** (partie 183, `profondeur.rs`) : la carte du calque n'est jamais cachée par un objet
+    /// du décor 3D de la séquence, quelle que soit sa distance (elle passe devant, comme avant la profondeur partagée).
+    /// Faux : la carte et le décor se cachent selon leur vraie distance.
+    pub devant_decor: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -600,6 +604,7 @@ impl Layer {
             profondeur_bornee: false,
             origine: None,
             aimante_au_sol: false,
+            devant_decor: false,
         }
     }
 

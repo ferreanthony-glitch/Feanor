@@ -310,6 +310,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédente lirait la pose autour du centre de la feuille et laisserait de côté l'ancrage : elle montrerait un autre film, et
 /// perdrait ces réglages en enregistrant ; elle le refuse donc. **Un projet de version 60 ou moins s'ouvre tel quel**, sans
 /// origine, ni aimant, avec les mêmes images.
+/// Sous ce même numéro (2026-11-19, `docs/INTERFACE.md` partie 183) : **toujours devant le décor 3D** — `devant_decor_3d` d'un
+/// calque, écrit seulement quand il est vrai : sa carte n'est jamais cachée par le décor 3D de la séquence (la profondeur partagée
+/// de la partie 183 ne s'applique pas à lui). Une version qui ne le connaît pas n'a pas de profondeur partagée : elle montre déjà
+/// toute carte devant le décor, la même image que ce réglage ; elle le perdrait en enregistrant, et la carte redeviendrait
+/// cachable ici. Le numéro ne change pas pour autant : le format 61 n'est encore sur aucune version distribuée (`main` est en
+/// 60), et un projet de version 60 ou moins s'ouvre tel quel, la case décochée.
 pub const VERSION: u32 = 61;
 
 /// La bascule et le panoramique d'une clé de caméra lue d'un fichier (degrés), ramenés dans leurs bornes. Plan ordinaire
@@ -967,6 +973,11 @@ struct LayerEntry {
     /// Aimanté au sol (format 61, partie 182) : l'origine de la carte repose sur le sol de l'Espace 3D ; absent : faux.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     aimante_au_sol: bool,
+    /// Toujours devant le décor 3D (partie 183, `profondeur.rs`) : la carte n'est jamais cachée par le décor 3D de la séquence ;
+    /// absent : faux. Sous le format 61, sans changer `VERSION` (voir la note de 61) : une version qui ne le connaît pas n'a pas de
+    /// profondeur partagée et montre déjà toute carte devant le décor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    devant_decor_3d: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2676,6 +2687,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 profondeur_bornee: l.profondeur_bornee,
                 origine: l.origine,
                 aimante_au_sol: l.aimante_au_sol,
+                devant_decor_3d: l.devant_decor,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3546,6 +3558,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         // (Une origine abîmée redonne le centre de la feuille, partie 182 ; l'aimant n'est pas refait à la lecture.)
                         origine: crate::origine::assainie(l.origine),
                         aimante_au_sol: l.aimante_au_sol,
+                        devant_decor: l.devant_decor_3d,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

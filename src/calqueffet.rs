@@ -304,6 +304,7 @@ pub fn marker_depuis(layers: &[Layer], li: usize, frame: usize, opacity: f32, fr
         ctg: None,
         fond: Some(FondPart::Reglage(Arc::new(reglage))),
         pre: None,
+        profondeur: None,
     })
 }
 
@@ -757,6 +758,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
         ctg: None,
         fond: None,
         pre: None,
+        profondeur: None,
     };
     if let Some(cel) = crate::fxcache::get(id, sig) {
         tenus.tenir(id, cel);

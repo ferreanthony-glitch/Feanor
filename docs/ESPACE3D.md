@@ -304,8 +304,9 @@ Ce qui ne revient pas : les objets simples (cube, mannequin…), les styles de r
 Ce qui est neuf : le décor est **dessiné par la carte graphique à l'écran** (dans la composition de l'image du plan, et dans la
 vue), jamais refait par le processeur quand la caméra bouge ; un **budget mesuré sur la machine** (`decor3dbudget.rs`) décide
 ce qu'un décor peut peser sans ralentir, et un décor trop lourd est allégé ou simplifié (la copie du projet seulement), jamais
-accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes, les ombres
-portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront ensuite.
+accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes (faite :
+partie 16 ci-dessous), les ombres portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront
+ensuite.
 
 **Partie 181 (2026-11-19, branche `banque-3d`)** : le décor d'une séquence est une **liste d'objets** (`Objet3d` : un modèle, une
 place, une **origine** — le point que la position place, autour duquel il tourne et change d'échelle, d'office le centre du dessous
@@ -313,8 +314,8 @@ de sa boîte — et « Aimanté au sol », `decor3daimant.rs` : la hauteur calcu
 pénétration). Importer un fichier ou prendre un modèle de la **banque 3D** (45 modèles CC0 de Kenney, rangés dans le programme,
 onglet « 3D » de la Bibliothèque) ajoute un objet, par le même chemin (budget de la machine pour **la somme** des objets, fenêtre
 « Ce décor est lourd », ou refus). Les objets d'un même contenu partagent un modèle : un fichier `decors/<empreinte>.glb`, une
-lecture, un envoi à la carte. Tous les objets sont dans le même tampon de profondeur (justes entre eux), toujours derrière les
-cartes. `decors3d.json` passe en version 2 ; un fichier de la partie 180 se lit comme un objet, à la même place. L'origine
+lecture, un envoi à la carte. Tous les objets sont dans le même tampon de profondeur (justes entre eux) ; derrière les cartes
+jusqu'à la partie 183, qui partage cette profondeur avec elles (partie 16 ci-dessous). `decors3d.json` passe en version 2 ; un fichier de la partie 180 se lit comme un objet, à la même place. L'origine
 modifiable et l'aimant viendront aussi aux calques dessinés (chantier suivant, avec un repère d'origine dans la vue partagé par les
 deux) ; `docs/INTERFACE.md`, partie 181.
 
@@ -356,4 +357,37 @@ image : la pose y est rapportée au centre de la feuille (`LayerTransform::au_ce
   jamais à la lecture d'un fichier ni pendant la lecture du film. Coché, la hauteur (Y) est grisée dans le panneau. Décoché,
   rien ne bouge : la carte reste où l'aimant l'a mise, maintenant et après enregistrement. Un calque accroché à la caméra ne se
   pose pas au sol.
+- **Aux pieds d'une carte aimantée** sur un objet du décor, rien n'est caché depuis la profondeur partagée (partie 16) : la
+  tolérance (0,4 % de la distance plus 1 cm) couvre le millimètre de l'aimant ; ce qui du dessin descend sous l'origine, dans
+  l'objet, est caché par lui.
+
+## 16. La profondeur partagée entre le décor et les cartes (2026-11-19, branche `profondeur-partagee`, partie 183 de `docs/INTERFACE.md`)
+
+Le décor n'est plus toujours derrière : **une carte et un objet du décor se cachent selon leur vraie distance** à l'œil de la caméra
+du plan. Un personnage passe derrière un arbre et devant un banc. Code : `profondeur.rs`.
+
+- **Le décor garde sa profondeur.** Il est rendu une fois par image, comme avant, et reste l'élément le plus bas de l'image du plan ;
+  son rendu garde, à chaque pixel de la feuille, l'inverse de la distance à l'œil (le long de son axe) de ce qu'il y montre, 0 là
+  où il n'y a rien (le ciel ne cache rien). Carte graphique : une seconde cible de la passe de l'image du plan (`decor3dgpu::PROF`,
+  `R16Float`, à 0,05 % près), une texture de plus à côté de celle du décor (`gpu.rs`, `CelTexture::prof`), dessinée en même temps qu'elle, donc
+  seulement quand la clé du décor change. Processeur et exports : `decor3drendu::rendre_objets_prof` (le plus proche des
+  échantillons qui couvrent la moitié du pixel), ou relue de la carte graphique (`rendre_hors_ecran_prof`) ; gardée avec le rendu
+  (`decor3d::profondeur_du_rendu`, par le numéro du rendu).
+- **Le plan de chaque carte.** L'élément d'une carte porte le plan où elle est posée, vu du même œil que le décor
+  (`profondeur::plan_du_calque`, comme `espace3d::place_dans` : l'œil de la caméra, ou l'œil de référence et le changement de
+  repère d'un plan en Espace 3D) : trois nombres (a, b, c) tels que l'inverse de la distance du point de la carte vu au pixel
+  (x, y) de la feuille soit a·x + b·y + c. Pour un plan, l'inverse de la profondeur est linéaire sur l'image : une carte inclinée
+  est juste en chaque pixel, sans maillage de plus.
+- **À la composition**, un pixel de carte est caché si le décor y est plus près qu'elle d'au moins 0,4 % de sa distance plus 1 cm
+  (`profondeur::cache`) ; le décor, dessous, se voit alors. Une lecture de plus par pixel de carte (`fs_compose_p`, `fs_blend_p` ;
+  `render::composite_tile_into`, `composite_world_tile`, `pixel_of`). Entre elles, les cartes gardent l'ordre de toujours.
+- **Jamais cachés** (`profondeur::partage`) : dossiers, calques d'effet (ajustements, incrustations de texte), calques d'annotation,
+  calques accrochés à la caméra, et tout calque marqué **« Toujours devant le décor 3D »** (`Layer::devant_decor`, écrit
+  `devant_decor_3d` sous le format 61 sans changer `VERSION`) ; ni la couleur unie d'un calque, ni les pelures d'oignon, ni les
+  silhouettes de la trajectoire.
+- **La vue Espace 3D** : ses cartes sont dessinées par egui, par-dessus le décor ; juste après chaque carte qui partage la
+  profondeur, un **voile** (`decor3dgpu::VoileCarte`) remet sur son quadrilatère le décor qui est plus près qu'elle, lu dans les
+  cibles de la passe du décor de cette vue (couleur lissée, tampon de profondeur à quatre échantillons, gardé pour cela).
+- **Sans décor**, aucun élément ne porte de plan : la composition est celle d'avant, par les mêmes pipelines et les mêmes
+  boucles.
 
