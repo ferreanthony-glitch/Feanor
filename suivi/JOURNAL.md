@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **`timeline-storyboard` fusionnée dans main (ecaeeb5), poussée, et son FEANOR habituel reconstruit** (exe de 3 h 51), sur
+  son « fusionne la timeline ». Partie 178 : la timeline du Storyboard dans l'organisation qu'il a dessinée (Séquence, Plans
+  avec transitions sur les coupes et icônes, Caméra repliable avec la rangée des préréglages, Calques repliables, coupes qui
+  traversent). Main n'avait pas bougé (9a748bb, ni ici ni sur GitHub) : l'arbre fusionné est celui vérifié (sans
+  avertissement, 4 923 réussis, 0 échec, deux passages). Son FEANOR n'était pas ouvert. Contrôle de lancement sur une copie de
+  « retakes brawlydays » (Tests\lancement main ecaeeb5, faux réglages) : vivant après 20 s, aucun rapport de plantage. Format
+  inchangé (60). **Pas regardé sur son écran** : liste 178.4. Un fichier vide `storyboard.rs` créé par erreur par l'agent dans
+  son dossier BRAWLSTAR\BRAWLIDAYS\3D lui a été signalé (suppression refusée à l'agent, laissée à lui). Gardé, retrait proposé :
+  `Chantiers\timeline-storyboard`.
 - **La timeline du Storyboard dans son organisation** (partie 178, branche `timeline-storyboard` partie de main 9a748bb, format
   60 inchangé), d'après son dessin et la maquette qu'il a validée : de haut en bas Séquence (16 points), Plans (26, le ⋈ des
   transitions sur les coupes, un clic ouvre leur menu), ⊕/⊖ Caméra (22 ; dépliée, la rangée Préréglages de 24 où l'on pose,
