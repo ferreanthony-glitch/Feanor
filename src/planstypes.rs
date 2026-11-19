@@ -1,5 +1,5 @@
 //! Les plans types (lot 4 des préréglages, partie 176 ; Anthony, 2026-11-18 : « Oui » à P1, P2, P3, P5, P6, P7, P8, P13, P14,
-//! P16, P17, P18 de la liste de la partie 170).
+//! P16, P17, P18 de la liste de la partie 170 ; partie 177 : « Oui » aux six restés sans réponse, P4, P9, P10, P11, P12, P15).
 //!
 //! Un plan type se glisse depuis le panneau Préréglages (onglet Montage) **entre deux plans du montage** : c'est un plan neuf,
 //! tout prêt (color card, carton, titre, intertitre, générique de fin, logo, écran partagé, « Précédemment », « À suivre »,
@@ -49,19 +49,37 @@ pub enum PlanType {
     Telephone,
     Ordinateur,
     Journal,
+    /// P4 (partie 177) : le titre de la séquence, rempli tout seul (une incrustation du nom de la séquence).
+    TitreSequence,
+    /// P9 : « PLAN 12 — À VENIR », avec sa durée, pour un animatic incomplet.
+    PlanManquant,
+    /// P10 : l'ardoise d'en-tête : titre, série, épisode, version, date, durée, remplis depuis le projet.
+    Ardoise,
+    /// P11 : le compte à rebours de livraison, 8, 7, 6… et le bip à 2.
+    CompteARebours,
+    /// P12 : la mire de couleur et un son à 1 kHz.
+    Mire,
+    /// P15 : « Fin de l'acte 1 », pour les séries.
+    FinDActe,
 }
 
 impl PlanType {
-    pub const ALL: [PlanType; 18] = [
+    pub const ALL: [PlanType; 24] = [
         PlanType::CouleurUnie,
         PlanType::CartonNoir,
         PlanType::CartonBlanc,
         PlanType::Titre,
+        PlanType::TitreSequence,
         PlanType::Intertitre,
+        PlanType::FinDActe,
         PlanType::LieuEtDate,
         PlanType::GeneriqueDebut,
         PlanType::GeneriqueFin,
         PlanType::Logo,
+        PlanType::Ardoise,
+        PlanType::CompteARebours,
+        PlanType::Mire,
+        PlanType::PlanManquant,
         PlanType::Partage2,
         PlanType::Partage3,
         PlanType::Partage4,
@@ -93,6 +111,12 @@ impl PlanType {
             PlanType::Telephone => "Insert : téléphone",
             PlanType::Ordinateur => "Insert : ordinateur",
             PlanType::Journal => "Insert : journal",
+            PlanType::TitreSequence => "Titre de séquence",
+            PlanType::PlanManquant => "Plan manquant",
+            PlanType::Ardoise => "Ardoise d'en-tête",
+            PlanType::CompteARebours => "Compte à rebours",
+            PlanType::Mire => "Mire de couleur",
+            PlanType::FinDActe => "Fin d'acte",
         }
     }
 
@@ -116,6 +140,12 @@ impl PlanType {
             PlanType::Telephone => "Un téléphone et ses messages, qui arrivent l'un après l'autre.",
             PlanType::Ordinateur => "Un écran d'ordinateur, une fenêtre et son texte.",
             PlanType::Journal => "La une d'un journal : le nom, le grand titre, les colonnes.",
+            PlanType::TitreSequence => "Le nom de la séquence qui commence, rempli tout seul (renommer la séquence le change) ; il ouvre la séquence du plan d'après.",
+            PlanType::PlanManquant => "« Plan 12 — À VENIR » et sa durée, remplis tout seuls : la place d'un plan pas encore dessiné, dans un animatic.",
+            PlanType::Ardoise => "Le titre, la série, l'épisode, la date et la durée du film, remplis depuis le projet (Fichier > Propriétés) ; la version se tape.",
+            PlanType::CompteARebours => "8, 7, 6… jusqu'à 2, avec le bip d'une image sur le 2, puis du noir : le compte à rebours des livraisons.",
+            PlanType::Mire => "Les barres de couleur, et un son à 1 kHz sur toute la durée du plan.",
+            PlanType::FinDActe => "« Fin de l'acte 1 » sur un carton noir, en fondu (le numéro suit les fins d'acte d'avant).",
         }
     }
 
@@ -134,6 +164,12 @@ impl PlanType {
             PlanType::Precedemment | PlanType::ASuivre => "P16",
             PlanType::Carte => "P17",
             PlanType::Telephone | PlanType::Ordinateur | PlanType::Journal => "P18",
+            PlanType::TitreSequence => "P4",
+            PlanType::PlanManquant => "P9",
+            PlanType::Ardoise => "P10",
+            PlanType::CompteARebours => "P11",
+            PlanType::Mire => "P12",
+            PlanType::FinDActe => "P15",
         }
     }
 
@@ -147,7 +183,9 @@ impl PlanType {
         match self {
             PlanType::CartonNoir | PlanType::CartonBlanc => 1.0,
             PlanType::CouleurUnie => 2.0,
-            PlanType::Intertitre | PlanType::Logo => 3.0,
+            PlanType::Intertitre | PlanType::Logo | PlanType::TitreSequence | PlanType::PlanManquant | PlanType::FinDActe => 3.0,
+            PlanType::CompteARebours => 8.0,
+            PlanType::Mire => 5.0,
             PlanType::GeneriqueFin => 10.0,
             PlanType::Precedemment | PlanType::ASuivre | PlanType::Carte => 5.0,
             _ => 4.0,
@@ -251,9 +289,14 @@ impl Document {
         pos2(fr.left() + x * fr.width(), fr.top() + y * fr.height())
     }
 
-    /// Un plan neuf de `n` images sur la coupe `cut` (0 : au début du film), sans calque ; rend son rang.
-    fn plan_neuf(&mut self, cut: usize, n: usize) -> usize {
-        let i = if cut == 0 || self.panels.is_empty() { self.add_scene_before(0) } else { self.add_scene_after(cut.min(self.panels.len()) - 1) };
+    /// Un plan neuf de `n` images sur la coupe `cut` (0 : au début du film), sans calque ; rend son rang. `avec_la_suite` : il
+    /// est de la séquence du plan d'après (un titre de séquence l'ouvre), sinon de celle du plan d'avant.
+    fn plan_neuf(&mut self, cut: usize, n: usize, avec_la_suite: bool) -> usize {
+        let i = if cut == 0 || self.panels.is_empty() || (avec_la_suite && cut < self.panels.len()) {
+            self.add_scene_before(cut.min(self.panels.len().saturating_sub(1)))
+        } else {
+            self.add_scene_after(cut.min(self.panels.len()) - 1)
+        };
         self.panels[i].layers.clear();
         self.panels[i].length = n.max(1);
         i
@@ -309,7 +352,9 @@ impl Document {
             PlanType::ASuivre => self.images_du_film(&(cut..(cut + 4).min(self.panels.len())).collect::<Vec<_>>()),
             _ => Vec::new(),
         };
-        let i = self.plan_neuf(cut, n);
+        // (Une fin d'acte compte celles d'avant.)
+        let acte = 1 + self.panels[..cut.min(self.panels.len())].iter().filter(|p| p.layers.iter().any(|l| l.name == NOM_FIN_D_ACTE)).count();
+        let i = self.plan_neuf(cut, n, t == PlanType::TitreSequence);
         let mut calques: Vec<Layer> = Vec::new();
         let fond = |c: [u8; 3], nom: &str| Layer::new_unie(nom, c);
         match t {
@@ -534,10 +579,124 @@ impl Document {
                 }
                 calques.push(self.calque_dessine("Journal", elements, n));
             }
+            PlanType::TitreSequence => {
+                calques.push(fond(NOIR, "Carton"));
+                let inc = incrustation_au_centre(crate::incrustation::Source::NomSequence, "", 9.0);
+                calques.push(self.calque_incrustation("Titre de séquence", inc, n));
+            }
+            PlanType::PlanManquant => {
+                calques.push(fond([92, 94, 100], "Carton"));
+                let gris = [128, 130, 138];
+                let croix = vec![trait_par(&[fr.left_top(), fr.right_bottom()], 0.004 * fh, gris), trait_par(&[fr.right_top(), fr.left_bottom()], 0.004 * fh, gris)];
+                calques.push(self.calque_dessine("Croix", croix, n));
+                let inc = incrustation_au_centre(crate::incrustation::Source::Libre, "{plan} — À VENIR\n{duree}", 7.0);
+                calques.push(self.calque_incrustation("Plan manquant", inc, n));
+            }
+            PlanType::Ardoise => {
+                calques.push(fond(NOIR, "Carton"));
+                let cadre = Rect::from_min_max(self.au_cadre(0.05, 0.08), self.au_cadre(0.95, 0.92));
+                calques.push(self.calque_dessine("Bord", vec![trait_par(&[cadre.left_top(), cadre.right_top(), cadre.right_bottom(), cadre.left_bottom(), cadre.left_top()], 0.003 * fh, GRIS)], n));
+                let mut inc = incrustation_au_centre(
+                    crate::incrustation::Source::Libre,
+                    "{titre}\nSérie : {serie}   Épisode : {episode}\nVersion : 1\nDate : {date}\nDurée du film : {duree_film}",
+                    5.5,
+                );
+                inc.ancre = crate::incrustation::Ancre::MilieuGauche;
+                inc.marge = 10.0;
+                calques.push(self.calque_incrustation("Ardoise", inc, n));
+            }
+            PlanType::CompteARebours => {
+                // Huit secondes : 8 à 3 une seconde chacun, le 2 une seule image avec le bip, puis du noir.
+                let f = self.fps.max(1) as usize;
+                calques.push(fond([112, 112, 112], "Fond"));
+                let c = fr.center();
+                let rond = |r: f32| -> Vec<Pos2> { (0..=48).map(|k| k as f32 / 48.0 * std::f32::consts::TAU).map(|a| pos2(c.x + r * a.cos(), c.y + r * a.sin())).collect() };
+                let encre = [24, 24, 24];
+                let mire = vec![
+                    trait_par(&rond(0.40 * fh), 0.006 * fh, BLANC),
+                    trait_par(&rond(0.34 * fh), 0.004 * fh, BLANC),
+                    trait_par(&[pos2(fr.left(), c.y), pos2(fr.right(), c.y)], 0.003 * fh, encre),
+                    trait_par(&[pos2(c.x, fr.top()), pos2(c.x, fr.bottom())], 0.003 * fh, encre),
+                ];
+                calques.push(self.calque_dessine("Cercles", mire, n));
+                // L'aiguille : un tour par seconde, de 8 à 3.
+                let aiguille = self.dessin_vectoriel(vec![trait_par(&[c, pos2(c.x, c.y - 0.40 * fh)], 0.008 * fh, encre)]);
+                let mut l = Layer::new("Aiguille", LayerKind::Vector);
+                l.frames = (0..n).map(|k| (k < 6 * f).then_some(aiguille)).collect();
+                let mut cles = Vec::new();
+                for s in 0..6 {
+                    let tour = 360.0 * (f.saturating_sub(1)) as f32 / f as f32;
+                    cles.push(crate::poskeys::PosKey::new(s * f, LayerTransform::default()));
+                    cles.push(crate::poskeys::PosKey::new(s * f + f - 1, LayerTransform { angle: tour, ..LayerTransform::default() }));
+                }
+                l.pos_keys = cles;
+                calques.push(l);
+                let chiffres: Vec<CelId> = (2..=8).rev().map(|k| self.dessin_vectoriel(vec![texte(&k.to_string(), 0.5 * fh, encre, c, 0.5)])).collect();
+                let mut l = Layer::new("Chiffres", LayerKind::Vector);
+                l.frames = (0..n).map(|k| if k < 6 * f { Some(chiffres[k / f]) } else if k == 6 * f { Some(chiffres[6]) } else { None }).collect();
+                calques.push(l);
+                let mut noir = fond(NOIR, "Noir");
+                if 6 * f + 1 < n {
+                    noir.set_opacity_keys(&[(6 * f, 0.0), (6 * f + 1, 1.0)]);
+                }
+                calques.push(noir);
+            }
+            PlanType::Mire => {
+                // Les barres : sept bandes à 75 %, une rangée de rappel, puis le bas.
+                let barres: [[u8; 3]; 7] = [[191, 191, 191], [191, 191, 0], [0, 191, 191], [0, 191, 0], [191, 0, 191], [191, 0, 0], [0, 0, 191]];
+                let rappel: [[u8; 3]; 7] = [[0, 0, 191], [16, 16, 16], [191, 0, 191], [16, 16, 16], [0, 191, 191], [16, 16, 16], [191, 191, 191]];
+                let bas: [([u8; 3], f32); 6] = [([0, 33, 76], 1.25), ([255, 255, 255], 1.25), ([50, 0, 106], 1.25), ([16, 16, 16], 1.25), ([8, 8, 8], 0.5), ([16, 16, 16], 1.5)];
+                let mut elements = Vec::new();
+                let bande = |x0: f32, x1: f32, y0: f32, y1: f32| Rect::from_min_max(self.au_cadre(x0, y0), self.au_cadre(x1, y1));
+                for k in 0..7 {
+                    let (x0, x1) = (k as f32 / 7.0, (k + 1) as f32 / 7.0);
+                    elements.push(rectangle(bande(x0, x1, 0.0, 0.67), barres[k]));
+                    elements.push(rectangle(bande(x0, x1, 0.67, 0.75), rappel[k]));
+                }
+                let mut x = 0.0;
+                for (c, part) in bas {
+                    let w = part / 7.0;
+                    elements.push(rectangle(bande(x, (x + w).min(1.0), 0.75, 1.0), c));
+                    x += w;
+                }
+                calques.push(self.calque_dessine("Mire", elements, n));
+            }
+            PlanType::FinDActe => {
+                calques.push(fond(NOIR, "Carton"));
+                let mot = format!("Fin de l'acte {acte}");
+                let mut l = self.calque_dessine(NOM_FIN_D_ACTE, vec![texte(&mot, taille_qui_tient(&mot, 0.09 * fh, 0.86 * fw), BLANC, self.au_cadre(0.5, 0.5), 0.5)], n);
+                fondu_entree_sortie(&mut l, n, secondes(0.4), secondes(0.4));
+                calques.push(l);
+            }
             PlanType::LieuEtDate | PlanType::GeneriqueDebut => {}
         }
         self.panels[i].layers = calques;
+        // Le son du compte à rebours (un bip d'une image sur le 2) et de la mire (1 kHz tout le plan) : dans le montage, au temps
+        // du plan neuf (une étape d'annulation avec lui).
+        let debut = self.panel_start(i);
+        let f = self.fps.max(1) as usize;
+        match t {
+            PlanType::CompteARebours => self.poser_un_son("Bip du compte à rebours (1 kHz)", 1.0 / f as f32, 0.5, debut + 6 * f),
+            PlanType::Mire => self.poser_un_son("Son de la mire (1 kHz)", n as f32 / f as f32, 0.1, debut),
+            _ => {}
+        }
         Some(i)
+    }
+
+    /// Un son à 1 kHz de `secondes` secondes, d'amplitude `amplitude` (1 : le plus fort), posé dans le montage à l'image `debut`.
+    fn poser_un_son(&mut self, nom: &str, secondes: f32, amplitude: f32, debut: usize) {
+        let octets = wav_1khz(secondes, amplitude);
+        let Ok(pcm) = crate::audio::decode(&octets, "wav") else { return };
+        let son = self.add_sound(nom.to_string(), "wav".into(), std::sync::Arc::new(octets), std::sync::Arc::new(pcm));
+        self.place_sound(son, debut, None);
+    }
+
+    /// Un calque d'incrustation nommé `nom`, visible pendant les `n` images.
+    fn calque_incrustation(&mut self, nom: &str, inc: crate::incrustation::Incrustation, n: usize) -> Layer {
+        let pose = self.new_cel(LayerKind::Bitmap);
+        let mut l = Layer::new_effect(nom, crate::calqueffet::CalqueEffet::incrustation(inc, nom));
+        l.frames = vec![Some(pose); n];
+        l
     }
 
     /// Pose le plan type `t` sur le plan `index` (lieu et date, générique de début) : des calques de plus, en haut de la pile.
@@ -601,6 +760,53 @@ impl Document {
         layers.push(layer);
         Some(layers.len() - 1)
     }
+}
+
+/// Le nom du calque d'une fin d'acte (une fin d'acte compte celles d'avant par lui).
+const NOM_FIN_D_ACTE: &str = "Fin d'acte";
+
+/// Une incrustation blanche, sans boîte, au centre du cadre : `source` (son texte `texte` si elle est libre), lettres de
+/// `taille` % de la hauteur du cadre.
+fn incrustation_au_centre(source: crate::incrustation::Source, texte: &str, taille: f32) -> crate::incrustation::Incrustation {
+    crate::incrustation::Incrustation {
+        source,
+        texte: texte.into(),
+        portee: crate::incrustation::Portee::Plan,
+        ancre: crate::incrustation::Ancre::Centre,
+        taille,
+        couleur: [255, 255, 255, 255],
+        fond: None,
+        marge: 3.0,
+        quand: crate::incrustation::Quand::Toujours,
+        police: String::new(),
+        lettre_a_lettre: 0,
+    }
+}
+
+/// Un son WAV (48 kHz, 16 bits, mono) à 1 kHz de `secondes` secondes, d'amplitude `amplitude`.
+pub(crate) fn wav_1khz(secondes: f32, amplitude: f32) -> Vec<u8> {
+    let taux = 48_000u32;
+    let n = ((secondes.max(0.0) * taux as f32).round() as u32).max(1);
+    let donnees = n * 2;
+    let mut out = Vec::with_capacity(44 + donnees as usize);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + donnees).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&taux.to_le_bytes());
+    out.extend_from_slice(&(taux * 2).to_le_bytes());
+    out.extend_from_slice(&2u16.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&donnees.to_le_bytes());
+    let a = amplitude.clamp(0.0, 1.0) * i16::MAX as f32;
+    for k in 0..n {
+        let v = (a * (std::f32::consts::TAU * 1000.0 * k as f32 / taux as f32).sin()).round() as i16;
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out
 }
 
 /// Un fondu à l'entrée (`entree` images) et à la sortie (`sortie` images) du calque `l`, sur un plan de `n` images, par ses clés

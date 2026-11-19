@@ -253,13 +253,36 @@ fn peindre_transition(painter: &egui::Painter, r: Rect, kind: Kind, rel: usize) 
         inn: Some(Side { panel: 1, start: cut, len: n + AVANT }),
         align: transitions::Align::Centre,
         couleur: transitions::COULEUR_DEFAUT,
+        depuis: kind.cote_d_origine().unwrap_or_default(),
+        // (L'iris et le zoom traversant visent le visage du personnage.)
+        centre: [0.5 + VISAGE[0], 0.5 + VISAGE[1] * 16.0 / 9.0],
+        aspect: 9.0 / 16.0,
     };
     let mix = zone.mix(rel).unwrap_or(Mix { a: (rel < AVANT).then_some((0, 0)), b: (rel >= AVANT).then_some((1, 0)), m: 1.0, ..Mix::default() });
     let (cam_a, cam_b) = (camera_de_base(), camera_plan_b());
     let w = r.width();
     let coupe = |x0: f32, x1: f32| painter.with_clip_rect(Rect::from_x_y_ranges(x0.max(r.left())..=x1.min(r.right()), r.y_range()).intersect(painter.clip_rect()));
     painter.rect_filled(r, 2.0, Color32::BLACK);
-    if mix.glisse {
+    if let Some([za, zb]) = mix.zoom {
+        // (Partie 177.) Le zoom traversant : la scène vue de plus en plus près, puis le plan entrant qui recule.
+        let plus_pres = |cam: Camera, z: f32| Camera { zoom: cam.zoom * z, ..cam };
+        peindre_scene_a(painter, r, &plus_pres(cam_a, za), 1.0, false);
+        peindre_scene_a(painter, r, &plus_pres(cam_b, zb), mix.m, false);
+    } else if let Some(balaye) = mix.horloge {
+        // Le volet en horloge : le plan entrant, puis le sortant dans ce qui reste à balayer (un éventail de parts).
+        peindre_scene_a(painter, r, &cam_b, 1.0, false);
+        let c = r.center();
+        let rr = r.width().hypot(r.height());
+        let reste = std::f32::consts::TAU - balaye;
+        let parts = 24;
+        for k in 0..parts {
+            let (a0, a1) = (balaye + reste * k as f32 / parts as f32, balaye + reste * (k + 1) as f32 / parts as f32);
+            let pt = |a: f32| pos2(c.x + rr * a.sin(), c.y - rr * a.cos());
+            painter.with_clip_rect(r.intersect(painter.clip_rect())).add(egui::Shape::convex_polygon(vec![c, pt(a0), pt(a1)], PAPIER, Stroke::NONE));
+        }
+        let pt = pos2(c.x + rr * balaye.sin(), c.y - rr * balaye.cos());
+        painter.with_clip_rect(r.intersect(painter.clip_rect())).line_segment([c, pt], Stroke::new(2.0_f32, ENCRE));
+    } else if mix.glisse {
         let (da, db) = (mix.shift_a * w, mix.shift_b * w);
         let pa = coupe(r.left(), r.right() + da);
         let pb = coupe(r.left() + db, r.right());
@@ -295,6 +318,13 @@ fn peindre_transition(painter: &egui::Painter, r: Rect, kind: Kind, rel: usize) 
     if mix.k > 0.0 {
         let c = mix.color;
         painter.with_clip_rect(r.intersect(painter.clip_rect())).rect_filled(r, 2.0, Color32::from_rgb(c[0], c[1], c[2]).gamma_multiply(mix.k.clamp(0.0, 1.0)));
+    }
+    if let Some([cx, cy, rayon]) = mix.iris {
+        // L'iris : du noir hors du rond (un anneau épais qui couvre jusqu'aux coins).
+        let c = pos2(r.left() + cx * w, r.top() + cy * r.height());
+        let rp = rayon * w;
+        let loin = r.width().hypot(r.height()) * 1.5;
+        painter.with_clip_rect(r.intersect(painter.clip_rect())).circle_stroke(c, (rp + loin) / 2.0, Stroke::new(loin - rp, Color32::BLACK));
     }
     painter.rect_stroke(r, 2.0, Stroke::new(2.0_f32, theme::camera()), StrokeKind::Inside);
 }
@@ -448,6 +478,55 @@ fn peindre_plan_type(painter: &egui::Painter, r: Rect, t: PlanType, rel: usize, 
                 let y = fenetre.top() + (0.12 + 0.07 * k as f32) * h;
                 painter.rect_filled(Rect::from_min_size(pos2(fenetre.left() + w * 0.03, y), vec2(fenetre.width() * if k == 3 { 0.4 } else { 0.8 }, h * 0.02)), 0.0, rgb([190, 192, 198]));
             }
+        }
+        // (Partie 177.)
+        PlanType::TitreSequence => {
+            painter.rect_filled(r, 2.0, noir);
+            ecrire("Séquence 3", h * 0.14, blanc.gamma_multiply(fondu(0.12)), r.center(), egui::Align2::CENTER_CENTER);
+        }
+        PlanType::FinDActe => {
+            painter.rect_filled(r, 2.0, noir);
+            ecrire("Fin de l'acte 1", h * 0.11, blanc.gamma_multiply(fondu(0.15)), r.center(), egui::Align2::CENTER_CENTER);
+        }
+        PlanType::PlanManquant => {
+            painter.rect_filled(r, 2.0, rgb([92, 94, 100]));
+            let gris = Stroke::new(1.0_f32, rgb([128, 130, 138]));
+            painter.line_segment([r.left_top(), r.right_bottom()], gris);
+            painter.line_segment([r.right_top(), r.left_bottom()], gris);
+            ecrire("Plan 12 — À VENIR", h * 0.1, blanc, at(0.5, 0.45), egui::Align2::CENTER_CENTER);
+            ecrire("3 s", h * 0.09, blanc, at(0.5, 0.6), egui::Align2::CENTER_CENTER);
+        }
+        PlanType::Ardoise => {
+            painter.rect_filled(r, 2.0, noir);
+            painter.rect_stroke(Rect::from_min_max(at(0.05, 0.08), at(0.95, 0.92)), 0.0, Stroke::new(1.0_f32, rgb([165, 165, 170])), StrokeKind::Inside);
+            for (k, l) in ["Titre du film", "Série · Épisode 3", "Version : 1", "Date : 2026-11-19", "Durée : 1:42"].iter().enumerate() {
+                ecrire(l, h * 0.075, blanc, at(0.12, 0.22 + 0.14 * k as f32), egui::Align2::LEFT_CENTER);
+            }
+        }
+        PlanType::CompteARebours => {
+            let s8 = (8.0 - u * 8.0).ceil().max(0.0) as i32;
+            if s8 <= 1 {
+                painter.rect_filled(r, 2.0, noir);
+            } else {
+                painter.rect_filled(r, 2.0, rgb([112, 112, 112]));
+                let c = r.center();
+                painter.circle_stroke(c, h * 0.4, Stroke::new(2.0_f32, blanc));
+                painter.circle_stroke(c, h * 0.34, Stroke::new(1.2_f32, blanc));
+                let encre = rgb([24, 24, 24]);
+                painter.line_segment([pos2(r.left(), c.y), pos2(r.right(), c.y)], Stroke::new(1.0_f32, encre));
+                painter.line_segment([pos2(c.x, r.top()), pos2(c.x, r.bottom())], Stroke::new(1.0_f32, encre));
+                let a = (u * 8.0).fract() * std::f32::consts::TAU;
+                painter.line_segment([c, pos2(c.x + h * 0.4 * a.sin(), c.y - h * 0.4 * a.cos())], Stroke::new(2.5_f32, encre));
+                ecrire(&s8.to_string(), h * 0.45, encre, c, egui::Align2::CENTER_CENTER);
+            }
+        }
+        PlanType::Mire => {
+            let barres: [[u8; 3]; 7] = [[191, 191, 191], [191, 191, 0], [0, 191, 191], [0, 191, 0], [191, 0, 191], [191, 0, 0], [0, 0, 191]];
+            for (k, c) in barres.iter().enumerate() {
+                painter.rect_filled(Rect::from_min_max(at(k as f32 / 7.0, 0.0), at((k + 1) as f32 / 7.0, 0.75)), 0.0, rgb(*c));
+            }
+            painter.rect_filled(Rect::from_min_max(at(0.0, 0.75), at(1.0, 1.0)), 0.0, rgb([16, 16, 16]));
+            painter.rect_filled(Rect::from_min_max(at(0.18, 0.75), at(0.36, 1.0)), 0.0, blanc);
         }
         PlanType::Journal => {
             painter.rect_filled(r, 2.0, rgb([66, 66, 70]));

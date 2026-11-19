@@ -59,16 +59,16 @@ fn proche(got: Color32, want: [u8; 3], tol: i32) -> bool {
 
 #[test]
 fn les_cinq_sortes_du_lot_4_sont_rangees_et_permises_ou_il_faut() {
-    assert_eq!(Kind::ALL.len(), 10);
+    assert_eq!(Kind::ALL.len(), 13, "dix, puis treize (partie 177)");
     let noms: HashSet<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
-    assert_eq!(noms.len(), 10, "dix noms différents");
+    assert_eq!(noms.len(), 13, "des noms différents");
     for k in [Kind::Push, Kind::Whip, Kind::Flash, Kind::Colour, Kind::Objet] {
         assert!(Kind::ALL.contains(&k) && k.du_lot_4() && k.allowed(true), "{k:?}");
     }
     for k in [Kind::Dissolve, Kind::Black, Kind::White, Kind::Wipe, Kind::CutBlack] {
         assert!(!k.du_lot_4(), "{k:?}");
     }
-    // Au bord du film, seul le fondu par une couleur s'ajoute aux fondus d'avant.
+    // Au bord du film, le fondu par une couleur s'ajoute aux fondus d'avant (et l'iris de la partie 177).
     assert!(Kind::Colour.allowed(false));
     for k in [Kind::Push, Kind::Whip, Kind::Flash, Kind::Objet] {
         assert!(!k.allowed(false), "{k:?}");
@@ -294,6 +294,12 @@ fn gpu_mix(rs: &eframe::egui_wgpu::RenderState, gpu: &mut crate::gpu::GpuCanvas,
         shift_b: mix.shift_b,
         blur: mix.blur,
         objet: mix.objet,
+        vertical: mix.vertical,
+        wipe_depuis: mix.wipe_depuis,
+        iris: mix.iris,
+        horloge: mix.horloge,
+        zoom: mix.zoom,
+        zoom_centre: mix.zoom_centre,
         cadre: [fr.left_top(), fr.right_top(), fr.right_bottom(), fr.left_bottom()],
     };
     let a = MixLayer { plan: &first, resolved: &resolved[..n], corners, ws: None };

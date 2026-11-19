@@ -47,6 +47,15 @@
 //! calculent comme les autres, dans le cadre filmé : un `Mix` dit de combien chaque plan glisse, son
 //! flou, où passe l'objet. Le fichier passe à la version 2 seulement quand une de ces sortes ou une
 //! couleur y est écrite : un projet sans elles reste lisible par une version précédente.
+//!
+//! # Ses réponses (partie 177)
+//!
+//! Trois sortes de plus, restées sans réponse puis « oui » : l'**iris** (T1 : le rond de cartoon se ferme sur un point choisi,
+//! puis se rouvre sur le plan suivant ; au bord du film, il s'ouvre ou se ferme seulement), le **volet en horloge** (T2 : le
+//! plan entrant balaie le cadre comme l'aiguille d'une montre) et le **zoom traversant** (T5 : on plonge dans le plan, on ressort
+//! du suivant). Le volet, la poussée et le raccord filé ont un **sens** (`depuis` : le plan entrant arrive de la gauche, de la
+//! droite, du haut ou du bas) ; l'iris et le zoom traversant un **centre** (le point du cadre où il se ferme, où l'on plonge).
+//! Le fichier passe à la version 3 seulement quand l'une de ces sortes, un sens ou un centre y est.
 
 use std::collections::HashSet;
 
@@ -58,8 +67,10 @@ use crate::document::Document;
 /// Nom du fichier, dans le dossier du projet.
 pub(crate) const FILE: &str = "transitions.json";
 const FORMAT: &str = "shot-transitions";
-/// La version du fichier : 2 dès qu'une sorte du lot 4 ou une couleur y est écrite (partie 175), 1 sinon.
-const VERSION: u32 = 2;
+/// La version du fichier : 3 dès qu'une sorte de la partie 177, un sens ou un centre y est écrit ; 2 dès qu'une sorte du lot 4
+/// ou une couleur y est écrite (partie 175) ; 1 sinon.
+const VERSION: u32 = 3;
+const VERSION_LOT4: u32 = 2;
 const VERSION_SANS_LOT4: u32 = 1;
 /// Durée d'une transition neuve, en images.
 pub const DEFAULT_FRAMES: usize = 12;
@@ -105,11 +116,60 @@ pub enum Kind {
     /// Volet par un objet (T8) : un tronc passe tout près devant la caméra, de droite à gauche ; derrière lui, le plan entrant.
     #[serde(rename = "objet")]
     Objet,
+    /// Iris (T1, partie 177) : le rond se ferme sur le centre de la transition, puis se rouvre sur le plan entrant.
+    #[serde(rename = "iris")]
+    Iris,
+    /// Volet en horloge (T2) : le plan entrant balaie le cadre comme l'aiguille d'une montre, depuis midi.
+    #[serde(rename = "horloge")]
+    Horloge,
+    /// Zoom traversant (T5) : on plonge dans le plan sortant, on ressort du plan entrant.
+    #[serde(rename = "zoom_traversant")]
+    ZoomTraversant,
+}
+
+/// D'où le plan entrant arrive (volet, poussée, raccord filé ; partie 177).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Cote {
+    #[default]
+    #[serde(rename = "gauche")]
+    Gauche,
+    #[serde(rename = "droite")]
+    Droite,
+    #[serde(rename = "haut")]
+    Haut,
+    #[serde(rename = "bas")]
+    Bas,
+}
+
+impl Cote {
+    pub const ALL: [Cote; 4] = [Cote::Gauche, Cote::Droite, Cote::Haut, Cote::Bas];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Cote::Gauche => "De la gauche",
+            Cote::Droite => "De la droite",
+            Cote::Haut => "Du haut",
+            Cote::Bas => "Du bas",
+        }
+    }
 }
 
 impl Kind {
-    pub const ALL: [Kind; 10] =
-        [Kind::Dissolve, Kind::Black, Kind::White, Kind::Colour, Kind::Wipe, Kind::Objet, Kind::Push, Kind::Whip, Kind::Flash, Kind::CutBlack];
+    pub const ALL: [Kind; 13] = [
+        Kind::Dissolve,
+        Kind::Black,
+        Kind::White,
+        Kind::Colour,
+        Kind::Wipe,
+        Kind::Horloge,
+        Kind::Iris,
+        Kind::Objet,
+        Kind::Push,
+        Kind::Whip,
+        Kind::ZoomTraversant,
+        Kind::Flash,
+        Kind::CutBlack,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -123,6 +183,9 @@ impl Kind {
             Kind::Flash => "Flash de coupe",
             Kind::Colour => "Fondu par une couleur",
             Kind::Objet => "Volet par un objet",
+            Kind::Iris => "Iris",
+            Kind::Horloge => "Volet en horloge",
+            Kind::ZoomTraversant => "Zoom traversant",
         }
     }
 
@@ -138,12 +201,35 @@ impl Kind {
             Kind::Flash => "Un blanc d'une ou deux images sur la coupe, qui s'éteint dans le plan entrant.",
             Kind::Colour => "Comme le fondu au noir, par la couleur choisie (clic droit sur la transition pour la changer).",
             Kind::Objet => "Un tronc passe tout près devant la caméra et sert de rideau : derrière lui, le plan entrant.",
+            Kind::Iris => "Le rond de cartoon se ferme sur un point choisi (clic droit sur la transition), puis se rouvre sur le plan entrant ; au début du film il s'ouvre, à la fin il se ferme.",
+            Kind::Horloge => "Le plan entrant balaie le cadre comme l'aiguille d'une montre, depuis midi.",
+            Kind::ZoomTraversant => "On plonge dans le plan sortant, on ressort du plan entrant (vers le point choisi au clic droit).",
         }
     }
 
     /// Sorte permise sur une coupe (entre deux plans) ou au bord du film.
     pub fn allowed(self, between_plans: bool) -> bool {
-        between_plans || matches!(self, Kind::Black | Kind::White | Kind::CutBlack | Kind::Colour)
+        between_plans || matches!(self, Kind::Black | Kind::White | Kind::CutBlack | Kind::Colour | Kind::Iris)
+    }
+
+    /// Le côté d'où le plan entrant arrive, d'origine : la gauche pour le volet (comme toujours), la droite pour la poussée et le
+    /// raccord filé (comme au lot 4) ; rien pour les sortes qui n'ont pas de sens.
+    pub fn cote_d_origine(self) -> Option<Cote> {
+        match self {
+            Kind::Wipe => Some(Cote::Gauche),
+            Kind::Push | Kind::Whip => Some(Cote::Droite),
+            _ => None,
+        }
+    }
+
+    /// La sorte a un centre à choisir (l'iris, le zoom traversant).
+    pub fn a_un_centre(self) -> bool {
+        matches!(self, Kind::Iris | Kind::ZoomTraversant)
+    }
+
+    /// Une sorte de la partie 177 : le fichier qui en contient une est écrit à la version 3.
+    pub fn de_ses_reponses(self) -> bool {
+        matches!(self, Kind::Iris | Kind::Horloge | Kind::ZoomTraversant)
     }
 
     /// La couleur de la couche : noir, blanc (aussi celui du flash), ou celle de la transition (`couleur`, sinon le bleu nuit).
@@ -160,6 +246,7 @@ impl Kind {
         match self {
             Kind::Flash => 4,
             Kind::Whip => 8,
+            Kind::Iris => 16,
             _ => DEFAULT_FRAMES,
         }
     }
@@ -267,6 +354,12 @@ pub struct Transition {
     /// La couleur d'un fondu par une couleur (partie 175) ; rien : le bleu nuit d'origine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub couleur: Option<[u8; 3]>,
+    /// D'où arrive le plan entrant d'un volet, d'une poussée, d'un raccord filé (partie 177) ; rien : le côté d'origine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depuis: Option<Cote>,
+    /// Le centre d'un iris ou d'un zoom traversant, en parts du cadre (partie 177) ; rien : le milieu du cadre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub centre: Option<[f32; 2]>,
 }
 
 fn is_centre(a: &Align) -> bool {
@@ -303,6 +396,11 @@ pub struct Zone {
     pub align: Align,
     /// La couleur de la transition (celle d'un fondu par une couleur ; noir pour les autres sortes, qui ne la lisent pas).
     pub couleur: [u8; 3],
+    /// D'où arrive le plan entrant (partie 177), et le centre de la transition, en parts du cadre.
+    pub depuis: Cote,
+    pub centre: [f32; 2],
+    /// La hauteur du cadre sur sa largeur (le rond d'un iris reste rond).
+    pub aspect: f32,
 }
 
 /// Ce que montre une image du film dans une zone (voir l'en-tête du module).
@@ -328,6 +426,17 @@ pub struct Mix {
     pub blur: f32,
     /// Volet par un objet : le milieu de l'objet, en parts du cadre ; A à sa gauche, B à sa droite, l'objet par-dessus.
     pub objet: Option<f32>,
+    /// (Partie 177.) Le glissement va de haut en bas (sinon de gauche à droite) ; `shift_a`, `shift_b` en hauteurs du cadre.
+    pub vertical: bool,
+    /// Le côté d'où le volet amène B.
+    pub wipe_depuis: Cote,
+    /// L'iris : son centre (en parts du cadre) et son rayon (en largeurs du cadre) ; hors du rond, la couleur `color`.
+    pub iris: Option<[f32; 3]>,
+    /// Le volet en horloge : l'angle balayé (en radians, depuis midi, dans le sens des aiguilles) ; B dedans, A dehors.
+    pub horloge: Option<f32>,
+    /// Le zoom traversant : le grossissement de A et de B autour de `zoom_centre` (en parts du cadre) ; B pèse `m`.
+    pub zoom: Option<[f32; 2]>,
+    pub zoom_centre: [f32; 2],
 }
 
 impl Zone {
@@ -352,16 +461,52 @@ impl Zone {
         let color = self.kind.color(Some(self.couleur));
         let mut mix = Mix { a, b, color, ..Mix::default() };
         match (self.kind, a, b) {
-            // (Partie 175.) La poussée : B arrive de la droite, A sort par la gauche.
+            // (Partie 175.) La poussée : B arrive de son côté (la droite d'origine), A sort par l'autre.
             (Kind::Push, Some(_), Some(_)) => {
                 let p = lisse((i + 1) as f32 / (n + 1) as f32);
-                (mix.glisse, mix.m, mix.shift_a, mix.shift_b) = (true, 1.0, -p, 1.0 - p);
+                self.pousser(&mut mix, p);
             }
             // Le raccord filé : la même poussée, très vite au milieu, floue d'autant.
             (Kind::Whip, Some(_), Some(_)) => {
                 let (p, vitesse) = file((i + 1) as f32 / (n + 1) as f32);
-                (mix.glisse, mix.m, mix.shift_a, mix.shift_b) = (true, 1.0, -p, 1.0 - p);
+                self.pousser(&mut mix, p);
                 mix.blur = FLOU_FILE * vitesse / 3.0;
+            }
+            // (Partie 177.) L'iris : il se ferme sur A jusqu'au milieu, se rouvre sur B ensuite.
+            (Kind::Iris, Some(_), Some(_)) => {
+                let t = (i + 1) as f32 / (n + 1) as f32;
+                mix.color = [0, 0, 0];
+                if t < 0.5 {
+                    mix.b = None;
+                    mix.iris = Some(self.iris_rond(1.0 - lisse(t / 0.5)));
+                } else {
+                    mix.a = None;
+                    mix.m = 1.0;
+                    mix.iris = Some(self.iris_rond(lisse((t - 0.5) / 0.5)));
+                }
+            }
+            (Kind::Iris, None, Some(_)) => {
+                mix.color = [0, 0, 0];
+                mix.m = 1.0;
+                mix.iris = Some(self.iris_rond(lisse(i as f32 / n as f32)));
+            }
+            (Kind::Iris, Some(_), None) => {
+                mix.color = [0, 0, 0];
+                mix.iris = Some(self.iris_rond(1.0 - lisse((i + 1) as f32 / n as f32)));
+            }
+            // Le volet en horloge : B dans l'angle balayé depuis midi.
+            (Kind::Horloge, Some(_), Some(_)) => {
+                mix.m = 1.0;
+                mix.horloge = Some(std::f32::consts::TAU * (i + 1) as f32 / (n + 1) as f32);
+            }
+            // Le zoom traversant : A grossit jusqu'à 4 fois, B arrive de 4 fois et se pose ; ils se fondent au milieu.
+            (Kind::ZoomTraversant, Some(_), Some(_)) => {
+                let t = (i + 1) as f32 / (n + 1) as f32;
+                let za = 1.0 + 3.0 * (t / 0.6).min(1.0).powi(2);
+                let zb = 1.0 + 3.0 * ((1.0 - t) / 0.6).min(1.0).powi(2);
+                mix.zoom = Some([za, zb]);
+                mix.zoom_centre = self.centre;
+                mix.m = lisse((t - 0.4) / 0.2);
             }
             // Le flash : blanc aux images qui touchent la coupe, A jusqu'à elle, B après, le blanc s'éteignant de part et d'autre.
             (Kind::Flash, Some(_), Some(_)) => {
@@ -379,6 +524,12 @@ impl Zone {
                 mix.m = 1.0;
                 mix.objet = Some(objet_milieu(i, n));
             }
+            // Le volet, depuis son côté (partie 177).
+            (Kind::Wipe, Some(_), Some(_)) => {
+                mix.wipe = true;
+                mix.wipe_depuis = self.depuis;
+                mix.m = (i + 1) as f32 / (n + 1) as f32;
+            }
             (Kind::CutBlack, _, _) => {
                 mix.k = 1.0;
                 mix.color = [0, 0, 0];
@@ -389,10 +540,6 @@ impl Zone {
                 }
             }
             (Kind::Dissolve, Some(_), Some(_)) => mix.m = (i + 1) as f32 / (n + 1) as f32,
-            (Kind::Wipe, Some(_), Some(_)) => {
-                mix.wipe = true;
-                mix.m = (i + 1) as f32 / (n + 1) as f32;
-            }
             // Par la couleur, sur une coupe : A s'éteint, puis B s'allume.
             (_, Some(_), Some(_)) => {
                 let t = (i + 1) as f32 / (n + 1) as f32;
@@ -415,6 +562,27 @@ impl Zone {
             (_, None, None) => return None,
         }
         Some(mix)
+    }
+}
+
+impl Zone {
+    /// Le glissement d'une poussée à l'avancée `p` : B arrive de son côté, A sort par l'autre.
+    fn pousser(&self, mix: &mut Mix, p: f32) {
+        let (signe, vertical) = match self.depuis {
+            Cote::Droite => (1.0, false),
+            Cote::Gauche => (-1.0, false),
+            Cote::Bas => (1.0, true),
+            Cote::Haut => (-1.0, true),
+        };
+        (mix.glisse, mix.m, mix.vertical) = (true, 1.0, vertical);
+        (mix.shift_a, mix.shift_b) = (-p * signe, (1.0 - p) * signe);
+    }
+
+    /// Le rond de l'iris ouvert à `ouvert` (0 : fermé, 1 : tout le cadre se voit) : son centre et son rayon, en largeurs du cadre.
+    fn iris_rond(&self, ouvert: f32) -> [f32; 3] {
+        let [cx, cy] = self.centre;
+        let loin = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]].iter().map(|c: &[f32; 2]| (c[0] - cx).hypot((c[1] - cy) * self.aspect)).fold(0.0_f32, f32::max);
+        [cx, cy, loin * ouvert.clamp(0.0, 1.0)]
     }
 }
 
@@ -467,7 +635,10 @@ pub fn zones(doc: &Document) -> Vec<Zone> {
             continue;
         }
         let couleur = t.couleur.unwrap_or(COULEUR_DEFAUT);
-        out.push(Zone { id: t.id, kind: t.kind, cut, start, end, out: o.map(side), inn: i.map(side), align: t.align, couleur });
+        let depuis = t.depuis.or(t.kind.cote_d_origine()).unwrap_or_default();
+        let centre = t.centre.unwrap_or([0.5, 0.5]);
+        let aspect = doc.frame[1].max(1) as f32 / doc.frame[0].max(1) as f32;
+        out.push(Zone { id: t.id, kind: t.kind, cut, start, end, out: o.map(side), inn: i.map(side), align: t.align, couleur, depuis, centre, aspect });
     }
     out.sort_by_key(|z| (z.start, z.id));
     out
@@ -547,11 +718,38 @@ pub fn blend_images(mix: &Mix, a: Option<&[Color32]>, b: Option<&[Color32]>, siz
     let objet = Color32::from_rgba_premultiplied(OBJET_COULEUR[0], OBJET_COULEUR[1], OBJET_COULEUR[2], 255);
     // Colonne où le volet s'arrête : à gauche, B ; à droite, A.
     let edge = (mix.m.clamp(0.0, 1.0) * w as f32).round() as usize;
-    // Le pixel de `img` que montre la colonne `x` quand l'image a glissé de `s` largeurs : rien hors de son cadre.
+    // Le pixel de `img` que montre la colonne `x` quand l'image a glissé de `s` largeurs (de `s` hauteurs, en vertical) : rien
+    // hors de son cadre.
     let glisse = |img: Option<&[Color32]>, s: f32, x: usize, y: usize| -> Option<Color32> {
         let p = img?;
-        let src = x as f32 + 0.5 - s * w as f32;
-        (src >= 0.0 && src < w as f32).then(|| p[y * w + src as usize])
+        if mix.vertical {
+            let src = y as f32 + 0.5 - s * h as f32;
+            (src >= 0.0 && src < h as f32).then(|| p[src as usize * w + x])
+        } else {
+            let src = x as f32 + 0.5 - s * w as f32;
+            (src >= 0.0 && src < w as f32).then(|| p[y * w + src as usize])
+        }
+    };
+    // (Partie 177.) Le pixel de `img` grossi `z` fois autour du centre du zoom : rien au-delà de l'image.
+    let (zcx, zcy) = (mix.zoom_centre[0] * w as f32, mix.zoom_centre[1] * h as f32);
+    let grossi = |img: Option<&[Color32]>, z: f32, x: usize, y: usize| -> Color32 {
+        let Some(p) = img else { return Color32::TRANSPARENT };
+        let (sx, sy) = (zcx + (x as f32 + 0.5 - zcx) / z.max(1e-3), zcy + (y as f32 + 0.5 - zcy) / z.max(1e-3));
+        if sx < 0.0 || sy < 0.0 || sx >= w as f32 || sy >= h as f32 {
+            return Color32::TRANSPARENT;
+        }
+        p[sy as usize * w + sx as usize]
+    };
+    // Le volet depuis son côté : B se voit-il au pixel (`x`, `y`) ?
+    let (bord_x, bord_y) = (mix.m.clamp(0.0, 1.0) * w as f32, mix.m.clamp(0.0, 1.0) * h as f32);
+    let volet_b = |x: usize, y: usize| -> bool {
+        let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+        match mix.wipe_depuis {
+            Cote::Gauche => x < edge,
+            Cote::Droite => fx >= w as f32 - bord_x,
+            Cote::Haut => fy < bord_y,
+            Cote::Bas => fy >= h as f32 - bord_y,
+        }
     };
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
@@ -559,6 +757,19 @@ pub fn blend_images(mix: &Mix, a: Option<&[Color32]>, b: Option<&[Color32]>, siz
         let y = i / w.max(1);
         let mut base = if mix.glisse {
             glisse(b, mix.shift_b, x, y).or_else(|| glisse(a, mix.shift_a, x, y)).unwrap_or(Color32::TRANSPARENT)
+        } else if let Some([za, zb]) = mix.zoom {
+            lerp_px(grossi(a, za, x, y), grossi(b, zb, x, y), m)
+        } else if let Some(balaye) = mix.horloge {
+            let (dx, dy) = (x as f32 + 0.5 - w as f32 / 2.0, y as f32 + 0.5 - h as f32 / 2.0);
+            let mut angle = dx.atan2(-dy);
+            if angle < 0.0 {
+                angle += std::f32::consts::TAU;
+            }
+            if angle < balaye {
+                pick(b, i)
+            } else {
+                pick(a, i)
+            }
         } else if let Some(c) = mix.objet {
             if (x as f32 + 0.5) / (w as f32) < c {
                 pick(a, i)
@@ -568,7 +779,7 @@ pub fn blend_images(mix: &Mix, a: Option<&[Color32]>, b: Option<&[Color32]>, siz
         } else {
             match (mix.wipe, a.is_some(), b.is_some()) {
                 (true, true, true) => {
-                    if x < edge {
+                    if volet_b(x, y) {
                         pick(b, i)
                     } else {
                         pick(a, i)
@@ -584,6 +795,14 @@ pub fn blend_images(mix: &Mix, a: Option<&[Color32]>, b: Option<&[Color32]>, siz
             let part = objet_couvre(c, x, y, w, h);
             if part > 0.0 {
                 base = lerp_px(base, objet, weight(part));
+            }
+        }
+        // L'iris : hors du rond (au bord lissé sur un pixel), la couleur.
+        if let Some([cx, cy, r]) = mix.iris {
+            let d = (x as f32 + 0.5 - cx * w as f32).hypot(y as f32 + 0.5 - cy * h as f32);
+            let dehors = (d - r * w as f32 + 0.5).clamp(0.0, 1.0);
+            if dehors > 0.0 {
+                base = lerp_px(base, layer, weight(dehors));
             }
         }
         out.push(if k == 0 { base } else { lerp_px(base, layer, k) });
@@ -642,7 +861,7 @@ impl Document {
             return Some(t.id);
         }
         let id = self.alloc();
-        self.transitions.push(Transition { id, out, inn, kind, frames: kind.default_frames(), align: Align::Centre, couleur: None });
+        self.transitions.push(Transition { id, out, inn, kind, frames: kind.default_frames(), align: Align::Centre, couleur: None, depuis: None, centre: None });
         Some(id)
     }
 
@@ -699,7 +918,13 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     // Dans l'ordre du film : le fichier se lit, et deux enregistrements se ressemblent.
     list.sort_by_key(|t| (order(t), t.id));
     // (Sans sorte du lot 4 ni couleur, la version 1 : une version précédente de FEANOR le lit encore.)
-    let version = if list.iter().any(|t| t.kind.du_lot_4() || t.couleur.is_some()) { VERSION } else { VERSION_SANS_LOT4 };
+    let version = if list.iter().any(|t| t.kind.de_ses_reponses() || t.depuis.is_some() || t.centre.is_some()) {
+        VERSION
+    } else if list.iter().any(|t| t.kind.du_lot_4() || t.couleur.is_some()) {
+        VERSION_LOT4
+    } else {
+        VERSION_SANS_LOT4
+    };
     let sidecar = Sidecar { format: FORMAT.into(), version, transitions: list };
     serde_json::to_vec_pretty(&sidecar).map(Some).map_err(|e| e.to_string())
 }
@@ -731,6 +956,8 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Transition>, String> {
         if !t.kind.allowed(t.between_plans()) {
             t.kind = Kind::Black;
         }
+        // (Partie 177.) Un centre abîmé revient au milieu du cadre.
+        t.centre = t.centre.filter(|c| c.iter().all(|v| v.is_finite())).map(|c| c.map(|v| v.clamp(0.0, 1.0)));
         out.push(t);
     }
     Ok(out)

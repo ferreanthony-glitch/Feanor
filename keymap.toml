@@ -2913,6 +2913,21 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "transition.iris"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.horloge"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "transition.zoom_traversant"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "transition.apercu"
 touches = []
 source = "FEANOR (sans touche)"

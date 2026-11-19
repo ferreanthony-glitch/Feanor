@@ -63,10 +63,10 @@ fn calque<'a>(doc: &'a Document, plan: usize, nom: &str) -> &'a Layer {
 #[test]
 fn les_dix_huit_plans_types_sont_ceux_de_sa_liste() {
     let noms: HashSet<&str> = PlanType::ALL.iter().map(|t| t.label()).collect();
-    assert_eq!(noms.len(), 18);
-    let retenus: HashSet<&str> = ["P1", "P2", "P3", "P5", "P6", "P7", "P8", "P13", "P14", "P16", "P17", "P18"].into_iter().collect();
-    let faits: HashSet<&str> = PlanType::ALL.iter().map(|t| t.numero()).collect();
-    assert_eq!(faits, retenus, "ses douze « Oui », et aucun des numéros restés sans réponse (P4, P9, P10, P11, P12, P15)");
+    assert_eq!(noms.len(), 24, "dix-huit, puis vingt-quatre (partie 177)");
+    let retenus: HashSet<String> = (1..=18).map(|k| format!("P{k}")).collect();
+    let faits: HashSet<String> = PlanType::ALL.iter().map(|t| t.numero().to_string()).collect();
+    assert_eq!(faits, retenus, "ses douze « Oui », puis ses six réponses : P1 à P18");
     let sur_un_plan: Vec<PlanType> = PlanType::ALL.into_iter().filter(|t| t.sur_un_plan()).collect();
     assert_eq!(sur_un_plan, vec![PlanType::LieuEtDate, PlanType::GeneriqueDebut]);
 }
