@@ -14998,3 +14998,83 @@ centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), 
 9. « Compte à rebours » : lire avec le son, le bip sur le 2.
 10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
 11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.
+
+## 178. La timeline du Storyboard dans l'organisation dessinée par Anthony (2026-11-19, branche `timeline-storyboard`)
+
+Anthony a dessiné l'organisation de la timeline de l'espace Storyboard : « pour l'instant impossible de poser des presets de
+caméra sans cette timeline dédiée à la caméra » (les blocs de préréglages de la partie 170 n'existaient que dans la timeline de
+l'Animation). Puis il a validé une maquette : de haut en bas, Séquence, Plan, ⊕/⊖ Caméra (dépliée : Préréglages), ⊕/⊖ Calques ;
+« Les rangées Séquences et plans doivent prendre le moins de place possible, les rangées caméra également n'ont pas besoin
+d'être très épaisses. La taille de la timeline doit rester la plus contenue possible pour laisser un max de place aux calques. »
+« On déplie uniquement pour poser des préréglages. » « Garde cette façon de montrer les images clés et le plan. » Rien dans le
+projet (format 60 inchangé) : deux réglages d'affichage du poste. L'espace Montage garde sa disposition (la caméra au-dessus des
+plans, la hauteur des plans au choix, les transitions en formes).
+
+### 178.1 Ce qui change pour lui (espace Storyboard)
+
+| Rangée | Avant | Maintenant |
+|---|---|---|
+| Règle des temps | 18 | 18 (inchangée) |
+| Séquence | 19 | **16** |
+| Caméra | 16, au-dessus des plans | **22, sous les plans** (ses clés en losanges) |
+| Plan | 56 (moyenne) ou 28 (bandeau) | **26**, toujours (le bandeau : miniature, nom, durée sur une ligne) |
+| Préréglages (Caméra dépliée) | (absente) | **24** ; deux rangs de 12 quand deux préréglages se chevauchent ; 12 par rang au-delà |
+| ⊕/⊖ Calques | (absente) | **20** (l'en-tête des calques ; repliée, la ligne de résumé) |
+| Haut des calques | 111 | 103 (Caméra repliée), 127 (dépliée) — plus 28 quand la barre de la colonne est sur deux lignes, comme avant |
+
+1. **Séquence** : la ligne la plus fine, les blocs de séquence comme avant (clic, double-clic pour la renommer, clic droit).
+2. **Plan** : les plans bout à bout, leur aspect ne change pas (miniature, nom, durée, étiquette « V2 ▸ », traits des clés). Sur la
+   coupe entre deux plans, **le symbole ⋈ de la transition** quand il y en a une (un petit nœud papillon, avec sa durée en trait fin
+   sous les plans) : **un clic ouvre son menu** (celui de la partie 175 : sorte, durée, sens, centre, couleur, calage, supprimer) ;
+   le clic droit aussi. Une transition glissée du panneau Préréglages sur une coupe s'y pose. Le symbole ne couvre plus les plans : un
+   clic tout près reste au plan. **En-tête** : « Plans », puis nouveau plan, dupliquer, versions du plan (menu), transitions (le
+   panneau Préréglages, onglet Montage), couper le plan à la tête de lecture, « ⋯ » (nouveau plan avant, supprimer, réunir avec le
+   suivant ou le précédent, durée du plan…, nom et fiche du plan…, couleur du plan, nouvelle séquence, renommer la séquence…,
+   réglages du projet…, verrouiller le storyboard ; un cadenas à sa place quand le storyboard est verrouillé).
+3. **⊕/⊖ Caméra** : repliée, une ligne qui porte les losanges des clés de caméra (et un trait jaune fin sous les images où le plan a
+   des préréglages). Dépliée, la rangée **Préréglages** dessous : les blocs jaunes de chaque plan, pris exactement comme dans la
+   timeline de l'Animation (glisser depuis le panneau Préréglages, sur la ligne de la caméra ou la rangée ; corps, bords ; clic,
+   clic droit « Retirer cet effet » / « Convertir les effets en clés » ; Suppr). Un geste sur les blocs d'un autre plan le rend
+   courant. Glisser un préréglage quand la caméra est repliée ouvre la rangée le temps du glisser ; elle se referme ensuite.
+   **En-tête** : ⊕/⊖, « Caméra » (un clic : la caméra choisie dans la vue Espace 3D, comme avant ; clic droit : le menu de la
+   caméra), clé de caméra ici, préréglages de caméra (le panneau, onglet Caméra ; la caméra se déplie), remettre la caméra à zéro
+   (ses clés s'en vont), « ⋯ » (convertir les préréglages en clés, copier, coller les clés de caméra, puis le menu de la caméra).
+4. **⊕/⊖ Calques** : dépliée, les pistes du plan sous la tête de lecture, comme avant (la piste du calque actif sur trois rangées,
+   « Normal ▾ », l'opacité et son losange ; les autres sur une ligne), et sur la ligne « Calques » les icônes des sept colonnes de la
+   partie 174 (afficher, verrouiller, pelure, transparence, pochoir, aplat, caméra : sur le calque courant et les calques choisis).
+   Un calque à moins de 100 % écrit son opacité en petit (« 50 % ») sur sa ligne, et ses images sont plus pâles dans la bande.
+   Repliée : une seule ligne de résumé, « Calques · 3 », et les clés de chaque plan en petits traits. Raccourci : **Maj+Alt+C**
+   (dans le Storyboard, cette rangée ; dans l'Animation, la colonne de la timeline, comme avant).
+5. **Les traits de coupe** des plans descendent de la caméra au bas des calques.
+6. Dans le Storyboard, le choix « hauteur moyenne / bandeau » des plans n'est plus au bas de la bande (il reste au Montage).
+
+### 178.2 Le code
+
+- `src/montagerows.rs` : `DispoStoryboard` dans `Rows` (`sb`), les hauteurs `SB_*`, `bands_h`, `seq_h`, `cam_h`, `prereglages_top`,
+  `calques_top` ; `montage_rows_en` (un préréglage glissé ouvre la rangée) ; `timeline_du_storyboard` ; les en-têtes dans
+  `row_headers` ; les fonds, le trait jaune et l'opacité des images dans `paint_track_rows`.
+- `src/timelinesb.rs` (nouveau) : les en-têtes des rangées, le symbole des transitions, la rangée des préréglages, les coupes.
+- `src/blocscamera.rs` : `blocs_camera_du_plan` (le plan, la hauteur d'un rang) ; `blocs_camera_bande` de l'Animation l'appelle.
+- `src/storyboard.rs` (la bande), `src/layerheads.rs` (`icones_des_colonnes`), `src/pistes.rs` (l'opacité en petit),
+  `src/settings.rs` (`storyboard_camera_depliee`, `storyboard_calques_replies`), `src/app.rs` (Maj+Alt+C),
+  `src/panneauprereglages.rs` (`onglet` lisible des essais).
+
+### 178.3 Les essais
+
+`src/timelinesb_tests.rs` (rouges d'abord, la disposition coupée : 9 échecs ; verts ensuite) : l'ordre et les hauteurs, le Montage
+inchangé ; les icônes des en-têtes et leurs actions ; le symbole d'une transition, son menu qui la change (une étape, Ctrl+Z), un
+préréglage de transition déposé ; la caméra repliée (clés sur la ligne) et dépliée (deux rangs bas) ; poser un préréglage par
+glisser (repliée et dépliée) et par clic, comme `ajouter_effet_camera` de l'Animation ; déplacer, étirer, Suppr, convertir en clés
+(les clés sur la ligne de la caméra) ; les calques repliés et dépliés, le raccourci, l'opacité ; les coupes ; la plus petite fenêtre
+(960 × 600, colonne d'origine et la plus étroite). `timeline_storyboard_178_captures` (ignoré) fait les images.
+
+### 178.4 À tester (sa checklist)
+
+1. Storyboard : de haut en bas, Séquence, Plans, Caméra, Calques ; la timeline est plus basse.
+2. En-tête des plans : survoler chaque icône (nom, raccourci) ; nouveau plan, dupliquer, couper à la tête ; « ⋯ ».
+3. Poser une transition (icône des transitions, glisser sur une coupe) : le ⋈ sur la coupe ; cliquer, changer la sorte ; Ctrl+Z.
+4. ⊕ Caméra : la rangée Préréglages ; glisser « Zoom avant » sur un plan, puis « Tremblement léger » par-dessus : deux rangs bas.
+5. Tirer un bord, le corps ; clic, Suppr ; clic droit, « Convertir les effets en clés » : les losanges sur la ligne de la caméra.
+6. ⊖ Caméra : la ligne seule, un trait jaune sous les préréglages ; glisser un préréglage dessus : il se pose quand même.
+7. ⊖ Calques (ou Maj+Alt+C) : une ligne de résumé ; ⊕ : les pistes ; rouvrir FEANOR : les deux états gardés.
+8. La plus petite fenêtre : rien ne déborde.

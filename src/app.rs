@@ -5006,6 +5006,8 @@ impl App {
             "calque.pochoirs_inverser" => self.stencils_invert(),
             "calque.pelure" => self.toggle_layer_onion(),
             // Partie 174 : ⊖ / ⊕ de la rangée d'en-tête de la colonne des calques de la timeline.
+            // (Partie 178 : dans le Storyboard, le même raccourci replie ou déplie la rangée Calques de sa timeline.)
+            "calques.replier_tout" if self.mode == Mode::Storyboard && self.timeline_du_storyboard() => self.basculer_calques_sb(),
             "calques.replier_tout" => self.basculer_calques_replies(),
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),

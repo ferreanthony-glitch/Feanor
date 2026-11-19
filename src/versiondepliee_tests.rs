@@ -259,7 +259,8 @@ fn the_arrow_unfolds_the_version_next_to_the_plan_for_display_only_and_folds_it_
     assert_eq!(b.app.history.names().0.len(), n0, "pas d'étape d'annulation");
     assert!(!b.app.modified, "rien à enregistrer");
     // Un clic dans le bloc déplié pose seulement la tête de lecture ; la vue montre la version en lecture seule.
-    let p = pos2(colonne.left() + 10.5 * ppf, blocs_apres[0].center().y);
+    // (Partie 178 : sous la rangée des plans, où l'étiquette de la version est sur la ligne du nom.)
+    let p = pos2(colonne.left() + 10.5 * ppf, blocs_apres[0].bottom() + 10.0);
     cliquer(&mut b, p, PointerButton::Primary);
     let t = b.app.depli.tete.expect("la tête est dans la version dépliée");
     assert_eq!((t.plan, t.numero), (plan, 1));

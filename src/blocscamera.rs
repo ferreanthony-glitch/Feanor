@@ -238,16 +238,25 @@ impl App {
         (n + usize::from(glisse) + usize::from(chemin) + usize::from(forme)) as f32 * BLOC_H
     }
 
-    /// La place du chemin de la caméra dans la rangée des blocs (sous les blocs) : de son départ à sa fin (bornée au plan).
-    fn rangee_du_chemin(&self, ctx: &egui::Context, band: Rect, left: f32, cell: f32) -> Option<(Rect, usize, usize)> {
-        let p = self.doc.panels.get(self.cur_panel)?;
+    /// La place du chemin de la caméra du plan `pi` dans la rangée des blocs (sous les blocs, en rangs de `rang_h`) : de son départ
+    /// à sa fin (bornée au plan).
+    fn rangee_du_chemin(&self, ctx: &egui::Context, pi: usize, band: Rect, left: f32, cell: f32, rang_h: f32) -> Option<(Rect, usize, usize)> {
+        let p = self.doc.panels.get(pi)?;
         let t = p.trajectoire_camera.as_ref()?;
         let len = p.frame_count().max(1);
         let (a, b) = (t.depart.min(len - 1), t.fin.unwrap_or(len - 1).max(t.depart));
         // (Pendant qu'on glisse un préréglage, sa place est juste sous les blocs : le chemin descend d'un rang.)
         let glisse = usize::from(egui::DragAndDrop::has_payload_of_type::<PresetDrag>(ctx));
-        let y = band.top() + (rangs(&p.effets_camera).1 + glisse) as f32 * BLOC_H;
-        Some((Rect::from_min_max(pos2(left + a as f32 * cell, y + 1.0), pos2((left + (b + 1) as f32 * cell).max(left + a as f32 * cell + 3.0), y + BLOC_H - 1.0)), a, b))
+        let y = band.top() + (rangs(&p.effets_camera).1 + glisse) as f32 * rang_h;
+        Some((Rect::from_min_max(pos2(left + a as f32 * cell, y + 1.0), pos2((left + (b + 1) as f32 * cell).max(left + a as f32 * cell + 3.0), y + rang_h - 1.0)), a, b))
+    }
+
+    /// Partie 178 : rend `pi` plan courant avant un geste sur un de ses blocs (la timeline du Storyboard montre ceux de tous les
+    /// plans ; choisir, poser, convertir visent le plan courant).
+    fn viser_le_plan(&mut self, pi: usize) {
+        if pi != self.cur_panel && pi < self.doc.panels.len() {
+            self.set_panel(pi);
+        }
     }
 
     /// Le nom de la rangée des blocs, dans la colonne des noms de la timeline.
@@ -274,7 +283,23 @@ impl App {
     /// glissé. `left` est l'abscisse de l'image 0 du plan, `cell` la largeur d'une image ; `grid` est la réponse de la grille
     /// de la timeline (un clic ailleurs lâche le bloc choisi).
     pub(crate) fn blocs_camera_bande(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, band: Rect, keys_row: Rect, left: f32, cell: f32, grid: &egui::Response) {
+        // Un clic dans la grille, hors des blocs : le bloc choisi est lâché.
+        if grid.clicked() || grid.drag_started() {
+            self.blocs.choisi = None;
+        }
+        if band.height() >= 1.0 {
+            painter.rect_filled(band.shrink2(vec2(0.0, 1.0)), 0.0, theme::rangee_sombre());
+        }
         let pi = self.cur_panel;
+        self.blocs_camera_du_plan(ui, painter, pi, band, keys_row, left, cell, BLOC_H, false);
+    }
+
+    /// Les blocs du plan `pi` dans `band` (sous sa rangée des clés de caméra `keys_row`), en rangs de `rang_h` points : les
+    /// peindre, les prendre, et recevoir un préréglage glissé. `left` est l'abscisse de l'image 0 du plan, `cell` la largeur
+    /// d'une image. `du_storyboard` (partie 178) : la timeline du Storyboard, qui montre les blocs de tous les plans ; un geste sur
+    /// ceux d'un autre plan le rend courant, et un clic dans le vide pose la tête de lecture dans ce plan.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn blocs_camera_du_plan(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, pi: usize, band: Rect, keys_row: Rect, left: f32, cell: f32, rang_h: f32, du_storyboard: bool) {
         let Some(p) = self.doc.panels.get(pi) else { return };
         let pid = p.id;
         let len = p.frame_count().max(1);
@@ -284,16 +309,9 @@ impl App {
             let v = &effets[i];
             let x0 = left + v.start as f32 * cell;
             let x1 = left + (v.start + v.params.duration.max(1)) as f32 * cell;
-            let y = band.top() + rgs[i] as f32 * BLOC_H;
-            Rect::from_min_max(pos2(x0, y + 1.0), pos2(x1.max(x0 + 3.0), y + BLOC_H - 1.0))
+            let y = band.top() + rgs[i] as f32 * rang_h;
+            Rect::from_min_max(pos2(x0, y + 1.0), pos2(x1.max(x0 + 3.0), y + rang_h - 1.0))
         };
-        // Un clic dans la grille, hors des blocs : le bloc choisi est lâché.
-        if grid.clicked() || grid.drag_started() {
-            self.blocs.choisi = None;
-        }
-        if band.height() >= 1.0 {
-            painter.rect_filled(band.shrink2(vec2(0.0, 1.0)), 0.0, theme::rangee_sombre());
-        }
         let resp = ui.interact(band, ui.id().with(("blocs_camera", pid)), Sense::click_and_drag());
         let sous = |p: Pos2| -> Option<(usize, Prise)> {
             (0..effets.len()).rev().find_map(|i| {
@@ -325,6 +343,7 @@ impl App {
             if let Some(p0) = ui.input(|i| i.pointer.press_origin()).or_else(|| resp.interact_pointer_pos()) {
                 if let Some((i, prise)) = sous(p0) {
                     let v = effets[i];
+                    self.viser_le_plan(pi);
                     self.record_named_step(match prise {
                         Prise::Corps => "Déplacer l'effet de caméra",
                         Prise::Debut | Prise::Fin => "Changer la durée de l'effet de caméra",
@@ -369,11 +388,21 @@ impl App {
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match sous(p) {
-                    Some((i, _)) => self.choisir_bloc_camera(Some(i)),
+                    Some((i, _)) => {
+                        self.viser_le_plan(pi);
+                        self.choisir_bloc_camera(Some(i));
+                    }
                     None => {
                         self.blocs.choisi = None;
                         let col = ((p.x - left) / cell).floor().max(0.0) as usize;
-                        self.set_frame_free(col);
+                        if du_storyboard {
+                            // (Dans le Storyboard, la tête de lecture reste dans le plan.)
+                            self.viser_le_plan(pi);
+                            self.set_frame_free(col.min(len - 1));
+                            self.follow_frame = true;
+                        } else {
+                            self.set_frame_free(col);
+                        }
                     }
                 }
             }
@@ -381,10 +410,12 @@ impl App {
         // Le clic droit : le menu du bloc.
         if resp.secondary_clicked() {
             if let Some((i, _)) = resp.interact_pointer_pos().and_then(sous) {
+                self.viser_le_plan(pi);
                 self.choisir_bloc_camera(Some(i));
             }
         }
-        if self.bloc_camera_choisi().is_some() {
+        // (Le menu du bloc choisi, sur la rangée de son plan seulement.)
+        if self.bloc_camera_choisi().is_some() && self.doc.panels.get(self.cur_panel).map(|p| p.id) == Some(pid) {
             resp.context_menu(|ui| {
                 if ui.button("Retirer cet effet").on_hover_text("Enlève l'effet (Suppr). Les clés de caméra du plan ne changent pas.").clicked() {
                     self.supprimer_bloc_camera();
@@ -398,15 +429,15 @@ impl App {
         }
         // Peindre les blocs (le plan s'arrête à `len` : au-delà, le bloc est pâle, l'effet y est coupé).
         let fin_du_plan = left + len as f32 * cell;
-        let choisi = self.bloc_camera_choisi();
+        let choisi = self.bloc_camera_choisi().filter(|_| self.doc.panels.get(self.cur_panel).map(|p| p.id) == Some(pid));
         let clip = painter.clip_rect();
         let effets = self.doc.panels.get(pi).map(|p| p.effets_camera.clone()).unwrap_or_default();
         let (rgs, _) = rangs(&effets);
         for (i, v) in effets.iter().enumerate() {
             let x0 = left + v.start as f32 * cell;
             let x1 = (left + (v.start + v.params.duration.max(1)) as f32 * cell).max(x0 + 3.0);
-            let y = band.top() + rgs[i] as f32 * BLOC_H;
-            let r = Rect::from_min_max(pos2(x0, y + 1.0), pos2(x1, y + BLOC_H - 1.0));
+            let y = band.top() + rgs[i] as f32 * rang_h;
+            let r = Rect::from_min_max(pos2(x0, y + 1.0), pos2(x1, y + rang_h - 1.0));
             if r.right() < clip.left() || r.left() > clip.right() {
                 continue;
             }
@@ -430,18 +461,21 @@ impl App {
                 painter.rect_stroke(r.expand(1.0), 3.0, Stroke::new(2.0_f32, theme::contour()), StrokeKind::Outside);
             }
         }
-        self.chemin_camera_bande(ui, painter, band, left, cell, len);
-        self.blocs_camera_depot(ui, painter, band.union(keys_row), band, left, cell, len);
-        self.forme_depot(ui, painter, band.union(keys_row), band, left, cell, len);
+        self.chemin_camera_bande(ui, painter, pi, band, left, cell, len, rang_h);
+        self.blocs_camera_depot(ui, painter, pi, band.union(keys_row), band, left, cell, len, rang_h);
+        self.forme_depot(ui, painter, pi, band.union(keys_row), band, left, cell, len, rang_h);
     }
 
-    /// La barre du chemin de la caméra (partie 172) : la peindre, la prendre (le corps glisse le chemin dans le temps, un bord
-    /// recale son départ ou sa fin), et son menu.
-    fn chemin_camera_bande(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, band: Rect, left: f32, cell: f32, len: usize) {
-        let pi = self.cur_panel;
+    /// La barre du chemin de la caméra du plan `pi` (partie 172) : la peindre, la prendre (le corps glisse le chemin dans le temps,
+    /// un bord recale son départ ou sa fin), et son menu.
+    #[allow(clippy::too_many_arguments)]
+    fn chemin_camera_bande(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, pi: usize, band: Rect, left: f32, cell: f32, len: usize, rang_h: f32) {
         let Some(pid) = self.doc.panels.get(pi).map(|p| p.id) else { return };
-        let Some((r, a, b)) = self.rangee_du_chemin(ui.ctx(), band, left, cell) else {
-            self.blocs.chemin = None;
+        let Some((r, a, b)) = self.rangee_du_chemin(ui.ctx(), pi, band, left, cell, rang_h) else {
+            // (Le glisser d'un autre plan reste à lui.)
+            if self.blocs.chemin.is_some_and(|g| g.panel == pid) {
+                self.blocs.chemin = None;
+            }
             return;
         };
         let resp = ui.interact(r.expand2(vec2(2.0, 0.0)), ui.id().with(("chemin_camera", pid)), Sense::click_and_drag());
@@ -463,6 +497,7 @@ impl App {
         if resp.drag_started() {
             if let Some(p0) = ui.input(|i| i.pointer.press_origin()).or_else(|| resp.interact_pointer_pos()) {
                 let prise = prise_sous(p0.x);
+                self.viser_le_plan(pi);
                 self.record_named_step(match prise {
                     Prise::Corps => "Déplacer le chemin de la caméra",
                     Prise::Debut | Prise::Fin => "Recaler le chemin de la caméra",
@@ -502,6 +537,7 @@ impl App {
             let vise = self.doc.panels.get(pi).and_then(|p| p.trajectoire_camera.as_ref()).is_some_and(|t| t.vise.is_some());
             let mut garde = vise;
             if ui.checkbox(&mut garde, "La caméra garde son sujet dans le cadre").on_hover_text("Elle tourne en suivant son chemin, pour voir toujours au même endroit le point qu'elle voit au centre du cadre au départ.").changed() {
+                self.viser_le_plan(pi);
                 self.chemin_camera_garde_le_sujet(garde);
                 ui.close_menu();
             }
@@ -561,7 +597,8 @@ impl App {
 
     /// Une trajectoire toute faite glissée depuis le panneau Préréglages, au-dessus de la rangée de la caméra ou des blocs : un
     /// repère de son chemin là où il se posera ; au lâcher, le chemin de la caméra (partie 172).
-    fn forme_depot(&mut self, ui: &egui::Ui, painter: &egui::Painter, zone: Rect, band: Rect, left: f32, cell: f32, len: usize) {
+    #[allow(clippy::too_many_arguments)]
+    fn forme_depot(&mut self, ui: &egui::Ui, painter: &egui::Painter, pi: usize, zone: Rect, band: Rect, left: f32, cell: f32, len: usize, rang_h: f32) {
         let ctx = ui.ctx().clone();
         let Some(drag) = egui::DragAndDrop::payload::<FormeDrag>(&ctx) else { return };
         let Some(p) = ctx.pointer_hover_pos() else { return };
@@ -571,14 +608,15 @@ impl App {
         let frame = (((p.x - left) / cell).floor().max(0.0) as usize).min(len.saturating_sub(1));
         let duree = ((crate::trajformes::SECONDES * self.doc.fps.max(1) as f32).round() as usize).max(1);
         let fin = (frame + duree).min(len.saturating_sub(1)).max(frame);
-        let y = band.top() + rangs(&self.panel().effets_camera).1 as f32 * BLOC_H;
-        let r = Rect::from_min_max(pos2(left + frame as f32 * cell, y + 1.0), pos2(left + (fin + 1) as f32 * cell, y + BLOC_H - 1.0));
+        let y = band.top() + self.doc.panels.get(pi).map_or(0, |p| rangs(&p.effets_camera).1) as f32 * rang_h;
+        let r = Rect::from_min_max(pos2(left + frame as f32 * cell, y + 1.0), pos2(left + (fin + 1) as f32 * cell, y + rang_h - 1.0));
         painter.rect_filled(r, 2.0, theme::camera().gamma_multiply(0.25));
         painter.rect_stroke(r, 2.0, Stroke::new(1.5_f32, theme::camera()), StrokeKind::Inside);
         painter.text(pos2(r.left() + 7.0, r.center().y), Align2::LEFT_CENTER, drag.forme.label(), FontId::proportional(11.0), ui.visuals().text_color());
         ctx.set_cursor_icon(CursorIcon::Copy);
         if ctx.input(|i| i.pointer.any_released()) {
             if let Some(d) = egui::DragAndDrop::take_payload::<FormeDrag>(&ctx) {
+                self.viser_le_plan(pi);
                 self.poser_trajectoire_toute_faite(d.forme, frame);
             }
         }
@@ -586,7 +624,8 @@ impl App {
 
     /// Un préréglage glissé depuis le panneau Préréglages, au-dessus de la rangée de la caméra ou des blocs : un repère de sa
     /// durée là où il se posera ; au lâcher, le nouveau bloc.
-    fn blocs_camera_depot(&mut self, ui: &egui::Ui, painter: &egui::Painter, zone: Rect, band: Rect, left: f32, cell: f32, len: usize) {
+    #[allow(clippy::too_many_arguments)]
+    fn blocs_camera_depot(&mut self, ui: &egui::Ui, painter: &egui::Painter, pi: usize, zone: Rect, band: Rect, left: f32, cell: f32, len: usize, rang_h: f32) {
         let ctx = ui.ctx().clone();
         let Some(drag) = egui::DragAndDrop::payload::<PresetDrag>(&ctx) else { return };
         let Some(p) = ctx.pointer_hover_pos() else { return };
@@ -596,14 +635,15 @@ impl App {
         let frame = ((p.x - left) / cell).floor().max(0.0) as usize;
         let duree = Params::new(drag.preset, self.doc.fps).duration.max(1);
         let start = depart_qui_tient(frame, duree, len);
-        let n = rangs(&self.panel().effets_camera).1;
-        let y = band.top() + n as f32 * BLOC_H;
-        let r = Rect::from_min_max(pos2(left + start as f32 * cell, y + 1.0), pos2(left + (start + duree) as f32 * cell, y + BLOC_H - 1.0));
+        let n = self.doc.panels.get(pi).map_or(0, |p| rangs(&p.effets_camera).1);
+        let y = band.top() + n as f32 * rang_h;
+        let r = Rect::from_min_max(pos2(left + start as f32 * cell, y + 1.0), pos2(left + (start + duree) as f32 * cell, y + rang_h - 1.0));
         painter.rect_filled(r, 2.0, theme::camera().gamma_multiply(0.35));
         painter.rect_stroke(r, 2.0, Stroke::new(1.5_f32, theme::camera()), StrokeKind::Inside);
         ctx.set_cursor_icon(CursorIcon::Copy);
         if ctx.input(|i| i.pointer.any_released()) {
             if let Some(d) = egui::DragAndDrop::take_payload::<PresetDrag>(&ctx) {
+                self.viser_le_plan(pi);
                 self.ajouter_effet_camera(d.preset, frame);
             }
         }

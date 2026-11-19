@@ -99,9 +99,17 @@ const ICONES_DE_LA_PISTE: &[&str] = &[crate::accroche::NOM, "Aplat sous le trait
 /// Le rectangle de l'icône de la piste dont la bulle est `nom` (ou commence par `nom` pour le groupe).
 fn icone(nom: &str) -> Option<Rect> {
     if nom.ends_with(": ") {
-        return vus::noms().into_iter().find(|n| n.starts_with(nom)).and_then(|n| vus::ou(&n).first().copied());
+        return vus::noms().into_iter().find(|n| n.starts_with(nom)).and_then(|n| de_la_piste(vus::ou(&n)));
     }
-    vus::ou(nom).first().copied()
+    de_la_piste(vus::ou(nom))
+}
+
+/// (Partie 178 : la ligne « Calques » du Storyboard porte aussi les icônes des colonnes ; celle de la piste active est dans la colonne,
+/// plus bas. Ailleurs, le même nom peut être dans un panneau, hors de la colonne : il compte quand la colonne n'est pas à l'écran.)
+fn de_la_piste(v: Vec<Rect>) -> Option<Rect> {
+    let colonne = vus::ou("Largeur de la colonne").first().map(|c| c.right());
+    let dans: Vec<Rect> = v.iter().copied().filter(|r| colonne.is_none_or(|c| r.left() < c)).collect();
+    dans.into_iter().max_by(|a, c| a.top().total_cmp(&c.top())).or_else(|| v.first().copied())
 }
 
 #[test]
