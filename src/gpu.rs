@@ -480,19 +480,12 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
     return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a) * item.params.x;
 }
 
-// sRGB ↔ linéaire (de 0 à 1), pour les ombres (partie 185).
-fn vers_lin(c: vec3<f32>) -> vec3<f32> {
-    return select(pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
-}
-fn vers_srgb(l: vec3<f32>) -> vec3<f32> {
-    let c = clamp(l, vec3<f32>(0.0), vec3<f32>(1.0));
-    return select(1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055), c * 12.92, c <= vec3<f32>(0.0031308));
-}
 "#;
 
 /// Les ombres des cartes et du décor 3D (partie 185, `ombres.rs`) : la lumière du décor (`ombres::Lumiere::octets`), et ce que la
-/// composition et la carte d'ombres des cartes en font. Le même texte dans les deux modules (`eclair` y est déclarée à part).
-const LUMIERE: &str = r#"
+/// composition et la carte d'ombres des cartes en font. Le même texte dans les deux modules (`eclair` y est déclarée à part), et
+/// dans ceux de la vue Espace 3D (partie 189, `decor3dgpu.rs`).
+pub(crate) const LUMIERE: &str = r#"
 struct Lumiere {
     light_vp: mat4x4<f32>,
     oeil: vec4<f32>,       // xyz ; w : pixels par unité de la prise
@@ -522,14 +515,18 @@ fn lum_vers(p: vec3<f32>) -> vec3<f32> {
 }
 "#;
 
-/// La composition (partie 185) : le soleil du décor, sa lumière, sa carte d'ombres et celle des cartes (groupe 3, avec la profondeur
-/// du décor de la partie 183).
-const COMPOSER_OMBRES: &str = r#"
-@group(3) @binding(1) var decor_soleil: texture_2d<f32>;
-@group(3) @binding(2) var<uniform> eclair: Lumiere;
-@group(3) @binding(3) var ombres_decor: texture_depth_2d;
-@group(3) @binding(4) var ombres_cartes: texture_depth_2d;
-@group(3) @binding(5) var s_cmp: sampler_comparison;
+/// Le calcul des ombres (parties 185 et 189) : ce que la composition de l'image du plan et la vue Espace 3D font des deux cartes
+/// d'ombres, le même texte pour les deux. Le module qui l'inclut déclare `eclair` (`Lumiere`), `ombres_decor`, `ombres_cartes`
+/// (`texture_depth_2d`) et `s_cmp` (`sampler_comparison`), là où ses groupes les mettent.
+pub(crate) const OMBRES_COMMUN: &str = r#"
+// sRGB ↔ linéaire (de 0 à 1), pour les ombres (partie 185).
+fn vers_lin(c: vec3<f32>) -> vec3<f32> {
+    return select(pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+}
+fn vers_srgb(l: vec3<f32>) -> vec3<f32> {
+    let c = clamp(l, vec3<f32>(0.0), vec3<f32>(1.0));
+    return select(1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055), c * 12.92, c <= vec3<f32>(0.0031308));
+}
 
 // `ombres::BIAIS`, `ombres::PAS`.
 const BIAIS: f32 = 0.0015;
@@ -586,6 +583,39 @@ fn assombrir_carte(c: vec4<f32>, occ: f32) -> vec4<f32> {
     return vec4<f32>(vers_srgb(lin) * c.a, c.a);
 }
 
+// La part du soleil que voit le point `l` (dans la carte d'ombres) d'une carte qui reçoit les ombres, de pente `g` dans la carte
+// d'ombres : le décor, puis les autres cartes (`Contexte::sur_la_carte`).
+fn soleil_vu_par_la_carte(l: vec3<f32>, g: vec2<f32>) -> f32 {
+    let r = i32(eclair.horizon.w + 0.5);
+    var vis = 1.0;
+    if (eclair.soleil.w > 0.5) {
+        vis = pcf(ombres_decor, l, g, r);
+    }
+    if (vis > 0.0 && eclair.carte.w > 0.5 && dans_boite(l)) {
+        vis = vis * pcf(ombres_cartes, l, g, r);
+    }
+    return vis;
+}
+
+// La part du soleil que les cartes laissent au point `l` (dans la carte d'ombres) du décor, avec le filtre du décor
+// (`Contexte::sur_le_decor`).
+fn soleil_des_cartes_sur_le_decor(l: vec3<f32>) -> f32 {
+    if (eclair.carte.w < 0.5 || !dans_boite(l)) {
+        return 1.0;
+    }
+    return pcf(ombres_cartes, l, vec2<f32>(0.0), i32(eclair.avant.w + 0.5));
+}
+"#;
+
+/// La composition (partie 185) : le soleil du décor, sa lumière, sa carte d'ombres et celle des cartes (groupe 3, avec la profondeur
+/// du décor de la partie 183).
+const COMPOSER_OMBRES: &str = r#"
+@group(3) @binding(1) var decor_soleil: texture_2d<f32>;
+@group(3) @binding(2) var<uniform> eclair: Lumiere;
+@group(3) @binding(3) var ombres_decor: texture_depth_2d;
+@group(3) @binding(4) var ombres_cartes: texture_depth_2d;
+@group(3) @binding(5) var s_cmp: sampler_comparison;
+
 // Ce que le décor et les autres cartes cachent du soleil au pixel `px` de la carte (son plan : prof.xyz ; sa pente dans la carte
 // d'ombres : extra.xy) (`Contexte::sur_la_carte`).
 fn ombre_recue(px: vec2<f32>) -> f32 {
@@ -594,16 +624,7 @@ fn ombre_recue(px: vec2<f32>) -> f32 {
         return 0.0;
     }
     let l = lum_vers(lum_monde(px, inv));
-    let r = i32(eclair.horizon.w + 0.5);
-    let g = item.extra.xy;
-    var vis = 1.0;
-    if (eclair.soleil.w > 0.5) {
-        vis = pcf(ombres_decor, l, g, r);
-    }
-    if (vis > 0.0 && eclair.carte.w > 0.5 && dans_boite(l)) {
-        vis = vis * pcf(ombres_cartes, l, g, r);
-    }
-    return 1.0 - vis;
+    return 1.0 - soleil_vu_par_la_carte(l, item.extra.xy);
 }
 
 // Le décor, assombri là où une carte lui cache le soleil (`Contexte::sur_le_decor`).
@@ -628,7 +649,7 @@ fn fs_decor_o(v: VOut) -> @location(0) vec4<f32> {
     if (!dans_boite(l)) {
         return c;
     }
-    let occ = 1.0 - pcf(ombres_cartes, l, vec2<f32>(0.0), i32(eclair.avant.w + 0.5));
+    let occ = 1.0 - soleil_des_cartes_sur_le_decor(l);
     return assombrir_decor(c, s, distance(w, eclair.oeil.xyz), occ);
 }
 "#;
@@ -1065,8 +1086,8 @@ impl GpuCanvas {
         let device = &rs.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("calques"),
-            // (Partie 185 : la lumière du décor et les ombres, à la suite.)
-            source: wgpu::ShaderSource::Wgsl(format!("{SHADER}{LUMIERE}{COMPOSER_OMBRES}").into()),
+            // (Partie 185 : la lumière du décor et les ombres, à la suite ; leur calcul est partagé avec la vue Espace 3D, partie 189.)
+            source: wgpu::ShaderSource::Wgsl(format!("{SHADER}{LUMIERE}{OMBRES_COMMUN}{COMPOSER_OMBRES}").into()),
         });
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("calques réglages"),

@@ -104,6 +104,8 @@ pub(crate) struct Espace3dState {
     /// « Précis » déplié dans le panneau, pour un calque choisi et pour la caméra (partie 162 ; replié d'origine).
     pub precis_carte: bool,
     pub precis_camera: bool,
+    /// Les ombres des cartes sous le soleil du décor 3D à cette image (partie 189, `ombres3d.rs`) ; rien : pas d'ombres de cartes.
+    pub ombres: Option<crate::ombres3d::OmbresDeLaVue>,
 }
 
 impl Default for Espace3dState {
@@ -141,6 +143,7 @@ impl Default for Espace3dState {
             vu_par_calque: HashMap::new(),
             precis_carte: false,
             precis_camera: false,
+            ombres: None,
         }
     }
 }

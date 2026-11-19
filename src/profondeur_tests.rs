@@ -462,6 +462,7 @@ fn voile_seul(rs: &RenderState, doc: &Document, xf: &crate::espace3d::Xf) -> Vec
         taille_pts: [w as f32, h as f32],
         cible_egui: rs.target_format,
         qualite: crate::decor3dbudget::Qualite::Sans,
+        cartes: None,
     };
     let coins = Monde::of(doc).card_corners(xf);
     let voile = crate::decor3dgpu::VoileCarte { cle: 77, rang: 0, coins, cible_egui: rs.target_format };

@@ -693,6 +693,8 @@ impl App {
                         taille_pts: [draw.width(), draw.height()],
                         cible_egui: g.render_state().target_format,
                         qualite,
+                        // (Les ombres des cartes, partie 189 : seulement quand ce décor a les siennes.)
+                        cartes: self.espace3d.ombres.as_ref().map(|o| o.cartes.clone()),
                     };
                     painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
                     sur_la_carte = true;

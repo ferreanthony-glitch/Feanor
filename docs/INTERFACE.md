@@ -16103,9 +16103,7 @@ dans `keymap.toml` ; écrites pour le seul calque décoché, relues, un fichier 
 
 ### 185.5 Ce qui n'est pas fait (ou limité)
 
-- **La vue Espace 3D ne montre pas les ombres des cartes** : ses cartes sont dessinées par egui, et le décor de la vue a sa propre
-  passe ; elle garde les ombres du décor sur lui-même. Les ombres des cartes sont dans l'image du plan (la vue de dessin), les
-  exports et les vignettes.
+- ~~La vue Espace 3D ne montre pas les ombres des cartes~~ (faite : partie 189, les mêmes ombres dans la vue, de tous les côtés).
 - **Le rendu de secours sans carte graphique** n'a ni ombres du décor ni ombres de cartes.
 - **Le bord d'une ombre sur une carte** est plus net que sur le décor (une lecture filtrée au lieu de 3 × 3 ou 5 × 5 : le coût,
   185.3) ; une ombre qui passe du sol à une carte change donc un peu de flou.
@@ -16298,3 +16296,140 @@ la commande dans la palette, le crochet et le voile sur la règle.
 4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
 5. « Enlever la plage de lecture » : la lecture reprend tout le film.
 
+
+## 189. Les ombres des cartes et du décor 3D dans la vue Espace 3D (2026-11-19, branche `ombres-espace3d` partie de `main` 9c33ec9, format 61 inchangé)
+
+La partie 185 a donné aux cartes les ombres du décor 3D dans l'image du plan (la vue de dessin), les exports et les vignettes. La
+**vue Espace 3D** (plein écran, à côté du dessin, vues multiples) montrait les ombres du décor sur lui-même, mais **ni l'ombre des
+cartes ni d'ombre sur les cartes**. Elle montre maintenant les mêmes, sous le même soleil, **de quelque côté qu'on la regarde** : les
+ombres du soleil sont dans le monde, pas dans le cadre de la caméra. Le choix d'Anthony (« Ombres dans l'Espace 3D »). Format du projet
+inchangé (61). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR ; les
+essais peignent la vue entière par la carte graphique, hors de l'écran, et en lisent les pixels).
+
+### 189.1 Ce qui change pour Anthony
+
+1. **Dans la vue Espace 3D, une carte porte l'ombre de son encre sur le décor** : le sol, les dalles, les objets. La même ombre que
+   dans l'image du plan (le vide entre les jambes laisse passer le soleil, elle part des pieds d'une carte aimantée, elle a le flou
+   des ombres du décor), au même endroit du monde : vue de côté, de dessus, de derrière, par la caméra du plan, dans chacune des vues
+   multiples, y compris les vues orthographiques (dessus, face, côté).
+2. **Le décor et les autres cartes ombrent les cartes de la vue** : un personnage à l'ombre d'un arbre s'y assombrit, comme dans
+   l'image du plan (du même bleu, à un niveau près, dans les essais) ; une carte n'est jamais dans sa propre ombre.
+3. **Les mêmes réglages** : le soleil du décor (panneau Espace 3D : autour, hauteur), les cases **« Porte une ombre »** et
+   **« Reçoit les ombres »** de chaque calque (partie 185), les mêmes calques sans ombre (accrochés à la caméra, d'effet, d'annotation,
+   dossiers). Rien de neuf à régler.
+4. **Les ombres du décor décident toujours** : sans l'aspect « Ombres » du décor, ou sur un ordinateur dont le budget ne permet pas
+   d'ombres (« sans ombres »), la vue est **exactement celle d'avant** (au pixel près dans les essais) et ne coûte rien de plus. Leur
+   finesse suit celle du décor (basses, hautes).
+5. **Tourner la vue ne refait pas les ombres des cartes** : elles ne sont refaites que quand une carte bouge (lecture, manipulateur,
+   trait sur la carte), et une seule fois pour toutes les vues.
+6. Le dessin qu'on fait sur une carte dans la vue porte son ombre au fil du trait (la carte d'ombres des cartes est refaite à chaque
+   image du trait ; pas d'essai qui le vérifie).
+
+### 189.2 Comment c'est fait
+
+- **`ombres3d.rs`** (nouveau) : une fois par image de la vue (`App::e3_ombres_de_la_vue`, au début d'`espace3d_panel`, pour toutes
+  les vues), les cartes qui portent une ombre — leurs quatre coins dans le monde (`Monde::card_corners`, la carte telle que la vue la
+  pose), leur dessin tel que la vue le montre (la texture d'egui de la carte, prise dans le moteur de rendu d'egui :
+  `Renderer::texture`) et l'opacité du calque — et les calques dont la carte reçoit les ombres. Rien sans carte graphique, sans décor,
+  sans ses ombres (`ombres::concerne` et les deux cases, comme la partie 185). Une empreinte (coins, texture et sa version, opacité)
+  dit si la carte d'ombres des cartes doit être refaite.
+- **La carte d'ombres des cartes de la vue** (`decor3dgpu::Moteur::preparer_ombres_vue`) : les cartes, vues du soleil avec **la
+  matrice de la carte d'ombres du décor** (`decor3dgpu::eclairage`, qui ne dépend que du décor et du soleil, pas du point de vue),
+  là où leur encre est au moins à moitié opaque (`PORTEUSES`, le seuil de `fs_ombre`), dans une carte de profondeur du côté que donne
+  la qualité (1024 ou 2048). **Gardée** entre les images et **partagée** par les vues : refaite seulement si l'empreinte, le soleil ou
+  la qualité change. Avec elle, une **carte grossière** (`GROSSIERE`, une case pour 8 × 8 texels : la profondeur la plus proche du
+  soleil), sur la boîte des cartes seulement.
+- **Le décor de la vue** (sa passe à quatre échantillons, `VueDecor`) : quand des cartes portent une ombre, un pipeline de plus
+  (`main4c`) avec le groupe des ombres. Le même `eclairer` que toujours, dont le soleil est multiplié par `soleil_des_cartes` (1 dans
+  tous les autres pipelines : l'image du plan et la vue sans ombres de cartes sont celles d'avant) : la carte grossière d'abord (quatre
+  lectures : aucune carte plus près du soleil dans tout ce que le filtre lirait, c'est 1, exactement), sinon le filtre du décor sur
+  la carte d'ombres des cartes (`soleil_des_cartes_sur_le_decor`, 3 × 3 ou 5 × 5 lectures comparées). C'est le calcul de l'image du
+  plan (`fs_decor_o`), au point du monde du fragment lui-même, et le soleil y est retiré avant la brume, là où le décor le met.
+- **Une carte qui reçoit les ombres** : juste après son dessin (et avant son voile de la partie 183), un rappel de la carte
+  graphique (`decor3dgpu::RecueCarte`) repasse **sur le maillage même qu'egui vient de dessiner** (`card_mesh` : ses sommets, leur
+  coordonnée de dessin interpolée comme egui, `@interpolate(linear)` ; le point du monde de chaque sommet, interpolé en perspective).
+  Il relit le dessin comme egui (valeurs gamma, prémultipliées, à l'opacité du calque), l'assombrit par **le calcul de l'image du
+  plan** (`soleil_vu_par_la_carte` : la carte d'ombres du décor de la vue, puis celle des cartes, à la pente de la carte,
+  `Lumiere::gradient_de` ; `assombrir_carte`), et **retranche la différence de l'écran** (mélange `ReverseSubtract`) : là où l'encre
+  est à demi transparente, ce qui est dessous garde sa part. L'écran d'egui en sRGB : la différence en lumière linéaire.
+- **Le calcul partagé** : le texte des ombres de la composition (partie 185) est sorti de `COMPOSER_OMBRES` en `gpu::OMBRES_COMMUN`
+  (`pcf`, `assombrir_decor`, `assombrir_carte`, `soleil_vu_par_la_carte`, `soleil_des_cartes_sur_le_decor`, les conversions sRGB) avec
+  `gpu::LUMIERE` (le réglage `ombres::Lumiere::octets`, inchangé) ; la composition de l'image du plan et les deux shaders de la vue
+  incluent le même texte. Aucune formule n'est recopiée.
+- **Sans ombres** : `VueDecor::cartes` vaut rien, aucun `RecueCarte` n'est posé ; le décor de la vue passe par ses pipelines d'avant.
+
+### 189.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai. `ombres3d_perf` (nouveau, ignoré :
+`cargo test --lib ombres3d_perf -- --ignored --nocapture`) : l'image d'écran entière de l'application (1920 × 1080, la vue Espace 3D
+en plein écran, 1533 × 559 pixels), huit cartes de personnage debout sur la grille d'essai en sol (180 000 triangles, ciel, brume),
+la vue qui regarde les huit cartes et leurs ombres ; quarante images enchaînées dans la file de la carte graphique comme à l'écran, la
+meilleure de cinq séries, trois passages.
+
+| Huit cartes, vue plein écran | sans ombres de cartes | avec, cartes immobiles | seulement portées | seulement reçues | cartes qui bougent à chaque image |
+|---|---|---|---|---|---|
+| ombres hautes | 4,28 à 4,49 ms | +0,16 à 0,23 ms | +0,07 à 0,16 ms | +0,04 à 0,09 ms | **+0,28 à 0,39 ms** |
+| ombres basses | 2,23 à 2,29 ms | +0,12 à 0,15 ms | +0,06 à 0,10 ms | +0,04 à 0,09 ms | **+0,14 à 0,19 ms** |
+
+- **La carte grossière a été choisie sur ces mesures** : sans elle (l'essai la met à zéro), le filtre du décor sur la carte d'ombres
+  des cartes (25 lectures comparées par fragment en hautes, 9 en basses, partout dans la boîte des cartes) coûte **+2,8 ms** (hautes)
+  et **+1,2 ms** (basses) ; une première carte grossière à fenêtre élargie (400 lectures par case, une dans le décor) coûtait 1,3 ms
+  à chaque image où une carte bouge ; à cases simples lues par quatre texels (`textureGather`, 16 par case) et quatre lectures dans le
+  décor, les chiffres du tableau. Elle ne change rien à l'image (un essai compare au pixel près, bords flous compris, aux deux
+  qualités, et échoue si la fenêtre qu'elle regarde est trop étroite).
+- **La règle des 4 ms** (partie 180) tient : le décor de la vue n'est pas redessiné plus souvent qu'avant (il l'est à chaque image
+  de la vue, comme avant), sa passe garde le même budget de triangles ; les ombres des cartes y ajoutent moins de 0,4 ms. Elles
+  suivent la qualité des ombres du décor : sur un ordinateur « sans ombres », il n'y en a pas, et rien ne coûte.
+- L'essai de durée `espace3dcote_tests::a_stroke_with_the_side_view_open_stays_within_the_frame_budget` (sans décor : rien ne se
+  prépare de plus), seul, trois fois : vue fermée 5,36 à 5,78 ms par image, ouverte 5,68 à 6,90 ms ; il réussit, et dans le passage
+  complet.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony**, avec la superposition « Performance » ouverte, un décor au budget
+et la vue en plein écran.
+
+### 189.4 Essais (`src/ombres3d_tests.rs`, 10 essais dont un ignoré)
+
+L'application entière peinte par la carte graphique, hors de l'écran (le banc des mesures, `perf_tests::Banc` : textures d'egui,
+décor de la vue, cartes, rappels), la vue Espace 3D ouverte en plein écran, les pixels lus là où la vue met les points du monde
+(`View::project`). Sous le soleil des essais de la partie 185 (derrière le décor, à 45°) : **vue de côté**, l'ombre de la carte tombe
+sur la dalle devant elle, aux deux qualités, rien au-delà de sa hauteur, à côté ni derrière ; **la vue tourne** (cinq points de vue,
+de face, de côté, de biais, de haut) : l'ombre reste au même endroit du monde, de la même couleur, et la carte (qui reçoit les
+ombres) n'est pas dans sa propre ombre ; **une boîte haute** derrière la
+carte l'assombrit (deux points de vue ; « Reçoit les ombres » décoché : non) ; **un panneau** ombre un mur (le panneau sans ombre :
+non) ; **la vue comme l'image du plan** : la carte à l'ombre de la boîte et la dalle à l'ombre de la carte ont la couleur de l'image
+composée par `GpuCanvas` (à un niveau près sur ce Mac ; l'essai tolère 6) ; **sans ombres, la vue d'avant au pixel près** (les cases décochées, un calque accroché à
+la caméra, l'aspect sans ombres, un ordinateur sans ombres ; et la vue change bien avec elles) ; **la carte d'ombres des cartes** n'est
+pas refaite quand la vue tourne, refaite une fois quand une carte bouge, une fois pour quatre vues (où l'ombre se voit dans plus
+d'une) ; **la carte grossière ne change rien à l'image** (une carte inclinée, deux barres, un trait fin, deux points de vue, deux
+qualités) ; les nombres et le calcul des shaders de la vue sont ceux du programme et de l'image du plan. `ombres3d_perf` (ignoré) :
+les mesures de 189.3. `ombres_tests`, `profondeur_tests`, `gpu_tests`, `decor3d_tests` passent toujours (le texte des ombres de la
+composition a été rangé, pas changé).
+
+### 189.5 Ce qui n'est pas fait (ou limité)
+
+- **L'ombre d'une carte dans la vue est celle de son dessin tel que la vue le montre** : sans les effets du calque (une lueur large
+  fait une ombre large dans l'image du plan, pas dans la vue, qui ne montre pas les effets).
+- **Une sélection qu'on déplace dans la vue** (partie Sélection de la vue) : pendant le geste, la partie déplacée ne porte pas
+  d'ombre et ne s'assombrit pas ; elle le fait une fois posée.
+- **Un dessin tout neuf** (la première image d'une carte) : son ombre vient à l'image suivante (la carte graphique n'a pas encore sa
+  texture) ; la vue se refait d'elle-même.
+- Comme dans l'image du plan (185.5) : le bord d'une ombre sur une carte est plus net que sur le décor ; ce qui est hors de la boîte
+  du décor ne porte ni ne reçoit ; pas d'ombre colorée ni translucide ; le rendu de secours sans carte graphique (les boîtes en fil
+  de fer) n'a pas d'ombres du tout.
+- Le voile d'une carte (183.5) couvre toujours tout son quadrilatère.
+- Les mesures sont celles d'une vue de 1533 × 559 pixels : la part qui dépend du décor (les fragments dans la boîte des cartes) grandit
+  avec la vue (un écran 4K plein, quatre fois plus de pixels).
+
+### 189.6 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D (une dalle, un arbre) et ses ombres ; un personnage « Aimanté au
+   sol » sur la dalle. Ouvre la vue Espace 3D (plein écran) : **son ombre est sur la dalle**, comme dans le dessin ; tourne autour
+   (clic droit) : elle reste au même endroit du sol, de tous les côtés.
+2. Tourne le soleil (panneau Espace 3D : autour, hauteur) : l'ombre tourne dans la vue et dans le dessin.
+3. Place le personnage à l'ombre de l'arbre (manipulateur de la vue) : **il s'assombrit dans la vue**, puis ressort au soleil.
+4. Deux personnages, l'un entre le soleil et l'autre : le premier ombre le second, dans la vue aussi.
+5. Décoche « Porte une ombre », puis « Reçoit les ombres » (panneau de la carte) : l'ombre disparaît de la vue, la carte ne
+   s'assombrit plus ; Ctrl+Z.
+6. Vues multiples (4 vues) : l'ombre dans la vue de dessus et dans la perspective ; Espace 3D à côté du dessin : de même.
+7. Lecture à 24 i/s d'un plan où le personnage marche, la vue à côté ouverte : **rien ne saccade** (superposition « Performance »).
+8. Décoche « Ombres » dans l'aspect du décor : plus aucune ombre, ni du décor ni des cartes, dans la vue comme dans le dessin.

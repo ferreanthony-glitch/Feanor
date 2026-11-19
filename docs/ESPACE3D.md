@@ -438,6 +438,29 @@ ombre les cartes**. Code : `ombres.rs`.
   `porte_ombre`, `recoit_ombres` quand elles sont décochées, sous le format 61) : dossiers, calques d'effet, d'annotation, accrochés
   à la caméra ; ni la couleur unie d'un calque, ni les pelures d'oignon.
 - **À l'export** avec une carte graphique, la même chose par le processeur (`ombres::Contexte`) avec ce que le rendu du décor a relu
-  (`decor3dgpu::SortieOmbres`) ; sans carte graphique, ni ombres du décor ni ombres de cartes. La vue Espace 3D ne montre pas les
-  ombres des cartes (ses cartes sont dessinées par egui).
+  (`decor3dgpu::SortieOmbres`) ; sans carte graphique, ni ombres du décor ni ombres de cartes. La vue Espace 3D les montre aussi
+  depuis la partie 189 (partie 19 ci-dessous).
 - **Sans décor, ou sans ses ombres**, aucun élément ne porte d'ombre : la composition d'avant, par les mêmes chemins.
+
+
+## 19. Les ombres des cartes dans la vue Espace 3D (2026-11-19, branche `ombres-espace3d`, partie 189 de `docs/INTERFACE.md`)
+
+La vue Espace 3D (plein écran, à côté, vues multiples) montre les ombres de la partie 18 : **une carte porte l'ombre de son encre**
+sur le décor de la vue, **le décor et les autres cartes ombrent une carte**, sous le même soleil, avec les mêmes cases et les mêmes
+exclusions ; justes **de tous les côtés**, puisque les ombres du soleil sont dans le monde. Code : `ombres3d.rs`, et le moteur du décor
+(`decor3dgpu.rs`).
+
+- **La carte d'ombres des cartes de la vue** : les cartes telles que la vue les pose (leurs quatre coins dans le monde, leur dessin :
+  la texture d'egui), vues du soleil avec la matrice de la carte d'ombres du décor (`eclairage`, qui ne dépend pas du point de vue).
+  Une pour toutes les vues, refaite seulement quand une carte, son dessin ou le soleil change (`CartesVue::cle`) ; avec une carte
+  grossière (une profondeur par case de 8 × 8 texels) qui épargne au décor son filtre là où aucune carte ne peut l'ombrer.
+- **Le décor de la vue** (sa passe à quatre échantillons) : son soleil multiplié par ce que les cartes lui en laissent, au point du
+  monde du fragment, avec le filtre du décor (`soleil_des_cartes_sur_le_decor`) : le calcul de l'image du plan.
+- **Une carte de la vue** : ses cartes étant dessinées par egui, un rappel de la carte graphique (`RecueCarte`) repasse juste après
+  elle sur le même maillage et **retranche de l'écran** ce que l'ombre ôte à sa couleur (`soleil_vu_par_la_carte`, `assombrir_carte`,
+  la pente de la carte : jamais dans sa propre ombre), avant son voile (partie 16).
+- **Un seul calcul** : le texte des ombres de la composition (`gpu::LUMIERE`, `gpu::OMBRES_COMMUN`) est inclus tel quel par les
+  shaders de la vue.
+- **Sans les ombres du décor**, ou aucune carte qui porte ou reçoit : rien n'est préparé, la vue d'avant au pixel près. Coût mesuré
+  (huit personnages, 180 000 triangles, vue de 1533 × 559 pixels) : +0,2 ms, +0,4 ms quand les cartes bougent (`docs/INTERFACE.md`,
+  189.3).

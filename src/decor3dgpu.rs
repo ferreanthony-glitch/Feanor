@@ -48,6 +48,15 @@ const VOILE_OCTETS: u64 = 192;
 const PAS_VOILE: u64 = 256;
 const OBJET: u64 = 160;
 const PAS_OBJET: u64 = 256;
+/// Les ombres reçues par une carte de la vue (partie 189, `RECUE`) : ses réglages et leur pas dans le tampon ; ses sommets (le
+/// maillage d'egui, `espace3dview::card_mesh` : (n + 1)² sommets, 6 n² indices au plus) et leur taille.
+const RECUE_OCTETS: u64 = 16;
+const PAS_RECUE: u64 = 256;
+const SOMMETS_RECUE: u64 = ((crate::espace3dview::SUBDIV_CARTE + 1) * (crate::espace3dview::SUBDIV_CARTE + 1)) as u64;
+const INDICES_RECUE: u64 = (crate::espace3dview::SUBDIV_CARTE * crate::espace3dview::SUBDIV_CARTE * 6) as u64;
+const SOMMET_RECUE: u64 = 32;
+/// Un sommet de la carte d'ombres des cartes de la vue : sa place dans le monde, sa coordonnée de dessin, l'opacité du calque.
+const SOMMET_PORTEUSE: u64 = 24;
 /// Triangles au plus par morceau envoyé à la carte (3 millions de sommets × 32 octets : sous les 256 Mo de tampon que toute
 /// carte accepte).
 const TRIANGLES_PAR_MORCEAU: usize = 1_000_000;
@@ -206,7 +215,8 @@ fn eclairer(in: VOut) -> Eclaire {
     if (dot(n, v) < 0.0) { n = -n; }
     let t = n.y * 0.5 + 0.5;
     let hemi = mix(g.ground_amb.rgb, g.sky_amb.rgb, t);
-    let sun = max(dot(n, g.key_dir.xyz), 0.0) * shadow(in.wpos, n);
+    // (Partie 189 : et le soleil que les cartes laissent au décor de la vue Espace 3D ; 1 partout ailleurs, `SANS_CARTES`.)
+    let sun = max(dot(n, g.key_dir.xyz), 0.0) * shadow(in.wpos, n) * soleil_des_cartes(in.wpos);
     var c = base.rgb * (hemi + g.key_col.rgb * sun);
     let d = length(v);
     let f = clamp((d - g.fog.x) / max(g.fog.y - g.fog.x, 0.0001), 0.0, 1.0) * g.fog_col.w;
@@ -256,6 +266,175 @@ fn ciel(in: SkyOut) -> vec4<f32> {
     let k = pow(e, 0.6);
     let c = mix(g.fog_col.rgb, g.zenith.rgb, k);
     return vec4<f32>(finish(c), 1.0);
+}
+"#;
+
+/// Le décor sans ombres de cartes (l'image du plan, et la vue quand ses cartes n'en portent pas) : le soleil reste le sien.
+const SANS_CARTES: &str = r#"
+fn soleil_des_cartes(w: vec3<f32>) -> f32 {
+    return 1.0;
+}
+"#;
+
+/// Le décor de la vue Espace 3D sous les ombres des cartes (partie 189, `ombres3d.rs`) : à la suite de `SHADER`, de la lumière du
+/// décor et du calcul des ombres de la composition (`gpu::LUMIERE`, `gpu::OMBRES_COMMUN`) : chaque point du décor perd le soleil que
+/// les cartes lui cachent, avec le filtre du décor, comme dans l'image du plan (`fs_decor_o`). Ici le point du monde est celui du
+/// fragment lui-même, et le soleil est retiré avant la brume, là où le décor le met.
+const AVEC_CARTES: &str = r#"
+@group(3) @binding(0) var<uniform> eclair: Lumiere;
+@group(3) @binding(1) var ombres_decor: texture_depth_2d;
+@group(3) @binding(2) var ombres_cartes: texture_depth_2d;
+@group(3) @binding(3) var s_cmp: sampler_comparison;
+@group(3) @binding(4) var cartes_au_plus_pres: texture_2d<f32>;
+
+fn soleil_des_cartes(w: vec3<f32>) -> f32 {
+    let l = lum_vers(w);
+    if (eclair.carte.w < 0.5 || !dans_boite(l)) {
+        return 1.0;
+    }
+    // (La carte grossière, `GROSSIERE` : aucune carte n'est plus près du soleil que ce point dans tout ce que le filtre lit autour de
+    // lui, les cases qui couvrent 4 texels de chaque côté ; chaque lecture le verrait au soleil, le filtre rendrait 1 : quatre
+    // lectures au lieu de 9 ou 25 comparées.)
+    let n = vec2<i32>(textureDimensions(cartes_au_plus_pres));
+    let t = l.xy * vec2<f32>(n * 8);
+    let a = clamp(vec2<i32>(floor((t - 4.0) / 8.0)), vec2<i32>(0), n - vec2<i32>(1));
+    let b = clamp(vec2<i32>(floor((t + 4.0) / 8.0)), vec2<i32>(0), n - vec2<i32>(1));
+    let m = min(
+        min(textureLoad(cartes_au_plus_pres, a, 0).r, textureLoad(cartes_au_plus_pres, vec2<i32>(b.x, a.y), 0).r),
+        min(textureLoad(cartes_au_plus_pres, vec2<i32>(a.x, b.y), 0).r, textureLoad(cartes_au_plus_pres, b, 0).r),
+    );
+    if (m >= l.z - BIAIS) {
+        return 1.0;
+    }
+    return soleil_des_cartes_sur_le_decor(l);
+}
+"#;
+
+/// Le côté d'une case de la carte grossière (`GROSSIERE`), en texels de la carte d'ombres des cartes (le décor de la vue y lit les
+/// cases qui couvrent 4 texels de chaque côté de son point : toute lecture du filtre du décor, au plus 2 × `ombres::PAS` = 3 texels
+/// du point, plus le texel voisin de la lecture bilinéaire, y tombe).
+const CASE_GROSSIERE: u32 = 8;
+
+/// La carte grossière des cartes de la vue (partie 189) : pour chaque case de `CASE_GROSSIERE` texels de côté de la carte d'ombres des
+/// cartes, la profondeur la plus proche du soleil (16 lectures de quatre texels). Le décor de la vue la lit d'abord : là où aucune
+/// carte n'est plus près du soleil que lui, le filtre rendrait 1 à coup sûr (le même résultat, sans ses lectures). Refaite avec la
+/// carte d'ombres des cartes, sur la boîte des cartes.
+const GROSSIERE: &str = r#"
+@group(0) @binding(0) var carte: texture_depth_2d;
+@group(0) @binding(1) var s_carte: sampler;
+
+@vertex
+fn vs_g(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((i << 1u) & 2u);
+    let y = f32(i & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs_g(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let texel = 1.0 / vec2<f32>(textureDimensions(carte));
+    let c = floor(pos.xy) * 8.0;
+    var m = 1.0;
+    for (var y = 0; y < 4; y = y + 1) {
+        for (var x = 0; x < 4; x = x + 1) {
+            // (Les quatre texels autour du coin (2x + 1, 2y + 1) de la case.)
+            let q = textureGather(carte, s_carte, (c + vec2<f32>(f32(2 * x + 1), f32(2 * y + 1))) * texel);
+            m = min(m, min(min(q.x, q.y), min(q.z, q.w)));
+        }
+    }
+    return vec4<f32>(m, 0.0, 0.0, 1.0);
+}
+"#;
+
+/// La carte d'ombres des cartes de la vue Espace 3D (partie 189) : chaque carte qui porte une ombre, ses quatre coins dans le monde
+/// vus du soleil (la matrice de la carte d'ombres du décor), là où son encre est au moins à moitié opaque. Comme `fs_ombre` de
+/// `gpu.rs`, qui la fait pour l'image du plan (où les cartes sont dans la feuille et relevées sur leur plan).
+const PORTEUSES: &str = r#"
+@group(0) @binding(0) var<uniform> eclair: Lumiere;
+@group(1) @binding(0) var t_carte: texture_2d<f32>;
+@group(1) @binding(1) var s_carte: sampler;
+
+// `ombres::SEUIL_ALPHA`.
+const SEUIL_ALPHA: f32 = 0.5;
+
+struct POut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) opacite: f32,
+};
+
+@vertex
+fn vs_porteuse(@location(0) p: vec3<f32>, @location(1) uv: vec2<f32>, @location(2) opacite: f32) -> POut {
+    let q = eclair.light_vp * vec4<f32>(p, 1.0);
+    var o: POut;
+    // (Ce qui est entre le soleil et la carte d'ombres cache tout : ramené au plus près, comme `gpu.rs`.)
+    o.pos = vec4<f32>(q.x, q.y, clamp(q.z, 0.0, 1.0), 1.0);
+    o.uv = uv;
+    o.opacite = opacite;
+    return o;
+}
+
+@fragment
+fn fs_porteuse(o: POut) {
+    if (textureSampleLevel(t_carte, s_carte, o.uv, 0.0).a * o.opacite < SEUIL_ALPHA) {
+        discard;
+    }
+}
+"#;
+
+/// L'ombre reçue par une carte de la vue Espace 3D (partie 189), posée juste après la carte dans la passe d'egui : sur le même
+/// maillage (les mêmes triangles, la même lecture du dessin, `@interpolate(linear)` comme les sommets d'egui), la couleur qu'egui y
+/// a mise, assombrie comme dans l'image du plan (`soleil_vu_par_la_carte`, `assombrir_carte` : le décor et les autres cartes, la
+/// pente de la carte dans la carte d'ombres), est **retranchée** de l'écran (`ReverseSubtract`) : ce qui est sous une encre à demi
+/// transparente garde sa part, au pixel près.
+const RECUE: &str = r#"
+@group(0) @binding(0) var<uniform> eclair: Lumiere;
+@group(0) @binding(1) var ombres_decor: texture_depth_2d;
+@group(0) @binding(2) var ombres_cartes: texture_depth_2d;
+@group(0) @binding(3) var s_cmp: sampler_comparison;
+
+struct Recue {
+    reglage: vec4<f32>,   // pente de la carte dans la carte d'ombres (x, y) ; opacité du calque ; écran en sRGB (1/0)
+};
+@group(1) @binding(0) var<uniform> recue: Recue;
+@group(2) @binding(0) var t_carte: texture_2d<f32>;
+@group(2) @binding(1) var s_carte: sampler;
+
+struct ROut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) @interpolate(linear) uv: vec2<f32>,
+    @location(1) monde: vec3<f32>,
+};
+
+@vertex
+fn vs_recue(@location(0) ndc: vec2<f32>, @location(1) uv: vec2<f32>, @location(2) monde: vec3<f32>, @location(3) w: f32) -> ROut {
+    var o: ROut;
+    // (Le w de la vue : le point du monde est interpolé en perspective, juste en chaque pixel ; la lecture du dessin, elle, est
+    // linéaire à l'écran comme celle d'egui.)
+    o.pos = vec4<f32>(ndc * w, 0.5 * w, w);
+    o.uv = uv;
+    o.monde = monde;
+    return o;
+}
+
+@fragment
+fn fs_recue(o: ROut) -> @location(0) vec4<f32> {
+    let t = textureSample(t_carte, s_carte, o.uv);
+    // Ce qu'egui a posé : le dessin en valeurs gamma, prémultiplié, à l'opacité du calque.
+    let p = vec4<f32>(vers_srgb(t.rgb), t.a) * recue.reglage.z;
+    if (p.a <= 0.0) {
+        discard;
+    }
+    let vis = soleil_vu_par_la_carte(lum_vers(o.monde), recue.reglage.xy);
+    if (vis >= 1.0) {
+        discard;
+    }
+    let s = assombrir_carte(p, 1.0 - vis);
+    var d = p.rgb - s.rgb;
+    if (recue.reglage.w > 0.5) {
+        d = vers_lin(p.rgb) - vers_lin(s.rgb);
+    }
+    return vec4<f32>(max(d, vec3<f32>(0.0)), 0.0);
 }
 "#;
 
@@ -412,6 +591,46 @@ struct Prise3 {
     passe: Option<Passe>,
     /// Les réglages des voiles des cartes de cette vue, un pas de `PAS_VOILE` par carte, et leur capacité (partie 183).
     voiles: Option<(wgpu::Buffer, wgpu::BindGroup, u64)>,
+    /// Les ombres des cartes de cette vue (partie 189) : la lumière de sa dernière passe et le groupe des deux cartes d'ombres (rien :
+    /// pas d'ombres de cartes à cette image) ; les ombres reçues par ses cartes.
+    ombres_vue: Option<(crate::ombres::Lumiere, wgpu::BindGroup)>,
+    recues: Option<Recues>,
+}
+
+/// Les ombres reçues par les cartes d'une vue (partie 189) : un pas par carte dans chaque tampon, et leur capacité.
+struct Recues {
+    reglages: wgpu::Buffer,
+    groupe: wgpu::BindGroup,
+    sommets: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    capacite: u64,
+    /// Pour chaque carte de cette image : le groupe de son dessin et le nombre de ses indices.
+    cartes: Vec<Option<(wgpu::BindGroup, u32)>>,
+}
+
+/// Ce que les ombres des cartes de la vue Espace 3D partagent entre les vues (partie 189), fait à la première qui en a besoin : les
+/// pipelines, la lumière, et **la carte d'ombres des cartes** (le soleil est le même de partout : elle ne dépend pas du point de vue),
+/// refaite seulement quand une carte, son dessin ou le soleil a changé (`cle`).
+struct OmbresVue {
+    main4c: wgpu::RenderPipeline,
+    porteuses: wgpu::RenderPipeline,
+    recue_shader: wgpu::ShaderModule,
+    recue: Option<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
+    layout_ombres: wgpu::BindGroupLayout,
+    layout_recue: wgpu::BindGroupLayout,
+    layout_carte: wgpu::BindGroupLayout,
+    lumiere: wgpu::Buffer,
+    groupe_lumiere: wgpu::BindGroup,
+    echant_carte: wgpu::Sampler,
+    carte: Option<(u32, wgpu::TextureView)>,
+    /// La carte grossière (`GROSSIERE`), son pipeline et ce qu'il lit ; une vide (aucune carte ne porte d'ombre).
+    grossiere: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    grossiere_pipe: wgpu::RenderPipeline,
+    layout_grossiere: wgpu::BindGroupLayout,
+    grossiere_vide: wgpu::TextureView,
+    echant_proche: wgpu::Sampler,
+    cle: Option<u64>,
+    sommets: Option<(wgpu::Buffer, u64)>,
 }
 
 /// Ce que le voile d'une carte de la vue lit de la passe du décor (`Prise3::passe`).
@@ -473,6 +692,10 @@ pub struct Moteur {
     max_texture: u32,
     /// Triangles dessinés par la dernière passe (essais, mesures).
     pub dessines: usize,
+    /// Les ombres des cartes de la vue Espace 3D (partie 189).
+    vue_ombres: Option<Box<OmbresVue>>,
+    /// Cartes d'ombres des cartes de la vue dessinées depuis le début (essais : gardée quand rien n'a bougé).
+    pub cartes_d_ombres_faites: u64,
 }
 
 /// Une chose à dessiner : un décor (sa scène, pour l'envoyer s'il n'est pas encore dans la carte) et sa matrice.
@@ -596,7 +819,7 @@ fn put(bytes: &mut [u8], at: usize, values: &[f32]) {
 
 impl Moteur {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Moteur {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D"), source: wgpu::ShaderSource::Wgsl(format!("{SHADER}{SANS_CARTES}").into()) });
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : poser"), source: wgpu::ShaderSource::Wgsl(BLIT.into()) });
         let voile_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : voile des cartes"), source: wgpu::ShaderSource::Wgsl(VOILE.into()) });
         let voile_layout_reglages = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -797,6 +1020,8 @@ impl Moteur {
             debut: 0,
             max_texture: device.limits().max_texture_dimension_2d,
             dessines: 0,
+            vue_ombres: None,
+            cartes_d_ombres_faites: 0,
         }
     }
 
@@ -909,7 +1134,7 @@ impl Moteur {
             let globals = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D globale"), size: GLOBAL, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
             let groupe_global = groupe_global(device, &self.layout_global, &globals, &self.ombre_vide, &self.echant_ombre);
             let (objets, groupe_objets) = tampon_objets(device, &self.layout_objet, 16);
-            Prise3 { globals, groupe_global, objets, groupe_objets, capacite: 16, cibles: None, ombre: None, ombre_tex: None, ombre_faite: false, utilise: tic, passe: None, voiles: None }
+            Prise3 { globals, groupe_global, objets, groupe_objets, capacite: 16, cibles: None, ombre: None, ombre_tex: None, ombre_faite: false, utilise: tic, passe: None, voiles: None, ombres_vue: None, recues: None }
         });
         entry.utilise = tic;
         if n > entry.capacite {
@@ -944,6 +1169,7 @@ impl Moteur {
         echantillons: u32,
         ciel: bool,
         qualite: crate::decor3dbudget::Qualite,
+        cartes: Option<&CartesVue>,
     ) {
         self.debut = self.tic + 1;
         for d in dessins {
@@ -1022,6 +1248,16 @@ impl Moteur {
                 p.groupe_global = groupe_global(device, &layout, &p.globals, &p.ombre.as_ref().expect("ombre").1, &echant);
             }
         }
+        // Les ombres des cartes de la vue (partie 189) : seulement quand le décor a ses ombres ; la carte d'ombres des cartes (gardée
+        // si rien n'a bougé), et le groupe que le décor et les cartes de cette vue en lisent.
+        let lum = cartes.filter(|_| ombres && echantillons == ECHANTILLONS_VUE).and_then(|_| crate::ombres::Lumiere::de(&ec, &aspect, &Prise { oeil: oe, droite: r, haut: u, avant: f, px_par_unite: 1.0, centre: [0.0; 2], proche: 0.01 }));
+        let decor_cartes = match (lum, cartes) {
+            (Some(lum), Some(cv)) => self.preparer_ombres_vue(device, queue, encoder, cle, n, cv, lum),
+            _ => {
+                self.prise(device, cle, n).ombres_vue = None;
+                None
+            }
+        };
         let p = self.prise(device, cle, n);
         p.passe = Some(Passe { vp, oeil: oe, avant: f, proche, loin, ortho: est_ortho, taille_px });
         p.ombre_faite = ombres;
@@ -1077,7 +1313,14 @@ impl Moteur {
             pass.set_bind_group(2, &self.blanc, &[]);
             pass.draw(0..3, 0..1);
         }
-        pass.set_pipeline(if echantillons > 1 { &self.main4 } else if avec_soleil { &self.main1s } else { &self.main1 });
+        match (&decor_cartes, self.vue_ombres.as_ref()) {
+            // (Partie 189 : le décor de la vue sous les ombres des cartes.)
+            (Some(groupe), Some(ov)) if echantillons > 1 => {
+                pass.set_pipeline(&ov.main4c);
+                pass.set_bind_group(3, groupe, &[]);
+            }
+            _ => pass.set_pipeline(if echantillons > 1 { &self.main4 } else if avec_soleil { &self.main1s } else { &self.main1 }),
+        }
         self.poser(&mut pass, dessins, &groupe_objets, &mut dessines, true);
         drop(pass);
         self.dessines = dessines;
@@ -1114,7 +1357,7 @@ impl Moteur {
     /// les cartes peuvent en porter ; rien : deux cibles, comme avant.
     pub fn dessiner_feuille(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], cible: &wgpu::TextureView, prof: &wgpu::TextureView, soleil: Option<&wgpu::TextureView>, ciel: bool, qualite: crate::decor3dbudget::Qualite) {
         let profondeur = self.cibles(device, cle, taille, 1, false).profondeur.clone();
-        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur, Some(prof), soleil, 1, ciel, qualite);
+        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur, Some(prof), soleil, 1, ciel, qualite, None);
     }
 
     /// La carte d'ombres du soleil de la dernière passe de la prise `cle`, si elle en a dessiné une (partie 185 : les cartes qui
@@ -1162,10 +1405,12 @@ impl Moteur {
 
     /// L'image de la vue Espace 3D : dans les cibles lissées de la prise `cle`, à poser ensuite par `poser_vue`.
     #[allow(clippy::too_many_arguments)]
-    pub fn dessiner_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], vue: &Vue, taille_pts: [f32; 2], taille_px: [u32; 2], qualite: crate::decor3dbudget::Qualite) {
+    ///
+    /// `cartes` (partie 189) : les cartes de la vue qui portent une ombre, quand le décor a ses ombres ; rien : comme avant.
+    pub fn dessiner_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], vue: &Vue, taille_pts: [f32; 2], taille_px: [u32; 2], qualite: crate::decor3dbudget::Qualite, cartes: Option<&CartesVue>) {
         let c = self.cibles(device, cle, taille_px, ECHANTILLONS_VUE, true);
         let (couleur, profondeur, resolue) = (c.couleur.clone(), c.profondeur.clone(), c.resolue.as_ref().map(|r| r.0.clone()));
-        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, None, None, ECHANTILLONS_VUE, false, qualite);
+        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, None, None, ECHANTILLONS_VUE, false, qualite, cartes);
     }
 
     /// Pose l'image de la vue `cle` dans la passe d'egui.
@@ -1243,6 +1488,307 @@ impl Moteur {
         pass.draw(0..6, 0..1);
     }
 
+    /// Les pipelines et la lumière des ombres des cartes de la vue (partie 189), faits la première fois qu'une vue en a besoin.
+    fn assurer_ombres_vue(&mut self, device: &wgpu::Device) {
+        if self.vue_ombres.is_some() {
+            return;
+        }
+        let commun = format!("{}{}", crate::gpu::LUMIERE, crate::gpu::OMBRES_COMMUN);
+        let shader_decor = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : ombres des cartes"), source: wgpu::ShaderSource::Wgsl(format!("{SHADER}{commun}{AVEC_CARTES}").into()) });
+        let shader_porteuses = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : carte d'ombres des cartes"), source: wgpu::ShaderSource::Wgsl(format!("{}{PORTEUSES}", crate::gpu::LUMIERE).into()) });
+        let recue_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : ombres reçues par les cartes"), source: wgpu::ShaderSource::Wgsl(format!("{commun}{RECUE}").into()) });
+        let lumiere_entree = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: NonZeroU64::new(crate::ombres::OCTETS) },
+            count: None,
+        };
+        let profondeur = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let layout_ombres = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : ombres des cartes de la vue"),
+            entries: &[
+                lumiere_entree(0),
+                profondeur(1),
+                profondeur(2),
+                wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison), count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+            ],
+        });
+        let layout_grossiere = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : carte grossière des cartes"),
+            entries: &[profondeur(0), wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering), count: None }],
+        });
+        let echant_proche = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("décor 3D : carte grossière des cartes"), ..Default::default() });
+        let shader_grossiere = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : carte grossière des cartes"), source: wgpu::ShaderSource::Wgsl(GROSSIERE.into()) });
+        let layout_g = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : carte grossière des cartes"), bind_group_layouts: &[&layout_grossiere], push_constant_ranges: &[] });
+        let grossiere_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("décor 3D : carte grossière des cartes"),
+            layout: Some(&layout_g),
+            vertex: wgpu::VertexState { module: &shader_grossiere, entry_point: Some("vs_g"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &shader_grossiere, entry_point: Some("fs_g"), targets: &[Some(wgpu::ColorTargetState { format: GROSSIERE_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let grossiere_vide = texture_grossiere(device, 1);
+        let layout_lumiere = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("décor 3D : lumière des cartes"), entries: &[lumiere_entree(0)] });
+        let layout_carte = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : dessin d'une carte"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+            ],
+        });
+        let layout_recue = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : ombres reçues, réglages"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: NonZeroU64::new(RECUE_OCTETS) },
+                count: None,
+            }],
+        });
+        // Le décor de la vue, comme `main4`, avec le groupe des ombres des cartes.
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : ombres des cartes"), bind_group_layouts: &[&self.layout_global, &self.layout_objet, &self.layout_texture, &layout_ombres], push_constant_ranges: &[] });
+        const ATTR: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+        let main4c = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("décor 3D : vue sous les ombres des cartes"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState { module: &shader_decor, entry_point: Some("vs_main"), buffers: &[wgpu::VertexBufferLayout { array_stride: 32, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTR }], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &shader_decor, entry_point: Some("fs_main"), targets: &[Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState { format: PROFONDEUR, depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() }),
+            multisample: wgpu::MultisampleState { count: ECHANTILLONS_VUE, mask: !0, alpha_to_coverage_enabled: false },
+            multiview: None,
+            cache: None,
+        });
+        let layout_p = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : carte d'ombres des cartes"), bind_group_layouts: &[&layout_lumiere, &layout_carte], push_constant_ranges: &[] });
+        const ATTR_P: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32];
+        let porteuses = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("décor 3D : carte d'ombres des cartes"),
+            layout: Some(&layout_p),
+            vertex: wgpu::VertexState { module: &shader_porteuses, entry_point: Some("vs_porteuse"), buffers: &[wgpu::VertexBufferLayout { array_stride: SOMMET_PORTEUSE, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTR_P }], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &shader_porteuses, entry_point: Some("fs_porteuse"), targets: &[], compilation_options: Default::default() }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState { format: PROFONDEUR, depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let lumiere = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D : lumière des cartes"), size: crate::ombres::OCTETS, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let groupe_lumiere = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("décor 3D : lumière des cartes"), layout: &layout_lumiere, entries: &[wgpu::BindGroupEntry { binding: 0, resource: lumiere.as_entire_binding() }] });
+        // (Le dessin d'une carte lu comme egui le lit : bilinéaire, bords répétés.)
+        let echant_carte = device.create_sampler(&wgpu::SamplerDescriptor { label: Some("décor 3D : dessin d'une carte"), mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
+        self.vue_ombres = Some(Box::new(OmbresVue { main4c, porteuses, recue_shader, recue: None, layout_ombres, layout_recue, layout_carte, lumiere, groupe_lumiere, echant_carte, carte: None, grossiere: None, grossiere_pipe, layout_grossiere, grossiere_vide, echant_proche, cle: None, sommets: None }));
+    }
+
+    /// Les ombres des cartes de la vue `cle` à cette image (partie 189), sous la lumière `lum` de sa passe : la carte d'ombres des
+    /// cartes (refaite seulement si une carte, son dessin ou le soleil a bougé depuis la dernière, toutes vues comprises), les
+    /// réglages de la lumière, et le groupe que la vue en lit. Rend ce groupe si des cartes portent une ombre (le décor les lit).
+    #[allow(clippy::too_many_arguments)]
+    fn preparer_ombres_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, n: u64, cv: &CartesVue, lum: crate::ombres::Lumiere) -> Option<wgpu::BindGroup> {
+        self.assurer_ombres_vue(device);
+        let cote = lum.cote.max(1);
+        let boite = if cv.porteuses.is_empty() { None } else { Some(crate::ombres::boite_de(&lum, cv.porteuses.iter().flat_map(|p| p.coins)).unwrap_or([0.0, 0.0, 1.0, 1.0])) };
+        let cle_carte = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            (cv.cle, cote, lum.light_vp.map(f32::to_bits)).hash(&mut h);
+            #[cfg(test)]
+            ESSAI_SANS_GROSSIERE.with(|e| e.get()).hash(&mut h);
+            h.finish()
+        };
+        let ov = self.vue_ombres.as_mut().expect("ombres de la vue");
+        if boite.is_some() && (ov.cle != Some(cle_carte) || ov.carte.as_ref().is_none_or(|(c, _)| *c != cote)) {
+            if ov.carte.as_ref().is_none_or(|(c, _)| *c != cote) {
+                let tex = texture_profondeur_t(device, [cote, cote], 1, true);
+                let vue = tex.create_view(&Default::default());
+                let g = texture_grossiere(device, cote.div_ceil(CASE_GROSSIERE));
+                let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("décor 3D : carte grossière des cartes"), layout: &ov.layout_grossiere, entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&vue) }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&ov.echant_proche) }] });
+                ov.carte = Some((cote, vue));
+                ov.grossiere = Some((g, groupe));
+            }
+            // Les sommets des cartes : six par carte (deux triangles), leurs coins dans le monde.
+            let mut data: Vec<f32> = Vec::with_capacity(cv.porteuses.len() * 36);
+            for p in &cv.porteuses {
+                let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+                for k in [0usize, 1, 2, 0, 2, 3] {
+                    data.extend_from_slice(&p.coins[k]);
+                    data.extend_from_slice(&uv[k]);
+                    data.push(p.opacite);
+                }
+            }
+            let octets = (data.len() as u64 * 4).max(SOMMET_PORTEUSE);
+            if ov.sommets.as_ref().is_none_or(|(_, c)| *c < octets) {
+                let cap = octets.next_power_of_two();
+                ov.sommets = Some((device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D : cartes vues du soleil"), size: cap, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false }), cap));
+            }
+            let (sommets, _) = ov.sommets.as_ref().expect("sommets");
+            queue.write_buffer(sommets, 0, bytemuck::cast_slice(&data));
+            let groupes: Vec<wgpu::BindGroup> = cv.porteuses.iter().map(|p| groupe_texture(device, &ov.layout_carte, &p.texture.create_view(&Default::default()), &ov.echant_carte)).collect();
+            let (_, vue) = ov.carte.as_ref().expect("carte d'ombres des cartes");
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("décor 3D : carte d'ombres des cartes"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: vue, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }), stencil_ops: None }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&ov.porteuses);
+            pass.set_bind_group(0, &ov.groupe_lumiere, &[]);
+            pass.set_vertex_buffer(0, sommets.slice(..));
+            for (k, g) in groupes.iter().enumerate() {
+                pass.set_bind_group(1, g, &[]);
+                pass.draw(k as u32 * 6..k as u32 * 6 + 6, 0..1);
+            }
+            drop(pass);
+            // Puis la carte grossière, d'après elle.
+            let (gv, gg) = ov.grossiere.as_ref().expect("carte grossière");
+            #[cfg(not(test))]
+            let sans = false;
+            #[cfg(test)]
+            let sans = ESSAI_SANS_GROSSIERE.with(|e| e.get());
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("décor 3D : carte grossière des cartes"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: gv, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(if sans { wgpu::Color::BLACK } else { wgpu::Color::WHITE }), store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            // (Seulement sur la boîte des cartes : le décor ne la lit pas ailleurs.)
+            let nc = cote.div_ceil(CASE_GROSSIERE);
+            let b = boite.expect("boîte des cartes").map(|v| v.clamp(0.0, 1.0) * nc as f32);
+            let (x0, y0) = ((b[0].floor() as u32).min(nc - 1), (b[1].floor() as u32).min(nc - 1));
+            let (x1, y1) = ((b[2].ceil() as u32).clamp(x0 + 1, nc), (b[3].ceil() as u32).clamp(y0 + 1, nc));
+            pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
+            pass.set_pipeline(&ov.grossiere_pipe);
+            pass.set_bind_group(0, gg, &[]);
+            if !sans {
+                pass.draw(0..3, 0..1);
+            }
+            drop(pass);
+            ov.cle = Some(cle_carte);
+            self.cartes_d_ombres_faites += 1;
+        }
+        let ov = self.vue_ombres.as_ref().expect("ombres de la vue");
+        // (Le même de toutes les vues : la carte d'ombres et sa boîte ne dépendent pas du point de vue.)
+        queue.write_buffer(&ov.lumiere, 0, &lum.octets([1.0, 1.0], boite, true));
+        let (cartes, grossiere) = match (boite, ov.carte.as_ref(), ov.grossiere.as_ref()) {
+            (Some(_), Some((_, v)), Some((g, _))) => (v.clone(), g.clone()),
+            _ => (self.ombre_vide.clone(), ov.grossiere_vide.clone()),
+        };
+        let (layout, lumiere) = (ov.layout_ombres.clone(), ov.lumiere.clone());
+        let echant = self.echant_ombre.clone();
+        let p = self.prise(device, cle, n);
+        let decor = p.ombre.as_ref().map(|(_, v)| v.clone())?;
+        let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("décor 3D : ombres des cartes de la vue"),
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: lumiere.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&decor) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&cartes) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&echant) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&grossiere) },
+            ],
+        });
+        p.ombres_vue = Some((lum, groupe.clone()));
+        boite.map(|_| groupe)
+    }
+
+    /// Les réglages de l'ombre reçue par la carte `rang` de la vue `cle` (partie 189), d'après la dernière passe du décor de cette
+    /// vue. Faux : la vue n'a pas d'ombres de cartes à cette image (rien à poser).
+    fn preparer_recue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, r: &RecueCarte) -> bool {
+        let format = r.cible_egui;
+        let Some(ov) = self.vue_ombres.as_mut() else { return false };
+        if ov.recue.as_ref().is_none_or(|(f, _)| *f != format) {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : ombres reçues"), bind_group_layouts: &[&ov.layout_ombres, &ov.layout_recue, &ov.layout_carte], push_constant_ranges: &[] });
+            const ATTR: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x3, 3 => Float32];
+            // (L'écran moins ce que l'ombre retire de la carte ; l'alpha de l'écran ne change pas.)
+            let blend = wgpu::BlendState {
+                color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::ReverseSubtract },
+                alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
+            };
+            let pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("décor 3D : ombres reçues par les cartes"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState { module: &ov.recue_shader, entry_point: Some("vs_recue"), buffers: &[wgpu::VertexBufferLayout { array_stride: SOMMET_RECUE, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTR }], compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState { module: &ov.recue_shader, entry_point: Some("fs_recue"), targets: &[Some(wgpu::ColorTargetState { format, blend: Some(blend), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+            ov.recue = Some((format, pipe));
+        }
+        let (layout_recue, layout_carte, echant) = (ov.layout_recue.clone(), ov.layout_carte.clone(), ov.echant_carte.clone());
+        let Some(p) = self.prises.get_mut(&r.cle) else { return false };
+        let Some((lum, _)) = p.ombres_vue.as_ref() else { return false };
+        let n = r.indices.len().min(INDICES_RECUE as usize);
+        if r.sommets.len() as u64 > SOMMETS_RECUE * SOMMET_RECUE / 4 || n == 0 {
+            return false;
+        }
+        let g = lum.gradient_de(r.normale);
+        let besoin = (r.rang.max(r.total.saturating_sub(1)) as u64 + 1).max(1);
+        if p.recues.as_ref().is_none_or(|v| v.capacite < besoin) {
+            let cap = besoin.next_power_of_two().max(4);
+            let tampon = |label: &str, size: u64, usage: wgpu::BufferUsages| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: usage | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            let reglages = tampon("décor 3D : ombres reçues, réglages", PAS_RECUE * cap, wgpu::BufferUsages::UNIFORM);
+            let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("décor 3D : ombres reçues, réglages"),
+                layout: &layout_recue,
+                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &reglages, offset: 0, size: NonZeroU64::new(RECUE_OCTETS) }) }],
+            });
+            let sommets = tampon("décor 3D : ombres reçues, sommets", SOMMETS_RECUE * SOMMET_RECUE * cap, wgpu::BufferUsages::VERTEX);
+            let indices = tampon("décor 3D : ombres reçues, indices", INDICES_RECUE * 4 * cap, wgpu::BufferUsages::INDEX);
+            p.recues = Some(Recues { reglages, groupe, sommets, indices, capacite: cap, cartes: Vec::new() });
+        }
+        let v = p.recues.as_mut().expect("ombres reçues");
+        let rang = r.rang as u64;
+        queue.write_buffer(&v.reglages, rang * PAS_RECUE, bytemuck::cast_slice(&[g[0], g[1], r.opacite, if format.is_srgb() { 1.0f32 } else { 0.0 }]));
+        queue.write_buffer(&v.sommets, rang * SOMMETS_RECUE * SOMMET_RECUE, bytemuck::cast_slice(&r.sommets));
+        queue.write_buffer(&v.indices, rang * INDICES_RECUE * 4, bytemuck::cast_slice(&r.indices[..n]));
+        if v.cartes.len() <= r.rang as usize {
+            v.cartes.resize(r.rang as usize + 1, None);
+        }
+        v.cartes[r.rang as usize] = Some((groupe_texture(device, &layout_carte, &r.texture.create_view(&Default::default()), &echant), n as u32));
+        true
+    }
+
+    /// Pose l'ombre reçue par la carte `rang` de la vue `cle` dans la passe d'egui.
+    fn poser_recue(&self, pass: &mut wgpu::RenderPass<'static>, cle: u64, rang: u32) {
+        let Some((_, pipe)) = self.vue_ombres.as_ref().and_then(|o| o.recue.as_ref()) else { return };
+        let Some(p) = self.prises.get(&cle) else { return };
+        let (Some((_, groupe)), Some(v)) = (p.ombres_vue.as_ref(), p.recues.as_ref()) else { return };
+        let Some(Some((dessin, n))) = v.cartes.get(rang as usize) else { return };
+        let r = rang as u64;
+        pass.set_pipeline(pipe);
+        pass.set_bind_group(0, groupe, &[]);
+        pass.set_bind_group(1, &v.groupe, &[(r * PAS_RECUE) as u32]);
+        pass.set_bind_group(2, dessin, &[]);
+        pass.set_vertex_buffer(0, v.sommets.slice(r * SOMMETS_RECUE * SOMMET_RECUE..(r + 1) * SOMMETS_RECUE * SOMMET_RECUE));
+        pass.set_index_buffer(v.indices.slice(r * INDICES_RECUE * 4..(r + 1) * INDICES_RECUE * 4), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..*n, 0, 0..1);
+    }
+
     /// Les prises qui ne servent plus (une vue multiple fermée) rendent leurs cibles.
     pub fn menage(&mut self) {
         let tic = self.tic;
@@ -1303,6 +1849,32 @@ fn texture_profondeur_t(device: &wgpu::Device, taille: [u32; 2], echantillons: u
         })
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Essais (partie 189) : la carte grossière à zéro (le décor fait toujours son filtre entier), pour vérifier qu'elle ne change
+    /// rien à l'image.
+    pub(crate) static ESSAI_SANS_GROSSIERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Le format de la carte grossière des cartes de la vue (partie 189, `GROSSIERE`) : une profondeur par case.
+const GROSSIERE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+
+/// La carte grossière d'une carte d'ombres des cartes : `cote` cases de côté, vide (1 : rien près du soleil).
+fn texture_grossiere(device: &wgpu::Device, cote: u32) -> wgpu::TextureView {
+    device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("décor 3D : carte grossière des cartes"),
+            size: wgpu::Extent3d { width: cote.max(1), height: cote.max(1), depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: GROSSIERE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default())
+}
+
 fn texture_couleur(device: &wgpu::Device, taille: [u32; 2], echantillons: u32, lue: bool) -> wgpu::TextureView {
     device
         .create_texture(&wgpu::TextureDescriptor {
@@ -1328,6 +1900,9 @@ pub struct VueDecor {
     pub taille_pts: [f32; 2],
     pub cible_egui: wgpu::TextureFormat,
     pub qualite: crate::decor3dbudget::Qualite,
+    /// Les cartes qui portent une ombre et celles qui la reçoivent (partie 189, `ombres3d.rs`), quand le décor a ses ombres ; rien :
+    /// le décor de la vue comme avant, au même coût.
+    pub cartes: Option<Arc<CartesVue>>,
 }
 
 impl CallbackTrait for VueDecor {
@@ -1339,7 +1914,7 @@ impl CallbackTrait for VueDecor {
         mt.assurer_blit(device, queue, self.cible_egui);
         let ppp = screen.pixels_per_point;
         let px = [((self.taille_pts[0] * ppp).round() as u32).max(1), ((self.taille_pts[1] * ppp).round() as u32).max(1)];
-        mt.dessiner_vue(device, queue, encoder, self.cle, &self.dessins, &self.vue, self.taille_pts, px, self.qualite);
+        mt.dessiner_vue(device, queue, encoder, self.cle, &self.dessins, &self.vue, self.taille_pts, px, self.qualite, self.cartes.as_deref());
         mt.menage();
         Vec::new()
     }
@@ -1375,6 +1950,63 @@ impl CallbackTrait for VoileCarte {
     fn paint(&self, _info: egui::PaintCallbackInfo, pass: &mut wgpu::RenderPass<'static>, resources: &CallbackResources) {
         if let Some(mt) = resources.get::<Moteur>() {
             mt.poser_voile(pass, self.cle, self.rang);
+        }
+    }
+}
+
+/// Une carte de la vue Espace 3D qui porte une ombre (partie 189) : ses quatre coins dans le monde (haut gauche, haut droit, bas droit,
+/// bas gauche : `Monde::card_corners`), son dessin tel que la vue le montre (la texture d'egui) et l'opacité de son calque.
+#[derive(Clone)]
+pub struct PorteuseVue {
+    pub coins: [V3; 4],
+    pub texture: wgpu::Texture,
+    pub opacite: f32,
+}
+
+/// Les cartes de la vue Espace 3D qui portent une ombre (partie 189, `ombres3d.rs`), et l'empreinte de ce qui fait leur ombre (leurs
+/// coins, leur dessin, leur opacité) : la carte d'ombres des cartes n'est refaite que si elle change.
+#[derive(Clone)]
+pub struct CartesVue {
+    pub porteuses: Vec<PorteuseVue>,
+    pub cle: u64,
+}
+
+/// L'ombre reçue par une carte de la vue Espace 3D (partie 189, `ombres3d.rs`) : posée juste après le dessin de la carte (et avant
+/// son voile, partie 183), elle retire de la carte le soleil que le décor et les autres cartes lui cachent, comme dans l'image du
+/// plan. Sur le maillage même qu'egui vient de dessiner.
+pub struct RecueCarte {
+    pub cle: u64,
+    /// Le rang de la carte parmi celles qui reçoivent les ombres dans cette vue à cette image, et leur nombre (la place à prévoir).
+    pub rang: u32,
+    pub total: u32,
+    /// Les sommets du maillage d'egui (`espace3dview::card_mesh`) : place dans la zone de la vue (de −1 à 1), coordonnée du dessin,
+    /// point du monde, w de la vue (1 en orthographique) ; et ses triangles.
+    pub sommets: Vec<f32>,
+    pub indices: Vec<u32>,
+    pub texture: wgpu::Texture,
+    pub opacite: f32,
+    /// La normale de la carte (unitaire, dans le monde).
+    pub normale: V3,
+    pub cible_egui: wgpu::TextureFormat,
+}
+
+impl CallbackTrait for RecueCarte {
+    fn prepare(&self, device: &wgpu::Device, queue: &wgpu::Queue, _screen: &egui_wgpu::ScreenDescriptor, _encoder: &mut wgpu::CommandEncoder, resources: &mut CallbackResources) -> Vec<wgpu::CommandBuffer> {
+        if let Some(mt) = resources.get_mut::<Moteur>() {
+            if !mt.preparer_recue(device, queue, self) {
+                if let Some(v) = mt.prises.get_mut(&self.cle).and_then(|p| p.recues.as_mut()) {
+                    if let Some(c) = v.cartes.get_mut(self.rang as usize) {
+                        *c = None;
+                    }
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    fn paint(&self, _info: egui::PaintCallbackInfo, pass: &mut wgpu::RenderPass<'static>, resources: &CallbackResources) {
+        if let Some(mt) = resources.get::<Moteur>() {
+            mt.poser_recue(pass, self.cle, self.rang);
         }
     }
 }

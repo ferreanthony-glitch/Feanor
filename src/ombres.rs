@@ -190,7 +190,12 @@ impl Lumiere {
     /// filtre décalée de (du, dv) compare la carte à la profondeur que son propre plan a là, pas à celle du centre. Une carte n'est
     /// donc jamais dans sa propre ombre, quelle que soit sa pente sous le soleil (sans biais qui décolle les ombres des pieds).
     pub fn gradient(&self, o: &OmbreCarte) -> [f32; 2] {
-        let n = o.normale;
+        self.gradient_de(o.normale)
+    }
+
+    /// Comme `gradient`, pour une carte de normale `n` (unitaire, dans le repère du décor) : la vue Espace 3D, qui a ses cartes dans
+    /// le monde (partie 189).
+    pub fn gradient_de(&self, n: V3) -> [f32; 2] {
         let t1 = m::normalize(m::cross(n, if n[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] }));
         let t2 = m::cross(n, t1);
         let (d1, d2) = (m::dir(&self.light_vp, t1), m::dir(&self.light_vp, t2));

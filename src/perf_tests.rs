@@ -172,7 +172,8 @@ impl App {
 pub(crate) struct Banc {
     pub ctx: egui::Context,
     pub app: App,
-    rs: Option<RenderState>,
+    /// La carte graphique du banc (rien sans elle ; partie 189 : les essais de la vue y lisent le moteur du décor).
+    pub rs: Option<RenderState>,
     pub taille: egui::Vec2,
     t: f64,
     cible: Option<wgpu::Texture>,

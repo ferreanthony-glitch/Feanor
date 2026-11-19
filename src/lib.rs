@@ -385,6 +385,10 @@ mod poignees3d_tests;
 mod ombres;
 #[cfg(test)]
 mod ombres_tests;
+// Les ombres des cartes et du décor 3D dans la vue Espace 3D (partie 189).
+mod ombres3d;
+#[cfg(test)]
+mod ombres3d_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;
