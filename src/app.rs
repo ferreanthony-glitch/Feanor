@@ -643,6 +643,8 @@ pub struct App {
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
     pub(crate) looping: bool,
+    /// Plage de lecture du film (`plagefilm.rs`) : la lecture du montage reste entre ses deux bouts.
+    pub(crate) plage_film: crate::plagefilm::PlageFilm,
     pub(crate) play_accum: f64,
     /// Vitesse de la lecture, signée (J, K, L du montage, jkl.rs) : 1 = la cadence du film, négative = en arrière.
     pub(crate) play_speed: f32,
@@ -1330,6 +1332,7 @@ impl App {
             playing: false,
             play_montage: false,
             looping: true,
+            plage_film: Default::default(),
             play_accum: 0.0,
             play_speed: 1.0,
             last_time: None,
@@ -2250,15 +2253,17 @@ impl App {
             self.start_audio_playback();
             return;
         }
+        // Dans le film : entre les bouts de la plage de lecture du film (`plagefilm.rs`), tout le film sans elle.
+        let (film_a, film_b) = self.film_play_range();
         let at_end = if self.play_montage {
-            self.global_frame() + 1 >= self.doc.total_frames()
+            let g = self.global_frame();
+            g + 1 >= film_b || g < film_a
         } else {
             self.cur_frame + 1 >= end || self.cur_frame < start
         };
         if at_end {
             if self.play_montage {
-                self.set_panel(0);
-                self.cur_frame = 0;
+                self.place_global(film_a);
             } else {
                 self.cur_frame = start;
             }
@@ -2297,36 +2302,44 @@ impl App {
                 self.follow_frame = true;
                 continue;
             }
-            let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
+            if self.play_montage {
+                // Le film, image par image d'un plan à l'autre, entre les bouts de la plage de lecture du film (tout le film
+                // sans elle) ; en arrière (J) de même.
+                let (a, b) = self.film_play_range();
+                let g = self.global_frame();
+                let suivante = if vitesse < 0.0 {
+                    if g > a && g < b {
+                        Some(g - 1)
+                    } else {
+                        self.looping.then(|| b - 1)
+                    }
+                } else if g + 1 < b && g >= a {
+                    Some(g + 1)
+                } else {
+                    self.looping.then_some(a)
+                };
+                let Some(g) = suivante else {
+                    self.playing = false;
+                    break;
+                };
+                self.place_global(g);
+                self.follow_frame = true;
+                continue;
+            }
+            let (start, end) = self.plan_play_range();
             if vitesse < 0.0 {
-                // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
+                // En arrière (J) : image par image jusqu'au début du plan.
                 if self.cur_frame > start {
                     self.cur_frame -= 1;
-                } else if self.play_montage && self.cur_panel > 0 {
-                    let prev = self.cur_panel - 1;
-                    self.set_panel(prev);
-                    self.cur_frame = self.frame_count().saturating_sub(1);
                 } else if self.looping {
-                    if self.play_montage {
-                        let last = self.doc.panels.len() - 1;
-                        self.set_panel(last);
-                        self.cur_frame = self.frame_count().saturating_sub(1);
-                    } else {
-                        self.cur_frame = end.max(1) - 1;
-                    }
+                    self.cur_frame = end.max(1) - 1;
                 } else {
                     self.playing = false;
                     break;
                 }
             } else if self.cur_frame + 1 < end {
                 self.cur_frame += 1;
-            } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
-                let next = self.cur_panel + 1;
-                self.set_panel(next);
             } else if self.looping {
-                if self.play_montage {
-                    self.set_panel(0);
-                }
                 self.cur_frame = start;
             } else {
                 self.playing = false;
@@ -3980,6 +3993,8 @@ impl App {
         // Ce qui était choisi ou visé l'était dans l'ancien projet, dont les numéros de plans et de calques reviennent dans le
         // nouveau (chaque projet compte depuis le début) : rien ne reste choisi, aucun menu ne vise plus rien.
         self.board_sel.clear();
+        // (La plage de lecture du film aussi : ses bouts sont accrochés à des numéros de plans, `plagefilm.rs`.)
+        self.plage_film = Default::default();
         self.board_notes.clear();
         self.board_text = None;
         self.layer_sel.clear();
@@ -5167,6 +5182,10 @@ impl App {
                 self.looping = !self.looping;
                 self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
             }
+            "plage.debut" => self.plage_ici(false),
+            "plage.fin" => self.plage_ici(true),
+            "plage.plans_choisis" => self.plage_plans_choisis(),
+            "plage.enlever" => self.enlever_plage(),
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             // Rognage des plans (`rognageui.rs`).
             "montage.duree" => self.open_duration_dialog(),

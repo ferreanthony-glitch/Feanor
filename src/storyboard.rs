@@ -1952,6 +1952,8 @@ impl App {
                     self.action_item(ui, "Raccourcir le début du plan jusqu'ici", "montage.debut_a_tete");
                     self.action_item(ui, "Raccourcir la fin du plan jusqu'ici", "montage.fin_a_tete");
                     ui.separator();
+                    self.plage_menu_items(ui);
+                    ui.separator();
                     self.action_item(ui, "Importer un son ici…", "son.importer");
                 }
             });
@@ -1974,6 +1976,9 @@ impl App {
             || self.cam_rect.is_some()
             || self.trans.drag.is_some();
         self.pile_versions_ui(ui, &etiquettes, occupe, painter.clip_rect());
+
+        // La plage de lecture du film (`plagefilm.rs`) : la règle et les plans hors de la plage, assombris.
+        self.peindre_plage(&painter, ruler_rect, top + block_h, &x_of);
 
         // Tête de lecture et repère de déplacement.
         let gx = left + self.depli_d(&carte) as f32 * ppf;

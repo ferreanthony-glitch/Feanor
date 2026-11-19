@@ -416,6 +416,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("plan.avancer", "Avancer le plan (plus tôt dans le montage)", true, false),
     act("plan.reculer", "Reculer le plan (plus tard dans le montage)", true, false),
     act("lecture.boucle", "Lecture en boucle (oui / non)", true, false),
+    // Plage de lecture du film (`plagefilm.rs`) : la lecture du montage entre deux images de plans différents.
+    act("plage.debut", "Début de la plage de lecture du film à l'image courante", true, false),
+    act("plage.fin", "Fin de la plage de lecture du film à l'image courante", true, false),
+    act("plage.plans_choisis", "Plage de lecture du film : les plans choisis", true, false),
+    act("plage.enlever", "Enlever la plage de lecture du film", true, false),
     // Rognage des plans dans le montage (`rognageui.rs`).
     act("montage.duree", "Durée du plan : taper la durée exacte…", true, false),
     act("montage.duree_plans", "Changer la durée des plans choisis…", true, false),

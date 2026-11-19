@@ -27,6 +27,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-reponses` et sa branche locale retirés (elle n'avait jamais
   été poussée ; tout est dans main, sur GitHub), `Tests\essai 177` mis à la corbeille (il n'avait pas servi). `Chantiers\piste-mode`
   et `Tests\essai 173`, à l'autre session, pas touchés.
+- **La plage de lecture du film** (partie 178, branche `plage-lecture` partie de main 6b1b99c, format 60 inchangé), sur son
+  « Plage de lecture » parmi trois écarts trouvés en comparant la timeline à celle d'un autre logiciel. La lecture du montage reste
+  entre deux images de plans différents, en boucle ou non ; les bouts sont accrochés à leurs plans ; clic droit sur la règle du
+  montage ; réglage de la séance, rangé avec l'onglet. 9 essais (`plagefilm_tests.rs`). Compilé et essayé sur le Mac seulement
+  (les mêmes 90 échecs que main sur ce Mac, aucun de plus). Commit 04599ac, poussé sur GitHub sur son « Oui, pousse ». **Pas
+  fusionné dans main, pas essayé sur son PC** (liste 178.4).
 - **`prereglages-reponses` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e859d56, exe de 1 h 10), sur
   son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (e561eff), ni ici ni
   sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 897 réussis, 0 échec, les dix groupes OK) ;

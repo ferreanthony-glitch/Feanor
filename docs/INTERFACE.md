@@ -14999,6 +14999,54 @@ centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), 
 10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
 11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.
 
+## 178. La plage de lecture du film (2026-11-19, branche `plage-lecture`, partie de `main` 6b1b99c)
+
+Anthony, en comparant la timeline de FEANOR à celle d'un autre logiciel de storyboard : il manquait une plage de lecture sur
+plusieurs plans. Les points d'entrée et de sortie (13d) ne valent que pour la lecture d'un plan seul ; la lecture du film entier
+allait toujours du début à la fin.
+
+### 178.1 Ce qui change pour lui
+
+- **La lecture du montage reste entre deux images du film**, qui peuvent être dans des plans différents (de l'image 12 du plan 3 à
+  l'image 5 du plan 7). Arrêt au bout, ou boucle si la lecture en boucle est allumée ; en arrière (J) de même ; le son suit.
+- **Clic droit sur la règle du montage** (la tête de lecture y va) : « Début de la plage de lecture ici », « Fin de la plage de
+  lecture ici », « Plage de lecture : ce plan » ou « les N plans choisis », « Enlever la plage de lecture ». Les quatre commandes
+  sont aussi dans la palette (Ctrl+K), sans touche par défaut (comme « Lecture en boucle »).
+- **Sur la règle** : un crochet à chaque bout, le film hors de la plage assombri (règle et plans).
+- Un bout seul suffit : sans fin, la plage va jusqu'au bout du film ; sans début, elle part de son début. Une fin posée avant le
+  début enlève le début (et inversement), la barre d'état le dit.
+- Les points d'entrée et de sortie d'un plan ne changent pas : ils bornent toujours la lecture du plan seul.
+
+### 178.2 Comment c'est fait
+
+- `src/plagefilm.rs` : chaque bout est accroché à un plan (son identifiant) et à une image de ce plan (`Ancre`), pas à un numéro
+  d'image du film : allonger, raccourcir, ajouter ou supprimer un plan avant la plage la déplace avec son contenu, comme les
+  signets. Un bout dont le plan a disparu ne compte plus ; un bout au-delà de la fin de son plan se pose sur sa dernière image ;
+  des bouts croisés ne bornent plus rien.
+- `App::tick_playback` lit le film image par image en images du film entre les bouts (`film_play_range`), `toggle_play_scope` part
+  du début de la plage quand la tête est dehors ; `soundtrack::play_range` donne la même plage au son. Les versions dépliées
+  (partie 168) se lisent sans la plage.
+- **Un réglage de la séance**, comme la boucle : ni dans le projet ni dans l'annulation ; rangé avec l'onglet de son projet
+  (`etat_projet!`), remis à zéro quand un autre projet est chargé (`load_doc` : les numéros de plans recommencent d'un projet à
+  l'autre). **Le format des projets ne change pas** (60).
+
+### 178.3 Les essais
+
+`src/plagefilm_tests.rs` (9) : les bornes (un bout, deux, croisés, tout le film), les bouts qui suivent leurs plans (plan allongé,
+raccourci, supprimé), la lecture une fois à travers trois plans puis l'arrêt, la boucle qui reste dedans, la lecture en arrière qui
+s'arrête au début de la plage, les plans choisis, la fin posée avant le début, un autre projet sans plage, la lecture sans plage
+inchangée. Compilé et essayé sur le Mac seulement (les mêmes 90 échecs que `main` sur ce Mac, aucun de plus) ; à l'écran sur le Mac :
+la commande dans la palette, le crochet et le voile sur la règle.
+
+### 178.4 À tester (sa checklist)
+
+1. Montage : clic droit sur la règle au milieu du plan 2, « Début de la plage de lecture ici » ; au milieu du plan 5, « Fin… ici ».
+   Le crochet, et le film assombri hors de la plage.
+2. Lire (Entrée) : la lecture part du début de la plage, traverse les plans, s'arrête à la fin ; boucle allumée, elle reprend au début.
+3. Allonger le plan 1 : la plage suit son contenu.
+4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
+5. « Enlever la plage de lecture » : la lecture reprend tout le film.
+
 ## 162. Les raccourcis qui manquaient parfois (2026-11-16, branche `raccourcis-muets`)
 
 Anthony : « les raccourcis manquent parfois, notamment le zoom », sur la feuille aussi, pas seulement dans l'Espace 3D. Pas

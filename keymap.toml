@@ -2480,6 +2480,27 @@ action = "lecture.boucle"
 touches = []
 source = "FEANOR (sans touche)"
 
+# Plage de lecture du film (`plagefilm.rs`) : clic droit sur la règle du montage.
+[[raccourci]]
+action = "plage.debut"
+touches = []
+source = "FEANOR (sans touche : clic droit sur la règle du montage)"
+
+[[raccourci]]
+action = "plage.fin"
+touches = []
+source = "FEANOR (sans touche : clic droit sur la règle du montage)"
+
+[[raccourci]]
+action = "plage.plans_choisis"
+touches = []
+source = "FEANOR (sans touche : clic droit sur un plan ou la règle du montage)"
+
+[[raccourci]]
+action = "plage.enlever"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "montage.duree"
 touches = []
