@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **`prereglages-reponses` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e859d56, exe de 1 h 10), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (e561eff), ni ici ni
+  sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 897 réussis, 0 échec, les dix groupes OK) ;
+  le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 0 h 09) : arrêté sans enregistrer, l'exe recompilé
+  dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 60) et de faux réglages : vivant après
+  30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. Le format des projets ne change
+  pas (60). **Pas regardé sur son écran** : liste 177.4. Gardés, retrait proposé (sa décision) : le dossier
+  `Chantiers\prereglages-reponses` et `Tests\essai 177`.
 - **Préréglages : ses neuf réponses** (partie 177, branche `prereglages-reponses` partie de main e561eff, format 60
   inchangé), sur son « Oui ok pour tout » aux neuf numéros restés sans réponse. Trois transitions de plus : l'iris (T1, sur un
   centre choisi au clic droit ; il s'ouvre au début du film, se ferme à la fin), le volet en horloge (T2) et le zoom traversant
