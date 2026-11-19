@@ -15258,7 +15258,15 @@ points ; l'Animation (même taille, lignes de 24) ; 16 et 11 agissent tout de su
 13 ; la page des Préférences (les deux réglages l'un sous l'autre, un clic écrit `taille_icones = 15`).
 Changés : `timeline_serree_tests` (les commandes jusqu'au bord droit ; chaque colonne du calque actif à sa case, plus sous une icône
 d'en-tête ; le ⋯ des calques au bord commun ; les captures savent `SHOT_CAPTURE_ICONES` et font la page des Préférences),
-`echelle_tests` (la ligne s'appelle « Taille de l'interface »).
+`echelle_tests` (la ligne s'appelle « Taille de l'interface ») ; `colonne_calques_tests` (la case de référence d'une colonne est
+celle du calque courant, plus celle de l'en-tête), `timelinesb_tests`, `piste_mode_tests` (trois cases de pelure pour trois calques ;
+« Plus… » cherché en tête de la colonne, pas dans la barre du haut de la fenêtre), `aplat_tests`, `notes_calques_tests` (l'icône pâle
+de l'aplat sur le calque courant), `panneaux_tests` (les commandes au bord de la colonne). Dans l'Animation, les onglets du bas
+(Notes, Son…) se placent maintenant à la vraie largeur de la colonne (ils partaient de 312 points ; la colonne est souvent plus large,
+et le « ⋯ » des calques, collé à son bord, passait au-dessus de « Notes »).
+
+Vérificateur (`-Repetitions 2`) : RESULTAT : OK, 4938 essais à chaque passage, aucun intermittent. Captures (banc headless, taille
+réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179b-6-preferences-tailles.png`.
 
 ### 179.9 À tester (sa checklist)
 
