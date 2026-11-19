@@ -5,6 +5,32 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Copier les objets du décor 3D** (partie 190, branche `copier-decor` partie de `main` 4481e66, format 61 inchangé), le choix
+  d'Anthony (« Copier les objets du décor »). Après un clic dans la vue Espace 3D ou dans le décor du panneau, **Ctrl+C, Ctrl+X,
+  Ctrl+V** (les commandes de toujours) visent les objets du décor choisis : collés dans la même séquence, **à côté** ; ailleurs (une
+  autre séquence, un autre projet ouvert, après Ctrl+X), **à la même place** ; l'aimant repose ensuite les objets et les cartes
+  aimantées ; une étape d'annulation ; plusieurs objets à la fois (Maj+clic dans la vue, Ctrl/Maj+clic dans la liste). Le modèle est
+  partagé (ni relu ni renvoyé à la carte) ; dans un autre projet il entre et s'enregistre sous son empreinte, ou reprend le modèle de
+  même contenu qui y est déjà. Le panneau : Copier, Couper, Coller, **« Copier vers la séquence… »** et **« Envoyer vers la
+  séquence… »**. Ailleurs (dessin, calques, effets, plans, clés), Ctrl+C / Ctrl+V gardent leur sens ; la dernière copie est celle qui
+  se colle. FEANOR n'a pas de commande qui duplique une séquence : les deux qui en font naître une des plans d'une autre (« Couper la
+  séquence ici », « Nouvelle séquence avec les plans choisis ») lui donnent maintenant **une copie indépendante du décor**. Un collage
+  qui ferait dépasser le budget de la machine est refusé. Essais : 13 nouveaux ; les 90 échecs connus du Mac, aucun neuf ; la version optimisée se construit. Compilé et essayé sur le Mac
+  seulement ; **rien regardé à l'écran, pas de commit** (liste 190.5).
+
+- **Les ombres des cartes et du décor 3D dans la vue Espace 3D** (partie 189, branche `ombres-espace3d` partie de `main` 9c33ec9,
+  format 61 inchangé), le choix d'Anthony (« Ombres dans l'Espace 3D »). La vue Espace 3D (plein écran, à côté, vues multiples, y
+  compris orthographiques) montre maintenant les ombres de la partie 185 : **une carte porte l'ombre de son encre sur le décor**,
+  **le décor et les autres cartes ombrent les cartes**, sous le même soleil, avec les mêmes cases et les mêmes calques sans ombre,
+  justes de tous les côtés (les ombres du soleil sont dans le monde). Les cartes de la vue (leurs coins, leur texture d'egui) sont
+  vues du soleil dans une carte d'ombres partagée par les vues et gardée tant que rien ne bouge ; le décor de la vue la lit (un
+  pipeline de plus, le même `eclairer`) ; une carte qui reçoit est repassée juste après son dessin, sur le même maillage, et l'ombre
+  est retranchée de l'écran. Le calcul est celui de l'image du plan, le même texte de shader (`gpu::OMBRES_COMMUN`, sorti de la
+  composition sans la changer). Sans les ombres du décor : la vue d'avant au pixel près, rien de plus à faire. Mesures (Mac, huit
+  personnages, 180 000 triangles, vue de 1533 × 559) : +0,2 ms, +0,3 à 0,4 ms quand les cartes bougent (une carte grossière évite au
+  décor son filtre là où aucune carte ne peut l'ombrer : sans elle, +2,8 ms en hautes). Essais : 10 nouveaux (dont un de mesure, ignoré) ;
+  les 90 échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste 189.6).
+
 - **Les branches rangées dans `main`** (sur son « Ranger les branches ») : le `main` de GitHub (fa23204, la timeline du
   Storyboard faite sur le PC, partie 178) réuni dans le `main` local (c9c24f6 : 162, 163, 178 la plage de lecture, 179), puis
   `banque-3d` (parties 180 à 185 : décor 3D, banque, origine et aimant, profondeur partagée, poignées dans la vue, ombres). Seuls

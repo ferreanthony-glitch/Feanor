@@ -197,6 +197,8 @@ const PARTAGES: &[&str] = &[
     "scenario_ui",
     // Le panneau Bibliothèque de fichiers : un réglage du poste et un explorateur, les mêmes dans tous les onglets.
     "biblio",
+    // Les objets du décor 3D copiés (partie 190) : un presse-papiers, commun aux onglets comme les autres.
+    "copie3d",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.

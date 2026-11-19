@@ -754,6 +754,9 @@ pub struct App {
     pub(crate) murs: crate::calquecouleur::Cache,
     /// Panneaux copiés (12e).
     pub(crate) panel_clipboard: Option<crate::document::PanelClip>,
+    /// Les objets du décor 3D copiés, et si le décor a la main pour Ctrl+C / X / V (partie 190, `copiedecor.rs`) : commun à
+    /// tous les onglets, comme les autres presse-papiers.
+    pub(crate) copie3d: crate::copiedecor::Copie3d,
     /// Le montage (ou la planche des vignettes) a la main : on y a cliqué en dernier, pas dans le
     /// dessin. Copier, coller et supprimer y visent alors les panneaux choisis (12e).
     pub(crate) panel_focus: bool,
@@ -1394,6 +1397,7 @@ impl App {
             collage: Default::default(),
             murs: Default::default(),
             panel_clipboard: None,
+            copie3d: Default::default(),
             panel_focus: false,
             cam_key_sel: Vec::new(),
             cam_key_anchor: None,
@@ -4464,6 +4468,8 @@ impl App {
         if matches!(action, "edition.copier" | "edition.couper") {
             self.fx_pile_recent = false;
             self.layer_clip_recent = false;
+            // (Et celle des objets du décor 3D : leur copie, plus bas, la redonne, `copiedecor.rs`.)
+            self.copie3d.recente = false;
             // (Et celle des pixels de la planche : Ctrl+C de la sélection bitmap des Vignettes la redonne, plus bas.)
             self.vignettes.selb_presse = None;
         }
@@ -4477,7 +4483,9 @@ impl App {
         // (Le panneau Calques a la main et un calque vient d'être copié : Ctrl+V colle ce calque, pas une image restée dans le
         // presse-papiers de Windows.)
         let calque_a_coller = self.layers_pane_focus && self.layer_clip_recent && self.layer_clipboard.is_some();
-        if (action == "edition.coller" || action == "edition.coller_a_la_tete") && !calque_a_coller {
+        // (De même quand le décor 3D a la main et que la dernière copie est celle de ses objets, partie 190.)
+        let decor_a_coller = self.decor3d_coller_a_la_main();
+        if (action == "edition.coller" || action == "edition.coller_a_la_tete") && !calque_a_coller && !decor_a_coller {
             if let Some(image) = crate::pasteimage::clipboard_image() {
                 self.paste_clipboard_image(image);
                 return;
@@ -4700,6 +4708,18 @@ impl App {
             "fichier.exporter_camera" => self.open_export(crate::export::Format::Camera),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Le décor 3D a la main (le dernier appui était dans la vue Espace 3D ou dans le décor du panneau Espace 3D) : Ctrl+C et
+            // Ctrl+X visent les objets du décor choisis, Ctrl+V colle ceux copiés en dernier (partie 190, `copiedecor.rs`). Sans
+            // objet choisi, ou après une autre copie, ces touches gardent leur sens d'avant.
+            "edition.copier" if self.decor3d_a_la_main() => {
+                let ids = self.e3_objets_choisis();
+                self.decor3d_copier(&ids);
+            }
+            "edition.couper" if self.decor3d_a_la_main() => {
+                let ids = self.e3_objets_choisis();
+                self.decor3d_couper(&ids);
+            }
+            "edition.coller" | "edition.coller_a_la_tete" if self.decor3d_coller_a_la_main() => self.decor3d_coller(),
             // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet
             // choisi et Ctrl+V colle les effets copiés, avant tous les autres presse-papiers
             // (`fxcopie.rs`). Sans effet sur la pile, Ctrl+C suit les règles d'avant.
@@ -5842,6 +5862,9 @@ impl App {
             self.fx_pane_focus = false;
             // Et le panneau Calques (`layersui.rs`) : Ctrl+V y colle des effets copiés.
             self.layers_pane_focus = false;
+            // Et le décor 3D (partie 190, `copiedecor.rs`) : la vue Espace 3D et le décor du panneau la reprennent si le clic est
+            // chez eux.
+            self.copie3d.main = false;
             // Et pour le panneau Références (`referencesui.rs`).
             self.refs.focus = false;
             // Et la bibliothèque de fichiers (`biblioui.rs`) : elle le reprend si le clic est chez elle.

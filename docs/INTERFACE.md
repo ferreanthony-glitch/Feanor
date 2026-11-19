@@ -15352,6 +15352,8 @@ partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banqu
 - Les nœuds sont cuits dans les sommets : un décor fait d'un même objet répété (instances) devient plus gros une fois allégé ou
   simplifié (l'avant → après le montre).
 - Copier ou dupliquer une séquence n'emporte pas son décor ; la séquence supprimée garde son entrée (elle revient avec Ctrl+Z).
+  **Depuis la partie 190** : une séquence née d'une autre (« Couper la séquence ici », « Nouvelle séquence avec les plans
+  choisis ») emporte une copie de son décor, et les objets se copient d'une séquence (ou d'un projet) à l'autre.
 - Pas de manipulateur du décor dans la vue (seulement les champs chiffrés du panneau).
 - Les couleurs du ciel, de la brume et de l'ambiance sont des constantes (`decor3drendu.rs`), pas encore des réglages.
 - L'export des calques séparés n'écrit pas le décor.
@@ -15517,7 +15519,8 @@ ouvre « Ce décor est lourd » ; le crédit Kenney est dans « À propos ».
   (une surface sans épaisseur) peut tromper le test « enfermé dedans ». Le sol de l'aimant est celui du cadre : changer la taille du
   cadre ne repose pas les objets (une retouche le fait).
 - Copier, coller, glisser un objet d'une séquence à l'autre : pas encore. Copier ou dupliquer une séquence n'emporte toujours pas
-  son décor.
+  son décor. **Fait à la partie 190** (sauf le glisser) : Ctrl+C / Ctrl+X / Ctrl+V sur les objets, « Copier vers » et « Envoyer
+  vers la séquence… », d'un projet ouvert à l'autre ; une séquence coupée emporte une copie de son décor.
 - Pas de vignette de la banque dans les vignettes des plans (le décor y est, comme partie 180).
 - La recherche de la banque porte sur les noms anglais des fichiers (« tree », « road »), les familles et les kits.
 
@@ -16103,9 +16106,7 @@ dans `keymap.toml` ; écrites pour le seul calque décoché, relues, un fichier 
 
 ### 185.5 Ce qui n'est pas fait (ou limité)
 
-- **La vue Espace 3D ne montre pas les ombres des cartes** : ses cartes sont dessinées par egui, et le décor de la vue a sa propre
-  passe ; elle garde les ombres du décor sur lui-même. Les ombres des cartes sont dans l'image du plan (la vue de dessin), les
-  exports et les vignettes.
+- ~~La vue Espace 3D ne montre pas les ombres des cartes~~ (faite : partie 189, les mêmes ombres dans la vue, de tous les côtés).
 - **Le rendu de secours sans carte graphique** n'a ni ombres du décor ni ombres de cartes.
 - **Le bord d'une ombre sur une carte** est plus net que sur le décor (une lecture filtrée au lieu de 3 × 3 ou 5 × 5 : le coût,
   185.3) ; une ombre qui passe du sol à une carte change donc un peu de flou.
@@ -16298,9 +16299,287 @@ la commande dans la palette, le crochet et le voile sur la règle.
 4. Choisir trois plans (Maj + clic), clic droit, « Plage de lecture : les 3 plans choisis ».
 5. « Enlever la plage de lecture » : la lecture reprend tout le film.
 
-## 189. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
 
-(Partie 189, appelée 179 dans les commits de `timeline-serree` : le numéro 179 était pris par « Une timeline plus claire », venue du main de GitHub.)
+## 189. Les ombres des cartes et du décor 3D dans la vue Espace 3D (2026-11-19, branche `ombres-espace3d` partie de `main` 9c33ec9, format 61 inchangé)
+
+La partie 185 a donné aux cartes les ombres du décor 3D dans l'image du plan (la vue de dessin), les exports et les vignettes. La
+**vue Espace 3D** (plein écran, à côté du dessin, vues multiples) montrait les ombres du décor sur lui-même, mais **ni l'ombre des
+cartes ni d'ombre sur les cartes**. Elle montre maintenant les mêmes, sous le même soleil, **de quelque côté qu'on la regarde** : les
+ombres du soleil sont dans le monde, pas dans le cadre de la caméra. Le choix d'Anthony (« Ombres dans l'Espace 3D »). Format du projet
+inchangé (61). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR ; les
+essais peignent la vue entière par la carte graphique, hors de l'écran, et en lisent les pixels).
+
+### 189.1 Ce qui change pour Anthony
+
+1. **Dans la vue Espace 3D, une carte porte l'ombre de son encre sur le décor** : le sol, les dalles, les objets. La même ombre que
+   dans l'image du plan (le vide entre les jambes laisse passer le soleil, elle part des pieds d'une carte aimantée, elle a le flou
+   des ombres du décor), au même endroit du monde : vue de côté, de dessus, de derrière, par la caméra du plan, dans chacune des vues
+   multiples, y compris les vues orthographiques (dessus, face, côté).
+2. **Le décor et les autres cartes ombrent les cartes de la vue** : un personnage à l'ombre d'un arbre s'y assombrit, comme dans
+   l'image du plan (du même bleu, à un niveau près, dans les essais) ; une carte n'est jamais dans sa propre ombre.
+3. **Les mêmes réglages** : le soleil du décor (panneau Espace 3D : autour, hauteur), les cases **« Porte une ombre »** et
+   **« Reçoit les ombres »** de chaque calque (partie 185), les mêmes calques sans ombre (accrochés à la caméra, d'effet, d'annotation,
+   dossiers). Rien de neuf à régler.
+4. **Les ombres du décor décident toujours** : sans l'aspect « Ombres » du décor, ou sur un ordinateur dont le budget ne permet pas
+   d'ombres (« sans ombres »), la vue est **exactement celle d'avant** (au pixel près dans les essais) et ne coûte rien de plus. Leur
+   finesse suit celle du décor (basses, hautes).
+5. **Tourner la vue ne refait pas les ombres des cartes** : elles ne sont refaites que quand une carte bouge (lecture, manipulateur,
+   trait sur la carte), et une seule fois pour toutes les vues.
+6. Le dessin qu'on fait sur une carte dans la vue porte son ombre au fil du trait (la carte d'ombres des cartes est refaite à chaque
+   image du trait ; pas d'essai qui le vérifie).
+
+### 189.2 Comment c'est fait
+
+- **`ombres3d.rs`** (nouveau) : une fois par image de la vue (`App::e3_ombres_de_la_vue`, au début d'`espace3d_panel`, pour toutes
+  les vues), les cartes qui portent une ombre — leurs quatre coins dans le monde (`Monde::card_corners`, la carte telle que la vue la
+  pose), leur dessin tel que la vue le montre (la texture d'egui de la carte, prise dans le moteur de rendu d'egui :
+  `Renderer::texture`) et l'opacité du calque — et les calques dont la carte reçoit les ombres. Rien sans carte graphique, sans décor,
+  sans ses ombres (`ombres::concerne` et les deux cases, comme la partie 185). Une empreinte (coins, texture et sa version, opacité)
+  dit si la carte d'ombres des cartes doit être refaite.
+- **La carte d'ombres des cartes de la vue** (`decor3dgpu::Moteur::preparer_ombres_vue`) : les cartes, vues du soleil avec **la
+  matrice de la carte d'ombres du décor** (`decor3dgpu::eclairage`, qui ne dépend que du décor et du soleil, pas du point de vue),
+  là où leur encre est au moins à moitié opaque (`PORTEUSES`, le seuil de `fs_ombre`), dans une carte de profondeur du côté que donne
+  la qualité (1024 ou 2048). **Gardée** entre les images et **partagée** par les vues : refaite seulement si l'empreinte, le soleil ou
+  la qualité change. Avec elle, une **carte grossière** (`GROSSIERE`, une case pour 8 × 8 texels : la profondeur la plus proche du
+  soleil), sur la boîte des cartes seulement.
+- **Le décor de la vue** (sa passe à quatre échantillons, `VueDecor`) : quand des cartes portent une ombre, un pipeline de plus
+  (`main4c`) avec le groupe des ombres. Le même `eclairer` que toujours, dont le soleil est multiplié par `soleil_des_cartes` (1 dans
+  tous les autres pipelines : l'image du plan et la vue sans ombres de cartes sont celles d'avant) : la carte grossière d'abord (quatre
+  lectures : aucune carte plus près du soleil dans tout ce que le filtre lirait, c'est 1, exactement), sinon le filtre du décor sur
+  la carte d'ombres des cartes (`soleil_des_cartes_sur_le_decor`, 3 × 3 ou 5 × 5 lectures comparées). C'est le calcul de l'image du
+  plan (`fs_decor_o`), au point du monde du fragment lui-même, et le soleil y est retiré avant la brume, là où le décor le met.
+- **Une carte qui reçoit les ombres** : juste après son dessin (et avant son voile de la partie 183), un rappel de la carte
+  graphique (`decor3dgpu::RecueCarte`) repasse **sur le maillage même qu'egui vient de dessiner** (`card_mesh` : ses sommets, leur
+  coordonnée de dessin interpolée comme egui, `@interpolate(linear)` ; le point du monde de chaque sommet, interpolé en perspective).
+  Il relit le dessin comme egui (valeurs gamma, prémultipliées, à l'opacité du calque), l'assombrit par **le calcul de l'image du
+  plan** (`soleil_vu_par_la_carte` : la carte d'ombres du décor de la vue, puis celle des cartes, à la pente de la carte,
+  `Lumiere::gradient_de` ; `assombrir_carte`), et **retranche la différence de l'écran** (mélange `ReverseSubtract`) : là où l'encre
+  est à demi transparente, ce qui est dessous garde sa part. L'écran d'egui en sRGB : la différence en lumière linéaire.
+- **Le calcul partagé** : le texte des ombres de la composition (partie 185) est sorti de `COMPOSER_OMBRES` en `gpu::OMBRES_COMMUN`
+  (`pcf`, `assombrir_decor`, `assombrir_carte`, `soleil_vu_par_la_carte`, `soleil_des_cartes_sur_le_decor`, les conversions sRGB) avec
+  `gpu::LUMIERE` (le réglage `ombres::Lumiere::octets`, inchangé) ; la composition de l'image du plan et les deux shaders de la vue
+  incluent le même texte. Aucune formule n'est recopiée.
+- **Sans ombres** : `VueDecor::cartes` vaut rien, aucun `RecueCarte` n'est posé ; le décor de la vue passe par ses pipelines d'avant.
+
+### 189.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais compilés en profil d'essai. `ombres3d_perf` (nouveau, ignoré :
+`cargo test --lib ombres3d_perf -- --ignored --nocapture`) : l'image d'écran entière de l'application (1920 × 1080, la vue Espace 3D
+en plein écran, 1533 × 559 pixels), huit cartes de personnage debout sur la grille d'essai en sol (180 000 triangles, ciel, brume),
+la vue qui regarde les huit cartes et leurs ombres ; quarante images enchaînées dans la file de la carte graphique comme à l'écran, la
+meilleure de cinq séries, trois passages.
+
+| Huit cartes, vue plein écran | sans ombres de cartes | avec, cartes immobiles | seulement portées | seulement reçues | cartes qui bougent à chaque image |
+|---|---|---|---|---|---|
+| ombres hautes | 4,28 à 4,49 ms | +0,16 à 0,23 ms | +0,07 à 0,16 ms | +0,04 à 0,09 ms | **+0,28 à 0,39 ms** |
+| ombres basses | 2,23 à 2,29 ms | +0,12 à 0,15 ms | +0,06 à 0,10 ms | +0,04 à 0,09 ms | **+0,14 à 0,19 ms** |
+
+- **La carte grossière a été choisie sur ces mesures** : sans elle (l'essai la met à zéro), le filtre du décor sur la carte d'ombres
+  des cartes (25 lectures comparées par fragment en hautes, 9 en basses, partout dans la boîte des cartes) coûte **+2,8 ms** (hautes)
+  et **+1,2 ms** (basses) ; une première carte grossière à fenêtre élargie (400 lectures par case, une dans le décor) coûtait 1,3 ms
+  à chaque image où une carte bouge ; à cases simples lues par quatre texels (`textureGather`, 16 par case) et quatre lectures dans le
+  décor, les chiffres du tableau. Elle ne change rien à l'image (un essai compare au pixel près, bords flous compris, aux deux
+  qualités, et échoue si la fenêtre qu'elle regarde est trop étroite).
+- **La règle des 4 ms** (partie 180) tient : le décor de la vue n'est pas redessiné plus souvent qu'avant (il l'est à chaque image
+  de la vue, comme avant), sa passe garde le même budget de triangles ; les ombres des cartes y ajoutent moins de 0,4 ms. Elles
+  suivent la qualité des ombres du décor : sur un ordinateur « sans ombres », il n'y en a pas, et rien ne coûte.
+- L'essai de durée `espace3dcote_tests::a_stroke_with_the_side_view_open_stays_within_the_frame_budget` (sans décor : rien ne se
+  prépare de plus), seul, trois fois : vue fermée 5,36 à 5,78 ms par image, ouverte 5,68 à 6,90 ms ; il réussit, et dans le passage
+  complet.
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony**, avec la superposition « Performance » ouverte, un décor au budget
+et la vue en plein écran.
+
+### 189.4 Essais (`src/ombres3d_tests.rs`, 10 essais dont un ignoré)
+
+L'application entière peinte par la carte graphique, hors de l'écran (le banc des mesures, `perf_tests::Banc` : textures d'egui,
+décor de la vue, cartes, rappels), la vue Espace 3D ouverte en plein écran, les pixels lus là où la vue met les points du monde
+(`View::project`). Sous le soleil des essais de la partie 185 (derrière le décor, à 45°) : **vue de côté**, l'ombre de la carte tombe
+sur la dalle devant elle, aux deux qualités, rien au-delà de sa hauteur, à côté ni derrière ; **la vue tourne** (cinq points de vue,
+de face, de côté, de biais, de haut) : l'ombre reste au même endroit du monde, de la même couleur, et la carte (qui reçoit les
+ombres) n'est pas dans sa propre ombre ; **une boîte haute** derrière la
+carte l'assombrit (deux points de vue ; « Reçoit les ombres » décoché : non) ; **un panneau** ombre un mur (le panneau sans ombre :
+non) ; **la vue comme l'image du plan** : la carte à l'ombre de la boîte et la dalle à l'ombre de la carte ont la couleur de l'image
+composée par `GpuCanvas` (à un niveau près sur ce Mac ; l'essai tolère 6) ; **sans ombres, la vue d'avant au pixel près** (les cases décochées, un calque accroché à
+la caméra, l'aspect sans ombres, un ordinateur sans ombres ; et la vue change bien avec elles) ; **la carte d'ombres des cartes** n'est
+pas refaite quand la vue tourne, refaite une fois quand une carte bouge, une fois pour quatre vues (où l'ombre se voit dans plus
+d'une) ; **la carte grossière ne change rien à l'image** (une carte inclinée, deux barres, un trait fin, deux points de vue, deux
+qualités) ; les nombres et le calcul des shaders de la vue sont ceux du programme et de l'image du plan. `ombres3d_perf` (ignoré) :
+les mesures de 189.3. `ombres_tests`, `profondeur_tests`, `gpu_tests`, `decor3d_tests` passent toujours (le texte des ombres de la
+composition a été rangé, pas changé).
+
+### 189.5 Ce qui n'est pas fait (ou limité)
+
+- **L'ombre d'une carte dans la vue est celle de son dessin tel que la vue le montre** : sans les effets du calque (une lueur large
+  fait une ombre large dans l'image du plan, pas dans la vue, qui ne montre pas les effets).
+- **Une sélection qu'on déplace dans la vue** (partie Sélection de la vue) : pendant le geste, la partie déplacée ne porte pas
+  d'ombre et ne s'assombrit pas ; elle le fait une fois posée.
+- **Un dessin tout neuf** (la première image d'une carte) : son ombre vient à l'image suivante (la carte graphique n'a pas encore sa
+  texture) ; la vue se refait d'elle-même.
+- Comme dans l'image du plan (185.5) : le bord d'une ombre sur une carte est plus net que sur le décor ; ce qui est hors de la boîte
+  du décor ne porte ni ne reçoit ; pas d'ombre colorée ni translucide ; le rendu de secours sans carte graphique (les boîtes en fil
+  de fer) n'a pas d'ombres du tout.
+- Le voile d'une carte (183.5) couvre toujours tout son quadrilatère.
+- Les mesures sont celles d'une vue de 1533 × 559 pixels : la part qui dépend du décor (les fragments dans la boîte des cartes) grandit
+  avec la vue (un écran 4K plein, quatre fois plus de pixels).
+
+### 189.6 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D (une dalle, un arbre) et ses ombres ; un personnage « Aimanté au
+   sol » sur la dalle. Ouvre la vue Espace 3D (plein écran) : **son ombre est sur la dalle**, comme dans le dessin ; tourne autour
+   (clic droit) : elle reste au même endroit du sol, de tous les côtés.
+2. Tourne le soleil (panneau Espace 3D : autour, hauteur) : l'ombre tourne dans la vue et dans le dessin.
+3. Place le personnage à l'ombre de l'arbre (manipulateur de la vue) : **il s'assombrit dans la vue**, puis ressort au soleil.
+4. Deux personnages, l'un entre le soleil et l'autre : le premier ombre le second, dans la vue aussi.
+5. Décoche « Porte une ombre », puis « Reçoit les ombres » (panneau de la carte) : l'ombre disparaît de la vue, la carte ne
+   s'assombrit plus ; Ctrl+Z.
+6. Vues multiples (4 vues) : l'ombre dans la vue de dessus et dans la perspective ; Espace 3D à côté du dessin : de même.
+7. Lecture à 24 i/s d'un plan où le personnage marche, la vue à côté ouverte : **rien ne saccade** (superposition « Performance »).
+8. Décoche « Ombres » dans l'aspect du décor : plus aucune ombre, ni du décor ni des cartes, dans la vue comme dans le dessin.
+
+## 190. Copier les objets du décor 3D (2026-11-19, branche `copier-decor` partie de `main` 4481e66, format 61 inchangé)
+
+Le choix d'Anthony (« Copier les objets du décor »). Jusqu'ici, un objet du décor 3D d'une séquence (parties 180 et 181) ne se
+dupliquait que dans sa séquence (« Dupliquer » du panneau) : ni copier, ni coller, ni l'emmener dans une autre séquence ou un autre
+projet, et une séquence née d'une autre perdait son décor (180.5, 181.4). Maintenant **les objets se copient, se coupent et se
+collent** — au clavier ou par le panneau —, **se copient ou s'envoient vers une autre séquence**, passent **d'un projet ouvert à
+l'autre**, et **une séquence coupée emporte une copie de son décor**. Format du projet inchangé (61 ; `decors3d.json` reste en
+version 2). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 190.1 Ce qui change pour Anthony
+
+1. **Ctrl+C, Ctrl+X, Ctrl+V sur les objets du décor** : après un clic dans la vue Espace 3D (plein écran, à côté, chacune des vues
+   multiples) ou dans le décor du panneau Espace 3D, **Ctrl+C copie les objets choisis** (ceux de la vue ; la liste du panneau les
+   choisit aussi dans la vue), **Ctrl+X les coupe** (copiés puis enlevés, une étape d'annulation ; ceux qui reposaient dessus
+   redescendent) et **Ctrl+V colle les derniers objets copiés** dans le décor de la séquence du plan courant. Ce sont les touches et
+   les commandes de toujours (`edition.copier`, `edition.couper`, `edition.coller`, Maj+Ctrl+V aussi) : rien à assigner.
+2. **Ailleurs, rien ne change** : un clic sur le dessin, dans le panneau Calques, le panneau Effets, le montage, la timeline… rend
+   à Ctrl+C / Ctrl+V leur sens d'avant (le dessin, le calque, les effets, les plans, les images, les clés), même si un objet reste
+   choisi dans la vue. Dans la vue, un clic sur une carte (aucun objet choisi) laisse aussi Ctrl+C copier comme avant. Après une autre
+   copie (un dessin, un calque, des plans…), Ctrl+V colle cette autre copie, pas les objets : **la dernière copie est celle qui se
+   colle**. Les outils de dessin, de trajectoire et de sélection pris dans la vue ne donnent pas la main au décor.
+3. **Où se pose ce qu'on colle** :
+   - **dans la même séquence**, tant que les objets copiés y sont encore : **à côté**, décalés en largeur de la largeur du groupe et
+     d'un dixième (au moins 30 cm, comme « Dupliquer ») ; collés encore, plus loin, jamais l'un sur l'autre ;
+   - **ailleurs** — une autre séquence, un autre projet ouvert, ou après Ctrl+X — : **à la même place** dans le monde ;
+   - puis **l'aimant** repose les objets aimantés (un banc collé avec sa dalle se pose dessus) et **les cartes aimantées** de la
+     séquence (un personnage aimanté monte sur la dalle collée sous ses pieds).
+   Les objets collés gardent leur nom, leur modèle, leur place (rotation, échelle), leur origine, « Aimanté au sol » et ce qui a été
+   allégé ; ils ont des numéros neufs et **sont choisis** (dans la vue et la liste). Une séquence sans décor en reçoit un, à l'aspect
+   (soleil, ciel, brume, ombres) du décor d'où viennent les objets. **Une étape d'annulation** par collage.
+4. **Plusieurs objets à la fois** : Maj+clic dans la vue (partie 184) ou, nouveau, **Ctrl ou Maj + clic dans la liste du panneau**
+   en choisit plusieurs ; ils se copient, se coupent, se collent ensemble, à leurs places les uns par rapport aux autres.
+5. **Le panneau Espace 3D**, sous Ajouter / Dupliquer / Enlever : **Copier**, **Couper**, **Coller** (« Coller (3 objets) »), les
+   mêmes que les touches ; puis **« Copier vers la séquence… »** et **« Envoyer vers la séquence… »**, deux menus des autres séquences
+   du projet (leur nom, et combien d'objets 3D a déjà leur décor). Copier vers : une copie à la même place, l'objet reste ici ;
+   Envoyer vers : il quitte ce décor. **Une étape d'annulation** chacun (Ctrl+Z ramène tout des deux côtés). Ils visent les objets
+   choisis dans la vue, sinon celui de la liste ; grisés s'il n'y a rien de choisi ou pas d'autre séquence (la bulle le dit).
+6. **D'un projet ouvert à l'autre** (les onglets de projets) : ce qu'on copie dans l'un se colle dans l'autre, comme les autres
+   copies. **Le modèle n'est ni relu ni renvoyé à la carte graphique** ; s'il manque au projet d'arrivée, il y entre et **s'enregistre
+   avec lui** (dans `decors/`, sous son empreinte) ; si ce projet a déjà le même contenu (le même arbre de la banque), c'est son modèle
+   qui sert (toujours un seul fichier par contenu).
+7. **Une séquence née d'une autre emporte son décor** : « Couper la séquence ici » (la planche des séquences) et « Nouvelle séquence
+   avec les plans choisis / les cases choisies » donnent à la séquence neuve (et à la suite d'une séquence coupée en deux) **une copie
+   du décor que ses plans montraient** : les mêmes objets aux mêmes places, les mêmes modèles, mais un décor à elle — déplacer un
+   objet de l'une ne touche pas l'autre. FEANOR n'a pas de commande qui duplique ou copie une séquence entière (copier-coller des plans
+   les colle dans la séquence où l'on colle) ; ce sont les deux seules qui font naître une séquence des plans d'une autre.
+8. **Le budget de cet ordinateur** (partie 181) vaut pour la somme du décor : un collage, une copie ou un envoi qui le ferait dépasser
+   est **refusé**, avec un message (« le décor de la séquence aurait N triangles… »). Jamais de ralentissement.
+9. **Supprimer une séquence** (ses plans) garde son décor pour Ctrl+Z, comme avant.
+
+### 190.2 Comment c'est fait
+
+- **`copiedecor.rs`** (nouveau) porte tout. **Le presse-papiers** est `App::copie3d` (`Copie3d { presse, main, recente }`), un champ
+  hors de l'échange des onglets (classé avec les autres presse-papiers dans `PARTAGES`) : `PresseDecor` garde des copies des objets
+  (leur `Arc<Modele3d>` partagé, donc leur `Modele3d::uid` : la carte graphique a déjà le modèle), l'aspect de leur décor, le projet
+  (`App::doc_epoch`) et la séquence d'où ils viennent, et combien de fois ils ont été collés à côté d'eux-mêmes.
+- **Qui a la main** : `Copie3d::main` est remis à faux à chaque appui (`App::update`, comme le panneau Effets et le panneau Calques,
+  `fxcopie.rs`) ; un appui dans une vue Espace 3D hors des outils de dessin, de trajectoire et de sélection (`e3_input_objets`), ou
+  dans le décor du panneau (`decor3d_reglages`), le reprend. `run_action_now` : `edition.copier` / `edition.couper` visent les objets
+  si `decor3d_a_la_main` (la main et un objet choisi dans la vue), `edition.coller` (et `coller_a_la_tete`) si
+  `decor3d_coller_a_la_main` (la main, et `Copie3d::recente` : remis à faux par toute autre copie au début de `run_action_now`,
+  comme `layer_clip_recent`). Ces règles passent avant celles des effets, des calques, des clés, des plans et du dessin ; sinon tout
+  suit le même chemin qu'avant. Une copie d'objets écrit « FEANOR : objets 3D copiés » dans le presse-papiers du système (une
+  image copiée ailleurs ne passe plus avant) et ôte la main aux clés copiées (`fx_clip_recent`, `cam_clip_recent`), comme une copie
+  de plans ; une image du système n'est pas collée quand le décor a la main et que ses objets sont la dernière copie.
+- **Un seul cœur** : `App::decor3d_transferer(nom, retirer, poser)` — couper, coller, copier et envoyer vers une séquence. Le budget
+  de la machine est vérifié sur le décor d'arrivée avant de rien changer ; puis un instantané, les objets retirés d'une séquence,
+  les copies posées dans une autre (`Document::poser_copies_3d` : numéros neufs par `alloc`, le modèle de même empreinte du projet
+  repris par `Decors3d::modele_d_empreinte`, sinon celui de la copie), `decor3daimant::aimanter` sur chaque décor touché,
+  `reposer_les_cartes_aimantees` sur chaque séquence touchée, **une étape** (`commit_structure`). Le décalage du collage à côté
+  (`pas_a_cote`) est celui de « Dupliquer » pour un objet seul, la boîte du groupe pour plusieurs ; il ne s'applique que si l'un des
+  objets copiés est encore, à la même place, dans le décor où l'on colle (même projet, même séquence).
+- **Les séquences nées d'une autre** : `Document::copier_decor_de_sequence(de, vers)` (un `Decor3d::new` — un `uid` neuf, sa propre
+  texture —, le même aspect, les objets clonés aux numéros neufs, les modèles partagés), appelé par `couper_sequence_avant`
+  (`planchesequences.rs`) et `new_sequence_from_plans` (`sequenceplans.rs`, pour la séquence neuve et pour la suite d'une séquence
+  coupée). Dans l'étape d'annulation de la commande (le décor est dans `Structure`).
+- **Le fichier** ne change pas : un modèle collé d'un autre projet a ses octets en mémoire (`Modele3d::octets`), et
+  `decor3d::plan_save` écrit ceux qui manquent sous `decors/<empreinte>.glb`, comme pour un import.
+- **Le panneau** (`decor3dui.rs`) : la liste montre choisis les objets de la vue et celui de la liste ; Ctrl ou Maj + clic y ajoute
+  ou retire un objet du choix de la vue (`e3_choisir_objet(id, true)`) ; les boutons et les deux menus appellent `decor3d_copier`,
+  `decor3d_couper`, `decor3d_coller`, `decor3d_vers_sequence` sur `decor3d_objets_vises` (la vue, sinon la liste).
+
+### 190.3 Essais (`src/copiedecor_tests.rs`, 13)
+
+Copier-coller dans la même séquence (à côté, 2,2 m pour une dalle de 2 m, puis 4,4 m ; le nom, l'origine, l'aimant, la rotation,
+l'échelle gardés ; **le même `Arc` de modèle** ; numéros neufs ; la copie choisie dans la vue et la liste ; une étape par collage,
+Ctrl+Z) ; dans une autre séquence (à la même place, un décor neuf à l'aspect de l'autre, la carte aimantée de cette séquence monte de
+0,4 m sur la dalle collée, Ctrl+Z la fait redescendre) ; couper (une étape, le banc redescend sur le sol, l'objet n'est plus choisi)
+puis coller dans la même séquence (à la même place, le banc remonte) ou dans l'autre (déplacé) ; deux objets ensemble (ailleurs : à
+leur place, le banc sur la dalle ; ici : décalés du même pas) ; copier et envoyer vers une autre séquence (une étape chacun, Ctrl+Z des
+deux côtés, vers sa propre séquence : rien) ; **par l'application entière** (le banc des mesures, la vue à côté) : un clic sur un
+objet dans la vue le choisit et donne la main au décor, Ctrl+C (l'événement Copier d'egui) le copie, un clic sur la feuille reprend la
+main et Ctrl+C n'est plus celui des objets ; **Ctrl+C / Ctrl+V d'avant** : un objet choisi dans la vue mais la main ailleurs, le
+dessin (une image collée, copiée, recollée), le panneau Calques (copier, coller un calque), le montage (copier un plan) ; la main au
+décor sans objet choisi : le dessin ; des objets copiés puis un dessin copié : Ctrl+V colle le dessin ; **« Couper la séquence ici »**
+et **« Nouvelle séquence avec les cases choisies »** : chaque séquence neuve a une copie indépendante du décor (autre `uid`, mêmes
+modèles, numéros neufs, mêmes places ; déplacer un objet de la copie laisse l'original), Ctrl+Z ne laisse qu'un décor ; supprimer la
+séquence puis Ctrl+Z rend son décor ; **l'enregistrement après collage** (six objets, deux fichiers dans `decors/`, relus aux mêmes
+places, les trois dalles relues partageant un modèle) ; **un autre projet ouvert** (deux onglets) : les objets collés partagent le
+modèle de l'autre onglet, enregistré et relu le projet d'arrivée a les deux modèles sous leur empreinte, le premier projet n'a pas
+changé ; dans un troisième qui avait déjà la dalle, c'est son modèle qui sert ; **le budget** : un collage qui le dépasserait est
+refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests` classe `copie3d` parmi les champs partagés.
+
+### 190.4 Ce qui n'est pas fait (ou limité)
+
+- **Glisser un objet d'une séquence à l'autre** (à la souris) : pas fait ; « Envoyer vers la séquence… » ou Ctrl+X / Ctrl+V le
+  remplacent.
+- **Pas de commande « Dupliquer la séquence »** dans FEANOR : rien à faire emporter. `Document::copier_decor_de_sequence` est prêt
+  pour elle.
+- **Édition > Copier / Coller (le menu)** ne vise pas les objets : un clic dans le menu est un appui hors du décor (comme pour le
+  panneau Calques et le panneau Effets). Les boutons du panneau et les touches les visent.
+- **La main au décor ne se voit pas** (pas de cadre autour de la vue ou du panneau, comme pour le montage) ; la barre d'état dit ce
+  qui a été copié ou collé.
+- **Les versions d'une séquence** (`variantes.rs`) partagent le décor de leur séquence, comme avant : en créer une ne copie rien.
+- Le collage d'un **autre projet de taille différente** pose les objets à la même place dans le monde ; le sol (`Monde::sol_y`) est
+  celui du projet d'arrivée, l'aimant y repose les objets aimantés, les autres gardent leur hauteur.
+- Coller à côté **plusieurs fois après des annulations** compte les collages faits (le suivant peut aller un cran plus loin).
+- Le budget n'est vérifié que si cet ordinateur a été mesuré (comme pour un import) ; il juge la somme du décor d'arrivée. Un modèle
+  masqué sur cet ordinateur (« Ce décor est lourd », en attente du choix) se copie et se colle masqué, et n'est pas compté.
+
+### 190.5 À essayer (sa checklist)
+
+1. Un projet de copie, deux séquences ; dans la première, un décor de la banque 3D : une dalle, un banc posé dessus, un arbre.
+2. Vue Espace 3D : clic sur la dalle, **Ctrl+C**, **Ctrl+V** : une deuxième dalle **à côté**, choisie ; Ctrl+V encore : une troisième
+   plus loin. Ctrl+Z deux fois.
+3. Maj+clic sur le banc (la dalle et le banc choisis), Ctrl+C ; clic sur un plan de la seconde séquence (montage), puis **clic dans la
+   vue** (dans le vide), **Ctrl+V** : la dalle et le banc **à la même place**, le banc sur la dalle. Un personnage « Aimanté au sol »
+   de cette séquence, debout là : il monte sur la dalle. Ctrl+Z : tout part, il redescend.
+4. Dans la liste du panneau : **Ctrl+clic** sur deux objets, **Couper** : ils disparaissent, ce qui reposait dessus redescend ;
+   **Coller** : ils reviennent à leur place.
+5. **« Envoyer vers la séquence… »** l'arbre vers la seconde séquence : il quitte la première ; **« Copier vers la séquence… »** le
+   banc : il reste aussi ici. Ctrl+Z à chaque fois.
+6. **Ailleurs, rien ne change** : clic sur le dessin, Ctrl+C / Ctrl+V d'un trait choisi ; dans le panneau Calques, Ctrl+C / Ctrl+V d'un
+   calque ; dans le montage, Ctrl+C / Ctrl+V d'un plan ; dans la timeline, des clés. Même avec un objet resté choisi dans la vue.
+7. Deux projets ouverts (onglets) : copie un arbre dans l'un, colle-le dans l'autre (clic dans la vue d'abord) ; enregistre ce
+   second projet, ferme-le, rouvre-le : l'arbre est là ; dans son dossier `decors/`, le fichier du modèle.
+8. Planche des séquences : **« Couper la séquence ici »** au milieu d'une séquence qui a un décor : les plans de la nouvelle séquence
+   montrent **le même décor** ; déplace un objet dans la nouvelle : l'ancienne ne bouge pas. Ctrl+Z. De même pour « Nouvelle séquence
+   avec les plans choisis ».
+9. Un décor au bout du budget de ton PC : Ctrl+V d'un gros objet y est **refusé** (le message) ; rien ne ralentit.
+## 191. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+
+(Partie 191, appelée 179 dans les commits de `timeline-serree` : le numéro 179 était pris par « Une timeline plus claire », venue du main de GitHub.)
 
 Anthony a annoté au feutre rouge une capture de la timeline du Storyboard (colonne de 432 points, la barre sur deux lignes) :
 « Bouge les éléments pour resserrer les choses et éviter les pertes d'espace. Réduis un peu l'épaisseur des calques. Justifie toutes
@@ -16309,7 +16588,7 @@ barre du bas de la colonne entourés, une flèche vers la ligne « ⊖ Calques �
 entourée, une flèche vers la place vide après le nom ; un trait vertical vers 347 points et toute la droite de la colonne hachurée.
 Rien dans le projet (format inchangé) ; l'espace Montage garde sa disposition.
 
-### 189.1 Ce qui change pour lui
+### 191.1 Ce qui change pour lui
 
 **Storyboard**
 
@@ -16350,7 +16629,7 @@ ligne, la moitié passerait sous « ⋯ ». À lui de dire s'il la veut aussi su
 **Ce qui ne change pas** : l'aspect des blocs de plans et de calques dans la bande (ils suivent seulement la hauteur de leur
 rangée), les couleurs, l'espace Montage (pistes de 66 et 17, sa barre au-dessus de la bande, sa barre des calques en bas).
 
-### 189.2 Le code
+### 191.2 Le code
 
 - `src/barres.rs` : `barre_dans_la_colonne_serree`, `qui_tient`, `rang_dans_la_barre` (le rang d'usage) ; retirés :
   `barre_dans_la_colonne` (la ligne à pleine largeur) et la mesure « sur une ligne ».
@@ -16377,7 +16656,7 @@ dire « la colonne pourrait s'arrêter là » (c'est à peu près la largeur d'o
 forcé : avec tout collé à droite et la barre sur une ligne, la colonne ramenée à 340 (double-clic sur sa poignée) ne perd plus de
 place ; à lui de dire s'il veut que sa largeur revienne d'office à 340.
 
-### 189.3 Les essais
+### 191.3 Les essais
 
 `src/timeline_serree_tests.rs` (lancés d'abord sur le code d'avant : 5 rouges sur 6, le Montage inchangé déjà vert ; verts
 ensuite) : la barre sur une seule ligne à 1920 × 1080 et 960 × 600, colonne d'origine, la plus étroite, 432 et 520, rien de perdu
@@ -16398,7 +16677,7 @@ mode sur la seconde rangée) ; `timelinesb_tests`, `calquesplace_tests` (plus de
 `poskeysmontage_tests`, `timeline_repliee_tests`, `calquesplace_tests` (les hauteurs du Montage, 66 et 17, quand l'essai est dans
 l'espace Montage).
 
-### 189.4 À tester (sa checklist)
+### 191.4 À tester (sa checklist)
 
 1. Storyboard, colonne à sa largeur : une seule ligne de boutons ; « ⋯ » : ce qui n'y tient pas (avec l'épingle). Plus de bande vide
    sous la règle.
@@ -16411,7 +16690,7 @@ l'espace Montage).
 6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
 7. Montage : rien n'a changé.
 
-### 189.5 Sa demande sur la capture d'après 179
+### 191.5 Sa demande sur la capture d'après 179
 
 Sur la capture du Storyboard après 179, Anthony a entouré, sur la ligne « ⊖ Calques », le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯, tracé une flèche vers la droite jusqu'aux icônes des colonnes (œil, verrou, pelure, transparence, pochoir, aplat,
@@ -16420,7 +16699,7 @@ taille que sur le reste des autres lignes. Pareil pour les icônes de l'interfac
 icônes doivent avoir cette taille. La taille des icônes et de l'interface doit être réglable dans les préférences. »
 Rien dans le projet (format inchangé, 60).
 
-### 189.6 Ce qui a bougé
+### 191.6 Ce qui a bougé
 
 **La ligne « ⊖ Calques »** (Storyboard et Animation) : ⊖ et « Calques » restent à gauche ; le groupe +, dossier, effet, dupliquer,
 supprimer, ⋯ est **collé au bord droit**, à la place des icônes des colonnes, au même bord que le ⋯ des lignes Plans et Caméra. Le
@@ -16454,7 +16733,7 @@ réglage et quelques icônes de ses pistes (`layerheads::icon_at`, `case_de_regl
 Barre de lecture : les commandes qui passent sous « ⋯ » sont maintenant strictement les moins utilisées (avant, un trait de groupe
 pouvait faire entrer une commande moins utilisée à la place d'une plus utilisée).
 
-### 189.7 Les réglages
+### 191.7 Les réglages
 
 Préférences > Apparence > **Tailles** (le groupe s'appelait « Taille de l'interface ») :
 
@@ -16469,7 +16748,7 @@ Le code : `src/tailleicones.rs` (la taille en cours, `mesure`, `case_de_barre`, 
 droite) ; `layerheads::case_de_reglage_en` (l'icône pâle), `icon_w` ; `icones_des_colonnes` retirée ; `timeline::LIGNE1_H` /
 `LIGNE2_H` = 24.
 
-### 189.8 Les essais
+### 191.8 Les essais
 
 `src/tailleicones_tests.rs` (lancés d'abord sur le code d'avant : 8 rouges sur 9 ; le neuvième, l'écriture du réglage, était déjà
 vert, le champ ayant été ajouté avant ; verts ensuite) : la ligne « Calques » sans icônes des colonnes, ses commandes collées à droite
@@ -16489,7 +16768,7 @@ et le « ⋯ » des calques, collé à son bord, passait au-dessus de « Notes �
 Vérificateur (`-Repetitions 2`) : RESULTAT : OK, 4938 essais à chaque passage, aucun intermittent. Captures (banc headless, taille
 réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179b-6-preferences-tailles.png`.
 
-### 189.9 À tester (sa checklist)
+### 191.9 À tester (sa checklist)
 
 1. Storyboard : la ligne « ⊖ Calques » : « Calques » à gauche, +, dossier, effet, dupliquer, supprimer, ⋯ à droite ; plus d'icônes
    de colonnes dessus.
@@ -16502,7 +16781,7 @@ réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179
 6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
 7. Montage : rien n'a changé.
 
-### 189.10 Le repli du calque actif devient une option
+### 191.10 Le repli du calque actif devient une option
 
 Anthony : « Ok maintenant je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille que l'on
 soit sur le calque actif ou non. Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur effet
@@ -16511,7 +16790,7 @@ et opacité. »
 **D'origine**, le calque actif a la hauteur des autres : une ligne de 15 points dans le Storyboard, 18 dans l'Animation. Il reste
 surligné (son cadre) ; dans le Storyboard, ses réglages (verrou, pelure, transparence, pochoir, aplat, caméra) sont en icônes collées
 à droite, pâles quand ils sont éteints, un clic les bascule (mêmes bulles, Ctrl+Z) ; dans l'Animation, la ligne du calque courant
-les avait déjà (189.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
+les avait déjà (191.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
 que si le calque actif se déplie).
 
 **Où sont le mode et l'opacité** quand le calque est replié : clic droit sur sa piste (ou sa ligne dans l'Animation) > Apparence
@@ -16536,7 +16815,7 @@ Le code : `settings.rs` (`deplier_calque_actif`), `pistes.rs` (`pistes_auto_open
 rouges sur 6 ; l'essai d'alignement, mesuré d'abord à la boîte, était vert : il mesure maintenant l'encre). Le banc d'essai
 (`perf_tests::banc_taille`) allume le réglage pour les essais d'avant, qui décrivent le calque déplié.
 
-### 189.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
+### 191.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
 
 Anthony : « C'est vrai qu'il manque une ligne de séquence. La ligne des icônes de lecture se placerait au-dessus de tout dans ce
 cas. »
@@ -16559,7 +16838,7 @@ Le code : `montagerows.rs` (`SB_SEQ_H` = 20, `sb_regle_h`, `Rows::regle_h`), `st
 `timelinesb.rs` (`entete_sequences_sb`), `barres.rs` (`HORS_DE_LA_BARRE_DE_LECTURE`). Essais : `src/ligne_sequence_tests.rs` (5
 rouges sur le code d'avant, verts ensuite).
 
-### 189.12 À tester (sa checklist)
+### 191.12 À tester (sa checklist)
 
 1. Storyboard : tous les calques de la même hauteur ; le calque actif surligné, ses réglages en icônes à droite ; clic droit >
    Apparence pour le mode et l'opacité.
@@ -16570,7 +16849,7 @@ rouges sur le code d'avant, verts ensuite).
 5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
 6. Montage : rien n'a changé.
 
-### 189.13 Tous les calques épais d'origine, la hauteur de chaque ligne
+### 191.13 Tous les calques épais d'origine, la hauteur de chaque ligne
 
 Anthony, sur la capture du calque déplié (deux rangées de 20 points) : « Il faut que tous les calques aient cette épaisseur de base.
 Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan, caméra, calques. »
@@ -16584,7 +16863,7 @@ courant). **Les dossiers** gardent leur ligne fine (13 points dans le Storyboard
 mode ; leur opacité est au clic droit (Apparence). Dans l'Animation, un dossier courant avait avant sa ligne de 40 (son opacité) :
 il garde maintenant la ligne fine, comme les autres.
 
-**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 189.10, éteint d'origine, clé `replier_calques` ; un
+**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 191.10, éteint d'origine, clé `replier_calques` ; un
 ancien `deplier_calque_actif` n'est pas repris) met tous les calques sur une ligne fine (15 points dans le Storyboard, 18 dans
 l'Animation), le calque actif avec ses réglages en icônes à droite. Mêmes places : le ⋯ de la ligne « Calques », Préférences >
 Montage > Pistes du montage, ⊖ / ⊕ et Maj+Alt+C dans l'Animation.
@@ -16609,7 +16888,7 @@ Le code : `src/hauteurstimeline.rs` (hauteurs, couleurs, la page des Préférenc
 `sb_cam_h`, `calques_du_storyboard`), `pistes.rs` (la piste de chaque calque, `regler_replier_calques`), `layerheads.rs`,
 `opacitecleselui.rs` (`losange_opacite_de`), `settings.rs`.
 
-### 189.14 La couleur de chaque ligne
+### 191.14 La couleur de chaque ligne
 
 Anthony : « Ajoute aussi dans les réglages la possibilité de donner une couleur à chaque ligne. »
 
@@ -16623,9 +16902,9 @@ recalculé) : une couleur claire éclaircit un peu le fond, sans le rendre blanc
 couleur d'étiquette d'un calque et les teintes des versions de plan gardent les leurs. Dans l'espace Montage, rien n'est teinté (le
 code des en-têtes et des rangées est partagé : la teinte n'y joue que pour la disposition du Storyboard).
 
-Essais (189.13 et 189.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
+Essais (191.13 et 191.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
 
-### 189.15 À tester (sa checklist)
+### 191.15 À tester (sa checklist)
 
 1. Storyboard : tous les calques sur deux rangées ; changer de calque actif : rien ne bouge, il est surligné.
 2. Sur un calque qui n'est pas l'actif : son mode, son opacité ; avec deux calques choisis (Ctrl + clic) : les deux.
@@ -16635,7 +16914,7 @@ Essais (189.13 et 189.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calq
 5. Animation : tous les calques sur leur ligne complète, les dossiers fins.
 6. Montage : rien n'a changé.
 
-### 189.16 Trois indicateurs en moins sur la ligne des calques
+### 191.16 Trois indicateurs en moins sur la ligne des calques
 
 Anthony, sur les trois indicateurs de la rangée 1 d'un calque (le dossier du groupe de couleur, le + / − du sens du pochoir, la
 punaise de la position verrouillée) : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit ».
@@ -16653,10 +16932,10 @@ punaise de la position verrouillée) : « Non supprime les carrément. Ça sera 
 Essais : `src/indicateurs_tests.rs` (3 rouges sur le code d'avant, verts ensuite) ; adaptés : ceux qui cherchaient « Pochoir
 positif » ou « Verrouiller la position » sur la ligne du calque.
 
-(La checklist de la partie 189.15 ci-dessus vaut pour 189.13 et 189.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
+(La checklist de la partie 191.15 ci-dessus vaut pour 191.13 et 191.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
 de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)
 
-### 189.17 Des listes déroulantes, alignées
+### 191.17 Des listes déroulantes, alignées
 
 Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les » ; puis : « pour le choix des valeurs dans réglages,
 propose plutôt un menu déroulant plutôt que plusieurs boutons. on gagnera de l'espace ».

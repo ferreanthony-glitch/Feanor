@@ -372,6 +372,11 @@ impl App {
         let trace = self.e3_trace();
         let selectionne = self.e3_selectionne();
         let dessine = self.e3_dessine() || trace || selectionne;
+        // Un appui dans la vue (hors des outils de dessin, de trajectoire et de sélection pris dans la vue) donne la main au décor
+        // 3D : Ctrl+C, Ctrl+X et Ctrl+V visent ses objets choisis (partie 190, `copiedecor.rs`).
+        if !dessine && response.hovered() && ctx.input(|i| i.pointer.any_pressed()) {
+            self.decor3d_prendre_la_main();
+        }
         if dessine {
             let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
             if trace {
@@ -789,9 +794,13 @@ impl App {
                 self.espace3d.sel = vec![espace3d::card_selection(current)];
             }
         }
+        // Les ombres des cartes sous le soleil du décor 3D (partie 189, `ombres3d.rs`) : les mêmes pour toutes les vues de cette image.
+        // (Lâchées après les vues : elles tiennent les textures des cartes.)
+        self.espace3d.ombres = self.e3_ombres_de_la_vue(ui.ctx());
         // Plusieurs vues (`espace3dvues.rs`) : chacune son point de vue, les mêmes cartes et la même sélection.
         if self.e3_vues_multiples() {
             self.e3_vues_panel(ui, rect);
+            self.espace3d.ombres = None;
             return;
         }
         let through = self.espace3d.through_camera;
@@ -820,6 +829,7 @@ impl App {
         let decor = self.e3_peindre_decor(&painter, draw, &view, 1).then_some((1, draw));
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
+        self.espace3d.ombres = None;
         if !through {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
         }
@@ -885,6 +895,7 @@ impl App {
         let frame = self.cur_frame;
         let cible_egui = self.gpu.as_ref().map(|g| g.render_state().target_format);
         let mut rang = 0u32;
+        let mut rang_recue = 0u32;
         for li in self.e3_cartes_a_tracer(view) {
             let layer = &self.layers()[li];
             let xf = world.carte(layer, frame);
@@ -915,7 +926,16 @@ impl App {
                     self.espace3d.vu_par_calque.insert(id, c);
                 }
                 if let Some(dessin) = tex.and_then(|tex| card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))) {
+                    // Les ombres que la carte reçoit (partie 189) : retirées juste après son dessin, sur son maillage.
+                    let recue = match (decor, tex) {
+                        (Some((cle, zone)), Some(tex)) => self.e3_ombre_recue(li, &dessin, tex, &at, view, zone, cle, rang_recue),
+                        _ => None,
+                    };
                     painter.add(Shape::mesh(dessin));
+                    if let Some((zone, r)) = recue {
+                        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(zone, r));
+                        rang_recue += 1;
+                    }
                 }
                 if let Some(f) = flottante {
                     // (Le pixel (u, v) de la feuille, mené au point du dessin où le geste le met, puis sur la carte.)
@@ -1059,6 +1079,10 @@ fn seg_dist(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     (w - d * t).length()
 }
 
+/// Les carreaux d'une carte de la vue sur chaque côté (`card_mesh`) : le sommet k du maillage est le point (u, v) =
+/// (k mod (n + 1), k div (n + 1)) / n de la carte (les ombres reçues le retrouvent, partie 189).
+pub(crate) const SUBDIV_CARTE: usize = 16;
+
 /// Une carte subdivisée : les points `at(u, v)` (u, v de 0 à 1, v vers le bas), texturée ou d'une couleur. La texture est
 /// posée par triangles : sans subdivision, la perspective la déformerait. Un morceau qui passe derrière l'œil n'est pas
 /// dessiné.
@@ -1068,7 +1092,7 @@ fn seg_dist(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
 /// arrivait à wgpu, qui refuse une tranche vide (« Buffer slices can not be empty ») et arrêtait FEANOR — le plantage
 /// « quand on se balade dans l'Espace 3D » (`docs/INTERFACE.md`, partie 147).
 pub(crate) fn card_mesh(view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, at: &dyn Fn(f32, f32) -> V3, texture: Option<egui::TextureId>, color: Color32) -> Option<egui::Mesh> {
-    const SUBDIV: usize = 16;
+    const SUBDIV: usize = SUBDIV_CARTE;
     let mut mesh = egui::Mesh::with_texture(texture.unwrap_or_default());
     let n = SUBDIV;
     let mut front = Vec::with_capacity((n + 1) * (n + 1));

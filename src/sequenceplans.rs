@@ -6,7 +6,9 @@
 //! - Une séquence que la nouvelle coupe en deux (les plans choisis étaient en son milieu) devient deux séquences : la première
 //!   garde son identité (son nom, son numéro, ses variantes), la suite reçoit une séquence à elle, de même nom, sans numéro
 //!   propre (en numérotation verrouillée elle en reçoit un entre ses voisines, `Document::assign_numbers`).
-//! - Chaque plan garde sa scène, donc son nom et son numéro propre. Rien d'autre ne change : ni images, ni calques, ni son.
+//! - Chaque plan garde sa scène, donc son nom et son numéro propre. Rien d'autre ne change : ni images, ni calques, ni son ; le
+//!   décor 3D qu'ils montraient les suit (la séquence neuve, et la suite d'une séquence coupée, en reçoivent une copie
+//!   indépendante : `Document::copier_decor_de_sequence`, partie 190).
 //! - Une seule étape d'annulation (`App::structure_op_dessins`) ; refusé sous le verrou du storyboard.
 //! - Un plan qui a d'autres panneaux dans sa scène (fichiers d'avant les plans) les emmène : une scène ne se partage pas.
 
@@ -41,6 +43,8 @@ impl Document {
         if self.refuser_si_sequence_videe(|p| chosen.contains(&p)) {
             return None;
         }
+        // (La séquence du premier plan choisi : la neuve reçoit une copie de son décor 3D, partie 190.)
+        let source = self.sequence_of(first);
         let seq = self.new_sequence();
         // Les plans choisis se suivent, à la place du premier.
         let (moved, mut kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.panels).into_iter().partition(|p| chosen.contains(&p.id));
@@ -66,6 +70,8 @@ impl Document {
                         if let Some(q) = self.sequence_mut(neuve) {
                             q.name = name;
                         }
+                        // (La suite garde le décor 3D qu'elle montrait : une copie, partie 190.)
+                        self.copier_decor_de_sequence(s, neuve);
                         neuve
                     } else {
                         s
@@ -81,6 +87,9 @@ impl Document {
                 }
             }
         }
+        // Les plans choisis gardent le décor 3D qu'ils montraient : la séquence neuve reçoit une copie de celui de la séquence du
+        // premier (partie 190, `copiedecor.rs`).
+        self.copier_decor_de_sequence(source, seq);
         Some(self.normalize_keeping(first_id))
     }
 }

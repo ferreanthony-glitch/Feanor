@@ -105,6 +105,16 @@ struct Lourd {
     partage: bool,
 }
 
+/// Un bouton du presse-papiers des objets du décor (panneau Espace 3D, partie 190).
+#[derive(Clone, Copy)]
+enum GestePresse {
+    Copier,
+    Couper,
+    Coller,
+    /// Copier (faux) ou envoyer (vrai) vers la séquence.
+    Vers(u64, bool),
+}
+
 /// Le titre de la fenêtre.
 pub(crate) const TITRE_LOURD: &str = "Ce décor est lourd";
 
@@ -693,6 +703,8 @@ impl App {
                         taille_pts: [draw.width(), draw.height()],
                         cible_egui: g.render_state().target_format,
                         qualite,
+                        // (Les ombres des cartes, partie 189 : seulement quand ce décor a les siennes.)
+                        cartes: self.espace3d.ombres.as_ref().map(|o| o.cartes.clone()),
                     };
                     painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
                     sur_la_carte = true;
@@ -788,6 +800,24 @@ impl App {
         let choisi = self.decor3d.choisi.filter(|id| d.objet(*id).is_some()).or_else(|| d.objets.last().map(|o| o.id));
         let mut nouveau_choix = choisi;
         let (mut enlever, mut dupliquer, mut ajouter) = (None, None, false);
+        // Copier, couper, coller, copier ou envoyer vers une autre séquence (partie 190, `copiedecor.rs`) : les objets choisis dans
+        // la vue Espace 3D, sinon celui de la liste.
+        let choisis_vue = self.e3_objets_choisis();
+        let vises: Vec<u64> = if choisis_vue.is_empty() { choisi.into_iter().collect() } else { choisis_vue.clone() };
+        let en_presse = self.copie3d.presse.as_ref().map(|p| p.objets.len());
+        let autres: Vec<(u64, String)> = self
+            .doc
+            .sequence_order()
+            .into_iter()
+            .filter(|&q| q != seq)
+            .map(|q| {
+                let n = self.doc.decors3d.par_sequence.get(&q).map_or(0, |d| d.objets.len());
+                let nom = self.doc.sequence_label(q);
+                (q, if n == 0 { nom } else { format!("{nom} ({n} objet{} 3D)", if n > 1 { "s" } else { "" }) })
+            })
+            .collect();
+        let mut geste: Option<GestePresse> = None;
+        let (mut clic_simple, mut bascule, mut prise) = (None, None, false);
         let monde = Monde::of(&self.doc);
         let poids = d.poids();
         egui::CollapsingHeader::new(RichText::new(format!("Décor 3D de la séquence ({} objet{})", d.objets.len(), if d.objets.len() > 1 { "s" } else { "" })).strong()).id_salt("decor3d_reglages").default_open(true).show(ui, |ui| {
@@ -813,9 +843,15 @@ impl App {
                 for o in &d.objets {
                     let masque = crate::decor3d::masque(o.modele.uid);
                     let texte = if masque { format!("{} (masqué)", o.nom) } else { o.nom.clone() };
-                    let r = ui.selectable_label(Some(o.id) == choisi, texte).on_hover_text(format!("{} · {} triangles", o.source, grand_nombre(o.modele.scene.triangles() as u64)));
+                    let r = ui.selectable_label(Some(o.id) == choisi || choisis_vue.contains(&o.id), texte).on_hover_text(format!("{} · {} triangles · Ctrl ou Maj + clic : en choisir plusieurs (pour les copier ensemble)", o.source, grand_nombre(o.modele.scene.triangles() as u64)));
                     if r.clicked() {
-                        nouveau_choix = Some(o.id);
+                        let m = ui.input(|i| i.modifiers);
+                        if m.shift || m.command || m.ctrl {
+                            bascule = Some(o.id);
+                        } else {
+                            nouveau_choix = Some(o.id);
+                            clic_simple = Some(o.id);
+                        }
                     }
                 }
             });
@@ -832,6 +868,50 @@ impl App {
                     }
                 }
             });
+            // Copier, couper, coller (partie 190) : les mêmes que Ctrl+C, Ctrl+X, Ctrl+V après un clic dans la vue ou dans ce décor.
+            ui.horizontal_wrapped(|ui| {
+                let n = vises.len();
+                let lesquels = if n > 1 { format!("les {n} objets choisis") } else { "l'objet choisi".to_string() };
+                if ui.add_enabled(n > 0, egui::Button::new("Copier")).on_hover_text(format!("Copie {lesquels} (Ctrl+C) : Ctrl+V les colle dans le décor de la séquence du plan courant, ici, dans une autre séquence ou dans un autre projet ouvert.")).clicked() {
+                    geste = Some(GestePresse::Copier);
+                }
+                if ui.add_enabled(n > 0, egui::Button::new("Couper")).on_hover_text(format!("Copie {lesquels} et l'enlève du décor (Ctrl+X) ; Ctrl+V le colle ailleurs, à la même place.")).clicked() {
+                    geste = Some(GestePresse::Couper);
+                }
+                let coller = match en_presse {
+                    Some(k) if k > 1 => format!("Coller ({k} objets)"),
+                    _ => "Coller".to_string(),
+                };
+                if ui.add_enabled(en_presse.is_some(), egui::Button::new(coller)).on_hover_text("Colle les objets 3D copiés dans ce décor (Ctrl+V) : à côté s'ils y sont encore, sinon à la même place que là d'où ils viennent.").clicked() {
+                    geste = Some(GestePresse::Coller);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                let possible = !vises.is_empty() && !autres.is_empty();
+                let pourquoi = if autres.is_empty() { "Le projet n'a pas d'autre séquence." } else { "Choisis d'abord un objet du décor." };
+                for (deplacer, titre, bulle) in [
+                    (false, "Copier vers la séquence…", "Une copie des objets choisis dans le décor d'une autre séquence du projet, à la même place (ceux-ci restent ici)."),
+                    (true, "Envoyer vers la séquence…", "Les objets choisis quittent ce décor pour celui d'une autre séquence du projet, à la même place."),
+                ] {
+                    ui.add_enabled_ui(possible, |ui| {
+                        ui.menu_button(titre, |ui| {
+                            for (q, nom) in &autres {
+                                if ui.button(nom).clicked() {
+                                    geste = Some(GestePresse::Vers(*q, deplacer));
+                                    ui.close_menu();
+                                }
+                            }
+                        })
+                        .response
+                        .on_hover_text(bulle)
+                        .on_disabled_hover_text(pourquoi);
+                    });
+                }
+            });
+            // (Un appui dans ce décor lui donne la main : Ctrl+C, Ctrl+X, Ctrl+V visent ses objets.)
+            if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+                prise = true;
+            }
             let Some(o) = choisi.and_then(|id| d.objet_mut(id)) else { return };
             ui.separator();
             ui.horizontal(|ui| {
@@ -916,9 +996,35 @@ impl App {
         });
         self.decor3d.choisi = nouveau_choix;
         // Un objet choisi dans la liste l'est aussi dans la vue Espace 3D (partie 184) : sa boîte s'y éclaire, les poignées y
-        // vont. (Et un objet choisi dans la vue l'est dans la liste : `e3_choisir_objet`.)
-        if let Some(id) = nouveau_choix.filter(|_| nouveau_choix != choisi) {
+        // vont. (Et un objet choisi dans la vue l'est dans la liste : `e3_choisir_objet`.) Un clic seul en fait le seul choisi ;
+        // Ctrl ou Maj + clic l'ajoute à ceux choisis dans la vue, ou l'en retire (partie 190).
+        if let Some(id) = clic_simple.or(nouveau_choix.filter(|_| nouveau_choix != choisi)) {
             self.e3_choisir_objet(id, false);
+        }
+        if let Some(id) = bascule {
+            // (Le premier Ctrl + clic part de l'objet de la liste, s'il n'était pas encore choisi dans la vue.)
+            if let Some(c) = choisi.filter(|c| *c != id && choisis_vue.is_empty()) {
+                self.e3_choisir_objet(c, false);
+            }
+            self.e3_choisir_objet(id, true);
+            if !self.e3_objets_choisis().contains(&id) {
+                self.decor3d.choisi = self.e3_objets_choisis().last().copied().or(self.decor3d.choisi.filter(|c| *c != id));
+            }
+        }
+        if prise || clic_simple.is_some() || bascule.is_some() || geste.is_some() {
+            self.decor3d_prendre_la_main();
+        }
+        if let Some(g) = geste {
+            self.decor3d_retouche_finir();
+            match g {
+                GestePresse::Copier => {
+                    self.decor3d_copier(&vises);
+                }
+                GestePresse::Couper => self.decor3d_couper(&vises),
+                GestePresse::Coller => self.decor3d_coller(),
+                GestePresse::Vers(q, deplacer) => self.decor3d_vers_sequence(&vises, q, deplacer),
+            }
+            return;
         }
         if ajouter {
             self.decor3d_retouche_finir();

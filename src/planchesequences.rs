@@ -267,6 +267,7 @@ impl Document {
             return None;
         }
         let id = self.panels[debut].id;
+        let ancienne = self.sequence_of(debut);
         let neuve = self.new_sequence();
         let scenes: Vec<u64> = self.panels[debut..fin].iter().map(|p| p.scene).collect();
         for sc in scenes {
@@ -274,6 +275,9 @@ impl Document {
                 s.sequence = neuve;
             }
         }
+        // Les plans qui partent gardent le décor 3D qu'ils montraient : la séquence neuve en reçoit une copie, indépendante
+        // (partie 190, `copiedecor.rs`).
+        self.copier_decor_de_sequence(ancienne, neuve);
         Some(self.normalize_keeping(id))
     }
 
