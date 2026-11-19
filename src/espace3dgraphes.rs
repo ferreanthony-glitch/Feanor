@@ -634,7 +634,11 @@ impl App {
             z[0], z[1], z[2], 0.0,
             0.0, 0.0, 0.0, 1.0,
         ];
+        // (La carte tourne autour de son origine, partie 182 : son origine reste où elle était.)
+        let e = world.ecart(l);
+        let o = world.origine_monde(&xf, e);
         xf.rot = m::euler_of(&axes);
+        let xf = world.xf_par_l_origine(&xf, e, o);
         let nom = ["Calque de face", "Calque au sol", "Calque en mur à gauche", "Calque en mur à droite"][k.min(3)];
         self.espace3d_step(nom, |s| {
             world.apply_card_xf_libre(&mut s.layers_mut()[li], frame, &xf);
@@ -1057,7 +1061,7 @@ impl App {
         if viser {
             let ids = self.e3_cible_de_la_visee();
             let world = self.e3_world();
-            let target = crate::espace3dgizmo::pivot_of(&self.e3_xfs(&ids));
+            let target = self.e3_pivot(&self.e3_xfs(&ids));
             let mut sc = world.scene_cam(&self.current_camera());
             sc.aim_at(target);
             let aimed = crate::camera::Camera { pan: sc.pan, tilt: sc.tilt, ..self.current_camera() };

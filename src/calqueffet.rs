@@ -304,6 +304,7 @@ pub fn marker_depuis(layers: &[Layer], li: usize, frame: usize, opacity: f32, fr
         ctg: None,
         fond: Some(FondPart::Reglage(Arc::new(reglage))),
         pre: None,
+        profondeur: None, ombre: None,
     })
 }
 
@@ -706,6 +707,8 @@ fn content_signature(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Opt
             FondPart::Forme(r) => format!("{r:?}"),
             FondPart::Reglage(r) => format!("{r:?}"),
             FondPart::Unie(c) => format!("unie {c:?}"),
+            // (Le rendu du décor 3D sous la caméra de cette image : son numéro le dit tout entier.)
+            FondPart::Decor(k) => format!("decor {}", crate::decor3d::id_of(k)),
         }).hash(&mut h);
     }
     h.finish()
@@ -755,6 +758,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
         ctg: None,
         fond: None,
         pre: None,
+        profondeur: None, ombre: None,
     };
     if let Some(cel) = crate::fxcache::get(id, sig) {
         tenus.tenir(id, cel);

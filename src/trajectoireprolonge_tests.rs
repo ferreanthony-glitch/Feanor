@@ -170,6 +170,8 @@ fn dans_l_espace_maj_depuis_la_fin_prolonge_le_chemin_sur_son_plan() {
     doc.panels[0].layers = vec![layer];
     doc.panels[0].length = 24;
     let mut b = banc_taille(doc, false, 1280, 720);
+    // (Ces essais suivent le déplacement relatif d'avant : une trajectoire neuve fait suivre l'origine du calque depuis la partie 182.)
+    b.app.traj.ancre_propose = Some(crate::trajectoire::Ancre::Depart);
     b.chauffer(2);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.run_action("espace3d.basculer");

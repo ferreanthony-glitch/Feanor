@@ -129,6 +129,7 @@ fn onion_tint_and_opacity() {
             ctg: None,
             fond: None,
             pre: None,
+            profondeur: None, ombre: None,
         }],
     };
     let c = render::composite_pixel(&doc, &plan, 0, 0);

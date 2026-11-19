@@ -310,7 +310,7 @@ fn numero_peinture(cels: &HashMap<CelId, Cel>, base: CelId) -> CelId {
 /// le même graffiti pour deux dessins du trait ; là où le trait n'a rien, le calque CTG non plus. Rend, pour chaque dessin
 /// du trait, son dessin de graffitis.
 fn recouvre(ctg: &Layer, t: &Layer) -> Option<BTreeMap<CelId, Option<CelId>>> {
-    if ctg.pre != t.pre || ctg.post != t.post || ctg.transform != t.transform || ctg.depth != t.depth || ctg.pos_keys != t.pos_keys {
+    if ctg.pre != t.pre || ctg.post != t.post || ctg.transform != t.transform || ctg.origine != t.origine || ctg.depth != t.depth || ctg.pos_keys != t.pos_keys {
         return None;
     }
     let mut map: BTreeMap<CelId, Option<CelId>> = BTreeMap::new();

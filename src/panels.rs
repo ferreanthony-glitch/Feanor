@@ -136,6 +136,10 @@ impl App {
                     }
                     self.action_item(ui, "Une vidéo (calque vidéo)…", "fichier.importer_video");
                     self.action_item(ui, "Une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
+                    self.action_item(ui, "Objet 3D pour le décor de la séquence (glTF, .glb)…", "fichier.importer_decor3d");
+                    if self.doc.decor_du_plan(self.cur_panel).is_some() {
+                        self.action_item(ui, "Enlever le décor 3D de la séquence", "decor3d.enlever");
+                    }
                     self.action_item(ui, "Des images comme références…", "references.importer_image");
                     self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
                     ui.separator();

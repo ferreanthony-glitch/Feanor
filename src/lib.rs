@@ -369,6 +369,22 @@ mod nouvellescles;
 mod accroche;
 #[cfg(test)]
 mod accroche_tests;
+// L'origine d'un calque, son vrai pivot, et l'aimant au sol des cartes (partie 182).
+mod origine;
+#[cfg(test)]
+mod origine_tests;
+// La profondeur partagée entre le décor 3D et les cartes dessinées (partie 183).
+mod profondeur;
+#[cfg(test)]
+mod profondeur_tests;
+// Les poignées de l'Espace 3D sur les objets du décor 3D, et l'origine déplacée dans la vue (partie 184).
+mod poignees3d;
+#[cfg(test)]
+mod poignees3d_tests;
+// Les ombres des cartes sur le décor 3D, et du décor sur les cartes (partie 185).
+mod ombres;
+#[cfg(test)]
+mod ombres_tests;
 #[cfg(test)]
 mod camerasuite_tests;
 mod choixtout;
@@ -426,6 +442,23 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+// Le décor 3D d'une séquence (partie 180) : lecture glTF, simplification, rendus, budget de la machine.
+pub mod decor3d;
+pub mod decor3dbudget;
+pub mod decor3dgltf;
+pub mod decor3dgpu;
+pub mod decor3drendu;
+pub mod decor3dsimplifier;
+mod decor3dui;
+pub mod decor3daimant;
+// La banque 3D (partie 181) : 45 modèles CC0 de Kenney, rangés dans le programme, montrés dans la Bibliothèque.
+pub mod banque3d;
+mod banque3dfichiers;
+mod banque3dui;
+#[cfg(test)]
+mod banque3d_tests;
+#[cfg(test)]
+mod decor3d_tests;
 mod brossesdediees;
 mod calquespastilles;
 #[cfg(test)]

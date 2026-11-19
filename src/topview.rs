@@ -142,7 +142,7 @@ impl App {
                     Some(b) => {
                         // Le dessin avec la transformation propre du calque (sans le défilement :
                         // c'est la caméra qui le produit, vue de dessus).
-                        let aff = l.pose(self.cur_frame).affine(pivot);
+                        let aff = l.pose(self.cur_frame).affine(l.pivot(pivot));
                         let xs = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| aff.apply(p).x);
                         let (lo, hi) = xs.iter().fold((f32::MAX, f32::MIN), |(lo, hi), &x| (lo.min(x), hi.max(x)));
                         (lo, hi, false)
@@ -246,6 +246,8 @@ impl App {
                     // (Un calque animé change l'écart de profondeur de sa clé de l'image courante.)
                     let frame = self.cur_frame;
                     self.layers_mut()[li].set_depth_at(frame, z);
+                    // (Une carte aimantée au sol y reste à sa nouvelle profondeur, partie 182.)
+                    self.aimanter_si(li);
                     self.modified = true;
                     let l = &self.layers()[li];
                     self.status = format!(

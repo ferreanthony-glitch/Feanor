@@ -67,6 +67,8 @@ impl App {
         // fait pas passer cet onglet devant : on dessine sur la feuille d'à côté.)
         if self.espace3d_vue_ouverte() || (self.espace3d_a_cote_visible() && !self.board_shown()) {
             self.espace3d_options_panel(ui);
+            // Le décor 3D de la séquence (partie 180) : sa place, son aspect.
+            self.decor3d_reglages(ui);
             return;
         }
         if self.board_shown() {

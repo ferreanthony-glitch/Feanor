@@ -44,7 +44,7 @@ impl CameraSeen {
     /// La caméra `c` vue par les calques : son décalage depuis le `centre` de la feuille, son avancée, la distance de référence du
     /// `cadre` ; et, pour les calques accrochés, son grossissement et sa rotation.
     pub fn de(c: &Camera, centre: Pos2, cadre: [usize; 2]) -> CameraSeen {
-        CameraSeen { offset: pos2(c.x, c.y) - centre, dolly: c.dolly, d0: camera::ref_distance(cadre), grossissement: c.magnification(cadre), angle: c.angle }
+        CameraSeen { offset: pos2(c.x, c.y) - centre, dolly: c.dolly, d0: camera::ref_distance(cadre), grossissement: c.magnification(cadre), angle: c.angle, centre }
     }
 
     fn grossi(&self) -> f32 {
@@ -117,9 +117,11 @@ impl Layer {
             return;
         }
         // (Tel qu'on le voit maintenant, multiplan compris : c'est cette place-là qu'il garde.)
-        let vu = |l: &Layer, t: LayerTransform| l.pose_seen(t, seen).unwrap_or(t);
-        self.transform = seen.decrochee(vu(self, self.transform));
-        let poses: Vec<LayerTransform> = self.pos_keys.iter().map(|k| seen.decrochee(vu(self, k.t))).collect();
+        // (`pose_seen` rend la pose rapportée au centre de la feuille ; elle revient autour de l'origine du calque, partie 182.)
+        let e = self.ecart_origine(seen.centre);
+        let vu = |l: &Layer, t: LayerTransform| l.pose_seen(t, seen).unwrap_or_else(|| t.au_centre(e));
+        self.transform = seen.decrochee(vu(self, self.transform)).a_l_origine(e);
+        let poses: Vec<LayerTransform> = self.pos_keys.iter().map(|k| seen.decrochee(vu(self, k.t)).a_l_origine(e)).collect();
         for (k, t) in self.pos_keys.iter_mut().zip(poses) {
             k.t = t;
         }
@@ -134,8 +136,10 @@ impl Layer {
             return;
         }
         self.accroche = false;
-        self.transform = self.sans_multiplan(seen.accrochee(self.transform), seen);
-        let poses: Vec<LayerTransform> = self.pos_keys.iter().map(|k| self.sans_multiplan(seen.accrochee(k.t), seen)).collect();
+        // (Le cadre de la caméra se lit autour du centre de la feuille : la pose y passe, puis revient autour de l'origine.)
+        let e = self.ecart_origine(seen.centre);
+        self.transform = self.sans_multiplan(seen.accrochee(self.transform.au_centre(e)), seen).a_l_origine(e);
+        let poses: Vec<LayerTransform> = self.pos_keys.iter().map(|k| self.sans_multiplan(seen.accrochee(k.t.au_centre(e)), seen).a_l_origine(e)).collect();
         for (k, t) in self.pos_keys.iter_mut().zip(poses) {
             k.t = t;
         }

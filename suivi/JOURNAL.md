@@ -5,6 +5,82 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Les ombres des cartes et du décor 3D** (partie 185, branche `ombres-cartes` partie de `banque-3d` 9c7d444, format 61 inchangé),
+  le choix d'Anthony (« Ombres cartes / décor »). Sous le soleil du décor : **une carte porte l'ombre de son encre** (pas de son
+  rectangle) sur le sol, les dalles, les objets et les autres cartes ; **le décor ombre les cartes** (un personnage s'assombrit à
+  l'ombre d'un arbre) ; une carte n'est jamais dans sa propre ombre. Le rendu du décor reste gardé : sa passe garde en plus la part
+  du soleil à chaque pixel (une troisième cible, seulement avec ses ombres), les cartes qui portent une ombre sont dessinées vues du
+  soleil dans une carte d'ombres à part, et tout se fait à la composition (sur le décor, retirer le soleil comme il le retire de ses
+  faces ; sur une carte, lire les deux cartes d'ombres le long de son plan). Image du plan à l'écran et exports (le décor rendu par
+  la carte prêtée ; le processeur fait le même calcul) ; pas dans la vue Espace 3D, ni dans le rendu de secours sans carte (qui n'a
+  pas d'ombres du tout). Deux cases par calque, **cochées d'office** : « Porte une ombre », « Reçoit les ombres » (menu du calque,
+  panneau de la carte, palette ; écrites seulement décochées, `VERSION` inchangée) ; jamais d'ombre pour un calque accroché, d'effet,
+  d'annotation ; « Toujours devant le décor 3D » garde ses ombres. Sans décor ou sans ses ombres, les mêmes images par les mêmes
+  chemins. Mesures (Mac, feuille 4K, huit cartes) : rien de mesurable pour huit personnages, +1,5 à 2,5 ms pour huit cartes pleines
+  (le pire cas) ; le filtre des cartes a été réduit à une lecture filtrée sur ces mesures. Essais : 13 nouveaux (dont un de mesure,
+  ignoré) ; les 90 échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de
+  commit** (liste 185.6).
+
+- **Les poignées dans la vue** (partie 184, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé), le choix
+  d'Anthony. Dans la vue Espace 3D, un **objet du décor 3D se choisit au clic** (sur ses vrais triangles ; le plus proche de l'œil,
+  carte ou objet, l'emporte ; Maj mêle cartes, objets et caméra), choisi aussi dans la liste du panneau et l'inverse, et **se manie
+  avec le même manipulateur** autour de son origine : déplacer, tourner (autour de la verticale seulement), mettre à l'échelle (d'un
+  bloc), ou le tirer lui-même sur le sol ; **une étape d'annulation par geste**, par le chemin de la retouche du panneau (les
+  cartes aimantées posées dessus suivent, Ctrl+Z ramène les deux). Un objet aimanté garde la hauteur de l'aimant : sa flèche Y est
+  grise, comme le champ du panneau. **« Modifier l'origine »** (une case de la colonne des outils de la vue,
+  `espace3d.modifier_origine` sans touche) : le manipulateur déplace l'origine seule d'un calque (dans le plan de sa carte, l'image
+  ne bouge à aucune clé) ou d'un objet (dans l'espace, l'objet ne bouge pas), Maj l'accroche aux points de la boîte, l'aimant
+  repose ensuite par la nouvelle origine. Poignées refusées grises, la barre d'état dit pourquoi. Suppr n'enlève pas un objet dans
+  la vue (elle n'enlève pas non plus une carte : le bouton « Enlever » du panneau reste le chemin). Essais : 15 nouveaux ; les 90
+  échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste
+  184.5).
+
+- **La profondeur partagée entre le décor 3D et les cartes** (partie 183, branche `profondeur-partagee` partie de `banque-3d`
+  d3b7ab0, format 61 inchangé), le chantier choisi par Anthony. Les cartes et les objets du décor se cachent selon leur vraie
+  distance à la caméra : un personnage passe derrière un arbre et devant un banc, une carte inclinée qui traverse un objet en sort,
+  rien n'est rogné aux pieds d'une carte aimantée sur une dalle. Le décor garde sa profondeur (une seconde cible de sa passe sur la
+  carte graphique, son tampon de profondeur sur le processeur et à l'export) ; chaque carte porte son plan, et un pixel de carte est
+  caché où le décor est plus près (une lecture par pixel d'encre). Image du plan à l'écran, exports, rendu de secours, et vue
+  Espace 3D (un voile du décor posé après chaque carte). Jamais cachés : calques accrochés à la caméra, d'effet, d'annotation, et
+  la case **« Toujours devant le décor 3D »** (menu du calque, panneau de la carte, palette ; `devant_decor_3d`, sans changer
+  `VERSION` : 61 n'est encore sur aucune version distribuée). Trouvé en route : la vue de dessin ne montrait pas le décor (seuls
+  les sorties et la vue Espace 3D) ; il y est maintenant. Sans décor, les mêmes images par les mêmes chemins. Essais : 13 nouveaux
+  (et un de mesure, ignoré) ; les 90 échecs connus du Mac, aucun neuf. Mesures (Mac) : la passe du décor avec sa seconde cible, comme avant dans le bruit ; la composition, +1,0 à 1,4 ms
+  pour huit cartes pleines d'encre sur une feuille 4K (le pire cas), rien de mesurable pour huit cartes de personnage ; à refaire
+  sur son PC. Compilé et essayé sur le Mac seulement ;
+  **rien regardé à l'écran, pas de commit** (liste 183.6).
+
+- **L'origine d'un calque, son vrai pivot** (partie 182, branche `origine-calques` partie de `decor-3d` 319e817, **format 61**), sur
+  le plan qu'Anthony a validé. Un point du dessin que l'on place (outil Transformer : le cercle à croix, Maj s'aimante à la boîte ;
+  champs x, y ; menu « Origine » ; Plus > Origine) : la pose fixe et chaque clé tournent, grandissent et s'étirent autour de lui ;
+  le déplacer ne déplace jamais le dessin (sur la feuille, et dans l'Espace 3D pour une carte inclinée). Ancrage « L'origine du
+  calque » des trajectoires, d'office pour les nouvelles (sur la feuille et dans l'espace) ; le manipulateur de l'Espace 3D tourne
+  autour de l'origine ; « Aimanté au sol » pour les cartes, et sur sa règle : décoché, la carte reste où l'aimant l'a mise.
+  Sans origine, les mêmes images au bit près. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit**
+  (liste 182.4).
+
+- **La banque 3D dans la Bibliothèque, et un décor fait de plusieurs objets** (partie 181, branche `banque-3d` partie de
+  `decor-3d` 319e817, format 60 inchangé, aucune dépendance neuve). Le décor d'une séquence devient une liste d'objets (importer
+  **ajoute**) ; la Bibliothèque a un onglet **3D** : les 45 modèles Kenney (CC0) par famille, recherche, bulle ; clic ou
+  glisser (dessin : devant la caméra ; vue Espace 3D : au point du sol) les pose par le même chemin qu'un fichier ; budget de la
+  machine pour la somme des objets (fenêtre « Ce décor est lourd » ou refus, jamais de ralenti). Les objets d'un même contenu
+  partagent un fichier (`decors/<empreinte>.glb`) et un envoi à la carte ; `decors3d.json` en version 2, un fichier de la partie
+  180 se lit comme un objet à la même place. Sur ses demandes en cours de route : une **origine** par objet (changer l'origine ne
+  bouge pas l'objet) et **« Aimanté au sol »** (posé sur le sol ou sur les objets dessous, sans pénétration, calculé aux retouches
+  seulement ; décoché, il reste exactement où l'aimant l'avait mis, même après réouverture). Banque rangée dans le programme
+  (`include_bytes!`, 1,22 Mio de données, +1,47 Mio sur l'exécutable du Mac) ; essais : les 90 échecs connus, aucun neuf ; crédit Kenney dans « À propos ». Compilé et essayé sur le Mac seulement ; **rien regardé à
+  l'écran, pas de commit** (liste 181.5).
+
+- **Le décor 3D d'une séquence** (partie 180, branche `decor-3d` partie de `main` c9c24f6, format 60 inchangé, aucune dépendance
+  neuve), première étape du moteur de prévisualisation qu'Anthony a choisi. Un glTF (`.glb`, `.gltf` empaqueté) importé pour une
+  séquence : tous ses plans le montrent, derrière les calques, filmé par leur caméra (vue Espace 3D, image du plan, exports) ;
+  aspect low poly doux (facettes, lumière hémisphère, ciel, brume, ombres douces) ; `decors3d.json` et `decors/<id>.glb` à côté du
+  manifeste ; une étape d'annulation. Sur ses demandes en cours de route : barrière à l'entrée (« Ce décor est lourd » : alléger
+  sans toucher la forme, simplifier en le disant), budget **mesuré sur la machine** (étalonnage gardé dans les réglages avec la
+  clé de la carte et du processeur, « Remesurer » dans Préférences > Performance), règle « aucun ralentissement » (à l'écran, la
+  carte graphique dessine le décor ; jamais d'attente sur le fil de l'interface), aucun plantage sur un fichier abîmé.
+  Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste 180.6). Budgets à valider sur son PC
+  (`decor3d_perf`, ignoré).
 - **`main` du 19 novembre (9c422b9 : parties 168 à 177, dont la colonne des calques de la partie 174) fusionné dans
   `timeline-claire`.** Première tentative annulée sans rien écrire : la colonne des calques de la 174 (en-tête, sept colonnes sur tous
   les calques, calque courant sur trois rangées) et celle de la timeline plus claire (lignes égales, barre du calque, exception

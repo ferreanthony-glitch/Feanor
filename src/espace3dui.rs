@@ -38,6 +38,9 @@ pub(crate) enum Drag {
         snap: Edit,
         changed: bool,
         name: &'static str,
+        /// « Modifier l'origine » (partie 184, `poignees3d.rs`) : le geste déplace l'origine seule de ce calque ou de cet objet
+        /// du décor, et rien d'autre ; rien : le geste déplace, tourne ou met à l'échelle ce qui est choisi.
+        origine: Option<Box<crate::poignees3d::GesteOrigine>>,
     },
 }
 
@@ -50,7 +53,12 @@ pub(crate) struct Espace3dState {
     pub mode: GizmoMode,
     /// Manipulateur dans le repère de la carte (une seule carte choisie).
     pub local: bool,
-    /// Ce qui est choisi : des cartes (`espace3d::card_selection`), la caméra du plan (`CAMERA_ID`).
+    /// « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine de ce qui est choisi, pas l'objet.
+    pub origine: bool,
+    /// Maj est tenue (lue par la vue à chaque image) : l'origine qu'on tire s'accroche aux points de la boîte.
+    pub maj: bool,
+    /// Ce qui est choisi : des cartes (`espace3d::card_selection`), des objets du décor 3D (`poignees3d::objet_selection`,
+    /// partie 184), la caméra du plan (`CAMERA_ID`).
     pub sel: Vec<u64>,
     /// Vue d'édition.
     pub cam: Option<Orbite>,
@@ -105,6 +113,8 @@ impl Default for Espace3dState {
             molette_clavier: 0.0,
             mode: GizmoMode::Move,
             local: false,
+            origine: false,
+            maj: false,
             sel: Vec::new(),
             cam: None,
             through_camera: false,
@@ -146,10 +156,10 @@ fn mode_icon(mode: GizmoMode) -> &'static str {
 
 pub(crate) fn mode_description(mode: GizmoMode) -> &'static str {
     match mode {
-        GizmoMode::Select => "Cliquer une carte ou la caméra pour la choisir (Maj : en ajouter). Glisser une carte : la déplacer dans son plan (Maj : en profondeur).",
+        GizmoMode::Select => "Cliquer une carte, un objet du décor 3D ou la caméra pour le choisir (Maj : en ajouter). Glisser une carte : la déplacer dans son plan (Maj : en profondeur) ; un objet du décor : sur le sol (Maj : en hauteur, s'il n'est pas aimanté).",
         GizmoMode::Move => "Flèches : déplacer le long d'un axe ; carrés : dans un plan.",
-        GizmoMode::Rotate => "Cercles : tourner autour d'un axe (X et Y inclinent la carte).",
-        GizmoMode::Scale => "Cubes : étirer le long d'un axe ; cube du centre : tout ensemble.",
+        GizmoMode::Rotate => "Cercles : tourner autour d'un axe (X et Y inclinent la carte ; un objet du décor ne tourne qu'autour de la verticale).",
+        GizmoMode::Scale => "Cubes : étirer le long d'un axe ; cube du centre : tout ensemble (un objet du décor grandit d'un bloc).",
     }
 }
 
@@ -234,14 +244,48 @@ impl App {
                 if id == CAMERA_ID {
                     return Some((id, world.camera_xf(&self.current_camera())));
                 }
+                // (Un objet du décor 3D, partie 184 : la place de son origine, sa rotation autour de la verticale, son échelle.)
+                if let Some(oid) = crate::poignees3d::objet_of(id) {
+                    return self.e3_objet(oid).map(|o| (id, crate::poignees3d::xf_de_l_objet(o)));
+                }
                 let layer = &self.layers()[self.e3_card_layer(id)?];
                 Some((id, world.carte(layer, frame)))
             })
             .collect()
     }
 
+    /// **Le pivot du manipulateur** (partie 182) : l'origine d'une carte seule (`Layer::origine`, le centre de sa feuille sans
+    /// origine) ; pour plusieurs, la moyenne de leurs origines (la caméra comptant pour sa place). Quand aucune carte choisie n'a
+    /// d'origine à elle, le centre de la boîte des positions, comme avant (`espace3dgizmo::pivot_of`).
+    pub(crate) fn e3_pivot(&self, xfs: &[(u64, Xf)]) -> crate::espace3dmath::V3 {
+        let world = self.e3_world();
+        let ecart = |id: u64| self.e3_card_layer(id).and_then(|li| self.layers().get(li)).map_or(eframe::egui::Vec2::ZERO, |l| world.ecart(l));
+        if xfs.iter().all(|(id, _)| ecart(*id) == eframe::egui::Vec2::ZERO) {
+            return crate::espace3dgizmo::pivot_of(xfs);
+        }
+        let n = xfs.len().max(1) as f32;
+        let somme = xfs.iter().fold([0.0f32; 3], |s, (id, xf)| crate::espace3dmath::add(s, world.origine_monde(xf, ecart(*id))));
+        crate::espace3dmath::scale(somme, 1.0 / n)
+    }
+
+    /// Après un étirement sur un axe de la carte (`espace3dgizmo::scale_xfs`, qui garde son centre) : chaque carte qui a une
+    /// origine est remise pour que son origine reste là où elle était dans `avant` (partie 182).
+    pub(crate) fn e3_garder_les_origines(&self, avant: &[(u64, Xf)], apres: &mut [(u64, Xf)]) {
+        let world = self.e3_world();
+        for ((id, a), (_, b)) in avant.iter().zip(apres.iter_mut()) {
+            let Some(l) = self.e3_card_layer(*id).and_then(|li| self.layers().get(li)) else { continue };
+            let e = world.ecart(l);
+            if e != eframe::egui::Vec2::ZERO {
+                *b = world.xf_par_l_origine(b, e, world.origine_monde(a, e));
+            }
+        }
+    }
+
     /// Pose ces placements (sans étape d'annulation : l'appelant s'en charge).
     pub(crate) fn e3_set_xfs(&mut self, new: &[(u64, Xf)]) {
+        // Les objets du décor d'abord (partie 184) : les cartes aimantées qui reposent sur eux suivent, puis les cartes choisies
+        // se posent sur le décor tel qu'il est devenu.
+        self.e3_poser_objets(new);
         let world = self.e3_world();
         let frame = self.cur_frame;
         for (id, xf) in new {
@@ -440,6 +484,7 @@ impl App {
             "espace3d.outil_tourner" => self.espace3d_mode(GizmoMode::Rotate),
             "espace3d.outil_echelle" => self.espace3d_mode(GizmoMode::Scale),
             "espace3d.outil_camera" => self.espace3d_pick_camera(false),
+            crate::poignees3d::ORIGINE_ACTION => self.e3_basculer_origine(),
             "espace3d.vue_camera" => {
                 self.montrer_espace3d();
                 self.espace3d.through_camera = !self.espace3d.through_camera;
@@ -469,6 +514,8 @@ impl App {
     fn espace3d_mode(&mut self, mode: GizmoMode) {
         self.montrer_espace3d();
         self.espace3d.mode = mode;
+        // (Un outil de la vue rend les poignées à l'objet : « Modifier l'origine » s'éteint, partie 184.)
+        self.espace3d.origine = false;
         // (Un outil de la vue : le pointeur manipule, il ne dessine plus.)
         self.e3_manipuler();
     }
@@ -586,10 +633,17 @@ impl App {
         let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
         self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
-            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
+            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine && !self.espace3d.origine), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
+                self.espace3d.origine = false;
                 self.e3_manipuler();
             }
+        }
+        // « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine du calque ou de l'objet du
+        // décor choisi, sans le bouger.
+        let r = self.case_icone(ui, ph::CROSSHAIR, Some(self.espace3d.origine && !dessine), crate::poignees3d::ORIGINE_NOM, crate::poignees3d::ORIGINE_PHRASE, crate::poignees3d::ORIGINE_ACTION);
+        if r.clicked() {
+            self.e3_basculer_origine();
         }
         // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et
         // reste allumée tant qu'elle l'est. Anthony, 2026-11-13 : « On garde l'outil ».)
@@ -620,9 +674,16 @@ impl App {
 
     /// Trois champs X, Y, Z pour un vecteur ; vrai si l'un a changé.
     fn vec3_fields(&mut self, ui: &mut egui::Ui, v: &mut V3, speed: f64, name: &str, lo: f64, hi: f64) -> bool {
+        self.vec3_fields_sauf(ui, v, speed, name, lo, hi, None)
+    }
+
+    /// Comme `vec3_fields`, l'axe `tenu` grisé (la hauteur d'une carte aimantée au sol, partie 182).
+    #[allow(clippy::too_many_arguments)]
+    fn vec3_fields_sauf(&mut self, ui: &mut egui::Ui, v: &mut V3, speed: f64, name: &str, lo: f64, hi: f64, tenu: Option<usize>) -> bool {
         let mut changed = false;
         for (k, label) in ["X", "Y", "Z"].into_iter().enumerate() {
-            let r = ui.add(egui::DragValue::new(&mut v[k]).speed(speed).range(lo..=hi).max_decimals(3).prefix(format!("{label} ")));
+            let r = ui.add_enabled(tenu != Some(k), egui::DragValue::new(&mut v[k]).speed(speed).range(lo..=hi).max_decimals(3).prefix(format!("{label} ")));
+            let r = if tenu == Some(k) { r.on_disabled_hover_text("Aimanté au sol : la hauteur est tenue par l'aimant. Décoche « Aimanté au sol » pour la régler.") } else { r };
             changed |= self.edited3d(&r, name);
         }
         changed
@@ -709,6 +770,34 @@ impl App {
         self.e3_comment_il_est_pose(ui, li, !locked);
         self.e3_reglette_distance(ui, li, !locked);
         self.e3_taille_dans_le_cadre(ui, li, !locked);
+        // Aimanté au sol (partie 182) : l'origine de la carte repose sur le sol, à sa pose fixe et à chaque clé.
+        let mut aimant = self.layers()[li].aimante_au_sol;
+        let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut aimant, crate::origine::AIMANT));
+        if self.aide(r, crate::origine::AIMANT, crate::origine::AIMANT_PHRASE, crate::origine::AIMANT_ACTION).clicked() {
+            self.basculer_aimant(li);
+        }
+        // Toujours devant le décor 3D (partie 183) : seulement quand la séquence a un décor (sinon, rien ne cache la carte).
+        if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.vus().next().is_some()) && !self.layers()[li].accroche {
+            let mut devant = self.layers()[li].devant_decor;
+            let r = ui.add_enabled(!self.layers()[li].locked, egui::Checkbox::new(&mut devant, crate::profondeur::NOM));
+            if self.aide(r, crate::profondeur::NOM, crate::profondeur::PHRASE, crate::profondeur::ACTION).clicked() {
+                self.basculer_devant_decor(li);
+            }
+            // Porte une ombre, reçoit les ombres (partie 185) : quand le décor a ses ombres.
+            if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.aspect.ombres) && crate::ombres::concerne(&self.layers()[li]) {
+                let locked = self.layers()[li].locked;
+                let mut porte = self.layers()[li].porte_ombre;
+                let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut porte, crate::ombres::NOM_PORTE));
+                if self.aide(r, crate::ombres::NOM_PORTE, crate::ombres::PHRASE_PORTE, crate::ombres::ACTION_PORTE).clicked() {
+                    self.basculer_porte_ombre(li);
+                }
+                let mut recoit = self.layers()[li].recoit_ombres;
+                let r = ui.add_enabled(!locked, egui::Checkbox::new(&mut recoit, crate::ombres::NOM_RECOIT));
+                if self.aide(r, crate::ombres::NOM_RECOIT, crate::ombres::PHRASE_RECOIT, crate::ombres::ACTION_RECOIT).clicked() {
+                    self.basculer_recoit_ombres(li);
+                }
+            }
+        }
         let mut ouvert = self.espace3d.precis_carte;
         if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {
             self.espace3d_card_fields(ui, li);
@@ -750,7 +839,12 @@ impl App {
         let t0 = layer.pose(frame);
         // (Plan en Espace 3D : la profondeur est libre, la carte peut être derrière la caméra d'origine du plan.)
         let d0 = world.profondeur(layer, frame);
-        let mut xf = world.card_xf(&t0, d0);
+        // (La position montrée est celle de l'origine de la carte, partie 182 : c'est elle qui porte sa place, et la rotation
+        // se fait autour d'elle. Sans origine : le centre de la carte, comme avant.)
+        let e = world.ecart(layer);
+        let aimant = layer.aimante_au_sol;
+        let xf0 = world.card_xf_o(&t0, d0, e);
+        let mut xf = crate::espace3d::Xf { pos: world.origine_monde(&xf0, e), ..xf0 };
         let mut t = t0;
         let mut depth = d0;
         let (mut moved, mut scaled, mut deepened, mut flat) = (false, false, false, false);
@@ -759,8 +853,8 @@ impl App {
         }
         ui.add_enabled_ui(!locked, |ui| {
             egui::Grid::new("espace3d_carte").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
-                ui.label("Position (m)");
-                ui.horizontal(|ui| moved |= self.vec3_fields(ui, &mut xf.pos, 0.02, "Placer le calque", -1e4, 1e4));
+                ui.label("Position (m)").on_hover_text("La place de l'origine du calque dans l'espace (le centre de sa feuille s'il n'a pas d'origine).");
+                ui.horizontal(|ui| moved |= self.vec3_fields_sauf(ui, &mut xf.pos, 0.02, "Placer le calque", -1e4, 1e4, aimant.then_some(1)));
                 ui.end_row();
                 ui.label("Rotation (°)");
                 ui.horizontal(|ui| moved |= self.vec3_fields(ui, &mut xf.rot, 0.5, "Tourner le calque", -1e4, 1e4));
@@ -818,6 +912,8 @@ impl App {
             let libre = true;
             let layer = &mut self.layers_mut()[li];
             if moved {
+                // (Du point de l'origine au placement du centre de la carte : la rotation tourne autour de l'origine.)
+                let xf = world.xf_par_l_origine(&xf, e, xf.pos);
                 world.apply_card_xf_libre(layer, frame, &xf);
             }
             if scaled || flat {

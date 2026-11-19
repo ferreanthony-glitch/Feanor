@@ -62,6 +62,14 @@ impl Layer {
             collapsed: self.collapsed,
             position_locked: self.position_locked,
             accroche: self.accroche,
+            // (L'origine va avec la pose, l'aimant avec la carte : chaque exemplaire garde les siens, partie 182.)
+            origine: self.origine,
+            aimante_au_sol: self.aimante_au_sol,
+            // (« Toujours devant le décor 3D » va avec la carte, partie 183.)
+            devant_decor: self.devant_decor,
+            // (Les ombres vont avec la carte, partie 185.)
+            porte_ombre: self.porte_ombre,
+            recoit_ombres: self.recoit_ombres,
             partage: self.partage,
             ..modele.clone()
         }

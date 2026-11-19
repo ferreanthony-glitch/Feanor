@@ -87,6 +87,10 @@ impl App {
                 ui.add_space(14.0);
                 ui.label(RichText::new(version_text()).strong());
                 ui.label(RichText::new(polices_text()).small().weak());
+                // La banque 3D (partie 181) : la licence CC0 ne demande pas de crédit, FEANOR le donne (`assets/banque3d/LICENCES.md`).
+                if ui.add(egui::Label::new(RichText::new(crate::banque3d::CREDIT).small().weak()).sense(Sense::click())).on_hover_text(crate::banque3d::SITE_KENNEY).clicked() {
+                    ctx.open_url(egui::OpenUrl::new_tab(crate::banque3d::SITE_KENNEY));
+                }
                 ui.label(RichText::new(ffmpeg_text()).small().weak());
                 ui.add_space(6.0);
             });

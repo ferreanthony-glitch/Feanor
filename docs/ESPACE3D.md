@@ -45,7 +45,9 @@ Les habitants : les **cartes** (un calque du plan = un rectangle de la taille de
 
 ### 3.1 Pose d'une carte
 
-Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe (`Xf`). La carte tourne autour de son centre. Rotation : l'ordre
+Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe (`Xf`). La carte tourne autour de son centre — **de son origine**
+depuis la partie 182, quand le calque en a une (`Layer::origine`, partie 15 ci-dessous ; sans origine, l'origine est le centre de
+la feuille, donc de la carte : comme avant). Rotation : l'ordre
 `Ry · Rx · Rz` ; Z est le tour dans le plan de la carte (le « angle » du calque), X et Y sont **l'inclinaison**. Inclinaison
 X positive : le haut de la carte vient vers la caméra. Inclinaison Y positive : le bord droit s'éloigne.
 
@@ -285,3 +287,157 @@ sans qu'aucun ne se perde ; l'application se repose vue ouverte ; la mesure ci-d
    refait la carte entière (3 ms environ pour une feuille 1920 × 1080) à cette image-là.
 3. La vue 3D montre les dessins bruts (sans effets, modes de fusion), comme en plein écran (point 11.3).
 4. Le côte à côte n'est pas retenu d'une séance à l'autre (seule sa largeur l'est).
+
+## 14. Le décor 3D d'une séquence (2026-11-19, branche `decor-3d`) : ce qui revient, et pourquoi
+
+Le 2026-10-21, Anthony avait choisi de rester simple (partie 1 : plus d'objets 3D, plus de repère, plus de rasteriseur). Le
+2026-11-19, il choisit d'aller **vers un moteur de prévisualisation** : décors, puis personnages, filmés par les caméras des plans.
+L'étude se fait par étapes ; **l'étape 1** est le décor d'une séquence (`docs/INTERFACE.md`, partie 180 ; code `decor3d*.rs`).
+
+Ce qui revient du code d'avant (le sien, repris) : le lecteur glTF de `model3d.rs` (étendu : normales, coordonnées de texture,
+couleur de base et texture, plafonds de sûreté), le rasteriseur par bandes de `scene3drender.rs` (étendu : texture juste en
+perspective, facettes, lumière hémisphère, ciel, brume ; il ne sert plus qu'à l'export sans carte graphique et à l'affichage de
+secours), la passe wgpu de `scene3dgpu.rs` (refaite : maillages texturés, ombres douces, une prise par vue), et l'idée
+d'`espace3dobjets.rs` (l'image des objets, élément le plus bas du plan, vue de l'œil de la caméra et alignée sur la feuille).
+Ce qui ne revient pas : les objets simples (cube, mannequin…), les styles de rendu, le « Figer dans un calque de fond ».
+
+Ce qui est neuf : le décor est **dessiné par la carte graphique à l'écran** (dans la composition de l'image du plan, et dans la
+vue), jamais refait par le processeur quand la caméra bouge ; un **budget mesuré sur la machine** (`decor3dbudget.rs`) décide
+ce qu'un décor peut peser sans ralentir, et un décor trop lourd est allégé ou simplifié (la copie du projet seulement), jamais
+accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes (faite :
+partie 16 ci-dessous), les ombres portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront
+ensuite.
+
+**Partie 181 (2026-11-19, branche `banque-3d`)** : le décor d'une séquence est une **liste d'objets** (`Objet3d` : un modèle, une
+place, une **origine** — le point que la position place, autour duquel il tourne et change d'échelle, d'office le centre du dessous
+de sa boîte — et « Aimanté au sol », `decor3daimant.rs` : la hauteur calculée, posée sur le sol ou sur les objets sous lui, sans
+pénétration). Importer un fichier ou prendre un modèle de la **banque 3D** (45 modèles CC0 de Kenney, rangés dans le programme,
+onglet « 3D » de la Bibliothèque) ajoute un objet, par le même chemin (budget de la machine pour **la somme** des objets, fenêtre
+« Ce décor est lourd », ou refus). Les objets d'un même contenu partagent un modèle : un fichier `decors/<empreinte>.glb`, une
+lecture, un envoi à la carte. Tous les objets sont dans le même tampon de profondeur (justes entre eux) ; derrière les cartes
+jusqu'à la partie 183, qui partage cette profondeur avec elles (partie 16 ci-dessous). `decors3d.json` passe en version 2 ; un fichier de la partie 180 se lit comme un objet, à la même place. L'origine
+modifiable et l'aimant viendront aussi aux calques dessinés (chantier suivant, avec un repère d'origine dans la vue partagé par les
+deux) ; `docs/INTERFACE.md`, partie 181.
+
+## 15. L'origine des cartes et l'aimant au sol (2026-11-19, branche `origine-calques`, partie 182 de `docs/INTERFACE.md`)
+
+**L'origine** d'un calque (`Layer::origine`, en pixels de son dessin, `origine.rs`) est le point de la carte qui porte sa place.
+Avec `e` l'écart de l'origine au centre de la feuille (`Monde::ecart`), les champs du calque donnent (`Monde::card_xf_o`) :
+
+| Carte (monde) | depuis le calque, avec une origine |
+|---|---|
+| place de l'origine | `((e.x + x) · s · k, −(e.y + y) · s · k, −d0 · d)` |
+| rotation, taille | comme au point 3.2, autour de l'origine |
+| centre de la carte (`Xf::pos`) | la place de l'origine moins `R · (taille ⊙ e / (W, H))` |
+
+La profondeur `d` est donc celle de **l'origine** (pour une carte à plat, c'est aussi celle de son centre). Sans origine, `e` est
+nul et `card_xf_o` est exactement `card_xf`, au bit près ; `card_from_xf_libre_o` en est l'inverse exacte (un essai fait l'aller
+et retour sur des cartes inclinées). Une carte à plat posée par l'affinité de la feuille (`Layer::transform_seen_at`) a la même
+image : la pose y est rapportée au centre de la feuille (`LayerTransform::au_centre`, x' = x + e − A·e).
+
+- **Déplacer l'origine ne déplace pas la carte** (`origine::deplacer_origine`) : à plat, la pose est recalculée sur la feuille
+  (xy2 = xy1 + A·Δ − Δ) ; **inclinée**, son placement 3D est recalculé (`card_xf_o` avec l'ancienne origine, puis
+  `card_from_xf_libre_o` avec la nouvelle) : la profondeur, celle de l'origine, peut changer, et l'échelle avec elle (la taille
+  dans le monde est gardée) ; les quatre coins de la carte restent au même endroit de l'espace, à la pose fixe et à chaque clé.
+- **Le manipulateur** (`App::e3_pivot`) : une carte seule tourne et grandit autour de son origine ; plusieurs, autour de la
+  moyenne de leurs origines (la caméra comptant pour sa place) ; aucune carte choisie n'a d'origine : le centre de la boîte des
+  positions, comme avant. Étirer une carte sur un de ses axes garde son origine en place. Le champ « Position » du panneau
+  (Précis) est la place de l'origine ; la rotation saisie, et « Comment il est posé », tournent la carte autour d'elle. La carte
+  choisie montre son origine, un petit cercle à croix.
+- **La trajectoire dans l'espace** (`trajectoire3d::cles_dans_l_espace`) : avec l'ancrage `Origine`, l'origine de la carte est posée
+  sur le chemin à chaque image ou jalon (au lieu du déplacement relatif d'avant, gardé pour `Depart`). La carte n'y tourne pas avec
+  le chemin (vue par la tranche, elle disparaîtrait). Une trajectoire neuve tracée dans la vue part avec l'ancrage `Origine`.
+- **Aimanté au sol** (`Layer::aimante_au_sol`, `origine::aimanter_au_sol`) : l'origine de la carte repose sur le sol, à sa pose
+  fixe et à chacune de ses clés : seul `y` change, `y = −sol / (s · k) − e.y`, à la profondeur de la pose. Le sol se lit par **une
+  seule fonction**, `origine::hauteur_du_sol_sous(monde, decor, x, z, ici)` : le plan `Monde::sol_y`, ou le dessus d'un objet du
+  décor de la séquence (`decor3daimant::hauteur_sous` : la verticale de l'origine traverse les triangles des objets ; un niveau
+  dedans un objet est écarté ; le plus proche de la hauteur où est l'origine l'emporte). Toute retouche du décor repose les
+  cartes aimantées de la séquence (`App::reposer_les_cartes_aimantees`). L'aimant est refait **après chaque modification** (manipulateur, champs, réglette de
+  distance, taille, clé posée, trajectoire recalculée, origine déplacée, profondeur dans le panneau Calques ou la vue de dessus),
+  jamais à la lecture d'un fichier ni pendant la lecture du film. Coché, la hauteur (Y) est grisée dans le panneau. Décoché,
+  rien ne bouge : la carte reste où l'aimant l'a mise, maintenant et après enregistrement. Un calque accroché à la caméra ne se
+  pose pas au sol.
+- **Aux pieds d'une carte aimantée** sur un objet du décor, rien n'est caché depuis la profondeur partagée (partie 16) : la
+  tolérance (0,4 % de la distance plus 1 cm) couvre le millimètre de l'aimant ; ce qui du dessin descend sous l'origine, dans
+  l'objet, est caché par lui.
+
+## 16. La profondeur partagée entre le décor et les cartes (2026-11-19, branche `profondeur-partagee`, partie 183 de `docs/INTERFACE.md`)
+
+Le décor n'est plus toujours derrière : **une carte et un objet du décor se cachent selon leur vraie distance** à l'œil de la caméra
+du plan. Un personnage passe derrière un arbre et devant un banc. Code : `profondeur.rs`.
+
+- **Le décor garde sa profondeur.** Il est rendu une fois par image, comme avant, et reste l'élément le plus bas de l'image du plan ;
+  son rendu garde, à chaque pixel de la feuille, l'inverse de la distance à l'œil (le long de son axe) de ce qu'il y montre, 0 là
+  où il n'y a rien (le ciel ne cache rien). Carte graphique : une seconde cible de la passe de l'image du plan (`decor3dgpu::PROF`,
+  `R16Float`, à 0,05 % près), une texture de plus à côté de celle du décor (`gpu.rs`, `CelTexture::prof`), dessinée en même temps qu'elle, donc
+  seulement quand la clé du décor change. Processeur et exports : `decor3drendu::rendre_objets_prof` (le plus proche des
+  échantillons qui couvrent la moitié du pixel), ou relue de la carte graphique (`rendre_hors_ecran_prof`) ; gardée avec le rendu
+  (`decor3d::profondeur_du_rendu`, par le numéro du rendu).
+- **Le plan de chaque carte.** L'élément d'une carte porte le plan où elle est posée, vu du même œil que le décor
+  (`profondeur::plan_du_calque`, comme `espace3d::place_dans` : l'œil de la caméra, ou l'œil de référence et le changement de
+  repère d'un plan en Espace 3D) : trois nombres (a, b, c) tels que l'inverse de la distance du point de la carte vu au pixel
+  (x, y) de la feuille soit a·x + b·y + c. Pour un plan, l'inverse de la profondeur est linéaire sur l'image : une carte inclinée
+  est juste en chaque pixel, sans maillage de plus.
+- **À la composition**, un pixel de carte est caché si le décor y est plus près qu'elle d'au moins 0,4 % de sa distance plus 1 cm
+  (`profondeur::cache`) ; le décor, dessous, se voit alors. Une lecture de plus par pixel de carte (`fs_compose_p`, `fs_blend_p` ;
+  `render::composite_tile_into`, `composite_world_tile`, `pixel_of`). Entre elles, les cartes gardent l'ordre de toujours.
+- **Jamais cachés** (`profondeur::partage`) : dossiers, calques d'effet (ajustements, incrustations de texte), calques d'annotation,
+  calques accrochés à la caméra, et tout calque marqué **« Toujours devant le décor 3D »** (`Layer::devant_decor`, écrit
+  `devant_decor_3d` sous le format 61 sans changer `VERSION`) ; ni la couleur unie d'un calque, ni les pelures d'oignon, ni les
+  silhouettes de la trajectoire.
+- **La vue Espace 3D** : ses cartes sont dessinées par egui, par-dessus le décor ; juste après chaque carte qui partage la
+  profondeur, un **voile** (`decor3dgpu::VoileCarte`) remet sur son quadrilatère le décor qui est plus près qu'elle, lu dans les
+  cibles de la passe du décor de cette vue (couleur lissée, tampon de profondeur à quatre échantillons, gardé pour cela).
+- **Sans décor**, aucun élément ne porte de plan : la composition est celle d'avant, par les mêmes pipelines et les mêmes
+  boucles.
+
+
+## 17. Les poignées sur les objets du décor, et l'origine dans la vue (2026-11-19, branche `poignees-3d`, partie 184 de `docs/INTERFACE.md`)
+
+Le titre de ce document (« les calques et la caméra, rien d'autre ») vaut toujours pour ce qui se dessine : le décor 3D reste
+celui de la séquence (parties 14 à 16). Mais **ses objets se choisissent et se manient dans la vue** comme les cartes. Code :
+`poignees3d.rs`.
+
+- **Un troisième habitant de la sélection** : `Espace3dState::sel` tient des cartes (`espace3d::card_selection`, marque `1 << 62`),
+  des objets du décor (`poignees3d::objet_selection`, marque `1 << 61`, l'`Objet3d::id`) et la caméra (`CAMERA_ID`) ; ils se
+  mêlent (Maj+clic). L'objet choisi dans la vue l'est dans la liste du panneau (`decor3d.choisi`), et l'inverse.
+- **Le choix** : le plus proche de l'œil l'emporte, entre la carte dont le dessin est touché et l'objet dont un triangle l'est
+  (`App::e3_pick_tout`, `poignees3d::toucher_objet` : le rayon dans le repère du modèle, sa boîte puis ses triangles ; la boîte
+  seule au-delà de 2 millions de triangles) ; une carte « Toujours devant le décor 3D » passe devant. L'outil Trajectoire et le
+  dessin dans la vue ne prennent toujours que des cartes (`e3_pick`).
+- **Un objet vu comme une carte** par le manipulateur : `poignees3d::xf_de_l_objet` (la place de l'origine, `[0, rotation_y, 0]`,
+  l'échelle sur les trois axes), dont la matrice est `Place3d::matrice`. Le pivot est l'origine de l'objet (`e3_pivot`). Un objet ne
+  tourne qu'autour de la verticale et grandit d'un bloc : les anneaux X et Z sont refusés, l'échelle est uniforme ; aimanté, sa
+  flèche Y est refusée (`App::e3_poignee_refusee`, poignées grises, la barre d'état dit pourquoi).
+- **Le geste** passe par le cœur de la retouche du panneau (`decor3dui::decor3d_appliquer` : l'aimant des objets, puis les cartes
+  aimantées de la séquence) ; l'instantané du projet pris au début du geste en fait **une étape d'annulation** (`commit_named`).
+- **« Modifier l'origine »** (`Espace3dState::origine`, `espace3d.modifier_origine`) : le manipulateur se pose sur l'origine de ce
+  qui est choisi seul et la déplace seule. Une carte : dans son plan, par `origine::deplacer_origine` (le point du monde ramené au
+  carré unité de la carte, puis aux pixels du dessin) ; un objet : dans l'espace, par `Objet3d::changer_origine`. Maj accroche aux
+  points de la boîte (`origine::aimanter_a_la_boite` ; `poignees3d::points_de_la_boite`). Au lâcher, l'aimant repose par la
+  nouvelle origine.
+- Rien ne change dans l'image du plan, les exports ni le fichier.
+
+
+## 18. Les ombres des cartes et du décor (2026-11-19, branche `ombres-cartes`, partie 185 de `docs/INTERFACE.md`)
+
+Sous le même soleil que le décor : **une carte porte l'ombre de son encre** sur le décor et sur les autres cartes, et **le décor
+ombre les cartes**. Code : `ombres.rs`.
+
+- **Le décor reste gardé** (`DecorCle`) ; les cartes n'y entrent pas, tout se fait à la composition de l'image du plan. Quand le décor
+  a ses ombres, sa passe garde à chaque pixel **la part du soleil** qu'il y a mise et le mélange de l'hémisphère (une troisième cible,
+  `decor3dgpu::SOLEIL`) : l'ombre d'une carte retire ce soleil-là exactement, brume comprise (`Lumiere::assombrir_decor`).
+- **La carte d'ombres des cartes** : les cartes qui portent une ombre, vues du soleil avec la matrice de la carte d'ombres du décor
+  (`decor3dgpu::eclairage`), relevées sur leur plan (`PlanItem::ombre`, le plan de la partie 16, aussi pour une carte « Toujours
+  devant le décor 3D »), là où leur dessin est au moins à moitié opaque.
+- **Le décor** (`fs_decor_o`) : son point du monde vient de sa profondeur (partie 16) ; comparé à la carte d'ombres des cartes avec
+  le filtre du décor. **Une carte** (`fs_compose_p`, `fs_blend_p`) : son point du monde vient de son plan ; comparée à la carte
+  d'ombres du décor et à celle des cartes, chaque lecture à la profondeur de son propre plan (`Lumiere::gradient` : jamais dans sa
+  propre ombre) ; assombrie de ce que perd une face du décor tournée vers le soleil.
+- **Ni porter ni recevoir** (`ombres::concerne`, et les cases `Layer::porte_ombre`, `Layer::recoit_ombres`, écrites
+  `porte_ombre`, `recoit_ombres` quand elles sont décochées, sous le format 61) : dossiers, calques d'effet, d'annotation, accrochés
+  à la caméra ; ni la couleur unie d'un calque, ni les pelures d'oignon.
+- **À l'export** avec une carte graphique, la même chose par le processeur (`ombres::Contexte`) avec ce que le rendu du décor a relu
+  (`decor3dgpu::SortieOmbres`) ; sans carte graphique, ni ombres du décor ni ombres de cartes. La vue Espace 3D ne montre pas les
+  ombres des cartes (ses cartes sont dessinées par egui).
+- **Sans décor, ou sans ses ombres**, aucun élément ne porte d'ombre : la composition d'avant, par les mêmes chemins.

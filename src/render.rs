@@ -31,6 +31,14 @@ pub struct PlanItem {
     /// agrandir une sélection vectorielle), appliquée au dessin avant celle du calque. Le GPU
     /// n'a que ce paramètre à changer à chaque image ; aucun pixel n'est refait ni envoyé.
     pub pre: Option<Pre>,
+    /// La profondeur partagée avec le décor 3D (partie 183, `profondeur.rs`) : le plan où la carte de cet élément est posée, vu de
+    /// l'œil de l'image ; là où le décor 3D du plan (l'élément `FondPart::Decor` posé dessous) est plus près qu'elle, ses pixels
+    /// sont cachés. Rien : jamais caché (pas de décor, ou ce n'est pas une carte du monde).
+    pub profondeur: Option<crate::profondeur::PlanCarte>,
+    /// Les ombres de la carte (partie 185, `ombres.rs`) : le plan où elle est posée (le même que `profondeur`, mais aussi pour une
+    /// carte « Toujours devant le décor 3D »), et si elle porte une ombre, si elle reçoit les ombres. Rien : ni l'un ni l'autre (pas
+    /// de décor avec ses ombres, ou ce n'est pas une carte du monde).
+    pub ombre: Option<crate::ombres::OmbreCarte>,
 }
 
 /// La transformation d'un geste sur une feuille flottante (`PlanItem::pre`).
@@ -84,6 +92,9 @@ pub enum FondPart {
     /// La couleur unie d'un calque « Couleur unie » (`couleurunie.rs`) : toute la feuille de cette couleur, sous les dessins du calque.
     /// Son dessin (un seul pixel, étiré sur la feuille) est fait à la demande et gardé par couleur : aucun bitmap de la taille de la feuille.
     Unie([u8; 3]),
+    /// Le décor 3D de la séquence du plan (`decor3d.rs`, partie 180), vu de l'œil de la caméra à cette image : l'élément le plus
+    /// bas du plan, sous tous les calques.
+    Decor(crate::decor3d::DecorCle),
 }
 
 /// Le numéro d'élément de plan de la couleur unie : aucun dessin du projet n'a ce numéro.
@@ -93,7 +104,7 @@ pub const UNIE_CEL: CelId = (1 << 62) | 0x554e_4945;
 /// cette image, déjà multipliée par celle de son dossier.
 pub fn unie_item(layer: &crate::document::Layer, opacity: u8) -> Option<PlanItem> {
     let c = layer.unie.filter(|_| !layer.folder)?;
-    Some(PlanItem { cel: UNIE_CEL, opacity, tint: None, transform: None, blend: layer.blend, fx: Vec::new(), ctg: None, fond: Some(FondPart::Unie(c)), pre: None })
+    Some(PlanItem { cel: UNIE_CEL, opacity, tint: None, transform: None, blend: layer.blend, fx: Vec::new(), ctg: None, fond: Some(FondPart::Unie(c)), pre: None, profondeur: None, ombre: None })
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
@@ -197,7 +208,19 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
         let s = at(ox, oy + y);
         buf[s..s + tw].fill(base);
     }
-    for item in &plan.items {
+    // La profondeur du décor 3D posé dessous (partie 183, `profondeur.rs`) : une carte qui porte son plan y est cachée là où le
+    // décor est plus près qu'elle. Sans décor, aucun élément ne porte de plan : rien n'est lu.
+    let mut prof: Option<crate::profondeur::Profondeurs> = None;
+    // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor rendu avec son soleil ; sinon rien n'est lu.
+    let ombres = crate::ombres::contexte(doc, plan);
+    for (rang, item) in plan.items.iter().enumerate() {
+        if let Some(FondPart::Decor(_)) = &item.fond {
+            prof = crate::fx::shown(doc, item).and_then(|c| crate::profondeur::du_decor(&c, doc.width, doc.height));
+        }
+        let masque = crate::profondeur::masque(item, prof.as_ref(), doc.width, doc.height);
+        let cache = |x: usize, y: usize| masque.as_ref().is_some_and(|m| m.cache(x as i64, y as i64));
+        let ombrer = ombreur(ombres.as_deref(), rang, item);
+        let ombrer = |x: usize, y: usize, c: Color32| ombrer.as_ref().map_or(c, |f| f(x as i64, y as i64, c));
         // Feuille déformée par un maillage (enveloppe, perspective) : calcul de secours, la carte
         // graphique dessine les mêmes triangles.
         if let Some((warp, layer)) = item.warp(doc.stage_center()) {
@@ -208,8 +231,8 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             for y in 0..th {
                 let s = at(ox, oy + y);
                 for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 && !cache(ox + x, oy + y) {
+                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
                     }
                 }
             }
@@ -223,8 +246,8 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
                     let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
                     let src = sample(&cel.raster, p.x, p.y);
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 && !cache(ox + x, oy + y) {
+                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
                     }
                 }
             }
@@ -240,8 +263,8 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                 let s = at(ox, oy + y);
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
                     let src = r.get((((ox + x) as f32 + 0.5) * kx) as usize, (((oy + y) as f32 + 0.5) * ky) as usize);
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 && !cache(ox + x, oy + y) {
+                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
                     }
                 }
             }
@@ -255,12 +278,22 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             let s = at(ox, oy + y);
             let row = &tile[y * TILE..y * TILE + tw];
             for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(row).enumerate() {
-                if src.a() != 0 {
-                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                if src.a() != 0 && !cache(ox + x, oy + y) {
+                    *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
                 }
             }
         }
     }
+}
+
+/// Ce que les ombres des cartes (partie 185, `ombres.rs`) font aux pixels de l'élément `idx` du plan : le décor s'assombrit sous
+/// les cartes, une carte qui reçoit les ombres sous le décor et les autres cartes ; rien : ses pixels tels quels.
+fn ombreur<'a>(ombres: Option<&'a crate::ombres::Contexte>, idx: usize, item: &PlanItem) -> Option<Box<dyn Fn(i64, i64, Color32) -> Color32 + Sync + 'a>> {
+    let c = ombres?;
+    if matches!(item.fond, Some(FondPart::Decor(_))) {
+        return Some(Box::new(move |x, y, p| c.sur_le_decor(x, y, p)));
+    }
+    c.recoit(idx).then(|| Box::new(move |x, y, p| c.sur_la_carte(idx, x, y, p)) as Box<dyn Fn(i64, i64, Color32) -> Color32 + Sync + 'a>)
 }
 
 /// Un rectangle du monde, en pixels entiers : [x0, x1) × [y0, y1). Les coordonnées vont de
@@ -478,7 +511,17 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
         buf[s..s + TILE].fill(base);
     }
     let in_window = tx >= 0 && ty >= 0 && ox < doc.width as i64 && oy < doc.height as i64;
-    for item in &plan.items {
+    // La profondeur du décor 3D posé dessous (partie 183), comme `composite_tile_into`.
+    let mut prof: Option<crate::profondeur::Profondeurs> = None;
+    // Les ombres des cartes (partie 185), comme `composite_tile_into`.
+    let ombres = crate::ombres::contexte(doc, plan);
+    for (rang, item) in plan.items.iter().enumerate() {
+        if let Some(FondPart::Decor(_)) = &item.fond {
+            prof = crate::fx::shown(doc, item).and_then(|c| crate::profondeur::du_decor(&c, doc.width, doc.height));
+        }
+        let masque = if in_window { crate::profondeur::masque(item, prof.as_ref(), doc.width, doc.height) } else { None };
+        let ombrer = ombreur(ombres.as_deref(), rang, item);
+        let teinte = |x: i64, y: i64, c: Color32| ombrer.as_ref().map_or(c, |f| f(x, y, c));
         if let Some((warp, layer)) = item.warp(doc.stage_center()) {
             if !in_window {
                 continue;
@@ -490,8 +533,8 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
             for y in 0..th {
                 let s = at(ox, oy + y as i64);
                 for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, ((ox + x as i64) as usize, (oy + y as i64) as usize));
+                    if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(ox + x as i64, oy + y as i64)) {
+                        *d = blend_over(*d, teinte(ox + x as i64, oy + y as i64, src), item.opacity, item.tint, item.blend, ((ox + x as i64) as usize, (oy + y as i64) as usize));
                     }
                 }
             }
@@ -500,7 +543,7 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
         if let Some(inv) = inverse_of(doc, item) {
             let Some(cel) = crate::fx::shown(doc, item) else { continue };
-            world_item_over(&cel.raster, Some(inv), item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin);
+            world_item_over_masque(&cel.raster, Some(inv), item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin, masque, ombrer.as_deref());
             continue;
         }
         let Some(cel) = crate::fx::shown(doc, item) else { continue };
@@ -520,14 +563,14 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
                         continue;
                     }
                     let src = r.get((((wx as f32) + 0.5) * kx) as usize, (((wy as f32) + 0.5) * ky) as usize);
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (wx as usize, wy as usize));
+                    if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(wx, wy)) {
+                        *d = blend_over(*d, teinte(wx, wy, src), item.opacity, item.tint, item.blend, (wx as usize, wy as usize));
                     }
                 }
             }
             continue;
         }
-        world_item_over(r, None, item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin);
+        world_item_over_masque(r, None, item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin, masque, ombrer.as_deref());
     }
 }
 
@@ -537,6 +580,40 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
 /// fait aussi sur un autre fil, avec les mêmes pixels (`monde.rs`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn world_item_over(raster: &Raster, inv: Option<Affine>, opacity: u8, tint: Option<[u8; 3]>, blend: BlendMode, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
+    world_item_over_masque(raster, inv, opacity, tint, blend, tx, ty, buf, stride, origin, None, None);
+}
+
+/// Comme `world_item_over`, les pixels cachés par le décor 3D (`masque`, partie 183) laissés tels quels, et ceux qui restent passés
+/// par `teinte` (les ombres des cartes, partie 185).
+#[allow(clippy::too_many_arguments)]
+fn world_item_over_masque(raster: &Raster, inv: Option<Affine>, opacity: u8, tint: Option<[u8; 3]>, blend: BlendMode, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64), masque: Option<crate::profondeur::Masque>, teinte: Option<&(dyn Fn(i64, i64, Color32) -> Color32 + Sync)>) {
+    if masque.is_none() && teinte.is_none() {
+        return world_item_over_seul(raster, inv, opacity, tint, blend, tx, ty, buf, stride, origin);
+    }
+    let t = TILE as i64;
+    let (ox, oy) = (tx as i64 * t, ty as i64 * t);
+    let at = |x: i64, y: i64| ((y - origin.1) as usize) * stride + (x - origin.0) as usize;
+    for y in 0..t {
+        let s = at(ox, oy + y);
+        for (x, d) in buf[s..s + TILE].iter_mut().enumerate() {
+            let (wx, wy) = (ox + x as i64, oy + y);
+            let src = match inv {
+                Some(inv) => {
+                    let p = inv.apply(egui::pos2(wx as f32 + 0.5, wy as f32 + 0.5));
+                    sample(raster, p.x, p.y)
+                }
+                None => raster.get_i(wx, wy),
+            };
+            if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(wx, wy)) {
+                let src = teinte.map_or(src, |f| f(wx, wy, src));
+                *d = blend_over(*d, src, opacity, tint, blend, (world_dither(wx), world_dither(wy)));
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn world_item_over_seul(raster: &Raster, inv: Option<Affine>, opacity: u8, tint: Option<[u8; 3]>, blend: BlendMode, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
     let t = TILE as i64;
     let (ox, oy) = (tx as i64 * t, ty as i64 * t);
     let at = |x: i64, y: i64| ((y - origin.1) as usize) * stride + (x - origin.0) as usize;
@@ -764,21 +841,35 @@ struct Resolved<'a> {
     /// Feuille posée par un maillage (carte inclinée de l'Espace 3D, enveloppe, perspective) : le dessin posé sur la
     /// feuille entière, calculé une fois ; il remplace le dessin de l'élément.
     laid: Option<Raster>,
+    /// La profondeur du décor 3D posé dessous, si l'élément porte le plan de sa carte (partie 183) : ses pixels y sont cachés là où
+    /// le décor est plus près ; et la taille de la feuille.
+    prof: Option<(crate::profondeur::Profondeurs, usize, usize)>,
+    /// Les ombres des cartes (partie 185) : le contexte du plan et le rang de l'élément dans le plan.
+    ombres: Option<(std::sync::Arc<crate::ombres::Contexte>, usize)>,
 }
 
 fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
+    let ombres = crate::ombres::contexte(doc, plan);
+    // (La profondeur du décor 3D posé dessous, partie 183 : les éléments qui portent le plan de leur carte la gardent.)
+    let mut decor: Option<crate::profondeur::Profondeurs> = None;
     plan.items
         .iter()
-        .filter_map(|item| {
+        .enumerate()
+        .filter_map(|(idx, item)| {
             let cel = crate::fx::shown(doc, item)?;
+            if let Some(FondPart::Decor(_)) = &item.fond {
+                decor = crate::profondeur::du_decor(&cel, doc.width, doc.height);
+            }
+            let prof = item.profondeur.and(decor.clone()).map(|p| (p, doc.width, doc.height));
+            let ombres = ombres.as_ref().filter(|c| matches!(item.fond, Some(FondPart::Decor(_))) || c.recoit(idx)).map(|c| (c.clone(), idx));
             if let Some((warp, layer)) = item.warp(doc.stage_center()) {
                 let laid = warp.rasterize(&cel.raster, layer.as_ref(), doc.width, doc.height);
-                return Some(Resolved { item, cel, inv: None, kx: 1.0, ky: 1.0, same: true, laid: Some(laid) });
+                return Some(Resolved { item, cel, inv: None, kx: 1.0, ky: 1.0, same: true, laid: Some(laid), prof, ombres });
             }
             let (w, h) = (cel.raster.width, cel.raster.height);
             let kx = w as f32 / doc.width.max(1) as f32;
             let ky = h as f32 / doc.height.max(1) as f32;
-            Some(Resolved { item, cel, inv: inverse_of(doc, item), kx, ky, same: w == doc.width && h == doc.height, laid: None })
+            Some(Resolved { item, cel, inv: inverse_of(doc, item), kx, ky, same: w == doc.width && h == doc.height, laid: None, prof, ombres })
         })
         .collect()
 }
@@ -801,7 +892,12 @@ fn pixel_of(layers: &[Resolved], base: Color32, x: i64, y: i64) -> Color32 {
                 if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
             }
         };
-        if s.a() != 0 {
+        if s.a() != 0 && !l.prof.as_ref().is_some_and(|(p, w, h)| l.item.profondeur.is_some_and(|plan| crate::profondeur::Masque { prof: p, w: *w, h: *h, plan }.cache(x, y))) {
+            let s = match &l.ombres {
+                Some((o, _)) if matches!(l.item.fond, Some(FondPart::Decor(_))) => o.sur_le_decor(x, y, s),
+                Some((o, idx)) => o.sur_la_carte(*idx, x, y, s),
+                None => s,
+            };
             c = blend_over(c, s, l.item.opacity, l.item.tint, l.item.blend, (world_dither(x), world_dither(y)));
         }
     }
@@ -835,7 +931,10 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
 /// Comme `panel_plan_at`, avec ou sans les calques d'annotation du plan : `annotations` vrai, ils sont posés par-dessus tout le reste.
 pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>, annotations: bool) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations)
+    let repere = doc.repere_du_plan(index, frame);
+    // Le décor 3D de la séquence (partie 180) : sous tous les calques.
+    let decor = crate::decor3d::item(doc, index, &camera, repere.as_ref());
+    plan_with_camera_layers(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, repere.as_ref(), doc.fps, annotations, decor).0
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
@@ -856,7 +955,8 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         return None;
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
-    let t = l.pose(frame);
+    // (Un élément de plan se pose autour du centre de la feuille : la pose y est rapportée, partie 182.)
+    let t = l.pose_au_centre(frame, doc.stage_center());
     let line = PlanItem {
         cel,
         opacity: 255,
@@ -867,13 +967,14 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         ctg: None,
         fond: None,
         pre: None,
+        profondeur: None, ombre: None,
     };
     // Le remplissage au griffonnage (calque de couleur) et le fond sous le trait font partie de l'image du calque.
     Some(Plan { paper: None, items: griffon_item(&panel.layers, li, frame, &line).into_iter().chain(fond_item(l, &line)).chain([line]).collect() })
 }
 
 fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> Plan {
-    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations).0
+    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations, None).0
 }
 
 /// Les calques d'un plan que l'export des calques séparés (`exportlayers.rs`) écrit chacun à part, du plus bas au plus haut : ni dossier, ni
@@ -895,14 +996,24 @@ pub fn separable_layers(panel: &Panel, annotations: bool) -> Vec<usize> {
 pub fn panel_layer_plans(doc: &Document, index: usize, frame: usize, annotations: bool) -> Vec<(usize, Plan)> {
     let camera = doc.camera_seen(index, frame);
     let panel = &doc.panels[index];
-    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations);
+    // (Sans le décor 3D : il n'est pas un calque, l'export des calques séparés ne l'écrit pas, partie 180.)
+    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations, None);
     let keep = separable_layers(panel, annotations);
     ranges.into_iter().filter(|(li, r)| keep.contains(li) && !r.is_empty()).map(|(li, r)| (li, Plan { paper: None, items: plan.items[r].to_vec() })).collect()
 }
 
 /// Comme `plan_with_camera`, avec pour chaque calque traité (dans l'ordre de pose) la plage de ses éléments dans `Plan::items`.
-fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
+/// `decor` : l'élément du décor 3D de la séquence (`decor3d::item`), posé avant le premier calque mais après son rang de départ
+/// (un calque d'ajustement qui couvre toute la pile le couvre aussi).
+#[allow(clippy::too_many_arguments)]
+fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool, decor: Option<PlanItem>) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
     let mut items: Vec<PlanItem> = Vec::new();
+    // La profondeur partagée avec le décor 3D (partie 183, `profondeur.rs`) : seulement s'il y en a un sous les calques ; sans
+    // décor, aucun élément ne porte de plan (la composition d'avant, au bit près).
+    let avec_decor = decor.is_some();
+    // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres.
+    let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.ombres));
+    let mut decor = decor;
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
@@ -916,6 +1027,7 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
         let l = &panel.layers[li];
         starts[li] = items.len();
         portees.visiter(&panel.layers, li, items.len());
+        items.extend(decor.take());
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect_at(&panel.layers, li, frame) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
@@ -942,13 +1054,17 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
             ctg: None,
             fond: None,
             pre: placed.pre,
+            profondeur: if avec_decor { crate::profondeur::plan_du_calque(world, l, frame, camera, repere) } else { None },
+            ombre: if avec_ombres { crate::ombres::du_calque(world, l, frame, camera, repere) } else { None },
         };
         // Le remplissage au griffonnage (calque de couleur, `griffonnage.rs`) puis le fond sous le trait (`fond.rs`),
-        // juste sous le dessin de son calque.
+        // juste sous le dessin de son calque (ils ont le plan de sa carte).
         items.extend(griffon_item(&panel.layers, li, frame, &line));
         items.extend(fond_item(l, &line));
         items.push(line);
     }
+    // (Une pile sans calque : le décor seul.)
+    items.extend(decor);
     let ranges = order.iter().enumerate().map(|(k, &li)| (li, starts[li]..order.get(k + 1).map_or(items.len(), |&next| starts[next]))).collect();
     (Plan { paper, items }, ranges)
 }

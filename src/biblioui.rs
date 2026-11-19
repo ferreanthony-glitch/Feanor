@@ -115,6 +115,9 @@ pub(crate) struct BiblioUi {
     fixes: Option<(Option<PathBuf>, Vec<FavoriFixe>)>,
     /// Le poids du fichier de l'aperçu, lu dans la liste une fois à l'ouverture (jamais cherché à chaque image).
     pub apercu_octets: Option<u64>,
+    /// L'onglet montré : les fichiers, ou la banque 3D (partie 181, `banque3dui.rs`).
+    pub onglet: crate::banque3dui::OngletBiblio,
+    pub banque: crate::banque3dui::Banque3dUi,
 }
 
 impl BiblioUi {
@@ -566,6 +569,21 @@ impl App {
         self.biblio.rect = dans_la_fenetre_principale.then_some(rect);
         if ctx.input(|i| i.pointer.any_pressed()) {
             self.biblio.focus = ctx.pointer_interact_pos().is_some_and(|p| rect.contains(p));
+        }
+        // Les onglets : les fichiers du disque, ou la banque 3D (partie 181).
+        let mut onglet = self.biblio.onglet;
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut onglet, crate::banque3dui::OngletBiblio::Fichiers, format!("{} Fichiers", ph::FOLDER_SIMPLE));
+            ui.selectable_value(&mut onglet, crate::banque3dui::OngletBiblio::Banque3d, format!("{} 3D", ph::CUBE)).on_hover_text("La banque 3D : 45 modèles low poly (Kenney, CC0) à poser dans le décor 3D de la séquence.");
+        });
+        if onglet != self.biblio.onglet {
+            self.biblio.onglet = onglet;
+            // (L'aperçu d'un fichier ne joue pas derrière la banque.)
+            self.biblio_fermer_apercu();
+        }
+        if onglet == crate::banque3dui::OngletBiblio::Banque3d {
+            self.banque3d_ui(ui);
+            return;
         }
         let mut cmds: Vec<Commande> = Vec::new();
         self.biblio_touches(ui, &mut cmds);

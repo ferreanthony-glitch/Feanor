@@ -435,13 +435,13 @@ fn l_effet_vivant_s_enregistre_et_les_anciens_projets_gardent_leurs_cles() {
     doc.panels[1].camera = cles(&[0, 1, 2, 3, 4]);
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 60"), "format 60 (partie 170 : une liste d'effets ; 171 : la caméra 2D ; 172 : la caméra dans l'espace ; 174 : le lettre à lettre)");
+    assert!(texte.contains("\"version\": 61"), "format 61 (partie 170 : une liste d'effets ; 171 : la caméra 2D ; 172 : la caméra dans l'espace ; 174 : le lettre à lettre ; 182 : l'origine des calques)");
     let lu = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(lu.panels[0].effets_camera, doc.panels[0].effets_camera, "l'effet revient tel quel");
     assert!(lu.panels[1].effets_camera.is_empty());
     assert_eq!((0..30).map(|f| lu.panel_camera(0, f)).collect::<Vec<_>>(), (0..30).map(|f| doc.panel_camera(0, f)).collect::<Vec<_>>());
     // Un projet du format 51 (sans le champ) : ses clés d'effet restent des clés, aucun effet vivant n'apparaît.
-    let ancien = texte.replace("\"version\": 60", "\"version\": 51");
+    let ancien = texte.replace("\"version\": 61", "\"version\": 51");
     let sans_effet: serde_json::Value = {
         let mut v: serde_json::Value = serde_json::from_str(&ancien).unwrap();
         fn retirer(v: &mut serde_json::Value) {

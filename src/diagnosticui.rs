@@ -202,6 +202,8 @@ impl App {
         self.diag.fait = None;
         let ctx = self.ctx.clone();
         self.diag.banc = Some(Banc::lancer(self.diag.carte.clone(), move || ctx.request_repaint_after(Duration::from_millis(50))));
+        // Le budget 3D de la machine se remesure avec le reste (`decor3dbudget.rs`, partie 180).
+        self.decor3d_remesurer();
     }
 
     /// Le banc a fini : le matériel complété, le profil choisi, la date notée (plus de proposition
@@ -597,6 +599,8 @@ impl App {
             }
         });
         ui.label(RichText::new("Les réglages jouent tout de suite ; le rendu des traits texturés, à l'ouverture d'un projet.").small().weak());
+        // Le budget 3D de cette machine (partie 180).
+        self.decor3d_prefs_ui(ui);
         if p != avant {
             self.settings.perf = p.sanitized();
             let _ = self.settings.save();

@@ -689,6 +689,10 @@ impl App {
         self.hover_canvas = hover
             .filter(|p| rect.contains(*p))
             .map(|p| self.view.to_canvas(rect, size, p));
+        // (Le dernier point sous le pointeur : l'origine « Ici », partie 182.)
+        if self.hover_canvas.is_some() {
+            self.origine_ici = self.hover_canvas;
+        }
         // Maj tenue (ou relâchée) sans que la souris bouge : le segment droit suit quand même.
         let pen = self.stroke.as_ref().map(|s| s.pen).or(self.erase_pen()).unwrap_or(false);
         self.droit_follow(&mods, primary_down, self.hover_canvas, if pen { self.pen_pressure } else { 1.0 });
@@ -825,6 +829,8 @@ impl App {
                 Some(BoxHandle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
                 Some(BoxHandle::Edge(_)) => CursorIcon::ResizeHorizontal,
                 Some(BoxHandle::Rotate | BoxHandle::RotateCorner(_)) => CursorIcon::Alias,
+                // (L'origine du calque, partie 182 : on la saisit.)
+                Some(BoxHandle::Origine) => CursorIcon::Crosshair,
                 None => CursorIcon::Default,
             });
             return;

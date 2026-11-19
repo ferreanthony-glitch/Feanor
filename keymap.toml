@@ -969,6 +969,67 @@ action = "calque.accrocher_camera"
 touches = []
 source = "FEANOR (sans touche ; le petit bouton caméra du calque dans le panneau Calques, ou Plus > Réglages avancés)"
 
+# L'origine du calque (partie 182) : le point du dessin autour duquel il se déplace, s'agrandit et tourne ; et l'aimant au sol des cartes.
+[[raccourci]]
+action = "origine.centre_dessin"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_centre"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.haut_gauche"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.haut_droite"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_gauche"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.bas_droite"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.ici"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "origine.feuille"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Origine, ou les réglages de l'outil Transformer)"
+
+[[raccourci]]
+action = "calque.aimante_au_sol"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
+[[raccourci]]
+action = "calque.devant_decor_3d"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
+[[raccourci]]
+action = "calque.porte_ombre"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
+[[raccourci]]
+action = "calque.recoit_ombres"
+touches = []
+source = "FEANOR (sans touche ; menu du calque > Plus > Réglages avancés, ou le panneau de la carte dans l'Espace 3D)"
+
 [[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]
@@ -1753,6 +1814,21 @@ touches = []
 source = "sans touche à l'origine"
 
 [[raccourci]]
+action = "fichier.importer_decor3d"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "decor3d.enlever"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "decor3d.remesurer"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "fichier.importer_sequence"
 touches = []
 source = "sans touche à l'origine"
@@ -1952,6 +2028,11 @@ source = "FEANOR (Espace 3D, outil échelle ; aucune touche choisie)"
 action = "espace3d.outil_camera"
 touches = []
 source = "FEANOR (Espace 3D, choisir la caméra du plan ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.modifier_origine"
+touches = []
+source = "FEANOR (Espace 3D, modifier l'origine du calque ou de l'objet du décor choisi ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.cadrer"

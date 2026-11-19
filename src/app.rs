@@ -638,6 +638,9 @@ pub struct App {
     pub(crate) continu: crate::continu::Continu,
     /// La fenêtre « Jalons » du projet (`jalonsui.rs`).
     pub(crate) jalons_ui: Option<crate::jalonsui::Fenetre>,
+    /// Le décor 3D de la séquence (`decor3dui.rs`, partie 180) : l'import en cours, la fenêtre « Ce décor est lourd », la
+    /// retouche en cours de sa place.
+    pub(crate) decor3d: crate::decor3dui::Etat3d,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
@@ -1016,6 +1019,9 @@ pub struct App {
     pub(crate) following: bool,
 
     pub(crate) hover_canvas: Option<Pos2>,
+    /// Le dernier point de la feuille sous le pointeur (partie 182) : où l'origine « Ici » se pose, même quand le menu qui la
+    /// demande couvre la feuille.
+    pub(crate) origine_ici: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
     pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
     /// Raccourci en cours d'assignation, et la recherche de la liste des raccourcis
@@ -1328,6 +1334,7 @@ impl App {
             recovery,
             continu: Default::default(),
             jalons_ui: None,
+            decor3d: Default::default(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -1529,6 +1536,7 @@ impl App {
             following: false,
 
             hover_canvas: None,
+            origine_ici: None,
             pending_keys: Vec::new(),
             assign: None,
             keys_filter: String::new(),
@@ -1561,6 +1569,15 @@ impl App {
         }
         crate::demarrage::marque("carte graphique : pipelines des calques (GpuCanvas::new)");
         app.renderer.set_gpu(app.gpu.is_some());
+        // Le décor 3D (partie 180) : le fil de l'interface n'attend jamais un rendu ; l'export emprunte la carte graphique ; le budget
+        // de cette machine, s'il a été mesuré ici.
+        if reel {
+            crate::decor3d::poser_fil_interface();
+            if let Some(rs) = wgpu_render_state {
+                crate::decor3d::poser_carte(rs);
+            }
+        }
+        app.decor3d_budget_au_demarrage();
         app.display_info.push_str(if app.gpu.is_some() {
             " · calques par la carte graphique"
         } else {
@@ -1638,7 +1655,13 @@ impl App {
     /// défilement multiplan si le calque est en profondeur et la caméra décalée.
     pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
         let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
-        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or(self.layer().pose(self.cur_frame))
+        // (Rapportée au centre de la feuille, comme ce que pose l'image : `affine(stage_center)`, partie 182.)
+        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or_else(|| self.layer().pose_au_centre(self.cur_frame, self.doc.stage_center()))
+    }
+
+    /// Comme `layer_seen`, autour de l'origine du calque (partie 182) : ce que les gestes comparent à sa pose (`Layer::pose`).
+    pub(crate) fn layer_seen_o(&self) -> crate::document::LayerTransform {
+        self.layer_seen().a_l_origine(self.layer().ecart_origine(self.doc.stage_center()))
     }
 
     /// Transformation du calque courant (de son dessin vers la feuille).
@@ -1661,7 +1684,7 @@ impl App {
         }
         // (Le monde du plan courant : dans un plan en Espace 3D, la profondeur de la carte est libre, partie 148.)
         let world = self.e3_world();
-        let xf = world.card_xf(&t, world.profondeur(l, self.cur_frame));
+        let xf = world.card_xf_de(l, &t, world.profondeur(l, self.cur_frame));
         match repere {
             Some(r) => Some((world, crate::espace3dmath::mul(&r, &xf.matrix()), world.eye_reference())),
             None => Some((world, xf.matrix(), world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame)))),
@@ -1930,10 +1953,17 @@ impl App {
         let par_distance = self.doc.ordre_par_la_distance(self.cur_panel);
         let order = if par_distance { crate::espace3d::ordre_par_distance(&world, layers, &order, frame, repere.as_ref()) } else { order };
         let mut portees = crate::calqueffet::Portees::new(par_distance);
+        // Le décor 3D de la séquence (partie 180), sous tous les calques comme dans les sorties (`render::panel_plan_at`), et la
+        // profondeur qu'il partage avec les cartes (partie 183, `profondeur.rs`) : sans décor, aucune carte ne porte de plan.
+        let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, &camera, repere.as_ref());
+        let avec_decor = decor.is_some();
+        // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
+        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres));
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
             portees.visiter(layers, li, items.len());
+            items.extend(decor.take());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1972,6 +2002,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: card_pre.clone(),
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -1994,6 +2025,7 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: pl.pre,
+                            profondeur: None, ombre: None,
                         });
                     }
                 }
@@ -2022,6 +2054,8 @@ impl App {
                     ctg: None,
                     fond: None,
                     pre: card_pre.clone(),
+                    profondeur: if avec_decor { crate::profondeur::plan_du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
+                    ombre: if avec_ombres { crate::ombres::du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
                 };
                 // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
                 // (`fond.rs`), la peinture libre ou le trait par-dessus.
@@ -2038,12 +2072,14 @@ impl App {
                 // (c'est ce qu'on pose avec le pinceau ; le remplissage est dessous).
                 if onion && li == cur && !self.playing {
                     if let Some(g) = layer.couleur.as_ref().filter(|c| c.griffonner).and_then(|c| c.griffonnages.get(&cel).copied()) {
-                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
+                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone(), profondeur: None, ombre: None });
                     }
                 }
             }
             items.append(&mut onion_items);
         }
+        // (Une pile sans calque : le décor seul.)
+        items.extend(decor);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2897,7 +2933,11 @@ impl App {
         // (Un calque accroché à la caméra, `accroche.rs` : « transformé » se lit sur ce qu'on voit, la caméra comprise.)
         let a_plat = if self.layer().accroche { self.layer_seen().is_identity() } else { self.layer().pose(self.cur_frame).is_identity() };
         if self.fill.sample_all && a_plat {
-            return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
+            let mut plan = self.build_plan(self.cur_frame, false, false);
+            // (Le décor 3D de la séquence n'est pas un calque : ses bords ne ferment pas une zone ; sans lui, aucune carte n'est
+            // cachée, les contours sont ceux d'avant, partie 183.)
+            plan.items.retain(|i| !matches!(i.fond, Some(crate::render::FondPart::Decor(_))));
+            return render::composite_full(&self.doc, &plan);
         }
         match self.cel_here() {
             Some(id) => self.doc.cels[&id].raster.to_flat(),
@@ -3154,6 +3194,15 @@ impl App {
         if crate::fx::fond_poll() | crate::fx::griffon_poll() {
             self.renderer.invalidate_composed();
             ctx.request_repaint();
+        }
+        // Le décor 3D rendu par le processeur en arrière-plan (sans carte graphique, `decor3d.rs`).
+        if crate::decor3d::poll() {
+            self.renderer.invalidate_composed();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::decor3d::pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
@@ -5304,6 +5353,9 @@ impl App {
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
+            "fichier.importer_decor3d" => self.decor3d_importer(),
+            "decor3d.enlever" => self.decor3d_enlever(),
+            "decor3d.remesurer" => self.decor3d_remesurer(),
             "fichier.importer_scenario" => self.open_scenario_window(),
             "scenario.creer_plans" => self.open_plans_window(),
             "pinceau.enregistrer_traits" => {
@@ -5365,6 +5417,17 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             // Accrocher les calques choisis à la caméra, ou les décrocher (`accroche.rs`).
             "calque.accrocher_camera" => self.basculer_accroche(self.cur_layer),
+            // L'origine du calque et l'aimant au sol (`origine.rs`, partie 182).
+            a if crate::origine::Preset::de_l_action(a).is_some() => {
+                if let Some(p) = crate::origine::Preset::de_l_action(a) {
+                    self.origine_preset(p);
+                }
+            }
+            crate::origine::AIMANT_ACTION => self.basculer_aimant(self.cur_layer),
+            // Toujours devant le décor 3D (`profondeur.rs`, partie 183).
+            crate::profondeur::ACTION => self.basculer_devant_decor(self.cur_layer),
+            crate::ombres::ACTION_PORTE => self.basculer_porte_ombre(self.cur_layer),
+            crate::ombres::ACTION_RECOIT => self.basculer_recoit_ombres(self.cur_layer),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.
@@ -5810,6 +5873,7 @@ impl App {
         self.tick_aplat_couleur(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
+        self.decor3d_tick(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();
@@ -5916,6 +5980,7 @@ impl App {
             self.poll_brushes();
             self.poll_bruitages(ctx);
             self.poll_bibliotheque(ctx);
+            self.poll_banque3d(ctx);
             self.poll_suggestions(ctx);
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);

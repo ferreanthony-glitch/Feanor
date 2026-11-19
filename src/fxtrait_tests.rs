@@ -938,7 +938,7 @@ fn the_stroke_effects_stay_on_the_background_thread_and_the_boil_goes_to_the_gra
     let doc = drawing_doc(six_lines(), Vec::new(), 1);
     let id = doc.panels[0].layers[0].frames[0].unwrap();
     let on_card = |steps: Vec<FxStep>| {
-        let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None };
+        let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None, profondeur: None, ombre: None };
         crate::gpu::gpu_fx_item(&doc, &item)
     };
     let boil = FxStep { kind: EffectKind::Boil, values: vec![3.0, 55.0, 3.0, 2.0, 0.0, 1.0, 0.0, 1.0] };
@@ -950,7 +950,7 @@ fn the_stroke_effects_stay_on_the_background_thread_and_the_boil_goes_to_the_gra
     // trait, la carte passe le flou et le tremblement dessus (plus de pile entière sur le processeur).
     let mixed = [write_steps(50.0, &[]), vec![blur.clone(), boil.clone()]].concat();
     assert!(on_card(mixed.clone()));
-    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: mixed, ctg: None, fond: None, pre: None };
+    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: mixed, ctg: None, fond: None, pre: None, profondeur: None, ombre: None };
     let (line, rest) = fx::hybrid_split(&item).expect("pile mêlée");
     assert_eq!(line.fx.iter().map(|s| s.kind).collect::<Vec<_>>(), vec![EffectKind::Write]);
     assert_eq!(rest.iter().map(|s| s.kind).collect::<Vec<_>>(), vec![EffectKind::GaussianBlur, EffectKind::Boil]);
@@ -973,7 +973,7 @@ fn a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects() {
     let steps = [write_steps(45.0, &[(t::WRITE_SOFT, 4.0)]), vec![FxStep { kind: EffectKind::GaussianBlur, values: vec![3.0] }, boil]].concat();
     let doc = drawing_doc(six_lines(), Vec::new(), 1);
     let id = doc.panels[0].layers[0].frames[0].unwrap();
-    let plan = render::Plan { paper: None, items: vec![PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None }] };
+    let plan = render::Plan { paper: None, items: vec![PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None, profondeur: None, ombre: None }] };
     let want = render::composite_full(&doc, &plan);
     let mut gpu = GpuCanvas::new(&rs);
     let mut worst = (u8::MAX, 0usize);
@@ -999,7 +999,7 @@ fn a_result_asked_by_a_thumbnail_has_the_stroke_effects_like_the_screen() {
     crate::fxcache::monde::ecrire();
     let doc = drawing_doc(six_lines(), Vec::new(), 1);
     let id = doc.panels[0].layers[0].frames[0].unwrap();
-    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: write_steps(45.0, &[(t::WRITE_SOFT, 4.0)]), ctg: None, fond: None, pre: None };
+    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: write_steps(45.0, &[(t::WRITE_SOFT, 4.0)]), ctg: None, fond: None, pre: None, profondeur: None, ombre: None };
     let plan = render::Plan { paper: None, items: vec![item.clone()] };
     let mini = crate::thumbs::snapshot(&doc, &plan);
     let _ = crate::fxcache::soft_scope(|| crate::fx::shown(&mini, &item).is_some());

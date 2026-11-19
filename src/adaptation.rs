@@ -27,7 +27,7 @@
 //! | dessins bitmap (feuille et hors-feuille) | rééchantillonnés (`reechantillonne`) |
 //! | dessins vectoriels | points, épaisseurs, tailles de pinceau et de texte (`Element::transformed`), puis rendu exact |
 //! | strate Fond d'un dessin (peinture et coupe) | comme un bitmap |
-//! | pose d'un calque, clés de position | décalage × `s` ; échelle, étirement et rotation inchangés (pivot : centre de la feuille) |
+//! | pose d'un calque, clés de position | décalage × `s` ; échelle, étirement et rotation inchangés (pivot : l'origine du calque, qui suit le dessin) |
 //! | clés de caméra | position par la similitude ; avancée × rapport des largeurs de cadre ; zoom et angles inchangés |
 //! | effets : paramètres en pixels (`px`, `px/img`), clés comprises | × `s` (bornes de l'effet respectées) ; « trous pour 100 px de trait » ÷ `s` |
 //! | fond sous le trait, calque de couleur (dont son remplissage au griffonnage) | débord et fermeture des trous (pixels) × `s` |
@@ -580,6 +580,11 @@ pub fn adapte_calque(l: &mut Layer, ad: &Adaptation) {
     let s = ad.s;
     l.transform.x *= s;
     l.transform.y *= s;
+    // L'origine est un point du dessin : elle suit le dessin (partie 182 ; la pose autour d'elle reste juste, décalage × `s`).
+    if let Some(o) = l.origine.as_mut() {
+        let q = ad.point(eframe::egui::pos2(o[0], o[1]));
+        *o = [q.x, q.y];
+    }
     for k in &mut l.pos_keys {
         k.t.x *= s;
         k.t.y *= s;

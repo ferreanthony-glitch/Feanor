@@ -289,7 +289,7 @@ fn le_format_59_garde_la_hauteur_l_avancee_et_le_sujet_vise() {
     let doc = &b.app.doc;
     crate::project::save(doc, &manifest, &mut Default::default()).unwrap();
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 60"));
+    assert!(texte.contains("\"version\": 61"));
     for bout in ["\"grue\"", "\"survol\"", "\"orbite\"", "\"travelling_lateral\"", "\"hauteur\": 2.25", "\"avancee\": 3.0", "\"vise\""] {
         assert!(texte.contains(bout), "{bout} dans le projet");
     }
