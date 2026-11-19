@@ -372,6 +372,11 @@ impl App {
         let trace = self.e3_trace();
         let selectionne = self.e3_selectionne();
         let dessine = self.e3_dessine() || trace || selectionne;
+        // Un appui dans la vue (hors des outils de dessin, de trajectoire et de sélection pris dans la vue) donne la main au décor
+        // 3D : Ctrl+C, Ctrl+X et Ctrl+V visent ses objets choisis (partie 190, `copiedecor.rs`).
+        if !dessine && response.hovered() && ctx.input(|i| i.pointer.any_pressed()) {
+            self.decor3d_prendre_la_main();
+        }
         if dessine {
             let regard = crate::espace3ddessin::Regard3d { rect: draw, view };
             if trace {

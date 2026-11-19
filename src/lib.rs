@@ -381,6 +381,10 @@ mod profondeur_tests;
 mod poignees3d;
 #[cfg(test)]
 mod poignees3d_tests;
+// Copier, couper, coller les objets du décor 3D ; les envoyer vers une autre séquence (partie 190).
+mod copiedecor;
+#[cfg(test)]
+mod copiedecor_tests;
 // Les ombres des cartes sur le décor 3D, et du décor sur les cartes (partie 185).
 mod ombres;
 #[cfg(test)]

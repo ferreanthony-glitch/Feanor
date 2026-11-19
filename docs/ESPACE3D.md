@@ -464,3 +464,21 @@ exclusions ; justes **de tous les côtés**, puisque les ombres du soleil sont d
 - **Sans les ombres du décor**, ou aucune carte qui porte ou reçoit : rien n'est préparé, la vue d'avant au pixel près. Coût mesuré
   (huit personnages, 180 000 triangles, vue de 1533 × 559 pixels) : +0,2 ms, +0,4 ms quand les cartes bougent (`docs/INTERFACE.md`,
   189.3).
+
+
+## 20. Copier les objets du décor (2026-11-19, branche `copier-decor`, partie 190 de `docs/INTERFACE.md`)
+
+Les objets du décor 3D d'une séquence se **copient, se coupent et se collent** (Ctrl+C / X / V après un clic dans la vue Espace 3D ou
+dans le décor du panneau ; boutons du panneau), **se copient ou s'envoient vers une autre séquence**, passent **d'un projet ouvert à
+l'autre** ; une séquence née d'une autre (« Couper la séquence ici », « Nouvelle séquence avec les plans choisis ») **emporte une
+copie de son décor**. Code : `copiedecor.rs`.
+
+- **Le presse-papiers** (`App::copie3d`) garde des copies des objets avec leur `Arc<Modele3d>` : coller ne relit rien et n'envoie
+  rien de plus à la carte graphique (le même `Modele3d::uid`). Dans un autre projet, le modèle de même empreinte qu'il a déjà est
+  repris, sinon celui de la copie y entre et s'enregistre avec lui (`decor3d::plan_save`, par l'empreinte).
+- **Où** : dans la même séquence, à côté (la largeur du groupe, comme « Dupliquer ») tant que les originaux y sont ; ailleurs, à la
+  même place du monde. Puis l'aimant des objets (`decor3daimant::aimanter`) et des cartes (`reposer_les_cartes_aimantees`) ; une
+  étape d'annulation (`App::decor3d_transferer`, le cœur commun).
+- **Une séquence née d'une autre** : `Document::copier_decor_de_sequence` (un décor neuf, `uid` neuf, objets aux numéros neufs, mêmes
+  modèles et mêmes places), indépendant ensuite.
+- Le fichier ne change pas (format 61, `decors3d.json` version 2).

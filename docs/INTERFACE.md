@@ -15352,6 +15352,8 @@ partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banqu
 - Les nœuds sont cuits dans les sommets : un décor fait d'un même objet répété (instances) devient plus gros une fois allégé ou
   simplifié (l'avant → après le montre).
 - Copier ou dupliquer une séquence n'emporte pas son décor ; la séquence supprimée garde son entrée (elle revient avec Ctrl+Z).
+  **Depuis la partie 190** : une séquence née d'une autre (« Couper la séquence ici », « Nouvelle séquence avec les plans
+  choisis ») emporte une copie de son décor, et les objets se copient d'une séquence (ou d'un projet) à l'autre.
 - Pas de manipulateur du décor dans la vue (seulement les champs chiffrés du panneau).
 - Les couleurs du ciel, de la brume et de l'ambiance sont des constantes (`decor3drendu.rs`), pas encore des réglages.
 - L'export des calques séparés n'écrit pas le décor.
@@ -15517,7 +15519,8 @@ ouvre « Ce décor est lourd » ; le crédit Kenney est dans « À propos ».
   (une surface sans épaisseur) peut tromper le test « enfermé dedans ». Le sol de l'aimant est celui du cadre : changer la taille du
   cadre ne repose pas les objets (une retouche le fait).
 - Copier, coller, glisser un objet d'une séquence à l'autre : pas encore. Copier ou dupliquer une séquence n'emporte toujours pas
-  son décor.
+  son décor. **Fait à la partie 190** (sauf le glisser) : Ctrl+C / Ctrl+X / Ctrl+V sur les objets, « Copier vers » et « Envoyer
+  vers la séquence… », d'un projet ouvert à l'autre ; une séquence coupée emporte une copie de son décor.
 - Pas de vignette de la banque dans les vignettes des plans (le décor y est, comme partie 180).
 - La recherche de la banque porte sur les noms anglais des fichiers (« tree », « road »), les familles et les kits.
 
@@ -16433,3 +16436,144 @@ composition a été rangé, pas changé).
 6. Vues multiples (4 vues) : l'ombre dans la vue de dessus et dans la perspective ; Espace 3D à côté du dessin : de même.
 7. Lecture à 24 i/s d'un plan où le personnage marche, la vue à côté ouverte : **rien ne saccade** (superposition « Performance »).
 8. Décoche « Ombres » dans l'aspect du décor : plus aucune ombre, ni du décor ni des cartes, dans la vue comme dans le dessin.
+
+## 190. Copier les objets du décor 3D (2026-11-19, branche `copier-decor` partie de `main` 4481e66, format 61 inchangé)
+
+Le choix d'Anthony (« Copier les objets du décor »). Jusqu'ici, un objet du décor 3D d'une séquence (parties 180 et 181) ne se
+dupliquait que dans sa séquence (« Dupliquer » du panneau) : ni copier, ni coller, ni l'emmener dans une autre séquence ou un autre
+projet, et une séquence née d'une autre perdait son décor (180.5, 181.4). Maintenant **les objets se copient, se coupent et se
+collent** — au clavier ou par le panneau —, **se copient ou s'envoient vers une autre séquence**, passent **d'un projet ouvert à
+l'autre**, et **une séquence coupée emporte une copie de son décor**. Format du projet inchangé (61 ; `decors3d.json` reste en
+version 2). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 190.1 Ce qui change pour Anthony
+
+1. **Ctrl+C, Ctrl+X, Ctrl+V sur les objets du décor** : après un clic dans la vue Espace 3D (plein écran, à côté, chacune des vues
+   multiples) ou dans le décor du panneau Espace 3D, **Ctrl+C copie les objets choisis** (ceux de la vue ; la liste du panneau les
+   choisit aussi dans la vue), **Ctrl+X les coupe** (copiés puis enlevés, une étape d'annulation ; ceux qui reposaient dessus
+   redescendent) et **Ctrl+V colle les derniers objets copiés** dans le décor de la séquence du plan courant. Ce sont les touches et
+   les commandes de toujours (`edition.copier`, `edition.couper`, `edition.coller`, Maj+Ctrl+V aussi) : rien à assigner.
+2. **Ailleurs, rien ne change** : un clic sur le dessin, dans le panneau Calques, le panneau Effets, le montage, la timeline… rend
+   à Ctrl+C / Ctrl+V leur sens d'avant (le dessin, le calque, les effets, les plans, les images, les clés), même si un objet reste
+   choisi dans la vue. Dans la vue, un clic sur une carte (aucun objet choisi) laisse aussi Ctrl+C copier comme avant. Après une autre
+   copie (un dessin, un calque, des plans…), Ctrl+V colle cette autre copie, pas les objets : **la dernière copie est celle qui se
+   colle**. Les outils de dessin, de trajectoire et de sélection pris dans la vue ne donnent pas la main au décor.
+3. **Où se pose ce qu'on colle** :
+   - **dans la même séquence**, tant que les objets copiés y sont encore : **à côté**, décalés en largeur de la largeur du groupe et
+     d'un dixième (au moins 30 cm, comme « Dupliquer ») ; collés encore, plus loin, jamais l'un sur l'autre ;
+   - **ailleurs** — une autre séquence, un autre projet ouvert, ou après Ctrl+X — : **à la même place** dans le monde ;
+   - puis **l'aimant** repose les objets aimantés (un banc collé avec sa dalle se pose dessus) et **les cartes aimantées** de la
+     séquence (un personnage aimanté monte sur la dalle collée sous ses pieds).
+   Les objets collés gardent leur nom, leur modèle, leur place (rotation, échelle), leur origine, « Aimanté au sol » et ce qui a été
+   allégé ; ils ont des numéros neufs et **sont choisis** (dans la vue et la liste). Une séquence sans décor en reçoit un, à l'aspect
+   (soleil, ciel, brume, ombres) du décor d'où viennent les objets. **Une étape d'annulation** par collage.
+4. **Plusieurs objets à la fois** : Maj+clic dans la vue (partie 184) ou, nouveau, **Ctrl ou Maj + clic dans la liste du panneau**
+   en choisit plusieurs ; ils se copient, se coupent, se collent ensemble, à leurs places les uns par rapport aux autres.
+5. **Le panneau Espace 3D**, sous Ajouter / Dupliquer / Enlever : **Copier**, **Couper**, **Coller** (« Coller (3 objets) »), les
+   mêmes que les touches ; puis **« Copier vers la séquence… »** et **« Envoyer vers la séquence… »**, deux menus des autres séquences
+   du projet (leur nom, et combien d'objets 3D a déjà leur décor). Copier vers : une copie à la même place, l'objet reste ici ;
+   Envoyer vers : il quitte ce décor. **Une étape d'annulation** chacun (Ctrl+Z ramène tout des deux côtés). Ils visent les objets
+   choisis dans la vue, sinon celui de la liste ; grisés s'il n'y a rien de choisi ou pas d'autre séquence (la bulle le dit).
+6. **D'un projet ouvert à l'autre** (les onglets de projets) : ce qu'on copie dans l'un se colle dans l'autre, comme les autres
+   copies. **Le modèle n'est ni relu ni renvoyé à la carte graphique** ; s'il manque au projet d'arrivée, il y entre et **s'enregistre
+   avec lui** (dans `decors/`, sous son empreinte) ; si ce projet a déjà le même contenu (le même arbre de la banque), c'est son modèle
+   qui sert (toujours un seul fichier par contenu).
+7. **Une séquence née d'une autre emporte son décor** : « Couper la séquence ici » (la planche des séquences) et « Nouvelle séquence
+   avec les plans choisis / les cases choisies » donnent à la séquence neuve (et à la suite d'une séquence coupée en deux) **une copie
+   du décor que ses plans montraient** : les mêmes objets aux mêmes places, les mêmes modèles, mais un décor à elle — déplacer un
+   objet de l'une ne touche pas l'autre. FEANOR n'a pas de commande qui duplique ou copie une séquence entière (copier-coller des plans
+   les colle dans la séquence où l'on colle) ; ce sont les deux seules qui font naître une séquence des plans d'une autre.
+8. **Le budget de cet ordinateur** (partie 181) vaut pour la somme du décor : un collage, une copie ou un envoi qui le ferait dépasser
+   est **refusé**, avec un message (« le décor de la séquence aurait N triangles… »). Jamais de ralentissement.
+9. **Supprimer une séquence** (ses plans) garde son décor pour Ctrl+Z, comme avant.
+
+### 190.2 Comment c'est fait
+
+- **`copiedecor.rs`** (nouveau) porte tout. **Le presse-papiers** est `App::copie3d` (`Copie3d { presse, main, recente }`), un champ
+  hors de l'échange des onglets (classé avec les autres presse-papiers dans `PARTAGES`) : `PresseDecor` garde des copies des objets
+  (leur `Arc<Modele3d>` partagé, donc leur `Modele3d::uid` : la carte graphique a déjà le modèle), l'aspect de leur décor, le projet
+  (`App::doc_epoch`) et la séquence d'où ils viennent, et combien de fois ils ont été collés à côté d'eux-mêmes.
+- **Qui a la main** : `Copie3d::main` est remis à faux à chaque appui (`App::update`, comme le panneau Effets et le panneau Calques,
+  `fxcopie.rs`) ; un appui dans une vue Espace 3D hors des outils de dessin, de trajectoire et de sélection (`e3_input_objets`), ou
+  dans le décor du panneau (`decor3d_reglages`), le reprend. `run_action_now` : `edition.copier` / `edition.couper` visent les objets
+  si `decor3d_a_la_main` (la main et un objet choisi dans la vue), `edition.coller` (et `coller_a_la_tete`) si
+  `decor3d_coller_a_la_main` (la main, et `Copie3d::recente` : remis à faux par toute autre copie au début de `run_action_now`,
+  comme `layer_clip_recent`). Ces règles passent avant celles des effets, des calques, des clés, des plans et du dessin ; sinon tout
+  suit le même chemin qu'avant. Une copie d'objets écrit « FEANOR : objets 3D copiés » dans le presse-papiers du système (une
+  image copiée ailleurs ne passe plus avant) et ôte la main aux clés copiées (`fx_clip_recent`, `cam_clip_recent`), comme une copie
+  de plans ; une image du système n'est pas collée quand le décor a la main et que ses objets sont la dernière copie.
+- **Un seul cœur** : `App::decor3d_transferer(nom, retirer, poser)` — couper, coller, copier et envoyer vers une séquence. Le budget
+  de la machine est vérifié sur le décor d'arrivée avant de rien changer ; puis un instantané, les objets retirés d'une séquence,
+  les copies posées dans une autre (`Document::poser_copies_3d` : numéros neufs par `alloc`, le modèle de même empreinte du projet
+  repris par `Decors3d::modele_d_empreinte`, sinon celui de la copie), `decor3daimant::aimanter` sur chaque décor touché,
+  `reposer_les_cartes_aimantees` sur chaque séquence touchée, **une étape** (`commit_structure`). Le décalage du collage à côté
+  (`pas_a_cote`) est celui de « Dupliquer » pour un objet seul, la boîte du groupe pour plusieurs ; il ne s'applique que si l'un des
+  objets copiés est encore, à la même place, dans le décor où l'on colle (même projet, même séquence).
+- **Les séquences nées d'une autre** : `Document::copier_decor_de_sequence(de, vers)` (un `Decor3d::new` — un `uid` neuf, sa propre
+  texture —, le même aspect, les objets clonés aux numéros neufs, les modèles partagés), appelé par `couper_sequence_avant`
+  (`planchesequences.rs`) et `new_sequence_from_plans` (`sequenceplans.rs`, pour la séquence neuve et pour la suite d'une séquence
+  coupée). Dans l'étape d'annulation de la commande (le décor est dans `Structure`).
+- **Le fichier** ne change pas : un modèle collé d'un autre projet a ses octets en mémoire (`Modele3d::octets`), et
+  `decor3d::plan_save` écrit ceux qui manquent sous `decors/<empreinte>.glb`, comme pour un import.
+- **Le panneau** (`decor3dui.rs`) : la liste montre choisis les objets de la vue et celui de la liste ; Ctrl ou Maj + clic y ajoute
+  ou retire un objet du choix de la vue (`e3_choisir_objet(id, true)`) ; les boutons et les deux menus appellent `decor3d_copier`,
+  `decor3d_couper`, `decor3d_coller`, `decor3d_vers_sequence` sur `decor3d_objets_vises` (la vue, sinon la liste).
+
+### 190.3 Essais (`src/copiedecor_tests.rs`, 13)
+
+Copier-coller dans la même séquence (à côté, 2,2 m pour une dalle de 2 m, puis 4,4 m ; le nom, l'origine, l'aimant, la rotation,
+l'échelle gardés ; **le même `Arc` de modèle** ; numéros neufs ; la copie choisie dans la vue et la liste ; une étape par collage,
+Ctrl+Z) ; dans une autre séquence (à la même place, un décor neuf à l'aspect de l'autre, la carte aimantée de cette séquence monte de
+0,4 m sur la dalle collée, Ctrl+Z la fait redescendre) ; couper (une étape, le banc redescend sur le sol, l'objet n'est plus choisi)
+puis coller dans la même séquence (à la même place, le banc remonte) ou dans l'autre (déplacé) ; deux objets ensemble (ailleurs : à
+leur place, le banc sur la dalle ; ici : décalés du même pas) ; copier et envoyer vers une autre séquence (une étape chacun, Ctrl+Z des
+deux côtés, vers sa propre séquence : rien) ; **par l'application entière** (le banc des mesures, la vue à côté) : un clic sur un
+objet dans la vue le choisit et donne la main au décor, Ctrl+C (l'événement Copier d'egui) le copie, un clic sur la feuille reprend la
+main et Ctrl+C n'est plus celui des objets ; **Ctrl+C / Ctrl+V d'avant** : un objet choisi dans la vue mais la main ailleurs, le
+dessin (une image collée, copiée, recollée), le panneau Calques (copier, coller un calque), le montage (copier un plan) ; la main au
+décor sans objet choisi : le dessin ; des objets copiés puis un dessin copié : Ctrl+V colle le dessin ; **« Couper la séquence ici »**
+et **« Nouvelle séquence avec les cases choisies »** : chaque séquence neuve a une copie indépendante du décor (autre `uid`, mêmes
+modèles, numéros neufs, mêmes places ; déplacer un objet de la copie laisse l'original), Ctrl+Z ne laisse qu'un décor ; supprimer la
+séquence puis Ctrl+Z rend son décor ; **l'enregistrement après collage** (six objets, deux fichiers dans `decors/`, relus aux mêmes
+places, les trois dalles relues partageant un modèle) ; **un autre projet ouvert** (deux onglets) : les objets collés partagent le
+modèle de l'autre onglet, enregistré et relu le projet d'arrivée a les deux modèles sous leur empreinte, le premier projet n'a pas
+changé ; dans un troisième qui avait déjà la dalle, c'est son modèle qui sert ; **le budget** : un collage qui le dépasserait est
+refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests` classe `copie3d` parmi les champs partagés.
+
+### 190.4 Ce qui n'est pas fait (ou limité)
+
+- **Glisser un objet d'une séquence à l'autre** (à la souris) : pas fait ; « Envoyer vers la séquence… » ou Ctrl+X / Ctrl+V le
+  remplacent.
+- **Pas de commande « Dupliquer la séquence »** dans FEANOR : rien à faire emporter. `Document::copier_decor_de_sequence` est prêt
+  pour elle.
+- **Édition > Copier / Coller (le menu)** ne vise pas les objets : un clic dans le menu est un appui hors du décor (comme pour le
+  panneau Calques et le panneau Effets). Les boutons du panneau et les touches les visent.
+- **La main au décor ne se voit pas** (pas de cadre autour de la vue ou du panneau, comme pour le montage) ; la barre d'état dit ce
+  qui a été copié ou collé.
+- **Les versions d'une séquence** (`variantes.rs`) partagent le décor de leur séquence, comme avant : en créer une ne copie rien.
+- Le collage d'un **autre projet de taille différente** pose les objets à la même place dans le monde ; le sol (`Monde::sol_y`) est
+  celui du projet d'arrivée, l'aimant y repose les objets aimantés, les autres gardent leur hauteur.
+- Coller à côté **plusieurs fois après des annulations** compte les collages faits (le suivant peut aller un cran plus loin).
+- Le budget n'est vérifié que si cet ordinateur a été mesuré (comme pour un import) ; il juge la somme du décor d'arrivée. Un modèle
+  masqué sur cet ordinateur (« Ce décor est lourd », en attente du choix) se copie et se colle masqué, et n'est pas compté.
+
+### 190.5 À essayer (sa checklist)
+
+1. Un projet de copie, deux séquences ; dans la première, un décor de la banque 3D : une dalle, un banc posé dessus, un arbre.
+2. Vue Espace 3D : clic sur la dalle, **Ctrl+C**, **Ctrl+V** : une deuxième dalle **à côté**, choisie ; Ctrl+V encore : une troisième
+   plus loin. Ctrl+Z deux fois.
+3. Maj+clic sur le banc (la dalle et le banc choisis), Ctrl+C ; clic sur un plan de la seconde séquence (montage), puis **clic dans la
+   vue** (dans le vide), **Ctrl+V** : la dalle et le banc **à la même place**, le banc sur la dalle. Un personnage « Aimanté au sol »
+   de cette séquence, debout là : il monte sur la dalle. Ctrl+Z : tout part, il redescend.
+4. Dans la liste du panneau : **Ctrl+clic** sur deux objets, **Couper** : ils disparaissent, ce qui reposait dessus redescend ;
+   **Coller** : ils reviennent à leur place.
+5. **« Envoyer vers la séquence… »** l'arbre vers la seconde séquence : il quitte la première ; **« Copier vers la séquence… »** le
+   banc : il reste aussi ici. Ctrl+Z à chaque fois.
+6. **Ailleurs, rien ne change** : clic sur le dessin, Ctrl+C / Ctrl+V d'un trait choisi ; dans le panneau Calques, Ctrl+C / Ctrl+V d'un
+   calque ; dans le montage, Ctrl+C / Ctrl+V d'un plan ; dans la timeline, des clés. Même avec un objet resté choisi dans la vue.
+7. Deux projets ouverts (onglets) : copie un arbre dans l'un, colle-le dans l'autre (clic dans la vue d'abord) ; enregistre ce
+   second projet, ferme-le, rouvre-le : l'arbre est là ; dans son dossier `decors/`, le fichier du modèle.
+8. Planche des séquences : **« Couper la séquence ici »** au milieu d'une séquence qui a un décor : les plans de la nouvelle séquence
+   montrent **le même décor** ; déplace un objet dans la nouvelle : l'ancienne ne bouge pas. Ctrl+Z. De même pour « Nouvelle séquence
+   avec les plans choisis ».
+9. Un décor au bout du budget de ton PC : Ctrl+V d'un gros objet y est **refusé** (le message) ; rien ne ralentit.
