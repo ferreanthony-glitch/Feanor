@@ -14770,7 +14770,8 @@ Les essais d'avant changés pour la nouvelle disposition : `avantapres165_tests:
 (le bord gauche de la colonne se lit au ⊖ de l'en-tête, plus à la barre d'opacité, qui a quitté le début de la ligne) ;
 `notes_calques_tests::the_layer_row_and_the_brush_settings_carry_the_aplat_button` (l'aplat est une colonne de chaque calque, pas
 du dossier, un point quand il est éteint ; on clique la case de « C1 ») ; `piste_mode_tests::the_animation_timeline_keeps_its_own_line_untouched`
-(la pelure : une case dans l'en-tête et une par calque, quatre au lieu d'une).
+(la pelure : une case dans l'en-tête et une par calque, quatre au lieu d'une) ; `aplat_tests::the_aplat_is_activated_from_the_layer_only`
+(l'icône de l'aplat deux fois dans la timeline : l'en-tête et le calque qui en a un).
 
 ### 174.4 À tester (sa checklist)
 
