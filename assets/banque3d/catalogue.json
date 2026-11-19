@@ -1,0 +1,645 @@
+{
+ "format": "feanor-banque3d",
+ "version": 1,
+ "modeles": [
+  {
+   "famille": "Banlieue",
+   "nom": "building-type-a",
+   "fichier": "banlieue/building-type-a.glb",
+   "apercu": "apercus/banlieue/building-type-a.png",
+   "triangles": 1174,
+   "octets": 110440,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Banlieue",
+   "nom": "building-type-c",
+   "fichier": "banlieue/building-type-c.glb",
+   "apercu": "apercus/banlieue/building-type-c.png",
+   "triangles": 1196,
+   "octets": 111428,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Banlieue",
+   "nom": "building-type-f",
+   "fichier": "banlieue/building-type-f.glb",
+   "apercu": "apercus/banlieue/building-type-f.png",
+   "triangles": 1616,
+   "octets": 150372,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Banlieue",
+   "nom": "driveway-long",
+   "fichier": "banlieue/driveway-long.glb",
+   "apercu": "apercus/banlieue/driveway-long.png",
+   "triangles": 12,
+   "octets": 14792,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Banlieue",
+   "nom": "tree-large",
+   "fichier": "banlieue/tree-large.glb",
+   "apercu": "apercus/banlieue/tree-large.png",
+   "triangles": 42,
+   "octets": 17644,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Banlieue",
+   "nom": "tree-small",
+   "fichier": "banlieue/tree-small.glb",
+   "apercu": "apercus/banlieue/tree-small.png",
+   "triangles": 42,
+   "octets": 17644,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Suburban) 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-suburban"
+  },
+  {
+   "famille": "Commerces",
+   "nom": "building-a",
+   "fichier": "commerces/building-a.glb",
+   "apercu": "apercus/commerces/building-a.png",
+   "triangles": 1252,
+   "octets": 119996,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Commercial) 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-commercial"
+  },
+  {
+   "famille": "Commerces",
+   "nom": "building-skyscraper-a",
+   "fichier": "commerces/building-skyscraper-a.glb",
+   "apercu": "apercus/commerces/building-skyscraper-a.png",
+   "triangles": 1292,
+   "octets": 122392,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Commercial) 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-commercial"
+  },
+  {
+   "famille": "Commerces",
+   "nom": "detail-parasol-a",
+   "fichier": "commerces/detail-parasol-a.glb",
+   "apercu": "apercus/commerces/detail-parasol-a.png",
+   "triangles": 96,
+   "octets": 21380,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Commercial) 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-commercial"
+  },
+  {
+   "famille": "Nature",
+   "nom": "campfire_logs",
+   "fichier": "nature/campfire_logs.glb",
+   "apercu": "apercus/nature/campfire_logs.png",
+   "triangles": 112,
+   "octets": 9284,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "fence_simple",
+   "fichier": "nature/fence_simple.glb",
+   "apercu": "apercus/nature/fence_simple.png",
+   "triangles": 64,
+   "octets": 5712,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "flower_redA",
+   "fichier": "nature/flower_redA.glb",
+   "apercu": "apercus/nature/flower_redA.png",
+   "triangles": 76,
+   "octets": 7104,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "grass_large",
+   "fichier": "nature/grass_large.glb",
+   "apercu": "apercus/nature/grass_large.png",
+   "triangles": 224,
+   "octets": 18504,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "log",
+   "fichier": "nature/log.glb",
+   "apercu": "apercus/nature/log.png",
+   "triangles": 200,
+   "octets": 14288,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "path_stone",
+   "fichier": "nature/path_stone.glb",
+   "apercu": "apercus/nature/path_stone.png",
+   "triangles": 136,
+   "octets": 12392,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "plant_bush",
+   "fichier": "nature/plant_bush.glb",
+   "apercu": "apercus/nature/plant_bush.png",
+   "triangles": 32,
+   "octets": 4396,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "rock_largeA",
+   "fichier": "nature/rock_largeA.glb",
+   "apercu": "apercus/nature/rock_largeA.png",
+   "triangles": 80,
+   "octets": 7552,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "rock_smallA",
+   "fichier": "nature/rock_smallA.glb",
+   "apercu": "apercus/nature/rock_smallA.png",
+   "triangles": 16,
+   "octets": 3044,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_largeC",
+   "fichier": "nature/stone_largeC.glb",
+   "apercu": "apercus/nature/stone_largeC.png",
+   "triangles": 72,
+   "octets": 6580,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_largeD",
+   "fichier": "nature/stone_largeD.glb",
+   "apercu": "apercus/nature/stone_largeD.png",
+   "triangles": 80,
+   "octets": 7564,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_smallG",
+   "fichier": "nature/stone_smallG.glb",
+   "apercu": "apercus/nature/stone_smallG.png",
+   "triangles": 32,
+   "octets": 3776,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_smallH",
+   "fichier": "nature/stone_smallH.glb",
+   "apercu": "apercus/nature/stone_smallH.png",
+   "triangles": 60,
+   "octets": 5772,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_tallH",
+   "fichier": "nature/stone_tallH.glb",
+   "apercu": "apercus/nature/stone_tallH.png",
+   "triangles": 78,
+   "octets": 7364,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stone_tallI",
+   "fichier": "nature/stone_tallI.glb",
+   "apercu": "apercus/nature/stone_tallI.png",
+   "triangles": 44,
+   "octets": 5160,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "stump_round",
+   "fichier": "nature/stump_round.glb",
+   "apercu": "apercus/nature/stump_round.png",
+   "triangles": 56,
+   "octets": 5644,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "tree_default",
+   "fichier": "nature/tree_default.glb",
+   "apercu": "apercus/nature/tree_default.png",
+   "triangles": 114,
+   "octets": 9428,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "tree_fat",
+   "fichier": "nature/tree_fat.glb",
+   "apercu": "apercus/nature/tree_fat.png",
+   "triangles": 50,
+   "octets": 5576,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "tree_oak",
+   "fichier": "nature/tree_oak.glb",
+   "apercu": "apercus/nature/tree_oak.png",
+   "triangles": 196,
+   "octets": 14644,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "tree_pineTallA",
+   "fichier": "nature/tree_pineTallA.glb",
+   "apercu": "apercus/nature/tree_pineTallA.png",
+   "triangles": 78,
+   "octets": 7200,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Nature",
+   "nom": "tree_simple",
+   "fichier": "nature/tree_simple.glb",
+   "apercu": "apercus/nature/tree_simple.png",
+   "triangles": 62,
+   "octets": 6500,
+   "texture_integree": [],
+   "kit": "Nature Kit 2.1",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/nature-kit"
+  },
+  {
+   "famille": "Routes",
+   "nom": "construction-cone",
+   "fichier": "routes/construction-cone.glb",
+   "apercu": "apercus/routes/construction-cone.png",
+   "triangles": 66,
+   "octets": 18532,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "construction-fence",
+   "fichier": "routes/construction-fence.glb",
+   "apercu": "apercus/routes/construction-fence.png",
+   "triangles": 136,
+   "octets": 26340,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "dumpster",
+   "fichier": "routes/dumpster.glb",
+   "apercu": "apercus/routes/dumpster.png",
+   "triangles": 234,
+   "octets": 35868,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "light-curved",
+   "fichier": "routes/light-curved.glb",
+   "apercu": "apercus/routes/light-curved.png",
+   "triangles": 92,
+   "octets": 20976,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "road-bend",
+   "fichier": "routes/road-bend.glb",
+   "apercu": "apercus/routes/road-bend.png",
+   "triangles": 260,
+   "octets": 31648,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "road-crossroad",
+   "fichier": "routes/road-crossroad.glb",
+   "apercu": "apercus/routes/road-crossroad.png",
+   "triangles": 116,
+   "octets": 21568,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "road-straight",
+   "fichier": "routes/road-straight.glb",
+   "apercu": "apercus/routes/road-straight.png",
+   "triangles": 44,
+   "octets": 16732,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Routes",
+   "nom": "traffic-light",
+   "fichier": "routes/traffic-light.glb",
+   "apercu": "apercus/routes/traffic-light.png",
+   "triangles": 212,
+   "octets": 31828,
+   "texture_integree": [
+    "Textures/colormap.png"
+   ],
+   "kit": "City Kit (Roads) 2.2",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/city-kit-roads"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "detail-barrier-strong-type-b",
+   "fichier": "ville-retro/detail-barrier-strong-type-b.glb",
+   "apercu": "apercus/ville-retro/detail-barrier-strong-type-b.png",
+   "triangles": 28,
+   "octets": 11604,
+   "texture_integree": [
+    "Textures/concrete.png",
+    "Textures/signs.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "detail-barrier-type-b",
+   "fichier": "ville-retro/detail-barrier-type-b.glb",
+   "apercu": "apercus/ville-retro/detail-barrier-type-b.png",
+   "triangles": 44,
+   "octets": 12700,
+   "texture_integree": [
+    "Textures/metal.png",
+    "Textures/signs.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "detail-bench",
+   "fichier": "ville-retro/detail-bench.glb",
+   "apercu": "apercus/ville-retro/detail-bench.png",
+   "triangles": 84,
+   "octets": 20360,
+   "texture_integree": [
+    "Textures/metal.png",
+    "Textures/planks.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "truck-flat",
+   "fichier": "ville-retro/truck-flat.glb",
+   "apercu": "apercus/ville-retro/truck-flat.png",
+   "triangles": 68,
+   "octets": 25068,
+   "texture_integree": [
+    "Textures/truck.png",
+    "Textures/metal.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "truck-green",
+   "fichier": "ville-retro/truck-green.glb",
+   "apercu": "apercus/ville-retro/truck-green.png",
+   "triangles": 48,
+   "octets": 17480,
+   "texture_integree": [
+    "Textures/truck_alien.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "wall-c-flat-low",
+   "fichier": "ville-retro/wall-c-flat-low.glb",
+   "apercu": "apercus/ville-retro/wall-c-flat-low.png",
+   "triangles": 4,
+   "octets": 4432,
+   "texture_integree": [
+    "Textures/bars.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  },
+  {
+   "famille": "Ville rétro",
+   "nom": "wall-fence",
+   "fichier": "ville-retro/wall-fence.glb",
+   "apercu": "apercus/ville-retro/wall-fence.png",
+   "triangles": 32,
+   "octets": 17956,
+   "texture_integree": [
+    "Textures/wall_lines.png",
+    "Textures/concrete.png",
+    "Textures/bars.png"
+   ],
+   "kit": "Retro Urban Kit 2.0",
+   "auteur": "Kenney (www.kenney.nl)",
+   "licence": "CC0 1.0",
+   "source": "https://opengameart.org/content/retro-urban-kit"
+  }
+ ]
+}
