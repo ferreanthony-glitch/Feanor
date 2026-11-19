@@ -391,3 +391,29 @@ du plan. Un personnage passe derrière un arbre et devant un banc. Code : `profo
 - **Sans décor**, aucun élément ne porte de plan : la composition est celle d'avant, par les mêmes pipelines et les mêmes
   boucles.
 
+
+## 17. Les poignées sur les objets du décor, et l'origine dans la vue (2026-11-19, branche `poignees-3d`, partie 184 de `docs/INTERFACE.md`)
+
+Le titre de ce document (« les calques et la caméra, rien d'autre ») vaut toujours pour ce qui se dessine : le décor 3D reste
+celui de la séquence (parties 14 à 16). Mais **ses objets se choisissent et se manient dans la vue** comme les cartes. Code :
+`poignees3d.rs`.
+
+- **Un troisième habitant de la sélection** : `Espace3dState::sel` tient des cartes (`espace3d::card_selection`, marque `1 << 62`),
+  des objets du décor (`poignees3d::objet_selection`, marque `1 << 61`, l'`Objet3d::id`) et la caméra (`CAMERA_ID`) ; ils se
+  mêlent (Maj+clic). L'objet choisi dans la vue l'est dans la liste du panneau (`decor3d.choisi`), et l'inverse.
+- **Le choix** : le plus proche de l'œil l'emporte, entre la carte dont le dessin est touché et l'objet dont un triangle l'est
+  (`App::e3_pick_tout`, `poignees3d::toucher_objet` : le rayon dans le repère du modèle, sa boîte puis ses triangles ; la boîte
+  seule au-delà de 2 millions de triangles) ; une carte « Toujours devant le décor 3D » passe devant. L'outil Trajectoire et le
+  dessin dans la vue ne prennent toujours que des cartes (`e3_pick`).
+- **Un objet vu comme une carte** par le manipulateur : `poignees3d::xf_de_l_objet` (la place de l'origine, `[0, rotation_y, 0]`,
+  l'échelle sur les trois axes), dont la matrice est `Place3d::matrice`. Le pivot est l'origine de l'objet (`e3_pivot`). Un objet ne
+  tourne qu'autour de la verticale et grandit d'un bloc : les anneaux X et Z sont refusés, l'échelle est uniforme ; aimanté, sa
+  flèche Y est refusée (`App::e3_poignee_refusee`, poignées grises, la barre d'état dit pourquoi).
+- **Le geste** passe par le cœur de la retouche du panneau (`decor3dui::decor3d_appliquer` : l'aimant des objets, puis les cartes
+  aimantées de la séquence) ; l'instantané du projet pris au début du geste en fait **une étape d'annulation** (`commit_named`).
+- **« Modifier l'origine »** (`Espace3dState::origine`, `espace3d.modifier_origine`) : le manipulateur se pose sur l'origine de ce
+  qui est choisi seul et la déplace seule. Une carte : dans son plan, par `origine::deplacer_origine` (le point du monde ramené au
+  carré unité de la carte, puis aux pixels du dessin) ; un objet : dans l'espace, par `Objet3d::changer_origine`. Maj accroche aux
+  points de la boîte (`origine::aimanter_a_la_boite` ; `poignees3d::points_de_la_boite`). Au lâcher, l'aimant repose par la
+  nouvelle origine.
+- Rien ne change dans l'image du plan, les exports ni le fichier.

@@ -423,6 +423,10 @@ impl App {
         if self.decor3d.choisi == Some(id) {
             self.decor3d.choisi = None;
         }
+        // (Ni dans la vue : partie 184.)
+        if self.doc.decors3d.objet(id).is_none() {
+            self.espace3d.sel.retain(|&s| s != crate::poignees3d::objet_selection(id));
+        }
     }
 
     /// « Dupliquer » un objet : la copie (même modèle, partagé : rien n'est relu ni renvoyé à la carte) posée juste à côté, à sa
@@ -702,7 +706,16 @@ impl App {
                 }
             }
         }
-        if let Some(o) = self.decor3d.choisi.and_then(|id| d.objet(id)).filter(|_| d.objets.len() > 1) {
+        // Les objets choisis dans la vue (partie 184) : leur boîte à la couleur de la sélection, et leur origine. L'objet choisi
+        // dans la liste du panneau, s'il ne l'est pas dans la vue : sa boîte en clair, comme avant.
+        let choisis = self.e3_objets_choisis();
+        for o in d.objets.iter().filter(|o| choisis.contains(&o.id)) {
+            boite(o, Stroke::new(2.0_f32, crate::theme::POIGNEE_SELECTION));
+            if let Some(p) = proj(o.place.position) {
+                crate::origine::peindre_repere(painter, p, crate::theme::POIGNEE_SELECTION, false);
+            }
+        }
+        if let Some(o) = self.decor3d.choisi.filter(|id| !choisis.contains(id)).and_then(|id| d.objet(id)).filter(|_| d.objets.len() > 1) {
             boite(o, Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 220, 120, 170)));
         }
         sur_la_carte
@@ -737,10 +750,17 @@ impl App {
 
     /// Applique une retouche du décor de la séquence `seq` (champs du panneau) : les objets aimantés se reposent, l'étape
     /// d'annulation viendra au lâcher (`decor3d_retouche_finir`).
-    pub(crate) fn decor3d_retoucher(&mut self, seq: u64, mut d: Decor3d) {
+    pub(crate) fn decor3d_retoucher(&mut self, seq: u64, d: Decor3d) {
         if self.decor3d.retouche.is_none() {
             self.decor3d.retouche = Some(self.snapshot());
         }
+        self.decor3d_appliquer(seq, d);
+    }
+
+    /// Le cœur d'une retouche, sans instantané : le décor `d` de la séquence `seq` remplace l'ancien, ses objets aimantés se
+    /// reposent, les cartes aimantées de la séquence aussi. L'étape d'annulation est à l'appelant : la retouche du panneau
+    /// (`decor3d_retoucher`), ou le geste des poignées de la vue Espace 3D, qui a déjà le sien (partie 184, `poignees3d.rs`).
+    pub(crate) fn decor3d_appliquer(&mut self, seq: u64, mut d: Decor3d) {
         let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
         if !notes.is_empty() {
             self.status = notes.join(" ");
@@ -895,6 +915,11 @@ impl App {
             });
         });
         self.decor3d.choisi = nouveau_choix;
+        // Un objet choisi dans la liste l'est aussi dans la vue Espace 3D (partie 184) : sa boîte s'y éclaire, les poignées y
+        // vont. (Et un objet choisi dans la vue l'est dans la liste : `e3_choisir_objet`.)
+        if let Some(id) = nouveau_choix.filter(|_| nouveau_choix != choisi) {
+            self.e3_choisir_objet(id, false);
+        }
         if ajouter {
             self.decor3d_retouche_finir();
             self.run_action("fichier.importer_decor3d");

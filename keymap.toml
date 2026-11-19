@@ -2020,6 +2020,11 @@ touches = []
 source = "FEANOR (Espace 3D, choisir la caméra du plan ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.modifier_origine"
+touches = []
+source = "FEANOR (Espace 3D, modifier l'origine du calque ou de l'objet du décor choisi ; aucune touche choisie)"
+
+[[raccourci]]
 action = "espace3d.cadrer"
 touches = []
 source = "FEANOR (Espace 3D, recadrer la vue ; aucune touche choisie)"

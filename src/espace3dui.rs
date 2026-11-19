@@ -38,6 +38,9 @@ pub(crate) enum Drag {
         snap: Edit,
         changed: bool,
         name: &'static str,
+        /// « Modifier l'origine » (partie 184, `poignees3d.rs`) : le geste déplace l'origine seule de ce calque ou de cet objet
+        /// du décor, et rien d'autre ; rien : le geste déplace, tourne ou met à l'échelle ce qui est choisi.
+        origine: Option<Box<crate::poignees3d::GesteOrigine>>,
     },
 }
 
@@ -50,7 +53,12 @@ pub(crate) struct Espace3dState {
     pub mode: GizmoMode,
     /// Manipulateur dans le repère de la carte (une seule carte choisie).
     pub local: bool,
-    /// Ce qui est choisi : des cartes (`espace3d::card_selection`), la caméra du plan (`CAMERA_ID`).
+    /// « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine de ce qui est choisi, pas l'objet.
+    pub origine: bool,
+    /// Maj est tenue (lue par la vue à chaque image) : l'origine qu'on tire s'accroche aux points de la boîte.
+    pub maj: bool,
+    /// Ce qui est choisi : des cartes (`espace3d::card_selection`), des objets du décor 3D (`poignees3d::objet_selection`,
+    /// partie 184), la caméra du plan (`CAMERA_ID`).
     pub sel: Vec<u64>,
     /// Vue d'édition.
     pub cam: Option<Orbite>,
@@ -105,6 +113,8 @@ impl Default for Espace3dState {
             molette_clavier: 0.0,
             mode: GizmoMode::Move,
             local: false,
+            origine: false,
+            maj: false,
             sel: Vec::new(),
             cam: None,
             through_camera: false,
@@ -146,10 +156,10 @@ fn mode_icon(mode: GizmoMode) -> &'static str {
 
 pub(crate) fn mode_description(mode: GizmoMode) -> &'static str {
     match mode {
-        GizmoMode::Select => "Cliquer une carte ou la caméra pour la choisir (Maj : en ajouter). Glisser une carte : la déplacer dans son plan (Maj : en profondeur).",
+        GizmoMode::Select => "Cliquer une carte, un objet du décor 3D ou la caméra pour le choisir (Maj : en ajouter). Glisser une carte : la déplacer dans son plan (Maj : en profondeur) ; un objet du décor : sur le sol (Maj : en hauteur, s'il n'est pas aimanté).",
         GizmoMode::Move => "Flèches : déplacer le long d'un axe ; carrés : dans un plan.",
-        GizmoMode::Rotate => "Cercles : tourner autour d'un axe (X et Y inclinent la carte).",
-        GizmoMode::Scale => "Cubes : étirer le long d'un axe ; cube du centre : tout ensemble.",
+        GizmoMode::Rotate => "Cercles : tourner autour d'un axe (X et Y inclinent la carte ; un objet du décor ne tourne qu'autour de la verticale).",
+        GizmoMode::Scale => "Cubes : étirer le long d'un axe ; cube du centre : tout ensemble (un objet du décor grandit d'un bloc).",
     }
 }
 
@@ -234,6 +244,10 @@ impl App {
                 if id == CAMERA_ID {
                     return Some((id, world.camera_xf(&self.current_camera())));
                 }
+                // (Un objet du décor 3D, partie 184 : la place de son origine, sa rotation autour de la verticale, son échelle.)
+                if let Some(oid) = crate::poignees3d::objet_of(id) {
+                    return self.e3_objet(oid).map(|o| (id, crate::poignees3d::xf_de_l_objet(o)));
+                }
                 let layer = &self.layers()[self.e3_card_layer(id)?];
                 Some((id, world.carte(layer, frame)))
             })
@@ -269,6 +283,9 @@ impl App {
 
     /// Pose ces placements (sans étape d'annulation : l'appelant s'en charge).
     pub(crate) fn e3_set_xfs(&mut self, new: &[(u64, Xf)]) {
+        // Les objets du décor d'abord (partie 184) : les cartes aimantées qui reposent sur eux suivent, puis les cartes choisies
+        // se posent sur le décor tel qu'il est devenu.
+        self.e3_poser_objets(new);
         let world = self.e3_world();
         let frame = self.cur_frame;
         for (id, xf) in new {
@@ -467,6 +484,7 @@ impl App {
             "espace3d.outil_tourner" => self.espace3d_mode(GizmoMode::Rotate),
             "espace3d.outil_echelle" => self.espace3d_mode(GizmoMode::Scale),
             "espace3d.outil_camera" => self.espace3d_pick_camera(false),
+            crate::poignees3d::ORIGINE_ACTION => self.e3_basculer_origine(),
             "espace3d.vue_camera" => {
                 self.montrer_espace3d();
                 self.espace3d.through_camera = !self.espace3d.through_camera;
@@ -496,6 +514,8 @@ impl App {
     fn espace3d_mode(&mut self, mode: GizmoMode) {
         self.montrer_espace3d();
         self.espace3d.mode = mode;
+        // (Un outil de la vue rend les poignées à l'objet : « Modifier l'origine » s'éteint, partie 184.)
+        self.espace3d.origine = false;
         // (Un outil de la vue : le pointeur manipule, il ne dessine plus.)
         self.e3_manipuler();
     }
@@ -613,10 +633,17 @@ impl App {
         let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
         self.espace3d_bouton_dessiner(ui);
         for mode in GizmoMode::ALL {
-            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine), mode.label(), mode_description(mode), mode.action()).clicked() {
+            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine && !self.espace3d.origine), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
+                self.espace3d.origine = false;
                 self.e3_manipuler();
             }
+        }
+        // « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine du calque ou de l'objet du
+        // décor choisi, sans le bouger.
+        let r = self.case_icone(ui, ph::CROSSHAIR, Some(self.espace3d.origine && !dessine), crate::poignees3d::ORIGINE_NOM, crate::poignees3d::ORIGINE_PHRASE, crate::poignees3d::ORIGINE_ACTION);
+        if r.clicked() {
+            self.e3_basculer_origine();
         }
         // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et
         // reste allumée tant qu'elle l'est. Anthony, 2026-11-13 : « On garde l'outil ».)

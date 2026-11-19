@@ -15901,3 +15901,145 @@ décor. `profondeur_perf` (ignoré) : les mesures de 183.3.
 7. Exporte une image et un film : comme à l'écran.
 8. Un plan sans décor : les mêmes images qu'avant.
 9. Enregistre, ferme, rouvre : la case est restée cochée.
+
+
+## 184. Les poignées dans la vue : les objets du décor 3D et l'origine (2026-11-19, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé)
+
+Le manipulateur de la vue Espace 3D (Choisir, Déplacer, Tourner, Mettre à l'échelle) ne servait qu'aux cartes et à la caméra ;
+les objets du décor 3D de la séquence (parties 180 et 181) ne se plaçaient que par les champs du panneau, et l'origine (partie
+182) ne se déplaçait que sur le dessin, avec l'outil Transformer. Maintenant **un objet du décor se choisit et se manie dans la
+vue comme une carte**, et **« Modifier l'origine »** déplace dans la vue l'origine d'un calque ou d'un objet sans le bouger.
+Format du projet inchangé (61) ; l'image du plan, les exports et la profondeur partagée (partie 183) ne changent pas. Compilé et
+essayé sur le Mac seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 184.1 Ce qui change pour Anthony
+
+1. **Un clic sur un objet du décor le choisit** dans la vue Espace 3D (plein écran, à côté, chacune des vues multiples) : sa
+   boîte s'allume à la couleur de la sélection, son origine s'y voit (le cercle à croix), et **il est choisi dans la liste du
+   panneau Espace 3D** du même coup (ses champs sont là, dessous). L'inverse aussi : une ligne de la liste choisie, l'objet l'est
+   dans la vue, et les poignées vont à lui. Le clic prend **ce qui est le plus près de l'œil**, carte ou objet, sur la vraie forme de
+   l'objet (ses triangles : le vide entre les branches d'un arbre ne le prend pas) ; une carte « Toujours devant le décor 3D »
+   passe devant l'objet, comme à l'écran. **Maj+clic** ajoute ou retire : cartes, objets et caméra se mêlent dans un même choix.
+2. **Déplacer, tourner, mettre à l'échelle** un objet : les mêmes flèches, carrés, anneaux et cubes, **autour de son origine** (son
+   vrai pivot). « Poignées dans le repère du calque » (menu Affichage de la vue) tourne les flèches avec l'objet. Un objet ne
+   tourne qu'autour de la verticale (l'anneau vert) et grandit d'un bloc : les anneaux rouge et bleu sont gris, un cube d'axe pris
+   donne l'échelle de tout l'objet. L'aimantation à la grille marche comme pour les cartes.
+3. **Un geste, une étape d'annulation** (« Déplacer un objet 3D », « Tourner un objet 3D », « Mettre un objet 3D à l'échelle ») :
+   les cartes aimantées posées sur l'objet le suivent pendant le geste, et **Ctrl+Z ramène l'objet et les cartes**.
+4. **Un objet aimanté au sol garde la hauteur que lui donne l'aimant** : sa flèche verte (Y) est grise, comme le champ de la hauteur
+   dans le panneau, et l'appui sur elle le dit dans la barre d'état. Un glisser dans un plan vertical (un carré) le déplace en
+   largeur ou en profondeur, et l'aimant le repose sur ce qui est sous lui (le sol, une dalle).
+5. **Tirer l'objet lui-même** (hors des poignées, quel que soit l'outil de la vue) le fait **glisser sur le sol**, l'aimant le
+   reposant ; Maj tenue : en hauteur, s'il n'est pas aimanté (aimanté, il reste sur le sol et la barre d'état le dit). Comme une
+   carte tirée glisse dans son plan.
+6. **« Modifier l'origine »** : une case de plus dans la colonne des outils de la vue (le viseur, sous « Mettre à l'échelle »), et la
+   commande `espace3d.modifier_origine` dans la palette (Ctrl+K), sans touche, à assigner au clic droit. Allumée, le manipulateur se
+   pose sur l'origine de ce qui est choisi **seul** (un calque, un objet du décor ; pas la caméra, pas plusieurs choses) et **déplace
+   l'origine seule : rien d'autre ne bouge**.
+   - Un **calque** : son origine est un point de son dessin, elle reste dans le plan de la carte (flèches rouge et verte, carré
+     bleu ; la flèche bleue et les autres carrés sont gris). L'image ne bouge à aucune clé, comme avec l'outil Transformer ; entre
+     deux clés, le calque tourne désormais autour de la nouvelle origine (la règle de la partie 182).
+   - Un **objet du décor** : son origine va où l'on veut dans l'espace (les trois flèches, les trois carrés), comme avec les champs
+     « Origine » du panneau : l'objet ne bouge pas, sa position devient celle de la nouvelle origine.
+   - **Maj** l'accroche au point le plus proche de la boîte : pour un calque, le centre, les coins et les milieux des côtés de la
+     boîte de ce qui est dessiné à l'image courante (comme Maj avec l'outil Transformer) ; pour un objet, le centre de sa boîte, le
+     centre de chacune de ses faces (le centre du dessous : « au sol ») et ses huit coins.
+   - Au lâcher, **une étape d'annulation** (« Déplacer l'origine »), et ce qui est aimanté se repose par sa nouvelle origine : une
+     carte aimantée au sol dont on met l'origine aux pieds monte jusqu'à poser les pieds sur le sol.
+   - Un outil de la vue (Choisir, Déplacer, Tourner, Mettre à l'échelle) éteint « Modifier l'origine » ; la case, ou la commande,
+     aussi. Pendant ce temps, un appui hors des poignées choisit ce qu'il touche sans rien déplacer.
+7. **La barre d'état et la légende** : au survol d'une poignée grise, la barre d'état dit pourquoi elle ne fait rien (« aimanté au
+   sol : sa hauteur est tenue par l'aimant », « un objet du décor ne tourne qu'autour de la verticale », « l'origine d'un calque est
+   un point de son dessin ») ; pendant « Modifier l'origine », ce que fait la poignée, et la légende du bas de la vue change. Le
+   pointeur : une croix pendant « Modifier l'origine », un sens interdit sur une poignée grise. Les bulles de Choisir, Tourner et
+   Mettre à l'échelle parlent des objets du décor.
+8. **Suppr ne supprime pas un objet choisi dans la vue**, et c'est voulu : dans la vue, Suppr ne supprime pas non plus une carte
+   (elle vise ce qui est choisi sur le dessin, ou ne fait rien) ; enlever un objet reste le bouton « Enlever » du panneau (une étape,
+   Ctrl+Z le rend). Un objet enlevé n'est plus choisi dans la vue.
+
+### 184.2 Comment c'est fait
+
+- **`poignees3d.rs`** (nouveau) porte tout ce qui est propre aux objets dans la vue ; `espace3dview.rs`, `espace3dui.rs` et
+  `decor3dui.rs` y passent la main par quelques appels.
+- **Le choix** : un objet a son numéro de sélection (`objet_selection`, marque `1 << 61`, à côté de celle des cartes, `1 << 62`, et
+  de la caméra) dans la même liste `Espace3dState::sel`. Le rayon de la souris passe dans le repère du modèle de chaque objet montré
+  sans être renormalisé (la distance y reste celle du monde), est essayé contre sa boîte, puis contre ses triangles (Möller–Trumbore,
+  des deux côtés) ; au-delà de 2 millions de triangles, la boîte seule (`toucher_objet`). `App::e3_pick_tout` compare la carte
+  dont le dessin est touché (`e3_pick_cartes`, l'ancien `e3_pick` en deux) et l'objet par leur distance ; sans dessin ni objet
+  touché, la feuille la plus proche, comme avant. Seuls le clic et le glisser de la vue s'en servent : l'outil Trajectoire et le
+  dessin dans la vue gardent `e3_pick` (les cartes seules). La liste du panneau et la vue se suivent par `App::e3_choisir_objet`
+  (`decor3d.choisi`).
+- **Le geste** : un objet est vu par le manipulateur comme une carte (`xf_de_l_objet` : la place de son origine, `[0, rotation_y,
+  0]`, l'échelle sur les trois axes : `Xf::matrix` est alors `Place3d::matrice`) ; `e3_xfs`, `e3_pivot`, `e3_gizmo` le servent
+  tels quels. `e3_set_xfs` pose d'abord les objets (`e3_poser_objets`), par **le chemin de la retouche du panneau** :
+  `decor3dui::decor3d_appliquer`, le cœur de `decor3d_retoucher` sans son instantané (l'aimant des objets, puis
+  `reposer_les_cartes_aimantees`), puis les cartes choisies, sur le décor tel qu'il est devenu. Le geste garde l'instantané du
+  projet pris à son début (comme pour les cartes) et le pose au lâcher par `commit_named` ; une retouche du panneau encore ouverte
+  est d'abord terminée (`decor3d_retouche_finir`), pour qu'aucune ne se mêle au geste. Tourner : `rotate_xfs`, puis l'angle de
+  l'objet est le sien plus celui du geste (`tourner_les_objets`, sans repasser par des angles d'Euler qui le ramèneraient entre
+  −180° et 180°).
+- **Les poignées refusées** : `App::e3_poignee_refusee(mode, poignée)` dit pourquoi une poignée ne peut rien (flèche Y d'un objet
+  aimanté ; anneaux X et Z d'un objet ; pendant « Modifier l'origine », hors du plan d'une carte, ou un calque verrouillé, de
+  position verrouillée, de couleur). Le dessin du manipulateur les grise, l'appui ne commence aucun geste, le survol le dit
+  (`e3_survol_poignee`).
+- **L'origine** : `Espace3dState::origine` ; `e3_gizmo` rend alors `e3_gizmo_origine` (des flèches et des carrés sur l'origine de
+  ce qui est choisi seul : dans le repère de la carte pour un calque). Le geste (`Drag::Handle::origine`, `GesteOrigine`) garde la
+  cible de son début et repose l'origine depuis elle à chaque pas (rien ne s'accumule) : pour un calque, le point du monde ramené
+  au carré unité de la carte puis aux pixels du dessin, et `origine::deplacer_origine` (Maj : `origine::aimanter_a_la_boite` sur
+  `layer_content_box`) ; pour un objet, le point ramené au repère du modèle et `Objet3d::changer_origine` (Maj :
+  `points_de_la_boite`). Au lâcher (`e3_origine_lachee`) : `aimanter_si` (un calque), `decor3d_appliquer` (un objet), puis une
+  étape. Maj est lue par la vue à chaque image (`Espace3dState::maj`).
+- **La boîte et l'origine des objets choisis** sont dessinées par `e3_peindre_decor` (la couleur de la sélection, deux points) ;
+  l'objet choisi dans la liste mais pas dans la vue garde sa boîte en clair d'avant.
+- **Rien d'autre ne change** : l'image du plan, les exports, la profondeur partagée, le fichier (aucun champ neuf : la sélection et
+  « Modifier l'origine » ne s'enregistrent pas).
+
+### 184.3 Essais (`src/poignees3d_tests.rs`, 15)
+
+Les numéros de sélection (objet, carte, caméra) ; le rayon sur les vrais triangles (dans la boîte mais hors du triangle : rien ; la
+distance du monde, objet agrandi compris) ; les quinze points de la boîte d'un objet ; le clic : la carte devant la boîte, la boîte
+devant la carte (et choisie dans la liste du panneau), Maj qui mêle et retire, « Toujours devant le décor 3D » qui l'emporte ; sans
+décor, le choix d'avant ; la liste du panneau qui choisit dans la vue, l'objet enlevé qui n'est plus choisi ; déplacer une dalle par
+la flèche Y (la carte aimantée posée dessus suit, une étape, Ctrl+Z ramène les deux) et par la flèche X ; tourner autour de la
+verticale (l'angle du geste, la position de l'origine gardée, les anneaux X et Z refusés) ; l'échelle d'un bloc par un cube d'axe ;
+l'objet aimanté (flèche Y refusée, le dire ; un carré vertical qui le laisse sur le sol ; tiré avec Maj, il glisse sur le sol) ;
+une carte et un objet déplacés ensemble en une étape ; la commande et son bloc dans `keymap.toml`, le manipulateur de l'origine (une
+seule chose choisie), un outil qui l'éteint ; l'origine d'une carte à deux clés déplacée (les coins identiques aux deux clés, la
+flèche Z refusée, une étape, Maj au milieu du bas de la boîte du dessin) ; l'origine d'un objet (sa boîte identique, sa position
+celle de la nouvelle origine, une étape, Maj au centre de la boîte ; un appui sur l'objet hors des poignées le choisit sans rien
+bouger) ; une carte aimantée dont l'origine passe aux pieds remonte
+jusqu'à les poser sur le sol, Ctrl+Z rend tout ; le survol d'une poignée grise et celui d'une poignée de l'origine.
+
+### 184.4 Ce qui n'est pas fait (ou limité)
+
+- **Plusieurs choses à la fois pour l'origine** : « Modifier l'origine » ne vise que ce qui est choisi seul (deux origines n'ont pas
+  de geste commun évident) ; la barre d'état le dit.
+- **Pas d'aimantation à la grille pour l'origine** : Maj l'accroche à la boîte de l'objet, pas au pas de la grille.
+- **Un objet ne s'incline pas** : le décor 3D ne garde que la rotation autour de la verticale (`Place3d`) ; les anneaux X et Z sont
+  gris. L'échelle est la même sur les trois axes.
+- **Le survol** n'éclaire que les poignées : un objet sous le pointeur ne s'éclaire qu'une fois choisi (le rayon contre les triangles
+  n'est lancé qu'au clic et à l'appui, pas à chaque image).
+- **Un objet masqué sur cet ordinateur** (« Ce décor est lourd », en attente du choix d'Anthony) ne se prend pas dans la vue (il
+  n'y est pas dessiné) ; il reste dans la liste du panneau.
+- **Suppr** n'enlève pas un objet choisi dans la vue (184.1.8).
+
+### 184.5 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor de la banque 3D : une dalle, un banc posé dessus, un arbre. Vue Espace 3D, outil
+   Choisir : **clic sur le banc**, sa boîte s'allume et il est choisi dans la liste du panneau ; clic entre les branches de l'arbre :
+   ce qui est derrière est pris, pas l'arbre.
+2. Un personnage sur une carte devant le banc : le clic le prend ; derrière le banc : le clic prend le banc. Maj+clic sur l'autre :
+   les deux sont choisis.
+3. Outil Déplacer : tirer la flèche rouge du banc, il glisse ; **la flèche verte est grise** (aimanté) et le dit au survol. Décocher
+   « Aimanté au sol » dans le panneau : la flèche verte remonte le banc. Ctrl+Z : une étape par geste.
+4. Une carte aimantée au sol posée sur la dalle : déplacer la dalle (flèches, carré, ou en la tirant elle-même), **la carte suit** ;
+   Ctrl+Z ramène les deux.
+5. Outil Tourner : l'anneau vert tourne l'arbre autour de son origine ; les deux autres sont gris. Outil Mettre à l'échelle : un cube
+   agrandit tout l'arbre, autour de son origine.
+6. **« Modifier l'origine »** (le viseur dans la colonne des outils de la vue) sur le banc : tirer la flèche verte, l'origine monte, le
+   banc ne bouge pas ; avec Maj, elle s'accroche au centre de la boîte, à un coin. Remettre l'outil Tourner : le banc tourne autour de
+   la nouvelle origine.
+7. Sur le personnage : son origine glisse dans le plan de sa carte, son dessin ne bouge pas (vérifier aussi sur le dessin) ; Maj :
+   aux pieds (le milieu du bas). S'il est aimanté au sol, au lâcher ses pieds se posent sur le sol. Ctrl+Z.
+8. Vues multiples (4 vues) : choisir et tirer un objet dans chacune ; Regarder par la caméra : la même chose.
+9. Exporter une image : rien n'a changé dans l'image hors de ce qu'on a déplacé.

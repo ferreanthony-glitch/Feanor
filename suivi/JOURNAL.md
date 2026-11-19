@@ -5,6 +5,20 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Les poignées dans la vue** (partie 184, branche `poignees-3d` partie de `banque-3d` 343a061, format 61 inchangé), le choix
+  d'Anthony. Dans la vue Espace 3D, un **objet du décor 3D se choisit au clic** (sur ses vrais triangles ; le plus proche de l'œil,
+  carte ou objet, l'emporte ; Maj mêle cartes, objets et caméra), choisi aussi dans la liste du panneau et l'inverse, et **se manie
+  avec le même manipulateur** autour de son origine : déplacer, tourner (autour de la verticale seulement), mettre à l'échelle (d'un
+  bloc), ou le tirer lui-même sur le sol ; **une étape d'annulation par geste**, par le chemin de la retouche du panneau (les
+  cartes aimantées posées dessus suivent, Ctrl+Z ramène les deux). Un objet aimanté garde la hauteur de l'aimant : sa flèche Y est
+  grise, comme le champ du panneau. **« Modifier l'origine »** (une case de la colonne des outils de la vue,
+  `espace3d.modifier_origine` sans touche) : le manipulateur déplace l'origine seule d'un calque (dans le plan de sa carte, l'image
+  ne bouge à aucune clé) ou d'un objet (dans l'espace, l'objet ne bouge pas), Maj l'accroche aux points de la boîte, l'aimant
+  repose ensuite par la nouvelle origine. Poignées refusées grises, la barre d'état dit pourquoi. Suppr n'enlève pas un objet dans
+  la vue (elle n'enlève pas non plus une carte : le bouton « Enlever » du panneau reste le chemin). Essais : 15 nouveaux ; les 90
+  échecs connus du Mac, aucun neuf. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste
+  184.5).
+
 - **La profondeur partagée entre le décor 3D et les cartes** (partie 183, branche `profondeur-partagee` partie de `banque-3d`
   d3b7ab0, format 61 inchangé), le chantier choisi par Anthony. Les cartes et les objets du décor se cachent selon leur vraie
   distance à la caméra : un personnage passe derrière un arbre et devant un banc, une carte inclinée qui traverse un objet en sort,

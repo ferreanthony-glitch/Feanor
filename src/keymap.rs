@@ -684,6 +684,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),
     act("espace3d.outil_echelle", "Espace 3D : outil mettre à l'échelle", true, false),
     act("espace3d.outil_camera", "Espace 3D : choisir la caméra du plan", true, false),
+    // « Modifier l'origine » (partie 184, `poignees3d.rs`) : le manipulateur déplace l'origine du calque ou de l'objet du décor.
+    act("espace3d.modifier_origine", "Espace 3D : modifier l'origine du calque ou de l'objet du décor choisi, sans le bouger (oui / non)", true, false),
     act("espace3d.cadrer", "Espace 3D : recadrer la vue sur tout l'espace", true, false),
     act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),
