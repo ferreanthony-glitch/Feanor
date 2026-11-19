@@ -189,7 +189,9 @@ fn the_aplat_is_activated_from_the_layer_only() {
     // timeline : son icône dans la rangée d'en-tête, et sur la ligne du seul calque qui en a un ; les autres ont un petit point).
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 2, "{textes:?}");
+    // (Partie 179.5 : plus d'icône dans la rangée d'en-tête ; le calque courant montre la sienne, pâle quand il n'a pas d'aplat.)
+    let attendu = if app.cur_layer == 2 { 1 } else { 2 };
+    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), attendu, "{textes:?}");
 }
 
 #[test]

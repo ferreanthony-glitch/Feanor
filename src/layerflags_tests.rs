@@ -146,33 +146,33 @@ fn header_rows_are_full_for_the_current_layer_and_fine_for_the_others() {
     use crate::layerheads::{row_at, rows_height, rows_of, ROW_FINE, ROW_FULL};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
     layers[2].collapsed = true;
+    // (Partie 179.13, Anthony : « Il faut que tous les calques aient cette épaisseur de base » : tous les calques ont leur ligne
+    // complète, le courant comme les autres ; repliés, tous une ligne fine.)
     let rows = rows_of(&layers, &groups::defaults(), 1);
     // Le calque le plus haut (le dernier) en premier.
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [2, 1, 0]);
-    assert_eq!(rows[0].h, ROW_FINE, "un calque qui n'est pas le courant : ligne fine");
-    assert_eq!(rows[1].top, ROW_FINE);
-    assert_eq!(rows[1].h, ROW_FULL, "le calque courant : ligne complète");
-    assert_eq!(rows[2].top, ROW_FINE + ROW_FULL);
-    assert_eq!(rows_height(&rows), ROW_FULL + ROW_FINE * 2.0);
-    assert_eq!(row_at(&rows, ROW_FINE + 1.0).map(|r| r.li), Some(1));
+    assert_eq!(rows.iter().map(|r| r.h).collect::<Vec<_>>(), [ROW_FULL; 3], "tous complets, le drapeau « réduit » ne compte pas");
+    assert_eq!(rows[1].top, ROW_FULL);
+    assert_eq!(rows_height(&rows), ROW_FULL * 3.0);
+    assert_eq!(row_at(&rows, ROW_FULL + 1.0).map(|r| r.li), Some(1));
     assert_eq!(row_at(&rows, rows_height(&rows) + 1.0), None);
-    // Un autre calque courant : c'est lui qui a la ligne complète (et le drapeau « réduit » ne compte pas).
-    let rows = rows_of(&layers, &groups::defaults(), 2);
-    assert_eq!(rows.iter().map(|r| r.h).collect::<Vec<_>>(), [ROW_FULL, ROW_FINE, ROW_FINE]);
+    let replies = crate::layerheads::rows_of_en(&layers, &groups::defaults(), 2, true);
+    assert_eq!(replies.iter().map(|r| r.h).collect::<Vec<_>>(), [ROW_FINE; 3], "repliés : tous fins");
     // Un dossier : ligne fine, sauf s'il est le courant.
     let mut avec_dossier = layers.clone();
     avec_dossier.push(Layer::new_folder("D"));
     assert_eq!(rows_of(&avec_dossier, &groups::defaults(), 0)[0].h, ROW_FINE);
-    assert_eq!(rows_of(&avec_dossier, &groups::defaults(), 3)[0].h, crate::layerheads::ROW_FOLDER);
+    // (Partie 179.13 : un dossier courant garde aussi sa ligne fine.)
+    assert_eq!(rows_of(&avec_dossier, &groups::defaults(), 3)[0].h, ROW_FINE);
     assert!(ROW_FINE <= 22.0, "une ligne fine fait 22 points");
 }
 
 #[test]
 fn a_dragged_header_row_lands_between_rows() {
-    use crate::layerheads::{cible_du_glisse, rows_of, Row, ROW_FINE};
+    use crate::layerheads::{cible_du_glisse, rows_of_en, Row, ROW_FINE};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
-    // (Aucun calque courant parmi eux : toutes les lignes sont fines, de la même hauteur.)
-    let rows = rows_of(&layers, &groups::defaults(), usize::MAX);
+    // (Toutes les lignes fines, de la même hauteur : partie 179.13, les calques repliés.)
+    let rows = rows_of_en(&layers, &groups::defaults(), usize::MAX, true);
     // La pile (les noms, du bas vers le haut) une fois le calque `from` lâché à `y` ; rien : elle ne change pas.
     let lache = |layers: &[Layer], rows: &[Row], from: usize, y: f32| -> Option<Vec<String>> {
         let cible = cible_du_glisse(rows, layers, &[from], y, true)?;
@@ -189,7 +189,7 @@ fn a_dragged_header_row_lands_between_rows() {
     hidden[4].shown = false;
     layers.push(Layer::new("C3", LayerKind::Bitmap));
     layers[1].group = 4;
-    let rows = rows_of(&layers, &hidden, usize::MAX);
+    let rows = rows_of_en(&layers, &hidden, usize::MAX, true);
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [3, 2, 0]);
     // C0 lâché entre C3 et C2 : juste au-dessus de C2 (C1, sans ligne, ne bouge pas).
     assert_eq!(lache(&layers, &rows, 0, ROW_FINE * 1.2).unwrap(), ["C1", "C2", "C0", "C3"]);

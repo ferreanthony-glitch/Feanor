@@ -35,9 +35,6 @@ thread_local! {
 pub(crate) const RULER_H: f32 = 18.0;
 const SEQ_H: f32 = 17.0;
 pub(crate) const BANDS_H: f32 = SEQ_H + 2.0;
-/// Partie 173.5 : la barre du montage sur deux lignes en tête de la colonne : la lecture et le temps (groupe 0) sur la première, les
-/// plans, les calques, le son… sur la seconde, avec « Plus… » et la légende des clés.
-const DERNIER_GROUPE_LIGNE1: u8 = 0;
 
 pub fn timecode(frames: usize, fps: u32) -> String {
     let fps = fps.max(1) as usize;
@@ -501,15 +498,13 @@ impl App {
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
-                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + rows.bands_h()));
-                        // Partie 173.5 (Anthony : « Plus petite et ajustable ») : une colonne trop étroite pour la barre sur une ligne
-                        // la reçoit sur deux, comme la timeline (partie 165.6) : la lecture et le temps, puis le reste, « Plus… » et la
-                        // légende ; l'en-tête de la bande gagne la hauteur de la seconde (`Rows::entete`).
-                        if dans_la_colonne && rows.entete > 0.0 {
-                            let ligne2 = Rect::from_min_size(egui::pos2(ligne.left(), ligne.bottom()), egui::vec2(ligne.width(), rows.entete));
-                            self.barre_dans_la_colonne_deux_lignes(&mut column, ligne, ligne2, barre, DERNIER_GROUPE_LIGNE1);
-                        } else if dans_la_colonne {
-                            self.barre_dans_la_colonne(&mut column, ligne, barre);
+                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, rows.regle_h()));
+                        // Partie 179 (Anthony : la seconde ligne de boutons barrée, ses boutons dans la place vide à droite du temps) :
+                        // une seule ligne, quelle que soit la largeur de la colonne ; ce qui n'y tient pas passe sous « Plus… », les
+                        // commandes les moins utilisées d'abord (`barres::barre_dans_la_colonne_serree`). (La seconde ligne de la partie
+                        // 173.5 et la bande qu'elle ajoutait sous la règle, `Rows::entete`, n'existent plus.)
+                        if dans_la_colonne {
+                            self.barre_dans_la_colonne_serree(&mut column, ligne, barre);
                         }
                         self.head_width_grip(&mut column, headers);
                         egui::ScrollArea::horizontal()
@@ -571,9 +566,18 @@ impl App {
             ui.spacing_mut().slider_width = 70.0;
             // La barre d'actions des calques, sous la colonne des calques (partie 160, `barrecalques.rs`) ; le zoom à sa droite.
             // (La barre du bas a une marge de 4 points à gauche : la barre finit au bord de la colonne.)
-            self.barre_calques(ui, self.montage_head_w - 4.0);
+            // Partie 179 (Anthony : les boutons des calques entourés, une flèche vers la ligne « Calques ») : dans le Storyboard, ils
+            // sont sur la ligne « ⊖ Calques » (`timelinesb.rs`) ; sous la colonne, plus rien, le zoom reste à sa place.
+            if self.timeline_du_storyboard() {
+                ui.add_space(self.montage_head_w - 4.0);
+            } else {
+                self.barre_calques(ui, self.montage_head_w - 4.0);
+            }
             ui.add_space(4.0);
-            let small = |icon: &str| egui::Button::new(RichText::new(icon).size(11.0)).frame(false).min_size(vec2(16.0, 14.0));
+            // (Partie 179.5 : dans le Storyboard, le zoom a aussi la taille des icônes de la timeline, `tailleicones.rs` ; le Montage garde
+            // ses petites icônes.)
+            let taille = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else { 11.0 };
+            let small = |icon: &str| egui::Button::new(RichText::new(icon).size(taille)).frame(false).min_size(vec2(16.0, 14.0));
             let (out, inn, all) = (self.raccourci("bande.zoom_arriere"), self.raccourci("bande.zoom_avant"), self.raccourci("bande.tout_voir"));
             if bulle(ui.add(small(ph::MAGNIFYING_GLASS_MINUS)), "Zoom arrière", "Ou Ctrl + molette sur la bande.", &out).clicked() {
                 self.run_action("bande.zoom_arriere");
@@ -809,7 +813,8 @@ impl App {
         // L'abscisse de l'image 0 pour ce qui se dessine à l'abscisse `x` (le son, les gestes sur ses pistes) : le film y est décalé
         // des versions dépliées d'avant.
         let left_at = |x: f32| left + carte.decalage(carte.film_de(crate::versiondeplieeui::d_sous(x, left, ppf))) as f32 * ppf;
-        let bands_top = r.top() + RULER_H;
+        // (Partie 179.11 : dans le Storyboard, la règle a la hauteur de la barre de lecture en face d'elle, `Rows::regle_h`.)
+        let bands_top = r.top() + rows.regle_h();
         let top = r.top() + rows.blocks_top();
         let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
@@ -871,6 +876,17 @@ impl App {
             }
         }
 
+        // Partie 179.14 : dans le Storyboard, une couleur réglée pour la ligne Séquence ou la ligne Plans teinte le fond de sa rangée
+        // (sous les blocs, qui gardent leurs couleurs).
+        if rows.sb.is_some() {
+            use crate::hauteurstimeline::Ligne;
+            for (l, y, h) in [(Ligne::Sequence, bands_top, rows.seq_h()), (Ligne::Plans, top, block_h)] {
+                let fond = crate::hauteurstimeline::teinte(l, theme::rangee_sombre());
+                if fond != theme::rangee_sombre() {
+                    painter.rect_filled(Rect::from_min_max(pos2(r.left(), y), pos2(r.right(), y + h)), 0.0, fond);
+                }
+            }
+        }
         // Plans. (Les numéros du film, trouvés une fois pour les titres et la barre des séquences.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;

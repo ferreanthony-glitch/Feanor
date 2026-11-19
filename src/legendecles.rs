@@ -165,8 +165,9 @@ impl App {
     /// sorte à cacher. Allumée quand une sorte est cachée (pour ne pas chercher longtemps une clé qu'on a cachée).
     pub(crate) fn legende_cles_ui(&mut self, ui: &mut egui::Ui) {
         let filtre_actif = !self.settings.key_filter.est_complet();
-        let text = RichText::new(ph::QUESTION).size(crate::barres::ICONE);
-        let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(filtre_actif, text));
+        // (Partie 179.5 : dans la barre de lecture de la timeline, la taille des icônes de la timeline, `barres::icone_de_barre`.)
+        let text = RichText::new(ph::QUESTION).size(crate::barres::icone_de_barre());
+        let resp = ui.add_sized(crate::barres::case_de_barre(), egui::SelectableLabel::new(filtre_actif, text));
         let id = egui::Id::new("legende_des_cles");
         let ctx = ui.ctx().clone();
         // Ouverte tant que la souris est sur l'icône ou sur la légende (qui touche l'icône : on peut y aller sans la

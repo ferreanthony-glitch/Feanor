@@ -29,8 +29,12 @@ use crate::theme;
 pub(crate) const CAM_H: f32 = 16.0;
 /// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
 /// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40 ; 44 depuis la partie 160 : la piste du
-/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7).
-pub(crate) const LAYER_H: f32 = 66.0;
+/// calque actif porte toutes ses options sur deux rangées de 22, la fenêtre des trois calques grandissait d'autant, retirée partie 165.7 ;
+/// 66, trois rangées de 22, partie 173.5). Partie 179 (Anthony : « Réduis un peu l'épaisseur des calques ») : dans le Storyboard, 40,
+/// deux rangées de 20 (`pistes::piste_active_head_sb`) ; l'espace Montage garde la sienne (`LAYER_H_MONTAGE`).
+pub(crate) const LAYER_H: f32 = 40.0;
+/// La piste dépliée dans l'espace Montage (trois rangées de 22, partie 173.5), inchangée par la partie 179.
+pub(crate) const LAYER_H_MONTAGE: f32 = 66.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
@@ -68,8 +72,44 @@ pub(crate) fn row_count(layers: &[Layer]) -> usize {
     layers.iter().filter(|l| !l.keys_follow_line()).count()
 }
 
-/// Partie 178 (la timeline du Storyboard dessinée par Anthony) : la ligne des séquences, la plus fine possible.
-pub(crate) const SB_SEQ_H: f32 = 16.0;
+/// Partie 178 (la timeline du Storyboard dessinée par Anthony) : la ligne des séquences, la plus fine possible. Partie 179.11
+/// (Anthony : « C'est vrai qu'il manque une ligne de séquence ») : elle a son en-tête « Séquence » et ses icônes, comme Plans et
+/// Caméra : 20 points (16 avant), la place d'une case d'icône de 18.
+pub(crate) const SB_SEQ_H: f32 = 20.0;
+
+/// Parties 179.13 (la hauteur réglée de chaque ligne, `hauteurstimeline.rs`) : la ligne des séquences, celle des plans, celle de la
+/// caméra (repliée) de la timeline du Storyboard ; d'origine `SB_SEQ_H`, `SB_PLAN_H`, `SB_CAM_H`.
+pub(crate) fn sb_seq_h() -> f32 {
+    crate::hauteurstimeline::hauteur(crate::hauteurstimeline::Ligne::Sequence)
+}
+pub(crate) fn sb_plan_h() -> f32 {
+    crate::hauteurstimeline::hauteur(crate::hauteurstimeline::Ligne::Plans)
+}
+pub(crate) fn sb_cam_h() -> f32 {
+    crate::hauteurstimeline::hauteur(crate::hauteurstimeline::Ligne::Camera)
+}
+
+/// Partie 179.13 (Anthony : « Il faut que tous les calques aient cette épaisseur de base ») : les pistes de calques du Storyboard
+/// toutes à la hauteur réglée de la ligne Calques (deux rangées), ou toutes fines (`replier`, « Replier les calques ») ; le calque
+/// actif ne change pas de taille. Les lignes de dossier gardent la leur. Les hauts sont recalculés.
+pub(crate) fn calques_du_storyboard(lanes: &mut [Lane], replier: bool) {
+    let grande = crate::hauteurstimeline::hauteur(crate::hauteurstimeline::Ligne::Calques);
+    let mut top = 0.0;
+    for l in lanes.iter_mut() {
+        if l.sorte == crate::pistes::Sorte::Calque {
+            l.folded = replier;
+            l.h = if replier { crate::pistes::FOLDED_H } else { grande };
+        }
+        l.top = top;
+        top += l.h;
+    }
+}
+/// Partie 179.11 (Anthony : « La ligne des icônes de lecture se placerait au-dessus de tout ») : la hauteur de la règle des temps de
+/// la timeline du Storyboard, en face de laquelle la barre de lecture est la première ligne de la colonne : une case de la barre
+/// et un point de chaque côté (22 pour des icônes de 13), jamais moins que la règle d'avant (18).
+pub(crate) fn sb_regle_h() -> f32 {
+    (crate::tailleicones::case_de_barre()[1] + 2.0).max(RULER_H)
+}
 /// Partie 178 : la rangée des plans, assez haute pour attraper un plan ou une transition (miniature, nom, durée sur une ligne).
 pub(crate) const SB_PLAN_H: f32 = 26.0;
 /// Partie 178 : la rangée Caméra, repliée : une ligne fine qui porte les losanges des clés de caméra et ses icônes.
@@ -112,18 +152,23 @@ pub(crate) struct Rows {
     /// Les pistes de calques visibles, de haut en bas : dépliées ou repliées, sans celles d'un
     /// dossier fermé (`pistes.rs`).
     pub lanes: Vec<Lane>,
-    /// Partie 173.5 : la hauteur que l'en-tête gagne sous la ligne des séquences quand la barre du montage est sur deux lignes en
-    /// tête de la colonne (`montagehead::barre_sur_deux_lignes`) ; 0 sinon.
-    pub entete: f32,
     /// Partie 178 : la disposition de la timeline du Storyboard ; `None` : celle de l'espace Montage.
     pub sb: Option<DispoStoryboard>,
 }
 
 impl Rows {
+    /// Partie 179.11 : la hauteur de la règle des temps (la barre de lecture en face d'elle, dans le Storyboard).
+    pub fn regle_h(&self) -> f32 {
+        if self.sb.is_some() {
+            sb_regle_h()
+        } else {
+            RULER_H
+        }
+    }
     /// La hauteur de la ligne des séquences (avec ses marges).
     pub fn bands_h(&self) -> f32 {
         if self.sb.is_some() {
-            SB_SEQ_H
+            sb_seq_h()
         } else {
             BANDS_H
         }
@@ -131,7 +176,7 @@ impl Rows {
     /// La hauteur de la barre d'une séquence, marges comprises (le bloc peint perd un point en haut et en bas).
     pub fn seq_h(&self) -> f32 {
         if self.sb.is_some() {
-            SB_SEQ_H
+            sb_seq_h()
         } else {
             BANDS_H - 2.0
         }
@@ -139,7 +184,7 @@ impl Rows {
     /// La hauteur de la rangée Caméra (ses clés).
     pub fn cam_h(&self) -> f32 {
         if self.sb.is_some() {
-            SB_CAM_H
+            sb_cam_h()
         } else {
             CAM_H
         }
@@ -148,12 +193,12 @@ impl Rows {
         match self.sb {
             // (Partie 178 : la caméra sous les plans.)
             Some(_) => self.blocks_top() + self.block_h + 1.0,
-            None => RULER_H + BANDS_H + self.entete,
+            None => RULER_H + BANDS_H,
         }
     }
     pub fn blocks_top(&self) -> f32 {
         match self.sb {
-            Some(_) => RULER_H + SB_SEQ_H + self.entete,
+            Some(_) => self.regle_h() + self.bands_h(),
             None => self.camera_top() + CAM_H,
         }
     }
@@ -235,27 +280,26 @@ impl App {
         let mut lanes = if replies {
             Vec::new()
         } else {
-            crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis())
+            crate::pistes::lanes_in_h(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis(), crate::pistes::Hauteurs::de(sb.is_some()))
         };
         // La rangée des plans a la hauteur du réglage (moyenne ou bandeau, `pistes::HauteurPlans`) : elle ne prend plus la place que
         // les pistes laissent (Anthony, 2026-11-11 : « l'épaisseur de la partie plan est trop importante »). Partie 178, dans le
         // Storyboard : la plus fine possible, toujours (« Les rangées Séquences et plans doivent prendre le moins de place possible »).
-        let block_h = if sb.is_some() { SB_PLAN_H } else { self.settings.montage_plans.points() };
-        let entete = if self.barre_montage_sur_deux_lignes() { crate::montagehead::ENTETE_DEUX_LIGNES } else { 0.0 };
-        if self.settings.montage_grands {
+        let block_h = if sb.is_some() { sb_plan_h() } else { self.settings.montage_plans.points() };
+
+        // (Partie 179.10 : dans le Storyboard, sans « Déplier le calque actif », aucun calque ne grandit : ils ont tous la même hauteur.)
+        // (Partie 179.13 : dans le Storyboard, tous les calques ont la même hauteur, la réglée ou la fine : `calques_du_storyboard`.)
+        if let Some(replier) = sb.map(|_| self.settings.replier_calques) {
+            calques_du_storyboard(&mut lanes, replier);
+        } else if self.settings.montage_grands {
             // Ce que la bande montre en plus des pistes de calques : la règle, les séquences, la caméra, les plans, les pistes son,
             // et la barre de défilement horizontale sous la bande. Le reste est aux calques.
-            let sans_calques = Rows { block_h, lanes: Vec::new(), entete, sb }.height(self.doc.audio_tracks.len());
-            crate::pistes::agrandir(&mut lanes, available - sans_calques - SOUS_LA_BANDE);
+            let sans_calques = Rows { block_h, lanes: Vec::new(), sb }.height(self.doc.audio_tracks.len());
+            crate::pistes::agrandir_h(&mut lanes, available - sans_calques - SOUS_LA_BANDE, crate::pistes::Hauteurs::de(sb.is_some()).grande);
         }
-        Rows { block_h, lanes, entete, sb }
+        Rows { block_h, lanes, sb }
     }
 
-    /// Partie 173.5 : la barre du montage est en tête de la colonne (hors de l'espace Montage) et la colonne est trop étroite pour
-    /// qu'elle tienne sur une ligne : elle est sur deux.
-    pub(crate) fn barre_montage_sur_deux_lignes(&self) -> bool {
-        crate::barres::Barre::du_montage_dans(self.espace) == crate::barres::Barre::Montage && crate::montagehead::barre_sur_deux_lignes(self.montage_head_w)
-    }
 
     /// Noms des pistes au-dessus des pistes son, dans la colonne `rect` ; un clic sur un calque
     /// le rend courant.
@@ -269,6 +313,9 @@ impl App {
         let painter = ui.painter_at(rect);
         let visuals = ui.visuals().clone();
         let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(rect.width() - 8.0, h - 2.0));
+        // Partie 179.14 : dans le Storyboard, le fond de chaque ligne teinté de sa couleur réglée (hauteurstimeline::teinte).
+        let teinte = |l: crate::hauteurstimeline::Ligne, base: Color32| if rows.sb.is_some() { crate::hauteurstimeline::teinte(l, base) } else { base };
+        use crate::hauteurstimeline::Ligne;
         let label = |lane: Rect, text: &str, color: Color32| {
             painter.rect_filled(lane, 3.0, theme::etiquette());
             painter.with_clip_rect(lane.shrink(1.0)).text(
@@ -285,7 +332,7 @@ impl App {
         let camera_seule = self.e3_camera_seule();
         // (Partie 178 : dans le Storyboard, « Caméra » vient après ⊕ / ⊖, et ses icônes suivent : `timelinesb.rs`.)
         if rows.sb.is_some() {
-            painter.rect_filled(cam, 3.0, theme::etiquette());
+            painter.rect_filled(cam, 3.0, teinte(Ligne::Camera, theme::etiquette()));
         } else {
             label(cam, "Caméra", if camera_seule { visuals.strong_text_color() } else { visuals.text_color() });
         }
@@ -300,9 +347,13 @@ impl App {
         }
         resp.context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
-        painter.rect_filled(header, 3.0, theme::etiquette());
+        painter.rect_filled(header, 3.0, teinte(Ligne::Plans, theme::etiquette()));
         if let Some(sb) = rows.sb {
-            // Partie 178 : les en-têtes des rangées de la timeline du Storyboard, chacune avec ses icônes.
+            // Partie 178 : les en-têtes des rangées de la timeline du Storyboard, chacune avec ses icônes. (Partie 179.11 : la ligne
+            // « Séquence » en face de la bande des séquences, sous la barre de lecture.)
+            let seq = lane(rows.regle_h(), rows.bands_h());
+            painter.rect_filled(seq, 3.0, teinte(Ligne::Sequence, theme::etiquette()));
+            self.entete_sequences_sb(ui, seq);
             self.entete_plans_sb(ui, header);
             self.entete_camera_sb(ui, cam, camera_seule);
             if sb.prereglages_h > 0.0 {
@@ -383,7 +434,7 @@ impl App {
             };
             // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
             // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
-            painter.rect_filled(r, 3.0, theme::etiquette());
+            painter.rect_filled(r, 3.0, teinte(Ligne::Calques, theme::etiquette()));
             // (La sorte du calque, vectoriel, bitmap…, est la pastille de couleur de l'en-tête : `montage_head`.)
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
@@ -422,11 +473,17 @@ impl App {
                 }
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
-            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160) ; les autres, l'œil, la pastille, le nom.
-            if current && !track.folded && track.h >= 3.0 * crate::pistes::RANGEE_ACTIVE {
+            // La piste du calque actif porte toutes ses options sur deux rangées (partie 160 ; trois dans l'espace Montage depuis la
+            // partie 173.5 ; deux de 20 dans le Storyboard depuis la partie 179) ; les autres, l'œil, la pastille, le nom.
+            // (Partie 179.13 : dans le Storyboard, chaque calque a sa piste sur deux rangées, le calque actif seulement surligné.)
+            if !track.folded && rows.sb.is_some() && track.h >= 2.0 * crate::hauteurstimeline::min_ligne() - 0.5 {
+                self.piste_active_head_sb(ui, r, k, color);
+            } else if current && !track.folded && rows.sb.is_none() && track.h >= 3.0 * crate::pistes::RANGEE_MONTAGE {
                 self.piste_active_head(ui, r, k, color);
             } else {
-                self.montage_head(ui, r, k, color, track.folded);
+                // (Partie 179.10 : la piste repliée du calque actif du Storyboard garde ses réglages en icônes, à droite.)
+                let colonnes = current && rows.sb.is_some();
+                self.montage_head(ui, r, k, color, track.folded, colonnes);
             }
         }
         // (Les calques ont changé pendant les rangées : le glissé et le clic de cette image visaient les rangs d'avant.)
@@ -529,8 +586,10 @@ impl App {
         let lane = |y: f32, h: f32| Rect::from_min_max(pos2(r.left(), top + y + 1.0), pos2(r.right(), top + y + h - 1.0));
 
         // Caméra : une clé = un losange ; un mouvement = une barre de la première à la dernière.
+        // (Partie 179.14 : dans le Storyboard, le fond de chaque rangée teinté de la couleur réglée de sa ligne.)
+        let teinte = |l: crate::hauteurstimeline::Ligne, base: Color32| if rows.sb.is_some() { crate::hauteurstimeline::teinte(l, base) } else { base };
         let cam = lane(rows.camera_top(), rows.cam_h());
-        painter.rect_filled(cam, 0.0, theme::rangee_sombre());
+        painter.rect_filled(cam, 0.0, teinte(crate::hauteurstimeline::Ligne::Camera, theme::rangee_sombre()));
         if let Some(sb) = rows.sb {
             // Partie 178 : la rangée des préréglages (Caméra dépliée) et la ligne « Calques » ont leur fond ; la caméra repliée garde
             // un trait jaune fin sous ses clés là où le plan a des préréglages, pour qu'on sache qu'ils sont là.
@@ -594,7 +653,7 @@ impl App {
         for track in &rows.lanes {
             let row = track.row;
             let lr = lane(rows.layers_top() + track.top, track.h);
-            painter.rect_filled(lr, 0.0, theme::rangee_sombre());
+            painter.rect_filled(lr, 0.0, teinte(crate::hauteurstimeline::Ligne::Calques, theme::rangee_sombre()));
             // Le nom de la rangée : celui du calque du plan courant, que la colonne de gauche écrit. Un bloc n'écrit son nom que s'il en diffère.
             let row_name = layer_in_row(&current_plan.layers, row).map(|k| current_plan.layers[k].name.as_str());
             for (i, b) in blocks.iter().enumerate() {

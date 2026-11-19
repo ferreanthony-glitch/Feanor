@@ -15078,3 +15078,378 @@ glisser (repliée et dépliée) et par clic, comme `ajouter_effet_camera` de l'A
 6. ⊖ Caméra : la ligne seule, un trait jaune sous les préréglages ; glisser un préréglage dessus : il se pose quand même.
 7. ⊖ Calques (ou Maj+Alt+C) : une ligne de résumé ; ⊕ : les pistes ; rouvrir FEANOR : les deux états gardés.
 8. La plus petite fenêtre : rien ne déborde.
+
+## 179. La timeline resserrée : une ligne de boutons, les commandes des calques sur « Calques », des calques moins épais (2026-11-19, branche `timeline-serree`)
+
+Anthony a annoté au feutre rouge une capture de la timeline du Storyboard (colonne de 432 points, la barre sur deux lignes) :
+« Bouge les éléments pour resserrer les choses et éviter les pertes d'espace. Réduis un peu l'épaisseur des calques. Justifie toutes
+les icônes à droite. » Ses traits : la seconde ligne de boutons barrée, la place vide à droite du temps hachurée ; les boutons de la
+barre du bas de la colonne entourés, une flèche vers la ligne « ⊖ Calques » ; sur le calque actif, la rangée d'icônes sous le nom
+entourée, une flèche vers la place vide après le nom ; un trait vertical vers 347 points et toute la droite de la colonne hachurée.
+Rien dans le projet (format inchangé) ; l'espace Montage garde sa disposition.
+
+### 179.1 Ce qui change pour lui
+
+**Storyboard**
+
+| | Avant | Maintenant |
+|---|---|---|
+| Barre de la colonne | deux lignes sous 480 points (la seconde ajoutait 28 points sous la règle) | **une ligne**, à toute largeur |
+| Boutons des calques | une barre de 18 points sous la colonne | sur la ligne « ⊖ Calques », juste après le mot |
+| Calque actif | 66 (trois rangées de 22) | **40** (deux rangées de 20) |
+| Autres calques | 17 | **15** |
+| Icônes des colonnes du calque actif | réparties sur la rangée du milieu | **sous leurs icônes de la ligne « Calques »**, collées à droite |
+| Icônes des en-têtes Plans et Caméra | après le mot | **collées à droite** |
+
+1. **La barre en une ligne** : la lecture (début, lire, boucle) et le temps, puis les autres commandes tant qu'il y a la place,
+   « ⋯ » et la légende des clés. Ce qui ne tient pas passe sous « ⋯ » (avec son icône, son nom, son raccourci, son épingle), **les
+   moins utilisées d'abord** : le rang de chaque commande vient de son compteur d'usage (`usage.json` de son poste au 19/11 : nouveau
+   plan 12 clics, déplier / replier toutes les pistes 3, comparer 2 ; nouvelle séquence, Son, importer un son, l'aimantation, les
+   envois : jamais au clic). « Nouveau calque vectoriel » passe le premier sous « ⋯ » : le « + » de la ligne « Calques » fait la même
+   chose juste dessous. Le rang est fixe (la barre ne change pas d'elle-même d'un jour à l'autre).
+   La bande hachurée sous la règle (la seconde ligne) a disparu : les calques remontent de 28 points.
+2. **La ligne « ⊖ Calques »** : ⊖, « Calques », puis + (nouveau calque, son menu), nouveau dossier, calque d'effet (son menu),
+   dupliquer, supprimer, ⋯ (groupes, opérations) ; à droite, les sept icônes des colonnes. Les mêmes bulles, raccourcis et clics
+   droits qu'en bas ; le clic droit dans le vide de la ligne : nouveau calque, coller le calque (c'était celui de la barre du bas).
+   Colonne étroite : supprimer, puis dupliquer, effet, dossier passent en tête de « ⋯ » (le + et « ⋯ » restent).
+   Sous la colonne, plus rien ; le zoom reste à sa place.
+3. **Le calque actif sur deux rangées** : en haut l'œil, la pastille, le nom, puis collés à droite les indicateurs (fx s'il y en a,
+   groupe, sens du pochoir + / −, punaise, maillon s'il est dans d'autres plans) et les colonnes verrou, pelure, transparence,
+   pochoir, aplat, caméra, chacune sous son icône de la ligne « Calques » ; en bas la vignette, « ‹ Normal ▾ › », l'opacité, son
+   losange et le ⋮. L'œil reste à gauche, comme sur les autres calques (pas en double à droite) : la case sous l'œil de la ligne
+   « Calques » reste vide, aucune icône n'est sous une colonne qui n'est pas la sienne. Quand le nom n'aurait plus 44
+   points, les indicateurs descendent sur la seconde rangée, après la vignette.
+
+**Animation** (même sorte de colonne, même traitement) : les commandes des calques montent sur la rangée « ⊖ Calques » (les
+onglets du bas, Notes, Son…, restent à leur place) ; le calque courant passe de trois rangées (60) à deux (40) : ⊖, le nom, les
+indicateurs et les colonnes en haut ; la vignette, le mode, l'opacité, le losange et le ⋮ en bas ; les autres lignes de 22 à 18.
+**La barre de la timeline de l'Animation reste sur deux lignes** : elle a une vingtaine de commandes image par image ; sur une
+ligne, la moitié passerait sous « ⋯ ». À lui de dire s'il la veut aussi sur une ligne.
+
+**Ce qui ne change pas** : l'aspect des blocs de plans et de calques dans la bande (ils suivent seulement la hauteur de leur
+rangée), les couleurs, l'espace Montage (pistes de 66 et 17, sa barre au-dessus de la bande, sa barre des calques en bas).
+
+### 179.2 Le code
+
+- `src/barres.rs` : `barre_dans_la_colonne_serree`, `qui_tient`, `rang_dans_la_barre` (le rang d'usage) ; retirés :
+  `barre_dans_la_colonne` (la ligne à pleine largeur) et la mesure « sur une ligne ».
+- `src/montagehead.rs` : `largeur_min_colonne` (ce qui ne passe jamais sous « ⋯ ») ; retirés : `barre_sur_deux_lignes`,
+  `ENTETE_DEUX_LIGNES`. `src/montagerows.rs` : `Rows::entete` retiré ; `LAYER_H` = 40, `LAYER_H_MONTAGE` = 66.
+- `src/pistes.rs` : `Hauteurs`, `lanes_in_h`, `agrandir_h`, `FOLDED_H` = 15 (`FOLDED_H_MONTAGE` = 17), `RANGEE_ACTIVE` = 20
+  (`RANGEE_MONTAGE` = 22), `piste_active_head_sb`, `indicateur_de_piste` ; `piste_active_head` (trois rangées) reste celle du Montage.
+- `src/barrecalques.rs` : `actions_des_calques_en_ligne`, `plus_des_calques`, `menu_vide_des_calques`.
+- `src/timelinesb.rs` : la ligne « Calques », les icônes des en-têtes collées à droite (`cases_d_entete`).
+- `src/layerheads.rs` : `ROW_FINE` = 18, `ROW_FULL` = 40, la ligne complète sur deux rangées, `indicateur_de_ligne`, la rangée
+  d'en-tête avec les commandes. `src/bottomtabs.rs`, `src/storyboard.rs` : plus de barre des calques en bas (sauf au Montage).
+
+**Les hauteurs, avant → après** : Storyboard, ligne de boutons 2 × 28 → 1 (−28 sous la règle quand la colonne fait moins de 480
+points, comme sa colonne de 432) ; calque actif 66 → 40 (−26) ; chaque autre calque 17 → 15 (−2) ; la barre de 18 points sous la
+colonne disparaît (le zoom reste). Sur la timeline de sa capture (un calque actif, cinq autres, un dossier) : la même timeline fait
+**64 points de moins** (381 → 317 sur les images ci-dessous), dont 36 pour les calques seuls (26 + 5 × 2). Animation : calque courant
+60 → 40, lignes 22 → 18 ; sur six calques, 44 points de moins (342 → 298).
+
+**La largeur la plus petite de la colonne** passe de 250 à 286 points : la lecture, le temps, « ⋯ » et la légende des clés doivent
+tenir sur l'unique ligne (avant, la seconde ligne les séparait). La largeur d'origine (340) et la plus grande (520) ne changent pas.
+
+**Une autre lecture de son dessin** : le trait vertical vers 347 points, avec toute la droite de la colonne hachurée, peut vouloir
+dire « la colonne pourrait s'arrêter là » (c'est à peu près la largeur d'origine, 340 ; sa colonne est réglée à 432). Rien n'est
+forcé : avec tout collé à droite et la barre sur une ligne, la colonne ramenée à 340 (double-clic sur sa poignée) ne perd plus de
+place ; à lui de dire s'il veut que sa largeur revienne d'office à 340.
+
+### 179.3 Les essais
+
+`src/timeline_serree_tests.rs` (lancés d'abord sur le code d'avant : 5 rouges sur 6, le Montage inchangé déjà vert ; verts
+ensuite) : la barre sur une seule ligne à 1920 × 1080 et 960 × 600, colonne d'origine, la plus étroite, 432 et 520, rien de perdu
+(chaque commande sur la ligne ou sous « ⋯ »), les moins utilisées cachées d'abord, plus de bande sous la règle ; les commandes des
+calques sur la ligne « Calques », dans l'ordre, avant les colonnes, et qui marchent (dossier, dupliquer, Ctrl+Z) ; le calque actif
+sur 40 points, les autres sur 15, les indicateurs et les colonnes sur la ligne du nom, chaque colonne sous son icône d'en-tête, le
+mode, l'opacité et le ⋮ dessous ; les icônes collées au même bord droit (piste, « Calques », Plans, Caméra) ; l'espace Montage
+garde ses pistes de 66 / 17 et sa barre du bas ; l'Animation (lignes de 40 et 18, commandes sur la rangée « Calques », une seule
+fois à l'écran, « Nouveau dossier » qui marche) ; la plus petite fenêtre sans débordement ni chevauchement.
+`timeline_serree_179_captures` (ignoré) fait les images (avant / après, même projet, même cadrage).
+
+Changés pour la nouvelle disposition : `avantapres165_tests` (la barre du Storyboard sur une ligne au plus étroit comme au plus large,
+ce qui est sous « ⋯ » n'est plus cherché sur la ligne) ; `piste_mode_tests` (deux rangées ; les boutons qui ne passent jamais sous
+« ⋯ » ; les cases des icônes se suivent à 19 points, sans écart qui grandit avec la colonne : 173.6 est remplacé par « collé à
+droite » ; le minimum de la colonne entre 250 et 300) ; `panneaux_fins_tests` (deux rangées ; la barre d'actions en haut de la
+colonne) ; `panneaux_tests`, `notes_calques_tests` (le « + » et le dossier sur la rangée « Calques ») ; `colonne_calques_tests` (le
+mode sur la seconde rangée) ; `timelinesb_tests`, `calquesplace_tests` (plus de `Rows::entete`) ; `pistes_tests`,
+`poskeysmontage_tests`, `timeline_repliee_tests`, `calquesplace_tests` (les hauteurs du Montage, 66 et 17, quand l'essai est dans
+l'espace Montage).
+
+### 179.4 À tester (sa checklist)
+
+1. Storyboard, colonne à sa largeur : une seule ligne de boutons ; « ⋯ » : ce qui n'y tient pas (avec l'épingle). Plus de bande vide
+   sous la règle.
+2. La ligne « ⊖ Calques » : + (son menu), dossier, effet (son menu), dupliquer, supprimer, ⋯ ; survoler (nom, raccourci) ; clic droit
+   dans le vide de la ligne : nouveau calque, coller.
+3. Le calque actif : le nom, puis dossier, + / −, punaise, puis les colonnes sous leurs icônes ; dessous la vignette, ‹ Normal ▾ ›,
+   100 %, le losange, ⋮. Cliquer chaque colonne : Ctrl+Z.
+4. Les calques sont-ils assez épais pour la main (15 et 40) ? Assez lisibles ?
+5. Tirer la colonne au plus étroit : rien ne déborde, les boutons passent sous les « ⋯ ».
+6. Animation : la rangée « Calques » porte les commandes ; le calque courant sur deux rangées ; les onglets Notes, Son… en bas.
+7. Montage : rien n'a changé.
+
+### 179.5 Sa demande sur la capture d'après 179
+
+Sur la capture du Storyboard après 179, Anthony a entouré, sur la ligne « ⊖ Calques », le groupe +, dossier, effet, dupliquer,
+supprimer, ⋯, tracé une flèche vers la droite jusqu'aux icônes des colonnes (œil, verrou, pelure, transparence, pochoir, aplat,
+caméra) et barré celles-ci : « repositionne les icônes comme sur le screenshot. Les icônes sur la ligne de séquence gardent la même
+taille que sur le reste des autres lignes. Pareil pour les icônes de l'interface de visionnage au-dessus de la timeline. Tous les
+icônes doivent avoir cette taille. La taille des icônes et de l'interface doit être réglable dans les préférences. »
+Rien dans le projet (format inchangé, 60).
+
+### 179.6 Ce qui a bougé
+
+**La ligne « ⊖ Calques »** (Storyboard et Animation) : ⊖ et « Calques » restent à gauche ; le groupe +, dossier, effet, dupliquer,
+supprimer, ⋯ est **collé au bord droit**, à la place des icônes des colonnes, au même bord que le ⋯ des lignes Plans et Caméra. Le
+débordement est le même : colonne étroite, supprimer, puis dupliquer, effet, dossier passent en tête de « ⋯ ».
+
+**L'en-tête des colonnes a disparu.** C'est la ligne du calque actif qui le remplace : sur sa première rangée, chaque réglage
+(verrou, pelure, préserver la transparence, pochoir, aplat, accroché à la caméra ; l'œil reste à gauche) est **son icône** : pâle =
+éteint, allumée = actif (avant : un petit point quand il était éteint). Clic = bascule, mêmes bulles, même raccourci, même « la
+sélection agit sur tout ». Dans l'Animation, la ligne du calque courant fait de même (y compris quand tous les calques sont repliés
+sur une ligne) ; les autres lignes gardent leurs petits points, sous les icônes du calque courant.
+Rien n'est perdu : le clic sur une icône de l'en-tête faisait exactement le clic dans la case du calque courant (et des calques
+choisis), qui est maintenant juste dessous, en icône. Il n'y avait ni menu ni « tout basculer » sur l'en-tête.
+
+**Une seule taille d'icônes** : celle des icônes des lignes Plans et Caméra (13 points), partout dans la timeline : lignes Plans,
+Caméra, Calques, le calque actif (réglages, indicateurs, ⋮, œil et cadenas des pistes), le zoom sous la bande, et **la barre de
+lecture au-dessus de la timeline** (début, lire, boucle, temps, nouveau plan, la liste des plans, le son, ⋯, la légende des clés).
+
+| | Avant | Maintenant |
+|---|---|---|
+| Icônes de la barre de lecture (Storyboard, Animation) | 17 points, cases de 28 × 26 | **13 points, cases de 20 × 20** |
+| Icônes des lignes, du calque actif | 13 (et 11 à 14 ailleurs : œil 11 des pistes repliées, cadenas 10, commandes des calques 13) | **13 partout** |
+| Ligne de la barre, Storyboard | 34 points (la règle 18 + la ligne des séquences 16) | 34 (elle est en face de la règle et des séquences : les boutons y sont plus petits, la ligne garde la hauteur de la règle) |
+| Barre de la timeline de l'Animation (deux lignes) | 30 + 28 = 58 points | **24 + 24 = 48** (−10) |
+
+La ligne de séquence n'a pas d'icônes à elle (les blocs des séquences) ; c'est en face d'elle et de la règle qu'est la barre de
+lecture, d'où sans doute ses mots : ses boutons ont maintenant la taille des autres.
+L'espace Montage garde sa barre au-dessus de la bande (17 points), ses pistes, sa barre du bas. **Code partagé** : les cases de
+réglage et quelques icônes de ses pistes (`layerheads::icon_at`, `case_de_reglage`) suivent elles aussi « Taille des icônes » ; à
+13, rien n'y change.
+
+Barre de lecture : les commandes qui passent sous « ⋯ » sont maintenant strictement les moins utilisées (avant, un trait de groupe
+pouvait faire entrer une commande moins utilisée à la place d'une plus utilisée).
+
+### 179.7 Les réglages
+
+Préférences > Apparence > **Tailles** (le groupe s'appelait « Taille de l'interface ») :
+
+- **Taille de l'interface** : le réglage qui existait (« Échelle », renommé) : 90 %, 100 % (d'origine), 125 %, 150 % ; tout grandit
+  (le zoom d'egui), clé `echelle_interface`.
+- **Taille des icônes** (nouveau, juste dessous) : six petites icônes, chacune à sa taille : **11, 12, 13 (d'origine), 14, 15, 16
+  points** ; la choisie est allumée, le clic agit tout de suite. Les cases suivent (18 points pour 13), la hauteur des rangées non
+  (c'est le rôle de la taille de l'interface). Clé `taille_icones` dans `reglages.toml` (absente à 13). Un réglage du poste.
+
+Le code : `src/tailleicones.rs` (la taille en cours, `mesure`, `case_de_barre`, la ligne des Préférences) ; `barres.rs`
+(`icone_de_barre`, `case_de_barre`, la barre de lecture « compacte ») ; `barrecalques::actions_des_calques_en_ligne` (justifiées à
+droite) ; `layerheads::case_de_reglage_en` (l'icône pâle), `icon_w` ; `icones_des_colonnes` retirée ; `timeline::LIGNE1_H` /
+`LIGNE2_H` = 24.
+
+### 179.8 Les essais
+
+`src/tailleicones_tests.rs` (lancés d'abord sur le code d'avant : 8 rouges sur 9 ; le neuvième, l'écriture du réglage, était déjà
+vert, le champ ayant été ajouté avant ; verts ensuite) : la ligne « Calques » sans icônes des colonnes, ses commandes collées à droite
+au bord du ⋯ des plans (Storyboard, Animation) ; les réglages éteints du calque actif en icônes (Storyboard, Animation) ; la même
+hauteur pour les icônes de la barre de lecture, des lignes Plans, Caméra, Calques et du calque actif, la case de « Lire » de 20
+points ; l'Animation (même taille, lignes de 24) ; 16 et 11 agissent tout de suite partout sans déborder ; le réglage retenu, absent à
+13 ; la page des Préférences (les deux réglages l'un sous l'autre, un clic écrit `taille_icones = 15`).
+Changés : `timeline_serree_tests` (les commandes jusqu'au bord droit ; chaque colonne du calque actif à sa case, plus sous une icône
+d'en-tête ; le ⋯ des calques au bord commun ; les captures savent `SHOT_CAPTURE_ICONES` et font la page des Préférences),
+`echelle_tests` (la ligne s'appelle « Taille de l'interface ») ; `colonne_calques_tests` (la case de référence d'une colonne est
+celle du calque courant, plus celle de l'en-tête), `timelinesb_tests`, `piste_mode_tests` (trois cases de pelure pour trois calques ;
+« Plus… » cherché en tête de la colonne, pas dans la barre du haut de la fenêtre), `aplat_tests`, `notes_calques_tests` (l'icône pâle
+de l'aplat sur le calque courant), `panneaux_tests` (les commandes au bord de la colonne). Dans l'Animation, les onglets du bas
+(Notes, Son…) se placent maintenant à la vraie largeur de la colonne (ils partaient de 312 points ; la colonne est souvent plus large,
+et le « ⋯ » des calques, collé à son bord, passait au-dessus de « Notes »).
+
+Vérificateur (`-Repetitions 2`) : RESULTAT : OK, 4938 essais à chaque passage, aucun intermittent. Captures (banc headless, taille
+réelle) : `179b-*` (13 points), `179b-icones-16-*`, `179b-icones-11-*`, et `179b-6-preferences-tailles.png`.
+
+### 179.9 À tester (sa checklist)
+
+1. Storyboard : la ligne « ⊖ Calques » : « Calques » à gauche, +, dossier, effet, dupliquer, supprimer, ⋯ à droite ; plus d'icônes
+   de colonnes dessus.
+2. Le calque actif : verrou, pelure, transparence, pochoir, aplat, caméra en icônes pâles ; un clic l'allume (Ctrl+Z) ; lisibles ?
+   assez pâles pour qu'on voie tout de suite ce qui est allumé ?
+3. La barre au-dessus de la timeline : des boutons plus petits, de la taille des icônes des lignes Plans et Caméra. Assez gros pour la
+   main ?
+4. Préférences > Apparence > Tailles : « Taille des icônes » 15 ou 16, puis 11 : toute la timeline suit tout de suite ; retour à 13.
+5. « Taille de l'interface » 125 % : tout grandit ; retour à 100 %.
+6. Animation : la rangée « Calques » (commandes à droite), le calque courant en icônes, la barre plus basse.
+7. Montage : rien n'a changé.
+
+### 179.10 Le repli du calque actif devient une option
+
+Anthony : « Ok maintenant je veux que le repli des calques soit une option. D'origine, les calques ne changent pas de taille que l'on
+soit sur le calque actif ou non. Remonte un peu l'icône de clé d'opacité, les flèches et les trois points pour les aligner sur effet
+et opacité. »
+
+**D'origine**, le calque actif a la hauteur des autres : une ligne de 15 points dans le Storyboard, 18 dans l'Animation. Il reste
+surligné (son cadre) ; dans le Storyboard, ses réglages (verrou, pelure, transparence, pochoir, aplat, caméra) sont en icônes collées
+à droite, pâles quand ils sont éteints, un clic les bascule (mêmes bulles, Ctrl+Z) ; dans l'Animation, la ligne du calque courant
+les avait déjà (179.5). Aucun calque ne grandit non plus quand la timeline a de la place (« Agrandir les calques proches » ne joue
+que si le calque actif se déplie).
+
+**Où sont le mode et l'opacité** quand le calque est replié : clic droit sur sa piste (ou sa ligne dans l'Animation) > Apparence
+(opacité, mode de fusion…) ; et le ⋯ de la ligne « Calques » > Opérations sur les calques, le même menu, celui du calque actif. Le ⋮
+n'est pas sur la ligne repliée (les colonnes vont jusqu'au bord) ; il n'y a plus de panneau Calques depuis la partie 160.
+
+**« Déplier le calque actif »** (réglage du poste, clé `deplier_calque_actif`, éteint d'origine, format du projet inchangé) remet le
+calque actif sur deux rangées (vignette, mode, opacité, losange, ⋮), dans le Storyboard et l'Animation, tout de suite, sans fenêtre.
+Il est à deux endroits : le ⋯ de la ligne « Calques » (sous « Opérations sur les calques ») et Préférences > Montage > Pistes du
+montage. Dans l'Animation, le ⊖ / ⊕ de la rangée « Calques », le ⊕ / ⊖ d'une ligne et le raccourci Maj+Alt+C basculent ce même
+réglage. L'espace Montage garde le sien (« Déplier le calque courant tout seul ») et ses pistes de 66 et 17.
+
+**L'alignement de la seconde rangée.** Mesuré sur l'encre des glyphes (pas sur leur boîte), à 100, 125 et 150 % : dans le Storyboard,
+‹ › et le losange étaient 0,5 point *plus haut* que le milieu de la liste du mode et de la barre, le ⋮ pile dessus ; sur l'image
+rendue (pixels), les cinq sont centrés sur la même ligne. Rien n'était plus bas. Dans l'Animation, le ⋮ était 1,5 à 2 points plus
+haut : sa case est maintenant celle du mode et du losange, il y est centré. Un essai compare les centres (à 0,75 point près, jamais
+plus bas que le mode). **À lui de dire, sur son écran, ce qui lui paraît encore bas** : je ne l'ai pas retrouvé.
+
+Le code : `settings.rs` (`deplier_calque_actif`), `pistes.rs` (`pistes_auto_open`, `regler_deplier_calque_actif`,
+`deplier_calque_actif_case`, `montage_head` et ses colonnes), `layerheads.rs` (`calques_tout_replies`, la case du ⋮),
+`barrecalques.rs` (le ⋯), `montagerows.rs`, `prefsonglets.rs`. Essais : `src/deplier_calque_tests.rs` (sur l'ancien comportement : 3
+rouges sur 6 ; l'essai d'alignement, mesuré d'abord à la boîte, était vert : il mesure maintenant l'encre). Le banc d'essai
+(`perf_tests::banc_taille`) allume le réglage pour les essais d'avant, qui décrivent le calque déplié.
+
+### 179.11 La barre de lecture tout en haut, une vraie ligne « Séquence »
+
+Anthony : « C'est vrai qu'il manque une ligne de séquence. La ligne des icônes de lecture se placerait au-dessus de tout dans ce
+cas. »
+
+- **La barre de lecture** (début, lire, boucle, temps, nouveau plan, liste, son, ⋯, aide) est la première ligne de la colonne, en face
+  de la **règle des temps seule** ; la règle prend sa hauteur (22 points, 18 avant : une case de 20 et un point de chaque côté). Je ne
+  l'ai pas fait courir sur toute la largeur : une ligne de plus au-dessus de la règle aurait coûté 22 points, la règle en face de la
+  barre n'en coûte que 4.
+- **La ligne « Séquence »**, en face de la bande des séquences, au format de Plans et Caméra : « Séquence » à gauche ; à droite
+  nouvelle séquence, renommer la séquence, versions de la séquence (le menu des versions), ⋯ (nouvelle séquence avec les plans
+  choisis, couper la séquence au plan courant). Il n'existe ni dupliquer, ni supprimer, ni couleur de séquence (une séquence vidée de
+  ses plans s'en va). Le clic droit sur une séquence garde son menu. 20 points (16 avant), la place d'une case d'icône.
+- **« Nouvelle séquence » quitte la barre de lecture** (ni sur la ligne ni sous « ⋯ ») : elle est juste dessous.
+- **Hauteurs de l'en-tête** au-dessus des plans : 18 + 16 = **34 points avant, 22 + 20 = 42 après** ; tout l'en-tête jusqu'aux pistes
+  de calques (règle, séquences, plans 26 + 1, caméra 22, « Calques » 20) : **103 → 111**.
+- **Animation** : sa timeline n'a pas de bande des séquences ; sa barre est déjà en haut de la colonne, en face de la règle : rien ne
+  change. **Montage** : inchangé (sa règle de 18, sa ligne des séquences, sa barre au-dessus de la bande).
+
+Le code : `montagerows.rs` (`SB_SEQ_H` = 20, `sb_regle_h`, `Rows::regle_h`), `storyboard.rs` (la règle, la ligne de la barre),
+`timelinesb.rs` (`entete_sequences_sb`), `barres.rs` (`HORS_DE_LA_BARRE_DE_LECTURE`). Essais : `src/ligne_sequence_tests.rs` (5
+rouges sur le code d'avant, verts ensuite).
+
+### 179.12 À tester (sa checklist)
+
+1. Storyboard : tous les calques de la même hauteur ; le calque actif surligné, ses réglages en icônes à droite ; clic droit >
+   Apparence pour le mode et l'opacité.
+2. ⋯ de la ligne « Calques » > « Déplier le calque actif » : deux rangées tout de suite ; décocher : retour. La même case dans
+   Préférences > Montage.
+3. La seconde rangée dépliée : ‹ ›, le losange, le ⋮ te paraissent-ils encore bas ? (Mesurés centrés ; dis-moi lequel.)
+4. La barre de lecture en haut, en face de la règle ; la ligne « Séquence » dessous : nouvelle séquence, renommer, versions, ⋯.
+5. Animation : calques sur une ligne d'origine ; ⊕ sur une ligne : le calque courant se déplie (et le réglage s'allume).
+6. Montage : rien n'a changé.
+
+### 179.13 Tous les calques épais d'origine, la hauteur de chaque ligne
+
+Anthony, sur la capture du calque déplié (deux rangées de 20 points) : « Il faut que tous les calques aient cette épaisseur de base.
+Ajoute dans les paramètres la possibilité d'ajuster la taille de chaque ligne. Séquence, plan, caméra, calques. »
+
+**D'origine, tous les calques** (Storyboard et Animation) ont la disposition du calque déplié, sur deux rangées : l'œil, la pastille,
+le nom, les indicateurs, puis les icônes de réglage collées à droite ; dessous la vignette, ‹ mode ▾ ›, l'opacité, ◇ et ⋮. Le calque
+actif est seulement surligné ; aucun calque ne change de taille quand on change de calque actif. Le mode et l'opacité de chaque
+calque se règlent sur sa ligne et suivent « la sélection agit sur tout » (plusieurs calques choisis : tous). Le losange ◇ de chaque
+calque montre ses clés d'opacité ; un clic en fait le calque courant et pose la clé (son clic droit, supprimer, reste celui du calque
+courant). **Les dossiers** gardent leur ligne fine (13 points dans le Storyboard, 18 dans l'Animation) : ils n'ont ni dessin ni
+mode ; leur opacité est au clic droit (Apparence). Dans l'Animation, un dossier courant avait avant sa ligne de 40 (son opacité) :
+il garde maintenant la ligne fine, comme les autres.
+
+**« Replier les calques »** (le sens inverse de « Déplier le calque actif » de 179.10, éteint d'origine, clé `replier_calques` ; un
+ancien `deplier_calque_actif` n'est pas repris) met tous les calques sur une ligne fine (15 points dans le Storyboard, 18 dans
+l'Animation), le calque actif avec ses réglages en icônes à droite. Mêmes places : le ⋯ de la ligne « Calques », Préférences >
+Montage > Pistes du montage, ⊖ / ⊕ et Maj+Alt+C dans l'Animation.
+
+**La hauteur de chaque ligne** du Storyboard, dans Préférences > Apparence > Tailles, « Lignes de la timeline » : un choix de
+valeurs en texte, comme la taille de l'interface ; effet immédiat ; réglages du poste.
+
+| Ligne | Choix (points) | D'origine | Clé |
+|---|---|---|---|
+| Séquence | 18, 20, 24, 28, 32 | 20 | `hauteur_ligne_sequence` |
+| Plans | 22, 26, 32, 40, 48, 56 | 26 | `hauteur_ligne_plans` |
+| Caméra | 18, 22, 26, 30, 36 | 22 | `hauteur_ligne_camera` |
+| Calques | 36, 40, 44, 48, 56, 64 | 40 | `hauteur_ligne_calques` |
+
+Une ligne ne descend jamais sous la taille des icônes et 5 points (18 pour des icônes de 13, 21 pour 16) ; un calque, deux fois
+cela. Les blocs de la bande (séquences, plans, clés de caméra, calques) suivent la hauteur de leur rangée. La hauteur repliée (15)
+et la ligne « Calques » (20) ne se règlent pas. L'espace Montage garde ses hauteurs (pistes de 66 et 17, caméra de 16).
+
+`App::sans_fenetre` (le constructeur des essais) ne touche plus au réglage : le défaut des essais est le nouvel état d'origine.
+
+Le code : `src/hauteurstimeline.rs` (hauteurs, couleurs, la page des Préférences), `montagerows.rs` (`sb_seq_h`, `sb_plan_h`,
+`sb_cam_h`, `calques_du_storyboard`), `pistes.rs` (la piste de chaque calque, `regler_replier_calques`), `layerheads.rs`,
+`opacitecleselui.rs` (`losange_opacite_de`), `settings.rs`.
+
+### 179.14 La couleur de chaque ligne
+
+Anthony : « Ajoute aussi dans les réglages la possibilité de donner une couleur à chaque ligne. »
+
+À côté des hauteurs, chaque ligne (Séquence, Plans, Caméra, Calques) a sa pastille : le champ de couleur commun de FEANOR (celui
+du calque Couleur unie, avec sa pipette), effet immédiat ; « Par défaut » paraît quand la ligne a une couleur et rend celle du
+thème. Clés `couleur_ligne_sequence`, `couleur_ligne_plans`, `couleur_ligne_camera`, `couleur_ligne_calques` (absentes : le thème).
+
+La couleur teinte le fond de la ligne : sa case dans la colonne de gauche et sa rangée dans la bande. Pour que le texte et les icônes
+restent lisibles quelle que soit la couleur, elle est **fondue à 35 % avec le fond du thème** (pas de couleur pure, pas de contraste
+recalculé) : une couleur claire éclaircit un peu le fond, sans le rendre blanc. Les blocs des plans, des séquences et des clés, la
+couleur d'étiquette d'un calque et les teintes des versions de plan gardent les leurs. Dans l'espace Montage, rien n'est teinté (le
+code des en-têtes et des rangées est partagé : la teinte n'y joue que pour la disposition du Storyboard).
+
+Essais (179.13 et 179.14) : `src/calques_epais_tests.rs` (l'ancien `deplier_calque_tests.rs`, renommé ; 7 rouges sur 10 sur la disposition d'avant, les trois autres étant le fichier de réglages, la page des Préférences et le Montage). Adaptés pour la nouvelle disposition (avec la raison en commentaire) : les essais du « seul calque actif déplié », du repli à la main et des calques proches qui grandissent passent dans l'espace Montage, où ce comportement reste (`pistes_tests`, `calquesplace_tests`, `timeline_repliee_tests`) ; ceux de l'Animation et du Storyboard comptent une ligne complète par calque (`colonne_calques`, `layerflags`, `panneaux`, `panneaux_fins`, `piste_mode`, `timeline_serree`, `timelinesb`, `calques_timeline`).
+
+### 179.15 À tester (sa checklist)
+
+1. Storyboard : tous les calques sur deux rangées ; changer de calque actif : rien ne bouge, il est surligné.
+2. Sur un calque qui n'est pas l'actif : son mode, son opacité ; avec deux calques choisis (Ctrl + clic) : les deux.
+3. ⋯ de la ligne « Calques » > « Replier les calques » : tous fins ; décocher : retour.
+4. Préférences > Apparence > Tailles > Lignes de la timeline : Plans 40, Calques 36… tout de suite ; la pastille d'une ligne, puis
+   « Par défaut ».
+5. Animation : tous les calques sur leur ligne complète, les dossiers fins.
+6. Montage : rien n'a changé.
+
+### 179.16 Trois indicateurs en moins sur la ligne des calques
+
+Anthony, sur les trois indicateurs de la rangée 1 d'un calque (le dossier du groupe de couleur, le + / − du sens du pochoir, la
+punaise de la position verrouillée) : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit ».
+
+- Ils ne sont plus sur les lignes de calque, ni dans le Storyboard ni dans l'Animation ; la pastille du groupe des lignes fines de
+  l'Animation part aussi (le filet de couleur à gauche de la ligne dit déjà le rangement). Les effets (fx) et le maillon de la
+  planche-mère restent. La place libérée va au nom.
+- Au clic droit d'un calque (et à son ⋮, le même menu), **Apparence** : « Groupe (couleur d'étiquette) » et son menu de couleurs (il
+  y était, sous le nom « Couleur d'étiquette »), « Pochoir négatif » (une coche, grisée tant que le pochoir n'est pas allumé, avec
+  sa raison en bulle) et « Verrouiller la position » (une coche). Ces deux-là étaient sous Plus > Réglages avancés : ils sont montés,
+  pas en double. Mêmes actions, même Ctrl+Z ; le sens du pochoir agit sur tous les calques choisis, comme avant ; la position, sur
+  le calque cliqué, comme avant.
+- L'espace Montage : sa piste active a son propre code (`pistes::piste_active_head`), non partagé : ses indicateurs restent.
+
+Essais : `src/indicateurs_tests.rs` (3 rouges sur le code d'avant, verts ensuite) ; adaptés : ceux qui cherchaient « Pochoir
+positif » ou « Verrouiller la position » sur la ligne du calque.
+
+(La checklist de la partie 179.15 ci-dessus vaut pour 179.13 et 179.14 ; pour celle-ci : sur une ligne de calque, plus de dossier,
+de + / − ni de punaise ; clic droit > Apparence : les trois, et Ctrl+Z.)
+
+### 179.17 Des listes déroulantes, alignées
+
+Anthony, sur les pastilles des « Lignes de la timeline » : « Aligne les » ; puis : « pour le choix des valeurs dans réglages,
+propose plutôt un menu déroulant plutôt que plusieurs boutons. on gagnera de l'espace ».
+
+Préférences > Apparence > Tailles est une grille de quatre colonnes : le nom ; une liste déroulante (la valeur courante écrite
+dessus), toutes de la même largeur ; la pastille de couleur ; « Par défaut ». Les listes : Taille de l'interface (90, 100, 125,
+150 %), Taille des icônes (11 à 16 pt, la petite icône à la taille choisie à côté), et les quatre lignes de la timeline (« 20 pt
+(d'origine) »…). Les pastilles et les « Par défaut » sont donc au même x pour les quatre lignes. Rien d'autre ne change (mêmes
+valeurs, mêmes clés, effet immédiat).
+
+Les autres réglages ajoutés pendant la partie 179 n'ont pas de rangée de boutons (« Replier les calques » est une case). Les réglages
+plus anciens qui choisissent encore une valeur par une rangée de boutons ou d'icônes, laissés tels quels : le thème (Apparence >
+Thème et couleurs), la hauteur des plans et celle des pistes son (Montage > Pistes du montage), les commandes de l'anneau (Dessin),
+la génération sonore (ses services).
+
+Essais : `calques_epais_tests` (les pastilles et les « Par défaut » au même x : rouge d'abord, quatre x différents ; chaque hauteur
+choisie par sa liste), `tailleicones_tests` et `echelle_tests` (les tailles choisies par leur liste ; `choisir_dans_la_liste`).

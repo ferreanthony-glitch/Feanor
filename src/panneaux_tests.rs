@@ -149,19 +149,23 @@ fn the_layers_action_bar_has_its_six_buttons_under_the_column() {
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let bas = |icone: &str| textes.iter().filter(|(t, _)| t.trim() == icone).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).map(|(_, r)| *r);
+    // (Partie 179 : la barre est montée sur la rangée « Calques », en haut de la colonne : ses icônes sont sur la rangée du
+    // Nouveau dossier, qui n'est qu'une fois à l'écran.)
+    let (_, rangee_dossier) = trouver(&textes, ph::FOLDER_PLUS).expect("Nouveau dossier").clone();
+    let bas = |icone: &str| textes.iter().filter(|(t, r)| t.trim() == icone && (r.center().y - rangee_dossier.center().y).abs() < 2.0).min_by(|a, b| a.1.left().total_cmp(&b.1.left())).map(|(_, r)| *r);
     let ordre = [ph::PLUS, ph::FOLDER_PLUS, ph::SPARKLE, ph::COPY_SIMPLE, ph::TRASH, ph::DOTS_THREE];
     let cases: Vec<Rect> = ordre.iter().map(|i| bas(i).unwrap_or_else(|| panic!("l'icône {i:?} de la barre d'actions : {textes:?}"))).collect();
     let (_, ligne) = trouver(&textes, "C1").unwrap();
     for (k, r) in cases.iter().enumerate() {
         assert!((r.center().y - cases[0].center().y).abs() < 2.0, "une seule rangée : {cases:?}");
-        assert!(r.center().y > ligne.center().y, "sous la colonne des calques : {cases:?}");
+        assert!(r.center().y < ligne.center().y, "sur la rangée « Calques », au-dessus des calques : {cases:?}");
         if k > 0 {
             assert!(r.center().x > cases[k - 1].center().x, "dans l'ordre : {cases:?}");
         }
     }
-    // Elle tient sous la colonne des calques (sa largeur), à gauche des onglets Notes, Son…
-    assert!(cases[5].right() <= crate::layerheads::HEAD_W + 16.0, "{cases:?}");
+    // Elle tient dans la colonne des calques (sa largeur) ; les onglets Notes, Son… restent à droite de la colonne.
+    // (Partie 179.5 : collée au bord droit de la colonne, dont la largeur est au moins celle de la barre de la timeline.)
+    assert!(cases[5].right() <= crate::layerheads::largeur_colonne_timeline() + 16.0, "{cases:?}");
     let (_, notes) = trouver(&textes, "Notes").expect("l'onglet Notes");
     assert!(notes.left() > cases[5].right(), "les onglets du bas à sa droite");
     // Ni monter ni descendre dans la barre.
@@ -212,7 +216,9 @@ fn the_plus_menu_offers_every_kind_of_layer_with_a_sentence() {
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == ph::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).unwrap().clone();
+    // (Partie 179 : le « + » de la rangée « Calques », à gauche du Nouveau dossier.)
+    let (_, dossier) = trouver(&textes, ph::FOLDER_PLUS).expect("Nouveau dossier").clone();
+    let (_, plus) = textes.iter().filter(|(t, r)| t.trim() == ph::PLUS && (r.center().y - dossier.center().y).abs() < 2.0).min_by(|a, b| a.1.left().total_cmp(&b.1.left())).unwrap().clone();
     let textes = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
     for s in crate::calquemenu::Sorte::TOUTES {
         assert!(contient(&textes, s.nom()), "« {} » est dans le menu : {textes:?}", s.nom());
@@ -330,7 +336,8 @@ fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer()
         a.timeline_heads(ui, 24.0, 0.0);
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 1, "un seul mode de fusion : {textes:?}");
+    // (Partie 179.13 : chaque calque a son mode et son opacité sur sa ligne.)
+    assert_eq!(textes.iter().filter(|(t, _)| t.contains("Normal")).count(), 3, "un mode de fusion par calque : {textes:?}");
     // (La barre d'opacité écrit sa valeur deux fois au même endroit : sur sa partie pleine et sur le reste.)
     let mut places: Vec<Rect> = Vec::new();
     for (_, r) in textes.iter().filter(|(t, _)| t.contains("100 %")) {
@@ -338,7 +345,7 @@ fn the_timeline_column_shows_blend_mode_and_opacity_once_for_the_current_layer()
             places.push(*r);
         }
     }
-    assert_eq!(places.len(), 1, "une seule opacité : {textes:?}");
+    assert_eq!(places.len(), 3, "une opacité par calque : {textes:?}");
 }
 
 // ============================================================================================= 2. Couleur

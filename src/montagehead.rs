@@ -52,27 +52,13 @@ pub(crate) fn largeur_min_colonne(barre: crate::barres::Barre) -> f32 {
     if barre != crate::barres::Barre::Montage {
         return HEAD_MIN;
     }
-    // Partie 173.5 (Anthony : « Plus petite et ajustable ») : la barre passe sur deux lignes quand la colonne est trop étroite pour
-    // une (`barre_sur_deux_lignes`) ; le minimum est la plus longue de ses deux lignes, et la place des options de la piste active.
+    // Partie 179 (Anthony : la seconde ligne de boutons barrée) : la barre est sur une seule ligne, ce qui n'y tient pas passe sous
+    // « Plus… » (`barres::barre_dans_la_colonne_serree`) ; le minimum est ce qui n'y passe jamais (la lecture, le temps, « Plus… », la
+    // légende), et la place des options de la piste active.
     let mesure = crate::barres::largeur_mesuree(barre);
     let barre = if mesure > 0.0 { mesure } else { LARGEUR_AVANT_MESURE };
     barre.max(crate::pistes::LARGEUR_PISTE_MIN).max(crate::pistes::LARGEUR_VIGNETTE + 8.0).max(HEAD_MIN)
 }
-
-/// Partie 173.5 : la colonne large de `w` est trop étroite pour la barre du montage sur une ligne : elle est sur deux lignes, et
-/// l'en-tête de la bande gagne la hauteur d'une ligne de boutons (`ENTETE_DEUX_LIGNES`).
-pub(crate) fn barre_sur_deux_lignes(w: f32) -> bool {
-    let une = crate::barres::largeur_une_ligne(crate::barres::Barre::Montage);
-    let une = if une > 0.0 { une } else { LARGEUR_UNE_LIGNE_AVANT_MESURE };
-    w + 0.5 < une
-}
-
-/// Partie 173.5 : la hauteur que l'en-tête de la bande gagne quand la barre du montage est sur deux lignes (une case de bouton, 26
-/// points, et son écart), sous la ligne des séquences.
-pub(crate) const ENTETE_DEUX_LIGNES: f32 = 28.0;
-
-/// Partie 173.5 : la barre du montage sur une ligne avant sa première mesure (celle d'avant : 474 points mesurés).
-const LARGEUR_UNE_LIGNE_AVANT_MESURE: f32 = 480.0;
 
 /// Icône d'un pré / post-comportement (partie 174 : « Aucun » est un rond barré, ∅ ; le montage ne le montre pas).
 pub(crate) fn behaviour_icon(b: Behaviour) -> &'static str {

@@ -39,8 +39,10 @@ use crate::document::{Layer, Panel};
 use crate::montagerows::{layer_in_row, row_of_layer, LAYER_H};
 use crate::theme;
 
-/// Hauteur d'une piste repliée : une bande de 15 points, le nom en 11.
-pub(crate) const FOLDED_H: f32 = 17.0;
+/// Hauteur d'une piste repliée : une bande, le nom en 11. Partie 179 (Anthony : « Réduis un peu l'épaisseur des calques ») : 15 dans
+/// le Storyboard (17 avant) ; l'espace Montage garde 17 (`FOLDED_H_MONTAGE`).
+pub(crate) const FOLDED_H: f32 = 15.0;
+pub(crate) const FOLDED_H_MONTAGE: f32 = 17.0;
 /// Hauteur de la ligne d'un dossier : jamais un calque, toujours plus petite qu'une piste.
 pub(crate) const DOSSIER_H: f32 = 13.0;
 /// Place de l'œil à gauche d'une piste.
@@ -53,8 +55,39 @@ pub(crate) const RETRAIT: f32 = 6.0;
 const VERROU_W: f32 = 13.0;
 /// Partie 178 : la place de l'opacité d'un calque à moins de 100 % (« 50 % »), à droite du nom, dans le Storyboard.
 const OPACITE_W: f32 = 30.0;
-/// Une rangée de la piste du calque actif (partie 173.5 : trois rangées, `LAYER_H` = 3 × 22 ; deux depuis la partie 160).
-pub(crate) const RANGEE_ACTIVE: f32 = 22.0;
+/// Une rangée de la piste du calque actif du Storyboard : partie 179, deux rangées de 20 (`LAYER_H` = 2 × 20 ; trois de 22 en partie
+/// 173.5, deux de 22 depuis la partie 160).
+pub(crate) const RANGEE_ACTIVE: f32 = 20.0;
+/// Une rangée de la piste du calque actif dans l'espace Montage (trois rangées, `LAYER_H_MONTAGE` = 3 × 22), inchangée.
+pub(crate) const RANGEE_MONTAGE: f32 = 22.0;
+/// Partie 179 : la place que garde au moins le nom sur la première rangée de la piste active du Storyboard ; les indicateurs qui
+/// ne tiennent pas avec lui passent sur la seconde rangée, après la vignette.
+const NOM_MIN: f32 = 44.0;
+/// Partie 179 : le ⋮ du menu du calque, au bout de la seconde rangée.
+const MENU_W: f32 = 15.0;
+
+/// Partie 179 : les hauteurs des pistes : celles du Storyboard (`LAYER_H`, `FOLDED_H`) ou celles de l'espace Montage, inchangées.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Hauteurs {
+    /// La piste dépliée (le calque actif, et les calques proches quand la bande a de la place).
+    pub grande: f32,
+    /// La bande d'un calque replié.
+    pub fine: f32,
+}
+
+impl Hauteurs {
+    pub(crate) const STORYBOARD: Hauteurs = Hauteurs { grande: LAYER_H, fine: FOLDED_H };
+    pub(crate) const MONTAGE: Hauteurs = Hauteurs { grande: crate::montagerows::LAYER_H_MONTAGE, fine: FOLDED_H_MONTAGE };
+
+    /// Celles de la timeline du Storyboard (`storyboard` vrai) ou de l'espace Montage.
+    pub(crate) fn de(storyboard: bool) -> Hauteurs {
+        if storyboard {
+            Hauteurs::STORYBOARD
+        } else {
+            Hauteurs::MONTAGE
+        }
+    }
+}
 /// La colonne doit avoir au moins cette largeur pour que la piste du calque actif montre aussi la vignette de son dessin (à la
 /// largeur d'origine, 104 points, les réglages prennent toute la rangée du bas).
 pub(crate) const LARGEUR_VIGNETTE: f32 = 150.0;
@@ -75,6 +108,14 @@ pub(crate) const LARGEUR_PISTE_MIN: f32 = 250.0;
 const VIGNETTE_W: f32 = 29.0;
 const MAILLON_W: f32 = 28.0;
 const PAS_MAX: f32 = 30.0;
+
+/// Partie 179 : les indicateurs de la piste active du Storyboard (avant les colonnes de réglages, ou sur la seconde rangée).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Indicateur {
+    Effets,
+    // (Partie 179.15 : le groupe, le sens du pochoir et la position verrouillée ne sont plus sur la ligne : au clic droit.)
+    Maillon,
+}
 
 /// Ce qu'une ligne des pistes est.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -256,7 +297,14 @@ pub(crate) fn sorte_de_rangee(layers: &[Layer], row: usize) -> Option<Sorte> {
 }
 
 /// Les lignes visibles de haut en bas, pour `count` rangées au plus : toute la pile (les pistes d'un dossier fermé en moins).
+/// (Aux hauteurs du Storyboard, pour les essais ; `lanes_in_h` choisit celles de l'espace.)
+#[cfg(test)]
 pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen, replis: &Replis) -> Vec<Lane> {
+    lanes_in_h(panels, cur, cur_layer, count, auto, replis, Hauteurs::STORYBOARD)
+}
+
+/// `lanes_in` aux hauteurs `h` (partie 179 : celles du Storyboard ou de l'espace Montage).
+pub(crate) fn lanes_in_h(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen, replis: &Replis, h: Hauteurs) -> Vec<Lane> {
     let vide: &[Layer] = &[];
     let layers = panels.get(cur).map_or(vide, |p| p.layers.as_slice());
     let mut top = 0.0;
@@ -269,7 +317,7 @@ pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: us
             Lane::dossier(row, top)
         } else {
             let folded = row_folded_in(panels, row, auto, replis);
-            Lane::calque(row, top, if folded { FOLDED_H } else { LAYER_H }, folded)
+            Lane::calque(row, top, if folded { h.fine } else { h.grande }, folded)
         };
         top += lane.h;
         out.push(lane);
@@ -282,7 +330,13 @@ pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: us
 /// (Anthony, 2026-11-11 : « quand il y a plus de place pour afficher les calques, les calques les plus proches du calque sélectionné
 /// prennent aussi la taille la plus grande », « il faut que ce soit toujours le plus confortable possible »). `place` : la hauteur
 /// offerte aux pistes de calques. Les lignes de dossier gardent leur hauteur. Sans calque actif déplié (replié à la main), rien ne grandit. Les hauts sont recalculés.
+#[cfg(test)]
 pub(crate) fn agrandir(lanes: &mut [Lane], place: f32) {
+    agrandir_h(lanes, place, LAYER_H)
+}
+
+/// `agrandir`, la grande hauteur étant `grande` (partie 179 : celle du Storyboard ou de l'espace Montage).
+pub(crate) fn agrandir_h(lanes: &mut [Lane], place: f32, grande: f32) {
     let calques: Vec<usize> = (0..lanes.len()).filter(|&i| lanes[i].sorte == Sorte::Calque).collect();
     let Some(centre) = calques.iter().position(|&i| !lanes[i].folded) else { return };
     let mut reste = place - lanes.iter().map(|l| l.h).sum::<f32>();
@@ -294,12 +348,12 @@ pub(crate) fn agrandir(lanes: &mut [Lane], place: f32) {
         if !l.folded {
             continue;
         }
-        let gain = LAYER_H - l.h;
+        let gain = grande - l.h;
         if gain > reste {
             break;
         }
         reste -= gain;
-        l.h = LAYER_H;
+        l.h = grande;
         l.folded = false;
     }
     let mut top = 0.0;
@@ -382,11 +436,42 @@ impl App {
         self.pistes.active_fermee = false;
     }
 
-    /// Le calque actif, si le réglage « Déplier le calque courant » est allumé.
+    /// Le calque actif, si le réglage « Déplier le calque courant » est allumé (espace Montage ; dans le Storyboard, partie 179.13,
+    /// tous les calques ont la même hauteur : `montage_rows_en`).
     pub(crate) fn pistes_auto_open(&self) -> AutoOpen {
         self.settings.montage_auto_open.then_some(self.pistes.auto_open).flatten()
     }
 
+    /// Partie 179.13 : « Replier les calques » (Storyboard et Animation) allumé ou éteint, tout de suite, gardé dans les réglages du
+    /// poste. Éteint (d'origine) : tous les calques sur deux rangées ; allumé : tous sur une ligne fine.
+    pub(crate) fn regler_replier_calques(&mut self, oui: bool) {
+        self.settings.replier_calques = oui;
+        self.settings.calques_replies = false;
+        if let Err(e) = self.settings.save() {
+            self.status = format!("Réglages non enregistrés : {e}");
+            return;
+        }
+        self.status = if oui {
+            "Calques repliés : tous sur une ligne fine (mode et opacité : clic droit > Apparence).".into()
+        } else {
+            "Calques dépliés : chacun sur deux rangées, sa vignette, son mode et son opacité.".into()
+        };
+    }
+
+    /// Partie 179.13 : la case « Replier les calques » (le ⋯ de la ligne « Calques », les Préférences).
+    pub(crate) fn replier_calques_case(&mut self, ui: &mut Ui) {
+        let mut oui = self.settings.replier_calques;
+        let resp = ui.checkbox(&mut oui, "Replier les calques");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Replier les calques",
+            "Allumé : tous les calques sur une ligne fine (le nom, les réglages). Éteint (d'origine) : chacun sur deux rangées, avec sa vignette, son mode et son opacité. Le calque actif est seulement surligné.",
+            "",
+        );
+        if resp.clicked() {
+            self.regler_replier_calques(oui);
+        }
+    }
     /// La rangée du calque `li` du plan courant (celle de son trait pour un calque de couleur lié).
     pub(crate) fn track_row_of(&self, li: usize) -> usize {
         row_of_layer(self.layers(), li).unwrap_or(0)
@@ -513,15 +598,37 @@ impl App {
     /// la pastille de la sorte du calque, le nom (ou son champ quand on le renomme ; sous le nom de son dossier dans une piste dépliée) et
     /// le cadenas d'un calque verrouillé. Le fond de la rangée (clics, glissés, menu) est déjà posé ; l'opacité, la fusion sont au clic
     /// droit.
-    pub(crate) fn montage_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32, folded: bool) {
+    /// Partie 179.10 : `colonnes` : la piste repliée du calque actif du Storyboard (« Déplier le calque actif » éteint) : ses
+    /// réglages (verrou, pelure, transparence, pochoir, aplat, caméra) en icônes collées à droite, pâles quand ils sont éteints, comme
+    /// sur la piste dépliée ; le nom s'arrête avant elles (le cadenas est celui de la colonne).
+    pub(crate) fn montage_head(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32, folded: bool, colonnes: bool) {
         let layers = self.layers();
         let Some(l) = layers.get(li) else { return };
-        let (id, name, visible, dot) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l));
+        let (id, name, visible, dot, negatif) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.stencil_negative);
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
         let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
-        let verrou = l.locked || crate::folders::locked_by_folder(layers, li);
+        let verrou = (l.locked || crate::folders::locked_by_folder(layers, li)) && !colonnes;
         // Partie 178 : dans la timeline du Storyboard, l'opacité d'un calque qui n'est pas à 100 %, en petit avant son cadenas.
         let opacite = (self.timeline_du_storyboard() && !l.folder && l.opacity < 0.995).then(|| format!("{:.0} %", l.opacity.clamp(0.0, 1.0) * 100.0));
+        let droite = r.right();
+        let r = if colonnes { Rect::from_min_max(r.min, pos2((crate::layerheads::debut_des_colonnes(droite) - 2.0).max(r.left() + 40.0), r.bottom())) } else { r };
+        if colonnes {
+            use crate::layerheads::{case_de_colonne, Colonne};
+            let fg = ui.visuals().text_color();
+            let y = r.center().y - 8.5;
+            for (k, col) in Colonne::TOUTES.into_iter().enumerate().skip(1) {
+                let Some(on) = self.layers().get(li).and_then(|l| col.etat(l)) else { continue };
+                let icone = if col == Colonne::Pochoir && negatif { ph::EXCLUDE } else { col.icone() };
+                let resp = crate::layerheads::case_de_reglage_en(ui, case_de_colonne(droite, k, y), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg, true);
+                let resp = self.aide(resp, col.nom(), col.description(), col.action());
+                if resp.clicked() {
+                    self.agir_colonne(col, li);
+                }
+                if col == Colonne::Pelure && resp.secondary_clicked() {
+                    self.onion_window = true;
+                }
+            }
+        }
         let mut at = head_layout_en(r, folded, if filet.is_some() { RETRAIT } else { 0.0 });
         if verrou {
             at.name.max.x = (at.name.max.x - VERROU_W).max(at.name.min.x + 1.0);
@@ -538,14 +645,18 @@ impl App {
         if let Some(c) = filet {
             ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 2.0, r.top() + 1.0), pos2(r.left() + 5.0, r.bottom() - 1.0)), 1.0, c);
         }
-        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, if folded { 11.0 } else { 13.0 }, if visible { fg } else { off });
+        // (Partie 179.5 : dans le Storyboard, l'œil a la taille de toutes les icônes de la timeline, `tailleicones.rs` ; le Montage garde
+        // le sien.)
+        let taille_oeil = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else if folded { 11.0 } else { 13.0 };
+        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, taille_oeil, if visible { fg } else { off });
         if crate::bulles::bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait). Verrou, opacité, fusion : clic droit sur la piste.", "").clicked() {
             self.toggle_layer_visible(li);
         }
         ui.painter().circle_filled(at.dot, at.dot_r, if visible { dot } else { dot.gamma_multiply(0.4) });
         if verrou {
             let ou = pos2(r.right() - VERROU_W * 0.5 - 1.0, r.center().y);
-            ui.painter().text(ou, Align2::CENTER_CENTER, ph::LOCK_SIMPLE, FontId::proportional(if folded { 10.0 } else { 11.5 }), fg.gamma_multiply(0.75));
+            let taille = if self.timeline_du_storyboard() { crate::tailleicones::icone() } else if folded { 10.0 } else { 11.5 };
+            ui.painter().text(ou, Align2::CENTER_CENTER, ph::LOCK_SIMPLE, FontId::proportional(taille), fg.gamma_multiply(0.75));
         }
         if let Some(t) = &opacite {
             ui.painter().text(pos2(opacite_x - 1.0, r.center().y), Align2::RIGHT_CENTER, t, FontId::proportional(if folded { 9.0 } else { 10.0 }), fg.gamma_multiply(0.7));
@@ -590,8 +701,8 @@ impl App {
         let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
         let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
         let retrait = if filet.is_some() { RETRAIT } else { 0.0 };
-        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + RANGEE_ACTIVE));
-        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - RANGEE_ACTIVE), r.max);
+        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + RANGEE_MONTAGE));
+        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - RANGEE_MONTAGE), r.max);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("tete_piste_active", id)));
         // (Rien ne sort de la piste, même dans la colonne étroite.)
         child.set_clip_rect(r.intersect(ui.clip_rect()));
@@ -662,11 +773,11 @@ impl App {
         let combien = [self.fx_switch_shown(li), accrochable, crate::fondui::takes_fond(&self.layers()[li]), true, true, true, true, groupe.is_some(), true].iter().filter(|b| **b).count() as f32;
         let place_des_icones = fin - x - if large { VIGNETTE_W } else { 0.0 } - if partage { MAILLON_W } else { 0.0 };
         let pas = (place_des_icones / combien).clamp(crate::layerheads::ICON_W, PAS_MAX);
-        let case = |x: f32| Rect::from_center_size(pos2(x + pas * 0.5, y), vec2(crate::layerheads::ICON_W.min(pas - 2.0), RANGEE_ACTIVE - 4.0));
+        let case = |x: f32| Rect::from_center_size(pos2(x + pas * 0.5, y), vec2(crate::layerheads::ICON_W.min(pas - 2.0), RANGEE_MONTAGE - 4.0));
         let tient = |x: f32, w: f32| x + w <= fin + 0.5;
         // La vignette (ou la couleur unie) : seulement si la colonne est assez large pour tout le reste.
         if large {
-            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, RANGEE_ACTIVE - 6.0));
+            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, RANGEE_MONTAGE - 6.0));
             if unie {
                 let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
                 c.spacing_mut().interact_size = v.size();
@@ -796,6 +907,204 @@ impl App {
         }
     }
 
+    /// Partie 179 (Anthony, au feutre sur la timeline du Storyboard : la rangée d'icônes sous le nom entourée, une flèche vers la place
+    /// vide après le nom ; « Justifie toutes les icônes à droite » ; « Réduis un peu l'épaisseur des calques ») : la piste du calque
+    /// actif `li` du Storyboard, dans `r`, sur deux rangées de 20 points (trois de 22 avant).
+    /// 1. En haut : le filet du dossier, l'œil, la pastille de la sorte, le nom (après celui de son dossier) ; puis, collés à droite,
+    ///    les indicateurs (effets, groupe, sens du pochoir, position verrouillée, maillon de la planche-mère) et les colonnes de
+    ///    réglages qui suivent l'œil (verrou, pelure, transparence, pochoir, aplat, caméra), chacune sous son icône de la ligne
+    ///    « Calques » (`layerheads::case_de_colonne`, le même bord droit). L'œil reste à gauche, comme sur toutes les pistes.
+    /// 2. En bas : la vignette, les indicateurs qui n'ont pas tenu en haut (colonne étroite), « ‹ Normal ▾ › », la barre d'opacité et
+    ///    son losange, puis le ⋮ du menu du calque, au bout.
+    pub(crate) fn piste_active_head_sb(&mut self, ui: &mut Ui, r: Rect, li: usize, name_color: Color32) {
+        let layers = self.layers();
+        let Some(l) = layers.get(li) else { return };
+        let (id, name, visible, dot, blend, cel, unie) = (l.id, l.name.clone(), l.visible, theme::couleur_du_calque(l), l.blend, l.cel_at(self.cur_frame), l.unie.is_some());
+        let negative = l.stencil_negative;
+        let opacity = l.opacity_at(self.cur_frame);
+        let filet = crate::folders::couleur_du_rangement(layers, li, &self.doc.groups);
+        let dossier = crate::folders::parent_index(layers, li).map(|fi| layers[fi].name.clone());
+        let retrait = if filet.is_some() { RETRAIT } else { 0.0 };
+        // (Partie 179.13 : deux rangées égales de la hauteur réglée de la ligne Calques, `hauteurstimeline.rs` ; 20 d'origine.)
+        let rangee = (r.height() * 0.5).max(RANGEE_ACTIVE * 0.5);
+        let haut = Rect::from_min_max(r.min, pos2(r.right(), r.top() + rangee));
+        let bas = Rect::from_min_max(pos2(r.left(), r.bottom() - rangee), r.max);
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("tete_piste_active", id)));
+        // (Rien ne sort de la piste, même dans la colonne étroite.)
+        child.set_clip_rect(r.intersect(ui.clip_rect()));
+        let ui = &mut child;
+        let large = r.width() >= LARGEUR_VIGNETTE;
+        let fg = ui.visuals().text_color();
+        let off = fg.gamma_multiply(0.35);
+        if let Some(c) = filet {
+            ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 2.0, r.top() + 1.0), pos2(r.left() + 5.0, r.bottom() - 1.0)), 1.0, c);
+        }
+        // ---- En haut, à gauche : l'œil, la pastille.
+        let at = head_layout_en(haut, false, retrait);
+        let resp = mini_icon(ui, at.eye, egui::Id::new(("oeil_piste", id)), if visible { ph::EYE } else { ph::EYE_SLASH }, crate::tailleicones::icone(), if visible { fg } else { off });
+        if crate::bulles::bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait).", "").clicked() {
+            self.toggle_layer_visible(li);
+        }
+        // (Colonne étroite : la couleur d'un calque Couleur unie prend la place de la pastille de sa sorte.)
+        if unie && !large {
+            let v = Rect::from_center_size(at.dot, vec2(DOT_W, 12.0));
+            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
+            c.spacing_mut().interact_size = v.size();
+            self.couleur_unie_champ(&mut c, li);
+        } else {
+            ui.painter().circle_filled(at.dot, at.dot_r, if visible { dot } else { dot.gamma_multiply(0.4) });
+        }
+        let sorte = crate::calquemenu::Sorte::of(&self.layers()[li]);
+        let resp = ui.interact(Rect::from_center_size(at.dot, vec2(DOT_W, haut.height())), egui::Id::new(("sorte_piste", id)), Sense::hover());
+        crate::bulles::bulle(resp, &format!("{}  {}", sorte.icone_ligne(), sorte.nom()), sorte.phrase(), "");
+        // ---- En haut, à droite : les colonnes de réglages, sous les icônes de la ligne « Calques » (même bord droit), sauf l'œil.
+        use crate::layerheads::{case_de_colonne, Colonne};
+        let droite = r.right();
+        let y_cases = haut.top() + (haut.height() - 17.0) * 0.5;
+        // (Les indicateurs s'arrêtent avant la case de l'œil, laissée vide sous l'œil de la ligne « Calques » : aucune icône n'est
+        // sous une colonne qui n'est pas la sienne.)
+        let debut_cols = case_de_colonne(droite, 0, 0.0).left();
+        for (k, col) in Colonne::TOUTES.into_iter().enumerate().skip(1) {
+            let Some(on) = self.layers().get(li).and_then(|l| col.etat(l)) else { continue };
+            let icone = if col == Colonne::Pochoir && negative { ph::EXCLUDE } else { col.icone() };
+            // (Partie 179.5 : éteint, l'icône pâle, plus le petit point : l'en-tête des colonnes a quitté la ligne « Calques ».)
+            let resp = crate::layerheads::case_de_reglage_en(ui, case_de_colonne(droite, k, y_cases), egui::Id::new(("colonne_piste", id, col as u8)), icone, on, fg, true);
+            let resp = self.aide(resp, col.nom(), col.description(), col.action());
+            if resp.clicked() {
+                self.agir_colonne(col, li);
+            }
+            if col == Colonne::Pelure && resp.secondary_clicked() {
+                self.onion_window = true;
+            }
+        }
+        // Les indicateurs, juste avant les colonnes ; ceux qui laisseraient moins de `NOM_MIN` au nom descendent sur la seconde rangée.
+        // (Partie 179.15, Anthony : « Non supprime les carrément. Ça sera accessible en clic droit ça suffit » : plus de groupe, de
+        // sens du pochoir ni de position verrouillée sur la ligne ; ils sont au clic droit, Apparence.)
+        let partage = self.doc.plans_du_partage(self.cur_panel, li).iter().any(|&i| i != self.cur_panel);
+        let indicateurs: Vec<Indicateur> = [(self.fx_switch_shown(li), Indicateur::Effets), (partage, Indicateur::Maillon)]
+        .into_iter()
+        .filter_map(|(oui, i)| oui.then_some(i))
+        .collect();
+        let largeur = |i: &Indicateur| if *i == Indicateur::Maillon { MAILLON_W } else { crate::layerheads::icon_w() };
+        let place = debut_cols - 2.0 - at.name.min.x - NOM_MIN;
+        let mut en_haut = indicateurs.len();
+        while en_haut > 0 && indicateurs[..en_haut].iter().map(largeur).sum::<f32>() > place {
+            en_haut -= 1;
+        }
+        let mut x = debut_cols - 2.0 - indicateurs[..en_haut].iter().map(largeur).sum::<f32>();
+        let fin_du_nom = x - 2.0;
+        for i in &indicateurs[..en_haut] {
+            self.indicateur_de_piste(ui, *i, Rect::from_min_size(pos2(x, y_cases), vec2(largeur(i), 17.0)), li, fg, off);
+            x += largeur(i);
+        }
+        // ---- Le nom (et celui de son dossier), jusqu'aux indicateurs.
+        let nom = Rect::from_min_max(at.name.min, pos2(fin_du_nom.max(at.name.min.x + 1.0), haut.bottom()));
+        let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == id && n.in_montage);
+        if renaming {
+            let mut field = ui.new_child(egui::UiBuilder::new().max_rect(nom.expand2(vec2(0.0, 2.0))).id_salt(("nom_calque_montage", id)));
+            let done = self.layer_rename_field(&mut field, nom.width());
+            self.finish_layer_rename(done);
+        } else {
+            let ink = if visible { name_color } else { name_color.gamma_multiply(0.5) };
+            let clip = ui.painter().with_clip_rect(nom.expand2(vec2(0.0, 1.0)));
+            let mut x = nom.left();
+            if let Some(d) = dossier {
+                let g = clip.text(pos2(x, nom.center().y), Align2::LEFT_CENTER, format!("{d} ›"), FontId::proportional(9.5), filet.unwrap_or(off));
+                x = g.right() + 3.0;
+            }
+            clip.text(pos2(x, nom.center().y), Align2::LEFT_CENTER, &name, FontId::proportional(12.0), ink);
+        }
+        // ---- En bas : la vignette, les indicateurs descendus, le mode, l'opacité, son losange, le ⋮.
+        let y = bas.center().y;
+        let mut x = bas.left() + 2.0 + retrait;
+        if large {
+            let v = Rect::from_center_size(pos2(x + 13.0, y), vec2(26.0, rangee - 5.0));
+            if unie {
+                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(v).id_salt(("unie_piste", id)));
+                c.spacing_mut().interact_size = v.size();
+                self.couleur_unie_champ(&mut c, li);
+            } else {
+                match cel.and_then(|c| self.layer_thumb(ui.ctx(), c)) {
+                    Some(t) => {
+                        ui.painter().image(t.id(), v, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), if visible { Color32::WHITE } else { Color32::from_gray(120) });
+                    }
+                    None => {
+                        ui.painter().rect_filled(v, 0.0, theme::controle());
+                    }
+                }
+                ui.painter().rect_stroke(v, 0.0, Stroke::new(1.0_f32, theme::bord()), egui::StrokeKind::Inside);
+            }
+            x += VIGNETTE_W;
+        }
+        for i in &indicateurs[en_haut..] {
+            self.indicateur_de_piste(ui, *i, Rect::from_min_size(pos2(x, y - 8.5), vec2(largeur(i), 17.0)), li, fg, off);
+            x += largeur(i);
+        }
+        let menu = Rect::from_min_size(pos2(bas.right() - MENU_W, y - 8.0), vec2(MENU_W - 1.0, 16.0));
+        // (Partie 179.13 : chaque calque a son losange, `losange_opacite_de`.)
+        let losange = 16.0;
+        let fin = menu.left() - 1.0;
+        let reste = (fin - x - losange - 2.0).max(0.0);
+        let fleches = reste >= LISTE_MAX + 2.0 * FLECHE + BARRE_AVEC_FLECHES;
+        let pour_la_liste = reste - if fleches { 2.0 * FLECHE } else { 0.0 };
+        let largeur_liste = (pour_la_liste - BARRE_MIN).clamp(LISTE_MIN, LISTE_MAX).min(pour_la_liste);
+        let modes = crate::blend::BlendMode::ALL;
+        let rang = modes.iter().position(|m| *m == blend).unwrap_or(0);
+        let mut mode = blend;
+        if fleches {
+            let prev = Rect::from_min_size(pos2(x, y - 8.5), vec2(FLECHE, 17.0));
+            if crate::bulles::bulle(crate::layerheads::icon_at(ui, prev, ph::CARET_LEFT, fg), "Mode précédent", "", "").clicked() {
+                mode = modes[(rang + modes.len() - 1) % modes.len()];
+            }
+            x += FLECHE;
+        }
+        let liste = Rect::from_min_max(pos2(x, y - 8.5), pos2(x + largeur_liste, y + 8.5));
+        if let Some(m) = crate::layerheads::liste_des_modes(ui, liste, egui::Id::new(("fusion_piste", id)), blend) {
+            mode = m;
+        }
+        x += largeur_liste;
+        if fleches {
+            let next = Rect::from_min_size(pos2(x, y - 8.5), vec2(FLECHE, 17.0));
+            if crate::bulles::bulle(crate::layerheads::icon_at(ui, next, ph::CARET_RIGHT, fg), "Mode suivant", "", "").clicked() {
+                mode = modes[(rang + 1) % modes.len()];
+            }
+            x += FLECHE;
+        }
+        if mode != blend {
+            // (Plusieurs calques choisis : tous prennent ce mode, une étape d'annulation, partie 136.)
+            self.regler_mode_calques(li, mode);
+        }
+        let barre = Rect::from_min_max(pos2(x + 2.0, y - 6.5), pos2((fin - losange).max(x + 8.0), y + 6.5));
+        let painter = ui.painter().clone();
+        self.opacity_bar(ui, &painter, barre, r, li, egui::Id::new(("opacite_piste", id)), opacity, true, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+        self.losange_opacite_de(ui, Rect::from_min_size(pos2(barre.right() + 1.0, y - 8.5), vec2(14.0, 17.0)), li, fg, off);
+        let mut m = ui.new_child(egui::UiBuilder::new().max_rect(menu).id_salt(("options_piste", id)));
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false);
+        let resp = egui::menu::menu_custom_button(&mut m, button, |ui| self.montage_layer_menu(ui, li)).response;
+        crate::bulles::bulle(resp, "Commandes du calque", "Renommer, dupliquer, organiser, apparence, effets, aplat… (aussi : clic droit sur la piste).", "");
+    }
+
+    /// Partie 179 : un indicateur de la piste active du Storyboard, dans `case` : les effets (fx), le groupe (son menu de couleurs), le
+    /// sens du pochoir (+ / −), la position verrouillée (la punaise), le maillon de la planche-mère. Les mêmes bulles et les mêmes
+    /// gestes qu'avant.
+    fn indicateur_de_piste(&mut self, ui: &mut Ui, quoi: Indicateur, case: Rect, li: usize, fg: Color32, _off: Color32) {
+        let Some(id) = self.layers().get(li).map(|l| l.id) else { return };
+        match quoi {
+            Indicateur::Effets => {
+                if let Some(resp) = self.fx_switch(ui, li, Some(case), fg) {
+                    if resp.clicked() {
+                        self.toggle_layer_fx(li);
+                    }
+                }
+            }
+            Indicateur::Maillon => {
+                let place = case.shrink2(vec2(1.0, 0.0));
+                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(place).id_salt(("maillon_piste", id)).layout(egui::Layout::left_to_right(egui::Align::Center)));
+                c.set_clip_rect(place.intersect(ui.clip_rect()));
+                self.maillon_partage(&mut c, li);
+            }
+        }
+    }
     /// La ligne fine du dossier `li`, dans `r` : son triangle (couché : fermé ; droit : ouvert ; de biais : fermé, ouvert le temps du
     /// passage), le carré de sa couleur, son nom, son cadenas et le nombre de ses calques. `survol` : la souris est dessus.
     pub(crate) fn dossier_head(&self, ui: &mut Ui, r: Rect, li: usize, survol: bool) {
@@ -902,6 +1211,8 @@ impl App {
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
         }
+        // Partie 179.10 : le calque actif des timelines du Storyboard et de l'Animation.
+        self.replier_calques_case(ui);
         // Les calques proches du calque actif prennent la grande hauteur quand la bande a de la place (`agrandir`).
         let mut grands = self.settings.montage_grands;
         let resp = ui

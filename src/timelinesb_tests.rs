@@ -29,7 +29,7 @@ const DT: f64 = 1.0 / 60.0;
 const PPF: f32 = 8.0;
 
 /// Trois plans de 24 images : trois calques dessinés, deux, un.
-fn film() -> Document {
+pub(crate) fn film() -> Document {
     let mut doc = doc_with(&[&["Décor", "Perso", "Ombre"], &["Seul", "Fond"], &["Trois"]]);
     for pi in 0..doc.panels.len() {
         for li in 0..doc.panels[pi].layers.len() {
@@ -46,7 +46,7 @@ fn effet(preset: Preset, start: usize, duration: usize) -> Vivant {
 }
 
 /// Un banc dans l'espace Storyboard, à la taille `w` × `h`, les formes gardées.
-fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
+pub(crate) fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
     let mut b = banc_taille(doc, false, w, h);
     b.app.set_espace(Espace::Storyboard);
     b.app.settings.storyboard_camera_depliee = camera_depliee;
@@ -58,16 +58,16 @@ fn banc_sb(doc: Document, w: u32, h: u32, camera_depliee: bool) -> Banc {
     b
 }
 
-fn blocs() -> Vec<Rect> {
+pub(crate) fn blocs() -> Vec<Rect> {
     crate::storyboard::BLOCS_DU_MONTAGE.with(|b| b.borrow().clone())
 }
 
-fn rangees(b: &Banc) -> Rows {
+pub(crate) fn rangees(b: &Banc) -> Rows {
     b.app.montage_rows(300.0)
 }
 
 /// Le haut de la bande à l'écran (le bloc d'un plan commence 2 points sous le haut de la rangée des plans).
-fn haut(b: &Banc) -> f32 {
+pub(crate) fn haut(b: &Banc) -> f32 {
     blocs()[0].top() - 2.0 - rangees(b).blocks_top()
 }
 
@@ -77,13 +77,13 @@ fn x_image(pi: usize, f: usize) -> f32 {
 }
 
 /// Le seul élément à l'écran dont la bulle est `nom`, dans la bande horizontale `y0..y1` de l'écran.
-fn ou_dans(nom: &str, y0: f32, y1: f32) -> Rect {
+pub(crate) fn ou_dans(nom: &str, y0: f32, y1: f32) -> Rect {
     let v: Vec<Rect> = vus::ou(nom).into_iter().filter(|r| r.center().y > y0 && r.center().y < y1).collect();
     assert_eq!(v.len(), 1, "« {nom} » : un seul entre {y0} et {y1} : {:?} ({:?})", vus::ou(nom), vus::noms());
     v[0]
 }
 
-fn colonne() -> Rect {
+pub(crate) fn colonne() -> Rect {
     let v = vus::ou("Largeur de la colonne");
     assert_eq!(v.len(), 1, "la poignée de la colonne");
     v[0]
@@ -170,18 +170,20 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
     let rows = rangees(&b);
     let sb = rows.sb.expect("la disposition du Storyboard");
     assert_eq!(rows.bands_h(), SB_SEQ_H, "la ligne des séquences, la plus fine");
-    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (16.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
+    // (Partie 179.11 : la ligne des séquences a son en-tête et ses icônes : 20, 16 avant.)
+    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (20.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
     assert_eq!(rows.block_h, SB_PLAN_H, "la rangée des plans");
     assert_eq!(rows.cam_h(), SB_CAM_H, "la ligne de la caméra");
     assert_eq!(sb.prereglages_h, 0.0, "repliée d'office : pas de rangée des préréglages");
     // De haut en bas : la règle, les séquences, les plans, la caméra, la ligne « Calques », les calques.
-    assert!(RULER_H + rows.bands_h() <= rows.blocks_top() + 0.01);
+    assert!(rows.regle_h() + rows.bands_h() <= rows.blocks_top() + 0.01 && rows.regle_h() >= RULER_H);
     assert!(rows.blocks_top() + rows.block_h <= rows.camera_top() + 0.01, "la caméra sous les plans");
     assert!(rows.camera_top() + rows.cam_h() <= rows.calques_top() + 0.01);
     assert!(rows.calques_top() + SB_CALQUES_H <= rows.layers_top() + 0.01);
     // Plus contenue qu'avant (la caméra de 16 au-dessus de plans de 56 : les calques commençaient à 111 points).
-    // (`entete` : la seconde ligne de boutons de la colonne, quand la barre du montage y est sur deux lignes, partie 173.5.)
-    assert!(rows.layers_top() - rows.entete <= 103.5, "le haut des calques : {} (en-tête {})", rows.layers_top(), rows.entete);
+    // (Partie 179 : plus de seconde ligne de boutons, plus de bande sous la règle.)
+    // (Partie 179.11 : la ligne « Séquence » et la barre de lecture en face de la règle : 8 points de plus, 111.)
+    assert!(rows.layers_top() <= 111.5, "le haut des calques : {}", rows.layers_top());
     // À l'écran : les plans, leurs en-têtes et celui de la caméra sur ces rangées.
     let h = haut(&b);
     assert!(blocs().iter().all(|r| (r.height() - (SB_PLAN_H - 2.0)).abs() < 0.6), "des plans de 24 points : {:?}", blocs());
@@ -515,15 +517,20 @@ fn les_calques_se_replient_en_une_ligne_de_resume_et_se_deplient() {
     doc.panels[0].layers[1].opacity = 0.5;
     let mut b = banc_sb(doc, 1920, 1080, false);
     assert!(!rangees(&b).lanes.is_empty());
-    assert_eq!(vus::ou("Mode de fusion").len(), 1, "la piste du calque actif, comme avant");
+    // (Partie 179.13 : la piste de chaque calque a son mode.)
+    assert_eq!(vus::ou("Mode de fusion").len(), b.app.layers().iter().filter(|l| !l.folder).count(), "la piste de chaque calque");
     // Un calque à 50 % : son opacité, en petit, sur sa ligne.
     assert!(texte(&b, "50 %").is_some(), "l'opacité d'un calque à moins de 100 %");
     let rows = rangees(&b);
     let h = haut(&b);
     let ligne = (h + rows.calques_top(), h + rows.calques_top() + SB_CALQUES_H);
-    // Dépliée : les icônes des sept colonnes de la partie 174 sur la ligne « Calques ».
+    // Dépliée : les commandes des calques sur la ligne « Calques ». (Partie 179.5 : les icônes des sept colonnes de la partie 174 ont
+    // quitté la ligne ; la piste du calque actif montre ses réglages en icônes.)
+    for nom in crate::barrecalques::NOMS {
+        assert!(vus::ou(nom).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {nom} » sur la ligne Calques");
+    }
     for col in crate::layerheads::Colonne::TOUTES {
-        assert!(vus::ou(col.nom()).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {} » sur la ligne Calques", col.nom());
+        assert!(!vus::ou(col.nom()).iter().any(|r| r.center().y > ligne.0 && r.center().y < ligne.1), "« {} » n'est plus sur la ligne Calques", col.nom());
     }
     let hauteur_avant = rows.height(0);
     clic(&mut b, ou_dans("Replier la rangée Calques", ligne.0, ligne.1).center(), Modifiers::NONE);
@@ -545,9 +552,10 @@ fn les_calques_se_replient_en_une_ligne_de_resume_et_se_deplient() {
     assert!(!rangees(&b).lanes.is_empty());
     // Dans l'Animation, il replie toujours la colonne de la timeline, sans toucher au Storyboard.
     b.app.set_mode(crate::app::Mode::Animation);
-    let avant = b.app.settings.calques_replies;
+    // (Partie 179.10 : c'est le réglage « Déplier le calque actif ».)
+    let avant = b.app.calques_tout_replies();
     b.app.run_action(crate::layerheads::ACTION_REPLIER);
-    assert_eq!((b.app.settings.calques_replies, b.app.settings.storyboard_calques_replies), (!avant, false));
+    assert_eq!((b.app.calques_tout_replies(), b.app.settings.storyboard_calques_replies), (!avant, false));
 }
 
 // ------------------------------------------------------------------------------------------------ 8. les coupes
@@ -591,7 +599,12 @@ fn a_la_plus_petite_fenetre_rien_ne_deborde_des_en_tetes() {
         icones_en_ordre(&ICONES_DES_PLANS, hh + rows.blocks_top(), hh + rows.blocks_top() + rows.block_h, &quoi);
         icones_en_ordre(&["Replier la caméra", "Clé de caméra ici", "Préréglages de caméra", "Remettre la caméra à zéro", "Autres commandes de la caméra"], hh + rows.camera_top(), hh + rows.camera_top() + SB_CAM_H, &quoi);
         let (a, z) = (hh + rows.calques_top(), hh + rows.calques_top() + SB_CALQUES_H);
-        let mut ligne: Vec<Rect> = std::iter::once(ou_dans("Replier la rangée Calques", a, z)).chain(crate::layerheads::Colonne::TOUTES.iter().map(|c| ou_dans(c.nom(), a, z))).collect();
+        // (Partie 179.5 : la ligne « Calques » porte ⊖ et les commandes des calques, plus les icônes des colonnes ; « + » et « ⋯ » y
+        // sont toujours, les autres selon la place.)
+        let mut ligne: Vec<Rect> = std::iter::once(ou_dans("Replier la rangée Calques", a, z))
+            .chain([crate::barrecalques::NOMS[0], crate::barrecalques::NOMS[5]].iter().map(|n| ou_dans(n, a, z)))
+            .chain(crate::barrecalques::NOMS[1..5].iter().flat_map(|n| vus::ou(n).into_iter().filter(|r| r.center().y > a && r.center().y < z)))
+            .collect();
         ligne.sort_by(|p, q| p.left().total_cmp(&q.left()));
         let col = colonne();
         for (k, r) in ligne.iter().enumerate() {

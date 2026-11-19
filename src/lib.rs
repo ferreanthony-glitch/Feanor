@@ -47,6 +47,21 @@ mod sans_marques_tests;
 mod echelle;
 #[cfg(test)]
 mod echelle_tests;
+// Partie 179.5 : une seule taille d'icônes pour la timeline et sa barre, réglable dans Préférences > Apparence.
+mod tailleicones;
+// Parties 179.13 et 179.14 : la hauteur et la couleur des lignes de la timeline du Storyboard.
+mod hauteurstimeline;
+#[cfg(test)]
+mod tailleicones_tests;
+// Parties 179.10 à 179.14 : tous les calques épais d'origine, « Replier les calques », la hauteur et la couleur des lignes.
+#[cfg(test)]
+mod calques_epais_tests;
+// Partie 179.15 : plus d'indicateurs de groupe, de sens du pochoir ni de position sur les lignes de calque ; au clic droit.
+#[cfg(test)]
+mod indicateurs_tests;
+// Partie 179.11 : la barre de lecture tout en haut, la ligne « Séquence ».
+#[cfg(test)]
+mod ligne_sequence_tests;
 mod reglagestylet;
 #[cfg(test)]
 mod reglagestylet_tests;
@@ -238,6 +253,8 @@ mod blocscamera_tests;
 mod timelinesb;
 #[cfg(test)]
 mod timelinesb_tests;
+#[cfg(test)]
+mod timeline_serree_tests;
 mod panneauprereglages;
 // Les plans types du montage (lot 4 des préréglages, partie 176) : cartons, titres, génériques, écran partagé, inserts.
 pub mod planstypes;

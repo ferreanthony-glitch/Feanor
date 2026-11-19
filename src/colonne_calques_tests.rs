@@ -75,14 +75,11 @@ fn cases(col: Colonne) -> Vec<Rect> {
     vus::ou(col.nom()).into_iter().filter(|r| r.center().y >= haut && r.center().y <= bas && r.width() <= 24.0).collect()
 }
 
-/// La case de l'en-tête de la colonne `col` (la plus haute).
-fn entete(col: Colonne) -> Rect {
-    let mut v = cases(col);
-    v.sort_by(|a, c| a.top().total_cmp(&c.top()));
-    let premiere = lignes().iter().map(|l| l.1).fold(f32::MAX, f32::min);
-    let r = *v.first().unwrap_or_else(|| panic!("« {} » : aucune case ({:?})", col.nom(), vus::noms()));
-    assert!(r.bottom() <= premiere + 0.5, "« {} » : la case la plus haute est dans l'en-tête, au-dessus des lignes : {r:?} / {premiere}", col.nom());
-    r
+/// La case de référence de la colonne `col` : celle du calque courant. (Partie 179.5, Anthony : les icônes des colonnes barrées sur la
+/// rangée « Calques » ; elles l'ont quittée, et c'est la ligne du calque courant, ses réglages éteints en icônes pâles, qui dit
+/// quelle colonne est laquelle. Avant : la case de la rangée d'en-tête, la plus haute.)
+fn entete(b: &Banc, col: Colonne) -> Rect {
+    case_du_calque(col, b.app.cur_layer).unwrap_or_else(|| panic!("« {} » : aucune case sur le calque courant ({:?})", col.nom(), vus::noms()))
 }
 
 /// La case de la colonne `col` sur la ligne du calque `li`, s'il en a une.
@@ -107,17 +104,24 @@ fn icone_comportement(b: &Banc, li: usize, apres: bool) -> Option<(String, Rect)
 
 #[test]
 fn the_header_row_shows_the_seven_columns_in_order() {
+    // (Partie 179.5 : les sept colonnes, dans l'ordre, sont sur la ligne du calque courant ; la rangée d'en-tête n'a plus que ⊖,
+    // « Calques » et les commandes des calques.)
     let b = banc_animation();
-    let rects: Vec<Rect> = Colonne::TOUTES.iter().map(|&c| entete(c)).collect();
+    let rects: Vec<Rect> = Colonne::TOUTES.iter().map(|&c| entete(&b, c)).collect();
     for k in 1..rects.len() {
         assert!(rects[k].left() >= rects[k - 1].right() - 0.5, "dans l'ordre, sans chevauchement : {rects:?}");
-        assert!((rects[k].center().y - rects[0].center().y).abs() < 0.5, "sur une rangée : {rects:?}");
+        // (Partie 179.5 : sur la ligne du calque courant, la case de l'œil est un bouton un point plus haut que les autres.)
+        assert!((rects[k].center().y - rects[0].center().y).abs() < 1.0, "sur une rangée : {rects:?}");
     }
-    let calques = textes(&b).into_iter().find(|(t, r)| t == "Calques" && (r.center().y - rects[0].center().y).abs() < 6.0).expect("« Calques » sur la rangée d'en-tête");
-    assert!(calques.1.right() < rects[0].left(), "« Calques » à gauche des colonnes : {calques:?} / {rects:?}");
+    let premiere = lignes().iter().map(|l| l.1).fold(f32::MAX, f32::min);
+    let (e0, e1) = (premiere - crate::layerheads::ENTETE_H - 1.0, premiere + 0.5);
+    let calques = textes(&b).into_iter().find(|(t, r)| t == "Calques" && r.center().y > e0 && r.center().y < e1).expect("« Calques » sur la rangée d'en-tête");
+    for col in Colonne::TOUTES {
+        assert!(vus::ou(col.nom()).iter().all(|r| r.center().y < e0 || r.center().y > e1), "« {} » n'est plus sur la rangée d'en-tête", col.nom());
+    }
     let replier = vus::ou("Replier tous les calques");
     assert_eq!(replier.len(), 1, "le ⊖ de l'en-tête : {:?}", vus::noms());
-    assert!(replier[0].right() <= calques.1.left() + 0.5 && (replier[0].center().y - rects[0].center().y).abs() < 3.0, "⊖ juste avant « Calques »");
+    assert!(replier[0].right() <= calques.1.left() + 0.5 && (replier[0].center().y - calques.1.center().y).abs() < 3.0, "⊖ juste avant « Calques »");
     assert_eq!(b.app.keymap.label(crate::layerheads::ACTION_REPLIER), "Maj+Alt+C", "son raccourci (Alt+Maj+C dans le fichier)");
 }
 
@@ -127,7 +131,7 @@ fn every_layer_has_its_columns_on_the_x_of_the_header() {
     let dossier = rang(&b, "Décors");
     assert_eq!(lignes().len(), 5, "cinq lignes : {:?}", lignes());
     for col in Colonne::TOUTES {
-        let t = entete(col);
+        let t = entete(&b, col);
         for (li, _, _) in lignes() {
             let nom = b.app.layers()[li].name.clone();
             let case = case_du_calque(col, li);
@@ -139,10 +143,9 @@ fn every_layer_has_its_columns_on_the_x_of_the_header() {
             assert!((case.center().x - t.center().x).abs() < 0.5, "« {nom} », « {} » sous l'en-tête : {case:?} / {t:?}", col.nom());
         }
     }
-    // Le calque courant sur trois rangées, les autres sur une ligne.
-    let perso = rang(&b, "Perso");
+    // (Partie 179.13 : tous les calques sur leur ligne complète, les dossiers sur une ligne fine.)
     for (li, haut, bas) in lignes() {
-        let h = if li == perso { ROW_FULL } else { ROW_FINE };
+        let h = if b.app.layers()[li].folder { ROW_FINE } else { ROW_FULL };
         assert!((bas - haut - h).abs() < 0.5, "calque {li} : {haut} {bas}");
     }
 }
@@ -185,7 +188,8 @@ fn the_blend_mode_of_the_current_layer_is_written_and_its_list_sets_every_chosen
     let barre = vus::ou("Opacité du calque").into_iter().find(|r| r.center().y > haut && r.center().y < bas).expect("la barre");
     let losange = vus::ou("Créer une clé").into_iter().find(|r| r.center().y > haut && r.center().y < bas).expect("le losange");
     assert!(liste.right() <= barre.left() + 0.5 && barre.right() <= losange.left() + 0.5, "mode, opacité, losange : {liste:?} {barre:?} {losange:?}");
-    assert!(liste.top() >= haut + 38.0, "sur la troisième rangée : {liste:?} / {haut}");
+    // (Partie 179 : la ligne complète sur deux rangées, le mode sur la seconde ; la troisième avant.)
+    assert!(liste.top() >= haut + 19.0, "sur la seconde rangée : {liste:?} / {haut}");
     // Deux calques choisis : un mode de la liste va aux deux, en une étape.
     b.app.layer_sel = vec![b.app.layers()[perso].id, b.app.layers()[ombre].id];
     b.chauffer(2);
@@ -274,10 +278,11 @@ fn fold_all_puts_every_layer_on_one_line_and_unfold_gives_back_the_three_rows() 
     let n = etapes(&b);
     let x0 = x_image(&b, 0);
     clic(&mut b, vus::ou("Replier tous les calques")[0].center(), Modifiers::NONE);
-    assert!(b.app.settings.calques_replies, "replié");
+    // (Partie 179.10 : le réglage « Déplier le calque actif », éteint.)
+    assert!(b.app.calques_tout_replies(), "replié");
     b.chauffer(2);
     assert!((x_image(&b, 0) - x0).abs() < 0.5, "la grille ne bouge pas : {x0} / {}", x_image(&b, 0));
-    let droite = entete(Colonne::Camera).right();
+    let droite = entete(&b, Colonne::Camera).right();
     assert!(droite < x0 - crate::timeline::MARGE_AVANT, "toute la colonne est à gauche de la grille : {droite} / {x0}");
     assert!(lignes().iter().all(|l| (l.2 - l.1 - ROW_FINE).abs() < 0.5), "toutes les lignes fines : {:?}", lignes());
     assert!(case_du_calque(Colonne::Pelure, perso).is_some(), "les colonnes du calque courant restent");
@@ -285,20 +290,20 @@ fn fold_all_puts_every_layer_on_one_line_and_unfold_gives_back_the_three_rows() 
     assert_eq!(etapes(&b), n, "un réglage d'affichage : rien à annuler");
     // ⊕ de l'en-tête : dépliés.
     clic(&mut b, vus::ou("Déplier les calques")[0].center(), Modifiers::NONE);
-    assert!(!b.app.settings.calques_replies);
+    assert!(!b.app.calques_tout_replies());
     b.chauffer(2);
     let (h, bs) = ligne(perso);
     assert!((bs - h - ROW_FULL).abs() < 0.5);
     // Le raccourci fait de même ; ⊕ sur la ligne d'un autre calque le rend courant, déplié.
     b.app.run_action(crate::layerheads::ACTION_REPLIER);
-    assert!(b.app.settings.calques_replies);
+    assert!(b.app.calques_tout_replies());
     b.chauffer(3);
     let ombre = rang(&b, "Ombre");
     let (h, bs) = ligne(ombre);
     let plus = vus::ou("Déplier le calque").into_iter().find(|r| r.center().y > h && r.center().y < bs).expect("le ⊕ de la ligne d'Ombre");
     clic(&mut b, plus.center(), Modifiers::NONE);
     assert_eq!(b.app.cur_layer, ombre);
-    assert!(!b.app.settings.calques_replies);
+    assert!(!b.app.calques_tout_replies());
     b.chauffer(2);
     let (h, bs) = ligne(ombre);
     assert!((bs - h - ROW_FULL).abs() < 0.5);

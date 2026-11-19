@@ -547,6 +547,58 @@ pub(crate) const ECART: f32 = 2.0;
 /// Espace de part et d'autre du trait qui sépare deux groupes.
 pub(crate) const MARGE_TRAIT: f32 = 3.0;
 
+thread_local! {
+    /// Partie 179.5 : vrai pendant qu'on peint la barre de lecture de la timeline (dans la colonne de gauche, Storyboard et
+    /// Animation) : ses icônes ont la taille de celles de la timeline (`tailleicones.rs`), ses cases sont plus petites.
+    static COMPACTE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Partie 179.5 (Anthony : « Pareil pour les icônes de l'interface de visionnage au-dessus de la timeline. Tous les icônes doivent
+/// avoir cette taille ») : la taille des icônes de la barre qu'on peint : celle de la timeline dans la barre de lecture de la
+/// timeline, `ICONE` dans toutes les autres barres.
+pub(crate) fn icone_de_barre() -> f32 {
+    if COMPACTE.with(|c| c.get()) {
+        crate::tailleicones::icone()
+    } else {
+        ICONE
+    }
+}
+
+/// La case d'une icône de la barre qu'on peint (`icone_de_barre`) : 20 × 20 dans la barre de lecture de la timeline (pour des
+/// icônes de 13), `CASE` ailleurs.
+pub(crate) fn case_de_barre() -> [f32; 2] {
+    if COMPACTE.with(|c| c.get()) {
+        crate::tailleicones::case_de_barre()
+    } else {
+        CASE
+    }
+}
+
+/// La place que prend la commande `c` dans la barre qu'on peint (`Cmd::largeur` hors de la barre de lecture de la timeline).
+fn largeur_de(c: &Cmd) -> f32 {
+    match c.genre {
+        Genre::Bouton | Genre::Etat | Genre::Menu if COMPACTE.with(|k| k.get()) => case_de_barre()[0] + ECART,
+        _ => c.largeur,
+    }
+}
+
+/// La place gardée pour « Plus… » au bout de la barre qu'on peint.
+fn plus_largeur() -> f32 {
+    if COMPACTE.with(|c| c.get()) {
+        case_de_barre()[0] + ECART + 2.0
+    } else {
+        PLUS_LARGEUR
+    }
+}
+
+/// Peint `f` en barre de lecture de la timeline (`COMPACTE`).
+fn en_barre_compacte<R>(f: impl FnOnce() -> R) -> R {
+    let avant = COMPACTE.with(|c| c.replace(true));
+    let r = f();
+    COMPACTE.with(|c| c.set(avant));
+    r
+}
+
 /// Place du bouton « Plus… », gardée à droite de la dernière commande.
 const PLUS_LARGEUR: f32 = 34.0;
 /// Largeur des lignes de « Plus… ».
@@ -565,6 +617,13 @@ pub(crate) struct Vue {
 /// de la bande (la plus grande vue pendant la séance : la colonne ne rétrécit pas quand un time code ou un nom de plan raccourcit).
 static MESURES: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
 
+#[cfg(test)]
+thread_local! {
+    /// Partie 179, pour les essais : les commandes de la barre du montage du Storyboard passées sous « Plus… » faute de place, à la
+    /// dernière image.
+    pub(crate) static DEBORDENT: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 fn rang(b: Barre) -> usize {
     match b {
         Barre::Commandes => 0,
@@ -574,40 +633,147 @@ fn rang(b: Barre) -> usize {
     }
 }
 
-/// Partie 173.5 : la largeur qu'il faut à la barre pour tenir sur **une** ligne, quand elle peut aussi se mettre sur deux (la barre du
-/// montage en tête de la colonne du Storyboard) : mesurée à son dessin sur une ligne, estimée d'après ses deux lignes sinon.
-static UNE_LIGNE: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new([0.0; 4]);
-
-/// La largeur mesurée de la barre `b` dans la colonne, légende des clés comprise, dans sa disposition la plus étroite (une ligne, ou
-/// la plus longue de ses deux lignes pour la timeline et le montage du Storyboard) ; 0 tant qu'elle n'a pas été dessinée.
+/// La largeur mesurée de la barre `b` dans la colonne, légende des clés comprise, dans sa disposition la plus étroite (la plus
+/// longue de ses deux lignes pour la timeline ; pour la barre du montage du Storyboard, sur une ligne depuis la partie 179, ce qui ne
+/// passe jamais sous « Plus… » : la lecture, le temps, « Plus… » et la légende) ; 0 tant qu'elle n'a pas été dessinée.
 pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
     MESURES.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
 }
 
-/// Partie 173.5 : la largeur de la barre `b` sur une seule ligne (0 tant qu'elle n'a été ni dessinée ni estimée).
-pub(crate) fn largeur_une_ligne(b: Barre) -> f32 {
-    UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner())[rang(b)]
+/// Partie 179 (Anthony : « Bouge les éléments pour resserrer les choses et éviter les pertes d'espace », la seconde ligne de boutons
+/// barrée) : quand la barre du montage du Storyboard n'a pas la place de toutes ses commandes sur sa ligne, celles qui passent sous
+/// « Plus… » sont les moins utilisées, pas les dernières. Le rang de chaque commande vient de son compteur d'usage (partie 112,
+/// `usage.json` de son poste, le 2026-11-19 : nouveau plan 12 fois, déplier ou replier toutes les pistes 3, comparer 2… ; nouvelle
+/// séquence, le menu Son, importer un son, l'aimantation, les envois : jamais au clic) ; un plus grand rang reste plus longtemps
+/// dans la barre. Le rang est fixe (la barre ne change pas d'elle-même d'un jour à l'autre). La lecture et le temps (groupe 0) ne
+/// passent jamais sous « Plus… ».
+pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
+    match id {
+        "panneau.nouveau" => 90,
+        "mode.basculer" => 85,
+        "edition.supprimer" => 80,
+        "plans" => 70,
+        "piste.deplier_tout" => 62,
+        "piste.replier_tout" => 61,
+        "comparer.ouvrir" => 55,
+        "storyboard.verrouiller" => 50,
+        "edition.copier" | "edition.coller" => 45,
+        "son" => 40,
+        "sequence.nouvelle" => 35,
+        "son.importer" => 30,
+        "version.nouvelle" => 28,
+        "transition.ajouter" => 26,
+        "commentaire.ajouter" => 24,
+        "montage.aimanter" => 22,
+        // (La même action que le « + » de la ligne « Calques », juste dessous : la première à passer sous « Plus… ».)
+        "calque.nouveau_vectoriel" => 1,
+        _ => 10,
+    }
+}
+
+/// Partie 179.11 : les commandes de la barre du montage qui ne sont plus dans la barre de lecture de la timeline du Storyboard (ni
+/// sous son « Plus… ») : « Nouvelle séquence » est sur la ligne « Séquence », juste dessous (`timelinesb::entete_sequences_sb`).
+pub(crate) const HORS_DE_LA_BARRE_DE_LECTURE: [&str; 1] = ["sequence.nouvelle"];
+
+/// Partie 179 : la place d'un trait entre deux groupes de la barre (ses marges, le trait, les écarts).
+const TRAIT_W: f32 = 2.0 * MARGE_TRAIT + 6.0 + 2.0 * ECART;
+
+/// Partie 179 : parmi `cmds` (dans l'ordre de la barre), celles qui tiennent dans `place` points, les plus utilisées d'abord
+/// (`rang_dans_la_barre`) ; `groupe_avant` : le groupe de la commande déjà posée juste avant (un trait la sépare d'un autre groupe).
+/// Les rangs (dans `cmds`) de celles qui tiennent.
+pub(crate) fn qui_tient(cmds: &[&Cmd], place: f32, groupe_avant: Option<u8>) -> Vec<usize> {
+    let largeur = |pris: &[usize]| -> f32 {
+        let mut w = 0.0;
+        let mut g = groupe_avant;
+        for &k in pris {
+            if g.is_some_and(|g| g != cmds[k].groupe) {
+                w += TRAIT_W;
+            }
+            g = Some(cmds[k].groupe);
+            w += largeur_de(cmds[k]);
+        }
+        w
+    };
+    let mut ordre: Vec<usize> = (0..cmds.len()).collect();
+    ordre.sort_by_key(|&k| std::cmp::Reverse(rang_dans_la_barre(cmds[k].id)));
+    let mut pris: Vec<usize> = Vec::new();
+    for k in ordre {
+        let mut essai = pris.clone();
+        essai.push(k);
+        essai.sort_unstable();
+        if largeur(&essai) <= place + 0.5 {
+            pris = essai;
+        } else {
+            // (Partie 179.5 : dès qu'une commande ne tient plus, les moins utilisées qu'elle passent aussi sous « Plus… » : un trait de
+            // groupe en moins ne fait plus entrer une commande moins utilisée à la place d'une plus utilisée.)
+            break;
+        }
+    }
+    pris
 }
 
 impl App {
-    /// Partie 165.5 (Anthony : « Monter les boutons » ; « ça va faire gagner de la place en haut de mettre les boutons sur la même
-    /// ligne que la timeline ») : la barre `barre` et la légende des clés, sur une seule ligne, dans `ligne`, la place vide de la
-    /// colonne de gauche en face de la règle des temps. Rien ne passe sous « Plus… » faute de place : la ligne est dessinée à sa
-    /// largeur entière, et cette largeur est retenue (`largeur_mesuree`) pour que la colonne la contienne.
-    pub(crate) fn barre_dans_la_colonne(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
-        let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    /// Partie 179 (Anthony : la seconde ligne de boutons barrée, ses boutons dans la place vide à droite du temps) : la barre `barre`
+    /// et la légende des clés sur **une** ligne, dans `ligne` (la place vide de la colonne de gauche, en face de la règle des temps et
+    /// de la ligne des séquences). La lecture et le temps d'abord ; puis, tant qu'il y a la place, les autres commandes de la barre,
+    /// les plus utilisées d'abord (`qui_tient`) ; celles qui ne tiennent pas sont sous « Plus… », avec leur icône, leur nom, leur
+    /// raccourci et leur épingle (rien n'est perdu). La largeur de ce qui ne passe jamais sous « Plus… » est retenue
+    /// (`largeur_mesuree`) : la colonne ne descend pas en dessous.
+    pub(crate) fn barre_dans_la_colonne_serree(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
+        // Partie 179.5 : la barre de lecture de la timeline, aux icônes de la timeline (`COMPACTE`).
+        en_barre_compacte(|| self.barre_dans_la_colonne_serree_en(ui, ligne, barre));
+    }
+
+    fn barre_dans_la_colonne_serree_en(&mut self, ui: &mut Ui, ligne: egui::Rect, barre: Barre) {
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(ligne).id_salt(("barre_dans_la_colonne", rang(barre))).layout(egui::Layout::left_to_right(egui::Align::Center)));
         child.set_clip_rect(ligne.intersect(ui.clip_rect()));
-        child.add_space(4.0);
-        self.barre_ui(&mut child, barre);
-        self.legende_cles_ui(&mut child);
-        let w = child.min_rect().width() + 8.0;
-        // (Partie 173.5 : cette largeur dit quand la barre tient sur une ligne ; la colonne peut être plus étroite, la barre passe
-        // alors sur deux lignes, `barre_dans_la_colonne_deux_lignes`.)
-        let mut m = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
-        if w > m[rang(barre)] + 0.5 {
-            m[rang(barre)] = w;
+        let ui = &mut child;
+        ui.add_space(4.0);
+        ui.spacing_mut().item_spacing.x = ECART;
+        ui.spacing_mut().button_padding = vec2(2.0, 1.0);
+        let debut = ui.cursor().left();
+        let reglage = self.settings.bars.de(barre).clone();
+        // (Une commande qui ne s'applique pas à l'instant n'est pas dans la barre : elle reste, grisée et expliquée, sous « Plus… ».)
+        let montrees: Vec<&'static Cmd> = dans_la_barre(barre, &reglage)
+            .into_iter()
+            .filter(|c| !(matches!(c.genre, Genre::Bouton | Genre::Etat) && !self.vue_de(barre, c).actif))
+            .filter(|c| !HORS_DE_LA_BARRE_DE_LECTURE.contains(&c.id))
+            .collect();
+        let (premieres, autres): (Vec<&'static Cmd>, Vec<&'static Cmd>) = montrees.into_iter().partition(|c| c.groupe == 0);
+        let mut groupe: Option<u8> = None;
+        for c in &premieres {
+            groupe = Some(c.groupe);
+            self.commande_dans_la_barre(ui, barre, c);
         }
+        // La place qui reste, une fois gardées celle de « Plus… » et celle de la légende des clés au bout de la ligne.
+        let fin = ligne.right() - 4.0;
+        let reserve = plus_largeur() + case_de_barre()[0] + ECART;
+        let essentiel = ui.cursor().left() - debut + reserve + 8.0;
+        let place = fin - ui.cursor().left() - reserve;
+        let tiennent = qui_tient(&autres, place, groupe);
+        let mut debordent: Vec<&'static Cmd> = Vec::new();
+        for (k, c) in autres.iter().enumerate() {
+            if !tiennent.contains(&k) {
+                debordent.push(c);
+                continue;
+            }
+            if groupe.is_some_and(|g| g != c.groupe) {
+                ui.add_space(MARGE_TRAIT);
+                ui.separator();
+                ui.add_space(MARGE_TRAIT);
+            }
+            groupe = Some(c.groupe);
+            self.commande_dans_la_barre(ui, barre, c);
+        }
+        let resp = self.bouton_plus_de_barre(ui, barre, &debordent);
+        bulle(resp, "Plus…", "Les autres commandes de la barre. L'épingle d'une ligne la remet dans la barre.", "");
+        self.legende_cles_ui(ui);
+        let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
+        if essentiel > m[rang(barre)] + 0.5 {
+            m[rang(barre)] = essentiel;
+        }
+        #[cfg(test)]
+        DEBORDENT.with(|d| *d.borrow_mut() = debordent.iter().map(|c| c.id).collect());
     }
 
     /// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre `barre` sur deux lignes, dans `ligne1` (en face de la règle des
@@ -615,12 +781,17 @@ impl App {
     /// suivants, puis « Plus… » et la légende des clés : un groupe n'est jamais coupé entre les deux. Rien ne passe sous « Plus… »
     /// faute de place ; la largeur retenue (`largeur_mesuree`) est celle de la plus longue des deux lignes.
     pub(crate) fn barre_dans_la_colonne_deux_lignes(&mut self, ui: &mut Ui, ligne1: egui::Rect, ligne2: egui::Rect, barre: Barre, dernier_groupe_ligne1: u8) {
+        // Partie 179.5 : la barre de la timeline de l'Animation, aux icônes de la timeline (`COMPACTE`), comme celle du Storyboard.
+        en_barre_compacte(|| self.barre_dans_la_colonne_deux_lignes_en(ui, ligne1, ligne2, barre, dernier_groupe_ligne1));
+    }
+
+    fn barre_dans_la_colonne_deux_lignes_en(&mut self, ui: &mut Ui, ligne1: egui::Rect, ligne2: egui::Rect, barre: Barre, dernier_groupe_ligne1: u8) {
         let mut w: f32 = 0.0;
-        let mut somme: f32 = 0.0;
         for (k, ligne) in [ligne1, ligne2].into_iter().enumerate() {
             let large = egui::Rect::from_min_size(ligne.min, vec2(4000.0, ligne.height()));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(large).id_salt(("barre_dans_la_colonne", rang(barre), k)).layout(egui::Layout::left_to_right(egui::Align::Center)));
             child.set_clip_rect(ligne.intersect(ui.clip_rect()));
+            child.spacing_mut().button_padding = vec2(2.0, 1.0);
             child.add_space(4.0);
             if k == 0 {
                 self.barre_ui_groupes(&mut child, barre, 0..=dernier_groupe_ligne1, false);
@@ -629,19 +800,12 @@ impl App {
                 self.legende_cles_ui(&mut child);
             }
             w = w.max(child.min_rect().width() + 8.0);
-            somme += child.min_rect().width();
         }
         let mut m = MESURES.lock().unwrap_or_else(|e| e.into_inner());
         if w > m[rang(barre)] + 0.5 {
             m[rang(barre)] = w;
         }
         drop(m);
-        // (Partie 173.5 : sur une ligne, il faudrait à peu près les deux bout à bout, plus le trait entre deux groupes ; une mesure sur
-        // une ligne, quand elle a lieu, remplace cette estimation.)
-        let mut une = UNE_LIGNE.lock().unwrap_or_else(|e| e.into_inner());
-        if une[rang(barre)] == 0.0 {
-            une[rang(barre)] = somme + 2.0 * MARGE_TRAIT + 2.0 * ECART + 8.0;
-        }
         if w > ligne1.width() + 6.5 {
             ui.ctx().request_repaint();
         }
@@ -660,7 +824,7 @@ impl App {
         let mut debordent: Vec<&'static Cmd> = Vec::new();
         let mut groupe: Option<u8> = None;
         // Le montage et la timeline gardent la place de l'icône de la légende des clés, au bout de la ligne.
-        let reserve = if barre == Barre::Commandes { 0.0 } else { CASE[0] + ECART };
+        let reserve = if barre == Barre::Commandes { 0.0 } else { case_de_barre()[0] + ECART };
         for c in dans_la_barre(barre, &reglage).into_iter().filter(|c| groupes.contains(&c.groupe)) {
             // Une commande qui ne s'applique pas à l'instant disparaît de la barre (elle reste, grisée et
             // expliquée, sous « Plus… ») : ni cases mortes, ni place prise pour rien.
@@ -668,7 +832,7 @@ impl App {
                 continue;
             }
             // Plus de place (avec celle de « Plus… ») : cette commande et les suivantes y passent.
-            if c.genre != Genre::Fixe && (!debordent.is_empty() || ui.available_width() < c.largeur + PLUS_LARGEUR + reserve) {
+            if c.genre != Genre::Fixe && (!debordent.is_empty() || ui.available_width() < largeur_de(c) + plus_largeur() + reserve) {
                 debordent.push(c);
                 continue;
             }
@@ -683,8 +847,19 @@ impl App {
         if !plus {
             return;
         }
-        let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(ICONE), |ui| self.plus_menu(ui, barre, &debordent)).response;
+        let resp = self.bouton_plus_de_barre(ui, barre, &debordent);
         bulle(resp, "Plus…", "Les autres commandes de la barre. L'épingle d'une ligne la remet dans la barre.", "");
+    }
+
+    /// Le bouton « Plus… » d'une barre et son menu (partie 179.5 : dans la barre de lecture de la timeline, une case de la taille des
+    /// autres).
+    fn bouton_plus_de_barre(&mut self, ui: &mut Ui, barre: Barre, debordent: &[&'static Cmd]) -> egui::Response {
+        let text = RichText::new(ph::DOTS_THREE).size(icone_de_barre());
+        if COMPACTE.with(|c| c.get()) {
+            egui::menu::menu_custom_button(ui, egui::Button::new(text).min_size(case_de_barre().into()), |ui| self.plus_menu(ui, barre, debordent)).response
+        } else {
+            ui.menu_button(text, |ui| self.plus_menu(ui, barre, debordent)).response
+        }
     }
 
     /// La commande `c` dans la barre : une icône, un menu, un champ ou un affichage.
@@ -693,18 +868,25 @@ impl App {
             Genre::Fixe => self.fixe_ui(ui, c.id),
             Genre::Reglage => self.reglage_ui(ui, c.id),
             Genre::Menu => {
-                let resp = ui.menu_button(RichText::new(c.icone).size(ICONE), |ui| self.menu_de_barre(ui, c.id)).response;
+                let text = RichText::new(c.icone).size(icone_de_barre());
+                let resp = if COMPACTE.with(|k| k.get()) {
+                    egui::menu::menu_custom_button(ui, egui::Button::new(text).min_size(case_de_barre().into()), |ui| self.menu_de_barre(ui, c.id)).response
+                } else {
+                    ui.menu_button(text, |ui| self.menu_de_barre(ui, c.id)).response
+                };
                 bulle(resp, c.nom, c.description, "");
             }
             Genre::Bouton | Genre::Etat => {
                 let v = self.vue_de(barre, c);
                 let on = v.etat == Some(true);
-                // Les mêmes cases partout : plates (un bouton) ou enfoncées (un état), à l'encre lisible sur l'accent.
-                let text = RichText::new(v.icone.as_str()).size(ICONE);
+                // Les mêmes cases partout : plates (un bouton) ou enfoncées (un état), à l'encre lisible sur l'accent. (Partie 179.5 :
+                // plus petites dans la barre de lecture de la timeline, `case_de_barre`.)
+                let text = RichText::new(v.icone.as_str()).size(icone_de_barre());
+                let case = case_de_barre();
                 let resp = if v.etat.is_some() {
-                    ui.add_sized(CASE, egui::SelectableLabel::new(on, text))
+                    ui.add_sized(case, egui::SelectableLabel::new(on, text))
                 } else {
-                    ui.add_sized(CASE, egui::Button::new(text).frame(false))
+                    ui.add_sized(case, egui::Button::new(text).frame(false))
                 };
                 if self.aide(resp, &v.nom, &v.description, c.action).clicked() && v.actif {
                     self.executer_commande(barre, c);

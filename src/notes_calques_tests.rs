@@ -240,8 +240,10 @@ fn the_timeline_column_shows_the_folder_its_layers_indented_and_the_action_bar_m
     assert!(contient(&textes, egui_phosphor::regular::FOLDER_OPEN) && textes.iter().any(|(t, _)| t.trim() == "2"), "{textes:?}");
     assert!(!contient(&textes, "dossier ·"), "{textes:?}");
     // Le nouveau dossier : le deuxième bouton de la barre d'actions, sous la colonne ; et l'entrée « Dossier » du « + ».
+    // (Partie 179 : les commandes sont montées sur la rangée « Calques » de la colonne ; le + est celui de cette rangée, pas celui du
+    // sens du pochoir, sur la ligne du calque courant.)
     let (_, dossier) = trouver(&textes, egui_phosphor::regular::FOLDER_PLUS).expect("Nouveau dossier, dans la barre d'actions").clone();
-    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == egui_phosphor::regular::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).expect("le + de la barre d'actions").clone();
+    let (_, plus) = textes.iter().filter(|(t, r)| t.trim() == egui_phosphor::regular::PLUS && (r.center().y - dossier.center().y).abs() < 2.0).min_by(|a, b| a.1.left().total_cmp(&b.1.left())).expect("le + de la barre d'actions").clone();
     assert!((plus.center().y - dossier.center().y).abs() < 2.0 && plus.center().x < dossier.center().x, "« + » puis Nouveau dossier, sur la même barre");
     let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
     assert!(contient(&menu, "Pour ranger des calques ensemble"), "{menu:?}");
@@ -317,7 +319,9 @@ fn the_new_folder_button_creates_one_folder_in_one_undo_step() {
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.timeline_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, plus) = textes.iter().filter(|(t, _)| t.trim() == egui_phosphor::regular::PLUS).max_by(|a, b| a.1.top().total_cmp(&b.1.top())).expect("le bouton +").clone();
+    // (Partie 179 : le + de la rangée « Calques », à gauche de Nouveau dossier, sur la même rangée.)
+    let (_, dossier) = trouver(&textes, egui_phosphor::regular::FOLDER_PLUS).expect("Nouveau dossier").clone();
+    let (_, plus) = textes.iter().filter(|(t, r)| t.trim() == egui_phosphor::regular::PLUS && (r.center().y - dossier.center().y).abs() < 2.0).min_by(|a, b| a.1.left().total_cmp(&b.1.left())).expect("le bouton +").clone();
     let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
     let (_, bouton) = menu.iter().find(|(t, _)| t.contains("Pour ranger des calques ensemble")).expect("l'entrée Dossier").clone();
     let n0 = app.history.names().0.len();
@@ -418,7 +422,10 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let cases = crate::bulles::vus::ou("Aplat sous le trait");
     assert_eq!(cases.len(), 3, "C1, C2 et « Hors dossier », pas le dossier : {cases:?}");
     assert!(cases.iter().all(|r| (r.center().x - cases[0].center().x).abs() < 0.5), "une colonne : {cases:?}");
-    assert!(!textes.iter().any(|(t, _)| t.contains(ph_fond)), "éteint partout : un point, pas l'icône");
+    // (Partie 179.5 : éteint, le calque courant montre l'icône pâle, les autres un petit point.)
+    let icones: Vec<Rect> = textes.iter().filter(|(t, _)| t.contains(ph_fond)).map(|(_, r)| *r).collect();
+    let (_, c1) = trouver(&textes, "C1").unwrap().clone();
+    assert!(icones.len() == 1 && (icones[0].center().y - c1.center().y).abs() < 10.0, "éteint : l'icône pâle sur C1 (le courant), un point ailleurs : {icones:?} / {c1:?}");
     // Un clic sur la case de la ligne « C1 » lui donne un fond.
     let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
     let bouton = *cases.iter().find(|r| r.center().y > ligne.top() && r.center().y - ligne.center().y < 30.0).expect("la case de la ligne C1");

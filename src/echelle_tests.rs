@@ -74,17 +74,27 @@ fn the_chosen_size_is_applied_live_to_the_interface_and_written_to_disk() {
     b.app.settings.prefs_onglet = Onglet::Apparence;
     b.app.run_action("fichier.preferences");
     b.chauffer(8);
-    // Les quatre choix sont dans la fenêtre, 100 % est allumé.
-    // (« 100 % » est aussi un bouton de la vue sous le dessin : on prend celui de la ligne « Échelle ».)
-    let pos = |b: &Banc, t: &str| {
-        let ligne = tous_les_textes(b).into_iter().find(|(x, _)| x == "Échelle").expect("la ligne Échelle").1.y;
-        tous_les_textes(b).into_iter().find(|(x, p)| x == t && (p.y - ligne).abs() < 4.0).unwrap_or_else(|| panic!("« {t} » manque")).1
+    // (Partie 179.17 : une liste déroulante, « Taille de l'interface », qui écrit la taille courante ; ses quatre choix s'ouvrent dessous.)
+    let ouvrir = |b: &mut Banc| -> Vec<(String, Pos2)> {
+        let liste = crate::bulles::vus::ou("Taille de l'interface")[0];
+        // (Les textes de la liste ouverte : ceux qui n'étaient pas à l'écran avant le clic.)
+        let avant = tous_les_textes(b);
+        clic(b, liste.center());
+        tous_les_textes(b).into_iter().filter(|(t, p)| !avant.iter().any(|(u, q)| u == t && q.distance(*p) < 1.0)).collect()
     };
-    for e in ECHELLES {
-        pos(&b, &format!("{e} %"));
-    }
-    let p = pos(&b, "150 %");
-    clic(&mut b, p);
+    let choix = |b: &mut Banc, t: &str| {
+        let mut ouvert = ouvrir(b);
+        if !ouvert.iter().any(|(x, _)| x == t) {
+            // (Le banc ne livre pas toujours le premier clic dans la fenêtre : une seconde fois.)
+            ouvert = ouvrir(b);
+        }
+        for e in ECHELLES {
+            assert!(ouvert.iter().any(|(x, _)| *x == format!("{e} %")), "« {e} % » dans la liste : {ouvert:?}");
+        }
+        let p = ouvert.iter().find(|(x, _)| x == t).unwrap().1;
+        clic(b, p);
+    };
+    choix(&mut b, "150 %");
     assert_eq!(b.app.settings.echelle, 150);
     b.chauffer(3);
     assert!((b.ctx.zoom_factor() - 1.5).abs() < 1e-4 && (b.ctx.pixels_per_point() - 1.5).abs() < 1e-4, "egui est à 150 % : {} {}", b.ctx.zoom_factor(), b.ctx.pixels_per_point());
@@ -92,12 +102,10 @@ fn the_chosen_size_is_applied_live_to_the_interface_and_written_to_disk() {
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(disque.contains("echelle_interface = 150"), "{disque}");
     // Un autre choix, tout de suite aussi ; et le retour à 100 % défait la clé du fichier.
-    let p = pos(&b, "90 %");
-    clic(&mut b, p);
+    choix(&mut b, "90 %");
     b.chauffer(3);
     assert!((b.ctx.pixels_per_point() - 0.9).abs() < 1e-4);
-    let p = pos(&b, "100 %");
-    clic(&mut b, p);
+    choix(&mut b, "100 %");
     b.chauffer(3);
     assert!((b.ctx.pixels_per_point() - 1.0).abs() < 1e-4);
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();

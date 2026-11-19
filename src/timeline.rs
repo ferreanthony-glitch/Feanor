@@ -12,10 +12,13 @@ pub(crate) const CELL_MIN: f32 = 3.0;
 pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
 /// Hauteur de la première ligne des boutons dans la colonne des calques, en face des numéros de la règle des images (partie 165.5 :
-/// une case de bouton, 26 points, y tient).
-pub(crate) const LIGNE1_H: f32 = 30.0;
-/// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la seconde ligne des boutons, juste sous la première.
-pub(crate) const LIGNE2_H: f32 = 28.0;
+/// une case de bouton, 26 points, y tient). Partie 179.5 (Anthony : « Tous les icônes doivent avoir cette taille », celle des icônes
+/// des rangées) : les cases de la barre font 20 points pour des icônes de 13, 23 pour les plus grandes (`tailleicones.rs`) : 24 (30
+/// avant).
+pub(crate) const LIGNE1_H: f32 = 24.0;
+/// Partie 165.6 (Anthony : « Deux lignes de boutons ») : la seconde ligne des boutons, juste sous la première (partie 179.5 : 24, 28
+/// avant).
+pub(crate) const LIGNE2_H: f32 = 24.0;
 /// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
 /// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
 pub(crate) const HEADER_H: f32 = REGLE_H + crate::layerheads::ENTETE_H;

@@ -54,6 +54,16 @@ pub(crate) fn app_with(name: &str, doc: Document) -> App {
     app
 }
 
+/// Partie 179.13 : dans le Storyboard, tous les calques ont la même hauteur (`montagerows::calques_du_storyboard`) ; « seul le
+/// calque actif déplié », les pistes dépliées ou repliées à la main, tout replier / tout déplier, ne jouent plus que dans l'espace
+/// Montage, à ses hauteurs (`LAYER_HM`, `FOLDED_HM`) : les essais de ces gestes y sont.
+pub(crate) fn app_montage(name: &str, doc: Document) -> App {
+    let mut app = app_with(name, doc);
+    app.set_espace(Espace::Montage);
+    app
+}
+const LAYER_HM: f32 = crate::montagerows::LAYER_H_MONTAGE;
+const FOLDED_HM: f32 = crate::pistes::FOLDED_H_MONTAGE;
 /// Les hauteurs des pistes visibles d'une application, de haut en bas : (rangée, hauteur).
 fn heights(app: &App) -> Vec<(usize, f32)> {
     app.montage_rows(300.0).lanes.iter().map(|l| (l.row, l.h)).collect()
@@ -74,28 +84,28 @@ fn stack_with_folder(closed: bool) -> Vec<Layer> {
 
 #[test]
 fn by_default_only_the_active_layer_is_unfolded_and_the_others_are_thin_bands() {
-    let mut app = app_with("defaut", doc_with(&[&["A", "B", "C"], &["X", "Y"]]));
+    let mut app = app_montage("defaut", doc_with(&[&["A", "B", "C"], &["X", "Y"]]));
     // Le calque courant est « C » (rang 0, rangée 2) : après le relâchement de la souris, il est seul déplié.
     app.pistes_follow_current(false);
-    assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, LAYER_H)]);
+    assert_eq!(heights(&app), [(0, FOLDED_HM), (1, FOLDED_HM), (2, LAYER_HM)]);
     let l = app.montage_rows(300.0).lanes;
-    assert_eq!(l[2].top, 2.0 * FOLDED_H, "les bandes sont au-dessus, serrées");
-    assert!(FOLDED_H <= 17.0 && FOLDED_H >= 14.0, "une bande de 15 points de haut une fois les filets retirés, pour un nom de 11 : {FOLDED_H}");
-    assert!(FOLDED_H < LAYER_H / 2.0);
+    assert_eq!(l[2].top, 2.0 * FOLDED_HM, "les bandes sont au-dessus, serrées");
+    assert!(FOLDED_HM <= 17.0 && FOLDED_HM >= 14.0, "une bande de 15 points de haut une fois les filets retirés, pour un nom de 11 : {FOLDED_HM}");
+    assert!(FOLDED_HM < LAYER_HM / 2.0);
 }
 
 #[test]
 fn a_closed_folder_hides_the_tracks_of_its_layers_and_is_itself_a_thin_track() {
-    let mut app = app_with("dossier-ferme", doc_with(&[&["A"]]));
+    let mut app = app_montage("dossier-ferme", doc_with(&[&["A"]]));
     app.doc.panels[0].layers = stack_with_folder(true);
     app.pistes_follow_current(false);
     // Le calque courant est « Libre » (rang 0, tout en bas, rangée 3) ; le dossier fermé est une ligne fine, C1 et C2 n'ont plus de piste.
-    assert_eq!(heights(&app), [(0, DOSSIER_H), (3, LAYER_H)]);
+    assert_eq!(heights(&app), [(0, DOSSIER_H), (3, LAYER_HM)]);
     assert!(row_hidden(&app.doc.panels, 0, 0, 1) && row_hidden(&app.doc.panels, 0, 0, 2) && !row_hidden(&app.doc.panels, 0, 0, 0));
     // Ouvert : tout revient, en bandes sauf le calque actif ; le dossier reste une ligne fine, jamais un calque.
     app.doc.panels[0].layers[3].collapsed = false;
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [DOSSIER_H, FOLDED_H, FOLDED_H, LAYER_H]);
-    assert!(DOSSIER_H < FOLDED_H, "un dossier est toujours plus petit qu'un calque");
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [DOSSIER_H, FOLDED_HM, FOLDED_HM, LAYER_HM]);
+    assert!(DOSSIER_H < FOLDED_HM, "un dossier est toujours plus petit qu'un calque");
     // Un dossier fermé s'ouvre le temps qu'on le traverse (2026-11-11) : le calque courant est l'un des siens, toutes leurs pistes sont là.
     app.doc.panels[0].layers[3].collapsed = true;
     app.cur_layer = 2;
@@ -121,45 +131,45 @@ fn the_active_layer_of_another_plan_unfolds_its_row_in_every_plan() {
 
 #[test]
 fn unfolding_or_folding_by_hand_is_display_only_and_writes_nothing_in_the_project() {
-    let mut app = app_with("main-1", doc_with(&[&["A", "B", "C"], &["X", "Y", "Z"], &["P"]]));
+    let mut app = app_montage("main-1", doc_with(&[&["A", "B", "C"], &["X", "Y", "Z"], &["P"]]));
     app.settings.montage_auto_open = false;
     app.modified = false;
-    assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, FOLDED_H)], "rien n'est actif : tout est en bandes fines");
+    assert_eq!(heights(&app), [(0, FOLDED_HM), (1, FOLDED_HM), (2, FOLDED_HM)], "rien n'est actif : tout est en bandes fines");
     assert!(app.set_track_folded(1, false));
-    assert_eq!(heights(&app), [(0, FOLDED_H), (1, LAYER_H), (2, FOLDED_H)]);
+    assert_eq!(heights(&app), [(0, FOLDED_HM), (1, LAYER_HM), (2, FOLDED_HM)]);
     assert!(!app.modified, "de l'affichage : le projet n'est pas modifié");
     assert!(app.doc.panels.iter().flat_map(|p| &p.layers).all(|l| !l.collapsed), "le drapeau enregistré (`replie`) n'est pas touché");
     assert!(app.set_track_folded(1, true));
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H; 3]);
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_HM; 3]);
     assert!(!app.set_track_folded(7, true), "une rangée qui n'existe pas ne fait rien");
 }
 
 #[test]
 fn fold_all_and_unfold_all() {
-    let mut app = app_with("tout", doc_with(&[&["A", "B", "C"]]));
+    let mut app = app_montage("tout", doc_with(&[&["A", "B", "C"]]));
     app.pistes_follow_current(false);
     let steps = app.history.names().0.len();
     assert_eq!(app.set_all_tracks_folded(false), 2, "les deux bandes fines se déplient, le calque actif l'est déjà");
-    assert!(heights(&app).iter().all(|h| h.1 == LAYER_H));
+    assert!(heights(&app).iter().all(|h| h.1 == LAYER_HM));
     assert_eq!(app.set_all_tracks_folded(true), 3, "tout se replie, même le calque actif");
-    assert!(heights(&app).iter().all(|h| h.1 == FOLDED_H));
+    assert!(heights(&app).iter().all(|h| h.1 == FOLDED_HM));
     assert_eq!(app.history.names().0.len(), steps, "replier est de l'affichage : pas d'étape d'annulation");
 }
 
 #[test]
 fn the_action_ids_do_the_same() {
-    let mut app = app_with("actions", doc_with(&[&["A", "B"]]));
+    let mut app = app_montage("actions", doc_with(&[&["A", "B"]]));
     app.cur_layer = 1; // « A », rangée 0
     app.pistes_follow_current(false);
-    assert_eq!(heights(&app), [(0, LAYER_H), (1, FOLDED_H)]);
+    assert_eq!(heights(&app), [(0, LAYER_HM), (1, FOLDED_HM)]);
     app.run_action("piste.basculer");
-    assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H)]);
+    assert_eq!(heights(&app), [(0, FOLDED_HM), (1, FOLDED_HM)]);
     app.run_action("piste.basculer");
-    assert_eq!(heights(&app), [(0, LAYER_H), (1, FOLDED_H)]);
+    assert_eq!(heights(&app), [(0, LAYER_HM), (1, FOLDED_HM)]);
     app.run_action("piste.deplier_tout");
-    assert_eq!(heights(&app), [(0, LAYER_H), (1, LAYER_H)]);
+    assert_eq!(heights(&app), [(0, LAYER_HM), (1, LAYER_HM)]);
     app.run_action("piste.replier_tout");
-    assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H)]);
+    assert_eq!(heights(&app), [(0, FOLDED_HM), (1, FOLDED_HM)]);
     app.run_action("piste.auto_deplier");
     assert!(!app.settings.montage_auto_open);
     app.run_action("piste.auto_deplier");
@@ -171,22 +181,22 @@ fn the_action_ids_do_the_same() {
 
 #[test]
 fn the_current_layer_becomes_active_after_the_release_and_the_old_one_folds() {
-    let mut app = app_with("courant", doc_with(&[&["A", "B", "C"]]));
+    let mut app = app_montage("courant", doc_with(&[&["A", "B", "C"]]));
     // Souris tenue : rien n'est actif encore, rien ne bouge (les pistes d'en dessous glisseraient sous le pointeur).
     app.pistes_follow_current(true);
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H; 3]);
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_HM; 3]);
     // Relâchée : le calque courant (rang 0 = rangée 2) se déplie.
     app.pistes_follow_current(false);
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H, FOLDED_H, LAYER_H]);
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_HM, FOLDED_HM, LAYER_HM]);
     // Un autre calque devient courant : il s'ouvre quand la souris est relâchée, l'ancien se referme.
     app.select_layer(1);
     app.pistes_follow_current(true);
-    assert_eq!(heights(&app)[2].1, LAYER_H, "pendant le geste, la disposition reste");
+    assert_eq!(heights(&app)[2].1, LAYER_HM, "pendant le geste, la disposition reste");
     app.pistes_follow_current(false);
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H, LAYER_H, FOLDED_H]);
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_HM, LAYER_HM, FOLDED_HM]);
     // Le réglage éteint : tout est en bandes fines.
     app.settings.montage_auto_open = false;
-    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H; 3]);
+    assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_HM; 3]);
 }
 
 #[test]
@@ -225,8 +235,9 @@ fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
     // complète, les autres une ligne fine).
     app.set_all_tracks_folded(true);
     let rows = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
-    assert_eq!(rows.iter().filter(|r| r.h == ROW_FULL).count(), 1, "le calque courant");
-    assert!(rows.iter().filter(|r| r.li != app.cur_layer).all(|r| r.h == ROW_FINE));
+    // (Partie 179.13 : tous les calques y ont leur ligne complète, le courant comme les autres.)
+    assert!(rows.iter().all(|r| r.h == ROW_FULL), "tous les calques : {rows:?}");
+    let _ = ROW_FINE;
     // Le drapeau « réduit » d'un calque (`collapsed`, d'avant) ne change rien aux pistes du montage, ni à la timeline.
     let before = heights(&app);
     let avant = rows_of(app.layers(), &app.doc.groups, app.cur_layer);
@@ -276,15 +287,15 @@ fn a_saved_three_layers_setting_opens_as_the_whole_stack() {
         let s: crate::settings::Settings = toml::from_str(&texte).unwrap_or_else(|e| panic!("« {valeur} » se lit : {e}"));
         assert_eq!(s.montage_plans, crate::pistes::HauteurPlans::Bandeau, "« {valeur} » : les autres réglages sont gardés");
         assert!(!toml::to_string(&s).unwrap().contains("calques_timeline"), "« {valeur} » : la vieille clé n'est plus écrite");
-        let mut app = app_with("trois-lu", doc_with(&[&["A", "B", "C", "D", "E"], &["X"]]));
+        let mut app = app_montage("trois-lu", doc_with(&[&["A", "B", "C", "D", "E"], &["X"]]));
         (app.settings.montage_plans, app.settings.montage_auto_open) = (s.montage_plans, s.montage_auto_open);
         app.cur_layer = 2; // « C », rangée 2
         app.pistes_follow_current(false);
-        assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, LAYER_H), (3, FOLDED_H), (4, FOLDED_H)], "« {valeur} » : toute la pile");
+        assert_eq!(heights(&app), [(0, FOLDED_HM), (1, FOLDED_HM), (2, LAYER_HM), (3, FOLDED_HM), (4, FOLDED_HM)], "« {valeur} » : toute la pile");
         // Le calque actif n'est jamais replié (165.4) : au bout de la pile aussi.
         app.cur_layer = 4;
         app.pistes_follow_current(false);
-        assert_eq!(heights(&app)[0], (0, LAYER_H), "« {valeur} »");
+        assert_eq!(heights(&app)[0], (0, LAYER_HM), "« {valeur} »");
     }
     assert_eq!(crate::project::VERSION, 60, "le format des projets ne change pas");
 }
@@ -325,10 +336,11 @@ fn hit_app(name: &str) -> App {
 #[test]
 fn the_handles_are_found_in_a_thin_band_but_the_diamonds_are_not() {
     let mut app = hit_app("hits");
+    app.set_espace(Espace::Montage);
     app.set_track_folded(1, false); // « Fond » (rangée 1) déplié à la main ; « Perso » (rangée 0) est une bande fine
     let rows = app.montage_rows(300.0);
     let lane = rows.lanes[0];
-    assert!(lane.folded && lane.h == FOLDED_H);
+    assert!(lane.folded && lane.h == FOLDED_HM);
     let top = 10.0;
     let x0 = 100.0;
     let blocks = vec![Rect::from_min_max(pos2(x0 + 1.0, 50.0), pos2(x0 + 24.0 * PPF - 1.0, 100.0))];
@@ -346,12 +358,12 @@ fn the_handles_are_found_in_a_thin_band_but_the_diamonds_are_not() {
     assert!(matches!(handle(x(6), lane.h - 2.0), Some(Handle::Key { .. })), "tout en bas de la bande : encore le dessin, jamais la barre");
     // La rangée sous le point : la bande fine, puis la suivante (dépliée) juste dessous.
     assert_eq!(app.row_at(pos2(x(6), y(5.0)), top, &rows), Some(0));
-    assert_eq!(app.row_at(pos2(x(6), y(FOLDED_H + 2.0)), top, &rows), Some(1));
-    assert_eq!(app.row_at(pos2(x(6), y(FOLDED_H + LAYER_H + 2.0)), top, &rows), None, "après la dernière piste");
-    assert_eq!(app.layer_row_hit(pos2(x(6), y(FOLDED_H + 2.0)), top, &blocks, &rows), Some((0, 0)));
+    assert_eq!(app.row_at(pos2(x(6), y(FOLDED_HM + 2.0)), top, &rows), Some(1));
+    assert_eq!(app.row_at(pos2(x(6), y(FOLDED_HM + LAYER_HM + 2.0)), top, &rows), None, "après la dernière piste");
+    assert_eq!(app.layer_row_hit(pos2(x(6), y(FOLDED_HM + 2.0)), top, &blocks, &rows), Some((0, 0)));
     // Le choix au rectangle : une hauteur avant la première piste ou après la dernière tombe sur la plus proche.
     assert_eq!(rows.row_near(-5.0), 0);
-    assert_eq!(rows.row_near(FOLDED_H + 5.0), 1);
+    assert_eq!(rows.row_near(FOLDED_HM + 5.0), 1);
     assert_eq!(rows.row_near(1000.0), 1);
 }
 
@@ -527,7 +539,7 @@ pub(crate) fn etapes(b: &Banc) -> usize {
 fn only_the_active_layer_is_drawn_tall_with_its_diamonds_and_the_others_are_thin() {
     let mut b = banc_montage();
     let rows = b.app.montage_rows(300.0);
-    assert_eq!(rows.lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [LAYER_H, FOLDED_H, FOLDED_H, FOLDED_H], "Perso, le calque courant, est seul déplié");
+    assert_eq!(rows.lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [crate::montagerows::LAYER_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE], "Perso, le calque courant, est seul déplié");
     let diamonds = losanges(&b, crate::theme::POIGNEE_CALQUE);
     assert_eq!(diamonds.len(), 3, "trois clés de position de Perso ; celles de Décor et de Fond sont de petits traits : {diamonds:?}");
     assert!(diamonds.iter().all(|d| d.height() > 8.0), "des losanges de piste dépliée");
@@ -543,7 +555,7 @@ fn only_the_active_layer_is_drawn_tall_with_its_diamonds_and_the_others_are_thin
     let avant = y_in(&b, &l, 3, 0.0);
     b.app.set_track_folded(1, false);
     b.chauffer(4);
-    assert!((y_in(&b, &lieu(&b), 3, 0.0) - avant - (LAYER_H - FOLDED_H)).abs() < 0.6, "déplier « Décor » à la main pousse « Vide » vers le bas");
+    assert!((y_in(&b, &lieu(&b), 3, 0.0) - avant - (crate::montagerows::LAYER_H_MONTAGE - crate::pistes::FOLDED_H_MONTAGE)).abs() < 0.6, "déplier « Décor » à la main pousse « Vide » vers le bas");
 }
 
 #[test]
@@ -555,7 +567,7 @@ fn clicking_the_name_of_a_folded_layer_makes_it_active_and_unfolds_it() {
     assert_eq!(b.app.cur_layer, 2, "« Décor » est le rang 2 (de bas en haut : Vide, Fond, Décor, Perso)");
     assert!(!b.app.track_is_folded(1), "Décor se déplie");
     assert!(b.app.track_is_folded(0), "Perso, l'ancien actif, se replie");
-    assert_eq!(b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [FOLDED_H, LAYER_H, FOLDED_H, FOLDED_H]);
+    assert_eq!(b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect::<Vec<_>>(), [crate::pistes::FOLDED_H_MONTAGE, crate::montagerows::LAYER_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE, crate::pistes::FOLDED_H_MONTAGE]);
     // Le panneau Calques suit : c'est le même calque courant ; et choisir dans ce panneau déplie la piste.
     b.app.select_layer(1);
     b.chauffer(4);
@@ -595,7 +607,7 @@ fn the_gestures_of_the_timeline_work_on_a_thin_band() {
     b.chauffer(4);
     let l = lieu(&b);
     let before = etapes(&b);
-    let cy = y_in(&b, &l, 0, LAYER_H * 0.5);
+    let cy = y_in(&b, &l, 0, crate::montagerows::LAYER_H_MONTAGE * 0.5);
     glisser(&mut b, pos2(l.x(10), cy), pos2(l.x(11), cy));
     let keys: Vec<usize> = b.app.doc.panels[0].layers[3].pos_keys.iter().map(|k| k.frame).collect();
     assert_eq!(keys, vec![4, 11, 16]);
