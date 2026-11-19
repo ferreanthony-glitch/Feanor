@@ -163,6 +163,7 @@ impl App {
             ui.separator();
             app.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
             app.action_item(ui, "Renommer la séquence…", "sequence.renommer");
+            app.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
             ui.separator();
             app.action_item(ui, "Réglages du projet…", "projet.proprietes");
             app.action_item(ui, if app.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" }, "storyboard.verrouiller");

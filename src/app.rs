@@ -5419,6 +5419,8 @@ impl App {
             "sequence.nouvelle_avec_cases" => self.new_sequence_from_cases(),
             "sequence.couper_ici" => self.sequence_couper_ici(),
             "sequence.renommer" => self.sequence_renommer_courante(),
+            // « Dupliquer la séquence » (`dupliquerseq.rs`, partie 191).
+            "sequence.dupliquer" => self.sequence_dupliquer_courante(),
             "sequence.afficher_toutes" => self.affichage_toutes(),
             "sequence.afficher_courante" => self.affichage_courante_seule(),
             "sequence.afficher_aucune_autre" => self.affichage_aucune_autre(),

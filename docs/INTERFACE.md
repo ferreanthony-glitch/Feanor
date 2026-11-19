@@ -16481,8 +16481,9 @@ version 2). Compilé et essayé sur le Mac seulement ; **rien n'a été regardé
 7. **Une séquence née d'une autre emporte son décor** : « Couper la séquence ici » (la planche des séquences) et « Nouvelle séquence
    avec les plans choisis / les cases choisies » donnent à la séquence neuve (et à la suite d'une séquence coupée en deux) **une copie
    du décor que ses plans montraient** : les mêmes objets aux mêmes places, les mêmes modèles, mais un décor à elle — déplacer un
-   objet de l'une ne touche pas l'autre. FEANOR n'a pas de commande qui duplique ou copie une séquence entière (copier-coller des plans
-   les colle dans la séquence où l'on colle) ; ce sont les deux seules qui font naître une séquence des plans d'une autre.
+   objet de l'une ne touche pas l'autre. FEANOR n'avait pas de commande qui duplique ou copie une séquence entière (copier-coller des
+   plans les colle dans la séquence où l'on colle) ; c'étaient les deux seules qui font naître une séquence des plans d'une autre.
+   Depuis la partie 191, **« Dupliquer la séquence »** en est une troisième : sa copie a aussi une copie indépendante du décor.
 8. **Le budget de cet ordinateur** (partie 181) vaut pour la somme du décor : un collage, une copie ou un envoi qui le ferait dépasser
    est **refusé**, avec un message (« le décor de la séquence aurait N triangles… »). Jamais de ralentissement.
 9. **Supprimer une séquence** (ses plans) garde son décor pour Ctrl+Z, comme avant.
@@ -16545,7 +16546,7 @@ refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests`
 - **Glisser un objet d'une séquence à l'autre** (à la souris) : pas fait ; « Envoyer vers la séquence… » ou Ctrl+X / Ctrl+V le
   remplacent.
 - **Pas de commande « Dupliquer la séquence »** dans FEANOR : rien à faire emporter. `Document::copier_decor_de_sequence` est prêt
-  pour elle.
+  pour elle. (Faite à la partie 191 : `Document::dupliquer_sequence` l'appelle.)
 - **Édition > Copier / Coller (le menu)** ne vise pas les objets : un clic dans le menu est un appui hors du décor (comme pour le
   panneau Calques et le panneau Effets). Les boutons du panneau et les touches les visent.
 - **La main au décor ne se voit pas** (pas de cadre autour de la vue ou du panneau, comme pour le montage) ; la barre d'état dit ce
@@ -16577,3 +16578,136 @@ refusé (aucune étape), le même dans une séquence vide passe. `onglets_tests`
    montrent **le même décor** ; déplace un objet dans la nouvelle : l'ancienne ne bouge pas. Ctrl+Z. De même pour « Nouvelle séquence
    avec les plans choisis ».
 9. Un décor au bout du budget de ton PC : Ctrl+V d'un gros objet y est **refusé** (le message) ; rien ne ralentit.
+
+## 191. Dupliquer la séquence (2026-11-19, branche `dupliquer-sequence` partie de `main` b27db77, format 61 inchangé)
+
+Le choix d'Anthony (« Dupliquer la séquence »). FEANOR dupliquait un plan (« Dupliquer le plan », Ctrl+Maj+D), copiait et collait
+des plans dans la séquence où l'on colle, coupait une séquence en deux, faisait une séquence des plans choisis, mais **ne savait pas
+dupliquer une séquence entière** (190.1, point 7). Maintenant **« Dupliquer la séquence »** pose, juste après elle, une séquence
+neuve qui en est une **copie indépendante** : ses plans, tout ce qui tient à eux, ses autres versions de séquence et son décor 3D.
+Format du projet inchangé (61) : la copie s'enregistre avec les fichiers de toujours. Compilé et essayé sur le Mac seulement ;
+**rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 191.1 Ce qui change pour Anthony
+
+1. **Où la trouver** — partout où l'on montre une séquence :
+   - le menu **⋯** (« Autres commandes des plans ») de l'en-tête de la timeline du Storyboard, sous « Renommer la séquence… » ;
+   - le **clic droit sur la bande d'une séquence** dans le montage (sous « Nouvelle séquence ») et le menu **⋯** de l'en-tête du
+     montage ;
+   - sur la planche des Vignettes : le **clic droit sur le titre d'une séquence**, sur **son nom dans la liste des séquences**, et le
+     menu « Séquence » du **clic droit sur une case** ;
+   - le menu **Storyboard** de la barre des menus (sous « Nouvelle séquence ») ;
+   - la **palette des commandes** (Ctrl+K) : « Dupliquer la séquence (une copie indépendante, juste après elle) ». **Pas de touche
+     d'origine** (Ctrl+D duplique un dessin, Ctrl+Maj+D le plan ; aucune autre n'est d'usage pour une séquence) : clic droit sur
+     l'entrée de menu > « Assigner un raccourci… » pour en donner une.
+   Depuis un titre ou la liste de la planche, c'est **cette séquence-là** qui est dupliquée ; ailleurs, celle du plan courant.
+2. **Ce qu'elle fait** : une séquence neuve **juste après l'originale** (avant la séquence qui la suivait), avec **les mêmes plans**
+   dans le même ordre — mêmes durées, mêmes noms de plans, mêmes calques et réglages, mêmes dessins au pixel près, même caméra (clés,
+   saccade, effets de caméra, trajectoire), mêmes textes, mêmes couleurs de repère, mêmes marques d'image, mêmes calques de toute la
+   scène. **Elle devient la séquence courante** (son premier plan), comme la copie d'un plan devient le plan courant ; la planche s'y
+   rend. La barre d'état : « Séquence Poursuite dupliquée : sa copie, Poursuite (copie), la suit (2 plans). Ctrl+Z la retire. »
+3. **Une étape d'annulation** (« Dupliquer la séquence ») : Ctrl+Z retire la copie et tout ce qu'elle avait apporté, Ctrl+Y la rend.
+4. **Le nom** : « Poursuite » donne « Poursuite (copie) », puis « Poursuite (copie 2) », « Poursuite (copie 3) »… (la copie d'une
+   copie aussi : jamais deux fois le même nom) ; une séquence **sans nom** donne une copie sans nom, que son numéro automatique
+   distingue. En **numérotation verrouillée**, la copie et ses plans reçoivent des numéros neufs entre leurs voisins (un numéro est
+   unique dans le projet) ; en numérotation suivie, les séquences qui suivent glissent d'un rang, comme pour « Nouvelle séquence ».
+5. **Indépendantes** : retoucher un dessin, un calque, une clé de caméra, un nom de plan ou un objet du décor dans l'une ne touche
+   jamais l'autre.
+6. **Ce qui est copié avec les plans** :
+   - leurs **versions** (V1, V2…, partie 168) : les mêmes numéros, la même version en cours, leurs couleurs de repère, le son posé
+     sous chacune ; passer la copie en V1 laisse l'originale en V2 ;
+   - leurs **commentaires** de la timeline, leur **contenu rogné** (les poignées du rognage) ;
+   - les **transitions** entre deux plans de la séquence ; et **la coupe de sortie** : la transition qui menait de la fin de
+     l'originale à la séquence suivante (ou à la fin du film) est posée à la fin de la copie, qui est maintenant devant elle — le film
+     passe toujours dans la séquence suivante de la même façon. **La coupe entre l'originale et sa copie est franche** ;
+   - les **liens des références** (une référence liée à un plan l'est aussi à sa copie) ;
+   - les **notes et annotations de la planche** attachées à leurs vignettes (à la même place sur la vignette copiée) ;
+   - la **planche-mère** (partie 126, `partage.rs`) : deux calques liés dans la séquence le restent entre leurs copies ; une copie
+     n'est jamais liée à l'original ni à un plan d'une autre séquence (comme « Dupliquer le plan » : lier se demande).
+7. **Les autres versions de la séquence** (A, B…, `variantes.rs`) sont copiées aussi : la copie a les mêmes lettres, la même version
+   choisie, et des copies des plans que ses versions rangées montrent hors du film ; passer la copie à une autre version ne touche
+   pas l'originale.
+8. **Le décor 3D** : une copie indépendante (mêmes objets aux mêmes places, numéros neufs ; **les modèles restent partagés**, rien
+   n'est relu ni renvoyé à la carte graphique, un seul fichier par modèle à l'enregistrement). Une séquence sans décor donne une
+   copie sans décor.
+9. **Refusé** sous le verrou du storyboard, dans un film partagé sans le jeton du montage (comme toute commande du montage), et quand
+   tout le film est écarté (le message de toujours).
+
+### 191.2 Comment c'est fait
+
+- **`dupliquerseq.rs`** (nouveau) : `Document::dupliquer_sequence(seq)` fait toute la copie, `App::sequence_dupliquer(seq)` la
+  passe par `structure_op_dessins` (une étape d'annulation, les sélections soulevées posées d'abord, refus du verrou et du jeton)
+  sous le nom d'étape « Dupliquer la séquence » ; `sequence_dupliquer_courante` sert la commande `sequence.dupliquer`.
+- **Une table de correspondances** (`Correspondances`) suit toute la copie : les scènes, les plans (du film et du garage des
+  versions de séquence), les clés de partage (une neuve par clé d'origine) et **les dessins** — un même dessin n'est copié qu'une
+  fois pour toute la séquence (`duplicate_cel` : les tuiles restent partagées jusqu'à la première retouche), si bien que deux calques
+  qui montraient le même dessin en montrent encore un même, à eux. Les plans sont copiés comme `duplicate_panel` et `copie_de` le
+  font (numéros neufs de plan, de marques, de calques ; griffonnages des calques de couleur ; `relink_copies`), puis
+  `adopt_scene_layers` donne à chaque scène neuve ses calques de toute la scène.
+- **Les scènes** neuves gardent le nom de plan, pas le numéro propre (unique dans le projet : `assign_numbers` en donne un à la fin
+  de `normalize`) ; les scènes des versions rangées de la copie reprennent ensuite le numéro de la même scène du film.
+- **Ce qui tient aux plans** est renuméroté : `versions` (les plans rangés copiés dans la scène de la copie), `reserves` (le calque
+  de chaque pièce suit sa copie, par rang ; dessins, marques et commentaires sortis neufs), `comments`, `transitions` (internes, et
+  celle de la coupe de sortie, `out` sur le dernier plan de la copie ; celle de l'originale reste et ne joue plus tant que ses deux
+  plans ne se suivent pas, `transitions::zones`), `references` (liens ajoutés), `board` (notes attachées) et `annotations` (les traits
+  attachés à une vignette, hors du calque du dessin hors des cases).
+- **Les versions de séquence** (`variantes_de_la_copie`) : le garage d'abord (chaque plan copié avec ses versions, son contenu rogné,
+  ses commentaires), puis chaque version rangée : ses scènes dans la séquence neuve, ses emplacements, ses transitions et ses liens
+  de références sur les plans copiés. Un emplacement qui montre un plan que le film a mis dans une autre séquence le montre toujours
+  (`accorder_au_film` en fera une copie au besoin). `origines` reste vide : les copies ne sont pas des plans d'un envoi.
+- **Les traits** des dessins copiés prennent des numéros neufs (partie 125), **une même table pour toute la copie** : les parts d'un
+  trait réparti sur plusieurs dessins de la séquence en gardent un commun, sans lien avec l'original.
+- **Le décor** : `Document::copier_decor_de_sequence(seq, neuve)` (partie 190). Tout est dans `Structure` : l'instantané de l'étape
+  rétablit tout. Les plans entrent par `insert_and_normalize` à la fin de l'originale ; le nom vient de `nom_de_copie` (la règle des
+  personnages, « (copie) », « (copie 2) »…, coupé à `NOM_MAX`).
+- **Les menus** : `timelinesb.rs`, `storyboard.rs` (la rangée des séquences), `montagerows.rs`, `panels.rs` (menu Storyboard),
+  `planchesequencesui.rs` (titre, liste, menu d'une case) ; la commande dans `keymap.rs` et `keymap.toml` (sans touche).
+
+### 191.3 Essais (`src/dupliquerseq_tests.rs`, 13)
+
+La copie juste après l'originale et avant la suivante, courante sur son premier plan, mêmes plans (durées, noms, caméra, couleurs,
+calques et réglages, dessins au pixel près, numéros et dessins neufs), le message ; **une étape d'annulation** (Ctrl+Z retire plans,
+séquence, scènes, transitions, versions, commentaires et décor ; Ctrl+Y rend les mêmes plans) ; **l'indépendance** après un trait
+dans un dessin (dans les deux sens), un réglage et un nom de calque, une clé de caméra, un objet du décor déplacé, un nom de plan ; le
+décor copié (autre `uid`, numéros neufs, **le même `Arc` de modèle**, mêmes places) ; une séquence sans décor et sans nom (pas de
+décor, pas de nom, un autre numéro) ; deux copies, deux noms, la copie d'une copie, un nom au bout de la longueur ; les **versions des
+plans** (mêmes numéros, plans rangés dans la scène de la copie, dessins à eux ; passer la copie en V1 laisse l'originale en V2) ; les
+**transitions** (celle du milieu, celle de la sortie, aucune entre l'originale et la copie ; trois jouent), les commentaires, le
+contenu rogné, la référence liée aux quatre plans, la note et l'annotation de la planche ; la **planche-mère** (liés entre copies sous
+une clé neuve, mêmes dessins entre elles, rien avec l'original ni l'autre séquence) ; les **versions de séquence** (mêmes lettres, un
+garage à elle, les emplacements de la version partagée sur les plans de la copie, passer la copie à B puis à A, l'originale
+immobile) ; la **numérotation verrouillée** (numéros de plans et de séquences tous uniques) ; la commande (palette, bloc dans
+`keymap.toml` sans touche, refus sous le verrou du storyboard) ; **l'enregistrement** (un seul fichier pour le modèle des deux bancs,
+relu sans avertissement : six plans, le nom, les dessins au pixel près, le modèle partagé, versions, transitions, commentaires, et les
+deux garages des versions de séquence avec leurs dessins).
+Le reste des essais : les 90 échecs connus du Mac, aucun neuf.
+
+### 191.4 Ce qui n'est pas fait (ou limité)
+
+- **Le son ne se copie pas** : les pistes sont en temps du montage et ne bougent avec aucun plan (comme pour « Dupliquer le plan ») ;
+  le son posé sous l'originale reste où il est, la copie arrive sans son, et ce qui suit est décalé de sa durée par rapport au son.
+- **Les plans écartés** de la séquence (partie 115) restent à l'originale ; la corbeille, les envois, les sons proposés aussi.
+- **La transition d'entrée** de l'originale (depuis la séquence d'avant) n'est pas reprise sur la coupe originale → copie, qui reste
+  franche ; celle de la sortie de l'originale est gardée, endormie (elle rejoue si la copie part ailleurs).
+- **Les annotations** au rang de secours (`Ancre::rank`) gardent celui de l'original : il ne sert que si la vignette copiée disparaît.
+- Une séquence **très lourde** se copie en une fois (les dessins sont des copies légères tant qu'on n'y touche pas, mais chaque plan,
+  chaque version, chaque note est recopié) ; pas mesuré sur un vrai film.
+- **Pas de touche** d'origine (aucune n'est d'usage) ; pas de « Dupliquer la séquence » dans la liste du panneau Espace 3D (rien à y
+  voir).
+
+### 191.5 À essayer (sa checklist)
+
+1. Sur un projet de copie : une séquence nommée « Poursuite », deux ou trois plans dessinés, une caméra animée, une V2 sur un plan, un
+   commentaire, un fondu enchaîné entre deux plans et un fondu au noir à la sortie, un décor 3D (deux objets de la banque).
+2. Timeline du Storyboard, menu **⋯** > **« Dupliquer la séquence »** : « Poursuite (copie) » arrive juste après, avec les mêmes
+   plans ; elle est courante. Lis le film : les deux séquences sont identiques, la coupe entre elles est franche, le fondu au noir est
+   à la fin de la copie.
+3. Dans la copie : un trait, l'opacité d'un calque, une clé de caméra, un objet du décor déplacé. Reviens à l'originale : rien n'a
+   bougé. Et l'inverse.
+4. **Ctrl+Z** : la copie disparaît d'un coup (plans, décor, commentaires) ; **Ctrl+Y** : elle revient.
+5. Planche des Vignettes : clic droit sur le titre « Poursuite » > « Dupliquer la séquence » : « Poursuite (copie 2) » ; puis depuis
+   la liste des séquences ; puis le menu d'une case. Clic droit sur la bande d'une séquence dans le montage, et le menu Storyboard.
+6. Sur la V2 de la copie, « Passer à la version » V1 : l'originale reste en V2.
+7. Une séquence qui a deux versions de séquence (A, B) : duplique-la, passe la copie de A à B : l'originale ne bouge pas.
+8. Enregistre, ferme, rouvre : les deux séquences, leurs dessins, leurs décors ; dans `decors/`, un seul fichier par modèle.
+9. Ctrl+K, « dupliquer la séquence » : la commande est là ; donne-lui une touche par clic droit sur l'entrée de menu si tu veux.

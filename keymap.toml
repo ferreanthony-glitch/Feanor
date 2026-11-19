@@ -2623,6 +2623,11 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "sequence.dupliquer"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "sequence.afficher_toutes"
 touches = []
 source = "FEANOR (sans touche)"

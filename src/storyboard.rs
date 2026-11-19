@@ -1971,6 +1971,7 @@ impl App {
                     }
                     ui.separator();
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                    self.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
                     self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                     self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
                     ui.separator();
