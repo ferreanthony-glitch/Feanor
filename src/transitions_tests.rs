@@ -190,7 +190,7 @@ fn dragging_an_edge_changes_the_duration_keeping_the_centre() {
 fn a_dissolve_at_fifty_percent_is_the_average() {
     let a = flat([200, 40, 0, 255], 12);
     let b = flat([100, 80, 250, 255], 12);
-    let mix = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: false, m: 0.5, color: [0, 0, 0], k: 0.0 };
+    let mix = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: false, m: 0.5, color: [0, 0, 0], k: 0.0, ..Mix::default() };
     let out = blend_images(&mix, Some(&a), Some(&b), [4, 3]);
     for px in &out {
         let [r, g, bl, al] = px.to_array();
@@ -270,7 +270,7 @@ fn the_black_transition_blacks_out_every_frame_of_the_zone() {
 fn a_wipe_shows_the_incoming_plan_on_the_left() {
     let a = flat([255, 0, 0, 255], 8);
     let b = flat([0, 0, 255, 255], 8);
-    let mix = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: true, m: 0.5, color: [0, 0, 0], k: 0.0 };
+    let mix = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: true, m: 0.5, color: [0, 0, 0], k: 0.0, ..Mix::default() };
     let out = blend_images(&mix, Some(&a), Some(&b), [4, 2]);
     for row in 0..2 {
         assert_eq!(out[row * 4], b[0]);
@@ -571,7 +571,28 @@ fn gpu_mix(rs: &eframe::egui_wgpu::RenderState, gpu: &mut crate::gpu::GpuCanvas,
     let (w, h) = (doc.width as u32, doc.height as u32);
     let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, h as f32));
     let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
-    let display = DisplayMix { wipe: mix.wipe, m: mix.m, grey: mix.color[0] as f32 / 255.0, k: mix.k, wipe_u };
+    let display = DisplayMix {
+        wipe: mix.wipe,
+        m: mix.m,
+        couleur: mix.color,
+        k: mix.k,
+        wipe_u,
+        glisse: mix.glisse,
+        shift_a: mix.shift_a,
+        shift_b: mix.shift_b,
+        blur: mix.blur,
+        objet: mix.objet,
+        vertical: mix.vertical,
+        wipe_depuis: mix.wipe_depuis,
+        iris: mix.iris,
+        horloge: mix.horloge,
+        zoom: mix.zoom,
+        zoom_centre: mix.zoom_centre,
+        cadre: {
+            let fr = doc.frame_rect();
+            [fr.left_top(), fr.right_top(), fr.right_bottom(), fr.left_bottom()]
+        },
+    };
     let a = MixLayer { plan: &first, resolved: &resolved[..n], corners, ws: None };
     let b = second.as_ref().map(|p| MixLayer { plan: p, resolved: &resolved[n..], corners, ws: None });
     let callback = gpu.paint_mix(a, b, Some(&display), rect, [doc.width, doc.height]);
@@ -588,7 +609,7 @@ fn the_graphics_card_mixes_the_plans_like_the_processor() {
     let mut gpu = crate::gpu::GpuCanvas::new(&rs);
     let at = |img: &[Color32], x: usize, y: usize| img[y * doc.width + x].to_array();
     let close = |got: [u8; 4], want: [i32; 3], tol: i32| (0..3).all(|k| (got[k] as i32 - want[k]).abs() <= tol) && got[3] == 255;
-    let base = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: false, m: 0.5, color: [0, 0, 0], k: 0.0 };
+    let base = Mix { a: Some((0, 0)), b: Some((1, 0)), wipe: false, m: 0.5, color: [0, 0, 0], k: 0.0, ..Mix::default() };
     let (red, blue) = ([200, 40, 0], [100, 80, 250]);
 
     // Fondu enchaîné à 50 % : la moyenne.

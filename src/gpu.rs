@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-use eframe::egui::{self, Pos2, Rect};
+use eframe::egui::{self, pos2, Pos2, Rect};
 use eframe::egui_wgpu::{self, wgpu, CallbackResources, CallbackTrait, RenderState};
 
 use crate::document::{CelId, Document};
@@ -33,7 +33,8 @@ use crate::render::Plan;
 
 /// Réglages d'un dessin dans le tampon : 4 coins (position, coordonnées de texture), une couleur,
 /// des paramètres = 6 vec4 = 96 octets.
-const ITEM_BYTES: u64 = 96;
+// (Partie 177 : un vec4 de plus, `extra`, pour l'iris et le volet en horloge.)
+const ITEM_BYTES: u64 = 112;
 /// Au-delà, les textures les moins récemment affichées sont libérées.
 const CACHE_BYTES: u64 = 1 << 30;
 /// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
@@ -50,6 +51,7 @@ struct Item {
     corners: array<vec4<f32>, 4>,
     color: vec4<f32>,
     params: vec4<f32>,
+    extra: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> item: Item;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -296,13 +298,38 @@ const LECTURES_MAX: i32 = 12;
 // Transitions (`transitions.rs`) : params.x est l'opacité de l'image posée ; params.y le mode
 // (1 : image, 0 : aplat de gris params.z, par exemple le noir d'un fondu au noir, 2 : volet, l'image
 // ne se voit qu'à gauche de la colonne params.z de la feuille). Une image seule : x = 1, y = 1.
+// Partie 175 : 3 : aplat de la couleur params.z (rouge × 65536 + vert × 256 + bleu, valeurs gamma) ; 4 : image floue le long
+// de l'horizontale de l'écran, sur params.z pixels de part et d'autre (la traînée d'un raccord filé).
+// Partie 177 : 5 : aplat de la couleur params.z hors du rond de centre extra.xy et de rayon extra.z (en pixels de l'écran, bord
+// lissé sur un pixel : l'iris) ; 6 : image vue seulement dans l'angle extra.z (radians) balayé depuis midi, dans le sens des
+// aiguilles, autour du point extra.xy de l'écran (le volet en horloge).
 @fragment
 fn fs_display(v: VOut) -> @location(0) vec4<f32> {
     if (item.params.y < 0.5) {
         return vec4<f32>(vec3<f32>(item.params.z), 1.0) * item.params.x;
     }
+    if (item.params.y > 2.5 && item.params.y < 3.5) {
+        let c = u32(item.params.z);
+        let rgb = vec3<f32>(f32((c >> 16u) & 255u), f32((c >> 8u) & 255u), f32(c & 255u)) / 255.0;
+        return vec4<f32>(rgb, 1.0) * item.params.x;
+    }
+    if (item.params.y > 4.5 && item.params.y < 5.5) {
+        let c = u32(item.params.z);
+        let rgb = vec3<f32>(f32((c >> 16u) & 255u), f32((c >> 8u) & 255u), f32(c & 255u)) / 255.0;
+        let dehors = clamp(distance(v.pos.xy, item.extra.xy) - item.extra.z + 0.5, 0.0, 1.0);
+        return vec4<f32>(rgb, 1.0) * item.params.x * dehors;
+    }
     let dx = dpdx(v.uv);
     let dy = dpdy(v.uv);
+    if (item.params.y > 3.5 && item.params.y < 4.5) {
+        var acc = vec4<f32>(0.0);
+        for (var k = 0; k < 32; k++) {
+            let o = ((f32(k) + 0.5) / 32.0 * 2.0 - 1.0) * item.params.z;
+            acc += textureSampleLevel(tex, samp, v.uv + dx * o, 0.0);
+        }
+        let flou = acc / 32.0;
+        return vec4<f32>(gamma_from_linear_rgb(flou.rgb), flou.a) * item.params.x;
+    }
     let size = vec2<f32>(textureDimensions(tex));
     // Ce que couvre un pixel d'écran, en pixels de l'image : ses deux côtés, et son étendue par axe de l'image.
     let cx = dx * size;
@@ -346,8 +373,18 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
         lin = lin / f32(n * n);
     }
     // (Le volet écarte les pixels après les dérivées : elles se calculent en flot uniforme.)
-    if (item.params.y > 1.5 && v.uv.x > item.params.z) {
+    if (item.params.y > 1.5 && item.params.y < 2.5 && v.uv.x > item.params.z) {
         discard;
+    }
+    if (item.params.y > 5.5 && item.params.y < 6.5) {
+        let d = v.pos.xy - item.extra.xy;
+        var angle = atan2(d.x, -d.y);
+        if (angle < 0.0) {
+            angle = angle + 6.28318530718;
+        }
+        if (angle > item.extra.z) {
+            discard;
+        }
     }
     return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a) * item.params.x;
 }
@@ -1316,9 +1353,99 @@ impl GpuCanvas {
             ws: norm(layer.ws),
             params,
             second,
+            clip: None,
+            extra: None,
         };
+        // (Partie 175.) Une image glissée de `d` points à l'écran, coupée à `clip` ; floue de `flou` points (mode 4 de
+        // `fs_display`), sinon posée telle quelle.
+        let glissee = |layer: &MixLayer, second: bool, d: egui::Vec2, flou: f32, clip: Rect| {
+            let mut s = quad(layer, second, if flou > 0.05 { [1.0, 4.0, flou] } else { [1.0, 1.0, 0.0] });
+            for c in &mut s.screen {
+                c[0] += d.x;
+                c[1] += d.y;
+            }
+            s.clip = Some(clip);
+            s
+        };
+        // Un aplat de la couleur `c` (valeurs gamma), d'opacité `k`, sur les coins `coins` à l'écran (mode 3).
+        let aplat = |coins: [Pos2; 4], c: [u8; 3], k: f32| Show {
+            screen: std::array::from_fn(|i| [coins[i].x, coins[i].y, uv[i][0], uv[i][1]]),
+            ws: None,
+            params: [k.clamp(0.0, 1.0), 3.0, couleur_en_reglage(c)],
+            second: false,
+            clip: None,
+            extra: None,
+        };
+        let loin = 1.0e6_f32;
         let mut shows = Vec::new();
         match (&second, mix) {
+            (Some(s), Some(m)) if m.glisse => {
+                // Poussée, raccord filé : A sort d'un côté, B arrive de l'autre (la droite d'origine), chacun coupé à la part du
+                // cadre où il se voit encore (son propre cadre, glissé, dans le cadre filmé).
+                let cadre = Rect::from_points(&m.cadre);
+                let flou = m.blur * m.largeur().length();
+                let coupe = |dec: f32| {
+                    if m.vertical {
+                        let h = cadre.height();
+                        Rect::from_min_max(pos2(cadre.left(), cadre.top() + dec.max(0.0) * h), pos2(cadre.right(), cadre.bottom() + dec.min(0.0) * h))
+                    } else {
+                        let w = cadre.width();
+                        Rect::from_min_max(pos2(cadre.left() + dec.max(0.0) * w, cadre.top()), pos2(cadre.right() + dec.min(0.0) * w, cadre.bottom()))
+                    }
+                };
+                let pas = if m.vertical { m.hauteur() } else { m.largeur() };
+                shows.push(glissee(&first, false, pas * m.shift_a, flou, coupe(m.shift_a)));
+                shows.push(glissee(s, true, pas * m.shift_b, flou, coupe(m.shift_b)));
+            }
+            (Some(s), Some(m)) if m.zoom.is_some() => {
+                // (Partie 177.) Le zoom traversant : chaque image grossie autour du centre du zoom, coupée au cadre ; B par-dessus,
+                // de poids `m`.
+                let [za, zb] = m.zoom.unwrap_or([1.0, 1.0]);
+                let c = m.dans_le_cadre(m.zoom_centre[0], m.zoom_centre[1]);
+                let cadre = Rect::from_points(&m.cadre);
+                let grossie = |layer: &MixLayer, second: bool, z: f32, k: f32| {
+                    let mut sh = quad(layer, second, [k.clamp(0.0, 1.0), 1.0, 0.0]);
+                    for p in &mut sh.screen {
+                        p[0] = c.x + (p[0] - c.x) * z;
+                        p[1] = c.y + (p[1] - c.y) * z;
+                    }
+                    sh.clip = Some(cadre);
+                    sh
+                };
+                shows.push(grossie(&first, false, za, 1.0));
+                shows.push(grossie(s, true, zb, m.m));
+            }
+            (Some(s), Some(m)) if m.horloge.is_some() => {
+                // Le volet en horloge : A, puis B seulement dans l'angle balayé (mode 6), autour du milieu du cadre.
+                shows.push(quad(&first, false, [1.0, 1.0, 0.0]));
+                let c = m.dans_le_cadre(0.5, 0.5);
+                let mut sh = quad(s, true, [1.0, 6.0, 0.0]);
+                sh.extra = Some([c.x, c.y, m.horloge.unwrap_or(0.0), 0.0]);
+                shows.push(sh);
+            }
+            (Some(s), Some(m)) if m.wipe && m.wipe_depuis != crate::transitions::Cote::Gauche => {
+                // Le volet depuis la droite, le haut ou le bas : B coupé à la part du cadre qu'il a recouverte.
+                shows.push(quad(&first, false, [1.0, 1.0, 0.0]));
+                let cadre = Rect::from_points(&m.cadre);
+                let k = m.m.clamp(0.0, 1.0);
+                let part = match m.wipe_depuis {
+                    crate::transitions::Cote::Droite => Rect::from_min_max(pos2(cadre.right() - k * cadre.width(), cadre.top()), cadre.max),
+                    crate::transitions::Cote::Haut => Rect::from_min_max(cadre.min, pos2(cadre.right(), cadre.top() + k * cadre.height())),
+                    _ => Rect::from_min_max(pos2(cadre.left(), cadre.bottom() - k * cadre.height()), cadre.max),
+                };
+                let mut sh = quad(s, true, [1.0, 1.0, 0.0]);
+                sh.clip = Some(part);
+                shows.push(sh);
+            }
+            (Some(s), Some(m)) if m.objet.is_some() => {
+                // Volet par un objet : A à gauche du milieu de l'objet, B à droite, puis l'objet par-dessus.
+                let c = m.objet.unwrap_or(0.5);
+                let x = m.dans_le_cadre(c, 0.5).x;
+                shows.push(glissee(&first, false, egui::Vec2::ZERO, 0.0, Rect::from_min_max(pos2(-loin, -loin), pos2(x, loin))));
+                shows.push(glissee(s, true, egui::Vec2::ZERO, 0.0, Rect::from_min_max(pos2(x, -loin), pos2(loin, loin))));
+                let coins = crate::transitions::objet_coins(c).map(|p| m.dans_le_cadre(p[0], p[1]));
+                shows.push(aplat(coins, crate::transitions::OBJET_COULEUR, 1.0));
+            }
             (Some(s), Some(m)) => {
                 // Le plan sortant (`first`) d'abord, l'entrant par-dessus (poids `m`, ou volet).
                 shows.push(quad(&first, false, [1.0, 1.0, 0.0]));
@@ -1331,8 +1458,17 @@ impl GpuCanvas {
             _ => shows.push(quad(&first, false, [1.0, 1.0, 0.0])),
         }
         if let Some(m) = mix.filter(|m| m.k > 0.0) {
-            // La couche de couleur : un aplat sur la feuille, d'opacité `k`.
-            shows.push(quad(&first, false, [m.k.clamp(0.0, 1.0), 0.0, m.grey]));
+            // La couche de couleur : un aplat sur la feuille, d'opacité `k`, de la couleur de la transition (partie 175).
+            shows.push(quad(&first, false, [m.k.clamp(0.0, 1.0), 3.0, couleur_en_reglage(m.couleur)]));
+        }
+        if let Some((m, [cx, cy, r])) = mix.and_then(|m| m.iris.map(|i| (m, i))) {
+            // (Partie 177.) L'iris : la couleur hors du rond, sur le cadre (mode 5).
+            let c = m.dans_le_cadre(cx, cy);
+            let rayon = r * m.largeur().length();
+            let mut sh = aplat(m.cadre, m.couleur, 1.0);
+            sh.params[1] = 5.0;
+            sh.extra = Some([c.x, c.y, rayon, 0.0]);
+            shows.push(sh);
         }
         egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, split, shows, lisser: self.lisser })
     }
@@ -1468,11 +1604,55 @@ pub struct DisplayMix {
     pub wipe: bool,
     /// Poids du plan entrant (ou avancée du volet), de 0 à 1.
     pub m: f32,
-    /// Couche de couleur : gris (0 noir, 1 blanc) et opacité.
-    pub grey: f32,
+    /// Couche de couleur : sa couleur (valeurs gamma, 0 à 255) et son opacité.
+    pub couleur: [u8; 3],
     pub k: f32,
     /// Colonnes de la feuille (0 à 1) où le cadre filmé commence et finit : le volet y avance.
     pub wipe_u: [f32; 2],
+    /// Poussée, raccord filé (partie 175, `transitions::Mix`) : les deux plans glissent de `shift_a` et `shift_b` largeurs du
+    /// cadre, flous de `blur` largeurs, chacun coupé à son cadre.
+    pub glisse: bool,
+    pub shift_a: f32,
+    pub shift_b: f32,
+    pub blur: f32,
+    /// Volet par un objet : le milieu de l'objet, en parts du cadre.
+    pub objet: Option<f32>,
+    /// (Partie 177.) Le glissement est vertical ; le côté d'où le volet amène B ; l'iris (centre en parts du cadre, rayon en
+    /// largeurs du cadre) ; l'angle balayé du volet en horloge ; le zoom traversant (grossissements de A et B, et son centre).
+    pub vertical: bool,
+    pub wipe_depuis: crate::transitions::Cote,
+    pub iris: Option<[f32; 3]>,
+    pub horloge: Option<f32>,
+    pub zoom: Option<[f32; 2]>,
+    pub zoom_centre: [f32; 2],
+    /// Le cadre filmé à l'écran, en points (haut-gauche, haut-droite, bas-droite, bas-gauche) : les glissements, les coupes et
+    /// l'objet s'y mesurent.
+    pub cadre: [Pos2; 4],
+}
+
+impl DisplayMix {
+    /// Le point (`x`, `y`) du cadre (en parts de sa largeur et de sa hauteur) à l'écran.
+    pub(crate) fn dans_le_cadre(&self, x: f32, y: f32) -> Pos2 {
+        let [hg, hd, bd, bg] = self.cadre;
+        let haut = hg + (hd - hg) * x;
+        let bas = bg + (bd - bg) * x;
+        haut + (bas - haut) * y
+    }
+
+    /// La largeur du cadre à l'écran, en points, le long de son haut.
+    fn largeur(&self) -> egui::Vec2 {
+        self.cadre[1] - self.cadre[0]
+    }
+
+    /// La hauteur du cadre à l'écran, en points, le long de son bord gauche.
+    fn hauteur(&self) -> egui::Vec2 {
+        self.cadre[3] - self.cadre[0]
+    }
+}
+
+/// La couleur `c` (valeurs gamma) dans le réglage d'un aplat de `fs_display` (mode 3) : un seul nombre, exact en flottant.
+fn couleur_en_reglage(c: [u8; 3]) -> f32 {
+    (c[0] as u32 * 65536 + c[1] as u32 * 256 + c[2] as u32) as f32
 }
 
 /// Un dessin à envoyer d'avance à la carte graphique : un dessin du projet (`cel` rien), ou un
@@ -1560,10 +1740,16 @@ struct Show {
     screen: [[f32; 4]; 4],
     /// Leur w, en perspective.
     ws: Option<[f32; 4]>,
-    /// Opacité, mode et réglage de `fs_display` (voir le shader).
+    /// Opacité, mode et réglage de `fs_display` (voir le shader). Mode 4 (flou) : le réglage est donné en points, et passe en
+    /// pixels au moment de l'envoi.
     params: [f32; 3],
     /// L'image du second plan d'une transition, au lieu de la première.
     second: bool,
+    /// Ce qui se voit de l'image à l'écran, en points (partie 175 : poussée, raccord filé, volet par un objet) ; rien : toute.
+    clip: Option<Rect>,
+    /// Le réglage de plus des modes 5 et 6 (partie 177) : un point de l'écran et un rayon (en points, passés en pixels à
+    /// l'envoi) ou un angle.
+    extra: Option<[f32; 4]>,
 }
 
 struct CanvasPaint {
@@ -1661,7 +1847,11 @@ fn compose_span(
 }
 
 fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4]) {
-    for (k, v) in corners.iter().flatten().chain(color).chain(params).enumerate() {
+    put_item_extra(bytes, corners, color, params, &[0.0; 4]);
+}
+
+fn put_item_extra(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4], extra: &[f32; 4]) {
+    for (k, v) in corners.iter().flatten().chain(color).chain(params).chain(extra).enumerate() {
         bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_ne_bytes());
     }
 }
@@ -1713,7 +1903,15 @@ impl CallbackTrait for CanvasPaint {
                 Some(w) => (w, 1.0),
                 None => ([0.0; 4], 0.0),
             };
-            put_item(&mut bytes[(self.items.len() + k) * stride..], &on_screen, &ws, &[show.params[0], show.params[1], show.params[2], persp]);
+            // (Le flou d'un raccord filé, en points, passe en pixels d'écran : le shader le lit le long de ses pixels.)
+            let reglage = if show.params[1] > 3.5 { show.params[2] * ppp } else { show.params[2] };
+            // (Le point et le rayon des modes 5 et 6, en points, passent en pixels de l'écran ; l'angle du mode 6 reste.)
+            let extra = match show.extra {
+                Some(e) if show.params[1] > 5.5 => [e[0] * ppp, e[1] * ppp, e[2], e[3]],
+                Some(e) => [e[0] * ppp, e[1] * ppp, e[2] * ppp, e[3]],
+                None => [0.0; 4],
+            };
+            put_item_extra(&mut bytes[(self.items.len() + k) * stride..], &on_screen, &ws, &[show.params[0], show.params[1], reglage, persp], &extra);
         }
         queue.write_buffer(&res.uniforms, 0, &bytes);
 
@@ -1804,12 +2002,30 @@ impl CallbackTrait for CanvasPaint {
         let [w, h] = info.screen_size_px;
         pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
         pass.set_pipeline(&res.display);
+        // La zone d'affichage, en pixels : la coupe d'une image (partie 175) ne la dépasse jamais, et elle revient après.
+        let base = info.clip_rect_in_pixels();
+        let (bx0, by0) = (base.left_px.max(0), base.top_px.max(0));
+        let (bx1, by1) = ((base.left_px + base.width_px).min(w as i32), (base.top_px + base.height_px).min(h as i32));
         for (k, show) in self.shows.iter().enumerate() {
             let Some(frame) = (if show.second { &res.frame2 } else { &res.frame }) else { continue };
+            if let Some(c) = show.clip {
+                let ppp = info.pixels_per_point;
+                let x0 = ((c.left() * ppp).round().clamp(-1.0e9, 1.0e9) as i32).max(bx0);
+                let y0 = ((c.top() * ppp).round().clamp(-1.0e9, 1.0e9) as i32).max(by0);
+                let x1 = ((c.right() * ppp).round().clamp(-1.0e9, 1.0e9) as i32).min(bx1);
+                let y1 = ((c.bottom() * ppp).round().clamp(-1.0e9, 1.0e9) as i32).min(by1);
+                if x1 <= x0 || y1 <= y0 {
+                    continue;
+                }
+                pass.set_scissor_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32);
+            }
             pass.set_bind_group(0, &res.uniform_group, &[((self.items.len() + k) as u64 * res.stride) as u32]);
             let lisse = self.lisser || !pose_nette(&show.screen, show.ws.is_some(), info.pixels_per_point, frame.size);
             pass.set_bind_group(1, if lisse { &frame.display_group_lisse } else { &frame.display_group }, &[]);
             pass.draw(0..6, 0..1);
+            if show.clip.is_some() && bx1 > bx0 && by1 > by0 {
+                pass.set_scissor_rect(bx0 as u32, by0 as u32, (bx1 - bx0) as u32, (by1 - by0) as u32);
+            }
         }
     }
 }

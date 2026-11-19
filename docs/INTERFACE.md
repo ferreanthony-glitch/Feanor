@@ -14788,3 +14788,213 @@ du dossier, un point quand il est éteint ; on clique la case de « C1 ») ; `pi
    petite marge avant la grille. Les prises du début et de la fin du calque se tirent toujours.
 8. Rétrécir la timeline au plus étroit : rien ne déborde.
 9. Storyboard, la piste du calque actif : le même ordre (indicateurs, puis pelure, transparence, pochoir, aplat, caméra).
+
+## 175. Les préréglages dans la timeline, lot 4 : les transitions (2026-11-18, branche `prereglages-montage` ; 175 et non 173 : la piste du calque actif, branche `piste-mode-liste`, a pris le 173)
+
+Anthony : « Ok continue », après la fusion du lot 3 : le lot 4 de la liste de la partie 170, le montage. Cette partie-ci, les
+transitions (ses « Oui » : T3, T4, T6, T7, T8) ; la suivante, les plans types. T1 (iris), T2 (volets) et T5 (zoom traversant)
+sont restés sans réponse : pas faits.
+
+Le code : `src/transitions.rs` (les cinq sortes, leurs images, le fichier), `src/gpu.rs` (leur affichage : images glissées et
+coupées, flou, aplat de couleur), `src/transitionsui.rs` (leur forme dans le montage, la couleur, les commandes, le dépôt),
+`src/panneauprereglages.rs` (les onglets du panneau, les vignettes), `src/storyboard.rs` (le dépôt sur une coupe), `src/keymap.rs`.
+Les essais : `src/transitions_lot4_tests.rs`.
+
+### 175.1 Ce qui change pour lui
+
+| | Nom | Ce qu'elle fait | Durée neuve |
+|---|---|---|---|
+| T3 | Poussée | Le plan suivant arrive de la droite et pousse l'autre hors du cadre, doucement aux deux bouts | 12 images |
+| T4 | Raccord filé | La même poussée, lente, puis très vite et floue au milieu (le flou d'un panoramique filé), puis lente | 8 images |
+| T6 | Flash de coupe | Les images qui touchent la coupe sont blanches, le blanc s'éteint de part et d'autre | 4 images |
+| T7 | Fondu par une couleur | Le fondu au noir, par la couleur choisie (bleu nuit d'origine) ; aussi au début et à la fin du film | 12 images |
+| T8 | Volet par un objet | Un tronc sombre passe tout près devant la caméra, de droite à gauche ; derrière lui, le plan suivant | 12 images |
+
+- **Le panneau Préréglages a deux onglets**, « Caméra » (ce qu'il y avait) et « Montage » : les dix transitions (les cinq
+  d'avant et les cinq neuves), puis les plans types (partie 176). Chaque vignette joue sa transition au survol, entre la petite
+  scène et la même scène de près.
+- **Glisser une transition sur le montage** : la coupe la plus proche du pointeur s'éclaire (en rouge si la sorte n'y va pas,
+  au bord du film) ; lâchée, la transition s'y pose (ou remplace celle qui y était). Un clic sur la vignette la pose sur la
+  coupe de la transition choisie, sinon sur la plus proche de la tête de lecture. Une étape d'annulation.
+- Ailleurs, comme les autres sortes : le menu du clic droit sur une coupe ou sur une transition, la palette (Ctrl+K :
+  « Transition : poussée »…), les poignées de durée, le calage. Le clic droit sur un fondu par une couleur a une case de
+  **couleur** (une étape d'annulation tant que la fenêtre de choix reste ouverte).
+- Dans le montage, chaque sorte a sa forme : la poussée, deux moitiés et une flèche ; le raccord filé, des traînées en plus ;
+  le flash, un losange blanc sur la coupe ; le fondu par une couleur, un losange de sa couleur ; le volet par un objet, le tronc.
+- L'écran (lecture, et à l'arrêt) et l'export montrent la même image, à l'arrondi près.
+
+### 175.2 Comment c'est fait
+
+- Un `Mix` dit en plus de combien chaque plan **glisse** (`shift_a`, `shift_b`, en largeurs du cadre), son **flou**
+  horizontal (`blur`) et le milieu de l'**objet** (`objet`). Le processeur (`blend_images`, l'export) floute chaque image
+  (moyenne glissante sur la ligne), puis la décale ; chaque plan est coupé à son propre cadre. L'objet est un trapèze
+  (`objet_coins`), un peu plus large en bas, au bord lissé.
+- La carte graphique (`paint_mix`) pose chaque image glissée de même, coupée par un rectangle de découpe (le « scissor » de
+  la passe d'affichage) ; le flou est un mode du shader d'affichage (32 lectures le long de l'horizontale de l'écran) ; la
+  couche de couleur est un aplat de n'importe quelle couleur (avant : du gris seulement). Le cadre filmé à l'écran vient de la
+  caméra du plan courant.
+- Le flash et le fondu par une couleur passent par la couche de couleur d'avant.
+- `transitions.json` passe à la **version 2 seulement quand une de ces sortes ou une couleur y est** : un projet sans elles
+  reste lisible par une version précédente. Une sorte qui ne va qu'entre deux plans, trouvée au bord du film dans un fichier,
+  devient un fondu au noir (comme avant).
+
+### 175.3 Ce qui n'est pas fait, ou à juger
+
+- La poussée et le raccord filé vont de droite à gauche seulement (les quatre sens étaient dans T2, sans réponse).
+- Le flou du raccord filé ne passe pas d'un plan à l'autre : la jointure reste nette au milieu de la traînée.
+- L'objet est un tronc dessiné par FEANOR ; un objet à soi (un dessin du plan qui passe devant) n'est pas fait.
+- Dans une vue tournée (la vue du dessin, pas la vue caméra), la découpe d'une poussée suit le rectangle qui contient le cadre.
+
+## 176. Les préréglages dans la timeline, lot 4 : les plans types (2026-11-18, branche `prereglages-montage`, **format 60**)
+
+La suite de la partie 175 : ses « Oui » à P1, P2, P3, P5, P6, P7, P8, P13, P14, P16, P17, P18. P4, P9, P10, P11, P12 et P15 sont
+restés sans réponse : pas faits.
+
+Le code : `src/planstypes.rs` (nouveau : ce que pose chaque plan type), `src/planstypesui.rs` (nouveau : le clic, le dépôt),
+`src/incrustation.rs` et `src/calqueffet.rs` (le lettre à lettre d'une incrustation), `src/prereglagesui.rs` (son réglage),
+`src/panneauprereglages.rs` (les vignettes), `src/storyboard.rs` (le dépôt), `src/project.rs` (format 60). Les essais :
+`src/planstypes_tests.rs` ; ceux qui citaient le format 59 passent à 60.
+
+### 176.1 Ce qui change pour lui
+
+Dans l'onglet Montage du panneau Préréglages, sous les transitions, **dix-huit vignettes de plans types**. Glissée entre deux
+plans du montage (un trait et un rond « + » montrent où), une vignette pose **un plan neuf, tout prêt** ; un clic le pose juste
+après le plan courant. Le plan neuf devient le plan courant ; Ctrl+Z le retire.
+
+| | Plan type | Ce qu'il pose | Durée |
+|---|---|---|---|
+| P1 | Color card | Un calque Couleur unie (gris moyen, à changer sur sa ligne de la timeline) | 2 s |
+| P2 | Carton noir, carton blanc | Un calque Couleur unie noir, ou blanc | 1 s |
+| P3 | Titre du film | Un carton noir ; le titre des propriétés du projet (sinon « Titre du film »), qui s'allume et s'éteint en fondu | 4 s |
+| P5 | Intertitre | « Trois jours plus tard… » sur un carton noir, en fondu | 3 s |
+| P6 | Lieu et date | **Sur un plan** : une incrustation en bas à gauche, « Paris, 1962 », qui s'écrit lettre à lettre | le plan |
+| P7 | Générique de début | **Sur un plan** : trois noms en bas du cadre, l'un après l'autre, chacun en fondu (un dessin par nom) | le plan |
+| P8 | Générique de fin | Les noms montent du bas du cadre et sortent par le haut ; allonger le plan les fait monter moins vite | 10 s |
+| P13 | Logo studio | Un carton noir, un calque Logo qui apparaît en douceur ; le choix de l'image s'ouvre tout de suite | 3 s |
+| P14 | Écran partagé en deux, trois, quatre | Les séparations noires, et un calque par case, où dessiner (un dessin sur tout le plan) | 4 s |
+| P16 | Précédemment, À suivre | Le carton de série en haut à gauche, sur les images (du milieu) des quatre plans d'avant, ou d'après | 5 s |
+| P17 | Carte avec trajet | Une carte (rivage, rivière, deux villes), et la ligne du trajet qui se dessine en tirets sur les deux tiers du plan | 5 s |
+| P18 | Inserts : téléphone, ordinateur, journal | Le téléphone et ses trois messages qui arrivent l'un après l'autre ; l'écran et sa fenêtre ; la une d'un journal | 4 s |
+
+- **Tout est fait de calques ordinaires** : Couleur unie, dessins vectoriels avec du texte (l'outil Texte les retouche),
+  clés d'opacité pour les fondus (elles se voient et se retouchent dans la timeline), clés de position pour le générique qui
+  monte, calques bitmap vides où dessiner. On les change comme le reste.
+- Le titre, le générique de fin et le générique de début reprennent le **titre** et l'**auteur** des propriétés du projet.
+- **Le lieu et la date** : son texte se change dans les réglages du calque « Lieu et date » (une incrustation : elle est dans
+  le cadre, par-dessus tout, et ne suit pas la caméra), et le lettre à lettre suit. Le réglage est neuf pour toutes les
+  incrustations : « Lettre à lettre », en images par lettre (0 : d'un coup).
+
+### 176.2 Comment c'est fait
+
+- `Document::poser_plan_type(t, coupe)` fait un plan neuf sur la coupe (`add_scene_before` / `add_scene_after`, comme
+  « Nouveau plan »), à la durée du type, et y pose ses calques ; `Document::poser_sur_le_plan(t, plan)` ajoute ceux du lieu et
+  de la date ou du générique de début en haut de la pile. `App::poser_plan_type` les enveloppe dans une étape d'annulation de
+  structure (`structure_op`).
+- Les textes sont des éléments Texte (`Element::Text`) dans la police intégrée, centrés par leur boîte, réduits pour tenir dans
+  le cadre ; les formes (téléphone, écran, journal, carte) sont des remplissages et des traits vectoriels.
+- « Précédemment » et « À suivre » calculent l'image finale du milieu de chaque plan voisin (`render::camera_image`, comme
+  l'export) et la posent dans un dessin bitmap, dans le cadre.
+- La carte : un dessin par étape de la ligne (dix-huit tirets au plus), exposés sur les deux tiers du plan, le dernier tenu.
+- **Format 60** : `lettre_a_lettre` d'une incrustation, écrit seulement quand il sert. Un projet 59 ou moins s'ouvre tel quel ;
+  une version précédente refuse un projet 60.
+
+### 176.3 Ce qui n'est pas fait, ou à juger
+
+- La ligne de la carte ne se retouche pas avec l'outil Trajectoire : c'est une suite de dessins (le tracé se change en
+  redessinant). Le lier à une vraie trajectoire de calque reste à faire.
+- « Précédemment » prend le milieu de chaque plan voisin, pas des images choisies.
+- Le lettre à lettre part du début du plan, pas de la première exposition du calque.
+- Le logo ne vient pas des Préférences : on choisit l'image à chaque pose.
+
+### 176.4 À tester (sa checklist, transitions et plans types)
+
+1. Panneau Préréglages : l'onglet « Montage » ; survoler « Poussée », « Raccord filé », « Volet par un objet ».
+2. Glisser « Poussée » sur une coupe du montage : la coupe s'éclaire ; lire : le plan suivant pousse l'autre.
+3. Clic droit sur la transition : « Fondu par une couleur », puis sa case Couleur ; Ctrl+Z.
+4. « Flash de coupe » et « Raccord filé » sur deux coupes : les lire en boucle.
+5. Glisser « Titre du film » au début du montage : un plan noir, le titre en fondu ; le retoucher à l'outil Texte.
+6. Cliquer « Générique de fin » : il monte ; allonger le plan, il monte moins vite.
+7. Glisser « Lieu et date » sur un plan : le texte s'écrit lettre à lettre ; changer le texte dans les réglages du calque.
+8. « Écran partagé en quatre » : dessiner dans chaque case (choisir le calque de la case).
+9. « Précédemment » après trois plans : leurs images défilent sous le carton.
+10. « Logo studio » : choisir une image ; elle apparaît en douceur.
+11. Exporter une vidéo du passage : l'export montre les mêmes transitions que l'écran.
+12. Enregistrer, rouvrir (le projet passe au format 60).
+
+## 177. Les préréglages : ses neuf réponses, trois transitions et six plans types de plus (2026-11-19, branche `prereglages-reponses`)
+
+Anthony, sur les neuf numéros restés sans réponse (T1, T2, T5, P4, P9, P10, P11, P12, P15) : « Oui ok pour tout ». Avec T2, la
+poussée et le raccord filé gagnent les quatre sens (ils allaient de droite à gauche seulement, partie 175.3). Le reste de la
+partie 175.3 et de 176.3 (un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire) n'est pas
+fait ici.
+
+Le code : `src/transitions.rs` (les trois sortes, le sens, le centre, le fichier), `src/gpu.rs` (leur affichage : deux modes de
+plus dans le shader d'affichage, un réglage de plus par image posée), `src/transitionsui.rs` (formes, sous-menu du sens, cadre du
+centre, commandes), `src/planstypes.rs` (les six plans types, le son à 1 kHz), `src/incrustation.rs` (quatre mots de plus),
+`src/panneauprereglages.rs` (vignettes), `src/keymap.rs` et `keymap.toml`. Les essais : `src/reponses_tests.rs`.
+
+### 177.1 Ce qui change pour lui
+
+| | Nom | Ce que c'est |
+|---|---|---|
+| T1 | Iris | Le rond de cartoon se ferme sur un point choisi, puis se rouvre sur le plan suivant. Au début du film il s'ouvre seulement, à la fin il se ferme. 16 images |
+| T2 | Volet en horloge | Le plan suivant balaie le cadre comme l'aiguille d'une montre, depuis midi |
+| T2 | Les volets dans les quatre sens | Le volet, la poussée et le raccord filé : « Sens : de la gauche, de la droite, du haut, du bas » au clic droit |
+| T5 | Zoom traversant | On plonge dans le plan (il grossit jusqu'à quatre fois), on ressort du suivant (il arrive de quatre fois et se pose), fondus au milieu |
+| P4 | Titre de séquence | Un carton noir et le nom de la séquence qui commence, rempli tout seul (il ouvre la séquence du plan d'après) ; 3 s |
+| P9 | Plan manquant | « Plan 12 — À VENIR » et sa durée sur un carton gris barré, remplis tout seuls (allonger le plan change la durée écrite) ; 3 s |
+| P10 | Ardoise d'en-tête | Titre, série, épisode, version, date et durée du film, remplis depuis le projet (Fichier > Propriétés) ; la version se tape ; 4 s |
+| P11 | Compte à rebours | 8, 7, 6, 5, 4, 3 (une seconde chacun, l'aiguille fait un tour), le 2 une seule image avec le bip à 1 kHz, puis du noir ; 8 s |
+| P12 | Mire de couleur | Les barres, et un son à 1 kHz sur tout le plan (à −20 dB) ; 5 s |
+| P15 | Fin d'acte | « Fin de l'acte 1 » sur un carton noir, en fondu ; le numéro suit les fins d'acte d'avant ; 3 s |
+
+- **Le centre** d'un iris ou d'un zoom traversant se choisit au clic droit sur la transition : un petit cadre où l'on clique (ou
+  tire) le point. Une étape d'annulation par geste.
+- Les textes du titre de séquence, du plan manquant et de l'ardoise sont des **incrustations** : ils se mettent à jour tout seuls
+  (renommer la séquence, allonger le plan, changer le titre du projet), et se retouchent dans les réglages du calque. Les
+  incrustations libres connaissent quatre mots de plus : `{duree}` (la durée du plan), `{duree_film}`, `{serie}`, `{episode}`.
+- **Les sons** du compte à rebours et de la mire sont des extraits du montage (piste son), posés au temps du plan neuf, faits par
+  FEANOR (pas de fichier à chercher) ; Ctrl+Z les retire avec leur plan.
+- Comme les autres : glissés depuis l'onglet Montage du panneau Préréglages (sur une coupe, ou entre deux plans), ou cliqués ;
+  la palette (Ctrl+K : « Transition : iris »…).
+
+### 177.2 Comment c'est fait
+
+- `transitions::Mix` dit en plus : l'**iris** (centre, rayon), l'angle balayé de l'**horloge**, les grossissements du **zoom**
+  et son centre, le glissement **vertical** d'une poussée, le côté d'où vient un **volet**. Le processeur (export) et la carte
+  graphique (écran) font la même image : l'iris est un aplat hors d'un rond (mode 5 du shader d'affichage), l'horloge une image
+  vue seulement dans un angle (mode 6), le zoom et les volets des images grossies ou coupées au cadre. Chaque image posée a un
+  réglage de plus (`extra`, 16 octets), pour ces deux modes.
+- `Transition::depuis` (le côté) et `Transition::centre` (en parts du cadre) ; sans eux, les sens d'avant (le volet de la gauche,
+  la poussée de la droite) et le milieu du cadre. `transitions.json` passe à la **version 3 seulement quand l'une des trois
+  sortes, un sens ou un centre y est** ; un centre abîmé revient dans le cadre.
+- Les plans types neufs sont faits des mêmes calques qu'à la partie 176 (Couleur unie, dessins vectoriels, clés d'opacité et de
+  position, incrustations) ; le son à 1 kHz est un WAV fait en mémoire (`planstypes::wav_1khz`), rangé dans le projet comme un
+  son importé.
+- **Pas de changement du format des projets** (60).
+- Corrigé en chemin : sur la carte graphique, le volet en horloge passait par le flou du raccord filé et montrait tout le plan
+  suivant (l'essai sur la carte graphique l'a trouvé).
+
+### 177.3 Ce qui n'est pas fait, ou à juger
+
+- Le compte à rebours suppose le cadre au milieu de la feuille (l'aiguille tourne autour du milieu de la feuille).
+- Dans les vignettes du montage, les cartons faits d'incrustations (titre de séquence, plan manquant, ardoise) se voient
+  noirs, sans leur texte : une incrustation est posée sur l'image finale, pas dans le dessin.
+- L'horloge part de midi et tourne dans le sens des aiguilles seulement ; l'iris n'a pas de forme autre que le rond.
+- Toujours pas faits : un objet à soi pour le volet par un objet, la ligne de la carte liée à l'outil Trajectoire ; C11, le flou
+  de vitesse du zip pan (C8), C28 ; le lot 5 (A, V, E, S, D, R).
+
+### 177.4 À tester (sa checklist)
+
+1. Onglet Montage du panneau Préréglages : survoler « Iris », « Volet en horloge », « Zoom traversant ».
+2. Glisser « Iris » sur une coupe ; clic droit sur la transition : cliquer dans le petit cadre sur un visage ; lire.
+3. « Iris » au début du film, puis à la fin : il s'ouvre, il se ferme.
+4. Un volet, une poussée : clic droit, « Sens : du haut », « du bas » ; lire.
+5. « Zoom traversant » : le point du centre, puis lire.
+6. « Titre de séquence » entre deux séquences ; renommer la séquence : le carton suit.
+7. « Plan manquant » : allonger le plan, la durée écrite suit.
+8. « Ardoise d'en-tête » : remplir le titre, la série, l'épisode dans les propriétés du projet ; changer la version dans les
+   réglages du calque « Ardoise ».
+9. « Compte à rebours » : lire avec le son, le bip sur le 2.
+10. « Mire de couleur » : le son à 1 kHz ; « Fin d'acte » deux fois : 1, puis 2.
+11. Exporter une vidéo du passage : les mêmes transitions qu'à l'écran, le bip et la mire dans le son.

@@ -1125,6 +1125,10 @@ impl App {
         self.depli.zones.clone_from(&zones_versions);
         self.depli.colonnes.clone_from(&colonnes);
         self.paint_transitions(&painter, &badges);
+        // Une transition glissée depuis le panneau Préréglages : sur la coupe la plus proche (partie 175).
+        self.transition_depot(ui, r, &blocks, top, top + block_h);
+        // Un plan type glissé depuis le même panneau : entre deux plans, ou sur un plan (partie 176).
+        self.plan_type_depot(ui, r, &blocks, top, top + block_h);
         // Un bruitage glissé depuis le panneau Bruitages : il se pose là où on le lâche.
         let l = resp.hover_pos().map_or(left, |p| left_at(p.x));
         self.bruitage_drop(ui, &resp, l, ppf, lanes_top);

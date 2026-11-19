@@ -3,8 +3,55 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-19
+
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-reponses` et sa branche locale retirés (elle n'avait jamais
+  été poussée ; tout est dans main, sur GitHub), `Tests\essai 177` mis à la corbeille (il n'avait pas servi). `Chantiers\piste-mode`
+  et `Tests\essai 173`, à l'autre session, pas touchés.
+- **`prereglages-reponses` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (e859d56, exe de 1 h 10), sur
+  son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (e561eff), ni ici ni
+  sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 897 réussis, 0 échec, les dix groupes OK) ;
+  le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 0 h 09) : arrêté sans enregistrer, l'exe recompilé
+  dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 60) et de faux réglages : vivant après
+  30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. Le format des projets ne change
+  pas (60). **Pas regardé sur son écran** : liste 177.4. Gardés, retrait proposé (sa décision) : le dossier
+  `Chantiers\prereglages-reponses` et `Tests\essai 177`.
+- **Préréglages : ses neuf réponses** (partie 177, branche `prereglages-reponses` partie de main e561eff, format 60
+  inchangé), sur son « Oui ok pour tout » aux neuf numéros restés sans réponse. Trois transitions de plus : l'iris (T1, sur un
+  centre choisi au clic droit ; il s'ouvre au début du film, se ferme à la fin), le volet en horloge (T2) et le zoom traversant
+  (T5) ; le volet, la poussée et le raccord filé viennent de chacun des quatre côtés (« Sens » au clic droit). Six plans types
+  de plus : titre de séquence (P4), plan manquant (P9), ardoise d'en-tête (P10), compte à rebours avec son bip (P11), mire de
+  couleur et son 1 kHz (P12), fin d'acte (P15) ; les incrustations libres connaissent `{duree}`, `{duree_film}`, `{serie}`,
+  `{episode}`. `transitions.json` passe à la version 3 seulement quand il le faut. Vérificateur : sans avertissement, 4 897
+  réussis, 0 échec, les dix groupes OK (l'essai sur la carte graphique avait trouvé, avant, le volet en horloge pris par le
+  flou du raccord filé : corrigé). Contrôle de lancement de l'exe du chantier sur une copie de « dd » (format 60) avec de faux
+  réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 0 h 09, pas touché).
+  Dossier d'essai pour lui : `Tests\essai 177` (copie de « dd », copie de ses réglages, `Lancer essai 177.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 177.4).
+- Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-montage` et sa branche locale retirés (elle n'avait jamais
+  été poussée ; tout est dans main, sur GitHub), `Tests\essai 175` mis à la corbeille (il n'avait pas servi : la copie de
+  « dd » était encore au format 59). `Chantiers\piste-mode` et `Tests\essai 173`, à l'autre session, pas touchés.
+- **`prereglages-montage` fusionnée dans main, poussée, et son FEANOR habituel reconstruit** (23efd4c, exe du 19 novembre à
+  0 h 01), sur son « Fusionne maintenant » (sans essai sur son écran avant). Main n'avait pas bougé depuis la branche (93ad4fd),
+  ni ici ni sur GitHub : l'arbre fusionné est exactement celui vérifié (sans avertissement, 4 880 réussis, 0 échec, les dix
+  groupes OK) ; le vérificateur n'a pas été relancé. Son FEANOR était ouvert (depuis 20 h 39) : arrêté sans enregistrer, l'exe
+  recompilé dans Source. Contrôle de lancement avec ce nouvel exe sur une copie de « dd » (format 59) et de faux réglages :
+  vivant après 30 s, aucun rapport de plantage, son vrai « dd » intact. Il n'a pas été rouvert à sa place. **Ses projets
+  passent au format 60 quand il les ouvre** (une version précédente les refuserait). **Pas regardé sur son écran** : liste
+  176.4. Gardés, retrait proposé (sa décision) : le dossier `Chantiers\prereglages-montage` et `Tests\essai 175`.
+
 ## 2026-11-18
 
+- **Préréglages dans la timeline, lot 4 : les transitions et les plans types** (parties 175 et 176, branche
+  `prereglages-montage` partie de main 93ad4fd, **format 60**), sur son « Ok continue ». Cinq transitions de plus (poussée T3,
+  raccord filé T4, flash de coupe T6, fondu par une couleur T7, volet par un objet T8), à l'écran comme à l'export ; le panneau
+  Préréglages a deux onglets, Caméra et Montage ; dans Montage, les dix transitions (glissées sur une coupe) et dix-huit plans
+  types (P1, P2, P3, P5, P6, P7, P8, P13, P14, P16, P17, P18) qui posent un plan neuf tout prêt entre deux plans, fait de calques
+  ordinaires ; le lieu et la date (une incrustation qui s'écrit lettre à lettre, réglage neuf « Lettre à lettre ») et le
+  générique de début se posent sur un plan. Numérotées 175 et 176 : la session de la branche `piste-mode-liste` a pris la partie
+  173 et `Tests\essai 173` (rien touché de son côté). Vérificateur : sans avertissement, 4 880 réussis, 0 échec, les dix groupes OK (un premier passage avait 8 échecs : le format 60 dans d'anciens essais, les commandes neuves absentes de keymap.toml, le menu d'une transition trop long, ses sortes passées dans un sous-menu). Contrôle de lancement de l'exe du chantier sur une copie de « dd » avec de faux réglages : vivant 30 s, aucun plantage, son vrai « dd » intact (son FEANOR habituel, ouvert depuis 20 h 39, pas touché). Dossier
+  d'essai pour lui : `Tests\essai 175` (copie de « dd » au format 59, copie de ses réglages, `Lancer essai 175.cmd`). **Pas
+  fusionné, pas essayé sur son écran** (liste 176.4). Restent sans réponse : T1, T2, T5, P4, P9, P10, P11, P12, P15.
 - Sur son « Oui, retire-les » : le dossier `Chantiers\prereglages-travellings` (environ 2,5 Go) et sa branche locale retirés
   (elle n'avait jamais été poussée ; tout est dans main, sur GitHub), `Tests\essai 172` mis à la corbeille (il n'avait pas
   servi : la copie de « dd » était encore au format 58).
