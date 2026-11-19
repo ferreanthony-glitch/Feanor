@@ -285,3 +285,22 @@ sans qu'aucun ne se perde ; l'application se repose vue ouverte ; la mesure ci-d
    refait la carte entière (3 ms environ pour une feuille 1920 × 1080) à cette image-là.
 3. La vue 3D montre les dessins bruts (sans effets, modes de fusion), comme en plein écran (point 11.3).
 4. Le côte à côte n'est pas retenu d'une séance à l'autre (seule sa largeur l'est).
+
+## 14. Le décor 3D d'une séquence (2026-11-19, branche `decor-3d`) : ce qui revient, et pourquoi
+
+Le 2026-10-21, Anthony avait choisi de rester simple (partie 1 : plus d'objets 3D, plus de repère, plus de rasteriseur). Le
+2026-11-19, il choisit d'aller **vers un moteur de prévisualisation** : décors, puis personnages, filmés par les caméras des plans.
+L'étude se fait par étapes ; **l'étape 1** est le décor d'une séquence (`docs/INTERFACE.md`, partie 180 ; code `decor3d*.rs`).
+
+Ce qui revient du code d'avant (le sien, repris) : le lecteur glTF de `model3d.rs` (étendu : normales, coordonnées de texture,
+couleur de base et texture, plafonds de sûreté), le rasteriseur par bandes de `scene3drender.rs` (étendu : texture juste en
+perspective, facettes, lumière hémisphère, ciel, brume ; il ne sert plus qu'à l'export sans carte graphique et à l'affichage de
+secours), la passe wgpu de `scene3dgpu.rs` (refaite : maillages texturés, ombres douces, une prise par vue), et l'idée
+d'`espace3dobjets.rs` (l'image des objets, élément le plus bas du plan, vue de l'œil de la caméra et alignée sur la feuille).
+Ce qui ne revient pas : les objets simples (cube, mannequin…), les styles de rendu, le « Figer dans un calque de fond ».
+
+Ce qui est neuf : le décor est **dessiné par la carte graphique à l'écran** (dans la composition de l'image du plan, et dans la
+vue), jamais refait par le processeur quand la caméra bouge ; un **budget mesuré sur la machine** (`decor3dbudget.rs`) décide
+ce qu'un décor peut peser sans ralentir, et un décor trop lourd est allégé ou simplifié (la copie du projet seulement), jamais
+accepté pour ralentir FEANOR. V1 : le décor est **derrière toutes les cartes** ; la profondeur partagée décor / cartes, les ombres
+portées par les cartes, puis les personnages (squelettes, animations : l'étape 2) viendront ensuite.

@@ -163,6 +163,8 @@ impl SnapshotBuilder {
         s.properties = doc.properties.clone();
         s.comments = doc.comments.clone();
         s.transitions = doc.transitions.clone();
+        // Les décors 3D des séquences (partie 180) : leurs modèles sont des `Arc`, rien n'est recopié.
+        s.decors3d = doc.decors3d.clone();
         // Pas copiés : ce que le rendu ne lit jamais (autres versions des plans, références visuelles, rognages,
         // planche de crayonnés, envois, sons proposés).
         let mut ids = Vec::new();

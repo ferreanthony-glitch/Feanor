@@ -1753,6 +1753,21 @@ touches = []
 source = "sans touche à l'origine"
 
 [[raccourci]]
+action = "fichier.importer_decor3d"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "decor3d.enlever"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "decor3d.remesurer"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "fichier.importer_sequence"
 touches = []
 source = "sans touche à l'origine"

@@ -421,6 +421,16 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+// Le décor 3D d'une séquence (partie 180) : lecture glTF, simplification, rendus, budget de la machine.
+pub mod decor3d;
+pub mod decor3dbudget;
+pub mod decor3dgltf;
+pub mod decor3dgpu;
+pub mod decor3drendu;
+pub mod decor3dsimplifier;
+mod decor3dui;
+#[cfg(test)]
+mod decor3d_tests;
 mod brossesdediees;
 mod calquespastilles;
 #[cfg(test)]

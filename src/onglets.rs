@@ -280,6 +280,8 @@ etat_projet! {
     // --- l'écriture continue et les jalons (`continu.rs`, `jalonsui.rs`)
     continu: crate::continu::Continu = Default::default(),
     jalons_ui: Option<crate::jalonsui::Fenetre> = None,
+    // --- le décor 3D de la séquence (`decor3dui.rs`) : import en cours, fenêtre « Ce décor est lourd »
+    decor3d: crate::decor3dui::Etat3d = Default::default(),
 }
 
 

@@ -959,7 +959,8 @@ fn no_object_reference_model_or_background_layer_command_remains() {
         assert!(crate::keymap::action_info(id).is_none(), "{id} ne doit plus exister");
         assert!(!crate::keymap::DEFAULT_KEYMAP.contains(&format!("\"{id}\"")), "{id} est encore dans keymap.toml");
     }
-    for (id, label) in crate::palette::palette_commands() {
+    // (Partie 180 : le décor 3D d'une séquence revient, par décision d'Anthony du 2026-11-19 ; son import parle de glTF.)
+    for (id, label) in crate::palette::palette_commands().into_iter().filter(|(id, _)| *id != "fichier.importer_decor3d") {
         let l = label.to_lowercase();
         assert!(!["cube", "mannequin", "cylindre", "sphère", "escalier", "gltf", "repère 3d"].iter().any(|w| l.contains(w)), "{id} « {label} » parle d'un objet 3D ou du repère");
     }

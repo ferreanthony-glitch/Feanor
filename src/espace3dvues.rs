@@ -839,6 +839,8 @@ impl App {
             };
             Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
+        // Le décor 3D de la séquence (partie 180), derrière les cartes ; une prise par vue.
+        self.e3_peindre_decor(&painter, draw, &view, 100 + i as u64);
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
         if !camera {
             let cam_now = self.e3_world().scene_cam(&self.current_camera());

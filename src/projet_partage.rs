@@ -799,6 +799,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.variantes = if variantes { variantes_octets(doc)? } else { None };
         job.variantes_gardees = doc.variantes_partielles;
         job.references = crate::references::plan_save(doc, dir)?;
+        job.decors3d = crate::decor3d::plan_save(doc, dir)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.snapshots = doc.envois.pending.clone();
         job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
@@ -836,6 +837,7 @@ impl SaveJob {
             scenario: None,
             sons_proposes: None,
             references: Default::default(),
+            decors3d: Default::default(),
             envois: None,
             plans_versions: None,
             variantes: None,
@@ -994,6 +996,7 @@ impl SaveJob {
                 ecrire(dir.join(crate::variantes::FILE), self.variantes.as_deref(), &|t| crate::variantes::parse(t).is_ok())?;
             }
             count += self.references.write(&dir)?;
+            count += self.decors3d.write(&dir)?;
             count += crate::envois::ecrire(&dir, &self.snapshots, &self.snapshot_reuse, None)?;
             // La structure : ré-écrite si ses octets ont changé, ou si une annexe a changé (les autres postes ne surveillent que
             // ce fichier-là pour savoir que le montage a bougé).

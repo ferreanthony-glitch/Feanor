@@ -84,6 +84,9 @@ pub enum FondPart {
     /// La couleur unie d'un calque « Couleur unie » (`couleurunie.rs`) : toute la feuille de cette couleur, sous les dessins du calque.
     /// Son dessin (un seul pixel, étiré sur la feuille) est fait à la demande et gardé par couleur : aucun bitmap de la taille de la feuille.
     Unie([u8; 3]),
+    /// Le décor 3D de la séquence du plan (`decor3d.rs`, partie 180), vu de l'œil de la caméra à cette image : l'élément le plus
+    /// bas du plan, sous tous les calques.
+    Decor(crate::decor3d::DecorCle),
 }
 
 /// Le numéro d'élément de plan de la couleur unie : aucun dessin du projet n'a ce numéro.
@@ -835,7 +838,10 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
 /// Comme `panel_plan_at`, avec ou sans les calques d'annotation du plan : `annotations` vrai, ils sont posés par-dessus tout le reste.
 pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>, annotations: bool) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations)
+    let repere = doc.repere_du_plan(index, frame);
+    // Le décor 3D de la séquence (partie 180) : sous tous les calques.
+    let decor = crate::decor3d::item(doc, index, &camera, repere.as_ref());
+    plan_with_camera_layers(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, repere.as_ref(), doc.fps, annotations, decor).0
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
@@ -873,7 +879,7 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
 }
 
 fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> Plan {
-    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations).0
+    plan_with_camera_layers(world, panel, frame, paper, camera, repere, fps, annotations, None).0
 }
 
 /// Les calques d'un plan que l'export des calques séparés (`exportlayers.rs`) écrit chacun à part, du plus bas au plus haut : ni dossier, ni
@@ -895,14 +901,19 @@ pub fn separable_layers(panel: &Panel, annotations: bool) -> Vec<usize> {
 pub fn panel_layer_plans(doc: &Document, index: usize, frame: usize, annotations: bool) -> Vec<(usize, Plan)> {
     let camera = doc.camera_seen(index, frame);
     let panel = &doc.panels[index];
-    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations);
+    // (Sans le décor 3D : il n'est pas un calque, l'export des calques séparés ne l'écrit pas, partie 180.)
+    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.repere_du_plan(index, frame).as_ref(), doc.fps, annotations, None);
     let keep = separable_layers(panel, annotations);
     ranges.into_iter().filter(|(li, r)| keep.contains(li) && !r.is_empty()).map(|(li, r)| (li, Plan { paper: None, items: plan.items[r].to_vec() })).collect()
 }
 
 /// Comme `plan_with_camera`, avec pour chaque calque traité (dans l'ordre de pose) la plage de ses éléments dans `Plan::items`.
-fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
+/// `decor` : l'élément du décor 3D de la séquence (`decor3d::item`), posé avant le premier calque mais après son rang de départ
+/// (un calque d'ajustement qui couvre toute la pile le couvre aussi).
+#[allow(clippy::too_many_arguments)]
+fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, repere: Option<&crate::espace3dmath::M4>, fps: u32, annotations: bool, decor: Option<PlanItem>) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
     let mut items: Vec<PlanItem> = Vec::new();
+    let mut decor = decor;
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
     let order = crate::calqueannot::ordre(&panel.layers, annotations);
@@ -916,6 +927,7 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
         let l = &panel.layers[li];
         starts[li] = items.len();
         portees.visiter(&panel.layers, li, items.len());
+        items.extend(decor.take());
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect_at(&panel.layers, li, frame) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
@@ -949,6 +961,8 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
         items.extend(fond_item(l, &line));
         items.push(line);
     }
+    // (Une pile sans calque : le décor seul.)
+    items.extend(decor);
     let ranges = order.iter().enumerate().map(|(k, &li)| (li, starts[li]..order.get(k + 1).map_or(items.len(), |&next| starts[next]))).collect();
     (Plan { paper, items }, ranges)
 }

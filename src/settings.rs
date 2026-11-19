@@ -202,6 +202,11 @@ pub struct Settings {
     /// animations (`diagnostic.rs`, Fichier > Préférences…, Aide > Diagnostic des performances).
     #[serde(default, rename = "performance")]
     pub perf: crate::diagnostic::PerfReglages,
+    /// Le budget 3D de cette machine (`decor3dbudget.rs`, partie 180) : mesuré par un étalonnage court la première fois qu'un
+    /// décor 3D est importé ou ouvert, refait quand la carte, son pilote ou le processeur changent (sa clé), ou par
+    /// « Remesurer » (Préférences > Performance, diagnostic des performances).
+    #[serde(default, rename = "budget_decor_3d", skip_serializing_if = "Option::is_none")]
+    pub decor3d: Option<crate::decor3dbudget::BudgetMachine>,
     /// Ce que le diagnostic des performances a fait : proposé au premier lancement, dernier profil
     /// appliqué et réglages d'avant (« Revenir comme avant »).
     #[serde(default, rename = "diagnostic")]
@@ -443,6 +448,7 @@ impl Default for Settings {
             comment_author: String::new(),
             framing: Default::default(),
             perf: Default::default(),
+            decor3d: None,
             diagnostic: Default::default(),
             bruitages: Default::default(),
             bibliotheque: Default::default(),

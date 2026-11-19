@@ -51,6 +51,11 @@
 //!                         contenu rogné, commentaires et transitions de chaque variante, de même sans changer
 //!                         `VERSION` ; leurs dessins sont dans dessins/ ; absent, aucune séquence n'a de variante
 //!                         (dans un projet partagé : annexe du montage, écrite par le porteur du jeton)
+//!   decors3d.json         les décors 3D des séquences (`decor3d.rs`, partie 180) : séquence, nom, fichier d'origine, place,
+//!                         aspect, ce qui a été allégé, de même sans changer `VERSION` ; absent, aucune séquence n'a de
+//!                         décor ; une version qui ne le connaît pas le laisse en place et montre les plans sans décor
+//!   decors/<id>.glb       leurs modèles, toujours en `.glb` autonome (un `.gltf` est empaqueté à l'import), jamais
+//!                         modifiés sur place ; ceux que plus rien ne cite partent à l'enregistrement
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -342,8 +347,8 @@ pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 /// place d'un renommage (`write_atomic`), un son, une texture, une image collée et une image de vidéo ne changent jamais
 /// sous le même nom. Un jalon (`jalons.rs`) peut donc en garder un second nom sur le disque (lien physique) au lieu d'une
 /// copie : ce que FEANOR écrit ensuite ne touche pas à ce que le jalon voit.
-pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 5] {
-    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER]
+pub(crate) fn dossiers_jamais_modifies_sur_place() -> [&'static str; 6] {
+    [DRAWINGS, SOUNDS, VIDEOS, TEXTURES, crate::imagevec::DOSSIER, crate::decor3d::DIR]
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1204,7 +1209,7 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             return Err(format!("un projet existe déjà à cet endroit ({}). Choisis un autre nom.", m.display()));
         }
     }
-    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR] {
+    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR, crate::decor3d::DIR] {
         if dir.join(sub).exists() {
             return Err(format!(
                 "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
@@ -1650,6 +1655,8 @@ pub struct SaveJob {
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
     /// qui peut s'effacer (`references.rs`).
     references: crate::references::SavePlan,
+    /// Les décors 3D : modèles à écrire dans `decors/`, `decors3d.json`, et ce qui peut s'effacer (`decor3d.rs`).
+    decors3d: crate::decor3d::SavePlan,
     /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
     envois: Option<Vec<u8>>,
     /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
@@ -2022,6 +2029,7 @@ impl SaveJob {
         self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
+        self.decors3d = crate::decor3d::plan_save(&doc, dir)?;
         self.envois = crate::envois::to_bytes(&doc)?;
         self.plans_versions = crate::planvers::to_bytes(&doc)?;
         self.variantes = if doc.variantes.is_empty() { None } else { crate::variantes::to_bytes(&doc, &hors_variantes)? };
@@ -2091,6 +2099,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
+        job.decors3d = crate::decor3d::plan_save(doc, dir)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.plans_versions = crate::planvers::to_bytes(doc)?;
         job.variantes = variantes_octets(doc)?;
@@ -2394,6 +2403,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
         count += self.references.write(dir)?;
+        // Les décors 3D : leurs modèles dans `decors/`, puis `decors3d.json`.
+        count += self.decors3d.write(dir)?;
         // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
         count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
@@ -2433,7 +2444,8 @@ impl SaveJob {
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) + crate::imagevec::effacer_inutiles(dir, &self.used_images) }
-            + self.references.cleanup(dir);
+            + self.references.cleanup(dir)
+            + self.decors3d.cleanup(dir);
         Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants) })
     }
 }
@@ -3396,6 +3408,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         // Le scénario gardé : `scenario.json`, `scenariogarde::load`.
         scenario: None,
         frames_rangees: None,
+        // Les décors 3D : `decors3d.json`, `decor3d::load`.
+        decors3d: Default::default(),
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
@@ -3710,6 +3724,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.transitions = load_transitions(dir, &mut warnings);
         // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
         structure.references = crate::references::load(dir, &mut warnings);
+        // Les décors 3D des séquences : `decors3d.json` et le dossier `decors/` (absents : aucun).
+        structure.decors3d = crate::decor3d::load(dir, &mut warnings);
         // Les personnages de la brosse par personnage (`personnages.json`, absent : aucun).
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).

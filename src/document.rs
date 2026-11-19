@@ -1411,6 +1411,9 @@ pub struct Structure {
     /// d'annulation les tient ainsi (une entrée par image et par calque pesait 16 octets : 4,5 Mo pour 450 plans, 830 Mo pour
     /// 183 étapes). Hors de cet état, `None` et les `frames` des calques sont en place.
     pub frames_rangees: Option<Box<FramesRangees>>,
+    /// Les décors 3D des séquences (`decor3d.rs`, partie 180) : importer, enlever, déplacer un décor s'annulent avec le reste.
+    /// Les modèles sont partagés (`Arc`) : une étape d'annulation ne les recopie pas.
+    pub decors3d: crate::decor3d::Decors3d,
 }
 
 /// Les `frames` de chaque calque de chaque plan d'une `Structure`, en suites (dessin ou rien, nombre d'images de suite).
@@ -1572,6 +1575,9 @@ pub struct Document {
     /// (montré, couleur, opacité, pas). Écrit dans le manifeste (champ facultatif `environnement_3d`, sans changer `VERSION`). Hors de
     /// l'annulation, comme `vues_3d` : une façon de regarder, jamais dans l'image du film. Rien : l'aspect d'origine.
     pub environnement_3d: Option<crate::espace3ddecor::Environnement3d>,
+    /// Les décors 3D des séquences (`decor3d.rs`, partie 180), par numéro de séquence ; enregistrés à côté du manifeste, dans
+    /// `decors3d.json`, leurs modèles dans `decors/`, sans changer `VERSION`. Dans `Structure` : l'annulation les rétablit.
+    pub decors3d: crate::decor3d::Decors3d,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1642,6 +1648,7 @@ impl Document {
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
             environnement_3d: None,
+            decors3d: Default::default(),
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1673,6 +1680,7 @@ impl Document {
             .chain(structure.transitions.iter().map(|t| t.id))
             .chain(structure.references.iter().map(|r| r.id))
             .chain(structure.personnages.iter().map(|p| p.id))
+            .chain(crate::decor3d::ids(&structure.decors3d))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -1718,6 +1726,7 @@ impl Document {
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             vues_3d: None,
             environnement_3d: None,
+            decors3d: structure.decors3d,
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1771,6 +1780,7 @@ impl Document {
             duree_plan_neuf: self.duree_plan_neuf,
             vues_3d: self.vues_3d.clone(),
             environnement_3d: self.environnement_3d,
+            decors3d: self.decors3d.clone(),
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
@@ -2295,6 +2305,7 @@ impl Document {
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
             frames_rangees: None,
+            decors3d: self.decors3d.clone(),
         }
     }
 
@@ -2339,6 +2350,7 @@ impl Document {
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
             scenario: std::mem::replace(&mut self.scenario, s.scenario),
             frames_rangees: None,
+            decors3d: std::mem::replace(&mut self.decors3d, s.decors3d),
         }
     }
 

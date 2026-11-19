@@ -1232,6 +1232,10 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
         r.hash(&mut h);
         return h.finish() | (1 << 63);
     }
+    // Le décor 3D (`decor3d.rs`) : un numéro propre à son rendu.
+    if let Some(crate::render::FondPart::Decor(key)) = &item.fond {
+        return crate::decor3d::id_of(key);
+    }
     // Couleur unie (`couleurunie.rs`) : un numéro propre à la couleur.
     if let Some(crate::render::FondPart::Unie(c)) = &item.fond {
         let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -1283,6 +1287,8 @@ fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Opti
         // Le repère d'un calque d'effet non résolu (`calqueffet::resolve`) ne montre rien.
         Some(crate::render::FondPart::Reglage(_)) => None,
         Some(crate::render::FondPart::Unie(c)) => Some(Shown::Fx(unie_cel(*c))),
+        // Le décor 3D : son rendu, ou le dernier en attendant (à l'écran, jamais d'attente).
+        Some(crate::render::FondPart::Decor(key)) => crate::decor3d::montre(doc, key),
     }
 }
 
@@ -1627,6 +1633,7 @@ fn job_for(doc: &Document, item: &crate::render::PlanItem, src: &Cel, id: CelId,
 /// mêmes numéros et les mêmes versions que ceux du nouveau).
 pub fn forget_all() {
     crate::fxcache::forget_all();
+    crate::decor3d::forget_all();
     RECOURS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
@@ -1634,6 +1641,7 @@ pub fn forget_all() {
 /// Comme `forget_all`, mais rend les dessins dérivés oubliés au lieu de les lâcher ici : l'appelant les fait rendre sur
 /// un autre fil (`lacher.rs`, autre projet qui prend la place).
 pub(crate) fn forget_all_rendre() -> crate::fxcache::Reserve {
+    crate::decor3d::forget_all();
     let r = crate::fxcache::mettre_de_cote();
     COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     r
@@ -1909,6 +1917,17 @@ pub fn fond_poll() -> bool {
     }
     FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     true
+}
+
+/// On est dans `differe` : les calculs de fond (fonds sous le trait, décor 3D) se font sur un autre fil.
+pub(crate) fn differe_actif() -> bool {
+    DIFFERE.with(std::cell::Cell::get)
+}
+
+/// Un rendu du décor 3D venu de l'arrière-plan (`decor3d::poll`) compte comme un fond adopté : ce qui en dépend (vignettes) se
+/// refait.
+pub(crate) fn decor_arrive() {
+    FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Un fond est-il en cours de calcul ?

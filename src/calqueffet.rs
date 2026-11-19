@@ -706,6 +706,8 @@ fn content_signature(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Opt
             FondPart::Forme(r) => format!("{r:?}"),
             FondPart::Reglage(r) => format!("{r:?}"),
             FondPart::Unie(c) => format!("unie {c:?}"),
+            // (Le rendu du décor 3D sous la caméra de cette image : son numéro le dit tout entier.)
+            FondPart::Decor(k) => format!("decor {}", crate::decor3d::id_of(k)),
         }).hash(&mut h);
     }
     h.finish()

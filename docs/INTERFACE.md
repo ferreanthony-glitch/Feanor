@@ -15241,3 +15241,212 @@ côte à côte, Anthony a choisi la barre du calque (« B mais la taille d'une l
 5. Ferme un dossier : sa ligne montre les clés de ses calques en petit. Rouvre-le.
 6. Un dossier courant : la barre montre son œil, son cadenas, son opacité et le nombre de ses calques.
 7. Dans les trois thèmes : la teinte reste lisible, le texte de la barre aussi. Dis si la teinte est trop forte ou trop faible.
+
+## 180. Le décor 3D d'une séquence (2026-11-19, branche `decor-3d`)
+
+Première étape du moteur de prévisualisation qu'Anthony a choisi le 2026-11-19 (`docs/ESPACE3D.md`, partie 14) : un **décor
+3D** (un modèle glTF 2.0, `.glb` ou `.gltf`) pour une **séquence**. Tous les plans de la séquence le montrent, filmé par la
+caméra de chaque plan, dans la vue Espace 3D et dans l'image du plan (à l'écran et dans les exports). Format du projet
+inchangé (60). **Rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR) ; compilé et essayé sur le Mac seulement.
+
+### 180.1 Ce qui change pour Anthony
+
+1. **Fichier > Importer > « Décor 3D de la séquence (glTF, .glb)… »** (`fichier.importer_decor3d`, sans touche). Le modèle est
+   posé pour la séquence du plan courant : le bas de sa boîte sur le sol (`Monde::sol_y`), centré, tout entier derrière la feuille
+   (z ≤ 0). Les mètres du glTF sont gardés ; la barre d'état dit sa taille (« 12,40 × 6,10 × 30,00 m, 84 000 triangles », et
+   « très grand / très petit : vérifie son échelle » au-delà de 500 m ou sous 5 cm). Un seul décor par séquence : en importer un
+   autre le remplace. Une étape d'annulation.
+2. **Derrière toutes les cartes.** Dans l'image du plan, le décor est l'élément le plus bas, juste au-dessus du papier ; chaque
+   calque se pose dessus. Il est juste en profondeur en lui-même (ses murs se cachent entre eux), **pas avec les cartes** : une carte
+   posée « derrière » un mur du décor passe quand même devant. La profondeur partagée entre le décor et les cartes est une étape
+   suivante.
+3. **Filmé comme une carte en profondeur** : vu de l'œil de la caméra du plan, aligné sur la feuille ; le panoramique, la bascule,
+   le zoom et la rotation de la caméra s'appliquent ensuite à tout le plan. Le décor défile donc avec la même parallaxe que les
+   cartes quand la caméra se déplace. Un plan « en Espace 3D » (`repere_du_plan`) le pose comme ses cartes (dans le repère de la
+   caméra, vu de l'œil de référence).
+4. **L'aspect « low poly doux »** (Anthony, « Dans l'étape 1 ») : facettes (normales par face, d'origine) ou lissé ; lumière
+   hémisphère (ambiance froide du ciel par-dessus, chaude du sol par-dessous) et soleil chaud ; **ciel** en dégradé pastel derrière
+   le décor (il couvre toute l'image du plan : c'est le fond le plus bas) ; **brume** vers la couleur de l'horizon avec la distance ;
+   **ombres douces** du soleil (une carte d'ombres filtrée), dont la qualité suit le budget de l'ordinateur (sans, basses, hautes).
+   Ni réflexions ni matières PBR : couleur de base × texture de couleur de base.
+5. **Le panneau Espace 3D**, sous les réglages de la vue : « Décor 3D : <nom> », le fichier d'origine, ce qui a été allégé, la
+   position (m), la rotation autour de la verticale, l'échelle, le soleil (autour, hauteur), les cases Facettes, Ciel, Brume,
+   Ombres, la qualité des ombres sur cet ordinateur, « Remettre au sol », « Enlever ». Une retouche (un glisser, une saisie) est
+   **une** étape d'annulation, posée au lâcher. Sans décor : un bouton « Importer le décor 3D de la séquence… ».
+6. **« Enlever le décor 3D de la séquence »** (`decor3d.enlever`, Fichier > Importer quand la séquence en a un, et le panneau) :
+   une étape d'annulation.
+7. **La vue Espace 3D** (plein écran, à côté, vues multiples) le montre entre le quadrillage et les cartes, dessiné par la carte
+   graphique, lissé (4 échantillons), avec facettes, lumière, brume et ombres (le ciel n'y est pas : le fond et le quadrillage de
+   la vue restent visibles). Sans carte graphique (OpenGL de secours, `PELURE_COMPOSITION=processeur`), la vue montre la boîte du
+   décor en fil de fer et une légende.
+8. **« Ce décor est lourd »** (une fenêtre de FEANOR, pas une boîte du système), quand le décor dépasse ce que **cet ordinateur**
+   dessine sans ralentir : les mesures (fichier, triangles, sommets, matières, textures et leur poids en mémoire, plus grand côté,
+   ce que FEANOR n'utilise pas, le temps d'une image sur la carte), ce qui dépasse, et deux propositions :
+   - **Alléger (la forme ne change pas)** : textures au plus 4096, 2048 ou 1024 px (JPEG pour une image opaque, PNG quand l'alpha
+     sert) ; retirer ce que le rendu de FEANOR n'utilise pas (cartes de normales, de rugosité, d'occlusion, d'émission, coordonnées
+     en plus, tangentes, couleurs de sommets, animations, squelettes, morphoses : elles compteront pour les personnages, étape 2,
+     et le fichier d'origine les garde) ; sommets soudés, indices sur 16 bits quand ils tiennent.
+   - **Simplifier la géométrie (modifie la forme)** : 50 %, 25 %, ou « jusqu'à N triangles » (le budget de l'ordinateur).
+   L'avant → après (fichier, mémoire des textures, triangles) est **calculé avant d'appliquer**, sur un autre fil, avec sa barre
+   d'avancement ; changer un choix relance le calcul. Boutons : « Alléger et importer » (« Simplifier, alléger et importer »),
+   « Importer tel quel » (seulement si ce qui dépasse ne ralentit pas : un fichier lourd de cartes inutiles), « Annuler ». Un
+   résultat encore au-delà du budget ne s'importe pas (« allège ou simplifie davantage »). **Le fichier d'origine n'est jamais
+   modifié** : seule la copie gardée dans le projet est allégée ; `decors3d.json` le note (« textures 4096 → 2048 », « cartes de
+   normales… retirées », « simplifié : 6,2 M → 1,9 M triangles ») et le panneau le dit.
+9. **Ouvert sur un autre ordinateur** : un décor du projet qui dépasse le budget de celui-ci est **masqué** (il ne ralentit
+   rien), la barre d'état le dit, et la même fenêtre propose de l'alléger (« Simplifier, alléger et remplacer », une étape
+   d'annulation) ou de le laisser masqué sur cet ordinateur (« Le masquer sur cet ordinateur », pour la séance).
+10. **Préférences > Performance** : « Décor 3D sur cet ordinateur : jusqu'à N triangles, M Mo de textures (mesuré le …) » et
+   **Remesurer** (aussi `decor3d.remesurer` dans la palette, et le diagnostic des performances le refait).
+
+### 180.2 Comment c'est fait
+
+- **Lecteur et écrivain glTF faits main** (`decor3dgltf.rs`, aucune dépendance neuve, `Cargo.lock` inchangé) : le lecteur de
+  l'ancien repère 3D (`model3d.rs`, retiré le 2026-10-21), étendu aux normales (plates quand le fichier n'en a pas, comme le
+  veut la norme), à `TEXCOORD_0` (flottants ou entiers normalisés), à la couleur de base et à sa texture (PNG ou JPEG, dans le
+  fichier ou en `data:`, décodée par `image`), au mode `MASK` (le seuil d'alpha ; `BLEND` est lu opaque). Refusés avec un message
+  en français : Draco, maillage quantifié, accesseurs clairsemés, toute extension exigée sauf `KHR_materials_unlit` (une matière
+  « sans éclairage », que les modèles low poly exigent souvent : le décor l'éclaire quand même, c'est l'aspect choisi) et
+  `KHR_materials_emissive_strength` (l'émission, que FEANOR ne montre pas).
+- **Données étrangères, aucun plantage** : chaque nombre, décalage et pas d'un accesseur est vérifié en arithmétique bornée contre la
+  longueur réelle du tampon **avant** toute réservation de mémoire ; la taille d'une texture est lue dans son en-tête et bornée
+  avant décodage ; des **plafonds de sûreté** (`decor3d::PLAFONDS` : fichier 1 Go, 16 millions de sommets, 48 millions d'indices,
+  16 384 px de côté, 2 Go de textures décodées) arrêtent un fichier énorme avant l'épuisement de la mémoire ; lecture, mesure,
+  allègement et simplification tournent sur d'autres fils, dans `catch_unwind` (une panique devient un message). Côté carte, une
+  primitive est coupée en morceaux d'un million de triangles au plus et une texture plus grande que la carte ne l'accepte y est
+  réduite.
+- **Le projet** : `decors3d.json` à côté du manifeste (séquence, numéro, nom, fichier d'origine, position, rotation, échelle,
+  aspect, ce qui a été allégé) et `decors/<id>.glb` (sans changer `VERSION` ; liste des fichiers dans `project.rs`). Le modèle est
+  **toujours un `.glb` autonome** : un `.gltf` texte est empaqueté à l'import (ses tampons et ses images, d'à côté ou en `data:`,
+  recopiés dans un seul tampon, sans rien décoder) ; le projet ne dépend jamais du dossier d'origine. `decors/` est parmi les
+  dossiers jamais modifiés sur place (jalons par liens physiques) et dans `check_target`. Un modèle manquant ou illisible n'empêche
+  pas d'ouvrir : on le dit, l'entrée est gardée telle quelle, rien n'est effacé. Une version de FEANOR qui ne connaît pas ces
+  fichiers les laisse en place et montre les plans sans décor. Projet partagé : écrit par le porteur du jeton du montage.
+- **Annuler** : `Structure::decors3d` (les modèles sont des `Arc` : une étape ne les recopie pas).
+- **L'image du plan** : `decor3d::item` pose un élément `FondPart::Decor(DecorCle)` tout en bas (`render::plan_with_camera_layers`,
+  après le rang de départ du premier calque : un calque d'ajustement sur toute la pile le couvre). La clé contient tout (le modèle,
+  sa pose dans le repère où on le regarde, l'œil, la feuille, le cadre, l'aspect).
+  - **À l'écran avec la carte graphique** (`gpu.rs`, `place_decor`, `decor3dgpu.rs`) : le décor est **dessiné par la carte**, dans
+    une texture de la taille de la feuille, redessinée seulement quand la clé change (la caméra a bougé), avant la composition ;
+    maillages et textures envoyés **une fois**. Le processeur ne refait jamais l'image du décor pendant qu'on joue ou qu'on glisse.
+  - **Sans carte graphique** : `decor3d::montre` rend sur un autre fil (la moitié des cœurs) et l'écran garde le rendu d'avant en
+    attendant ; sur le fil de l'interface, jamais d'attente.
+  - **À l'export** : l'image exacte, tout de suite — par la carte graphique si FEANOR en a une (`decor3d::poser_carte` : la même
+    image qu'à l'écran, ombres comprises), sinon par le processeur (`decor3drendu.rs` : facettes, lumière, ciel, brume ; **pas
+    d'ombres** dans ce rendu de secours).
+  - L'export des **calques séparés** n'écrit pas le décor (ce n'est pas un calque) ; les vignettes d'une version rangée de plan non
+    plus.
+- **La vue Espace 3D** : une commande de dessin d'egui (`VueDecor`) qui dessine le décor dans ses propres cibles (lissage 4×,
+  profondeur 32 bits), une par vue (les vues multiples ne s'écrasent pas), puis le pose sur la vue en transparence.
+- **Le budget de la machine** (`decor3dbudget.rs`) : un **étalonnage** de quelques secondes, sur une grille d'essai texturée
+  (2 et 200 000 triangles), à la taille de la feuille, pour chaque qualité d'ombres, par la carte graphique (`rendre_hors_ecran`,
+  quatre images, la première exclue) et par le processeur ; on en tire une droite de coût par qualité (coût fixe + coût par
+  million de triangles). **La règle** : tout le décor d'une image d'écran (l'image du plan et la vue, qui peuvent se montrer
+  ensemble) tient en **4 ms de carte**, soit 2 ms par passe, moins 20 % de marge : un quart d'une image à 60 Hz, le reste pour
+  ce que FEANOR dessine déjà ; la lecture à 24 i/s et les vitesses J/K/L gardent leur marge. Triangles du budget = ce que la droite
+  « sans ombres » permet en 1,6 ms ; la qualité des ombres d'un décor = la meilleure dont la droite tient pour ses triangles (sur une
+  machine faible, les ombres tombent avant que rien ne ralentisse). Mémoire des textures : un quart de la mémoire vidéo connue,
+  sinon (mémoire partagée d'un Mac, graphisme intégré) un dixième de la mémoire vive. Sans carte : un rendu par le processeur en
+  250 ms au plus (sur un autre fil). Gardé dans `reglages.toml` (`budget_decor_3d`) avec **la clé de la machine** (carte, API,
+  pilote, processeur) : une autre carte ou un autre pilote, et il se remesure tout seul, au premier décor importé ou ouvert.
+  À l'import, le décor lui-même est **aussi chronométré** sur la carte (trois images à la taille de la feuille) avant d'être
+  accepté.
+- **Simplifier** (`decor3dsimplifier.rs`, fait main) : contraction de demi-arêtes guidée par les quadriques d'erreur (Garland et
+  Heckbert) : chaque sommet gardé est un sommet du modèle, avec ses vraies coordonnées de texture. Primitive par primitive (les
+  frontières de matière ne se traversent pas), sommets soudés par position et coordonnées de texture (une couture de texture est un
+  bord), **tout sommet de bord gardé** ; pas de face retournée, pas de maillage non variété ; normales refaites (lissées sous
+  50°, cassées au-delà). Sur un autre fil, avec avancement, annulable. Limites : la cible est approchée, pas toujours atteinte (un
+  maillage fait surtout de bords se simplifie peu).
+
+### 180.3 Les mesures sur le Mac de développement (à valider sur le PC d'Anthony)
+
+Machine : Apple M5 Pro (Metal), essai `decor3d_perf` compilé en `--release`, trois passages. Méthode : la grille d'essai texturée
+(1024² pour l'étalonnage, 2048² pour l'essai), feuille 3840 × 2160 (cadre 1920 × 1080), ciel et brume, huit images enchaînées
+dans une seule soumission à la carte (comme à l'écran, où elle ne s'arrête pas pour attendre le processeur), la plus rapide de
+trois séries ; un premier essai qui attendait la fin de chaque image comptait 1 à 2 ms d'attente du pilote par image et donnait
+des droites incohérentes (des ombres « moins chères » que sans ombres) : abandonné.
+
+| Triangles | Processeur (export de secours, 1920 × 1080) | Carte, feuille 3840 × 2160 : sans / ombres basses / hautes |
+|---|---|---|
+| 20 000 | 7 ms | 0,29 / 0,58 / 0,58 ms |
+| 180 000 | 21 ms | 0,37 / 0,64 / 0,88 ms |
+| 980 000 | 83 ms | 1,05 / 1,32 / 1,81 ms |
+| 2 000 000 | 181 ms | 1,78 / 2,32 / 2,58 ms |
+
+Droites mesurées par l'étalonnage (coût fixe + par million de triangles) : sans ombres 0,18 à 0,28 ms + 0,73 à 1,29 ms ; ombres
+basses 0,48 à 0,67 + 0,87 à 1,29 ; hautes 0,53 à 0,68 + 1,29 à 1,59 ; processeur 5,4 à 6,5 ms + 77 à 79 ms. **Budget tiré :
+jusqu'à 1,1 à 1,8 million de triangles** selon le passage (le bruit de mesure de la carte, d'un passage à l'autre, fait ±25 %),
+ombres hautes jusqu'à 0,7 à 0,8 million environ ; **512 Mo de textures** : sur ce Mac, FEANOR ne connaît ni la mémoire vidéo
+(mémoire partagée) ni la mémoire vive (`materiel::memoire` ne répond que sous Windows), il prend donc la valeur prudente de repli.
+Le processeur, lui, n'entre pas dans le budget de l'écran (il ne sert qu'à l'export sans carte et au secours) ; avec la carte,
+l'export passe par elle.
+
+La règle de 4 ms par image d'écran (2 ms par passe, moins 20 %) vient de la cadence de l'écran (16,7 ms à 60 Hz) et de la
+lecture (41,7 ms à 24 i/s) ; le temps d'image actuel de FEANOR (`perf_tests`) n'a **pas** été remesuré ici, à faire sur son PC
+avec la superposition « Performance » ouverte et un décor au budget.
+
+Ces budgets **doivent être validés sur le PC d'Anthony** (Windows, i7-10700K) : l'essai ignoré `decor3d_perf` imprime les temps
+(`cargo test --lib decor3d_perf -- --ignored --nocapture`), et FEANOR mesure de toute façon sa machine tout seul au premier décor.
+
+### 180.4 Essais (`decor3d_tests.rs`, 29 essais dont un ignoré)
+
+Lecture : un carré coloré (positions, normales, coordonnées, couleur), un carré texturé (une PNG de 2 × 2), normales plates sans
+normales, Draco / quantifié / clairsemé refusés avec leur message ; fichiers abîmés refusés proprement (nombres qui mentent,
+décalage géant, `.glb` tronqué à plusieurs endroits, image qui annonce 100 000 × 100 000 pixels, n'importe quoi) ; un `.gltf`
+texte empaqueté en `.glb` qui se relit pareil. Projet : enregistré à côté du manifeste et relu identique (les octets copiés,
+le manifeste inchangé), enlevé puis enregistré (le fichier part), sans fichier (aucun décor), modèle manquant (ouvert, entrée
+gardée). Séquence : deux plans de la séquence le voient, un plan d'une autre non, et il est l'élément le plus bas. Image : à
+l'export, le carré au centre, transparent autour, un calque dessiné passe dessus ; à l'écran sans carte, aucune attente et le rendu
+arrivé est montré. Aspect : ciel en haut, brume au loin (processeur), facettes ≠ lissé, ombres de la boîte et ciel sur la carte
+graphique (sauté sans carte). Budget : il suit l'échelle des mesures injectées, la qualité des ombres suit le budget, gardé et
+relu dans les réglages, une autre clé de machine fait remesurer. Allègement : textures réduites, carte de normales et animation
+retirées, mêmes triangles, positions, coordonnées et couleurs, fichier d'origine intact ; simplification d'une grille dense en
+deux matières vers 25 % (boîte, matières, coordonnées gardées, relue en `.glb`), annulable. Interface : sous le budget, importé
+sans fenêtre en une étape d'annulation (posé au sol, derrière la feuille) ; au-delà, la fenêtre et rien de posé ; un fichier
+refusé le dit ; les trois commandes ont leur bloc dans `keymap.toml`. Et, s'il y a une banque de modèles dans
+`assets/banque3d/` (le dossier était là, non suivi par git, dans le dossier de travail de cette branche : il ne vient pas de cette
+partie), chacun de ses `.glb` se lit, se mesure et se rend (sauté sans la banque) ; c'est lui qui a montré `KHR_materials_unlit`.
+`espace3d_tests::no_object_reference_model_or_background_layer_command_remains` laisse passer « Importer le décor 3D… (glTF…) »
+(la décision du 2026-10-21 sur le glTF est levée pour le décor).
+
+### 180.5 Ce qui n'est pas fait (ou limité)
+
+- **La profondeur partagée** décor / cartes (une carte derrière un mur) : étape suivante. Les cartes ne portent ni ne reçoivent
+  d'ombres.
+- **Le quadrillage du sol de la vue ne se perd pas dans la brume** du décor (il est dessiné par egui, avant le décor) ; le ciel
+  n'est pas dans la vue Espace 3D.
+- Le rendu par le processeur (sans carte graphique) n'a **pas d'ombres** ; ni profondeur de champ ni occlusion ambiante (plus tard).
+- Pas de cartes de niveaux (mipmaps) des textures : une texture très fine, vue de loin, peut scintiller.
+- `BLEND` lu comme opaque, couleurs de sommets ignorées, `KHR_texture_transform` et l'échantillonneur du fichier ignorés
+  (toujours répété), une seule texture de couleur de base par matière.
+- Pendant un mouvement de caméra **sans carte graphique**, le décor suit avec un temps de retard (rendu sur un autre fil).
+- Les nœuds sont cuits dans les sommets : un décor fait d'un même objet répété (instances) devient plus gros une fois allégé ou
+  simplifié (l'avant → après le montre).
+- Copier ou dupliquer une séquence n'emporte pas son décor ; la séquence supprimée garde son entrée (elle revient avec Ctrl+Z).
+- Pas de manipulateur du décor dans la vue (seulement les champs chiffrés du panneau).
+- Les couleurs du ciel, de la brume et de l'ambiance sont des constantes (`decor3drendu.rs`), pas encore des réglages.
+- L'export des calques séparés n'écrit pas le décor.
+
+### 180.6 À tester (sa checklist)
+
+1. Un projet de copie. Fichier > Importer > « Décor 3D de la séquence (glTF, .glb)… » : un `.glb` low poly (des arbres, des
+   rochers). La barre d'état dit sa taille ; le décor est sur le sol, derrière la feuille. Tous les plans de la séquence le
+   montrent ; un plan d'une autre séquence non.
+2. Ses calques passent devant le décor ; le ciel pastel couvre le fond ; au loin, la brume.
+3. Bouge la caméra du plan (déplacement, avancée) : le décor défile avec la parallaxe des cartes ; panoramique, bascule, zoom,
+   rotation : il suit comme le reste. **Rien ne doit saccader** — lecture à 24 i/s, J/K/L, glisser la caméra : dis-le au moindre
+   ralenti.
+4. Vue Espace 3D (plein écran, à côté, vues multiples) : le décor entre le quadrillage et les cartes, en facettes, avec ses ombres.
+5. Panneau Espace 3D : déplace, tourne, mets à l'échelle le décor ; coche/décoche Facettes, Ciel, Brume, Ombres ; tourne le
+   soleil. Ctrl+Z défait une retouche d'un coup. « Remettre au sol », « Enlever », Ctrl+Z.
+6. Exporte une image et un film : le décor y est, comme à l'écran (ombres comprises).
+7. Enregistre, ferme, rouvre : le décor est là ; le dossier du projet a `decors3d.json` et `decors/<id>.glb`.
+8. Un `.gltf` texte avec ses images à côté : il s'importe, et le projet ne dépend plus du dossier d'origine.
+9. Un fichier lourd (textures 8K, millions de triangles) : « Ce décor est lourd », les mesures, Alléger (2048, 1024), Simplifier
+   (50 %, 25 %, jusqu'au budget), l'avant → après, puis « Simplifier, alléger et importer ». Vérifie que **le fichier d'origine
+   n'a pas changé** et que le panneau dit ce qui a été allégé.
+10. Un fichier Draco : refusé avec un message clair.
+11. Préférences > Performance : la ligne « Décor 3D sur cet ordinateur : jusqu'à N triangles, M Mo de textures » et **Remesurer** ;
+   note les chiffres de ton PC.
+12. En `PELURE_AFFICHAGE=opengl` : la vue montre la boîte du décor en fil de fer ; l'image du plan le montre (rendu un instant
+   après).

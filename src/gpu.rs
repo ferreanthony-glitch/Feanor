@@ -566,6 +566,18 @@ struct CanvasResources {
     bordures: HashMap<CelId, BordureGardee>,
     /// Passes d'effets dessinées, pour les mesures.
     fx_passes: u64,
+    /// Les décors 3D à redessiner à la prochaine composition (`place_decor` les pose ; `decor3dgpu.rs`).
+    decor_jobs: Vec<DecorJob>,
+}
+
+/// Un décor 3D à dessiner dans sa texture (la feuille vue de l'œil de la caméra) avant la composition.
+struct DecorJob {
+    out: CelId,
+    dessin: crate::decor3dgpu::Dessin,
+    prise: crate::decor3drendu::Prise,
+    taille: [u32; 2],
+    qualite: crate::decor3dbudget::Qualite,
+    sig: u64,
 }
 
 impl CanvasResources {
@@ -718,6 +730,11 @@ pub struct GpuCanvas {
 }
 
 impl GpuCanvas {
+    /// L'état de rendu partagé avec eframe : la vue Espace 3D y pose le moteur du décor 3D (`decor3dgpu.rs`, partie 180).
+    pub fn render_state(&self) -> &RenderState {
+        &self.render_state
+    }
+
     /// Plus grand côté d'une texture de la carte (au-delà, l'image composée de la feuille ne se crée pas).
     pub fn max_side(&self) -> u32 {
         self.render_state.device.limits().max_texture_dimension_2d
@@ -912,6 +929,7 @@ impl GpuCanvas {
             fx_jobs: Vec::new(),
             bordures: HashMap::new(),
             fx_passes: 0,
+            decor_jobs: Vec::new(),
         });
         // Le budget de mémoire vidéo du système, lu sur un autre fil (`memoirevideo.rs`).
         crate::memoirevideo::suivre(&rs.adapter.get_info());
@@ -1130,12 +1148,19 @@ impl GpuCanvas {
         // des effets de la carte : le fil de fond calcule le dessin dérivé par les effets du trait seuls, la
         // carte passe les autres effets dessus, à pleine résolution (`fx::hybrid_split`).
         let hybrid: Vec<Option<(crate::render::PlanItem, Vec<crate::fx::FxStep>)>> = plan.items.iter().zip(&on_gpu).map(|(item, &gpu)| gpu.then(|| crate::fx::hybrid_split(item)).flatten()).collect();
+        // Le décor 3D (partie 180) : dessiné par la carte, dans sa texture, avant la composition (`place_decor`) ; jamais rendu
+        // par le processeur ici (la caméra qui bouge ferait un rendu par image).
+        let max_side = rs.device.limits().max_texture_dimension_2d;
+        let decor_gpu: Vec<bool> = plan.items.iter().map(|item| matches!(item.fond, Some(crate::render::FondPart::Decor(_))) && size.0 <= max_side && size.1 <= max_side).collect();
         let displays: Vec<Option<crate::fx::Display>> = plan
             .items
             .iter()
             .zip(&on_gpu)
             .enumerate()
             .map(|(i, (item, &gpu))| {
+                if decor_gpu[i] {
+                    return None;
+                }
                 // (Sur la carte en attendant le calcul de fond d'un dessin qui déborde : il part ici, son résultat prend la place à son arrivée.)
                 if gpu {
                     crate::fx::demander_si_debord(doc, item);
@@ -1204,6 +1229,11 @@ impl GpuCanvas {
             }
             if let Some(entry) = res.textures.get_mut(&id) {
                 entry.last_used = tick;
+            }
+        }
+        for (i, item) in plan.items.iter().enumerate() {
+            if let (true, Some(crate::render::FondPart::Decor(key))) = (decor_gpu[i], &item.fond) {
+                resolved[i] = place_decor(rs, res, doc, key, size, tick, &mut bytes);
             }
         }
         // Les calques à effets sur la carte graphique : la texture du résultat de chaque pile (créée à
@@ -1865,6 +1895,21 @@ impl CallbackTrait for CanvasPaint {
         encoder: &mut wgpu::CommandEncoder,
         resources: &mut CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
+        // Le décor 3D (partie 180) : redessiné dans sa texture, de l'œil de la caméra, avant la composition qui la lit.
+        let jobs = resources.get_mut::<CanvasResources>().map(|r| std::mem::take(&mut r.decor_jobs)).unwrap_or_default();
+        if !jobs.is_empty() {
+            let mut moteur = resources.remove::<crate::decor3dgpu::Moteur>().unwrap_or_else(|| crate::decor3dgpu::Moteur::new(device, queue));
+            if let Some(res) = resources.get_mut::<CanvasResources>() {
+                for j in jobs {
+                    let Some(view) = res.textures.get(&j.out).map(|t| t.texture.create_view(&Default::default())) else { continue };
+                    moteur.dessiner_feuille(device, queue, encoder, j.out, std::slice::from_ref(&j.dessin), &j.prise, j.taille, &view, j.dessin.aspect.ciel, j.qualite);
+                    if let Some(state) = res.textures.get_mut(&j.out).and_then(|t| t.fx.as_mut()) {
+                        state.done = j.sig;
+                    }
+                }
+            }
+            resources.insert(moteur);
+        }
         let Some(res) = resources.get_mut::<CanvasResources>() else { return Vec::new() };
         // Effets de calque sur la carte graphique (`gpufx.rs`) : les textures de résultat dont la
         // signature a changé sont redessinées, avant la composition qui les lit.
@@ -2205,6 +2250,43 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
     if entry.fx.is_some_and(|s| s.done != sig) {
         res.fx_jobs.retain(|j| j.out != out);
         res.fx_jobs.push(FxJob { src, out, chain: std::sync::Arc::new(chain), sig, bordure: bord.map(|b| b.1) });
+    }
+    Some(out)
+}
+
+/// La texture du décor 3D de la clé `key` (`decor3d.rs`) : une par décor, de la taille de la feuille, redessinée par la carte
+/// quand la clé change (la caméra a bougé) — jamais remplie par le processeur. Rien : le modèle n'est plus dans le projet.
+#[allow(clippy::too_many_arguments)]
+fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key: &crate::decor3d::DecorCle, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
+    let (modele, aspect) = crate::decor3d::modele(doc, key.modele)?;
+    let prise = key.prise()?;
+    let out = crate::decor3d::id_texture(key.modele);
+    let qualite = if aspect.ombres { crate::decor3d::qualite(&modele.scene) } else { crate::decor3dbudget::Qualite::Sans };
+    let sig = crate::decor3d::id_of(key) ^ (qualite as u64) << 1;
+    let want = [0, 0, sheet.0, sheet.1];
+    if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.rect == want) {
+        if let Some(old) = res.textures.remove(&out) {
+            *bytes -= old.bytes();
+        }
+        let texture = crate::gpufx::target_texture(&rs.device, sheet.0, sheet.1);
+        let view = texture.create_view(&Default::default());
+        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()) };
+        *bytes += entry.bytes();
+        res.textures.insert(out, entry);
+    }
+    let entry = res.textures.get_mut(&out).expect("texture du décor présente");
+    entry.last_used = tick;
+    let state = entry.fx.as_mut().expect("texture du décor");
+    if state.wanted != sig {
+        state.wanted = sig;
+        // La texture va changer : l'image composée gardée n'est plus bonne.
+        entry.generation = tick;
+    }
+    if entry.fx.is_some_and(|s| s.done != sig) {
+        res.decor_jobs.retain(|j| j.out != out);
+        let dessin = crate::decor3dgpu::Dessin { id: key.modele, scene: modele.scene.clone(), matrice: key.pose, aspect };
+        res.decor_jobs.push(DecorJob { out, dessin, prise, taille: [sheet.0, sheet.1], qualite, sig });
     }
     Some(out)
 }

@@ -638,6 +638,9 @@ pub struct App {
     pub(crate) continu: crate::continu::Continu,
     /// La fenêtre « Jalons » du projet (`jalonsui.rs`).
     pub(crate) jalons_ui: Option<crate::jalonsui::Fenetre>,
+    /// Le décor 3D de la séquence (`decor3dui.rs`, partie 180) : l'import en cours, la fenêtre « Ce décor est lourd », la
+    /// retouche en cours de sa place.
+    pub(crate) decor3d: crate::decor3dui::Etat3d,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
@@ -1328,6 +1331,7 @@ impl App {
             recovery,
             continu: Default::default(),
             jalons_ui: None,
+            decor3d: Default::default(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -1561,6 +1565,15 @@ impl App {
         }
         crate::demarrage::marque("carte graphique : pipelines des calques (GpuCanvas::new)");
         app.renderer.set_gpu(app.gpu.is_some());
+        // Le décor 3D (partie 180) : le fil de l'interface n'attend jamais un rendu ; l'export emprunte la carte graphique ; le budget
+        // de cette machine, s'il a été mesuré ici.
+        if reel {
+            crate::decor3d::poser_fil_interface();
+            if let Some(rs) = wgpu_render_state {
+                crate::decor3d::poser_carte(rs);
+            }
+        }
+        app.decor3d_budget_au_demarrage();
         app.display_info.push_str(if app.gpu.is_some() {
             " · calques par la carte graphique"
         } else {
@@ -3154,6 +3167,15 @@ impl App {
         if crate::fx::fond_poll() | crate::fx::griffon_poll() {
             self.renderer.invalidate_composed();
             ctx.request_repaint();
+        }
+        // Le décor 3D rendu par le processeur en arrière-plan (sans carte graphique, `decor3d.rs`).
+        if crate::decor3d::poll() {
+            self.renderer.invalidate_composed();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::decor3d::pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
@@ -5302,6 +5324,9 @@ impl App {
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
+            "fichier.importer_decor3d" => self.decor3d_importer(),
+            "decor3d.enlever" => self.decor3d_enlever(),
+            "decor3d.remesurer" => self.decor3d_remesurer(),
             "fichier.importer_scenario" => self.open_scenario_window(),
             "scenario.creer_plans" => self.open_plans_window(),
             "pinceau.enregistrer_traits" => {
@@ -5808,6 +5833,7 @@ impl App {
         self.tick_aplat_couleur(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
+        self.decor3d_tick(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();

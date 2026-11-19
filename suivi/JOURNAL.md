@@ -5,6 +5,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-19
 
+- **Le décor 3D d'une séquence** (partie 180, branche `decor-3d` partie de `main` c9c24f6, format 60 inchangé, aucune dépendance
+  neuve), première étape du moteur de prévisualisation qu'Anthony a choisi. Un glTF (`.glb`, `.gltf` empaqueté) importé pour une
+  séquence : tous ses plans le montrent, derrière les calques, filmé par leur caméra (vue Espace 3D, image du plan, exports) ;
+  aspect low poly doux (facettes, lumière hémisphère, ciel, brume, ombres douces) ; `decors3d.json` et `decors/<id>.glb` à côté du
+  manifeste ; une étape d'annulation. Sur ses demandes en cours de route : barrière à l'entrée (« Ce décor est lourd » : alléger
+  sans toucher la forme, simplifier en le disant), budget **mesuré sur la machine** (étalonnage gardé dans les réglages avec la
+  clé de la carte et du processeur, « Remesurer » dans Préférences > Performance), règle « aucun ralentissement » (à l'écran, la
+  carte graphique dessine le décor ; jamais d'attente sur le fil de l'interface), aucun plantage sur un fichier abîmé.
+  Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de commit** (liste 180.6). Budgets à valider sur son PC
+  (`decor3d_perf`, ignoré).
 - **`main` du 19 novembre (9c422b9 : parties 168 à 177, dont la colonne des calques de la partie 174) fusionné dans
   `timeline-claire`.** Première tentative annulée sans rien écrire : la colonne des calques de la 174 (en-tête, sept colonnes sur tous
   les calques, calque courant sur trois rangées) et celle de la timeline plus claire (lignes égales, barre du calque, exception

@@ -721,6 +721,8 @@ impl App {
             Self::e3_peindre_quadrillage(&painter, &view, center, draw.left_top(), lignes);
         }
 
+        // Le décor 3D de la séquence (partie 180) : derrière toutes les cartes.
+        self.e3_peindre_decor(&painter, draw, &view, 1);
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
         if !through {
