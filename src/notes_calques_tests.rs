@@ -406,23 +406,22 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
-    // (Partie 160 : le panneau Calques n'existe plus ; la ligne complète du calque courant de la timeline porte le bouton, les
-    // lignes fines des autres calques ne l'ont pas.) « C1 » est le calque courant.
+    // (Partie 160 : le panneau Calques n'existe plus ; la ligne du calque de la timeline porte le bouton. Partie 174 : l'aplat est une
+    // colonne de chaque calque, alignée sous l'en-tête ; éteint, un petit point ; rien pour un dossier.) « C1 » est le calque courant.
     app.cur_layer = 0;
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| {
         a.timeline_heads(ui, 24.0, 0.0);
     };
-    let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let n = textes.iter().filter(|(t, _)| t.contains(ph_fond)).count();
-    assert_eq!(n, 1, "{textes:?}");
-    // Un clic sur celui de la ligne « C1 » lui donne un fond.
+    ecran.chauffer(&mut app, 3, &mut ui_calques);
+    crate::bulles::vus::vider();
+    let textes = ecran.chauffer(&mut app, 1, &mut ui_calques);
+    let cases = crate::bulles::vus::ou("Aplat sous le trait");
+    assert_eq!(cases.len(), 3, "C1, C2 et « Hors dossier », pas le dossier : {cases:?}");
+    assert!(cases.iter().all(|r| (r.center().x - cases[0].center().x).abs() < 0.5), "une colonne : {cases:?}");
+    assert!(!textes.iter().any(|(t, _)| t.contains(ph_fond)), "éteint partout : un point, pas l'icône");
+    // Un clic sur la case de la ligne « C1 » lui donne un fond.
     let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
-    let (_, bouton) = textes
-        .iter()
-        .filter(|(t, r)| t.contains(ph_fond) && r.center().y > ligne.center().y && r.center().y - ligne.center().y < 30.0 && r.left() > ligne.left() - 5.0)
-        .min_by(|a, b| a.1.top().total_cmp(&b.1.top()))
-        .expect("le bouton de la ligne C1")
-        .clone();
+    let bouton = *cases.iter().find(|r| r.center().y > ligne.top() && r.center().y - ligne.center().y < 30.0).expect("la case de la ligne C1");
     let textes = ecran.cliquer(&mut app, bouton.center(), &mut ui_calques);
     assert!(app.layers()[0].fond.is_some(), "{} / {textes:?}", app.status);
     // Les réglages du pinceau ont « Peint sur l'aplat » et, à côté, le même bouton d'aplat que la ligne du calque

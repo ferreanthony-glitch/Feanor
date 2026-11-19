@@ -2,7 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::App;
 use crate::handles::{GridMenu, GridSelect, Handle};
-use crate::layerheads::{row_at, rows_height, rows_of, Row};
+use crate::layerheads::{row_at, rows_height, Row};
 use crate::storyboard::duration_label;
 use crate::theme;
 
@@ -18,7 +18,14 @@ pub(crate) const LIGNE1_H: f32 = 30.0;
 pub(crate) const LIGNE2_H: f32 = 28.0;
 /// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
 /// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
-pub(crate) const HEADER_H: f32 = LIGNE1_H + LIGNE2_H;
+pub(crate) const HEADER_H: f32 = REGLE_H + crate::layerheads::ENTETE_H;
+/// Partie 174 : la hauteur de la règle elle-même (les numéros, les crochets d'entrée et de sortie, les marques, les signets, la prise
+/// de la fin du plan, l'image courante), en face des deux lignes de boutons ; dessous, en face de la rangée d'en-tête des colonnes
+/// des calques (`layerheads::ENTETE_H`), la règle continue, vide.
+pub(crate) const REGLE_H: f32 = LIGNE1_H + LIGNE2_H;
+/// Partie 174 : la marge avant l'image 0 de la grille : la place de l'icône du comportement avant la première image d'un calque
+/// qui commence à l'image 0 (`comportements_timeline`).
+pub(crate) const MARGE_AVANT: f32 = 20.0;
 /// Partie 165.6 : les groupes de la barre de la timeline sur la première ligne (le plan, puis le transport, l'image courante, les
 /// repères et l'affichage) ; les dessins, la caméra et le reste sur la seconde, avec « Plus… » et la légende des clés.
 pub(crate) const DERNIER_GROUPE_LIGNE1: u8 = 1;
@@ -106,12 +113,20 @@ impl App {
                 .show(ui, |ui| {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
-                        self.timeline_names(ui);
+                        // (Partie 174 : dans un `scope`, la colonne prend sa largeur entière : un bouton posé (`put`) dans une ligne
+                        // déplace le curseur de la rangée horizontale jusqu'à lui, et la grille commençait après le dernier posé.)
+                        ui.scope(|ui| self.timeline_names(ui));
                         ui.add_space(2.0);
                         egui::ScrollArea::horizontal()
                             .id_salt("timeline_h")
                             .auto_shrink([false, true])
-                            .show(ui, |ui| self.timeline_grid(ui));
+                            .show(ui, |ui| {
+                                // (Partie 174 : la marge avant l'image 0, puis la grille, côte à côte.)
+                                ui.horizontal_top(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 0.0;
+                                    self.timeline_grid(ui);
+                                });
+                            });
                     });
                 });
         });
@@ -150,7 +165,7 @@ impl App {
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups, self.cur_layer));
+        let rows_h = rows_height(&self.lignes_de_la_timeline());
         let sound_h = self.sound_row_h();
         let notes_h = self.notes_row_h();
         // (Les blocs de la piste Caméra, sous ses clés : partie 170.)
@@ -226,7 +241,7 @@ impl App {
         let cell = self.timeline_cell.clamp(CELL_MIN, CELL_MAX);
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
-        let rows = rows_of(self.layers(), &self.doc.groups, self.cur_layer);
+        let rows = self.lignes_de_la_timeline();
         let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
@@ -234,8 +249,12 @@ impl App {
         let notes_h = self.notes_row_h();
         let blocs_h = self.blocs_camera_h(ui.ctx());
         let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + blocs_h + notes_h + sound_h);
+        // Partie 174 : une marge avant l'image 0 (l'icône du comportement avant la première image d'un calque qui commence à l'image
+        // 0 s'y pose) ; elle défile avec la grille, la règle et les rangées s'y prolongent.
+        let (marge, _) = ui.allocate_exact_size(vec2(MARGE_AVANT, size.y), Sense::hover());
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
+        let large = ui.painter().with_clip_rect(ui.clip_rect().intersect(marge.union(r)));
         if let Some((a, b)) = fit {
             let target = Rect::from_min_max(pos2(r.left() + a as f32 * cell, r.top()), pos2(r.left() + b as f32 * cell, r.top() + HEADER_H));
             ui.scroll_to_rect(target, Some(egui::Align::Min));
@@ -265,13 +284,15 @@ impl App {
             .map(|d| d.handle)
             .or_else(|| resp.hover_pos().and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)));
         // Règle des images.
-        painter.rect_filled(Rect::from_min_size(r.min, vec2(size.x, HEADER_H)), 0.0, theme::regle());
+        large.rect_filled(Rect::from_min_size(marge.min, vec2(size.x + MARGE_AVANT, HEADER_H)), 0.0, theme::regle());
 
         // Images clés de la caméra : losanges (ronds si le mouvement y est adouci), reliés par un
         // trait là où la caméra bouge.
         {
             let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
+            // (Partie 174 : la marge avant l'image 0 prend le fond ordinaire de la rangée.)
+            large.rect_filled(Rect::from_min_max(pos2(marge.left(), row.top()), pos2(r.left(), row.bottom())), 0.0, theme::rangee_sombre());
             // (La caméra choisie seule dans la vue Espace 3D : sa rangée a la surbrillance du calque courant, partie 152.)
             painter.rect_filled(row, 0.0, if self.e3_camera_seule() { theme::surface_active(crate::theme::accent(), 0.35) } else { theme::rangee_sombre() });
             // (Cachées par le filtre de la légende, `legendecles.rs` : la rangée reste, sans losanges.)
@@ -353,7 +374,7 @@ impl App {
         LIGNES_PEINTES.with(|l| l.borrow_mut().1 = rows.iter().map(|row| (row.li, grid_top + row.top, grid_top + row.top + row.h)).collect());
         for row in &rows {
             let li = row.li;
-            let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
+            let rect = Rect::from_min_size(pos2(marge.left(), grid_top + row.top), vec2(size.x + MARGE_AVANT, row.h)).shrink2(vec2(0.0, 1.0));
             let bg = if self.calque_montre_courant(li) {
                 theme::surface_active(crate::theme::accent(), 0.35)
             } else if !camera_seule && self.is_chosen_layer(li) {
@@ -364,7 +385,7 @@ impl App {
             } else {
                 theme::rangee()
             };
-            painter.rect_filled(rect, 0.0, bg);
+            large.rect_filled(rect, 0.0, bg);
         }
 
         // Graduations : une seconde = trait plus marqué.
@@ -404,15 +425,15 @@ impl App {
             let bracket = Stroke::new(2.0_f32, theme::image_courante());
             if let Some(f) = cues.in_point {
                 let x = r.left() + f as f32 * cell + 1.0;
-                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + REGLE_H - 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x + 5.0, r.top() + 2.0)], bracket);
-                painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x + 5.0, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + REGLE_H - 2.0), pos2(x + 5.0, r.top() + REGLE_H - 2.0)], bracket);
             }
             if let Some(f) = cues.out_point {
                 let x = r.left() + (f + 1) as f32 * cell - 1.0;
-                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + REGLE_H - 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x - 5.0, r.top() + 2.0)], bracket);
-                painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x - 5.0, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + REGLE_H - 2.0), pos2(x - 5.0, r.top() + REGLE_H - 2.0)], bracket);
             }
         }
         // Signets (13d) : un petit fanion bleu en bas de la règle.
@@ -420,7 +441,7 @@ impl App {
         for &f in &cues.bookmarks {
             let x = r.left() + (f as f32 + 0.5) * cell;
             painter.add(egui::Shape::convex_polygon(
-                vec![pos2(x - 4.0, r.top() + HEADER_H - 1.0), pos2(x + 4.0, r.top() + HEADER_H - 1.0), pos2(x, r.top() + HEADER_H - 7.0)],
+                vec![pos2(x - 4.0, r.top() + REGLE_H - 1.0), pos2(x + 4.0, r.top() + REGLE_H - 1.0), pos2(x, r.top() + REGLE_H - 7.0)],
                 bookmark,
                 Stroke::NONE,
             ));
@@ -432,7 +453,7 @@ impl App {
             let x = r.left() + m.frame as f32 * cell;
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.5_f32, theme::marque()));
             painter.add(egui::Shape::convex_polygon(
-                vec![pos2(x, r.top() + 2.0), pos2(x + 7.0, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)],
+                vec![pos2(x, r.top() + 2.0), pos2(x + 7.0, r.top() + 2.0), pos2(x, r.top() + REGLE_H - 2.0)],
                 theme::marque(),
                 Stroke::NONE,
             ));
@@ -619,6 +640,9 @@ impl App {
                 painter.rect_stroke(at, 0.0, Stroke::new(1.0_f32, Color32::from_black_alpha(90)), StrokeKind::Inside);
             }
         }
+        // Partie 174 : avant la première image et après la dernière de chaque calque, l'icône de son comportement (Aucun, Boucle,
+        // Va-et-vient, Maintenir), qui ouvre son menu.
+        self.comportements_timeline(ui, &rows, r, grid_top, cell);
 
         // Rôles des images (13g-2) : un symbole en bas de la case, sur une pastille sombre.
         let view = self.roles_view;
@@ -823,7 +847,7 @@ impl App {
         );
         // La prise de la fin du plan, au bout de la règle (chantier 4) : on la tire pour changer
         // la durée du plan.
-        let tab = Rect::from_min_size(pos2(end_x, r.top() + 2.0), vec2(PLAN_END_W - 2.0, HEADER_H - 4.0));
+        let tab = Rect::from_min_size(pos2(end_x, r.top() + 2.0), vec2(PLAN_END_W - 2.0, REGLE_H - 4.0));
         // (Les essais retrouvent la prise de la fin du plan à l'écran par ce rectangle.)
         #[cfg(test)]
         PRISE_FIN_DU_PLAN.with(|c| c.set(Some(tab)));
@@ -841,7 +865,7 @@ impl App {
         painter.rect_filled(column, 0.0, cur_frame().gamma_multiply(0.18));
         painter.rect_stroke(column, 0.0, Stroke::new(1.0_f32, cur_frame()), StrokeKind::Inside);
         painter.rect_filled(
-            Rect::from_min_size(pos2(cx, r.top()), vec2(cell, HEADER_H)),
+            Rect::from_min_size(pos2(cx, r.top()), vec2(cell, REGLE_H)),
             0.0,
             cur_frame(),
         );
@@ -1289,6 +1313,58 @@ impl App {
     /// Dans la règle : la fin du plan (sa prise au bout), un signet (en bas), l'entrée ou la
     /// sortie, une marque d'image. Dans une ligne de calque : une clé d'effet (en haut), le début
     /// ou la fin du calque, sa barre (en bas), le bord droit d'un dessin.
+    /// Partie 174 (la disposition validée par Anthony) : sur la ligne de chaque calque de la grille `r` (son image 0 à `r.left()`,
+    /// la marge `MARGE_AVANT` avant elle), une petite icône juste avant sa première image et une juste après sa dernière : ce que le
+    /// calque montre avant et après (`Behaviour` : ∅ Aucun, Boucle, Va-et-vient, Maintenir), grise, plus claire au survol. Un clic
+    /// ouvre le menu « Aucun / Boucle / Va-et-vient / Maintenir », coché ; un choix va à tous les calques choisis
+    /// (`regler_comportement`, une étape d'annulation). Les blocs des images ne changent pas : l'icône est à côté, hors des prises du
+    /// début et de la fin du calque. Rien pour un dossier, un calque vidéo ou un calque de couleur (il suit son trait).
+    fn comportements_timeline(&mut self, ui: &mut egui::Ui, rows: &[Row], r: Rect, grid_top: f32, cell: f32) {
+        use crate::document::Behaviour;
+        const COTE: f32 = 12.0;
+        // (L'écart avec le bord des images : les prises du début et de la fin du calque vont jusqu'à 5 points.)
+        const ECART: f32 = 6.0;
+        let clip = ui.clip_rect().intersect(Rect::from_min_max(pos2(r.left() - MARGE_AVANT, r.top()), r.max));
+        for row in rows {
+            let Some(layer) = self.layers().get(row.li) else { continue };
+            if layer.folder || layer.video.is_some() || layer.keys_follow_line() {
+                continue;
+            }
+            let Some((a, b)) = crate::handles::content_bounds(layer) else { continue };
+            let (id, pre, post) = (layer.id, layer.pre, layer.post);
+            let y = grid_top + row.top + 3.0 + (body_bottom(0.0, row.h) - 3.0) * 0.5;
+            for (apres, x, b_) in [(false, r.left() + a as f32 * cell - ECART - COTE, pre), (true, r.left() + b as f32 * cell + ECART, post)] {
+                let case = Rect::from_min_size(pos2(x, y - COTE * 0.5), vec2(COTE, COTE));
+                if !clip.intersects(case) {
+                    continue;
+                }
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(case).id_salt(("comportement", id, apres)));
+                child.set_clip_rect(clip);
+                child.spacing_mut().button_padding = vec2(0.0, 0.0);
+                let bouton = egui::Button::new("").frame(false).min_size(case.size());
+                let ou = if apres { "Après la dernière image" } else { "Avant la première image" };
+                let resp = egui::menu::menu_custom_button(&mut child, bouton, |ui| {
+                    ui.label(RichText::new(ou).small().weak());
+                    for c in Behaviour::ALL {
+                        if ui.radio(c == b_, c.label()).clicked() {
+                            ui.close_menu();
+                            self.regler_comportement(row.li, apres, c);
+                        }
+                    }
+                })
+                .response;
+                let encre = if resp.hovered() || resp.has_focus() { theme::texte_fort() } else { theme::texte_doux().gamma_multiply(0.75) };
+                child.painter().text(case.center(), Align2::CENTER_CENTER, crate::montagehead::behaviour_icon(b_), FontId::proportional(11.0), encre);
+                let quoi = if apres {
+                    "Ce que le calque montre après sa dernière image : rien, ses images en boucle, en va-et-vient, ou la dernière tenue. Clic : changer (tous les calques choisis)."
+                } else {
+                    "Ce que le calque montre avant sa première image : rien, ses images en boucle, en va-et-vient, ou la première tenue. Clic : changer (tous les calques choisis)."
+                };
+                crate::bulles::bulle(resp, &format!("{ou} : {}", b_.label()), quoi, "");
+            }
+        }
+    }
+
     fn timeline_handle_at(&self, p: Pos2, r: Rect, cell: f32, rows: &[Row], grid_top: f32) -> Option<Handle> {
         let x = |f: usize| r.left() + f as f32 * cell;
         let near = |at: f32, tol: f32| (p.x - at).abs() <= tol;
@@ -1302,7 +1378,7 @@ impl App {
             return Some(Handle::PlanEnd);
         }
         if in_ruler {
-            if p.y >= grid_top - 9.0 {
+            if p.y >= r.top() + REGLE_H - 9.0 {
                 if let Some(i) = panel.cues.bookmarks.iter().position(|&f| near(x(f) + cell * 0.5, (cell * 0.5).max(5.0))) {
                     return Some(Handle::Bookmark(i));
                 }

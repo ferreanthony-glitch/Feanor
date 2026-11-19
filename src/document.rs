@@ -490,7 +490,7 @@ impl Behaviour {
 
     pub fn label(self) -> &'static str {
         match self {
-            Behaviour::Nothing => "Rien",
+            Behaviour::Nothing => "Aucun",
             Behaviour::Loop => "Boucle",
             Behaviour::PingPong => "Va-et-vient",
             Behaviour::Hold => "Maintenir",

@@ -5,7 +5,7 @@
 //! peut les recevoir, les autres laissés de côté avec un message (`fxui.rs`). Une étape d'annulation par geste.
 
 use crate::app::App;
-use crate::document::Layer;
+use crate::document::{Behaviour, Layer};
 use crate::fx::EffectKind;
 use crate::blend::BlendMode;
 
@@ -61,6 +61,34 @@ impl App {
         if lis.len() >= 2 {
             self.status = format!("Mode de fusion « {} » sur {} calque{}.{}", mode.label(), ok.len(), pluriel(ok.len()), laisses);
         }
+    }
+
+    /// Partie 174 : le comportement `b` avant la première image (`apres` faux) ou après la dernière (`apres` vrai), choisi pour le
+    /// calque `li` : sur tous les calques du geste (pas les dossiers, ni les calques de couleur, qui suivent leur trait). Une étape.
+    pub(crate) fn regler_comportement(&mut self, li: usize, apres: bool, b: Behaviour) {
+        let lis: Vec<usize> = self.calques_du_geste(li).into_iter().filter(|&k| self.layers().get(k).is_some_and(|l| !l.keys_follow_line())).collect();
+        let (ok, laisses) = self.sans_les_dossiers(&lis, false);
+        let vaut = |l: &Layer| if apres { l.post } else { l.pre };
+        if ok.is_empty() || ok.iter().all(|&k| vaut(&self.layers()[k]) == b) {
+            return;
+        }
+        self.end_stroke();
+        self.record_step();
+        for &k in &ok {
+            let l = &mut self.layers_mut()[k];
+            if apres {
+                l.post = b;
+            } else {
+                l.pre = b;
+            }
+        }
+        self.renderer.invalidate_all();
+        let ou = if apres { "Après la dernière image" } else { "Avant la première image" };
+        self.status = if ok.len() >= 2 {
+            format!("{ou} : « {} » sur {} calques.{}", b.label(), ok.len(), laisses)
+        } else {
+            format!("{ou} : « {} ».", b.label())
+        };
     }
 
     /// Les calques `lis` sans les dossiers (si `dossiers` est faux), et le texte de ceux laissés de côté.
