@@ -14,6 +14,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   lignes « exception seule », les lignes à 28 points ; la colonne est celle de la 174. La partie devient la **179** (168 : les versions
   d'un plan ; 178 : la plage de lecture du film, branche `plage-lecture`). Essais : ceux de la colonne sont ceux du `main` ;
   `timeline_claire_tests` garde la teinte et vérifie la couleur d'un calque rangé. Compilé et essayé sur le Mac seulement.
+- **`timeline-storyboard` fusionnée dans main (ecaeeb5), poussée, et son FEANOR habituel reconstruit** (exe de 3 h 51), sur
+  son « fusionne la timeline ». Partie 178 : la timeline du Storyboard dans l'organisation qu'il a dessinée (Séquence, Plans
+  avec transitions sur les coupes et icônes, Caméra repliable avec la rangée des préréglages, Calques repliables, coupes qui
+  traversent). Main n'avait pas bougé (9a748bb, ni ici ni sur GitHub) : l'arbre fusionné est celui vérifié (sans
+  avertissement, 4 923 réussis, 0 échec, deux passages). Son FEANOR n'était pas ouvert. Contrôle de lancement sur une copie de
+  « retakes brawlydays » (Tests\lancement main ecaeeb5, faux réglages) : vivant après 20 s, aucun rapport de plantage. Format
+  inchangé (60). **Pas regardé sur son écran** : liste 178.4. Un fichier vide `storyboard.rs` créé par erreur par l'agent dans
+  son dossier BRAWLSTAR\BRAWLIDAYS\3D lui a été signalé (suppression refusée à l'agent, laissée à lui). Gardé, retrait proposé :
+  `Chantiers\timeline-storyboard`.
+- **La timeline du Storyboard dans son organisation** (partie 178, branche `timeline-storyboard` partie de main 9a748bb, format
+  60 inchangé), d'après son dessin et la maquette qu'il a validée : de haut en bas Séquence (16 points), Plans (26, le ⋈ des
+  transitions sur les coupes, un clic ouvre leur menu), ⊕/⊖ Caméra (22 ; dépliée, la rangée Préréglages de 24 où l'on pose,
+  glisse, étire les préréglages de caméra comme dans l'Animation), ⊕/⊖ Calques (repliée : une ligne de résumé). Chaque rangée a
+  ses icônes d'en-tête ; les coupes des plans traversent tout. L'espace Montage garde sa disposition. **Pas fusionné, pas
+  regardé sur son écran** : liste 178.4 d'INTERFACE.md. Captures dans le dossier `vues178` de la session.
 - **`piste-mode-liste` fusionnée dans main (9c422b9), poussée, et son FEANOR habituel reconstruit** (exe de 2 h 22), sur
   son « fusionne et pousse sur github ». Parties 173 à 174 : la piste du calque actif du Storyboard (liste « Normal ▾ »,
   colonne réglable 250–520 points, toutes les options du calque) et la colonne des calques de la timeline dans la

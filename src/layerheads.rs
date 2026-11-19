@@ -897,6 +897,13 @@ impl App {
             self.basculer_calques_replies();
         }
         painter.text(pos2(bouton.right() + 4.0, rect.center().y), Align2::LEFT_CENTER, "Calques", FontId::proportional(12.0), doux);
+        self.icones_des_colonnes(ui, rect);
+    }
+
+    /// Partie 174 : les icônes des sept colonnes d'une rangée d'en-tête `rect`, alignées à droite (`case_de_colonne`). Un clic agit comme
+    /// un clic dans la case du calque courant (et de tous les calques choisis). Aussi sur la ligne « Calques » du Storyboard (178).
+    pub(crate) fn icones_des_colonnes(&mut self, ui: &mut Ui, rect: Rect) {
+        let doux = ui.visuals().weak_text_color();
         let cur = self.cur_layer;
         let etats: Vec<Option<bool>> = match self.layers().get(cur) {
             Some(l) => Colonne::TOUTES.iter().map(|c| c.etat(l)).collect(),

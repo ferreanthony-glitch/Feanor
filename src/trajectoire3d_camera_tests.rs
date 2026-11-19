@@ -188,7 +188,7 @@ fn ctrl_click_on_the_camera_releases_the_cards_and_its_path_gestures_change_no_l
 fn the_camera_chosen_alone_is_the_chosen_row_of_the_montage_and_of_the_timeline_and_no_layer_row_is() {
     let mut b = ouvert(doc_deux_cartes(), true);
     b.garder_formes = true;
-    let cadre = |r: &(Rect, Color32, Stroke)| r.2.width == 1.5 && r.2.color == theme::contour() && (r.0.height() - (crate::montagerows::CAM_H - 2.0)).abs() < 0.6;
+    let cadre = |r: &(Rect, Color32, Stroke)| r.2.width == 1.5 && r.2.color == theme::contour() && [crate::montagerows::CAM_H, crate::montagerows::SB_CAM_H].iter().any(|h| (r.0.height() - (h - 2.0)).abs() < 0.6);
 
     // Le montage (Storyboard). Un calque est courant : sa rangée est la rangée choisie, pas la piste « Caméra ».
     b.app.set_espace(crate::workspace::Espace::Storyboard);

@@ -235,6 +235,11 @@ mod bruitagesui;
 mod blocscamera;
 #[cfg(test)]
 mod blocscamera_tests;
+// La timeline de l'espace Storyboard dans l'organisation dessinée par Anthony (partie 178) : séquences, plans, caméra et ses
+// préréglages, calques.
+mod timelinesb;
+#[cfg(test)]
+mod timelinesb_tests;
 mod panneauprereglages;
 // Les plans types du montage (lot 4 des préréglages, partie 176) : cartons, titres, génériques, écran partagé, inserts.
 pub mod planstypes;

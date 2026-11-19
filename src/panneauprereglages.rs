@@ -671,7 +671,7 @@ fn id_onglet() -> egui::Id {
 }
 
 /// L'onglet ouvert du panneau (gardé d'une séance à l'autre avec la mise en page).
-fn onglet(ctx: &egui::Context) -> Onglet {
+pub(crate) fn onglet(ctx: &egui::Context) -> Onglet {
     match ctx.data_mut(|d| *d.get_persisted_mut_or_default::<u8>(id_onglet())) {
         1 => Onglet::Montage,
         _ => Onglet::Camera,

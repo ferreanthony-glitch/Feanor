@@ -498,7 +498,10 @@ impl App {
         let pointer_down = ui.input(|i| i.pointer.any_down());
         self.pistes_follow_current(pointer_down);
         // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
-        let rows = self.montage_rows(ui.available_height());
+        // (Partie 178 : un préréglage de caméra glissé depuis le panneau ouvre la rangée des préréglages du Storyboard.)
+        let glisse = egui::DragAndDrop::has_payload_of_type::<crate::blocscamera::PresetDrag>(ui.ctx())
+            || egui::DragAndDrop::has_payload_of_type::<crate::trajformes::FormeDrag>(ui.ctx());
+        let rows = self.montage_rows_en(ui.available_height(), glisse);
         // Quand la bande est trop basse pour toutes les pistes, elle défile : aucune piste ni bouton coupé, et la barre de
         // défilement se voit tout de suite (pas seulement au survol, `montagehauteur.rs`).
         ui.scope(|ui| {
@@ -518,7 +521,7 @@ impl App {
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
-                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + BANDS_H));
+                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, RULER_H + rows.bands_h()));
                         // Partie 173.5 (Anthony : « Plus petite et ajustable ») : une colonne trop étroite pour la barre sur une ligne
                         // la reçoit sur deux, comme la timeline (partie 165.6) : la lecture et le temps, puis le reste, « Plus… » et la
                         // légende ; l'en-tête de la bande gagne la hauteur de la seconde (`Rows::entete`).
@@ -610,8 +613,11 @@ impl App {
             self.hauteur_pistes_bouton(ui);
             // La hauteur des plans (moyenne ou bandeau), à portée de main (Anthony, 2026-11-11 : « depuis le bas de la timeline » ; aussi
             // dans Préférences > Montage, `pistes.rs`). (Le choix « trois calques / toute la pile » est retiré, partie 165.7.)
-            ui.add_space(8.0);
-            self.plans_choix_ui(ui, true);
+            // (Partie 178 : dans le Storyboard, la rangée des plans est toujours la plus fine ; le choix reste au Montage.)
+            if !self.timeline_du_storyboard() {
+                ui.add_space(8.0);
+                self.plans_choix_ui(ui, true);
+            }
         });
     }
 
@@ -830,6 +836,13 @@ impl App {
         let visuals = ui.visuals().clone();
         // Les transitions posées sur les coupes (`transitionsui.rs`) : leurs formes, au milieu des plans.
         let mut badges = self.trans_badges(left, ppf, top + block_h * 0.5);
+        // Partie 178 : dans le Storyboard, une transition est un symbole ⋈ posé sur sa coupe (sa forme ne couvre plus les plans) ;
+        // un clic l'ouvre en menu (`timelinesb.rs`).
+        if rows.sb.is_some() {
+            for b in &mut badges {
+                crate::timelinesb::badge_en_symbole(b, left, ppf, top + 1.0 + block_h * 0.5);
+            }
+        }
         // (Une transition suit sa coupe, décalée des versions dépliées d'avant elle.)
         if !carte.vide() {
             for b in &mut badges {
@@ -897,6 +910,9 @@ impl App {
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
         // Les étiquettes des autres versions, à côté du nom des plans (partie 168, `versiondeplieeui.rs`).
         let mut zones_versions: Vec<crate::versiondeplieeui::ZoneVersion> = Vec::new();
+        // Partie 178 : les calques repliés du Storyboard : la ligne de résumé montre les clés de chaque plan.
+        let mut resumes: Vec<(Rect, std::sync::Arc<Vec<crate::clesplan::Cle>>)> = Vec::new();
+        let resume_y = rows.sb.filter(|s| s.calques_replies).map(|_| r.top() + rows.calques_top());
         let mut start = 0;
         // (La souris tenue : un geste change peut-être un plan sans étape d'historique, les clés du bloc se recalculent alors.)
         let pointer_tenu = ui.input(|i| i.pointer.any_down());
@@ -977,6 +993,10 @@ impl App {
             // calculées une fois par changement du document.
             let cles = self.cles_blocs.pour(self.history.serial(), &self.doc.panels[i], pointer_tenu);
             crate::clesplan::peindre(&painter.with_clip_rect(rect.intersect(painter.clip_rect())), rect, &cles, ppf);
+            if let Some(y) = resume_y {
+                let ligne = Rect::from_min_max(pos2(rect.left(), y + 2.0), pos2(rect.right(), y + crate::montagerows::SB_CALQUES_H - 2.0));
+                resumes.push((ligne, cles.clone()));
+            }
             // (Les marques d'image, les limites des cases du plan, ne se dessinent plus dans le montage : réunir deux plans en décochant une
             // coupe y laissait un repère orange qui ne sert à rien. Elles restent dans les données, la planche et la timeline du plan.)
             // La version du plan (« V2 »), près du haut, au milieu, quand il en a plusieurs : la survoler ouvre
@@ -1036,7 +1056,7 @@ impl App {
         let ancien_ordre = crate::perf::ancien().then(|| self.doc.sequence_order());
         // Durées cibles des séquences (`budget.rs`) : rien à calculer quand aucune n'est posée.
         let budgets = crate::budget::budgets_des_sequences(&self.doc);
-        for (band, y0, h) in [(0, bands_top, SEQ_H)] {
+        for (band, y0, h) in [(0, bands_top, rows.seq_h())] {
             let mut i = 0;
             while i < self.doc.panels.len() {
                 let (start, end) = if band == 0 {
@@ -1121,6 +1141,16 @@ impl App {
         };
         let drops = self.drop_view();
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
+        if rows.sb.is_some() {
+            // Partie 178 : la ligne de résumé des calques repliés, les blocs de préréglages de caméra (pris, glissés, étirés comme dans
+            // la timeline de l'Animation), puis les traits de coupe des plans, qui traversent la caméra, ses préréglages et les calques.
+            for (ligne, cles) in &resumes {
+                crate::clesplan::peindre(&painter.with_clip_rect(ligne.intersect(painter.clip_rect())), *ligne, cles, ppf);
+            }
+            let lacher = resp.clicked() || resp.drag_started();
+            self.prereglages_bande_sb(ui, &painter, r, &blocks, ppf, rows, lacher);
+            crate::timelinesb::peindre_coupes(&painter, r, &blocks, rows);
+        }
         if carte.vide() {
             self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
         } else {
@@ -1144,7 +1174,12 @@ impl App {
         zones_versions.extend(zones_depliees);
         self.depli.zones.clone_from(&zones_versions);
         self.depli.colonnes.clone_from(&colonnes);
-        self.paint_transitions(&painter, &badges);
+        if rows.sb.is_some() {
+            // Partie 178 : le symbole ⋈ de chaque transition sur sa coupe ; un clic ouvre son menu.
+            self.transitions_sb(ui, &painter, &badges, left, ppf, top + block_h);
+        } else {
+            self.paint_transitions(&painter, &badges);
+        }
         // Une transition glissée depuis le panneau Préréglages : sur la coupe la plus proche (partie 175).
         self.transition_depot(ui, r, &blocks, top, top + block_h);
         // Un plan type glissé depuis le même panneau : entre deux plans, ou sur un plan (partie 176).
@@ -1319,7 +1354,7 @@ impl App {
             // Un geste qui ne part pas d'un losange jaune lâche le choix des clés de caméra.
             let cam_hit = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
             // (Un geste qui part de la piste Caméra, hors d'un losange, trace un rectangle de choix.)
-            let cam_row = (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&origin.y);
+            let cam_row = (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + rows.cam_h()).contains(&origin.y);
             // (Une poignée de lissage de la caméra passe après le losange, avant le reste : lissage.rs.)
             let ease_hit = if cam_hit.is_none() { self.montage_ease_at(origin, r.top(), &blocks, ppf, rows) } else { None };
             if cam_hit.is_none() && !cam_row {
@@ -1458,8 +1493,8 @@ impl App {
             ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
                 let rect = Rect::from_two_pos(o, p);
-                let y = r.top() + rows.camera_top() + crate::montagerows::CAM_H * 0.5;
-                let band = rect.union(Rect::from_center_size(pos2(rect.center().x, y), vec2(0.0, crate::montagerows::CAM_H)));
+                let y = r.top() + rows.camera_top() + rows.cam_h() * 0.5;
+                let band = rect.union(Rect::from_center_size(pos2(rect.center().x, y), vec2(0.0, rows.cam_h())));
                 let picked = crate::camkeys::pick_in_rect(&self.montage_cam_diamonds(&blocks, ppf, y), band, crate::camkeys::DIAMOND_HALF);
                 self.drag_cam_rect(&picked);
                 crate::camkeys::paint_marquee(&painter, rect);
@@ -1698,7 +1733,7 @@ impl App {
                 }
                 // Un clic dans la piste Caméra (une clé, une poignée de lissage, le vide) : la caméra du plan, devenu le plan
                 // courant, est choisie seule dans la vue Espace 3D, sa piste la piste choisie (`e3_piste_camera_cliquee`).
-                if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + rows.cam_h()).contains(&p.y) {
                     self.e3_piste_camera_cliquee();
                 }
             }
@@ -1832,7 +1867,7 @@ impl App {
                 } else if p.y < bands_top {
                     self.goto_global(frame_at(p.x));
                     Some(MenuTarget::Ruler)
-                } else if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                } else if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + rows.cam_h()).contains(&p.y) {
                     self.goto_global(frame_at(p.x));
                     Some(MenuTarget::Camera)
                 } else {

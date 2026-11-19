@@ -243,6 +243,8 @@ fn the_timeline_of_the_animation_keeps_its_own_reduced_rows() {
 fn the_height_of_the_plans_is_a_setting_of_the_workstation_with_a_preferences_section() {
     use crate::pistes::HauteurPlans;
     let mut app = app_with("prefs-pile", doc_with(&[&["A", "B"]]));
+    // (Partie 178 : le réglage vaut pour l'espace Montage ; le Storyboard a toujours sa rangée des plans la plus fine.)
+    app.set_espace(Espace::Montage);
     app.modified = false;
     app.set_hauteur_plans(HauteurPlans::Bandeau);
     assert_eq!(app.montage_rows(300.0).block_h, 28.0);

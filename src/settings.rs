@@ -123,6 +123,13 @@ pub struct Settings {
     /// calques sur une ligne, le calque courant compris (⊖ / ⊕ de sa rangée d'en-tête). Un réglage d'affichage du poste.
     #[serde(default, rename = "timeline_tout_replie")]
     pub calques_replies: bool,
+    /// Partie 178 (la timeline du Storyboard d'Anthony) : la rangée Caméra dépliée, la rangée des préréglages de caméra sous ses
+    /// clés (« On déplie uniquement pour poser des préréglages »). Repliée d'office. Un réglage d'affichage du poste.
+    #[serde(default, rename = "storyboard_camera_depliee")]
+    pub storyboard_camera_depliee: bool,
+    /// Partie 178 : la rangée Calques de la timeline du Storyboard repliée en une ligne de résumé (sans piste). Dépliée d'office.
+    #[serde(default, rename = "storyboard_calques_replies")]
+    pub storyboard_calques_replies: bool,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -422,6 +429,8 @@ impl Default for Settings {
             storyboard_head_w: default_storyboard_head_w(),
             montage_auto_open: true,
             calques_replies: false,
+            storyboard_camera_depliee: false,
+            storyboard_calques_replies: false,
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

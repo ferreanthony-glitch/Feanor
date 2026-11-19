@@ -249,6 +249,8 @@ fn the_montage_shows_the_same_titles_ruler_and_sequences_as_before() {
     }
     doc.nouvelle_version(3, 0);
     let mut b = banc(doc, false);
+    // (Partie 178 : les plans de hauteur moyenne, avec leur titre sous la vignette, sont ceux de l'espace Montage.)
+    b.app.set_espace(crate::workspace::Espace::Montage);
     b.garder_formes = true;
     let total = b.app.doc.total_frames();
     for (zoom, image) in [(0.5, 0), (2.0, total / 3), (6.0, total / 2), (16.0, total - 5)] {
