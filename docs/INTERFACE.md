@@ -17659,3 +17659,118 @@ Réglages tiennent sans défiler). **Pas regardé à l'écran.**
 
 À tester : la fenêtre de la capture (1384 × 868, 90 %), Couleur, Propriétés et Préréglages ouverts : la roue entière ; la molette
 sur la colonne descend jusqu'au bas de Préréglages. Puis Couleur repliée : tout tient, Propriétés en a le reste.
+
+## 197. Le panneau Scène du Storyboard : du film jusqu'aux calques (2026-11-20, branche scene-storyboard partie de main 62620e6)
+
+Étape 2 sur 5 de la maquette `onglet-3d-v8` validée par Anthony : « un panneau qui propose de choisir ce qu'on y montre en partant
+de la séquence jusqu'aux calques ; ce serait la barre latérale de la timeline mais sans la temporalité ». Format des projets
+inchangé (61) ; les réglages de l'application ont une clé de plus, `panneau_scene` (écrite seulement quand elle n'est pas
+d'origine).
+
+### 197.1 Ce qui a changé
+
+1. **Un panneau de la pile, « Scène »** (`Pane::Scene`, icône en arbre), dans le Storyboard et l'Animation, proposé par
+   « + Panneau » et la barre des panneaux (action `vue.scene`, sans touche). **En haut de la pile d'origine du Storyboard** : Scène,
+   Couleur, Propriétés (Propriétés grandit toujours). L'Animation ne l'a pas d'office (« + Panneau »). Pas dans les Vignettes ni le
+   Montage : ils n'ont pas la colonne des calques dont il est la vue en arbre (un panneau déjà ouvert là y reste proposé). Une
+   pile du Storyboard déjà enregistrée ne le reçoit pas : « + Panneau » (il arrive en bas, comme tout ajout) ou « Rétablir la
+   disposition ». Ouvert par sa commande, il se range en haut de la pile. C'est un panneau à lui, jamais un onglet de Propriétés.
+   Il commence à 230 points (une liste) et cède comme une liste quand Propriétés manquerait de ses 120 points (partie 196.5).
+2. **« Depuis : Film · Séquence · Plan »** en haut, et le fil d'Ariane à côté (« Film › Séquence 1 › Plan 3 ») ; ils restent en haut,
+   seul l'arbre défile.
+   - **Plan** (d'origine) : les calques du plan courant, en arbre avec leurs dossiers, qui se replient et se déplient.
+   - **Séquence** : les plans de la séquence courante (petite vignette, nom, durée) ; le plan courant est déplié jusqu'à ses
+     calques, les autres se déplient à leur triangle.
+   - **Film** : les séquences (nom, nombre de plans) ; la courante dépliée, ses plans, puis leurs calques.
+   - Un clic sur un plan y mène ; un clic sur une séquence mène à son premier plan ; les triangles déplient sans changer de plan.
+     Ce qui est déplié ou replié (plans, séquences) et la racine sont gardés dans les réglages du poste ; les dossiers se replient
+     dans le projet (`Layer::collapsed`), comme dans la timeline.
+3. **Chaque ligne de calque**, comme la colonne des calques de la timeline sans le temps : la pastille de couleur de sa sorte, son
+   signe (lettre de la sorte, effet, annotation, couleur unie, dossier) et son nom, puis le cadenas et l'œil.
+   - L'œil et le cadenas sont **les colonnes de la timeline** (`agir_colonne` : une étape d'annulation, les calques choisis
+     ensemble) ; sur un calque d'un autre plan, ils agissent sans quitter le plan courant.
+   - Un clic rend le calque courant (`click_layer_head` : Ctrl et Maj comme dans la timeline) ; sur un calque d'un autre plan, on va
+     à ce plan et il y devient le calque courant. Dans le Storyboard, un clic sur la ligne d'un dossier le ferme ou l'ouvre, comme sa
+     ligne dans la timeline ; dans l'Animation, il le choisit. Double-clic sur le nom : le renommer dans le panneau.
+   - **Le calque courant se déplie en sa ligne complète** : c'est **la ligne de la timeline elle-même** (`layerheads::layer_head`),
+     peinte dans le panneau : les sept colonnes (œil, cadenas, pelure, transparence, pochoir, aplat, accroche à la caméra), la
+     vignette, le mode de fusion, la barre d'opacité, le losange des clés d'opacité, les effets, le ⋮. Ses gestes ont leurs propres
+     identifiants là (`App::tete_ailleurs`), pour ne pas se mêler à ceux de la même ligne dans la timeline de l'Animation.
+   - **Clic droit : le menu de la ligne de la timeline** (`montage_layer_menu` dans le Storyboard, `layer_head_menu` dans
+     l'Animation) ; sur un calque d'un autre plan, on y va d'abord.
+   - **Glisser une ligne** la range comme dans la timeline (`cible_des_calques_glisses`, `poser_les_calques` : entre deux lignes, ou
+     dans un dossier), parmi les calques du plan courant.
+   - Ce que montre l'arbre suit la colonne de la timeline, dans son ordre et avec ses règles : dans le Storyboard, les rangées des
+     pistes (un calque de couleur lié à son trait n'a pas de ligne), la caméra au-dessus des calques ; dans l'Animation, les lignes
+     de sa colonne (les groupes cachés en moins, un calque de couleur en retrait sous son trait), la caméra dessous ; un calque d'un
+     dossier fermé n'a pas de ligne, sauf le calque courant. Les calques d'annotation, de couleur, d'effet sont des calques comme
+     les autres. **La caméra** a sa ligne (un clic la choisit seule dans la vue Espace 3D, comme sa ligne de la timeline ; clic droit :
+     son menu, `menu_camera_sb` dans le Storyboard). La timeline n'a pas de ligne « Décor 3D » : le panneau non plus. Il n'y a
+     toujours pas de panneau Calques à part (partie 160) : la Scène en est la vue en arbre, elle ne remplace pas la colonne.
+4. **Les deux suivent, dans les deux sens** : le panneau lit le projet à chaque image (calque courant, œil, cadenas, dossier, nom,
+   calques ajoutés, supprimés, rangés) et agit par le code de la timeline.
+5. **Un grand projet ne le ralentit pas** : seules les lignes visibles sont peintes (`ScrollArea::show_viewport`,
+   `scene::Arbre::visibles`) ; l'arbre n'est refait que si son empreinte change (racine, plan et calque courants, ce qui est déplié,
+   identifiants des séquences, des plans et des calques, dossiers, rangements, groupes montrés). Mesuré dans le banc sans fenêtre
+   (debug) : 300 plans, 20 séquences, 15 calques par plan, le film tout déplié (5 120 lignes) : 10 images en environ 9 ms, une
+   quarantaine de lignes peintes, l'arbre refait une seule fois.
+
+Le code : `scene.rs` (le modèle, l'arbre, l'empreinte), `sceneui.rs` (l'affichage), `layerheads.rs` (la ligne de la timeline
+réutilisée : `id_de_tete`, `menu_de_tete`, `encre_de_sorte`, `signe_de_sorte`), `dock.rs`, `colonne.rs`, `barrepanneaux.rs`,
+`dockui.rs`, `settings.rs`, `keymap.rs`, `keymap.toml`.
+
+### 197.2 Les essais
+
+`scene_tests.rs` (10) : la pile d'origine (Scène, Couleur, Propriétés ; pas dans l'Animation d'office ; « + Panneau » selon l'espace ;
+une pile enregistrée laissée telle quelle ; « Rétablir la disposition ») ; les trois racines, les triangles et le fil d'Ariane ;
+l'arbre face aux pistes du Storyboard et à la colonne de l'Animation (ordre, retraits, caméra, groupe caché) ; un dossier replié dans
+le panneau et dans la timeline, dans les deux sens ; le calque courant, aussi dans un autre plan ; l'œil et le cadenas dans les deux
+sens, et sur un autre plan ; la ligne complète du calque courant (ses réglages, la pelure qui agit) ; le menu du clic droit
+(dupliquer) ; le grand projet (lignes peintes, arbre pas refait) ; le choix gardé dans les réglages.
+
+Changés exprès :
+- La liste des panneaux et les piles d'origine : `dock_tests` (la Scène n'est pas dans la disposition standard, seulement dans celle
+  du Storyboard), `barrepanneaux_tests` (son icône en tête du groupe du plan : 4, 5, 6 icônes ; 14 en storyboard, 11 dans la barre du
+  Storyboard), `colonne_tests` (la pile d'origine Scène, Couleur, Propriétés ; « + Panneau » ; les essais de la pile de la partie 194
+  partent de la pile sans la Scène), `espace3dpanneau_tests`, `workspace_tests`, `suggestions_tests` (`Pane::ALL` : 21),
+  `onglets_tests` (`scene_arbre` est un cache du projet affiché, rangé avec son onglet ; `tete_ailleurs` est partagé, à 0 entre deux
+  images).
+- Les essais qui mesurent la place des autres panneaux de la pile du Storyboard (l'aperçu des effets, la caméra du panneau
+  Espace 3D, les versions de la fiche, les hauteurs des parties 195 et 196.5), ou comptent les lettres peintes à l'écran : la
+  Scène, qui prend 230 points en haut de la pile, en est retirée au début (`colonne_tests::sans_la_scene`) :
+  `avantapres165_tests`, `panneaux_fins_tests`, `panneauxvisuels_tests`, `visuels164_tests`, `vignettes_camera_tests`,
+  `retouches195_tests`, `retouches196_tests`.
+- Le registre des bulles des essais (`bulles::vus`) note celles du panneau sous « Scène › » et leur nom : la ligne de la timeline
+  qu'il reprend a les mêmes bulles que dans la timeline, et les essais de la timeline en cherchent une seule.
+
+### 197.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil. En particulier la
+  ligne complète de la timeline dans la largeur de la colonne (290 points environ), et le fil d'Ariane qui passe à la ligne.
+- Le menu « Renommer… » du clic droit ouvre le champ là où le menu de la timeline l'ouvre (dans la timeline) ; le double-clic sur
+  le nom, lui, l'ouvre dans le panneau.
+- Pas de glisser d'un plan à l'autre, ni de plans ou de séquences (ils se rangent dans la bande et sur la planche).
+- Les lignes de séquence et de plan n'ont pas de menu au clic droit (ceux de la bande restent là-bas).
+- Le choix de ce qui est déplié est gardé par identifiants : un plan supprimé y laisse le sien, sans effet.
+- **La place** : dans une fenêtre de 1080 points, la Scène (230 points) en haut de la pile d'origine laisse moins de hauteur à
+  Propriétés ; l'aperçu des effets ou toute la caméra du panneau Espace 3D peuvent demander de faire défiler la colonne (partie
+  196.5) ou de replier la Scène d'un clic sur son titre. À voir à l'écran avec Anthony.
+
+### 197.4 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`. Pour voir la pile d'origine : Affichage > Espaces de travail > « Rétablir la
+disposition » dans le Storyboard (ta pile enregistrée ne reçoit pas le panneau d'elle-même ; « + Panneau » > Scène l'ajoute en bas).
+
+1. Storyboard : en haut de la colonne, Scène, puis Couleur, puis Propriétés.
+2. « Depuis : Plan » : les calques du plan courant ; replie un dossier par son triangle : la timeline le replie aussi.
+3. Clique un calque : il devient le calque courant (sa piste dans la timeline aussi) et se déplie en sa ligne complète ; change
+   son mode, son opacité, sa pelure depuis le panneau, vérifie dans la timeline.
+4. L'œil et le cadenas d'un calque dans le panneau, puis dans la timeline : l'autre suit.
+5. « Depuis : Séquence » : les plans avec leur vignette et leur durée ; déplie un autre plan, clique un de ses calques : tu vas à ce
+   plan, ce calque est courant. Cache un calque d'un autre plan par son œil : tu restes où tu es.
+6. « Depuis : Film » : les séquences ; clique une autre séquence : son premier plan.
+7. Clic droit sur un calque : le menu de la timeline ; « Dupliquer ».
+8. Glisse un calque dans le panneau entre deux autres, puis sur la ligne d'un dossier : il y entre, dans la timeline aussi.
+9. Double-clic sur le nom d'un calque : renomme-le.
+10. Animation (double-clic sur un plan), « + Panneau » > Scène : la caméra est sous les calques, comme dans la colonne de l'Animation.
+11. Ton plus gros projet, « Depuis : Film », tout déplié : le panneau reste fluide.

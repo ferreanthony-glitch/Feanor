@@ -46,7 +46,8 @@ fn default_panes() -> impl Iterator<Item = Pane> {
     Pane::ALL.into_iter().filter(|p| {
         !matches!(
             p,
-            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
+            // (Partie 197 : la Scène n'est pas dans la disposition standard ; seul le Storyboard l'a d'office, `pour_le_storyboard`.)
+            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d | Pane::Scene
         )
     })
 }

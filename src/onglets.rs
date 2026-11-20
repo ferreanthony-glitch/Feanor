@@ -212,6 +212,8 @@ etat_projet! {
     // --- fenêtres et saisies qui visent ce projet
     tween_dialog: Option<crate::tweenui::TweenDialog> = None,
     layer_rename: Option<crate::layersui::LayerRename> = None,
+    // (Partie 197 : l'arbre du panneau Scène, un cache du projet affiché.)
+    scene_arbre: crate::scene::Arbre = Default::default(),
     instance_rename: Option<crate::images::InstanceRename> = None,
     smart_rename: Option<crate::images::SmartRename> = None,
     res_edit: Option<crate::projetui::ResolutionEdit> = None,

@@ -477,6 +477,12 @@ pub struct App {
     pub(crate) layer_rename: Option<crate::layersui::LayerRename>,
     /// Calque que l'on fait glisser dans l'en-tête de la timeline pour changer son rang (13b).
     pub(crate) head_drag: Option<usize>,
+    /// Partie 197 : l'arbre du panneau Scène, gardé d'une image à l'autre (`scene.rs`) ; un cache du projet affiché (`onglets.rs`).
+    pub(crate) scene_arbre: crate::scene::Arbre,
+    /// Partie 197 : la ligne d'un calque de la timeline (`layerheads::layer_head`) peinte ailleurs que dans la timeline (la ligne
+    /// complète du calque courant dans le panneau Scène) : ce nombre s'ajoute aux identifiants de ses gestes, pour qu'ils ne se
+    /// confondent pas avec ceux de la même ligne dans la timeline. 0 : dans la timeline.
+    pub(crate) tete_ailleurs: u64,
     /// Calque que l'on fait glisser dans le panneau Calques (passe interface).
     pub(crate) panel_layer_drag: Option<usize>,
     /// Calque que l'on fait glisser dans les noms des pistes du montage (passe interface).
@@ -1263,6 +1269,8 @@ impl App {
             layer_thumbs: Default::default(),
             layer_rename: None,
             head_drag: None,
+            scene_arbre: Default::default(),
+            tete_ailleurs: 0,
             panel_layer_drag: None,
             montage_layer_drag: None,
             layer_sel: Vec::new(),

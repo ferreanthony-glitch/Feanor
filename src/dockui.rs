@@ -34,6 +34,8 @@ pub(crate) fn defile_seul(pane: Pane) -> bool {
             | Pane::References
             // (Partie 196 : l'aperçu reste en haut, seule la liste défile, `panneauprereglages.rs`.)
             | Pane::Prereglages
+            // (Partie 197 : « Depuis » reste en haut, seul l'arbre défile, et ne peint que ses lignes visibles, `sceneui.rs`.)
+            | Pane::Scene
     )
 }
 
@@ -222,6 +224,7 @@ impl App {
             Pane::MonPanneau => self.mon_panneau(ui),
             Pane::Scenario => self.scenario_panneau(ui),
             Pane::Bibliotheque => self.bibliotheque_panel(ui),
+            Pane::Scene => self.scene_panel(ui),
             // Les réglages de la vue Espace 3D (`espace3dpanneau.rs`) : le panneau Réglages, lui, montre toujours l'outil choisi.
             Pane::Espace3d => self.espace3d_panneau(ui),
             // La colonne en pile (partie 194) : elle dessine ses panneaux, chacun par ce même `pane_ui`.
@@ -352,6 +355,7 @@ impl App {
                             | Pane::Bibliotheque
                             | Pane::References
                             | Pane::Prereglages
+                            | Pane::Scene
                     ) {
                         self.pane_ui(ui, pane);
                     } else {

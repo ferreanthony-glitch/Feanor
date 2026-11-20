@@ -1347,6 +1347,8 @@ fn a_hand_held_camera_with_dozens_of_keys_stacks_no_letters_and_the_tile_is_not_
         crate::camera::set_key(&mut doc.panels[1].camera, k * (n - 1) / 29, a.shifted((k as f32 * 0.9).sin() * 0.6, (k as f32 * 1.3).cos() * 0.5));
     }
     let mut b = ouvert(doc, 6);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     b.garder_formes = true;
     b.chauffer(6);
     assert_eq!(b.app.doc.panels[1].camera.len(), 30);

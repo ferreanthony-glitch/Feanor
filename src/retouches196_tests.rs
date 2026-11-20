@@ -258,6 +258,8 @@ fn the_view_bar_starts_with_the_camera_view_then_2d_then_3d_in_cells_of_the_same
 /// à 90 % (la taille d'origine de l'interface).
 fn pile_a_90(l: u32, h: u32) -> Banc {
     let mut b = banc_dans(film(1), Espace::Storyboard, l, h);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     b.app.settings.echelle = 90;
     b.chauffer(4);
     b.app.colonne.ajouter(Pane::Prereglages);

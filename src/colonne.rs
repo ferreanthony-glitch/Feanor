@@ -113,9 +113,9 @@ pub fn hors_colonne(pane: Pane) -> bool {
 }
 
 /// Les panneaux qui sont des onglets de Propriétés quand on les ouvre (les réglages, les listes) ; les autres (la Couleur,
-/// les Brosses dédiées, la Planche, les icônes des outils) ont toujours leur propre panneau dans la pile.
+/// les Brosses dédiées, la Planche, les icônes des outils, la Scène de la partie 197) ont toujours leur propre panneau dans la pile.
 pub fn en_onglet(pane: Pane) -> bool {
-    !hors_colonne(pane) && !matches!(pane, Pane::Color | Pane::Personnages | Pane::Vignettes | Pane::Tools)
+    !hors_colonne(pane) && !matches!(pane, Pane::Color | Pane::Personnages | Pane::Vignettes | Pane::Tools | Pane::Scene)
 }
 
 /// L'ordre des onglets de Propriétés : un onglet qui arrive se range à son rang parmi ceux qui y sont (Réglages, Fiche,
@@ -222,6 +222,9 @@ pub fn propositions(espace: Espace, animation: bool, experimental: bool, a_propr
             && (animation || !p.animation_only())
             && (experimental || p != Pane::SuggestionsSonores || present(p))
             && (p != Pane::MonPanneau || present(p))
+            // (Partie 197 : la Scène, du film jusqu'aux calques, sert au dessin du Storyboard et de l'Animation ; ni la planche des
+            // Vignettes ni le Montage n'ont la colonne des calques dont elle est la vue en arbre.)
+            && (p != Pane::Scene || matches!(espace, Espace::Storyboard | Espace::Animation) || present(p))
     };
     let mut vus: Vec<Pane> = Vec::new();
     for p in d_office.iter().copied().chain(Pane::ALL) {
@@ -413,7 +416,7 @@ impl Colonne {
 
     /// Range `pane` dans la pile (`DockLayout::open` : sa commande, Affichage > Panneaux, la palette, la fin d'une fenêtre à part) :
     /// un panneau de réglages devient un onglet de Propriétés, à son rang ; la Couleur et les Brosses dédiées se rangent
-    /// ensemble ; la Planche et les icônes des outils arrivent en haut de la pile ; le reste (et tout, sans Propriétés) arrive en
+    /// ensemble ; la Planche, les icônes des outils et la Scène (partie 197) arrivent en haut de la pile ; le reste (et tout, sans Propriétés) arrive en
     /// bas. La Couleur sans son panneau revient en haut (sous la Planche), comme à l'origine. Ce qui était devant le reste :
     /// `App::toggle_pane` met devant ce qu'on ouvre (`montrer`), comme egui_dock le fait d'un onglet.
     pub fn ouvrir(&mut self, pane: Pane) {
@@ -434,7 +437,7 @@ impl Colonne {
             self.panneaux.insert(haut, PanneauPile::simple(pane));
             return;
         }
-        if matches!(pane, Pane::Vignettes | Pane::Tools) {
+        if matches!(pane, Pane::Vignettes | Pane::Tools | Pane::Scene) {
             self.panneaux.insert(0, PanneauPile::simple(pane));
             return;
         }

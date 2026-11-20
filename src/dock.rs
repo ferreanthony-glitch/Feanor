@@ -127,6 +127,10 @@ pub enum Pane {
     /// ne s'ouvre ni ne se ferme à la main, il est là tant que la pile a un panneau.
     #[serde(rename = "colonne")]
     Colonne,
+    /// Le panneau « Scène » (`scene.rs`, `sceneui.rs`, partie 197) : du film jusqu'aux calques, la colonne de la timeline sans le
+    /// temps. En haut de la pile d'origine du Storyboard ; dans l'Animation, par « + Panneau ».
+    #[serde(rename = "scene")]
+    Scene,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -144,9 +148,10 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 20] = [
+    pub const ALL: [Pane; 21] = [
         Pane::Canvas,
         Pane::Tools,
+        Pane::Scene,
         Pane::Color,
         Pane::ToolOptions,
         Pane::Espace3d,
@@ -173,7 +178,7 @@ impl Pane {
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d | Pane::Scene
         )
     }
 
@@ -212,6 +217,7 @@ impl Pane {
             Pane::Bibliotheque => "Bibliothèque",
             Pane::Espace3d => "Espace 3D",
             Pane::Colonne => "Colonne des panneaux",
+            Pane::Scene => "Scène",
         }
     }
 
@@ -256,6 +262,7 @@ impl Pane {
             // (Le cube du bouton de la vue, dans la barre au-dessus du dessin.)
             Pane::Espace3d => ph::CUBE,
             Pane::Colonne => ph::SIDEBAR_SIMPLE,
+            Pane::Scene => ph::TREE_VIEW,
         }
     }
 
@@ -265,6 +272,7 @@ impl Pane {
             Pane::Canvas | Pane::Colonne => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Espace3d => Group::Left,
             Pane::Layers
+            | Pane::Scene
             | Pane::XSheet
             | Pane::Effects
             | Pane::History
@@ -730,6 +738,9 @@ impl DockLayout {
         if let Some(i) = d.colonne.proprietes() {
             d.colonne.panneaux[i].panneaux.push(Pane::Scenario);
         }
+        // Partie 197 : le panneau Scène en haut de la pile (Scène, Couleur, Propriétés), comme dans la maquette validée. Une pile déjà
+        // enregistrée ne le reçoit pas : « + Panneau » ou « Rétablir la disposition ».
+        d.colonne.panneaux.insert(0, crate::colonne::PanneauPile::simple(Pane::Scene));
         d.sanitized()
     }
 

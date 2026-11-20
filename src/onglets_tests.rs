@@ -187,6 +187,8 @@ const PARTAGES: &[&str] = &[
     "fusion_noms_auto", "coupe_versions_auto", "quitter_prevenu", "sortie_confirmee", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
     // Mon panneau (essai du Labo) : un réglage du poste, le même dans tous les onglets.
     "mon_panneau",
+    // (Partie 197 : la ligne d'un calque peinte dans le panneau Scène, le temps de la peindre ; à 0 entre deux images.)
+    "tete_ailleurs",
     // L'anneau sous le stylet : un geste de l'instant, sur le dessin affiché.
     "anneau",
     // Le compteur d'usage du poste et la note de friction en cours : les mêmes quel que soit l'onglet.

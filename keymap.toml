@@ -2827,6 +2827,12 @@ action = "vue.prereglages"
 touches = []
 source = "FEANOR (sans touche)"
 
+# Panneau Scène, du film jusqu'aux calques (partie 197 ; sans touche : à choisir).
+[[raccourci]]
+action = "vue.scene"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "bruitage.inserer"
 touches = []

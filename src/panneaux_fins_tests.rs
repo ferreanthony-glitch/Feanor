@@ -16,6 +16,8 @@ use crate::workspace::Espace;
 fn banc_dans(espace: Espace) -> Banc {
     let mut b = banc(crate::pistes_tests::doc_with(&[&["Décor", "Perso", "Ombre"], &["Seul"]]), false);
     b.app.set_espace(espace);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     b.chauffer(6);
     b
 }
@@ -503,6 +505,8 @@ fn the_whole_camera_of_the_3d_space_panel_shows_without_scrolling() {
     doc.panels[0].set_length(24);
     let mut b = crate::perf_tests::banc_taille(doc, false, 2576, 1010);
     b.app.set_espace(Espace::Storyboard);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     b.chauffer(4);
     b.app.run_action("espace3d.basculer");
     b.chauffer(6);

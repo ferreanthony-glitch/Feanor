@@ -1284,6 +1284,11 @@ mod scenariopanneau_tests;
 mod scenario_tests;
 #[cfg(test)]
 mod scenelayer_tests;
+// Le panneau Scène, du film jusqu'aux calques (partie 197) : son arbre, son affichage.
+pub(crate) mod scene;
+mod sceneui;
+#[cfg(test)]
+mod scene_tests;
 mod selbox;
 #[cfg(test)]
 mod selbox_pointfixe_tests;

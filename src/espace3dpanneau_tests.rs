@@ -656,7 +656,8 @@ fn the_default_layouts_no_longer_hold_the_pane_it_only_comes_with_the_view() {
     // Le Storyboard et l'Animation : les réglages de l'outil au-dessus de la couleur, comme avant la partie 150 ; l'onglet
     // du panneau rejoint celui de Réglages quand la vue s'ouvre.
     for e in [Espace::Storyboard, Espace::Animation] {
-        let pile: Vec<Vec<Pane>> = e.defaut().dock_layout().colonne.panneaux.iter().map(|p| p.panneaux.clone()).collect();
+        // (Partie 197 : la Scène en haut de la pile du Storyboard, au-dessus de la couleur.)
+        let pile: Vec<Vec<Pane>> = e.defaut().dock_layout().colonne.panneaux.iter().map(|p| p.panneaux.clone()).filter(|p| *p != [Pane::Scene]).collect();
         assert_eq!(pile, colonne_des_reglages(e), "{e:?}");
     }
     for (action, _, layout) in workspace::builtin() {

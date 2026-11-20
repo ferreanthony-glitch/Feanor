@@ -41,10 +41,18 @@ pub(crate) mod vus {
 
     thread_local! {
         static VUS: RefCell<Vec<(String, eframe::egui::Rect)>> = const { RefCell::new(Vec::new()) };
+        static PREFIXE: RefCell<&'static str> = const { RefCell::new("") };
     }
 
     pub(crate) fn noter(nom: &str, r: eframe::egui::Rect) {
-        VUS.with(|v| v.borrow_mut().push((nom.to_string(), r)));
+        let p = PREFIXE.with(|p| *p.borrow());
+        VUS.with(|v| v.borrow_mut().push((format!("{p}{nom}"), r)));
+    }
+
+    /// Partie 197 : les bulles posées jusqu'au prochain appel sont notées sous `p` + leur nom (« Scène › Afficher / cacher » : le
+    /// panneau Scène reprend des lignes de la timeline, qui gardent leurs noms à elle). `""` : plus de préfixe.
+    pub(crate) fn prefixer(p: &'static str) {
+        PREFIXE.with(|x| *x.borrow_mut() = p);
     }
 
     pub(crate) fn vider() {

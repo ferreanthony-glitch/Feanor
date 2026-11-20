@@ -68,8 +68,24 @@ fn ordre(c: &Colonne) -> Vec<Pane> {
 fn banc_dans(espace: Espace) -> Banc {
     let mut b = banc(crate::pistes_tests::doc_with(&[&["Décor", "Perso", "Ombre"], &["Seul"]]), false);
     b.app.set_espace(espace);
+    // (Partie 197 : ces essais portent sur la pile de la partie 194, la Couleur et Propriétés ; la Scène, en haut de celle du
+    // Storyboard depuis, a les siens, `scene_tests.rs`.)
+    sans_la_scene(&mut b.app);
     b.chauffer(6);
     b
+}
+
+/// La pile d'origine du Storyboard de la partie 194 (la Couleur, Propriétés) : celle d'aujourd'hui sans la Scène (partie 197).
+fn pile_194() -> Colonne {
+    let mut c = Espace::Storyboard.defaut().dock_layout().colonne;
+    c.retirer(Pane::Scene);
+    c
+}
+
+/// Partie 197 : retire le panneau Scène de la pile (il est en haut de celle d'origine du Storyboard), pour un essai qui porte sur les
+/// autres panneaux et leur place.
+pub(crate) fn sans_la_scene(app: &mut crate::app::App) {
+    app.colonne.retirer(Pane::Scene);
 }
 
 fn ou(nom: &str) -> Rect {
@@ -113,8 +129,9 @@ fn glisser(b: &mut Banc, de: Pos2, a: Pos2) {
 #[test]
 fn each_workspace_has_its_own_default_stack_and_keeps_every_panel_it_had() {
     let sb = Espace::Storyboard.defaut().dock_layout();
-    // Storyboard : la Couleur (avec les Brosses dédiées, comme avant) en haut, puis Propriétés et ses onglets.
-    assert_eq!(pile(&sb), vec![simple(&[Pane::Color, Pane::Personnages]), props(&[Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario])]);
+    // Storyboard : la Couleur (avec les Brosses dédiées, comme avant) en haut, puis Propriétés et ses onglets. (Partie 197 : la Scène
+    // au-dessus de tout.)
+    assert_eq!(pile(&sb), vec![simple(&[Pane::Scene]), simple(&[Pane::Color, Pane::Personnages]), props(&[Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario])]);
     assert_eq!(sb.colonne.onglet_devant(), Some(Pane::ToolOptions), "les Réglages de l'outil devant");
     assert_eq!(sb.version, dock::LAYOUT_VERSION);
     assert_eq!(dock::LAYOUT_VERSION, 10);
@@ -150,7 +167,8 @@ fn each_workspace_has_its_own_default_stack_and_keeps_every_panel_it_had() {
     }
     // Ce que le Storyboard montrait dans sa colonne avant la partie 194, chaque panneau à sa place d'avant (Réglages, Fiche,
     // Effets et Scénario en onglets ; la Couleur et les Brosses dédiées ensemble).
-    assert_eq!(sb.colonne.panes(), vec![Pane::Color, Pane::Personnages, Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario]);
+    // (Partie 197 : la Scène au-dessus.)
+    assert_eq!(sb.colonne.panes(), vec![Pane::Scene, Pane::Color, Pane::Personnages, Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario]);
 }
 
 // ------------------------------------------------------------------------------------------------ 2. ranger
@@ -292,7 +310,7 @@ fn a_dragged_height_stays_within_its_bounds() {
 
 #[test]
 fn properties_grows_otherwise_the_last_open_panel() {
-    let mut c = Espace::Storyboard.defaut().dock_layout().colonne;
+    let mut c = pile_194();
     assert_eq!(c.qui_grandit(), Some(1), "Propriétés, ouvert");
     c.replier(1);
     assert_eq!(c.qui_grandit(), Some(0), "Propriétés replié : le dernier ouvert");
@@ -347,7 +365,7 @@ fn the_add_panel_menu_lists_what_the_workspace_can_show_and_greys_what_is_there(
     c.ajouter(Pane::Bibliotheque);
     assert_eq!(c.panneaux.last().unwrap().panneaux, vec![Pane::Bibliotheque]);
     c.ajouter(Pane::Bibliotheque);
-    assert_eq!(c.panneaux.len(), 3, "déjà là : rien de plus");
+    assert_eq!(c.panneaux.len(), 4, "déjà là : rien de plus (la Scène, la Couleur, Propriétés, la Bibliothèque)");
     let mut sans = Colonne::new(vec![PanneauPile::simple(Pane::Sheet)]);
     sans.ajouter_proprietes(&colonne::onglets_d_origine(Espace::Storyboard), &|p| p == Pane::Effects);
     assert_eq!(pile(&DockLayout { colonne: sans, ..sb.clone() }).last().unwrap(), &props(&[Pane::ToolOptions, Pane::Scenario]));
@@ -367,7 +385,7 @@ fn the_add_panel_menu_lists_what_the_workspace_can_show_and_greys_what_is_there(
 
 #[test]
 fn popping_out_the_front_tab_makes_a_panel_above_properties_and_closing_it_brings_the_tab_back() {
-    let mut c = Espace::Storyboard.defaut().dock_layout().colonne;
+    let mut c = pile_194();
     c.montrer(Pane::Sheet);
     assert_eq!(c.sortir_l_onglet(), Some(Pane::Sheet));
     assert_eq!(c.panneaux.len(), 3);

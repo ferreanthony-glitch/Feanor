@@ -79,8 +79,11 @@ fn the_three_spaces_have_their_own_starting_layouts() {
     assert_eq!(Layout { panneaux: None, ..storyboard.clone() }, Layout::default(), "le storyboard : la disposition standard");
     let (avec, sans) = (storyboard.dock_layout(), Layout::default().dock_layout());
     assert!(avec.contains(Pane::Scenario) && !sans.contains(Pane::Scenario));
+    // (Partie 197 : et la Scène en haut de la pile.)
+    assert!(avec.contains(Pane::Scene) && !sans.contains(Pane::Scene));
     let mut retire = avec.clone();
     retire.close(Pane::Scenario);
+    retire.close(Pane::Scene);
     assert_eq!(retire.panes(), sans.panes(), "rien d'autre ne change");
     assert!(animation.montage_height > storyboard.montage_height, "l'animation : la bande (la timeline) plus haute");
     assert!(animation.sheet_width > storyboard.sheet_width, "et les calques plus larges");

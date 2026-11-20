@@ -5,6 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **Le panneau Scène du Storyboard** (partie 197, étape 2 sur 5 de la maquette `onglet-3d-v8`, branche `scene-storyboard` partie de
+  main 62620e6, format 61 inchangé) : un panneau de la pile, en haut de celle d'origine du Storyboard (Scène, Couleur, Propriétés),
+  « + Panneau » dans l'Animation ; « Depuis : Film · Séquence · Plan » et le fil d'Ariane ; l'arbre de la colonne de la timeline
+  sans le temps (dossiers, pastille, signe, nom, cadenas, œil par le code de la timeline), le calque courant déplié en la ligne
+  complète de la timeline elle-même, le menu du clic droit de la timeline, le glisser de la timeline ; seules les lignes visibles
+  peintes, l'arbre refait seulement quand il change. Essais : `scene_tests.rs` (10). **Rien regardé à l'écran, pas de commit**
+  (liste 197.4).
 - **Deuxième tour des retouches vues à l'écran** (partie 196, même branche `colonne-panneaux`, format 61 inchangé) : l'aperçu des
   Préréglages un tiers plus petit, au milieu, et fixé en haut pendant que la liste défile ; la ligne Séquence de la timeline du
   Storyboard deux fois plus fine (10 points) et sans icônes, la ligne Caméra sans icônes, leurs commandes au clic droit de la ligne ;

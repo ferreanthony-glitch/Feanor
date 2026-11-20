@@ -235,6 +235,8 @@ fn a_panel_added_under_properties_leaves_it_usable() {
     // hauteur d'origine (230 points, ou son aperçu et trois lignes s'il lui en faut plus), Propriétés le reste, au moins son minimum,
     // sans que la colonne ait à défiler.
     let mut b = banc_dans(film(1), Espace::Storyboard, 1500, 870);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     let couleur = b.app.colonne.rang_de(Pane::Color).expect("la Couleur dans la pile");
     b.app.colonne.panneaux[couleur].replie = true;
     b.app.colonne.ajouter(Pane::Prereglages);

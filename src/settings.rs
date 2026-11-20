@@ -158,6 +158,10 @@ pub struct Settings {
     /// Partie 178 : la rangée Calques de la timeline du Storyboard repliée en une ligne de résumé (sans piste). Dépliée d'office.
     #[serde(default, rename = "storyboard_calques_replies")]
     pub storyboard_calques_replies: bool,
+    /// Partie 197 : ce que montre le panneau Scène (depuis le film, la séquence ou le plan) et ce qu'on y a déplié ou replié (les
+    /// plans, les séquences). Les dossiers de calques, eux, se replient dans le projet, comme dans la timeline. Un réglage du poste.
+    #[serde(default, rename = "panneau_scene", skip_serializing_if = "crate::scene::ChoixScene::est_d_origine")]
+    pub scene: crate::scene::ChoixScene,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -486,6 +490,7 @@ impl Default for Settings {
             couleur_ligne_calques: None,
             storyboard_camera_depliee: false,
             storyboard_calques_replies: false,
+            scene: Default::default(),
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

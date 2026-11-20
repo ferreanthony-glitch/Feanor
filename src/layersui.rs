@@ -162,11 +162,13 @@ pub(crate) struct LayerRename {
     pub focused: bool,
     pub in_timeline: bool,
     pub in_montage: bool,
+    /// Partie 197 : le champ est dans le panneau Scène (double-clic sur le nom d'un calque).
+    pub in_scene: bool,
 }
 
 impl LayerRename {
     pub(crate) fn new(id: u64, name: &str, in_timeline: bool) -> Self {
-        Self { id, name: name.to_string(), focused: false, in_timeline, in_montage: false }
+        Self { id, name: name.to_string(), focused: false, in_timeline, in_montage: false, in_scene: false }
     }
 }
 

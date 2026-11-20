@@ -19,6 +19,8 @@ fn banc_163(espace: Espace) -> Banc {
     doc.panels[1].set_length(24);
     let mut b = banc(doc, false);
     b.app.set_espace(espace);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     b.chauffer(6);
     b
 }

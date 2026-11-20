@@ -28,6 +28,8 @@ fn banc_165(trait_: bool) -> Banc {
     }
     let mut b = banc(doc, false);
     b.app.set_espace(Espace::Storyboard);
+    // (Partie 197 : cet essai porte sur les autres panneaux de la pile ; la Scène, en haut de celle du Storyboard, en est retirée.)
+    crate::colonne_tests::sans_la_scene(&mut b.app);
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.chauffer(6);
     b.app.show_pane(Pane::Effects);

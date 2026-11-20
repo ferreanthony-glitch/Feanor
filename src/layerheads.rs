@@ -218,6 +218,36 @@ pub(crate) fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> eg
     ui.put(rect, egui::Button::new(RichText::new(icon).size(crate::tailleicones::icone()).color(color)).frame(false))
 }
 
+/// La couleur de la sorte d'un calque (son signe sur la ligne, sa pastille dans le panneau Scène) : un calque d'effet, d'annotation,
+/// de couleur unie, ou la couleur de sa sorte (vectoriel, bitmap…, et un calque de couleur).
+pub(crate) fn encre_de_sorte(l: &Layer) -> Color32 {
+    if l.effet.is_some() {
+        theme::palette().dessin_cfx
+    } else if l.annotation {
+        theme::palette().dessin_annotation
+    } else if l.unie.is_some() {
+        theme::palette().dessin_unie
+    } else {
+        theme::couleur_calque(l.kind, l.couleur.is_some())
+    }
+}
+
+/// Le signe de la sorte d'un calque qui n'est pas un dossier : une icône (effet, annotation, couleur unie), ou une lettre (`true`) :
+/// celle de sa sorte, « C » pour un calque de couleur.
+pub(crate) fn signe_de_sorte(l: &Layer) -> (&'static str, bool) {
+    if l.effet.is_some() {
+        (ph::SPARKLE, false)
+    } else if l.annotation {
+        (ph::MARKER_CIRCLE, false)
+    } else if l.unie.is_some() {
+        (ph::SQUARE, false)
+    } else if l.couleur.is_some() {
+        ("C", true)
+    } else {
+        (l.kind.badge(), true)
+    }
+}
+
 /// Partie 174 (la disposition validée par Anthony) : les colonnes de réglages de la colonne des calques, dans l'ordre de la rangée
 /// d'en-tête, de gauche à droite. Chaque calque a les siennes sur les mêmes x que l'en-tête, qu'il soit le calque courant ou non.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -420,6 +450,9 @@ struct Head {
     children: usize,
     /// Rangé dans un dossier : la ligne est décalée vers la droite.
     in_folder: bool,
+    /// La couleur et le signe de sa sorte (`encre_de_sorte`, `signe_de_sorte`), lus avant que le menu ne change les calques.
+    encre: Color32,
+    signe: (&'static str, bool),
 }
 
 impl App {
@@ -537,8 +570,30 @@ impl App {
         rect
     }
 
-    /// La ligne du calque `li` dans `rect`.
-    fn layer_head(&mut self, ui: &mut Ui, rect: Rect, li: usize) {
+    /// Partie 197 : l'identifiant `base` d'un geste de la ligne d'un calque, propre au lieu où elle est peinte (`tete_ailleurs` : la
+    /// timeline, ou le panneau Scène), pour que la même ligne peinte aux deux endroits ne mêle pas ses gestes.
+    pub(crate) fn id_de_tete(&self, base: impl std::hash::Hash) -> egui::Id {
+        let id = egui::Id::new(base);
+        if self.tete_ailleurs == 0 {
+            id
+        } else {
+            id.with(self.tete_ailleurs)
+        }
+    }
+
+    /// Partie 197 : le menu du clic droit (et du ⋮) de la ligne d'un calque : celui de la timeline de l'Animation ; peinte dans le
+    /// panneau Scène du Storyboard, celui des pistes de la timeline du Storyboard, comme ses autres lignes.
+    pub(crate) fn menu_de_tete(&mut self, ui: &mut Ui, li: usize) {
+        if self.tete_ailleurs != 0 && self.scene_suit_le_storyboard() {
+            self.montage_layer_menu(ui, li);
+        } else {
+            self.layer_head_menu(ui, li);
+        }
+    }
+
+    /// La ligne du calque `li` dans `rect` (dans la timeline ; partie 197 : aussi la ligne complète du calque courant du panneau Scène,
+    /// `tete_ailleurs`).
+    pub(crate) fn layer_head(&mut self, ui: &mut Ui, rect: Rect, li: usize) {
         let h = {
             let l = &self.layers()[li];
             Head {
@@ -560,6 +615,8 @@ impl App {
                 folder: l.folder,
                 children: crate::folders::children_of(self.layers(), li).len(),
                 in_folder: l.parent.is_some(),
+                encre: encre_de_sorte(l),
+                signe: signe_de_sorte(l),
             }
         };
         // (La caméra du plan choisie seule dans la vue Espace 3D : c'est sa rangée que la timeline montre choisie, et plus
@@ -614,7 +671,7 @@ impl App {
 
         // Le fond de la ligne : choisir, glisser, menu, double-clic sur le nom. Posé avant les
         // boutons, qui restent au-dessus.
-        let resp = ui.interact(r, egui::Id::new(("tete_calque", h.id)), Sense::click_and_drag());
+        let resp = ui.interact(r, self.id_de_tete(("tete_calque", h.id)), Sense::click_and_drag());
         // Partie 160 : la ligne fine (tout calque ou dossier qui n'est pas le courant) ou la ligne complète, celle du courant
         // (`rows_of`). Partie 174 : « tout replier » (⊖ de l'en-tête) met aussi le courant sur une ligne fine.
         // (Partie 179.13 : tous les calques sur leur ligne complète, sauf repliés ; un dossier sur sa ligne fine.)
@@ -659,16 +716,23 @@ impl App {
             self.click_layer_head(li, m.command, m.shift);
         }
         if resp.double_clicked() && resp.interact_pointer_pos().is_some_and(|p| name_rect.contains(p)) {
-            self.layer_rename = Some(crate::layersui::LayerRename::new(h.id, &h.name, true));
+            // (Partie 197 : dans le panneau Scène, le champ s'ouvre là, pas dans la timeline.)
+            let ici = self.tete_ailleurs != 0;
+            self.layer_rename = Some(crate::layersui::LayerRename { in_scene: ici, ..crate::layersui::LayerRename::new(h.id, &h.name, !ici) });
         }
         if resp.drag_started() {
             self.select_layer(li);
-            self.head_drag = Some(li);
+            // (Partie 197 : glissée dans le panneau Scène, la ligne se pose dans ses lignes, `sceneui.rs`.)
+            if self.tete_ailleurs == 0 {
+                self.head_drag = Some(li);
+            } else {
+                self.panel_layer_drag = Some(li);
+            }
         }
-        if self.head_drag.is_some() && resp.dragged() {
+        if (self.head_drag.is_some() || self.panel_layer_drag.is_some()) && resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         }
-        resp.context_menu(|ui| self.layer_head_menu(ui, li));
+        resp.context_menu(|ui| self.menu_de_tete(ui, li));
 
         // Triangle d'un dossier : montrer ou cacher ses calques. (Plus de triangle sur les calques, partie 160 : leur ligne est
         // complète quand ils sont le calque courant, fine sinon, d'elle-même.)
@@ -708,21 +772,18 @@ impl App {
         }
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
-        let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else if h.annotation { theme::palette().dessin_annotation } else if h.unie { theme::palette().dessin_unie } else { theme::couleur_calque(h.kind, h.couleur) };
+        let badge = if current { fg } else { h.encre };
         if h.folder {
             // (Partie 179 : l'icône du dossier prend sa couleur, sa ligne sert de titre.)
             let icon = if h.collapsed { ph::FOLDER } else { ph::FOLDER_OPEN };
             painter.text(pos2(x0 - 2.0, line1), Align2::LEFT_CENTER, icon, FontId::proportional(14.0), if current { fg } else { filet });
-        } else if h.cfx {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(crate::tailleicones::icone()), badge);
-        } else if h.annotation {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::MARKER_CIRCLE, FontId::proportional(crate::tailleicones::icone()), badge);
-        } else if h.unie {
-            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SQUARE, FontId::proportional(crate::tailleicones::icone()), badge);
         } else {
-            painter.text(pos2(x0, line1), Align2::LEFT_CENTER, if h.couleur { "C" } else { h.kind.badge() }, FontId::monospace(11.0), badge);
+            let (signe, lettre) = h.signe;
+            let (dx, police) = if lettre { (0.0, FontId::monospace(11.0)) } else { (-1.0, FontId::proportional(crate::tailleicones::icone())) };
+            painter.text(pos2(x0 + dx, line1), Align2::LEFT_CENTER, signe, police, badge);
         }
-        let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == h.id && n.in_timeline);
+        let ici = self.tete_ailleurs != 0;
+        let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == h.id && if ici { n.in_scene } else { n.in_timeline });
         if renaming {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(name_rect).id_salt(("nom_calque", h.id)));
             let done = self.layer_rename_field(&mut child, name_rect.width());
@@ -741,7 +802,7 @@ impl App {
             if !fine && !h.folder {
                 if let Some(petit) = self.sous_le_nom(li) {
                     let at = pos2(nom.right() + 8.0, line1);
-                    let resp = ui.interact(Rect::from_min_max(pos2(at.x, name_rect.top()), name_rect.max), egui::Id::new(("sous_le_nom", h.id)), Sense::hover());
+                    let resp = ui.interact(Rect::from_min_max(pos2(at.x, name_rect.top()), name_rect.max), self.id_de_tete(("sous_le_nom", h.id)), Sense::hover());
                     painter.with_clip_rect(name_rect).text(at, Align2::LEFT_CENTER, &petit.0, FontId::proportional(10.5), off.gamma_multiply(2.2));
                     bulle(resp, &petit.0, petit.1, "");
                 }
@@ -787,7 +848,7 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(opts).id_salt(("options_calque", h.id)));
         child.spacing_mut().button_padding = vec2(0.0, 0.0);
         let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(crate::tailleicones::icone()).color(fg)).frame(false).min_size(opts.size());
-        let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_head_menu(ui, li)).response;
+        let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.menu_de_tete(ui, li)).response;
         bulle(resp, "Commandes du calque", "Renommer, profondeur, dupliquer, verrouiller, supprimer, groupe… (aussi : clic droit sur la ligne).", "");
 
         // Dossier (13b-5) : son opacité (elle agit sur ses calques) et le nombre de ses calques ; son œil et son cadenas sont dans les
@@ -795,7 +856,8 @@ impl App {
         if h.folder {
             let y2 = r.top() + 21.0;
             let bar = Rect::from_min_size(pos2(r.left() + 20.0, y2 + 2.0), vec2(108.0_f32.min((cols - 70.0 - r.left()).max(40.0)), 13.0));
-            self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.");
+            let id = self.id_de_tete(("opacite_calque", h.id));
+            self.opacity_bar(ui, &painter, bar, r, li, id, h.opacity, current, "Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.");
             let n = h.children;
             let count = format!("{n} calque{}", if n > 1 { "s" } else { "" });
             painter.with_clip_rect(Rect::from_min_max(pos2(bar.right(), r.top()), pos2(cols - 2.0, r.bottom()))).text(pos2(bar.right() + 8.0, bar.center().y), Align2::LEFT_CENTER, count, FontId::proportional(11.0), off.gamma_multiply(2.0));
@@ -859,7 +921,7 @@ impl App {
         }
         let largeur_liste = LISTE_W.min((reste - if fleches { 2.0 * FLECHE_W } else { 0.0 } - 40.0).max(26.0));
         let liste = Rect::from_min_size(pos2(x, yc), vec2(largeur_liste, hc));
-        if let Some(m) = liste_des_modes(ui, liste, egui::Id::new(("fusion_tete", h.id)), h.blend) {
+        if let Some(m) = liste_des_modes(ui, liste, self.id_de_tete(("fusion_tete", h.id)), h.blend) {
             mode = m;
         }
         x += largeur_liste;
@@ -875,7 +937,8 @@ impl App {
             self.regler_mode_calques(li, mode);
         }
         let bar = Rect::from_min_max(pos2(x + 4.0, yc + 2.0), pos2((losange.left() - 2.0).max(x + 20.0), yc + hc - 2.0));
-        self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+        let id = self.id_de_tete(("opacite_calque", h.id));
+        self.opacity_bar(ui, &painter, bar, r, li, id, h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
         self.losange_opacite_de(ui, losange, li, fg, off);
     }
 
@@ -913,8 +976,8 @@ impl App {
             let resp = match col {
                 // (L'œil reste un œil, barré quand le calque est caché.)
                 Colonne::Afficher => icon_at(ui, case, if on { ph::EYE } else { ph::EYE_SLASH }, if on { encre } else { encre.gamma_multiply(0.45) }),
-                Colonne::Pochoir => case_de_reglage_en(ui, case, egui::Id::new(("colonne", id, k)), if negatif { ph::EXCLUDE } else { ph::INTERSECT }, on, encre, pale),
-                _ => case_de_reglage_en(ui, case, egui::Id::new(("colonne", id, k)), col.icone(), on, encre, pale),
+                Colonne::Pochoir => case_de_reglage_en(ui, case, self.id_de_tete(("colonne", id, k)), if negatif { ph::EXCLUDE } else { ph::INTERSECT }, on, encre, pale),
+                _ => case_de_reglage_en(ui, case, self.id_de_tete(("colonne", id, k)), col.icone(), on, encre, pale),
             };
             let resp = self.aide(resp, col.nom(), col.description(), col.action());
             if resp.clicked() {
