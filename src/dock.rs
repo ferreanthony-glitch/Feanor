@@ -131,6 +131,27 @@ pub enum Pane {
     /// temps. En haut de la pile d'origine du Storyboard ; dans l'Animation, par « + Panneau ».
     #[serde(rename = "scene")]
     Scene,
+    /// Partie 198 : les panneaux de l'onglet 3D (`onglet3d.rs`, `onglet3dui.rs`). « Scène 3D », le sommaire de la séquence en 3D
+    /// (décor, caméras de ses plans, lumières, cartes du plan courant), en haut de sa pile.
+    #[serde(rename = "scene_3d")]
+    Scene3d,
+    /// Les onglets de Propriétés de l'onglet 3D : l'objet ou la carte choisis, la caméra, les lumières, le monde, le décor.
+    #[serde(rename = "objet_3d")]
+    Objet3d,
+    #[serde(rename = "camera_3d")]
+    Camera3d,
+    #[serde(rename = "lumieres_3d")]
+    Lumieres3d,
+    #[serde(rename = "monde_3d")]
+    Monde3d,
+    #[serde(rename = "decor_3d")]
+    Decor3d,
+    /// La bande du bas de l'onglet 3D : la timeline de la séquence (ses plans, la tête de lecture, les clés de caméra).
+    #[serde(rename = "timeline_sequence")]
+    TimelineSequence,
+    /// La bande du bas de l'onglet 3D, son second onglet : la banque 3D (`banque3dui.rs`).
+    #[serde(rename = "banque_3d")]
+    Banque3d,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -148,7 +169,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 21] = [
+    pub const ALL: [Pane; 29] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Scene,
@@ -170,7 +191,23 @@ impl Pane {
         Pane::MonPanneau,
         Pane::Scenario,
         Pane::Bibliotheque,
+        Pane::Scene3d,
+        Pane::Objet3d,
+        Pane::Camera3d,
+        Pane::Lumieres3d,
+        Pane::Monde3d,
+        Pane::Decor3d,
+        Pane::TimelineSequence,
+        Pane::Banque3d,
     ];
+
+    /// Partie 198 : les panneaux de l'onglet 3D, qui ne servent que là.
+    pub const DE_LA_3D: [Pane; 8] = [Pane::Scene3d, Pane::Objet3d, Pane::Camera3d, Pane::Lumieres3d, Pane::Monde3d, Pane::Decor3d, Pane::TimelineSequence, Pane::Banque3d];
+
+    /// Un panneau de l'onglet 3D (partie 198).
+    pub fn de_la_3d(self) -> bool {
+        Pane::DE_LA_3D.contains(&self)
+    }
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande. (Le panneau Espace 3D en est
     /// depuis la partie 152 : il arrive en onglet des réglages de l'outil quand la vue Espace 3D s'ouvre, ou quand on
@@ -179,7 +216,7 @@ impl Pane {
         matches!(
             self,
             Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::Prereglages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque | Pane::Espace3d | Pane::Scene
-        )
+        ) || self.de_la_3d()
     }
 
     /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
@@ -218,6 +255,14 @@ impl Pane {
             Pane::Espace3d => "Espace 3D",
             Pane::Colonne => "Colonne des panneaux",
             Pane::Scene => "Scène",
+            Pane::Scene3d => "Scène 3D",
+            Pane::Objet3d => "Objet",
+            Pane::Camera3d => "Caméra",
+            Pane::Lumieres3d => "Lumières",
+            Pane::Monde3d => "Monde",
+            Pane::Decor3d => "Décor",
+            Pane::TimelineSequence => "Timeline de la séquence",
+            Pane::Banque3d => "Banque 3D",
         }
     }
 
@@ -263,6 +308,14 @@ impl Pane {
             Pane::Espace3d => ph::CUBE,
             Pane::Colonne => ph::SIDEBAR_SIMPLE,
             Pane::Scene => ph::TREE_VIEW,
+            Pane::Scene3d => ph::TREE_STRUCTURE,
+            Pane::Objet3d => ph::CUBE,
+            Pane::Camera3d => ph::VIDEO_CAMERA,
+            Pane::Lumieres3d => ph::SUN,
+            Pane::Monde3d => ph::GLOBE_HEMISPHERE_WEST,
+            Pane::Decor3d => ph::MOUNTAINS,
+            Pane::TimelineSequence => ph::FILM_STRIP,
+            Pane::Banque3d => ph::SHAPES,
         }
     }
 
@@ -273,6 +326,12 @@ impl Pane {
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Espace3d => Group::Left,
             Pane::Layers
             | Pane::Scene
+            | Pane::Scene3d
+            | Pane::Objet3d
+            | Pane::Camera3d
+            | Pane::Lumieres3d
+            | Pane::Monde3d
+            | Pane::Decor3d
             | Pane::XSheet
             | Pane::Effects
             | Pane::History
@@ -284,7 +343,7 @@ impl Pane {
             | Pane::Scenario
             | Pane::Bibliotheque
             | Pane::References => Group::Right,
-            Pane::Montage | Pane::Timeline => Group::Bottom,
+            Pane::Montage | Pane::Timeline | Pane::TimelineSequence | Pane::Banque3d => Group::Bottom,
             Pane::Vignettes => Group::Planche,
         }
     }
@@ -715,6 +774,19 @@ impl DockLayout {
         let haut = row(1.0 - COLONNE / REF_WIDTH, tabs(vec![Pane::Canvas]), tabs(vec![Pane::Colonne]));
         let h = bande_hauteur.clamp(140.0, 1200.0);
         DockLayout { principal: column(1.0 - h / REF_HEIGHT, haut, tabs(vec![Pane::Montage])), colonne, ..DockLayout::empty() }.sanitized()
+    }
+
+    /// Partie 198 : la disposition d'origine de l'onglet 3D. La vue Espace 3D en grand (le dessin, qui la montre) ; à sa droite la
+    /// colonne : « Scène 3D » en haut, puis Propriétés et ses onglets d'icônes (Objet, Caméra, Lumières, Monde, Décor) ; en bas, sur
+    /// toute la largeur sous les deux (partie 194), la timeline de la séquence et la banque 3D en onglets.
+    pub fn pour_la_3d() -> DockLayout {
+        let colonne = Colonne::new(vec![
+            PanneauPile::simple(Pane::Scene3d),
+            PanneauPile::proprietes(vec![Pane::Objet3d, Pane::Camera3d, Pane::Lumieres3d, Pane::Monde3d, Pane::Decor3d]),
+        ]);
+        let haut = row(1.0 - COLONNE / REF_WIDTH, tabs(vec![Pane::Canvas]), tabs(vec![Pane::Colonne]));
+        let bande = tabs(vec![Pane::TimelineSequence, Pane::Banque3d]);
+        DockLayout { principal: column(1.0 - BAND_HEIGHT / REF_HEIGHT, haut, bande), colonne, ..DockLayout::empty() }.sanitized()
     }
 
     /// La disposition d'origine de l'espace Vignettes (le premier onglet, en haut à droite) : la planche en grand,

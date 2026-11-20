@@ -234,16 +234,20 @@ pub enum Espace {
     Animation,
     #[serde(rename = "montage")]
     Montage,
+    /// Partie 198 : l'onglet « 3D » (`onglet3d.rs`), entre le Storyboard et le Montage : la vue Espace 3D en grand, sur la
+    /// séquence courante (son décor, les caméras de ses plans, les cartes du plan courant).
+    #[serde(rename = "3d")]
+    TroisD,
 }
 
 impl Espace {
-    /// Dans l'ordre des onglets, de gauche à droite.
-    pub const TOUS: [Espace; 4] = [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage];
+    /// Dans l'ordre des onglets, de gauche à droite (l'Animation, sans onglet, après le Storyboard).
+    pub const TOUS: [Espace; 5] = [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::TroisD, Espace::Montage];
 
     /// Ceux qui se proposent comme un espace (onglets, menu Affichage, palette) : l'Animation n'y est plus, on y entre par
     /// un double-clic sur un plan et un bouton « Retour au storyboard » en sort. Elle reste un espace en interne (disposition,
     /// projets rouverts, onglets restaurés).
-    pub const VISIBLES: [Espace; 3] = [Espace::Vignettes, Espace::Storyboard, Espace::Montage];
+    pub const VISIBLES: [Espace; 4] = [Espace::Vignettes, Espace::Storyboard, Espace::TroisD, Espace::Montage];
 
     pub fn nom(self) -> &'static str {
         match self {
@@ -251,6 +255,7 @@ impl Espace {
             Espace::Storyboard => "Storyboard",
             Espace::Animation => "Animation",
             Espace::Montage => "Montage",
+            Espace::TroisD => "3D",
         }
     }
 
@@ -260,7 +265,7 @@ impl Espace {
     pub fn barre_personnages_par_defaut(self) -> bool {
         match self {
             Espace::Vignettes | Espace::Storyboard => true,
-            Espace::Animation | Espace::Montage => false,
+            Espace::Animation | Espace::Montage | Espace::TroisD => false,
         }
     }
 
@@ -271,6 +276,7 @@ impl Espace {
             Espace::Storyboard => "espace.storyboard",
             Espace::Animation => "espace.animation",
             Espace::Montage => "espace.montage",
+            Espace::TroisD => "espace.3d",
         }
     }
 
@@ -282,7 +288,7 @@ impl Espace {
     pub fn mode(self) -> Mode {
         match self {
             Espace::Animation => Mode::Animation,
-            Espace::Vignettes | Espace::Storyboard | Espace::Montage => Mode::Storyboard,
+            Espace::Vignettes | Espace::Storyboard | Espace::Montage | Espace::TroisD => Mode::Storyboard,
         }
     }
 
@@ -316,6 +322,8 @@ impl Espace {
             },
             Espace::Storyboard => Layout { panneaux: Some(DockLayout::pour_le_storyboard()), ..standard },
             Espace::Animation => Layout { montage_height: 340.0, sheet_width: 250.0, ..standard },
+            // Partie 198 : la vue Espace 3D en grand, la pile de la 3D (Scène 3D, Propriétés), la bande de la séquence en bas.
+            Espace::TroisD => Layout { tools: false, sheet: false, montage_height: MONTAGE_BANDE, panneaux: Some(DockLayout::pour_la_3d()), ..standard },
             Espace::Montage => Layout {
                 tools: false,
                 sheet: true,

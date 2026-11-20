@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **L'onglet 3D** (partie 198, étape 3 sur 5 de la maquette `onglet-3d-v8`, branche `onglet-3d` partie de main 25c1084, format 61
+  inchangé) : un onglet « 3D » entre Storyboard et Montage, la vue Espace 3D d'aujourd'hui en grand sur la séquence courante, sa
+  barre (cinq points de vue, 1, 2 ou 4 vues, ombres, grille, cartes, caméras des plans, soleil, recadrer), la boussole cliquable,
+  les outils de la vue seuls à gauche, la pile Scène 3D (le sommaire de la séquence) et Propriétés (Objet, Caméra, Lumières, Monde,
+  Décor, qui suit ce qui est choisi), la timeline de la séquence et la banque 3D en bas. Essais : `onglet3d_tests.rs` (10).
+  **Rien regardé à l'écran, pas de commit** (liste 198.4). Puis, vu à l'écran : les boutons de la bande (Timeline de la séquence,
+  Banque 3D) ; 198.5 : « Tree oak » (196 triangles) jugé lourd parce que chronométré pendant l'étalonnage (la lecture l'attend, et un
+  modèle loin sous le budget n'est plus jugé par un temps), les aperçus de la banque cadrés, les noms entiers de l'onglet Monde.
 - **Le panneau Scène du Storyboard** (partie 197, étape 2 sur 5 de la maquette `onglet-3d-v8`, branche `scene-storyboard` partie de
   main 62620e6, format 61 inchangé) : un panneau de la pile, en haut de celle d'origine du Storyboard (Scène, Couleur, Propriétés),
   « + Panneau » dans l'Animation ; « Depuis : Film · Séquence · Plan » et le fil d'Ariane ; l'arbre de la colonne de la timeline

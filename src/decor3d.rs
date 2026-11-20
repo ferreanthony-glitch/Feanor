@@ -237,6 +237,11 @@ pub struct Decor3d {
     pub uid: u64,
     pub aspect: Aspect,
     pub objets: Vec<Objet3d>,
+    /// Partie 198 : les objets cachés par leur œil dans « Scène 3D » (ni la vue ni l'image ne les dessinent), pour la séance : pas
+    /// dans le fichier du projet.
+    pub caches: BTreeSet<u64>,
+    /// Partie 198 : les objets verrouillés par leur cadenas dans « Scène 3D » (ils ne se choisissent plus dans la vue), pour la séance.
+    pub verrous: BTreeSet<u64>,
 }
 
 impl std::fmt::Debug for Decor3d {
@@ -248,12 +253,13 @@ impl std::fmt::Debug for Decor3d {
 impl Decor3d {
     pub fn new(aspect: Aspect) -> Decor3d {
         static SUIVANT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new() }
+        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), caches: BTreeSet::new(), verrous: BTreeSet::new() }
     }
 
     /// Les objets que cet ordinateur montre (pas ceux masqués en attendant le choix d'Anthony, `masquer`).
     pub fn vus(&self) -> impl Iterator<Item = &Objet3d> + '_ {
-        self.objets.iter().filter(|o| !masque(o.modele.uid))
+        // (Partie 198 : ni ceux cachés par leur œil dans « Scène 3D ».)
+        self.objets.iter().filter(|o| !masque(o.modele.uid) && !self.caches.contains(&o.id))
     }
 
     pub fn objet(&self, id: u64) -> Option<&Objet3d> {
@@ -1119,15 +1125,30 @@ pub fn octets_lisibles(o: u64) -> String {
     }
 }
 
+/// Partie 198.5 : en deçà de cette part du budget de la machine, en triangles **et** en textures, le temps mesuré d'une image du
+/// décor ne compte pas : il n'est alors que le coût fixe d'une passe à la taille de la feuille (le ciel, la brume, la profondeur), que
+/// l'étalonnage a déjà mesuré et compté dans le budget (`decor3dbudget::Cout::fixe`), et une mesure qui tombe au mauvais moment (la
+/// carte occupée ailleurs, un pilote qui se réveille) ne fait pas juger lourd un modèle de quelques centaines de triangles.
+pub const PART_SANS_CHRONO: u64 = 20;
+
+/// Le modèle est loin sous le budget de la machine (moins d'un vingtième, 5 %, en triangles et en textures) : son temps mesuré ne
+/// le juge pas.
+pub fn loin_sous_le_budget(m: &Mesures, budget: &crate::decor3dbudget::BudgetMachine) -> bool {
+    (m.triangles as u64).saturating_mul(PART_SANS_CHRONO) <= budget.triangles && m.octets_textures.saturating_mul(PART_SANS_CHRONO) <= budget.textures_mo << 20
+}
+
 pub fn verdict(m: &Mesures, budget: &crate::decor3dbudget::BudgetMachine, cout_ms: Option<f32>) -> Verdict {
     use crate::decor3dbudget::grand_nombre;
     let mut raisons = Vec::new();
     let (mut lent, mut memoire) = (false, false);
+    // (Partie 198.5 : le temps mesuré ne compte que s'il dépasse strictement le budget d'une passe, et seulement pour un modèle qui
+    // n'est pas loin sous le budget en triangles et en textures.)
+    let cout_ms = cout_ms.filter(|_| !loin_sous_le_budget(m, budget));
     if m.triangles as u64 > budget.triangles {
         raisons.push(format!("{} triangles : cet ordinateur en dessine {} sans ralentir.", grand_nombre(m.triangles as u64), grand_nombre(budget.triangles)));
         lent = true;
     } else if let Some(ms) = cout_ms.filter(|ms| *ms > crate::decor3dbudget::BudgetMachine::ms_par_passe()) {
-        raisons.push(format!("une image de ce décor prend {ms:.1} ms à la carte graphique : au-delà des {:.1} ms qu'on lui laisse.", crate::decor3dbudget::BudgetMachine::ms_par_passe()));
+        raisons.push(format!("une image de ce décor prend {ms:.2} ms à la carte graphique : au-delà des {:.2} ms qu'on lui laisse.", crate::decor3dbudget::BudgetMachine::ms_par_passe()));
         lent = true;
     }
     if m.octets_textures > budget.textures_mo << 20 {

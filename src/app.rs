@@ -589,6 +589,8 @@ pub struct App {
     /// Le panneau « Espace 3D » suit la vue (`espace3dpanneau.rs`, partie 150) : la vue était-elle montrée à la dernière
     /// image, et l'onglet que le panneau a remplacé devant son groupe quand elle s'est ouverte.
     pub(crate) e3_panneau: crate::espace3dpanneau::Suivi,
+    /// Partie 198 : ce que l'onglet 3D retient pendant la séance (`onglet3d.rs`).
+    pub(crate) o3: crate::onglet3d::Onglet3d,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -1328,6 +1330,7 @@ impl App {
             espace3d: Default::default(),
             e3d: Default::default(),
             e3_panneau: Default::default(),
+            o3: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -2220,7 +2223,14 @@ impl App {
             self.vignettes.libre = true;
             self.vignettes.camera_choisie = None;
         }
+        // (Partie 198 : quitter l'onglet 3D rend à la vue Espace 3D ce qu'elle était avant lui.)
+        if avant == Espace::TroisD && espace != Espace::TroisD {
+            self.o3_quitter();
+        }
         self.aller_a_l_espace(espace);
+        if espace == Espace::TroisD && avant != Espace::TroisD {
+            self.o3_entrer();
+        }
         // L'onglet Vignettes, c'est toujours la planche (partie 113) : une disposition retenue qui dirait le dessin (un ancien réglage,
         // ou l'espace qu'on rouvre alors qu'on y est déjà) n'y change rien. Et l'outil en main y est l'un des siens (décision 2) : un autre
         // laisse la place au pinceau.
@@ -2258,6 +2268,7 @@ impl App {
             Espace::Storyboard => "Storyboard : monte les plans.".into(),
             Espace::Montage => "Montage : le film en haut, les pistes en bas.".into(),
             Espace::Animation => format!("Animation de {}.", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
+            Espace::TroisD => format!("3D : la séquence {}, son décor et ses caméras.", self.doc.sequence_label(self.doc.sequence_of(self.cur_panel))),
         };
         // La feuille d'exposition n'existe qu'en animation.
         self.masquer_exposition();

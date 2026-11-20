@@ -341,6 +341,13 @@ pub fn en_cours() -> bool {
     EN_COURS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(t, _)| *t == moi)
 }
 
+/// Partie 198.5 : l'étalonnage lancé depuis le fil `t` (celui de l'interface) tourne encore. Un autre fil (la lecture d'un modèle)
+/// l'attend avant de chronométrer sa propre image sur la carte : les deux à la fois se gênent, et la mesure du modèle en sortait
+/// faussée.
+pub fn en_cours_pour(t: std::thread::ThreadId) -> bool {
+    EN_COURS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(id, h)| *id == t && !h.is_finished())
+}
+
 /// Le budget mesuré, s'il vient de finir.
 pub fn fini() -> Option<BudgetMachine> {
     let moi = std::thread::current().id();

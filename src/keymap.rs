@@ -722,6 +722,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace.enregistrer", "Enregistrer la disposition comme espace de travail", true, false),
     act("espace.storyboard", "Espace de travail : Storyboard (sa disposition retenue)", true, false),
     act("espace.montage", "Espace de travail : Montage (le film en haut, toutes les pistes en bas)", true, false),
+    act("espace.3d", "Espace de travail : 3D (la séquence en trois dimensions : décor, caméras des plans, cartes du plan)", true, false),
     act("espace.vignettes", "Espace de travail : Vignettes (la planche seule, pour dessiner dans les cases)", true, false),
     act("espace.retablir", "Rétablir la disposition de l'espace de travail en cours", true, false),
     act("vue.panneau_outils", "Colonne des réglages et fiche (montrer / cacher)", true, false),

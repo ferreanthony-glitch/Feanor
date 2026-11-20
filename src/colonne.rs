@@ -109,18 +109,24 @@ pub struct Colonne {
 /// Les panneaux qui ne vont jamais dans la colonne : le dessin, la bande du bas, la colonne elle-même, et les anciens
 /// panneaux retirés (`DockLayout::sanitized` les enlève partout).
 pub fn hors_colonne(pane: Pane) -> bool {
-    matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::Colonne | Pane::View | Pane::Guides | Pane::Brushes | Pane::Layers)
+    matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::Colonne | Pane::View | Pane::Guides | Pane::Brushes | Pane::Layers | Pane::TimelineSequence | Pane::Banque3d)
 }
 
 /// Les panneaux qui sont des onglets de Propriétés quand on les ouvre (les réglages, les listes) ; les autres (la Couleur,
 /// les Brosses dédiées, la Planche, les icônes des outils, la Scène de la partie 197) ont toujours leur propre panneau dans la pile.
 pub fn en_onglet(pane: Pane) -> bool {
-    !hors_colonne(pane) && !matches!(pane, Pane::Color | Pane::Personnages | Pane::Vignettes | Pane::Tools | Pane::Scene)
+    !hors_colonne(pane) && !matches!(pane, Pane::Color | Pane::Personnages | Pane::Vignettes | Pane::Tools | Pane::Scene | Pane::Scene3d)
 }
 
 /// L'ordre des onglets de Propriétés : un onglet qui arrive se range à son rang parmi ceux qui y sont (Réglages, Fiche,
 /// Effets, Scénario, Espace 3D, Historique…), comme dans la disposition d'avant.
-const ORDRE_DES_ONGLETS: [Pane; 14] = [
+const ORDRE_DES_ONGLETS: [Pane; 19] = [
+    // (Partie 198 : ceux de l'onglet 3D, dans son ordre.)
+    Pane::Objet3d,
+    Pane::Camera3d,
+    Pane::Lumieres3d,
+    Pane::Monde3d,
+    Pane::Decor3d,
     Pane::ToolOptions,
     Pane::Sheet,
     Pane::Effects,
@@ -206,6 +212,7 @@ pub fn onglets_d_origine(espace: Espace) -> Vec<Pane> {
         Espace::Storyboard => vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario],
         Espace::Animation => vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects],
         Espace::Montage => vec![Pane::Bruitages, Pane::Comments, Pane::History],
+        Espace::TroisD => vec![Pane::Objet3d, Pane::Camera3d, Pane::Lumieres3d, Pane::Monde3d, Pane::Decor3d],
     }
 }
 
@@ -225,6 +232,8 @@ pub fn propositions(espace: Espace, animation: bool, experimental: bool, a_propr
             // (Partie 197 : la Scène, du film jusqu'aux calques, sert au dessin du Storyboard et de l'Animation ; ni la planche des
             // Vignettes ni le Montage n'ont la colonne des calques dont elle est la vue en arbre.)
             && (p != Pane::Scene || matches!(espace, Espace::Storyboard | Espace::Animation) || present(p))
+            // (Partie 198 : les panneaux de l'onglet 3D n'y sont proposés que là ; des autres, l'onglet 3D ne propose que l'Historique.)
+            && (p.de_la_3d() == (espace == Espace::TroisD) || (espace == Espace::TroisD && p == Pane::History) || present(p))
     };
     let mut vus: Vec<Pane> = Vec::new();
     for p in d_office.iter().copied().chain(Pane::ALL) {
@@ -437,7 +446,7 @@ impl Colonne {
             self.panneaux.insert(haut, PanneauPile::simple(pane));
             return;
         }
-        if matches!(pane, Pane::Vignettes | Pane::Tools | Pane::Scene) {
+        if matches!(pane, Pane::Vignettes | Pane::Tools | Pane::Scene | Pane::Scene3d) {
             self.panneaux.insert(0, PanneauPile::simple(pane));
             return;
         }

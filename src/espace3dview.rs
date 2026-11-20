@@ -269,7 +269,7 @@ impl App {
     }
 
     /// Les coins de la pyramide de la caméra du plan, à une distance qui se lit dans la vue.
-    fn e3_camera_corners(&self, cam: &SceneCam, view: &View) -> [V3; 4] {
+    pub(crate) fn e3_camera_corners(&self, cam: &SceneCam, view: &View) -> [V3; 4] {
         // (Une vue orthographique regarde de très loin : la pyramide prend une taille à l'échelle de ce qu'elle montre.)
         let d = match crate::espace3dvues::largeur_ortho(view) {
             Some(span) => (span * 0.08).clamp(0.3, 6.0),
@@ -830,8 +830,12 @@ impl App {
         // Les cartes (les calques du plan), du fond vers le dessus de la pile.
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
         self.espace3d.ombres = None;
-        if !through {
+        if !through && !self.o3_camera_cachee() {
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
+        }
+        // (Partie 198 : dans l'onglet 3D, les caméras des autres plans de la séquence et le soleil.)
+        if self.dans_l_onglet_3d() {
+            self.o3_peindre_la_scene(&painter, &proj, &view);
         }
         // (On dessine, on sélectionne ou on trace une trajectoire : pas de poignées sur la carte, elles ne répondraient pas.)
         let trace = self.e3_trace();
@@ -856,6 +860,10 @@ impl App {
         }
         let label = format!("{} carte(s)", self.e3_visible_cards().len());
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
+        // (Partie 198 : la boussole, dans l'onglet 3D, en perspective.)
+        if self.dans_l_onglet_3d() && !through {
+            self.o3_boussole(ui, rect, &view, None);
+        }
         // On dessine dans la vue : la pointe du trait, le cercle du pinceau posé sur la carte, la légende
         // (`espace3ddessin.rs`).
         if trace {

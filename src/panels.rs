@@ -318,8 +318,8 @@ impl App {
 
             // (Sans projet, il n'y a pas d'espace de travail à choisir : les trois mots ne paraissent pas.)
             if !sans_projet { ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Les trois espaces de travail restent écrits en toutes lettres, dans l'ordre du
-                // travail (de gauche à droite : Vignettes, Storyboard, Montage) : on voit d'un coup
+                // Les espaces de travail restent écrits en toutes lettres, dans l'ordre du
+                // travail (de gauche à droite : Vignettes, Storyboard, 3D depuis la partie 198, Montage) : on voit d'un coup
                 // d'œil où l'on est. Passer de l'un à l'autre est instantané : le plan, l'image, la
                 // sélection et le projet ne changent pas, seule la disposition change.
                 // (Ce panneau se remplit de droite à gauche : le dernier posé est le premier à gauche.)
@@ -332,6 +332,16 @@ impl App {
                 }
                 if montage.clicked() && !on {
                     self.set_espace(Espace::Montage);
+                }
+                // Partie 198 : l'onglet 3D, entre le Storyboard et le Montage.
+                let on = self.espace == Espace::TroisD;
+                let trois_d = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" 3D ").strong(), on));
+                let trois_d = self.aide(trois_d, "3D", "La séquence en trois dimensions : son décor, les caméras de ses plans, les cartes du plan courant. Placer, éclairer, cadrer.", "espace.3d");
+                if on {
+                    crate::theme::souligner_actif(ui, trois_d.rect);
+                }
+                if trois_d.clicked() && !on {
+                    self.set_espace(Espace::TroisD);
                 }
                 let on = self.espace == Espace::Storyboard;
                 let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));

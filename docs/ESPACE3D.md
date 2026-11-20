@@ -512,3 +512,14 @@ maintenant **lissés sur un pixel**, partout où la profondeur est partagée. Co
   doux), mais prenait la distance de la carte au centre du pixel ; il la prend maintenant à la place de chaque échantillon, d'après
   sa pente à l'écran : la ligne où une carte inclinée entre dans un objet est douce aussi.
 - **Sans décor**, rien n'est lu, rien ne change, au bit près.
+
+## 22. L'onglet 3D (2026-11-20, branche `onglet-3d`, partie 198 de `docs/INTERFACE.md`)
+
+L'onglet « 3D », entre le Storyboard et le Montage, montre **la vue Espace 3D d'aujourd'hui, en grand**, sur la séquence courante :
+pas de nouveau moteur. Ce qu'il ajoute vit dans `onglet3d.rs` et `onglet3dui.rs` : sa barre de vue (point de vue, 1, 2 ou 4 vues :
+`espace3dvues::Disposition`, une vue orthographique seule étant la vue agrandie des quatre), la boussole cliquable, les caméras des
+autres plans et le soleil peints par-dessus la vue, le sommaire « Scène 3D », les onglets de Propriétés (le réglage du décor découpé
+par `decor3d_reglages_de`), la timeline de la séquence et la banque 3D dans la bande du bas. Les règles « sans latence » tiennent :
+rien ne se redessine au repos ; seule l'animation de la boussole (un quart de seconde) demande des images. Un objet caché ou
+verrouillé dans « Scène 3D » l'est pour la séance (`Decor3d::caches`, `Decor3d::verrous`, pas dans le fichier) : caché, ni la vue ni
+l'image ne le dessinent (`Decor3d::vus`) ; verrouillé, il ne se prend plus dans la vue.

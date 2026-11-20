@@ -36,6 +36,10 @@ pub(crate) fn defile_seul(pane: Pane) -> bool {
             | Pane::Prereglages
             // (Partie 197 : « Depuis » reste en haut, seul l'arbre défile, et ne peint que ses lignes visibles, `sceneui.rs`.)
             | Pane::Scene
+            // (Partie 198 : la recherche de Scène 3D reste en haut ; la bande de la séquence et la banque ont leur place à elles.)
+            | Pane::Scene3d
+            | Pane::TimelineSequence
+            | Pane::Banque3d
     )
 }
 
@@ -225,6 +229,14 @@ impl App {
             Pane::Scenario => self.scenario_panneau(ui),
             Pane::Bibliotheque => self.bibliotheque_panel(ui),
             Pane::Scene => self.scene_panel(ui),
+            Pane::Scene3d => self.scene3d_panel(ui),
+            Pane::Objet3d => self.objet3d_panel(ui),
+            Pane::Camera3d => self.camera3d_panel(ui),
+            Pane::Lumieres3d => self.lumieres3d_panel(ui),
+            Pane::Monde3d => self.monde3d_panel(ui),
+            Pane::Decor3d => self.decor3d_onglet_panel(ui),
+            Pane::TimelineSequence => self.timeline_sequence_panel(ui),
+            Pane::Banque3d => self.banque3d_panel(ui),
             // Les réglages de la vue Espace 3D (`espace3dpanneau.rs`) : le panneau Réglages, lui, montre toujours l'outil choisi.
             Pane::Espace3d => self.espace3d_panneau(ui),
             // La colonne en pile (partie 194) : elle dessine ses panneaux, chacun par ce même `pane_ui`.
@@ -356,6 +368,9 @@ impl App {
                             | Pane::References
                             | Pane::Prereglages
                             | Pane::Scene
+                            | Pane::Scene3d
+                            | Pane::TimelineSequence
+                            | Pane::Banque3d
                     ) {
                         self.pane_ui(ui, pane);
                     } else {

@@ -189,6 +189,8 @@ const PARTAGES: &[&str] = &[
     "mon_panneau",
     // (Partie 197 : la ligne d'un calque peinte dans le panneau Scène, le temps de la peindre ; à 0 entre deux images.)
     "tete_ailleurs",
+    // (Partie 198 : l'onglet 3D, ce qu'il montre et ce qu'on y cherche : un réglage de la séance, le même pour tous les projets.)
+    "o3",
     // L'anneau sous le stylet : un geste de l'instant, sur le dessin affiché.
     "anneau",
     // Le compteur d'usage du poste et la note de friction en cours : les mêmes quel que soit l'onglet.

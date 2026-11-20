@@ -90,6 +90,8 @@ pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
         Espace::Storyboard => &[Pane::Scene, Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::Prereglages, Pane::Scenario, Pane::References, Pane::Bibliotheque],
         Espace::Animation => &[Pane::Scene, Pane::ToolOptions, Pane::Color, Pane::Espace3d, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::Prereglages, Pane::References, Pane::Bibliotheque],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History, Pane::Bibliotheque],
+        // (Partie 198 : l'onglet 3D a ses propres panneaux, que « + Panneau » propose d'abord ; pas d'icône dans la barre.)
+        Espace::TroisD => &[Pane::Scene3d, Pane::Objet3d, Pane::Camera3d, Pane::Lumieres3d, Pane::Monde3d, Pane::Decor3d, Pane::TimelineSequence, Pane::Banque3d, Pane::History],
     }
 }
 

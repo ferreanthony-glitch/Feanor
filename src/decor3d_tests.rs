@@ -565,8 +565,11 @@ fn le_verdict_compare_les_mesures_au_budget() {
     let peu_de_memoire = BudgetMachine { textures_mo: 0, ..budget_large() };
     let (_, mt) = gltf::lire(&carre(true, Some(quatre_pixels()), |_| {}), None).unwrap();
     assert!(matches!(decor3d::verdict(&mt, &peu_de_memoire, None), decor3d::Verdict::Lourd { tel_quel: false, simplifier: false, .. }));
-    // Trop lent, mesuré sur la carte : lourd aussi.
-    assert!(matches!(decor3d::verdict(&m, &budget_large(), Some(50.0)), decor3d::Verdict::Lourd { simplifier: true, .. }));
+    // Trop lent, mesuré sur la carte : lourd aussi. (Partie 198.5 : pour un modèle qui n'est pas loin sous le budget ; loin sous lui,
+    // le temps mesuré n'est que le coût fixe d'une passe, déjà dans le budget : il ne le juge pas.)
+    let juste = BudgetMachine { triangles: m.triangles as u64 * 4, ..budget_large() };
+    assert!(matches!(decor3d::verdict(&m, &juste, Some(50.0)), decor3d::Verdict::Lourd { simplifier: true, .. }));
+    assert_eq!(decor3d::verdict(&m, &budget_large(), Some(50.0)), decor3d::Verdict::Direct);
 }
 
 #[test]

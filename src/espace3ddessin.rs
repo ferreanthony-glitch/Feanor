@@ -248,7 +248,8 @@ impl App {
     /// Un outil vient d'être pris (`App::set_tool`). Dans la vue Espace 3D, c'est lui qui décide : un outil de dessin
     /// fait dessiner le pointeur, un autre lui rend les cartes.
     pub(crate) fn e3_outil_pris(&mut self, tool: Tool) {
-        if !(self.espace3d.on && !self.camera_view) {
+        // (Partie 198 : l'onglet 3D n'a pas les outils de dessin ; le pointeur reste aux outils de la vue.)
+        if !(self.espace3d.on && !self.camera_view) || self.dans_l_onglet_3d() {
             return;
         }
         if outil_de_dessin(tool) {

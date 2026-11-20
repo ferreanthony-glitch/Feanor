@@ -55,7 +55,8 @@ fn the_animation_tab_is_gone_and_the_other_three_stay_in_work_order() {
     let (v, s, m) = (texte_a_l_ecran(&b, " Vignettes ", false).unwrap(), texte_a_l_ecran(&b, " Storyboard ", false).unwrap(), texte_a_l_ecran(&b, " Montage ", false).unwrap());
     assert!(v.x < s.x && s.x < m.x, "Vignettes, Storyboard, Montage : {v:?} {s:?} {m:?}");
     // L'animation, elle, n'est dans aucune liste d'espaces à choisir.
-    assert_eq!(Espace::VISIBLES.map(Espace::nom), ["Vignettes", "Storyboard", "Montage"]);
+    // (Partie 198 : l'onglet 3D, entre le Storyboard et le Montage.)
+    assert_eq!(Espace::VISIBLES.map(Espace::nom), ["Vignettes", "Storyboard", "3D", "Montage"]);
     assert!(crate::keymap::action_info("espace.animation").is_none(), "plus d'action « espace.animation »");
     assert!(crate::palette::palette_commands().iter().all(|(id, _)| *id != "espace.animation"));
     // Et hors animation, le bouton de retour ne se montre pas.

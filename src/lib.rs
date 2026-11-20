@@ -1289,6 +1289,11 @@ pub(crate) mod scene;
 mod sceneui;
 #[cfg(test)]
 mod scene_tests;
+// L'onglet 3D (partie 198) : la séquence en trois dimensions, ses panneaux.
+pub(crate) mod onglet3d;
+mod onglet3dui;
+#[cfg(test)]
+mod onglet3d_tests;
 mod selbox;
 #[cfg(test)]
 mod selbox_pointfixe_tests;

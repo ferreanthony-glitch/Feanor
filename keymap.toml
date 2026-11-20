@@ -2212,6 +2212,12 @@ action = "espace.montage"
 touches = ["Alt+M"]
 source = "proposition (M comme Montage ; troisième onglet en haut à droite)"
 
+# L'onglet 3D (partie 198 ; sans touche : à choisir).
+[[raccourci]]
+action = "espace.3d"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "espace.retablir"
 touches = []

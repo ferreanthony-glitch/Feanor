@@ -204,19 +204,35 @@ impl App {
         let carte = self.gpu.as_ref().map(|g| g.render_state().clone());
         let (feuille, cadre) = ([self.doc.width, self.doc.height], self.doc.frame);
         self.decor3d.cible = Some(cible);
-        self.decor3d.lecture = Some(std::thread::spawn(move || {
-            let mut a = lire()?;
-            // Le temps réel d'une image de ce décor sur la carte de cette machine (s'il n'est pas d'emblée hors budget).
-            if let Some(rs) = carte.filter(|_| a.mesures.triangles <= 4_000_000) {
-                a.cout_ms = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mesurer_cout(&rs, &a.scene, feuille, cadre))).ok().flatten();
-            }
-            Ok(a)
-        }));
+        // (Partie 198.5 : l'étalonnage d'abord, s'il faut ; la lecture l'attend avant de chronométrer une image du modèle.)
         if self.decor3d_budget().is_none() {
             self.decor3d_etalonner();
         } else {
             self.status = "Décor 3D : lecture du modèle…".into();
         }
+        let interface = std::thread::current().id();
+        #[cfg(test)]
+        let cout_force = COUT_ESSAI.with(|c| c.get());
+        self.decor3d.lecture = Some(std::thread::spawn(move || {
+            let mut a = lire()?;
+            // Le temps réel d'une image de ce décor sur la carte de cette machine (s'il n'est pas d'emblée hors budget), une fois
+            // l'étalonnage fini : les deux en même temps sur la carte faussent la mesure (un modèle de 196 triangles mesuré à 1,6 ms).
+            if let Some(rs) = carte.filter(|_| a.mesures.triangles <= 4_000_000) {
+                let debut = std::time::Instant::now();
+                while crate::decor3dbudget::en_cours_pour(interface) && debut.elapsed() < std::time::Duration::from_secs(60) {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                a.cout_ms = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mesurer_cout(&rs, &a.scene, feuille, cadre))).ok().flatten();
+            }
+            #[cfg(test)]
+            if let Some(ms) = cout_force {
+                while crate::decor3dbudget::en_cours_pour(interface) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                a.cout_ms = Some(ms);
+            }
+            Ok(a)
+        }));
         true
     }
 
@@ -786,11 +802,22 @@ impl App {
     /// enlever, en ajouter), et les champs de l'objet choisi (position de son origine, rotation, échelle, origine, aimanté au
     /// sol).
     pub(crate) fn decor3d_reglages(&mut self, ui: &mut egui::Ui) {
+        self.decor3d_reglages_de(ui, PartiesDecor::TOUT);
+    }
+
+    /// Partie 198 : `decor3d_reglages`, seulement les parties `p` (les onglets Lumières, Monde, Décor et Objet de Propriétés, dans
+    /// l'onglet 3D) ; toutes : le décor tel que le panneau Espace 3D le montre, dans son en-tête repliable. La même retouche,
+    /// la même étape d'annulation, quelle que soit la partie.
+    pub(crate) fn decor3d_reglages_de(&mut self, ui: &mut egui::Ui, p: PartiesDecor) {
         let seq = self.doc.sequence_of(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else {
             ui.add_space(6.0);
-            if ui.button("Ajouter un objet 3D au décor de la séquence…").on_hover_text("Un modèle glTF (.glb, .gltf) que tous les plans de la séquence montrent, derrière les calques. Ou glisse un modèle de la Bibliothèque, onglet 3D.").clicked() {
-                self.run_action("fichier.importer_decor3d");
+            if p.decor {
+                if ui.button("Ajouter un objet 3D au décor de la séquence…").on_hover_text("Un modèle glTF (.glb, .gltf) que tous les plans de la séquence montrent, derrière les calques. Ou glisse un modèle de la Bibliothèque, onglet 3D.").clicked() {
+                    self.run_action("fichier.importer_decor3d");
+                }
+            } else {
+                ui.label(RichText::new(SANS_DECOR).small().weak());
             }
             return;
         };
@@ -820,24 +847,49 @@ impl App {
         let (mut clic_simple, mut bascule, mut prise) = (None, None, false);
         let monde = Monde::of(&self.doc);
         let poids = d.poids();
-        egui::CollapsingHeader::new(RichText::new(format!("Décor 3D de la séquence ({} objet{})", d.objets.len(), if d.objets.len() > 1 { "s" } else { "" })).strong()).id_salt("decor3d_reglages").default_open(true).show(ui, |ui| {
+        let titre = format!("Décor 3D de la séquence ({} objet{})", d.objets.len(), if d.objets.len() > 1 { "s" } else { "" });
+        let tout = p == PartiesDecor::TOUT;
+        let mut contenu = |ui: &mut egui::Ui| {
             // L'aspect : commun à tous les objets (une lumière, un ciel).
+            if p.soleil {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Soleil");
+                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
+                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
+                });
+            }
             ui.horizontal_wrapped(|ui| {
-                ui.label("Soleil");
-                ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
-                ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
+                if p.monde {
+                    ui.checkbox(&mut d.aspect.facettes, "Facettes");
+                }
+                if p.ciel || p.monde {
+                    ui.checkbox(&mut d.aspect.ciel, "Ciel");
+                }
+                if p.monde {
+                    ui.checkbox(&mut d.aspect.brume, "Brume");
+                }
+                if p.decor {
+                    ui.checkbox(&mut d.aspect.ombres, "Ombres");
+                }
             });
-            ui.horizontal_wrapped(|ui| {
-                ui.checkbox(&mut d.aspect.facettes, "Facettes");
-                ui.checkbox(&mut d.aspect.ciel, "Ciel");
-                ui.checkbox(&mut d.aspect.brume, "Brume");
-                ui.checkbox(&mut d.aspect.ombres, "Ombres");
-            });
-            if let Some(b) = &budget {
-                let q = if d.aspect.ombres { b.qualite_pour(poids.triangles) } else { crate::decor3dbudget::Qualite::Sans };
-                ui.label(RichText::new(format!("{} triangles en tout · sur cet ordinateur : {} (jusqu'à {})", grand_nombre(poids.triangles), q.nom(), grand_nombre(b.triangles))).small().weak());
+            if !p.decor && !p.objet {
+                return;
+            }
+            if p.decor {
+                if let Some(b) = &budget {
+                    let q = if d.aspect.ombres { b.qualite_pour(poids.triangles) } else { crate::decor3dbudget::Qualite::Sans };
+                    ui.label(RichText::new(format!("{} triangles en tout · sur cet ordinateur : {} (jusqu'à {})", grand_nombre(poids.triangles), q.nom(), grand_nombre(b.triangles))).small().weak());
+                    if !tout {
+                        // (Partie 198 : les bords doux de la partie 193, selon le budget de la machine.)
+                        let doux = crate::decor3d::bords_doux(poids.triangles, q);
+                        ui.label(RichText::new(if doux { "Bords doux entre les cartes et le décor : oui (le budget les permet)." } else { "Bords doux entre les cartes et le décor : non (le budget de cet ordinateur ne les permet pas, ou pas encore mesuré)." }).small().weak());
+                    }
+                } else if !tout {
+                    ui.label(RichText::new(format!("{} triangles en tout · cet ordinateur n'est pas encore mesuré.", grand_nombre(poids.triangles))).small().weak());
+                }
             }
             ui.separator();
+            if p.decor {
             // La liste des objets.
             egui::ScrollArea::vertical().id_salt("decor3d_objets").max_height(140.0).auto_shrink([false, true]).show(ui, |ui| {
                 for o in &d.objets {
@@ -908,12 +960,18 @@ impl App {
                     });
                 }
             });
+            }
             // (Un appui dans ce décor lui donne la main : Ctrl+C, Ctrl+X, Ctrl+V visent ses objets.)
             if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
                 prise = true;
             }
+            if !p.objet {
+                return;
+            }
             let Some(o) = choisi.and_then(|id| d.objet_mut(id)) else { return };
-            ui.separator();
+            if p.decor {
+                ui.separator();
+            }
             ui.horizontal(|ui| {
                 ui.label("Nom");
                 ui.add(egui::TextEdit::singleline(&mut o.nom).desired_width(f32::INFINITY));
@@ -993,7 +1051,12 @@ impl App {
                     o.poser_au_sol(x, z, monde.sol_y());
                 }
             });
-        });
+        };
+        if tout {
+            egui::CollapsingHeader::new(RichText::new(titre).strong()).id_salt("decor3d_reglages").default_open(true).show(ui, |ui| contenu(ui));
+        } else {
+            contenu(ui);
+        }
         self.decor3d.choisi = nouveau_choix;
         // Un objet choisi dans la liste l'est aussi dans la vue Espace 3D (partie 184) : sa boîte s'y éclaire, les poignées y
         // vont. (Et un objet choisi dans la vue l'est dans la liste : `e3_choisir_objet`.) Un clic seul en fait le seul choisi ;
@@ -1096,6 +1159,13 @@ pub(crate) fn mesures_de(m: &Modele3d) -> crate::decor3dgltf::Mesures {
     }
 }
 
+// Partie 198.5, pour les essais : le temps d'une image que la lecture d'un modèle « mesure » (les essais n'ont pas de carte
+// graphique) : une première image trop lente, par exemple.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static COUT_ESSAI: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+
 /// Le temps d'une image du décor sur la carte, à la taille de la feuille, posé à sa place d'origine (millisecondes).
 fn mesurer_cout(rs: &eframe::egui_wgpu::RenderState, scene: &Arc<crate::decor3dgltf::Scene3d>, feuille: [usize; 2], cadre: [usize; 2]) -> Option<f32> {
     let max = rs.device.limits().max_texture_dimension_2d as usize;
@@ -1122,3 +1192,22 @@ fn date_lisible(secondes: u64) -> String {
     let y = yoe + ere * 400 + i64::from(mo <= 2);
     format!("{d:02}/{mo:02}/{y}")
 }
+
+/// Partie 198 : les parties du réglage du décor (`App::decor3d_reglages_de`) : le soleil, le ciel, le monde (facettes, ciel, brume),
+/// le décor lui-même (son poids, les ombres, la liste de ses objets et ce qu'on en fait), l'objet choisi.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PartiesDecor {
+    pub soleil: bool,
+    pub ciel: bool,
+    pub monde: bool,
+    pub decor: bool,
+    pub objet: bool,
+}
+
+impl PartiesDecor {
+    pub(crate) const TOUT: PartiesDecor = PartiesDecor { soleil: true, ciel: true, monde: true, decor: true, objet: true };
+    pub(crate) const RIEN: PartiesDecor = PartiesDecor { soleil: false, ciel: false, monde: false, decor: false, objet: false };
+}
+
+/// La phrase d'un onglet de l'onglet 3D quand la séquence n'a pas de décor 3D.
+pub(crate) const SANS_DECOR: &str = "La séquence n'a pas encore de décor 3D : l'onglet Décor en ajoute un, ou un clic sur un modèle de la Banque 3D, en bas.";

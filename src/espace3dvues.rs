@@ -842,9 +842,13 @@ impl App {
         // Le décor 3D de la séquence (partie 180), derrière les cartes ; une prise par vue.
         let decor = self.e3_peindre_decor(&painter, draw, &view, 100 + i as u64).then_some((100 + i as u64, draw));
         self.e3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen, decor);
-        if !camera {
+        if !camera && !self.o3_camera_cachee() {
             let cam_now = self.e3_world().scene_cam(&self.current_camera());
             self.e3_paint_camera(&painter, &proj, &view, &cam_now);
+        }
+        // (Partie 198 : dans l'onglet 3D, les caméras des autres plans de la séquence et le soleil.)
+        if self.dans_l_onglet_3d() {
+            self.o3_peindre_la_scene(&painter, &proj, &view);
         }
         // (On dessine, ou on trace une trajectoire : pas de poignées, elles ne répondraient pas ; comme la vue seule.)
         let trace = self.e3_trace();
@@ -862,6 +866,10 @@ impl App {
             self.e3_dessin_peindre(ui.ctx(), &painter, resp, r, regard);
         }
         peindre_axes(&painter, r, &view);
+        // (Partie 198 : la boussole des vues en perspective, dans l'onglet 3D.)
+        if self.dans_l_onglet_3d() && c.point == PointDeVue::Perspective {
+            self.o3_boussole(ui, r, &view, Some(i));
+        }
         if plusieurs && self.espace3d.vues.active == i {
             painter.rect_stroke(r.shrink(1.0), 0.0, Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.55)), egui::StrokeKind::Inside);
         }

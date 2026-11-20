@@ -532,6 +532,11 @@ impl App {
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, 0.0);
             ui.add_space(4.0);
+            // Partie 198 : l'onglet 3D a sa barre (le point de vue, une, deux ou quatre vues, ce que la vue montre).
+            if self.dans_l_onglet_3d() {
+                self.o3_barre_de_vue(ui);
+                return;
+            }
             let cam = self.camera_view;
             let in3d = self.espace3d.on && !cam;
             // Partie 196 (Anthony : « l'icône vue caméra prend la première place en partant de la gauche ; l'icône "vue du plateau" devient

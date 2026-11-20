@@ -593,7 +593,7 @@ impl App {
     /// « choisir » du panneau Espace 3D (`e3_choisir_la_camera`), et le prochain trait trace son chemin. `ajouter` (Maj
     /// tenue au clic) : elle rejoint ce qui est choisi, ou le quitte. Avec tout autre outil, rien ne change : `ajouter` ne
     /// sert pas, et les autres outils de la vue (choisir, déplacer, tourner, taille) rendent toujours le pointeur aux cartes.
-    fn espace3d_pick_camera(&mut self, ajouter: bool) {
+    pub(crate) fn espace3d_pick_camera(&mut self, ajouter: bool) {
         if self.e3_trace() {
             self.e3_choisir_la_camera(ajouter);
             self.e3_traj_dire_ce_qui_suivra();
@@ -634,7 +634,11 @@ impl App {
         // (L'outil Trajectoire, pris dans la vue, a lui aussi le pointeur : les outils de la vue sont éteints, partie 149.
         // L'outil Sélection de même, partie 152.)
         let dessine = self.e3_dessine() || self.e3_trace() || self.e3_selectionne();
-        self.espace3d_bouton_dessiner(ui);
+        // (Partie 198 : l'onglet 3D ne dessine pas sur les cartes ; ses outils sont ceux de la vue, et « Aimanter au sol ».)
+        let onglet_3d = self.dans_l_onglet_3d();
+        if !onglet_3d {
+            self.espace3d_bouton_dessiner(ui);
+        }
         for mode in GizmoMode::ALL {
             if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode && !dessine && !self.espace3d.origine), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
@@ -647,6 +651,14 @@ impl App {
         let r = self.case_icone(ui, ph::CROSSHAIR, Some(self.espace3d.origine && !dessine), crate::poignees3d::ORIGINE_NOM, crate::poignees3d::ORIGINE_PHRASE, crate::poignees3d::ORIGINE_ACTION);
         if r.clicked() {
             self.e3_basculer_origine();
+        }
+        if onglet_3d {
+            let on = self.o3_aimant_allume();
+            let r = ui.add_enabled_ui(on.is_some(), |ui| self.case_icone(ui, ph::MAGNET_STRAIGHT, Some(on == Some(true)), "Aimanter au sol", "Ce qui est choisi, une carte ou des objets du décor, repose sur le sol (ou ne l'est plus) : sa hauteur est tenue par l'aimant.", crate::origine::AIMANT_ACTION)).inner;
+            if r.clicked() {
+                self.o3_basculer_aimant();
+            }
+            return;
         }
         // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et
         // reste allumée tant qu'elle l'est. Anthony, 2026-11-13 : « On garde l'outil ».)
@@ -757,7 +769,7 @@ impl App {
 
     /// Un calque choisi (partie 162, état 2) : comment il est posé, sa distance à la caméra, sa taille dans le cadre, puis
     /// « Précis » (tous les champs d'avant) replié.
-    fn e3_etat_calque(&mut self, ui: &mut egui::Ui, li: usize) {
+    pub(crate) fn e3_etat_calque(&mut self, ui: &mut egui::Ui, li: usize) {
         let l = &self.layers()[li];
         let (name, locked) = (l.name.clone(), l.locked || l.position_locked);
         ui.horizontal(|ui| {
@@ -812,7 +824,7 @@ impl App {
 
     /// La caméra choisie (partie 162, état 3) : l'objectif, la hauteur et la plongée, le panoramique et l'horizon, regarder
     /// par elle, viser la sélection, puis « Précis » replié.
-    fn e3_etat_camera(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn e3_etat_camera(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new(ph::VIDEO_CAMERA).color(crate::theme::camera()));
             ui.label(RichText::new("Caméra du plan").strong());

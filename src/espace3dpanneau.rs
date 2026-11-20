@@ -89,6 +89,11 @@ impl App {
     /// onglets de son groupe (il arrive d'abord en onglet de Réglages s'il n'est pas dans la disposition) ; elle vient de
     /// se fermer, l'onglet qui était devant revient.
     pub(crate) fn espace3d_panneau_suivre(&mut self) {
+        // (Partie 198 : l'onglet 3D a ses propres onglets de Propriétés, qui suivent ce qui est choisi : `onglet3d.rs`.)
+        if self.dans_l_onglet_3d() {
+            self.o3_suivre();
+            return;
+        }
         let vue = self.espace3d_vue_ouverte();
         // (Sans disposition encore posée, on attend l'image suivante.)
         if self.dock.is_none() {

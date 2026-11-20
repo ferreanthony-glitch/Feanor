@@ -17774,3 +17774,167 @@ disposition » dans le Storyboard (ta pile enregistrée ne reçoit pas le pannea
 9. Double-clic sur le nom d'un calque : renomme-le.
 10. Animation (double-clic sur un plan), « + Panneau » > Scène : la caméra est sous les calques, comme dans la colonne de l'Animation.
 11. Ton plus gros projet, « Depuis : Film », tout déplié : le panneau reste fluide.
+
+## 198. L'onglet 3D (2026-11-20, branche onglet-3d partie de main 25c1084)
+
+Étape 3 sur 5 de la maquette `onglet-3d-v8` validée par Anthony : un onglet de travail « 3D » pour la séquence en trois dimensions.
+La fenêtre « Ce que filme le plan » de la maquette n'est pas faite (Anthony l'a retirée). Format des projets inchangé (61) ; les
+réglages de l'application ont une clé de plus, `disposition_3d` (la disposition de l'onglet, retenue comme celle des autres).
+
+### 198.1 Ce qui a changé
+
+1. **Un onglet « 3D »** en haut à droite, entre « Storyboard » et « Montage » (`Espace::TroisD`), sa commande `espace.3d` (sans
+   touche ; dans la palette et le fichier de raccourcis), sa disposition et sa pile à lui (partie 194). Y aller garde le projet, la
+   séquence, le plan, le calque et ce qui est choisi dans la vue, comme les autres onglets. **Il travaille sur la séquence
+   courante** : son décor 3D, les caméras de tous ses plans, les cartes (les calques) du plan courant.
+2. **Au centre, la vue Espace 3D, en grand** : la même vue et le même rendu que l'Espace 3D d'avant (`espace3d*.rs`, `decor3d*.rs`).
+   L'onglet l'ouvre en y entrant ; en sortant, il la referme si elle l'était avant. Sa barre, au-dessus :
+   - **Perspective · Dessus · Face · Côté · Caméra du plan** : le point de vue de la vue active. Une seule vue : la perspective et la
+     caméra du plan sont la vue seule d'avant ; Dessus, Face et Côté (la vue de droite) sont de vraies vues orthographiques (la vue
+     agrandie des quatre vues de la partie 144).
+   - **1 · 2 · 4** vues : deux, la perspective et la caméra du plan ; quatre, dessus, perspective, face et la caméra du plan.
+   - Ce que la vue montre : **Ombres** (celles du décor, une étape d'annulation), **Grille du sol**, **Cartes**, **Caméras** (celles
+     des autres plans de la séquence, avec le nom de leur plan, en plus de celle du plan courant), **Lumières** (le soleil du décor :
+     sa direction depuis le centre de la scène), puis **Recadrer**.
+   - **La boussole**, en haut à droite de chaque vue en perspective : X rouge, Y vert, Z bleu (le bout plein : le côté positif). Un
+     clic sur un bout d'axe tourne la vue pour regarder le long de lui, depuis ce bout, en un quart de seconde adouci, par le plus
+     court chemin.
+3. **La barre d'outils de gauche** n'a que les outils de la vue : Choisir, Déplacer, Tourner, Mettre à l'échelle, Modifier l'origine
+   (partie 184), Aimanter au sol (la carte ou les objets choisis reposent sur le sol, ou plus ; une étape). Ni outils de dessin, ni
+   « Dessiner sur la carte » : un raccourci d'outil de dessin ne fait pas dessiner sur la carte dans cet onglet.
+4. **La colonne, sa pile d'origine** : **Scène 3D** en haut, puis **Propriétés**.
+   - **Scène 3D** (`Pane::Scene3d`) : Décor (les objets de la séquence), Caméras (une par plan de la séquence, « · plan courant »
+     sur la sienne), Lumières (Soleil, Ciel), Cartes du plan (les calques du plan courant, du haut de la pile). Chaque ligne : une
+     icône, un nom, le cadenas d'un objet, l'œil. Une recherche en haut ; les groupes se replient d'un clic. Un clic choisit dans la
+     vue (Maj : ajoute) ; une caméra d'un autre plan mène à ce plan et choisit sa caméra ; le Soleil et le Ciel mettent l'onglet
+     Lumières devant. Ce qui est choisi dans la vue est surligné ici. L'œil : d'une carte, celui de son calque (une étape) ; d'une
+     caméra, cachée dans la vue ; du Soleil, sa marque dans la vue ; du Ciel, celui du décor (une étape) ; **d'un objet, caché de la
+     vue et de l'image, pour la séance** (pas dans le fichier). Le cadenas d'un objet (pour la séance) : il ne se choisit plus dans
+     la vue.
+   - **Propriétés**, ses onglets d'icônes : **Objet** (la carte choisie : sa pose, sa distance, sa taille, l'aimant, les ombres et
+     « Toujours devant le décor », ce que le panneau Espace 3D montrait ; l'objet du décor choisi : son nom, sa position, sa
+     rotation, son échelle, son origine, « Aimanté au sol ») ; **Caméra** (la caméra du plan choisie : ses graphiques et « Précis »,
+     ceux de la partie 162) ; **Lumières** (le soleil, le ciel, « Montrer le soleil dans la vue ») ; **Monde** (ciel, brume,
+     facettes, grille du sol, le fond et le maillage de la vue) ; **Décor** (son poids face au budget de l'ordinateur, les ombres,
+     les bords doux de la partie 193, la liste de ses objets, ajouter, dupliquer, enlever, copier, couper, coller, copier ou envoyer
+     vers une autre séquence). Ce sont les fonctions d'avant, découpées par sujet (`decor3d_reglages_de` et ses `PartiesDecor`) :
+     rien n'est refait. **L'onglet devant suit ce qui est choisi** : la caméra, Caméra ; un objet ou une carte, Objet ; seulement
+     quand le choix change (un onglet qu'on a mis devant y reste tant que le choix est le même).
+5. **La bande du bas**, sur toute la largeur sous la vue et la colonne (partie 194), deux onglets, **choisis par deux boutons en tête
+   de la bande**, à gauche, sur la ligne de la lecture et du compteur : « Timeline de la séquence » et « Banque 3D », celui qui est
+   devant allumé (vu à l'écran : depuis la partie 160, les groupes d'egui_dock ne montrent plus le nom de leurs onglets, et la Banque
+   3D restait cachée derrière la timeline ; le groupe d'egui_dock est gardé dessous) :
+   - **Timeline de la séquence** : ses plans en blocs, la règle (en secondes depuis le début de la séquence), la tête de lecture,
+     les clés de caméra de chaque plan, le compteur, lecture / pause. Un clic sur un plan y mène, à l'image sous le pointeur ; un
+     glisser sur la règle mène la tête de lecture de plan en plan. La vue et la vue « Caméra du plan » suivent. Une rangée « Objet
+     choisi », vide pour l'instant (les clés d'objet : étape 5).
+   - **Banque 3D** : celle de la Bibliothèque. Un clic pose le modèle dans le décor de la séquence par le chemin d'un import (le
+     budget de la machine, « Ce décor est lourd »), devant la caméra du plan ; glissé sur la vue, il se pose sur le sol sous le
+     pointeur (partie 181).
+6. **Les gestes dans la vue** sont ceux de l'Espace 3D : clic pour choisir, clic droit ou Alt + glisser pour tourner autour, bouton
+   du milieu pour glisser, molette pour avancer, les poignées de la partie 184 ; une étape d'annulation par geste, nommée. En
+   « Caméra du plan », glisser déplace la caméra du plan elle-même.
+7. **Sans latence** (ESPACE3D.md) : rien ne se redessine au repos ; l'animation de la boussole demande des images le temps qu'elle
+   dure. Un décor lourd reste gouverné par le budget de la machine.
+8. « + Panneau » dans l'onglet 3D propose ses panneaux (et l'Historique) ; les autres onglets ne proposent pas les siens.
+
+Le code : `onglet3d.rs` (l'état de l'onglet, la barre de vue, la boussole, ce que la vue montre de plus, les outils, Propriétés qui
+suit), `onglet3dui.rs` (Scène 3D, les onglets de Propriétés, la timeline de la séquence, la banque), `workspace.rs`, `dock.rs`
+(`DockLayout::pour_la_3d`, les panneaux), `colonne.rs`, `decor3dui.rs` (`decor3d_reglages_de`), `decor3d.rs` (`caches`,
+`verrous`), `espace3dview.rs`, `espace3dvues.rs`, `espace3dui.rs` (les outils), `espace3dpanneau.rs`, `viewbar.rs`, `toolbars.rs`,
+`panels.rs`, `app.rs`, `settings.rs`, `keymap.rs`, `keymap.toml`.
+
+### 198.2 Les essais
+
+`onglet3d_tests.rs` (11) : l'onglet entre Storyboard et Montage, sa commande, sa disposition retenue ; sa pile d'origine, « +
+Panneau », la bande sur toute la largeur ; le plan, le calque et le choix gardés en y allant et en revenant, la vue refermée en
+sortant, les outils de la vue seulement ; la barre de vue (les cinq points de vue, 1, 2 et 4 vues, les bascules) ; la boussole (+X,
++Y dans la vue seule, −X dans la perspective des quatre, l'animation qui s'arrête) ; le sommaire face à la séquence (objets, caméras
+des trois plans, lumières, cartes du plan, la recherche, un groupe replié, l'œil et le cadenas d'un objet) ; le choix dans le
+sommaire et dans la vue, l'onglet de Propriétés qui suit ; la timeline de la séquence (un clic sur un plan, un glisser sur la règle) ;
+la banque 3D (un clic, le chemin du budget, la fenêtre « Ce décor est lourd ») ; le repos. Puis (11) : les deux boutons en tête de la
+bande (sur la ligne de la lecture, « Banque 3D » montre la grille des modèles, « Timeline de la séquence » la ramène).
+
+Changés exprès : `sansonglet_tests` et `vignettes_camera_tests` (les onglets visibles : Vignettes, Storyboard, 3D, Montage) ;
+`dock_tests` (les panneaux de l'onglet 3D ne sont pas dans la disposition standard) ; `suggestions_tests` (`Pane::ALL` : 29, les huit
+panneaux de l'onglet 3D) ; `espace3ddirect_tests` (l'onglet « 3D » est la porte de la 3D, permis en 2D comme le mot « 3D » de la barre
+de la vue) ; `hasard_tests` (les espaces tirés au hasard le sont parmi tous, `Espace::TOUS.len()`, et plus parmi les quatre premiers :
+le Montage était devenu le cinquième).
+
+### 198.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil.
+- **Étape 4** (la maquette) : la colonne revue comme Blender pour la 3D (les onglets de Propriétés avec leurs icônes de la maquette).
+  **Étape 5** : les lumières (lampes à poser), « Nouveau plan depuis la vue », les clés d'un objet du décor dans la timeline de la
+  séquence (sa rangée « Objet choisi » est là, vide).
+- L'œil et le cadenas d'un objet du décor ne sont pas enregistrés dans le projet (le format reste 61) : ils valent pour la séance.
+- Les caméras des autres plans sont peintes à leur première image ; elles ne se choisissent pas dans la vue (le sommaire y mène).
+- Un clic dans la Banque 3D pose le modèle devant la caméra du plan (le chemin d'aujourd'hui), pas au centre de la vue de l'onglet.
+- La timeline de la séquence n'a pas de zoom ni de défilement : toute la séquence tient dans sa largeur.
+- Les autres groupes d'egui_dock de l'onglet 3D n'ont qu'un panneau (la vue, la colonne, qui dessine ses propres en-têtes et les
+  onglets d'icônes de Propriétés) : aucun autre onglet caché. La bande du bas du Montage (et du Storyboard, de l'Animation) n'a qu'un
+  panneau, la bande elle-même : rien n'y est caché, rien n'y a changé. Un groupe que l'utilisateur ferait lui-même en glissant des
+  panneaux ensemble n'a toujours pas de noms d'onglets.
+
+### 198.4 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`.
+
+1. En haut à droite : « 3D » entre « Storyboard » et « Montage ». Clique dessus : la vue Espace 3D en grand, la séquence du plan
+   courant ; à gauche, seulement les outils de la vue.
+2. La barre au-dessus : Perspective, Dessus, Face, Côté, Caméra du plan ; 1, 2, 4 ; Ombres, Grille, Cartes, Caméras, Lumières,
+   Recadrer. Essaie chaque point de vue en une vue, puis 2 et 4.
+3. La boussole en haut à droite de la perspective : clique X, puis Y, puis le bout pâle de Z : la vue tourne doucement.
+4. Les caméras des autres plans de la séquence se voient, avec le nom de leur plan ; « Caméras » les cache.
+5. Scène 3D : clique un objet du décor (Propriétés passe à Objet), une caméra d'un autre plan (on y va, Propriétés passe à Caméra),
+   une carte. Cherche « maison ». Replie « Caméras ». L'œil d'un objet le cache ; son cadenas l'empêche d'être pris dans la vue.
+6. Propriétés : Lumières (le soleil), Monde (ciel, brume, facettes), Décor (le poids, les ombres, les bords doux, copier vers une
+   autre séquence).
+7. En bas : la timeline de la séquence ; clique un plan, glisse sur la règle : la vue suit. Puis le bouton « Banque 3D », en tête de
+   la bande à gauche : la banque passe devant ; clique un modèle, il arrive dans le décor ; glisse-en un autre sur la vue, il se pose
+   au sol sous le pointeur. Le bouton « Timeline de la séquence » ramène la timeline.
+8. Dans la vue : choisir, tourner autour (clic droit), glisser (milieu), avancer (molette), les poignées ; Ctrl+Z défait chaque
+   geste.
+9. Reviens au Storyboard : le même plan, le même calque ; la vue Espace 3D est refermée si elle l'était.
+10. Laisse FEANOR au repos dans l'onglet 3D : le processeur ne travaille plus.
+
+### 198.5 Vu à l'écran : un modèle de 196 triangles « lourd », les aperçus de la banque, l'onglet Monde
+
+Vu par le coordinateur et Anthony dans l'application d'essai (Mac, 1384 × 868). **Le bug** : « Tree oak » (196 triangles, aucune
+texture), cliqué dans la Banque 3D sur une séquence sans décor, tout de suite après le message de l'étalonnage, ouvrait « Ce décor
+est lourd » : « une image de ce décor prend 1.6 ms à la carte graphique : au-delà des 1.6 ms qu'on lui laisse ».
+
+**La cause.** La première action de décor de la séance lance l'étalonnage de la machine (il n'y a pas encore de budget) et, dans le
+même instant, la lecture du modèle sur un autre fil (`decor3d_lancer`). Un modèle de 14 Ko se lit en un rien de temps : son image
+était chronométrée sur la carte **pendant que l'étalonnage la faisait travailler**, et le temps mesuré doublait. Et pour un modèle si
+petit, ce temps n'est de toute façon que le coût fixe d'une passe à la taille de la feuille (le ciel, la brume, la profondeur), que
+l'étalonnage mesure lui-même et compte déjà dans le budget (`Cout::fixe`) : la mesure (une image d'échauffement, puis la meilleure de
+trois séries de quatre images) frôlait donc toujours la limite d'une passe (1,6 ms), et la moindre gêne la passait. (La limite était
+déjà stricte, « au-delà » ; « 1.6 ms au-delà des 1.6 ms » venait de l'arrondi à un chiffre : le message en a maintenant deux.)
+
+**Le correctif** :
+1. La lecture **attend la fin de l'étalonnage** avant de chronométrer l'image du modèle (`decor3dbudget::en_cours_pour` ; au plus
+   une minute), et l'étalonnage est lancé avant elle.
+2. **Un modèle loin sous le budget** (moins de 5 % de ses triangles **et** de sa mémoire de textures, `decor3d::loin_sous_le_budget`)
+   n'est jamais jugé lourd par un temps mesuré : ce temps n'y dit rien que le budget ne sache déjà. C'est le choix le plus sûr : il
+   ne dépend d'aucune mesure (une médiane resterait au coût fixe, tout près de la limite, et une carte occupée ailleurs par une autre
+   application la ferait encore passer). Au-delà de 5 %, le temps mesuré compte comme avant, strictement au-delà de la limite.
+3. Un décor vraiment lourd est toujours vu : par ses triangles, par ses textures, et, entre 5 % et 100 % du budget, par son temps.
+
+**Les aperçus de la Banque 3D** : les modèles n'occupaient que quelques pixels au milieu de leur case. Chaque aperçu est maintenant
+cadré sur ce qu'il dessine (les pixels ni transparents ni de la couleur du fond), en un carré avec 8 % de marge, avant d'être réduit
+(`banque3dui::cadrer`), sur le fil des aperçus d'avant et dans les mêmes textures.
+
+**L'onglet Monde** : la pastille de « Couleur du fond » et de « Couleur du maillage » coupait leur nom (« Couleur du fo▮ ») ; elle est
+au bord droit du panneau, jamais sur le nom.
+
+Essais (`onglet3d_tests.rs`, 4 de plus, 15 en tout) : un modèle minuscule n'est jamais lourd par un temps (à la limite, juste
+au-delà, un pic de 5 ms), à 10 % du budget le temps compte strictement au-delà de la limite, des triangles ou des textures lourds sont
+toujours vus ; un clic dans la banque juste après l'étalonnage, avec une première image « mesurée » à 5 ms, pose le modèle sans
+fenêtre, et un modèle au-delà du budget l'ouvre toujours ; les aperçus cadrés (une image d'essai, les huit premiers modèles de la
+banque) ; les noms entiers de l'onglet Monde dans la colonne de 290 points. Changé exprès : `decor3d_tests` (le temps trop lent d'un
+modèle qui n'est pas loin sous le budget le fait toujours juger lourd ; loin sous lui, plus).
+
+À tester : sur une copie de projet, sans budget mesuré (Préférences > Performance, « Remesurer » d'abord, ou une première séance),
+cliquer « Tree oak » dans la Banque 3D : il arrive dans le décor, sans fenêtre. Les aperçus de la banque remplissent leur case. Onglet
+Monde : « Couleur du fond » et « Couleur du maillage » entiers.

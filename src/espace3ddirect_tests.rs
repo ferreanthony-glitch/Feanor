@@ -527,6 +527,10 @@ fn sans_3d(b: &Banc, quand: &str) {
     if let Some(k) = peints.iter().position(|t| t == "3D") {
         peints.remove(k);
     }
+    // (Partie 198 : et l'onglet « 3D », en haut à droite : la porte de l'onglet 3D, comme les autres onglets.)
+    if let Some(k) = peints.iter().position(|t| t == " 3D ") {
+        peints.remove(k);
+    }
     assert!(peints.is_empty(), "{quand} : l'écran montre {peints:?}");
 }
 

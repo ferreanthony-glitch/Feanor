@@ -21,6 +21,48 @@ const APERCU_PX: u32 = 128;
 const VIGNETTE: f32 = 76.0;
 const NOM_H: f32 = 16.0;
 
+/// La marge laissée autour du modèle cadré dans son aperçu (part du côté).
+pub(crate) const MARGE_APERCU: f32 = 0.08;
+
+/// Partie 198.5 : l'aperçu `img` cadré sur ce qu'il dessine (les pixels qui ne sont ni transparents ni de la couleur du fond, celle
+/// du coin), en un carré avec une marge de `MARGE_APERCU` de chaque côté : le modèle remplit sa case. Rien de dessiné : tel quel.
+pub(crate) fn cadrer(img: &image::RgbaImage) -> image::RgbaImage {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return img.clone();
+    }
+    let fond = *img.get_pixel(0, 0);
+    let dessine = |p: &image::Rgba<u8>| {
+        if p[3] <= 24 {
+            return false;
+        }
+        fond[3] <= 24 || (0..3).any(|k| (p[k] as i32 - fond[k] as i32).abs() > 24)
+    };
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0u32, 0u32);
+    for (x, y, p) in img.enumerate_pixels() {
+        if dessine(p) {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+    }
+    if x1 < x0 || y1 < y0 {
+        return img.clone();
+    }
+    let cote = ((x1 - x0 + 1).max(y1 - y0 + 1) as f32 * (1.0 + 2.0 * MARGE_APERCU)).ceil() as u32;
+    let (cx, cy) = ((x0 + x1) as f32 / 2.0, (y0 + y1) as f32 / 2.0);
+    let ox = (cx - cote as f32 / 2.0).round() as i64;
+    let oy = (cy - cote as f32 / 2.0).round() as i64;
+    let mut out = image::RgbaImage::from_pixel(cote, cote, if fond[3] <= 24 { image::Rgba([0, 0, 0, 0]) } else { fond });
+    for y in 0..cote {
+        for x in 0..cote {
+            let (sx, sy) = (ox + x as i64, oy + y as i64);
+            if sx >= 0 && sy >= 0 && (sx as u32) < w && (sy as u32) < h {
+                out.put_pixel(x, y, *img.get_pixel(sx as u32, sy as u32));
+            }
+        }
+    }
+    out
+}
+
 /// L'onglet du panneau Bibliothèque.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum OngletBiblio {
@@ -57,7 +99,10 @@ impl Banque3dUi {
                 .iter()
                 .map(|m| {
                     let img = image::load_from_memory_with_format(m.png()?, image::ImageFormat::Png).ok()?;
-                    let petit = img.thumbnail(APERCU_PX, APERCU_PX).to_rgba8();
+                    // (Partie 198.5, vu à l'écran : le modèle n'occupait que quelques pixels au milieu de sa case. Il est cadré sur
+                    // ce qu'il dessine, avec une marge, avant d'être réduit.)
+                    let cadre = cadrer(&img.to_rgba8());
+                    let petit = image::DynamicImage::ImageRgba8(cadre).thumbnail(APERCU_PX, APERCU_PX).to_rgba8();
                     Some(egui::ColorImage::from_rgba_unmultiplied([petit.width() as usize, petit.height() as usize], petit.as_raw()))
                 })
                 .collect()

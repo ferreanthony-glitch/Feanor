@@ -392,6 +392,8 @@ impl App {
     /// couleur du fond, le maillage du sol (couleur, opacité, pas). Les couleurs se choisissent dans le petit panneau même, en
     /// le dépliant (une fenêtre de choix le fermerait).
     pub(crate) fn e3_environnement_ui(&mut self, ui: &mut egui::Ui) {
+        #[cfg(test)]
+        PASTILLES_ENV.with(|p| p.borrow_mut().clear());
         let mut env = Environnement3d { maillage: self.espace3d.show_grid, ..self.e3_environnement() };
         let avant = env;
         ui.label(RichText::new(format!("{}  Environnement", ph::SUN_HORIZON)).strong());
@@ -402,7 +404,12 @@ impl App {
                 change = crate::champcouleur::srgb_en_ligne(ui, c);
             });
             let r = entete.header_response.rect;
-            let case = egui::Rect::from_center_size(egui::pos2(r.right() - 10.0, r.center().y), egui::vec2(16.0, 12.0));
+            // (Partie 198.5, vu à l'écran dans l'onglet Monde : la pastille, posée au bout de l'en-tête, coupait son nom ; elle va au
+            // bord droit du panneau, et jamais sur le nom.)
+            let x = (ui.max_rect().right() - 10.0).max(r.right() + 12.0);
+            let case = egui::Rect::from_center_size(egui::pos2(x, r.center().y), egui::vec2(16.0, 12.0));
+            #[cfg(test)]
+            PASTILLES_ENV.with(|p| p.borrow_mut().push((nom.to_string(), r, case)));
             ui.painter().rect_filled(case, 3.0, Color32::from_rgb(c[0], c[1], c[2]));
             ui.painter().rect_stroke(case, 3.0, Stroke::new(1.0_f32, crate::theme::bord_fort()), egui::StrokeKind::Inside);
             crate::bulles::bulle(entete.header_response, nom, description, "");
@@ -503,4 +510,10 @@ fn nombre(v: f32) -> String {
     let s = format!("{v:.2}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     s.replace('.', ",")
+}
+
+// Partie 198.5 : les en-têtes des couleurs de l'environnement et leurs pastilles, à la dernière image (pour les essais).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PASTILLES_ENV: std::cell::RefCell<Vec<(String, egui::Rect, egui::Rect)>> = const { std::cell::RefCell::new(Vec::new()) };
 }

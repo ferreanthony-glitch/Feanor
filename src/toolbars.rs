@@ -132,6 +132,11 @@ impl App {
             ui.vertical_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
                 ui.add_space(4.0);
+                // (Partie 198 : l'onglet 3D n'a que les outils de la vue, pas ceux du dessin.)
+                if self.dans_l_onglet_3d() {
+                    self.espace3d_outils(ui);
+                    return;
+                }
                 let groups = if self.espace == crate::workspace::Espace::Vignettes { TOOL_GROUPS_VIGNETTES } else { TOOL_GROUPS };
                 // La vue Espace 3D ouverte : ses outils en tête de la barre, en partant du haut (Anthony, partie 160 : « Les outils
                 // de la vue Espace 3D s'ajoutent à la barre latérale d'outils. En premier en partant du haut. »). Vue fermée, la

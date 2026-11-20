@@ -73,7 +73,8 @@ fn the_three_tabs_are_drawn_vignettes_first_and_switch_spaces_by_clicks() {
     let xs: Vec<f32> = tous.iter().map(|t| centre_du_texte(&b, t).x).collect();
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "Vignettes, Storyboard, Montage : {xs:?}");
     assert!(tous.iter().all(|t| centre_du_texte(&b, t).y < 40.0), "dans la barre de menus, en haut");
-    assert_eq!(Espace::VISIBLES.map(Espace::nom), ["Vignettes", "Storyboard", "Montage"]);
+    // (Partie 198 : l'onglet 3D, entre le Storyboard et le Montage.)
+    assert_eq!(Espace::VISIBLES.map(Espace::nom), ["Vignettes", "Storyboard", "3D", "Montage"]);
     for (espace, mode) in [(Espace::Vignettes, Mode::Storyboard), (Espace::Montage, Mode::Storyboard), (Espace::Storyboard, Mode::Storyboard), (Espace::Vignettes, Mode::Storyboard)] {
         let texte = format!(" {} ", espace.nom());
         let p = centre_du_texte(&b, &texte);

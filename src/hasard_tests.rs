@@ -733,7 +733,7 @@ impl Essai {
                 self.b.chauffer(2);
             }
             Espace(k) => {
-                self.b.app.set_espace(Espace::TOUS[k as usize % 4]);
+                self.b.app.set_espace(Espace::TOUS[k as usize % Espace::TOUS.len()]);
                 self.b.chauffer(3);
             }
             TraitDessin { outil, x0, y0, x1, y1 } => {
@@ -1053,7 +1053,7 @@ impl Essai {
                 match INTERRUPTIONS[quoi as usize % INTERRUPTIONS.len()] {
                     "onglet" => self.b.app.onglet_voisin(1),
                     "enregistrer" => self.enregistrer(false),
-                    e if e.starts_with("espace:") => self.b.app.set_espace(Espace::TOUS[e[7..].parse::<usize>().unwrap_or(0) % 4]),
+                    e if e.starts_with("espace:") => self.b.app.set_espace(Espace::TOUS[e[7..].parse::<usize>().unwrap_or(0) % Espace::TOUS.len()]),
                     id => self.b.app.run_action(id),
                 }
                 for q in &chemin[4..] {

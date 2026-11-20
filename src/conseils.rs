@@ -112,6 +112,7 @@ impl App {
             Espace::Montage => Some(Conseil::Montage),
             Espace::Animation => Some(Conseil::Animation),
             Espace::Storyboard => self.modified.then_some(Conseil::Raccourcis),
+            Espace::TroisD => Some(Conseil::Espace3d),
         }
     }
 

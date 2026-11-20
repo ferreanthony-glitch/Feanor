@@ -96,6 +96,17 @@ pub fn commandes_de_l_onglet(espace: Espace) -> &'static [(&'static str, &'stati
             ("bande.zoom_arriere", "Zoom des Pistes -"),
             ("bande.tout_voir", "Tout voir"),
         ],
+        // Partie 198 : l'onglet 3D.
+        Espace::TroisD => &[
+            ("espace3d.outil_choisir", "Choisir"),
+            ("espace3d.outil_deplacer", "Déplacer"),
+            ("espace3d.outil_tourner", "Tourner"),
+            ("espace3d.outil_echelle", "Mettre à l'échelle"),
+            ("espace3d.cadrer", "Recadrer"),
+            ("espace3d.vue_camera", "Regarder par la caméra du plan"),
+            ("lecture.basculer", "Lecture / pause"),
+            ("edition.annuler", "Annuler"),
+        ],
     }
 }
 

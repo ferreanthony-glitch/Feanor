@@ -68,6 +68,9 @@ pub struct Settings {
     /// Disposition de l'espace Vignettes (le quatrième espace, `Espace::Vignettes`) ; absente : son origine.
     #[serde(default, rename = "disposition_vignettes", skip_serializing_if = "Option::is_none")]
     pub vignettes_layout: Option<Layout>,
+    /// Partie 198 : la disposition de l'onglet 3D (`Espace::TroisD`) ; absente : son origine (`DockLayout::pour_la_3d`).
+    #[serde(default, rename = "disposition_3d", skip_serializing_if = "Option::is_none")]
+    pub trois_d_layout: Option<Layout>,
     /// Le panneau « Vignettes » (2026-10-24) a été posé, une fois, dans la disposition retenue de l'espace Vignettes
     /// (`poser_le_panneau_vignettes`) : une disposition d'avant lui ne l'avait pas, et il se voit avec l'onglet. Fermé ensuite à la main,
     /// il reste fermé.
@@ -466,6 +469,7 @@ impl Default for Settings {
             animation_layout: None,
             montage_layout: None,
             vignettes_layout: None,
+            trois_d_layout: None,
             panneau_vignettes_pose: false,
             panneau_espace3d_pose: false,
             panneau_espace3d_a_cote: false,
@@ -563,6 +567,7 @@ impl Settings {
             Espace::Animation => self.animation_layout.as_ref(),
             Espace::Montage => self.montage_layout.as_ref(),
             Espace::Vignettes => self.vignettes_layout.as_ref(),
+            Espace::TroisD => self.trois_d_layout.as_ref(),
         }
     }
 
@@ -573,6 +578,7 @@ impl Settings {
             Espace::Animation => self.animation_layout = Some(layout),
             Espace::Montage => self.montage_layout = Some(layout),
             Espace::Vignettes => self.vignettes_layout = Some(layout),
+            Espace::TroisD => self.trois_d_layout = Some(layout),
         }
     }
 
