@@ -119,17 +119,22 @@ impl App {
         let w = crate::layerheads::icon_w();
         let oeil = Rect::from_center_size(pos2(rect.right() - 6.0 - w * 0.5, rect.center().y), vec2(w, 18.0));
         let cadenas = oeil.translate(vec2(-w, 0.0));
-        let fin_du_nom = if matches!(l, Ligne3d::Objet(_)) { cadenas.left() } else { oeil.left() } - 4.0;
+        // (Partie 199 : un objet a, avant son cadenas, la puce de sa couleur d'identification ; un clic ouvre la palette.)
+        let puce = Rect::from_center_size(pos2(cadenas.left() - 10.0, rect.center().y), vec2(14.0, 14.0));
+        let fin_du_nom = if matches!(l, Ligne3d::Objet(_)) { puce.left() } else { oeil.left() } - 4.0;
         p.with_clip_rect(Rect::from_min_max(pos2(x + 18.0, rect.top()), pos2(fin_du_nom, rect.bottom()))).text(pos2(x + 20.0, rect.center().y), Align2::LEFT_CENTER, &nom, FontId::proportional(12.0), encre);
+        if let Ligne3d::Objet(id) = l {
+            self.puce_de_couleur(ui, puce, id);
+        }
         let visible = self.scene3d_visible(l);
         let r = crate::layerheads::icon_at(ui, oeil, if visible { ph::EYE } else { ph::EYE_SLASH }, if visible { texte } else { doux.gamma_multiply(0.6) });
-        if crate::bulles::bulle(r, "Afficher / cacher", "Montrer ou cacher dans la vue (une carte : comme l'œil de son calque ; un objet du décor : aussi dans l'image du plan, pour la séance).", "").clicked() {
+        if crate::bulles::bulle(r, "Afficher / cacher", "Montrer ou cacher dans la vue (une carte : comme l'œil de son calque ; un objet du décor : aussi dans les images des plans, gardé dans le projet).", "").clicked() {
             self.scene3d_basculer_oeil(l);
         }
         if let Ligne3d::Objet(id) = l {
-            let verrou = self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.verrous.contains(&id));
+            let verrou = self.e3_objet(id).is_some_and(|o| o.verrou);
             let r = crate::layerheads::icon_at(ui, cadenas, if verrou { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN }, if verrou { texte } else { doux.gamma_multiply(0.6) });
-            if crate::bulles::bulle(r, "Verrouiller / déverrouiller", "Un objet verrouillé ne se choisit plus dans la vue (pour la séance) : on ne le déplace pas par erreur.", "").clicked() {
+            if crate::bulles::bulle(r, "Verrouiller / déverrouiller", "Un objet verrouillé ne se choisit plus dans la vue : on ne le déplace pas par erreur (gardé dans le projet).", "").clicked() {
                 self.scene3d_basculer_verrou(id);
             }
         }
@@ -143,7 +148,7 @@ impl App {
     /// Ce que montre l'œil d'une ligne.
     fn scene3d_visible(&self, l: Ligne3d) -> bool {
         match l {
-            Ligne3d::Objet(id) => self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| !d.caches.contains(&id)),
+            Ligne3d::Objet(id) => self.e3_objet(id).is_some_and(|o| !o.cache),
             Ligne3d::Camera(pi) => !self.o3.cameras_cachees.contains(&self.doc.panels[pi].id),
             Ligne3d::Soleil => self.o3.montrer_lumieres,
             Ligne3d::Ciel => self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.aspect.ciel),
@@ -156,7 +161,7 @@ impl App {
     pub(crate) fn scene3d_choisir(&mut self, l: Ligne3d, ajouter: bool) {
         match l {
             Ligne3d::Objet(id) => {
-                if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.verrous.contains(&id)) {
+                if self.e3_objet(id).is_some_and(|o| o.verrou) {
                     self.status = "Cet objet est verrouillé (son cadenas, dans Scène 3D).".into();
                     return;
                 }
@@ -194,12 +199,12 @@ impl App {
         let seq = self.doc.sequence_of(self.cur_panel);
         match l {
             Ligne3d::Objet(id) => {
-                if let Some(d) = self.doc.decors3d.par_sequence.get_mut(&seq) {
-                    if !d.caches.remove(&id) {
-                        d.caches.insert(id);
-                        let s = crate::poignees3d::objet_selection(id);
-                        self.espace3d.sel.retain(|x| *x != s);
-                    }
+                // (Partie 199 : gardé dans le projet, une étape d'annulation.)
+                let cache = self.e3_objet(id).is_some_and(|o| o.cache);
+                self.decor3d_changer_objet(id, if cache { "Montrer un objet du décor" } else { "Cacher un objet du décor" }, |o| o.cache = !cache);
+                if !cache {
+                    let s = crate::poignees3d::objet_selection(id);
+                    self.espace3d.sel.retain(|x| *x != s);
                 }
             }
             Ligne3d::Camera(pi) => {
@@ -228,15 +233,14 @@ impl App {
         }
     }
 
-    /// Le cadenas d'un objet du décor (pour la séance) : verrouillé, il ne se choisit plus dans la vue, et il est lâché s'il l'était.
+    /// Le cadenas d'un objet du décor (gardé dans le projet depuis la partie 199, une étape d'annulation) : verrouillé, il ne se
+    /// choisit plus dans la vue, et il est lâché s'il l'était.
     pub(crate) fn scene3d_basculer_verrou(&mut self, id: u64) {
-        let seq = self.doc.sequence_of(self.cur_panel);
-        if let Some(d) = self.doc.decors3d.par_sequence.get_mut(&seq) {
-            if !d.verrous.remove(&id) {
-                d.verrous.insert(id);
-                let s = crate::poignees3d::objet_selection(id);
-                self.espace3d.sel.retain(|x| *x != s);
-            }
+        let verrou = self.e3_objet(id).is_some_and(|o| o.verrou);
+        self.decor3d_changer_objet(id, if verrou { "Déverrouiller un objet du décor" } else { "Verrouiller un objet du décor" }, |o| o.verrou = !verrou);
+        if !verrou {
+            let s = crate::poignees3d::objet_selection(id);
+            self.espace3d.sel.retain(|x| *x != s);
         }
     }
 
@@ -252,7 +256,10 @@ impl App {
             self.e3_etat_calque(ui, *li);
             return;
         }
-        if !self.e3_objets_choisis().is_empty() {
+        let objets = self.e3_objets_choisis();
+        if !objets.is_empty() {
+            // (Partie 199 : en haut, la couleur d'identification de l'objet choisi, ou des objets choisis ensemble.)
+            self.couleur_d_identification_ui(ui, &objets);
             self.decor3d_reglages_de(ui, PartiesDecor { objet: true, ..PartiesDecor::RIEN });
             return;
         }

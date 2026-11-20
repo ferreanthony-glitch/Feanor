@@ -178,6 +178,12 @@ pub struct Objet3d {
     /// Aimanté au sol : sa hauteur est calculée (`decor3daimant.rs`), posée sur le sol ou sur les objets sous lui.
     pub aimante: bool,
     pub modele: Arc<Modele3d>,
+    /// Partie 199 : sa couleur d'identification (le rang dans `couleurs3d::PALETTE`) ; rien : aucune (d'origine).
+    pub couleur: Option<u8>,
+    /// Partie 198, enregistrés depuis la partie 199 : caché par son œil dans « Scène 3D » (ni la vue ni les images des plans ne le
+    /// dessinent), verrouillé par son cadenas (il ne se choisit plus dans la vue).
+    pub cache: bool,
+    pub verrou: bool,
 }
 
 impl std::fmt::Debug for Objet3d {
@@ -190,7 +196,7 @@ impl Objet3d {
     /// Un objet neuf : l'origine au centre du dessous de sa boîte, aimanté au sol.
     pub fn neuf(id: u64, nom: String, source: String, allege: Vec<String>, modele: Arc<Modele3d>) -> Objet3d {
         let origine = origine_au_sol(modele.bornes);
-        Objet3d { id, nom, source, allege, place: Place3d::default(), origine, aimante: true, modele }
+        Objet3d { id, nom, source, allege, place: Place3d::default(), origine, aimante: true, modele, couleur: None, cache: false, verrou: false }
     }
 
     /// Du repère du modèle au monde : l'origine à `place.position`, la rotation et l'échelle autour d'elle.
@@ -237,11 +243,6 @@ pub struct Decor3d {
     pub uid: u64,
     pub aspect: Aspect,
     pub objets: Vec<Objet3d>,
-    /// Partie 198 : les objets cachés par leur œil dans « Scène 3D » (ni la vue ni l'image ne les dessinent), pour la séance : pas
-    /// dans le fichier du projet.
-    pub caches: BTreeSet<u64>,
-    /// Partie 198 : les objets verrouillés par leur cadenas dans « Scène 3D » (ils ne se choisissent plus dans la vue), pour la séance.
-    pub verrous: BTreeSet<u64>,
 }
 
 impl std::fmt::Debug for Decor3d {
@@ -253,13 +254,13 @@ impl std::fmt::Debug for Decor3d {
 impl Decor3d {
     pub fn new(aspect: Aspect) -> Decor3d {
         static SUIVANT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), caches: BTreeSet::new(), verrous: BTreeSet::new() }
+        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new() }
     }
 
     /// Les objets que cet ordinateur montre (pas ceux masqués en attendant le choix d'Anthony, `masquer`).
     pub fn vus(&self) -> impl Iterator<Item = &Objet3d> + '_ {
         // (Partie 198 : ni ceux cachés par leur œil dans « Scène 3D ».)
-        self.objets.iter().filter(|o| !masque(o.modele.uid) && !self.caches.contains(&o.id))
+        self.objets.iter().filter(|o| !masque(o.modele.uid) && !o.cache)
     }
 
     pub fn objet(&self, id: u64) -> Option<&Objet3d> {
@@ -366,6 +367,14 @@ struct EntreeObjet {
     aimante: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     allege: Vec<String>,
+    /// Partie 199 : la couleur d'identification (rang dans la palette) ; l'œil et le cadenas de « Scène 3D ». Absents d'un fichier
+    /// d'avant : aucune, montré, libre ; un FEANOR d'avant les ignore (rien n'interdit les clés inconnues ici).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    couleur: Option<u8>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    cache: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    verrou: bool,
 }
 
 /// Un décor de la partie 180 (version 1) : un seul modèle par séquence, sa place celle du point (0, 0, 0) du modèle.
@@ -425,6 +434,9 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                     origine: Some(o.origine),
                     aimante: o.aimante,
                     allege: o.allege.clone(),
+                    couleur: o.couleur,
+                    cache: o.cache,
+                    verrou: o.verrou,
                 })
                 .map_err(|e| e.to_string())
             })
@@ -499,7 +511,8 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                 let lu = serde_json::from_value::<EntreeObjet>(ov.clone()).map_err(|e| e.to_string()).and_then(|e| lire_modele(dir, &e.fichier, &mut lus).map(|mdl| (e, mdl)));
                 match lu {
                     Ok((e, modele)) => {
-                        let mut o = Objet3d { id: e.id, nom: e.nom, source: e.fichier_d_origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: e.aimante, modele };
+                        let couleur = e.couleur.filter(|k| crate::couleurs3d::couleur(*k).is_some());
+                        let mut o = Objet3d { id: e.id, nom: e.nom, source: e.fichier_d_origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: e.aimante, modele, couleur, cache: e.cache, verrou: e.verrou };
                         match e.origine.filter(|p| p.iter().all(|c| c.is_finite())) {
                             Some(p) => o.origine = p,
                             None => o.changer_origine(origine_au_sol(o.modele.bornes)),
@@ -523,7 +536,7 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
             });
             match lu {
                 Ok((e, modele)) => {
-                    let mut o = Objet3d { id: e.id, nom: e.nom, source: e.origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: false, modele };
+                    let mut o = Objet3d { id: e.id, nom: e.nom, source: e.origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false };
                     o.changer_origine(origine_au_sol(o.modele.bornes));
                     out.par_sequence.entry(e.sequence).or_insert_with(|| Decor3d::new(e.aspect)).objets.push(o);
                 }
@@ -637,9 +650,10 @@ pub struct DecorCle {
 }
 
 impl DecorCle {
-    fn bits(&self) -> ([u32; 16], [u32; 3], [u32; 6]) {
+    fn bits(&self) -> ([u32; 16], [u32; 3], [u32; 7]) {
         let a = &self.aspect;
-        (self.repere.map(f32::to_bits), self.oeil.map(f32::to_bits), [a.facettes as u32, a.ciel as u32, a.brume as u32, a.ombres as u32, a.soleil_azimut.to_bits(), a.soleil_hauteur.to_bits()])
+        // (Partie 199 : l'aspect « Dans les plans » aussi : passer de l'un à l'autre fait une autre image, et d'autres vignettes.)
+        (self.repere.map(f32::to_bits), self.oeil.map(f32::to_bits), [a.facettes as u32, a.ciel as u32, a.brume as u32, a.ombres as u32, a.soleil_azimut.to_bits(), a.soleil_hauteur.to_bits(), a.rendu as u32])
     }
 
     pub fn monde(&self) -> Monde {
@@ -670,9 +684,15 @@ impl Hash for DecorCle {
 /// L'empreinte des objets que cet ordinateur montre : leurs modèles et leurs matrices.
 pub fn contenu(d: &Decor3d) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    // (Partie 199 : et leurs couleurs d'identification, quand les plans les montrent : changer une couleur redessine l'image une fois,
+    // sans rien refaire des maillages.)
+    let couleurs = d.aspect.rendu == crate::couleurs3d::Rendu::Couleurs;
     for o in d.vus() {
         o.modele.uid.hash(&mut h);
         o.matrice().map(f32::to_bits).hash(&mut h);
+        if couleurs {
+            o.couleur.hash(&mut h);
+        }
     }
     h.finish()
 }
@@ -737,25 +757,31 @@ pub fn masque(uid: u64) -> bool {
     MASQUES.lock().unwrap_or_else(|e| e.into_inner()).contains(&uid)
 }
 
-/// Un objet à dessiner : son modèle et sa matrice dans le repère où on le regarde.
-pub type Pose3d = (Arc<Modele3d>, M4);
+/// Un objet à dessiner : son modèle, sa matrice dans le repère où on le regarde, et sa couleur d'identification (partie 199).
+pub type Pose3d = (Arc<Modele3d>, M4, Option<u8>);
+
+/// Les objets que ce décor montre, à dessiner (`Pose3d`), dans le repère du décor.
+pub fn poses(d: &Decor3d) -> Vec<Pose3d> {
+    d.vus().map(|o| (o.modele.clone(), o.matrice(), o.couleur)).collect()
+}
 
 /// Les objets du décor de la clé `key`, tels qu'ils étaient quand la clé a été faite ; rien : le décor a changé depuis (ou n'est
 /// plus dans le projet), la clé ne vaut plus.
 pub fn objets_de(doc: &Document, key: &DecorCle) -> Option<Vec<Pose3d>> {
     let d = doc.decors3d.par_sequence.values().find(|d| d.uid == key.decor)?;
-    (contenu(d) == key.contenu).then(|| d.vus().map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice()))).collect())
+    (contenu(d) == key.contenu).then(|| d.vus().map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice()), o.couleur)).collect())
 }
 
 /// Les triangles que dessinent ces objets (chaque objet compte).
 pub fn triangles_de(objets: &[Pose3d]) -> u64 {
-    objets.iter().map(|(mdl, _)| mdl.scene.triangles() as u64).sum()
+    objets.iter().map(|(mdl, _, _)| mdl.scene.triangles() as u64).sum()
 }
 
 /// Ce que la carte graphique dessine pour ces objets : un dessin par objet ; les objets d'un même modèle ont le même `id`, le
 /// modèle part à la carte une fois.
 pub fn dessins_gpu(objets: &[Pose3d], aspect: Aspect) -> Vec<crate::decor3dgpu::Dessin> {
-    objets.iter().map(|(mdl, mx)| crate::decor3dgpu::Dessin { id: mdl.uid, scene: mdl.scene.clone(), matrice: *mx, aspect }).collect()
+    // (Partie 199 : chaque objet dans sa teinte pour l'aspect `aspect.rendu` ; le modèle à la carte, lui, ne change pas.)
+    objets.iter().map(|(mdl, mx, k)| crate::decor3dgpu::Dessin { id: mdl.uid, scene: mdl.scene.clone(), matrice: *mx, aspect, teinte: crate::couleurs3d::Teinte::de(aspect.rendu, *k) }).collect()
 }
 
 // -------------------------------------------------------------------------------- l'image calculée (exports, secours)
@@ -876,8 +902,10 @@ pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Opti
             }
         }
     }
-    let scenes: Vec<(&Scene3d, M4)> = objets.iter().map(|(mdl, mx)| (&*mdl.scene, *mx)).collect();
-    let (rgba, prof) = crate::decor3drendu::rendre_objets_prof(&scenes, &prise, [w, h], sur_echantillonnage(key.feuille), fils, &key.aspect);
+    let scenes: Vec<(&Scene3d, M4)> = objets.iter().map(|(mdl, mx, _)| (&*mdl.scene, *mx)).collect();
+    // (Partie 199 : sans carte graphique aussi, chaque objet dans sa teinte : l'export par le processeur montre le même aspect.)
+    let teintes: Vec<crate::couleurs3d::Teinte> = objets.iter().map(|(_, _, k)| crate::couleurs3d::Teinte::de(key.aspect.rendu, *k)).collect();
+    let (rgba, prof) = crate::decor3drendu::rendre_objets_prof_teintes(&scenes, &teintes, &prise, [w, h], sur_echantillonnage(key.feuille), fils, &key.aspect);
     (Raster::from_rgba(w, h, &rgba), Some(prof), None)
 }
 

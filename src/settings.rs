@@ -165,6 +165,10 @@ pub struct Settings {
     /// plans, les séquences). Les dossiers de calques, eux, se replient dans le projet, comme dans la timeline. Un réglage du poste.
     #[serde(default, rename = "panneau_scene", skip_serializing_if = "crate::scene::ChoixScene::est_d_origine")]
     pub scene: crate::scene::ChoixScene,
+    /// Partie 199 : l'aspect du décor 3D dans la vue (onglet 3D, vue Espace 3D, vue à côté) : matières, couleurs, argile. Un réglage
+    /// du poste ; celui des images des plans est dans le décor de chaque séquence (« Dans les plans »).
+    #[serde(default, rename = "aspect_vue_3d", skip_serializing_if = "crate::couleurs3d::Rendu::est_matieres")]
+    pub aspect_vue_3d: crate::couleurs3d::Rendu,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -495,6 +499,7 @@ impl Default for Settings {
             storyboard_camera_depliee: false,
             storyboard_calques_replies: false,
             scene: Default::default(),
+            aspect_vue_3d: Default::default(),
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

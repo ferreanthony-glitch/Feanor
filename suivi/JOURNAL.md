@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **Les couleurs d'identification du décor 3D, et les aspects Couleurs et Argile** (partie 199, étape 4 sur 5 de la maquette,
+  branche `couleurs-3d` partie de main d9c6788, format 61 inchangé) : une couleur par objet du décor (dix de la maquette ou
+  « Aucune »), posée par la puce de sa ligne dans Scène 3D ou en haut de Propriétés > Objet, une étape d'annulation, enregistrée,
+  gardée par la copie et la duplication ; l'aspect de la vue (Matières · Couleurs · Argile, barre de la vue de l'onglet 3D, un
+  réglage retenu, pour toutes les vues 3D, jamais les cartes) ; « Dans les plans » (Propriétés > Décor et une bascule dans la barre
+  au-dessus du dessin du Storyboard), dans la clé de l'image, les vignettes et l'export ; l'œil et le cadenas d'un objet enregistrés
+  dans le projet et annulables. Aucun maillage refait. Essais : `couleurs3d_tests.rs` (8). **Rien regardé à l'écran, pas de
+  commit** (liste 199.4).
 - **L'onglet 3D** (partie 198, étape 3 sur 5 de la maquette `onglet-3d-v8`, branche `onglet-3d` partie de main 25c1084, format 61
   inchangé) : un onglet « 3D » entre Storyboard et Montage, la vue Espace 3D d'aujourd'hui en grand sur la séquence courante, sa
   barre (cinq points de vue, 1, 2 ou 4 vues, ombres, grille, cartes, caméras des plans, soleil, recadrer), la boussole cliquable,

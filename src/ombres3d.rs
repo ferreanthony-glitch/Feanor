@@ -62,7 +62,7 @@ impl App {
         if !d.aspect.ombres {
             return None;
         }
-        let objets: Vec<crate::decor3d::Pose3d> = d.vus().map(|o| (o.modele.clone(), o.matrice())).collect();
+        let objets: Vec<crate::decor3d::Pose3d> = crate::decor3d::poses(d);
         // (La qualité que la vue donne à son décor, `e3_peindre_decor` : sans ombres, pas d'ombres de cartes non plus.)
         if objets.is_empty() || crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)).ombres().0 == 0 {
             return None;

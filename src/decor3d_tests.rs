@@ -134,7 +134,7 @@ fn decor_du_carre(doc: &mut Document, seq: u64, place: Place3d) {
     let aspect = Aspect { ciel: false, brume: false, ombres: false, ..Aspect::default() };
     let modele = Arc::new(Modele3d::new(Arc::new(scene), Arc::new(octets)));
     let mut d = Decor3d::new(aspect);
-    d.objets.push(Objet3d { id, nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele });
+    d.objets.push(Objet3d { id, nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false });
     doc.decors3d.par_sequence.insert(seq, d);
 }
 
@@ -330,7 +330,7 @@ fn chaque_plan_de_la_sequence_voit_son_decor_et_pas_ceux_d_une_autre() {
 }
 
 /// L'image du plan 0 à l'image 0, exportée (le chemin d'export, exact, par le processeur).
-fn image_exportee(doc: &Document) -> Vec<eframe::egui::Color32> {
+pub(crate) fn image_exportee(doc: &Document) -> Vec<eframe::egui::Color32> {
     use crate::exportrender::{snapshot_of, Papier, Rendu};
     let rendu = Rendu::new(snapshot_of(doc, &[0]), Papier::Aucun, false, Vec::new(), Arc::new(std::sync::atomic::AtomicBool::new(false)));
     (*rendu.image(0, 0).expect("image")).clone()
@@ -458,7 +458,7 @@ fn ombres_et_ciel_sur_la_carte_graphique() {
     let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
     let mut rendu = |q: Qualite| {
         let aspect = Aspect { soleil_azimut: 0.0, soleil_hauteur: 45.0, ..Aspect::default() };
-        let d = [crate::decor3dgpu::Dessin { id: 7, scene: scene.clone(), matrice: crate::espace3dmath::IDENT, aspect }];
+        let d = [crate::decor3dgpu::Dessin { id: 7, scene: scene.clone(), matrice: crate::espace3dmath::IDENT, aspect, teinte: Default::default() }];
         crate::decor3dgpu::rendre_hors_ecran(&rs.device, &rs.queue, &mut mt, &d, &prise, [320, 180], true, q, 1).unwrap().0
     };
     let avec = rendu(Qualite::Hautes);
@@ -754,7 +754,7 @@ fn decor3d_perf() {
         let cpu = debut.elapsed().as_secs_f32() * 1000.0;
         let gpu = rs.as_ref().and_then(|rs| {
             let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
-            let d = [crate::decor3dgpu::Dessin { id: 1, scene: Arc::new(s.clone()), matrice: crate::espace3dmath::IDENT, aspect: Aspect::default() }];
+            let d = [crate::decor3dgpu::Dessin { id: 1, scene: Arc::new(s.clone()), matrice: crate::espace3dmath::IDENT, aspect: Aspect::default(), teinte: Default::default() }];
             let max = rs.device.limits().max_texture_dimension_2d.min(3840);
             let feuille = [max, max * 9 / 16];
             let prise_f = Prise::de_la_feuille(&Monde::new([feuille[0] as usize, feuille[1] as usize], [1920, 1080]), monde.eye_reference()).unwrap();
@@ -795,7 +795,7 @@ fn les_modeles_de_la_banque_se_lisent_et_se_rendent() {
 
 /// Un objet du carré, son origine au point (0, 0, 0) du modèle, à `place`.
 fn objet_du_carre(doc: &mut Document, place: Place3d, modele: Arc<Modele3d>) -> Objet3d {
-    Objet3d { id: doc.alloc(), nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele }
+    Objet3d { id: doc.alloc(), nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false }
 }
 
 fn modele_du_carre() -> Arc<Modele3d> {
@@ -979,7 +979,7 @@ fn un_objet_qui_ferait_depasser_le_decor_ouvre_la_fenetre_ou_est_refuse() {
 }
 
 /// Un projet de 160 × 90 dont le décor a deux carrés, l'un à gauche, l'autre à droite du cadre.
-fn projet_a_deux_carres() -> Document {
+pub(crate) fn projet_a_deux_carres() -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     let seq = doc.sequence_of(0);
     let monde = Monde::of(&doc);

@@ -707,14 +707,15 @@ impl App {
                 }
             }
         };
-        let objets: Vec<crate::decor3d::Pose3d> = d.vus().map(|o| (o.modele.clone(), o.matrice())).collect();
+        let objets: Vec<crate::decor3d::Pose3d> = crate::decor3d::poses(d);
         if !objets.is_empty() {
             match self.gpu.as_ref() {
                 Some(g) => {
                     let qualite = if d.aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
                     let cb = crate::decor3dgpu::VueDecor {
                         cle,
-                        dessins: crate::decor3d::dessins_gpu(&objets, d.aspect),
+                        // (Partie 199 : l'aspect de la vue, un réglage du poste, pas celui des plans.)
+                        dessins: crate::decor3d::dessins_gpu(&objets, crate::decor3drendu::Aspect { rendu: self.settings.aspect_vue_3d, ..d.aspect }),
                         vue: crate::decor3dgpu::Vue::de_view(view, center),
                         taille_pts: [draw.width(), draw.height()],
                         cible_egui: g.render_state().target_format,
@@ -874,6 +875,19 @@ impl App {
             });
             if !p.decor && !p.objet {
                 return;
+            }
+            if p.decor && !tout {
+                // Partie 199 : « Dans les plans », l'aspect du décor dans les images des plans (le dessin, la planche, le montage,
+                // les vignettes, l'export) : ses matières, les couleurs d'identification, l'argile.
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Dans les plans");
+                    for r in crate::couleurs3d::Rendu::TOUS {
+                        let resp = ui.selectable_label(d.aspect.rendu == r, r.nom());
+                        if crate::bulles::bulle(resp, &format!("Dans les plans : {}", r.nom()), r.aide(), "").clicked() {
+                            d.aspect.rendu = r;
+                        }
+                    }
+                });
             }
             if p.decor {
                 if let Some(b) = &budget {
@@ -1173,7 +1187,7 @@ fn mesurer_cout(rs: &eframe::egui_wgpu::RenderState, scene: &Arc<crate::decor3dg
     let monde = Monde::new(feuille, cadre);
     let prise = crate::decor3drendu::Prise::de_la_feuille(&monde, monde.eye_reference())?;
     let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
-    let d = [crate::decor3dgpu::Dessin { id: 1, scene: scene.clone(), matrice: Place3d::d_origine(scene, &monde).matrice(), aspect: Default::default() }];
+    let d = [crate::decor3dgpu::Dessin { id: 1, scene: scene.clone(), matrice: Place3d::d_origine(scene, &monde).matrice(), aspect: Default::default(), teinte: Default::default() }];
     crate::decor3dgpu::rendre_hors_ecran(&rs.device, &rs.queue, &mut mt, &d, &prise, [feuille[0] as u32, feuille[1] as u32], true, crate::decor3dbudget::Qualite::Sans, 4).map(|r| r.1)
 }
 

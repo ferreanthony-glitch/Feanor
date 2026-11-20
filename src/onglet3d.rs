@@ -576,6 +576,9 @@ impl App {
             }
         }
         ui.separator();
+        // (Partie 199 : l'aspect de la vue, Matières · Couleurs · Argile.)
+        self.aspect_de_la_vue_ui(ui);
+        ui.separator();
         let decor = self.doc.decor_du_plan(self.cur_panel).map(|d| d.aspect.ombres);
         let r = ui.add_enabled_ui(decor.is_some(), |ui| self.case_icone(ui, ph::CLOUD_SUN, Some(decor == Some(true)), "Ombres", "Les ombres du décor 3D et des cartes sous le soleil (selon le budget de l'ordinateur).", "")).inner;
         if r.clicked() {

@@ -50,6 +50,10 @@ pub struct Aspect {
     pub soleil_azimut: f32,
     #[serde(default = "hauteur_d_origine")]
     pub soleil_hauteur: f32,
+    /// Partie 199 : « Dans les plans », l'aspect du décor dans les images des plans (matières, couleurs d'identification, argile).
+    /// (Absent d'un fichier d'avant : les matières ; un FEANOR d'avant ignore la clé.)
+    #[serde(default, skip_serializing_if = "crate::couleurs3d::Rendu::est_matieres")]
+    pub rendu: crate::couleurs3d::Rendu,
 }
 
 fn oui() -> bool {
@@ -64,7 +68,7 @@ fn hauteur_d_origine() -> f32 {
 
 impl Default for Aspect {
     fn default() -> Aspect {
-        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine() }
+        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine(), rendu: Default::default() }
     }
 }
 
@@ -98,12 +102,22 @@ impl Aspect {
     /// La couleur (linéaire) d'un point de couleur de base `c`, de normale `n` (tournée vers l'œil), à `d` de l'œil, la brume
     /// allant de `brume` (début, fin). Sans ombre (le rendu par le processeur n'en a pas).
     pub fn ombrer(&self, c: [f32; 3], n: V3, d: f32, brume: (f32, f32)) -> [f32; 3] {
+        self.ombrer_en(c, n, d, brume, false)
+    }
+
+    /// `ombrer`, et `plat` (partie 199, l'aspect Couleurs) : la couleur éclairée tirée vers la couleur de base (`couleurs3d::PLAT`),
+    /// comme le shader de la carte.
+    pub fn ombrer_en(&self, c: [f32; 3], n: V3, d: f32, brume: (f32, f32), plat: bool) -> [f32; 3] {
         let t = n[1] * 0.5 + 0.5;
         let (sa, ga) = self.ambiances();
         let k = self.couleur_soleil();
         let sun = m::dot(n, self.soleil()).max(0.0);
         let lit = [0, 1, 2].map(|i| ga[i] + (sa[i] - ga[i]) * t + k[i] * sun);
-        let c = [c[0] * lit[0], c[1] * lit[1], c[2] * lit[2]];
+        let mut c2 = [c[0] * lit[0], c[1] * lit[1], c[2] * lit[2]];
+        if plat {
+            c2 = [0, 1, 2].map(|i| c2[i] + (c[i] - c2[i]) * crate::couleurs3d::PLAT);
+        }
+        let c = c2;
         if !self.brume {
             return c;
         }
@@ -303,8 +317,10 @@ struct Bande {
     couvert: Vec<bool>,
 }
 
-fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], om: &Ombrage) {
+fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], teintes: &[crate::couleurs3d::Teinte], om: &Ombrage) {
     let scene = scenes[t.obj as usize].0;
+    // (Partie 199 : la teinte de l'objet dans l'aspect du décor ; sa texture ne garde alors que sa découpe.)
+    let teinte = teintes.get(t.obj as usize).copied().unwrap_or_default();
     let p = &t.p;
     let (x0, x1) = (p[0][0].min(p[1][0]).min(p[2][0]), p[0][0].max(p[1][0]).max(p[2][0]));
     let (ya, yb) = t.y;
@@ -318,7 +334,7 @@ fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], om: &Ombrage) {
     }
     let prim = &scene.primitives[t.prim as usize];
     let tex = prim.texture.and_then(|i| scene.textures.get(i));
-    let base = prim.couleur;
+    let (base, couleur_de_texture) = teinte.base(prim.couleur);
     let (xs, xe) = (x0.max(0.0).floor() as usize, (x1.ceil() as usize).min(b.w - 1));
     let (ys, ye) = ((ya.max(by0).floor() as usize).max(b.y0), (yb.ceil() as usize).min(b.y0 + b.lignes - 1));
     for y in ys..=ye {
@@ -345,7 +361,9 @@ fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], om: &Ombrage) {
                 if prim.seuil_alpha.is_some_and(|seuil| s[3] * base[3] < seuil) {
                     continue;
                 }
-                c = [c[0] * s[0], c[1] * s[1], c[2] * s[2]];
+                if couleur_de_texture {
+                    c = [c[0] * s[0], c[1] * s[1], c[2] * s[2]];
+                }
             } else if prim.seuil_alpha.is_some_and(|seuil| base[3] < seuil) {
                 continue;
             }
@@ -355,7 +373,7 @@ fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], om: &Ombrage) {
             // La distance à l'œil (pour la brume) : la profondeur, allongée selon l'écart au centre de l'image.
             let (dx, dy) = ((px / om.ss - om.centre[0]) / om.s, (py / om.ss - om.centre[1]) / om.s);
             let d = (1.0 / invz) * (1.0 + dx * dx + dy * dy).sqrt();
-            b.couleur[at] = om.aspect.ombrer(c, n, d, om.brume);
+            b.couleur[at] = om.aspect.ombrer_en(c, n, d, om.brume, teinte.plate());
         }
     }
 }
@@ -379,6 +397,12 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
 /// (`MOTIF_GRILLE`) ; à quatre par côté, les quatre aux places de la carte graphique (`MOTIF_CARTE`) ; sinon, un seul, répété
 /// (`MOTIF_CENTRE` : le plus proche de ceux qui couvrent le pixel, s'ils en couvrent la moitié).
 pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> (Vec<u8>, crate::profondeur::ProfDecor) {
+    rendre_objets_prof_teintes(objets, &[], prise, taille, ss, fils, aspect)
+}
+
+/// Partie 199 : `rendre_objets_prof`, chaque objet dans sa teinte (`teintes`, une par objet ; absente : ses matières).
+#[allow(clippy::too_many_arguments)]
+pub fn rendre_objets_prof_teintes(objets: &[(&Scene3d, M4)], teintes: &[crate::couleurs3d::Teinte], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> (Vec<u8>, crate::profondeur::ProfDecor) {
     let [w, h] = taille;
     let mut out = vec![0u8; w * h * 4];
     let ss = ss.clamp(1, 4);
@@ -455,7 +479,7 @@ pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usi
                 let n = w * ss * lignes_px * ss;
                 let mut b = Bande { w: w * ss, y0, lignes: lignes_px * ss, invz: vec![0.0; n], couleur: vec![[0.0; 3]; n], couvert: vec![false; n] };
                 for &ti in &bins[bi] {
-                    raster(&tris[ti as usize], &mut b, objets, &om);
+                    raster(&tris[ti as usize], &mut b, objets, teintes, &om);
                 }
                 for ry in 0..lignes_px {
                     for x in 0..w {

@@ -368,7 +368,7 @@ fn la_carte_graphique_et_le_processeur_donnent_la_meme_profondeur_du_decor() {
     let Some(FondPart::Decor(key)) = plan.items[0].fond.clone() else { panic!() };
     let objets = crate::decor3d::objets_de(&doc, &key).unwrap();
     let [w, h] = key.feuille;
-    let scenes: Vec<(&crate::decor3dgltf::Scene3d, crate::espace3dmath::M4)> = objets.iter().map(|(mdl, mx)| (&*mdl.scene, *mx)).collect();
+    let scenes: Vec<(&crate::decor3dgltf::Scene3d, crate::espace3dmath::M4)> = objets.iter().map(|(mdl, mx, _)| (&*mdl.scene, *mx)).collect();
     let (_, prof_cpu) = crate::decor3drendu::rendre_objets_prof(&scenes, &key.prise().unwrap(), [w, h], 1, 2, &key.aspect);
     let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
     let d = crate::decor3d::dessins_gpu(&objets, key.aspect);

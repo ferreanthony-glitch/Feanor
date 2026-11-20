@@ -223,7 +223,7 @@ impl App {
     pub(crate) fn e3_pick_objet(&self, ray: &Ray) -> Option<(f32, u64)> {
         let d = self.doc.decor_du_plan(self.cur_panel)?;
         // (Partie 198 : un objet verrouillé dans « Scène 3D » ne se prend pas.)
-        d.vus().filter(|o| !d.verrous.contains(&o.id)).filter_map(|o| toucher_objet(o, ray).map(|t| (t, o.id))).min_by(|a, b| a.0.total_cmp(&b.0))
+        d.vus().filter(|o| !o.verrou).filter_map(|o| toucher_objet(o, ray).map(|t| (t, o.id))).min_by(|a, b| a.0.total_cmp(&b.0))
     }
 
     /// **Ce que touche le rayon** : une carte ou un objet du décor (son numéro de sélection). Le plus proche de l'œil l'emporte,

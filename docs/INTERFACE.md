@@ -17938,3 +17938,107 @@ modèle qui n'est pas loin sous le budget le fait toujours juger lourd ; loin so
 À tester : sur une copie de projet, sans budget mesuré (Préférences > Performance, « Remesurer » d'abord, ou une première séance),
 cliquer « Tree oak » dans la Banque 3D : il arrive dans le décor, sans fenêtre. Les aperçus de la banque remplissent leur case. Onglet
 Monde : « Couleur du fond » et « Couleur du maillage » entiers.
+
+## 199. Les couleurs d'identification du décor 3D, et les aspects Couleurs et Argile (2026-11-20, branche couleurs-3d partie de main d9c6788)
+
+Étape 4 sur 5 de la maquette de l'onglet 3D. Anthony : donner une couleur à un objet 3D pour le reconnaître d'un coup d'œil dans un
+storyboard. **Format des projets inchangé (61)** : les nouvelles données sont des champs facultatifs de `decors3d.json` (toujours en
+version 2), lus à leur valeur par défaut quand ils manquent, jamais écrits quand ils valent cette valeur (un projet sans couleur
+s'enregistre au bit près comme avant). Les réglages de l'application ont une clé de plus, `aspect_vue_3d`.
+
+### 199.1 Ce qui a changé
+
+1. **Une couleur d'identification par objet du décor** (`Objet3d::couleur`, le rang dans la palette ; `couleurs3d.rs`). La palette
+   est celle de la maquette, dix couleurs nommées plus « Aucune » : Rouge, Orange, Jaune, Vert, Sarcelle, Bleu, Violet, Rose, Brun,
+   Gris clair. Elles diffèrent aussi par leur clarté (du violet et du brun, sombres, au jaune et au gris clair). Un objet neuf n'a pas
+   de couleur. On la pose :
+   - **dans le sommaire « Scène 3D »** : chaque ligne d'objet a une puce de couleur, devant le cadenas (un carré au trait sans
+     couleur, plein avec). Un clic ouvre la palette sous elle ; un choix la referme ;
+   - **en haut de Propriétés > Objet** : « Couleur d'identification · Bleu » et la rangée des onze pastilles, pour l'objet ou les
+     objets choisis (une seule étape pour tous).
+   Chaque changement est **une étape d'annulation nommée** « Couleur d'identification » et s'enregistre dans le projet. Les objets
+   copiés (partie 190) et la séquence dupliquée (partie 191) gardent leurs couleurs (c'est un champ de l'objet, copié avec lui).
+2. **L'aspect de la vue**, dans la barre de la vue de l'onglet 3D, après 1 · 2 · 4 : **Matières · Couleurs · Argile**.
+   - **Matières** : le rendu d'avant (les couleurs et les textures des modèles).
+   - **Couleurs** : chaque objet dans sa couleur d'identification, éclairé « à plat » (la couleur éclairée est rapprochée de 55 % de la
+     couleur elle-même, `couleurs3d::PLAT` : elle se lit d'un coup d'œil, la forme reste) ; sans couleur, un gris neutre (a3a3a3).
+   - **Argile** : tout en une argile grise claire (bdb7ad), avec la lumière et les ombres : les volumes seuls.
+   Dans Couleurs et Argile, une texture ne garde que sa découpe (le feuillage d'un arbre reste découpé), pas sa couleur. C'est un
+   **réglage du poste** (`Settings::aspect_vue_3d`, retenu), **pour l'affichage seulement** : il ne change ni le projet ni les images
+   des plans. **Il vaut pour toutes les vues 3D** : la vue de l'onglet 3D, la vue Espace 3D du Storyboard et la vue à côté de la
+   feuille (elles passent toutes par `e3_peindre_decor`). **Les cartes ne sont jamais teintes** : ce sont des dessins.
+3. **« Dans les plans »**, en haut de Propriétés > Décor : Matières · Couleurs · Argile, l'aspect du
+   décor de **la séquence** dans les images des plans (`Aspect::rendu`, enregistré avec l'aspect du décor). Il vaut pour le dessin,
+   la planche, le montage, **les vignettes et l'export**. Il est dans la clé de l'image du décor (`DecorCle::bits`, et dans
+   l'aspect Couleurs les couleurs des objets dans `contenu`) : changer l'aspect ou une couleur redessine l'image, et seulement alors.
+   Les ombres (partie 185) et les bords doux (partie 193) marchent dans les trois aspects (la teinte ne change que la couleur de
+   base de chaque matière ; la profondeur, les ombres et les bords sont ceux d'avant). **Une bascule rapide** est dans la barre
+   au-dessus du dessin, hors de l'onglet 3D (le Storyboard, et les autres onglets de dessin), quand la séquence du plan courant a un
+   décor 3D : « Décor » puis Matières · Couleurs · Argile, après les boutons de l'Espace 3D et de la vue à côté, devant les Guides.
+   Chaque changement est une étape « Aspect du décor dans les plans » (de Propriétés > Décor : « Retoucher le décor 3D », comme ses
+   autres réglages).
+4. **L'œil et le cadenas d'un objet** (partie 198) sont maintenant **enregistrés dans le projet** (`Objet3d::cache`,
+   `Objet3d::verrou`, facultatifs) et sont des étapes d'annulation (« Cacher un objet du décor », « Montrer… », « Verrouiller… »,
+   « Déverrouiller… »). Caché, l'objet n'est dessiné ni dans la vue ni dans les plans ; verrouillé, il ne se prend plus dans la vue.
+5. **Sans latence** : une couleur ou un aspect ne refait aucun maillage. Dans la vue, la carte graphique écrit à chaque passe la
+   couleur de base de chaque matière dans son uniforme (`Dessin::teinte`, les drapeaux `z` « la texture garde sa couleur » et `w`
+   « à plat » du shader) : un changement redessine la vue une fois. Dans les plans, l'image du décor se redessine une fois par le
+   chemin du décor, dans la même texture, les modèles restant à la carte.
+6. **Sans carte graphique**, l'export passe par le rendu du processeur (`decor3drendu::rendre_objets_prof_teintes`), qui applique les
+   mêmes teintes (la couleur de base, la découpe des textures, l'éclairage à plat) ; comme avant, ce chemin n'a pas les ombres du
+   décor.
+
+Le code : `couleurs3d.rs` (la palette, `Rendu`, `Teinte`), `couleurs3dui.rs` (les pastilles, la puce du sommaire, les segments
+d'aspect, les étapes d'annulation), `decor3d.rs` (les champs de l'objet et leur lecture, `poses`, la clé), `decor3drendu.rs`
+(`Aspect::rendu`, le rendu du processeur teinté), `decor3dgpu.rs` (l'uniforme et le shader), `decor3dui.rs` (la vue, « Dans les
+plans »), `onglet3d.rs` (la barre de la vue), `onglet3dui.rs` (la puce, l'œil, le cadenas, Objet), `viewbar.rs` (la bascule rapide),
+`settings.rs`, `ombres3d.rs`, `poignees3d.rs`.
+
+### 199.2 Les essais
+
+`couleurs3d_tests.rs` (8) : la palette (dix couleurs nommées, distinctes, étalées en clarté, « Aucune ») ; la puce du sommaire et
+la rangée d'Objet posent la couleur en une étape nommée, annulable ; l'aller et retour par le fichier (les clés écrites, la version 2
+gardée), un fichier d'avant sans ces clés se lit (aucune couleur, montré, libre, Matières), et un lecteur d'avant (des structures
+sans ces champs) lit le fichier d'aujourd'hui ; la copie des objets et la séquence dupliquée gardent les couleurs ; les aspects
+changent les couleurs rendues par le processeur (et par la carte graphique quand le banc en a une) ; « Dans les plans » change la
+clé de l'image (et la couleur aussi, dans Couleurs ; pas dans Matières), garde la même texture et le même modèle (aucun maillage
+refait), change l'export, et une carte peinte au milieu du cadre a les mêmes pixels dans les trois aspects ; l'aspect de la vue est
+un réglage retenu qui ne change pas les plans, la bascule du Storyboard fait une étape nommée ; l'œil et le cadenas sont des étapes
+annulables.
+
+Changés exprès (pour les nouveaux champs, pas leur sens) : `decor3d_tests` (les objets et les `Dessin` construits à la main ont les
+nouveaux champs ; deux aides rendues visibles aux autres essais), `onglet3d_tests` (l'œil d'un objet se lit sur l'objet,
+`Objet3d::cache`, et plus dans `Decor3d::caches`), `profondeur_tests` et `ombres_tests` (une pose d'objet a maintenant sa couleur).
+
+### 199.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil. La part « à
+  plat » (55 %), le gris sans couleur et l'argile sont des choix à juger à l'œil.
+- **Étape 5** (la maquette) : les lumières (lampes à poser), « Nouveau plan depuis la vue », les clés d'un objet du décor dans la
+  timeline de la séquence.
+- L'aspect de la vue ne se choisit que dans la barre de l'onglet 3D ; il vaut aussi pour la vue Espace 3D du Storyboard et la vue à
+  côté, qui n'ont pas de bouton pour lui.
+- Sans carte graphique, l'export n'a toujours pas les ombres du décor (dans les trois aspects).
+- Une couleur de la palette ne se règle pas : il n'y a que les dix de la maquette.
+
+### 199.4 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`.
+
+1. Ouvre l'onglet 3D sur une séquence qui a un décor de plusieurs objets.
+2. Scène 3D : clique la puce d'un objet (le petit carré devant le cadenas) ; la palette s'ouvre ; choisis Bleu. La puce devient
+   bleue. Ctrl+Z la rend vide ; Rétablir la remet.
+3. Choisis un autre objet : Propriétés > Objet, en haut, « Couleur d'identification » ; clique Rouge. Choisis deux objets (Maj) et
+   clique Vert : les deux, en une étape.
+4. Barre de la vue : clique « Couleurs ». Les objets prennent leur couleur, ceux sans couleur un gris ; les cartes ne changent pas.
+   Clique « Argile » : tout en gris clair, avec les ombres. Reviens à « Matières ».
+5. Reviens au Storyboard, ouvre l'Espace 3D puis la vue à côté : elles ont l'aspect choisi à l'étape 4. Quitte et relance FEANOR :
+   l'aspect est retenu.
+6. Propriétés > Décor : « Dans les plans », Couleurs. Le dessin, les vignettes de la planche montrent le décor en couleurs ; les
+   ombres et les bords doux sont là. Exporte un plan : l'image l'est aussi.
+7. Storyboard, la barre au-dessus du dessin : « Décor » Matières · Couleurs · Argile, devant les Guides. Clique Argile : le plan
+   passe en argile ; Ctrl+Z le rend.
+8. Cache un objet (l'œil) et verrouille-en un autre (le cadenas) ; enregistre, ferme, rouvre : ils sont toujours cachés et
+   verrouillés, et les couleurs sont là. Ctrl+Z défait l'œil.
+9. Copie un objet coloré vers une autre séquence, puis duplique la séquence : les copies gardent leur couleur.
+10. Ouvre une copie d'un projet d'avant cette version : rien n'a changé (aucune couleur, Matières, tout montré).

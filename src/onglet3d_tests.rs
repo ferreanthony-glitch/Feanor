@@ -36,7 +36,7 @@ fn film() -> Document {
     let mut d = Decor3d::new(crate::decor3drendu::Aspect { ombres: false, ..Default::default() });
     for (nom, x) in [("Maison", -1.0), ("Arbre", 1.5)] {
         let id = doc.alloc();
-        d.objets.push(Objet3d { id, nom: nom.into(), source: "carre.glb".into(), allege: Vec::new(), place: Place3d { position: [x, 0.0, -2.0], rotation_y: 0.0, echelle: 1.0 }, origine: [0.0; 3], aimante: false, modele: modele.clone() });
+        d.objets.push(Objet3d { id, nom: nom.into(), source: "carre.glb".into(), allege: Vec::new(), place: Place3d { position: [x, 0.0, -2.0], rotation_y: 0.0, echelle: 1.0 }, origine: [0.0; 3], aimante: false, modele: modele.clone(), couleur: None, cache: false, verrou: false });
     }
     doc.decors3d.par_sequence.insert(seq, d);
     doc
@@ -324,7 +324,7 @@ fn the_outliner_lists_the_sequence_objects_cameras_lights_and_the_cards_of_the_p
     let r = ligne(Ligne3d::Objet(ids[0]));
     let oeil = vus::ou("Afficher / cacher").into_iter().find(|x| r.contains(x.center())).expect("l'œil de l'objet");
     clic(&mut b, oeil.center(), Modifiers::NONE);
-    assert!(b.app.doc.decor_du_plan(0).unwrap().caches.contains(&ids[0]));
+    assert!(b.app.doc.decor_du_plan(0).unwrap().objet(ids[0]).unwrap().cache);
     assert_eq!(b.app.doc.decor_du_plan(0).unwrap().vus().count(), 1, "la vue et l'image ne le dessinent plus");
     let r = ligne(Ligne3d::Objet(ids[1]));
     let cadenas = vus::ou("Verrouiller / déverrouiller").into_iter().find(|x| r.contains(x.center())).expect("le cadenas de l'objet");

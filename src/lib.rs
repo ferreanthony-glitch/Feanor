@@ -1290,6 +1290,11 @@ mod sceneui;
 #[cfg(test)]
 mod scene_tests;
 // L'onglet 3D (partie 198) : la séquence en trois dimensions, ses panneaux.
+// Les couleurs d'identification du décor 3D et ses aspects (partie 199).
+pub(crate) mod couleurs3d;
+mod couleurs3dui;
+#[cfg(test)]
+mod couleurs3d_tests;
 pub(crate) mod onglet3d;
 mod onglet3dui;
 #[cfg(test)]

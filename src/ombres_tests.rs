@@ -207,7 +207,7 @@ fn une_carte_n_est_jamais_dans_sa_propre_ombre_et_le_calcul_est_celui_de_la_cart
     let eye = monde.eye_reference();
     let prise = crate::decor3drendu::Prise::de_la_feuille(&monde, eye).unwrap();
     let modele = Arc::new(crate::decor3d::Modele3d::new(Arc::new(boite([-4.0, -1.1, -6.0], [4.0, -1.0, 0.0])), Arc::new(Vec::new())));
-    let d = crate::decor3d::dessins_gpu(&[(modele, m::IDENT)], aspect());
+    let d = crate::decor3d::dessins_gpu(&[(modele, m::IDENT, None)], aspect());
     let ec = crate::decor3dgpu::eclairage(&d, eye, &aspect(), Qualite::Hautes);
     let lum = crate::ombres::Lumiere::de(&ec, &aspect(), &prise).expect("ombres");
     assert!(crate::ombres::Lumiere::de(&crate::decor3dgpu::eclairage(&d, eye, &aspect(), Qualite::Sans), &aspect(), &prise).is_none(), "sans ombres : rien");
@@ -658,7 +658,7 @@ fn ombres_perf() {
     let prise = crate::decor3drendu::Prise::de_la_feuille(&monde, monde.eye_reference()).unwrap();
     for cote in [100usize, 300, 700] {
         let modele = Arc::new(crate::decor3d::Modele3d::new(Arc::new(crate::decor3dbudget::scene_d_essai(cote, 512)), Arc::new(Vec::new())));
-        let d = crate::decor3d::dessins_gpu(&[(modele, m::translation([0.0, -1.0, -3.0]))], Aspect { ciel: true, brume: true, ..aspect() });
+        let d = crate::decor3d::dessins_gpu(&[(modele, m::translation([0.0, -1.0, -3.0]), None)], Aspect { ciel: true, brume: true, ..aspect() });
         for q in [Qualite::Basses, Qualite::Hautes] {
             let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
             let taille = [monde.stage[0] as u32, monde.stage[1] as u32];

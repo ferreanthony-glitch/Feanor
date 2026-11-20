@@ -274,7 +274,7 @@ pub fn etalonner(carte: Option<&eframe::egui_wgpu::RenderState>, feuille: [u32; 
         let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
         let mut couts = [Cout::default(); 3];
         let mut mesure = |s: &std::sync::Arc<Scene3d>, id: u64, q: Qualite, quatre: bool| {
-            let d = [crate::decor3dgpu::Dessin { id, scene: s.clone(), matrice: crate::espace3dmath::IDENT, aspect }];
+            let d = [crate::decor3dgpu::Dessin { id, scene: s.clone(), matrice: crate::espace3dmath::IDENT, aspect, teinte: Default::default() }];
             crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, feuille, true, q, 8, false, true, quatre).map(|r| r.1)
         };
         for q in Qualite::TOUTES {

@@ -523,3 +523,14 @@ par `decor3d_reglages_de`), la timeline de la séquence et la banque 3D dans la 
 rien ne se redessine au repos ; seule l'animation de la boussole (un quart de seconde) demande des images. Un objet caché ou
 verrouillé dans « Scène 3D » l'est pour la séance (`Decor3d::caches`, `Decor3d::verrous`, pas dans le fichier) : caché, ni la vue ni
 l'image ne le dessinent (`Decor3d::vus`) ; verrouillé, il ne se prend plus dans la vue.
+
+## 23. Les couleurs d'identification et les aspects du décor (2026-11-20, branche `couleurs-3d`, partie 199 de `docs/INTERFACE.md`)
+
+Chaque objet du décor peut avoir une couleur d'identification (`Objet3d::couleur`, la palette de `couleurs3d.rs`), et le décor se
+montre en trois aspects (`couleurs3d::Rendu`) : Matières (le rendu d'avant), Couleurs (la couleur de chaque objet, éclairée à plat),
+Argile. L'aspect de la vue est un réglage du poste (`Settings::aspect_vue_3d`) pour toutes les vues 3D ; celui des images des
+plans est celui du décor de la séquence (`Aspect::rendu`), dans la clé de l'image (`DecorCle::bits`, et les couleurs dans `contenu`
+pour l'aspect Couleurs). Aucun maillage n'est refait : une teinte par objet (`couleurs3d::Teinte`, `Dessin::teinte`) remplace la
+couleur de base de ses matières dans l'uniforme de la carte graphique (les drapeaux `z` et `w`), et dans le rendu du processeur
+(`rendre_objets_prof_teintes`). Les règles sans latence tiennent : un changement redessine une fois. L'œil et le cadenas d'un objet
+(section 22) sont maintenant dans le fichier (`Objet3d::cache`, `Objet3d::verrou`), plus pour la séance seulement.

@@ -92,7 +92,7 @@ struct Obj {
     model: mat4x4<f32>,
     nmat: mat4x4<f32>,
     color: vec4<f32>,
-    flags: vec4<f32>,      // texture (1/0), seuil d'alpha (0 : opaque)
+    flags: vec4<f32>,      // texture (1/0), seuil d'alpha (0 : opaque), couleur de la texture (1/0), à plat (1/0)
 };
 @group(0) @binding(0) var<uniform> g: Globals;
 @group(0) @binding(1) var t_shadow: texture_depth_2d;
@@ -259,7 +259,9 @@ fn eclairer(in: VOut) -> Eclaire {
     let flat_n = normalize(cross(dpdx(in.wpos), dpdy(in.wpos)));
     let tex = textureSampleLevel(t_base, s_base, in.uv, 0.0);
     var base = o.color;
-    if (o.flags.x > 0.5) { base = base * tex; }
+    if (o.flags.x > 0.5) {
+        if (o.flags.z > 0.5) { base = base * tex; } else { base.a = base.a * tex.a; }
+    }
     if (o.flags.y > 0.0 && base.a < o.flags.y) { discard; }
     var n = normalize(in.n);
     if (g.eye.w > 0.5) { n = flat_n; }
@@ -270,6 +272,8 @@ fn eclairer(in: VOut) -> Eclaire {
     // (Partie 189 : et le soleil que les cartes laissent au décor de la vue Espace 3D ; 1 partout ailleurs, `SANS_CARTES`.)
     let sun = max(dot(n, g.key_dir.xyz), 0.0) * shadow(in.wpos, n) * soleil_des_cartes(in.wpos);
     var c = base.rgb * (hemi + g.key_col.rgb * sun);
+    // (Partie 199 : l'aspect Couleurs, éclairé à plat : tiré vers la couleur d'identification, `couleurs3d::PLAT`.)
+    if (o.flags.w > 0.5) { c = mix(c, base.rgb, 0.55); }
     let d = length(v);
     let f = clamp((d - g.fog.x) / max(g.fog.y - g.fog.x, 0.0001), 0.0, 1.0) * g.fog_col.w;
     c = mix(c, g.fog_col.rgb, f * f * (3.0 - 2.0 * f));
@@ -817,6 +821,9 @@ pub struct Dessin {
     pub scene: Arc<Scene3d>,
     pub matrice: M4,
     pub aspect: Aspect,
+    /// Partie 199 : ce que l'aspect fait de cet objet (ses matières, sa couleur d'identification à plat, l'argile) : seulement la
+    /// couleur de base de ses matières, écrite à chaque passe ; le modèle à la carte ne change pas.
+    pub teinte: crate::couleurs3d::Teinte,
 }
 
 /// Le point de vue d'une passe.
@@ -1406,10 +1413,12 @@ impl Moteur {
             let nm = crate::decor3drendu::normal_matrix(&d.matrice);
             for &(couleur, tex, seuil) in &mg.matieres {
                 let at = rang * PAS_OBJET as usize;
+                let (couleur, couleur_de_texture) = d.teinte.base(couleur);
                 put(&mut objets, at, &d.matrice);
                 put(&mut objets, at + 64, &nm);
                 put(&mut objets, at + 128, &couleur);
-                put(&mut objets, at + 144, &[if tex.is_some() { 1.0 } else { 0.0 }, seuil, 0.0, 0.0]);
+                // (z : la texture garde sa couleur, ou seulement sa découpe ; w : éclairé à plat, l'aspect Couleurs, partie 199.)
+                put(&mut objets, at + 144, &[if tex.is_some() { 1.0 } else { 0.0 }, seuil, if couleur_de_texture { 1.0 } else { 0.0 }, if d.teinte.plate() { 1.0 } else { 0.0 }]);
                 rang += 1;
             }
         }
