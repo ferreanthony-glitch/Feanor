@@ -707,7 +707,24 @@ impl App {
                 }
             }
         };
-        let objets: Vec<crate::decor3d::Pose3d> = crate::decor3d::poses(d);
+        // (Partie 200 : « Caméra du plan » ne montre pas les objets cachés dans ce plan ; les autres vues les montrent, en pointillés.)
+        let plan = self.doc.panels[self.cur_panel].id;
+        let par_la_camera = self.espace3d.through_camera;
+        let objets: Vec<crate::decor3d::Pose3d> = crate::decor3d::poses_sauf(d, par_la_camera.then_some(plan));
+        if !par_la_camera {
+            for o in d.vus().filter(|o| o.cache_dans(plan)) {
+                let (lo, hi) = o.modele.bornes;
+                let mx = o.matrice();
+                let coin = |i: usize| m::point(&mx, [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] }));
+                for (a, b) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
+                    if let (Some(p), Some(q)) = (proj(coin(a)), proj(coin(b))) {
+                        painter.extend(egui::Shape::dashed_line(&[p, q], Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(230, 230, 230, 170)), 5.0, 4.0));
+                    }
+                }
+            }
+        }
+        #[cfg(test)]
+        PEINTS.with(|v| v.borrow_mut().push((par_la_camera, objets.len(), if par_la_camera { 0 } else { d.vus().filter(|o| o.cache_dans(plan)).count() })));
         if !objets.is_empty() {
             match self.gpu.as_ref() {
                 Some(g) => {
@@ -715,7 +732,8 @@ impl App {
                     let cb = crate::decor3dgpu::VueDecor {
                         cle,
                         // (Partie 199 : l'aspect de la vue, un réglage du poste, pas celui des plans.)
-                        dessins: crate::decor3d::dessins_gpu(&objets, crate::decor3drendu::Aspect { rendu: self.settings.aspect_vue_3d, ..d.aspect }),
+                        // (Partie 200 : et ses lampes.)
+                        dessins: crate::decor3d::dessins_gpu(&objets, crate::decor3drendu::Aspect { rendu: self.settings.aspect_vue_3d, lampes: crate::miseenscene3d::lampes_vues(d, &m::IDENT), ..d.aspect }),
                         vue: crate::decor3dgpu::Vue::de_view(view, center),
                         taille_pts: [draw.width(), draw.height()],
                         cible_egui: g.render_state().target_format,
@@ -728,7 +746,7 @@ impl App {
                 }
                 None => {
                     // Sans carte graphique : les boîtes des objets, en fil de fer.
-                    for o in d.vus() {
+                    for o in d.vus().filter(|o| !par_la_camera || !o.cache_dans(plan)) {
                         boite(o, Stroke::new(1.0_f32, Color32::from_rgb(150, 170, 200)));
                     }
                     painter.text(draw.left_bottom() + egui::vec2(8.0, -22.0), Align2::LEFT_BOTTOM, format!("Décor 3D ({} objets) : leurs boîtes (sans carte graphique, la vue ne les dessine pas)", objets.len()), FontId::proportional(11.0), Color32::from_gray(170));
@@ -790,9 +808,16 @@ impl App {
     /// reposent, les cartes aimantées de la séquence aussi. L'étape d'annulation est à l'appelant : la retouche du panneau
     /// (`decor3d_retoucher`), ou le geste des poignées de la vue Espace 3D, qui a déjà le sien (partie 184, `poignees3d.rs`).
     pub(crate) fn decor3d_appliquer(&mut self, seq: u64, mut d: Decor3d) {
+        // (Partie 200 : un objet animé de la séquence courante retouché suit la règle des caméras de plan, `miseenscene3d::retoucher` ;
+        // l'aimant ne change pas ses clés.)
+        let courante = !self.doc.panels.is_empty() && self.doc.sequence_of(self.cur_panel) == seq;
+        let retouches = if courante { crate::miseenscene3dui::places_retouchees(self.doc.decors3d.par_sequence.get(&seq), &d) } else { Vec::new() };
         let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
         if !notes.is_empty() {
             self.status = notes.join(" ");
+        }
+        if courante && d.anime() {
+            crate::miseenscene3dui::reporter_les_cles(&mut d, &retouches, self.image_de_sequence_courante());
         }
         self.doc.decors3d.par_sequence.insert(seq, d);
         self.reposer_les_cartes_aimantees(seq);
@@ -1171,6 +1196,13 @@ pub(crate) fn mesures_de(m: &Modele3d) -> crate::decor3dgltf::Mesures {
         plus_grand_cote: s.textures.iter().map(|t| t.largeur.max(t.hauteur)).max().unwrap_or(0),
         ..Default::default()
     }
+}
+
+// Partie 200, pour les essais : ce que chaque vue Espace 3D a peint du décor à la dernière image : « Caméra du plan » ou non, les objets
+// dessinés, ceux en pointillés (cachés dans le plan).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PEINTS: std::cell::RefCell<Vec<(bool, usize, usize)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 // Partie 198.5, pour les essais : le temps d'une image que la lecture d'un modèle « mesure » (les essais n'ont pas de carte

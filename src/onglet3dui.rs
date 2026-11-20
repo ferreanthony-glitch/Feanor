@@ -32,6 +32,8 @@ const NOMS_W: f32 = 96.0;
 thread_local! {
     pub(crate) static LIGNES_S3D: std::cell::RefCell<Vec<(Ligne3d, Rect)>> = const { std::cell::RefCell::new(Vec::new()) };
     pub(crate) static TIMELINE_SEQ: std::cell::RefCell<Option<(Rect, Vec<(usize, Rect)>)>> = const { std::cell::RefCell::new(None) };
+    /// Partie 200 : les losanges des clés de l'objet choisi (image de la séquence, rectangle).
+    pub(crate) static CLES_SEQ: std::cell::RefCell<Vec<(usize, Rect)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 impl App {
@@ -67,6 +69,7 @@ impl App {
         let sel = &self.espace3d.sel;
         match l {
             Ligne3d::Objet(id) => sel.contains(&crate::poignees3d::objet_selection(id)),
+            Ligne3d::Lampe(id) => sel.contains(&crate::miseenscene3dui::lampe_selection(id)),
             Ligne3d::Camera(pi) => pi == self.cur_panel && sel.contains(&crate::espace3dgizmo::CAMERA_ID),
             Ligne3d::Carte(_, id) => sel.contains(&crate::espace3d::card_selection(id)),
             _ => false,
@@ -105,6 +108,7 @@ impl App {
             Ligne3d::Camera(_) => (ph::VIDEO_CAMERA, crate::theme::camera()),
             Ligne3d::Soleil => (ph::SUN, Color32::from_rgb(250, 205, 80)),
             Ligne3d::Ciel => (ph::CLOUD, Color32::from_rgb(140, 180, 230)),
+            Ligne3d::Lampe(id) => (ph::LIGHTBULB, self.o3_lampe(id).map_or(texte, |l| crate::couleurs3d::color32(l.couleur))),
             Ligne3d::Carte(li, _) => (ph::CARDS, self.layers().get(li).map_or(texte, crate::layerheads::encre_de_sorte)),
             Ligne3d::Groupe(..) => unreachable!(),
         };
@@ -121,7 +125,11 @@ impl App {
         let cadenas = oeil.translate(vec2(-w, 0.0));
         // (Partie 199 : un objet a, avant son cadenas, la puce de sa couleur d'identification ; un clic ouvre la palette.)
         let puce = Rect::from_center_size(pos2(cadenas.left() - 10.0, rect.center().y), vec2(14.0, 14.0));
-        let fin_du_nom = if matches!(l, Ligne3d::Objet(_)) { puce.left() } else { oeil.left() } - 4.0;
+        let fin_du_nom = match l {
+            Ligne3d::Objet(_) => puce.left(),
+            Ligne3d::Lampe(_) => cadenas.left(),
+            _ => oeil.left(),
+        } - 4.0;
         p.with_clip_rect(Rect::from_min_max(pos2(x + 18.0, rect.top()), pos2(fin_du_nom, rect.bottom()))).text(pos2(x + 20.0, rect.center().y), Align2::LEFT_CENTER, &nom, FontId::proportional(12.0), encre);
         if let Ligne3d::Objet(id) = l {
             self.puce_de_couleur(ui, puce, id);
@@ -130,6 +138,14 @@ impl App {
         let r = crate::layerheads::icon_at(ui, oeil, if visible { ph::EYE } else { ph::EYE_SLASH }, if visible { texte } else { doux.gamma_multiply(0.6) });
         if crate::bulles::bulle(r, "Afficher / cacher", "Montrer ou cacher dans la vue (une carte : comme l'œil de son calque ; un objet du décor : aussi dans les images des plans, gardé dans le projet).", "").clicked() {
             self.scene3d_basculer_oeil(l);
+        }
+        if let Ligne3d::Lampe(id) = l {
+            // (Partie 200 : une lampe s'enlève d'ici, à la place du cadenas des objets.)
+            let r = crate::layerheads::icon_at(ui, cadenas, ph::TRASH, doux.gamma_multiply(0.8));
+            if crate::bulles::bulle(r, "Enlever la lampe", "Enlève la lampe du décor de la séquence (Ctrl+Z la rend).", "").clicked() {
+                self.o3_enlever_lampe(id);
+                return;
+            }
         }
         if let Ligne3d::Objet(id) = l {
             let verrou = self.e3_objet(id).is_some_and(|o| o.verrou);
@@ -152,6 +168,7 @@ impl App {
             Ligne3d::Camera(pi) => !self.o3.cameras_cachees.contains(&self.doc.panels[pi].id),
             Ligne3d::Soleil => self.o3.montrer_lumieres,
             Ligne3d::Ciel => self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.aspect.ciel),
+            Ligne3d::Lampe(id) => self.o3_lampe(id).is_some_and(|l| !l.cache),
             Ligne3d::Carte(li, _) => self.layers().get(li).is_some_and(|l| l.visible),
             Ligne3d::Groupe(..) => true,
         }
@@ -189,6 +206,20 @@ impl App {
             Ligne3d::Soleil | Ligne3d::Ciel => {
                 self.colonne.montrer(crate::dock::Pane::Lumieres3d);
             }
+            Ligne3d::Lampe(id) => {
+                let s = crate::miseenscene3dui::lampe_selection(id);
+                if ajouter {
+                    if !self.espace3d.sel.contains(&s) {
+                        self.espace3d.sel.push(s);
+                    }
+                } else {
+                    self.espace3d.sel = vec![s];
+                }
+                self.o3.montrer_lumieres = true;
+                if self.colonne.contient(crate::dock::Pane::Lumieres3d) {
+                    self.colonne.montrer(crate::dock::Pane::Lumieres3d);
+                }
+            }
             Ligne3d::Groupe(..) => {}
         }
     }
@@ -217,6 +248,7 @@ impl App {
                 }
             }
             Ligne3d::Soleil => self.o3.montrer_lumieres = !self.o3.montrer_lumieres,
+            Ligne3d::Lampe(id) => self.o3_basculer_lampe(id),
             Ligne3d::Ciel => {
                 if let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() {
                     d.aspect.ciel = !d.aspect.ciel;
@@ -261,6 +293,10 @@ impl App {
             // (Partie 199 : en haut, la couleur d'identification de l'objet choisi, ou des objets choisis ensemble.)
             self.couleur_d_identification_ui(ui, &objets);
             self.decor3d_reglages_de(ui, PartiesDecor { objet: true, ..PartiesDecor::RIEN });
+            // (Partie 200 : « Dans les plans » et « Animation », pour l'objet de la liste.)
+            if let Some(id) = self.decor3d.choisi.filter(|id| objets.contains(id)).or(objets.first().copied()) {
+                self.o3_objet_mise_en_scene_ui(ui, id);
+            }
             return;
         }
         ui.label(RichText::new("Choisis un objet du décor ou une carte, dans Scène 3D ou dans la vue.").small().weak());
@@ -288,9 +324,11 @@ impl App {
         }
         self.decor3d_reglages_de(ui, PartiesDecor { soleil: true, ciel: true, ..PartiesDecor::RIEN });
         let mut on = self.o3.montrer_lumieres;
-        if ui.checkbox(&mut on, "Montrer le soleil dans la vue").clicked() {
+        if ui.checkbox(&mut on, "Montrer le soleil et les lampes dans la vue").clicked() {
             self.o3.montrer_lumieres = on;
         }
+        // (Partie 200 : les lampes de la séquence.)
+        self.o3_lampes_ui(ui);
     }
 
     /// L'onglet Monde : le ciel, la brume, les facettes du décor, la grille, le fond de la vue.
@@ -337,6 +375,8 @@ impl App {
             }
             ui.label(RichText::new(format!("image {} / {}", g.saturating_sub(debut) + 1, n)).monospace());
             ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.sequence_of(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
+            // (Partie 200 : « ◆ Clé » pour l'objet choisi, au bout de la ligne.)
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.o3_bouton_cle(ui));
         });
         let w = ui.available_width();
         let hauteur = REGLE_H + PLANS_H + 2.0 * RANGEE_H + 4.0;
@@ -352,7 +392,7 @@ impl App {
         let plans = Rect::from_min_size(pos2(rect.left(), regle.bottom()), vec2(w, PLANS_H));
         let cles = Rect::from_min_size(pos2(rect.left(), plans.bottom() + 2.0), vec2(w, RANGEE_H));
         let objet = Rect::from_min_size(pos2(rect.left(), cles.bottom() + 2.0), vec2(w, RANGEE_H));
-        for (r, nom) in [(plans, "Plans"), (cles, "Caméra"), (objet, "Objet choisi")] {
+        for (r, nom) in [(plans, "Plans"), (cles, "Caméra")] {
             p.text(pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER, nom, FontId::proportional(11.0), doux);
         }
         // La règle : une graduation par seconde.
@@ -384,7 +424,11 @@ impl App {
                 p.add(egui::Shape::convex_polygon(vec![c + vec2(0.0, -5.0), c + vec2(5.0, 0.0), c + vec2(0.0, 5.0), c + vec2(-5.0, 0.0)], crate::theme::camera(), Stroke::NONE));
             }
         }
-        p.text(pos2(piste.left() + 6.0, objet.center().y), Align2::LEFT_CENTER, "(les clés d'un objet du décor viendront avec l'étape 5)", FontId::proportional(10.0), doux.gamma_multiply(0.7));
+        // (Partie 200 : les clés de l'objet choisi ; « Objet choisi » sans objet.)
+        if self.o3_objet_des_cles().is_none() {
+            p.text(pos2(objet.left() + 6.0, objet.center().y), Align2::LEFT_CENTER, "Objet choisi", FontId::proportional(11.0), doux);
+        }
+        self.o3_rangee_des_cles(ui, Rect::from_min_max(objet.min, pos2(piste.left(), objet.bottom())), Rect::from_min_max(pos2(piste.left(), objet.top()), objet.max), debut, n);
         // La tête de lecture.
         let xg = x_de(g.clamp(debut, fin - 1));
         p.line_segment([pos2(xg, regle.top()), pos2(xg, rect.bottom())], Stroke::new(2.0_f32, crate::timeline::cur_frame()));

@@ -110,7 +110,16 @@ impl Document {
         for o in source.objets {
             let mut c = o;
             c.id = self.alloc();
+            // (Partie 200 : « Caché dans le plan » vise les plans de l'autre séquence : rien ici ; la duplication de la séquence le
+            // reporte sur les copies de ses plans, `dupliquer_sequence`.)
+            c.caches_dans.clear();
             d.objets.push(c);
+        }
+        // (Partie 200 : ses lampes aussi, à des numéros neufs ; les clés des objets sont copiées avec eux.)
+        for l in source.lampes {
+            let mut c = l;
+            c.id = self.alloc();
+            d.lampes.push(c);
         }
         self.decors3d.par_sequence.insert(vers, d);
         true

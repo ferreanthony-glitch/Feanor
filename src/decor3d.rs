@@ -184,6 +184,12 @@ pub struct Objet3d {
     /// dessinent), verrouillé par son cadenas (il ne se choisit plus dans la vue).
     pub cache: bool,
     pub verrou: bool,
+    /// Partie 200 : ses clés d'animation, triées par image de la séquence (`miseenscene3d.rs`) ; aucune : immobile à `place`. Avec
+    /// des clés, `place` est la pose à l'image courante (`App::decor3d_suivre_l_image`), les images des plans lisent les clés.
+    pub cles: Vec<crate::miseenscene3d::CleObjet>,
+    /// Partie 200 : les plans (leurs numéros, `Panel::id`) dont l'image ne le montre pas, « Caché dans le plan » : il reste dans le
+    /// décor de la séquence et dans les vues de l'onglet 3D (sauf « Caméra du plan » de ce plan).
+    pub caches_dans: Vec<u64>,
 }
 
 impl std::fmt::Debug for Objet3d {
@@ -196,7 +202,28 @@ impl Objet3d {
     /// Un objet neuf : l'origine au centre du dessous de sa boîte, aimanté au sol.
     pub fn neuf(id: u64, nom: String, source: String, allege: Vec<String>, modele: Arc<Modele3d>) -> Objet3d {
         let origine = origine_au_sol(modele.bornes);
-        Objet3d { id, nom, source, allege, place: Place3d::default(), origine, aimante: true, modele, couleur: None, cache: false, verrou: false }
+        Objet3d { id, nom, source, allege, place: Place3d::default(), origine, aimante: true, modele, couleur: None, cache: false, verrou: false, cles: Vec::new(), caches_dans: Vec::new() }
+    }
+
+    /// Partie 200 : animé par des clés.
+    pub fn anime(&self) -> bool {
+        !self.cles.is_empty()
+    }
+
+    /// Partie 200 : sa place à l'image `image` de la séquence : celle de ses clés, adoucie entre deux (`miseenscene3d::place_a`) ;
+    /// sans clé, `place`.
+    pub fn place_a(&self, image: usize) -> Place3d {
+        crate::miseenscene3d::place_a(&self.cles, image).unwrap_or(self.place)
+    }
+
+    /// `matrice`, à l'image `image` de la séquence.
+    pub fn matrice_a(&self, image: usize) -> M4 {
+        m::mul(&self.place_a(image).matrice(), &m::translation(m::scale(self.origine, -1.0)))
+    }
+
+    /// Partie 200 : caché dans l'image du plan `plan` (`Panel::id`).
+    pub fn cache_dans(&self, plan: u64) -> bool {
+        self.caches_dans.contains(&plan)
     }
 
     /// Du repère du modèle au monde : l'origine à `place.position`, la rotation et l'échelle autour d'elle.
@@ -216,6 +243,12 @@ impl Objet3d {
             return;
         }
         self.place.position = self.au_monde(o);
+        // (Partie 200 : et à chacune de ses clés, l'objet ne bouge à aucune image.)
+        let ancienne = self.origine;
+        for k in &mut self.cles {
+            let mx = m::mul(&k.place.matrice(), &m::translation(m::scale(ancienne, -1.0)));
+            k.place.position = m::point(&mx, o);
+        }
         self.origine = o;
     }
 
@@ -243,6 +276,8 @@ pub struct Decor3d {
     pub uid: u64,
     pub aspect: Aspect,
     pub objets: Vec<Objet3d>,
+    /// Partie 200 : ses lampes (`miseenscene3d::Lampe3d`, au plus `MAX_LAMPES`), en plus du soleil et du ciel.
+    pub lampes: Vec<crate::miseenscene3d::Lampe3d>,
 }
 
 impl std::fmt::Debug for Decor3d {
@@ -254,7 +289,26 @@ impl std::fmt::Debug for Decor3d {
 impl Decor3d {
     pub fn new(aspect: Aspect) -> Decor3d {
         static SUIVANT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new() }
+        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), lampes: Vec::new() }
+    }
+
+    /// Partie 200 : les objets que montre l'image du plan `plan` (`Panel::id`) : ceux que cet ordinateur montre, sans ceux « cachés
+    /// dans le plan ».
+    pub fn vus_dans(&self, plan: u64) -> impl Iterator<Item = &Objet3d> + '_ {
+        self.vus().filter(move |o| !o.cache_dans(plan))
+    }
+
+    /// Partie 200 : un de ses objets est animé.
+    pub fn anime(&self) -> bool {
+        self.objets.iter().any(Objet3d::anime)
+    }
+
+    pub fn lampe(&self, id: u64) -> Option<&crate::miseenscene3d::Lampe3d> {
+        self.lampes.iter().find(|l| l.id == id)
+    }
+
+    pub fn lampe_mut(&mut self, id: u64) -> Option<&mut crate::miseenscene3d::Lampe3d> {
+        self.lampes.iter_mut().find(|l| l.id == id)
     }
 
     /// Les objets que cet ordinateur montre (pas ceux masqués en attendant le choix d'Anthony, `masquer`).
@@ -348,6 +402,9 @@ struct EntreeSequence {
     #[serde(default)]
     aspect: Aspect,
     objets: Vec<serde_json::Value>,
+    /// Partie 200 : les lampes de la séquence. Absentes d'un fichier d'avant : aucune ; un FEANOR d'avant ignore la clé.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lampes: Vec<crate::miseenscene3d::Lampe3d>,
 }
 
 /// Un objet (version 2).
@@ -375,6 +432,12 @@ struct EntreeObjet {
     cache: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     verrou: bool,
+    /// Partie 200 : ses clés d'animation (image de la séquence et place), et les plans dont l'image ne le montre pas. Absents d'un
+    /// fichier d'avant : immobile, dans tous les plans ; un FEANOR d'avant les ignore.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    cles: Vec<crate::miseenscene3d::CleObjet>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    caches_dans: Vec<u64>,
 }
 
 /// Un décor de la partie 180 (version 1) : un seul modèle par séquence, sa place celle du point (0, 0, 0) du modèle.
@@ -437,11 +500,13 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                     couleur: o.couleur,
                     cache: o.cache,
                     verrou: o.verrou,
+                    cles: o.cles.clone(),
+                    caches_dans: o.caches_dans.clone(),
                 })
                 .map_err(|e| e.to_string())
             })
             .collect::<Result<_, _>>()?;
-        decors.push(serde_json::to_value(EntreeSequence { sequence, aspect: x.aspect, objets }).map_err(|e| e.to_string())?);
+        decors.push(serde_json::to_value(EntreeSequence { sequence, aspect: x.aspect, objets, lampes: x.lampes.clone() }).map_err(|e| e.to_string())?);
     }
     decors.extend(d.gardees.iter().cloned());
     let mut out = serde_json::to_vec_pretty(&Fichier { version: VERSION_FICHIER, decors }).map_err(|e| e.to_string())?;
@@ -512,18 +577,26 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                 match lu {
                     Ok((e, modele)) => {
                         let couleur = e.couleur.filter(|k| crate::couleurs3d::couleur(*k).is_some());
-                        let mut o = Objet3d { id: e.id, nom: e.nom, source: e.fichier_d_origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: e.aimante, modele, couleur, cache: e.cache, verrou: e.verrou };
+                        let mut o = Objet3d { id: e.id, nom: e.nom, source: e.fichier_d_origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: e.aimante, modele, couleur, cache: e.cache, verrou: e.verrou, cles: crate::miseenscene3d::cles_valides(e.cles), caches_dans: e.caches_dans };
                         match e.origine.filter(|p| p.iter().all(|c| c.is_finite())) {
                             Some(p) => o.origine = p,
                             None => o.changer_origine(origine_au_sol(o.modele.bornes)),
                         }
-                        out.par_sequence.entry(s.sequence).or_insert_with(|| Decor3d::new(s.aspect)).objets.push(o);
+                        let d = out.par_sequence.entry(s.sequence).or_insert_with(|| Decor3d::new(s.aspect));
+                        if d.lampes.is_empty() {
+                            d.lampes = crate::miseenscene3d::lampes_valides(s.lampes.clone());
+                        }
+                        d.objets.push(o);
                     }
                     Err(e) => {
                         illisible(warnings, e);
                         out.gardees.push(serde_json::json!({ "sequence": s.sequence, "aspect": s.aspect, "objets": [ov] }));
                     }
                 }
+            }
+            // (Partie 200 : les lampes d'une séquence dont aucun objet n'a pu être lu restent dans le fichier, telles quelles.)
+            if !s.lampes.is_empty() && !out.par_sequence.contains_key(&s.sequence) {
+                out.gardees.push(serde_json::json!({ "sequence": s.sequence, "aspect": s.aspect, "objets": [], "lampes": s.lampes }));
             }
         } else {
             // Version 1 (partie 180) : un objet, son origine au centre du dessous de sa boîte, à la même place exactement ;
@@ -536,7 +609,7 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
             });
             match lu {
                 Ok((e, modele)) => {
-                    let mut o = Objet3d { id: e.id, nom: e.nom, source: e.origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false };
+                    let mut o = Objet3d { id: e.id, nom: e.nom, source: e.origine, allege: e.allege, place: e.place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false, cles: Vec::new(), caches_dans: Vec::new() };
                     o.changer_origine(origine_au_sol(o.modele.bornes));
                     out.par_sequence.entry(e.sequence).or_insert_with(|| Decor3d::new(e.aspect)).objets.push(o);
                 }
@@ -563,7 +636,7 @@ pub fn ids(d: &Decors3d) -> impl Iterator<Item = u64> + '_ {
         n.extend(v["objets"].as_array().into_iter().flatten().filter_map(|o| o["id"].as_u64()));
         n
     });
-    d.par_sequence.values().flat_map(|x| x.objets.iter().map(|o| o.id)).chain(gardes)
+    d.par_sequence.values().flat_map(|x| x.objets.iter().map(|o| o.id).chain(x.lampes.iter().map(|l| l.id))).chain(gardes)
 }
 
 /// Ce que l'enregistrement fait des décors (préparé sur le fil de l'interface, joué sur celui de l'enregistrement).
@@ -647,6 +720,11 @@ pub struct DecorCle {
     pub feuille: [usize; 2],
     pub cadre: [usize; 2],
     pub aspect: Aspect,
+    /// Partie 200 : le plan (`Panel::id`) et l'image de la séquence dont `contenu` est l'empreinte : de quoi retrouver les poses de
+    /// ses objets animés et ceux « cachés dans le plan » (`objets_de`). Hors de l'égalité et du hachage : deux clés de même
+    /// empreinte font la même image (un décor immobile garde sa seule image d'un plan et d'une image à l'autre, comme avant).
+    pub plan: u64,
+    pub image: usize,
 }
 
 impl DecorCle {
@@ -683,15 +761,29 @@ impl Hash for DecorCle {
 
 /// L'empreinte des objets que cet ordinateur montre : leurs modèles et leurs matrices.
 pub fn contenu(d: &Decor3d) -> u64 {
+    contenu_a(d, None, 0)
+}
+
+/// Partie 200 : `contenu` pour l'image `image` de la séquence et le plan `plan` (rien : tous les plans) : les poses de ses objets
+/// animés à cette image, sans ceux cachés dans ce plan, et ses lampes. Un décor immobile, sans objet caché dans le plan ni lampe, a
+/// exactement l'empreinte d'avant (la même suite de hachages) : il garde son image et ses vignettes, au même coût.
+pub fn contenu_a(d: &Decor3d, plan: Option<u64>, image: usize) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     // (Partie 199 : et leurs couleurs d'identification, quand les plans les montrent : changer une couleur redessine l'image une fois,
     // sans rien refaire des maillages.)
     let couleurs = d.aspect.rendu == crate::couleurs3d::Rendu::Couleurs;
-    for o in d.vus() {
+    for o in d.vus().filter(|o| plan.is_none_or(|p| !o.cache_dans(p))) {
         o.modele.uid.hash(&mut h);
-        o.matrice().map(f32::to_bits).hash(&mut h);
+        o.matrice_a(image).map(f32::to_bits).hash(&mut h);
         if couleurs {
             o.couleur.hash(&mut h);
+        }
+    }
+    // (Partie 200 : les lampes, seulement quand il y en a : un décor sans lampe ne hache rien de plus.)
+    if d.lampes.iter().any(|l| !l.cache) {
+        "lampes".hash(&mut h);
+        for l in d.lampes.iter().filter(|l| !l.cache) {
+            l.empreinte(&mut h);
         }
     }
     h.finish()
@@ -714,17 +806,21 @@ pub fn id_texture(decor: u64) -> CelId {
     h.finish() | (1 << 63)
 }
 
-/// L'élément du plan `index` qui montre son décor, à l'image où la caméra est `camera` (et `repere`, pour un plan en Espace
-/// 3D) ; rien : la séquence n'a pas d'objet vu, ou l'œil n'est pas devant la feuille.
-pub fn item(doc: &Document, index: usize, camera: &crate::document::CameraSeen, repere: Option<&M4>) -> Option<crate::render::PlanItem> {
+/// L'élément du plan `index` qui montre son décor, à l'image `frame` du plan où la caméra est `camera` (et `repere`, pour un plan
+/// en Espace 3D) ; rien : la séquence n'a pas d'objet vu dans ce plan, ou l'œil n'est pas devant la feuille.
+pub fn item(doc: &Document, index: usize, frame: usize, camera: &crate::document::CameraSeen, repere: Option<&M4>) -> Option<crate::render::PlanItem> {
     let d = doc.decor_du_plan(index)?;
-    d.vus().next()?;
+    let plan = doc.panels[index].id;
+    d.vus_dans(plan).next()?;
     let monde = Monde::of(doc);
     let (repere, oeil) = match repere {
         Some(r) => (*r, monde.eye_reference()),
         None => (m::IDENT, monde.eye_seen(camera)),
     };
-    let key = DecorCle { decor: d.uid, contenu: contenu(d), repere, oeil, feuille: [doc.width, doc.height], cadre: doc.frame, aspect: d.aspect };
+    // (Partie 200 : l'image de la séquence, pour les objets animés ; un décor immobile n'en a pas besoin, elle ne change rien.)
+    let image = if d.anime() { doc.image_de_sequence(index, frame) } else { 0 };
+    let aspect = Aspect { lampes: crate::miseenscene3d::lampes_vues(d, &repere), ..d.aspect };
+    let key = DecorCle { decor: d.uid, contenu: contenu_a(d, Some(plan), image), repere, oeil, feuille: [doc.width, doc.height], cadre: doc.frame, aspect, plan, image };
     key.prise()?;
     Some(crate::render::PlanItem {
         cel: id_of(&key),
@@ -765,11 +861,17 @@ pub fn poses(d: &Decor3d) -> Vec<Pose3d> {
     d.vus().map(|o| (o.modele.clone(), o.matrice(), o.couleur)).collect()
 }
 
+/// Partie 200 : `poses`, sans les objets cachés dans le plan `plan` (rien : aucun n'est retiré).
+pub fn poses_sauf(d: &Decor3d, plan: Option<u64>) -> Vec<Pose3d> {
+    d.vus().filter(|o| plan.is_none_or(|p| !o.cache_dans(p))).map(|o| (o.modele.clone(), o.matrice(), o.couleur)).collect()
+}
+
 /// Les objets du décor de la clé `key`, tels qu'ils étaient quand la clé a été faite ; rien : le décor a changé depuis (ou n'est
 /// plus dans le projet), la clé ne vaut plus.
 pub fn objets_de(doc: &Document, key: &DecorCle) -> Option<Vec<Pose3d>> {
     let d = doc.decors3d.par_sequence.values().find(|d| d.uid == key.decor)?;
-    (contenu(d) == key.contenu).then(|| d.vus().map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice()), o.couleur)).collect())
+    // (Partie 200 : à l'image et dans le plan de la clé : les objets animés à leur pose, sans ceux cachés dans ce plan.)
+    (contenu_a(d, Some(key.plan), key.image) == key.contenu).then(|| d.vus_dans(key.plan).map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice_a(key.image)), o.couleur)).collect())
 }
 
 /// Les triangles que dessinent ces objets (chaque objet compte).

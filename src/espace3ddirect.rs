@@ -91,7 +91,8 @@ impl App {
     /// les anciennes limites, rien ne change : le chemin de toujours.
     pub(crate) fn set_current_camera_libre(&mut self, cam: crate::camera::Camera) {
         let pi = self.cur_panel;
-        if !self.doc.panels[pi].espace && !self.doc.camera_dans_les_anciennes_limites(&cam) && !self.doc.panels[pi].camera_libre {
+        // (Partie 200.7 : et quand son cadre sort de la feuille.)
+        if !self.doc.panels[pi].espace && !self.doc.camera_filmee_par_la_feuille(&cam) && !self.doc.panels[pi].camera_libre {
             self.doc.panels[pi].camera_libre = true;
             self.renderer.invalidate_all();
         }

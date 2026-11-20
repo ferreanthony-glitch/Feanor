@@ -1987,7 +1987,7 @@ impl App {
         let mut portees = crate::calqueffet::Portees::new(par_distance);
         // Le décor 3D de la séquence (partie 180), sous tous les calques comme dans les sorties (`render::panel_plan_at`), et la
         // profondeur qu'il partage avec les cartes (partie 183, `profondeur.rs`) : sans décor, aucune carte ne porte de plan.
-        let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, &camera, repere.as_ref());
+        let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, frame, &camera, repere.as_ref());
         let avec_decor = decor.is_some();
         // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
         let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres));
@@ -3235,6 +3235,8 @@ impl App {
             self.renderer.invalidate_composed();
             ctx.request_repaint();
         }
+        // (Partie 200 : les objets animés du décor de la séquence à la place de leurs clés à l'image courante.)
+        self.decor3d_suivre_l_image();
         // Le décor 3D rendu par le processeur en arrière-plan (sans carte graphique, `decor3d.rs`).
         if crate::decor3d::poll() {
             self.renderer.invalidate_composed();

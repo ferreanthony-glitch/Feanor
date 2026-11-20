@@ -143,6 +143,8 @@ pub enum Ligne3d {
     Camera(usize),
     Soleil,
     Ciel,
+    /// Partie 200 : une lampe du décor de la séquence.
+    Lampe(u64),
     /// La carte du calque `li` du plan courant (`id` : pour vérifier qu'il y est toujours).
     Carte(usize, u64),
 }
@@ -155,6 +157,7 @@ pub fn nom_de(doc: &crate::document::Document, cur_panel: usize, l: Ligne3d) -> 
         Ligne3d::Camera(pi) => format!("Caméra · {}", crate::storyboard::panel_title(doc, pi)),
         Ligne3d::Soleil => "Soleil".into(),
         Ligne3d::Ciel => "Ciel".into(),
+        Ligne3d::Lampe(id) => doc.decor_du_plan(cur_panel).and_then(|d| d.lampe(id)).map_or_else(String::new, |l| l.nom.clone()),
         Ligne3d::Carte(li, _) => doc.panels.get(cur_panel).and_then(|p| p.layers.get(li)).map_or_else(String::new, |l| l.name.clone()),
     }
 }
@@ -177,7 +180,12 @@ pub fn sommaire(doc: &crate::document::Document, cur_panel: usize, recherche: &s
                 let (a, z) = doc.sequence_run(cur_panel);
                 (a..z).map(Ligne3d::Camera).collect()
             }
-            Groupe3d::Lumieres => vec![Ligne3d::Soleil, Ligne3d::Ciel],
+            Groupe3d::Lumieres => {
+                // (Partie 200 : et les lampes du décor.)
+                let mut v = vec![Ligne3d::Soleil, Ligne3d::Ciel];
+                v.extend(doc.decor_du_plan(cur_panel).into_iter().flat_map(|d| d.lampes.iter().map(|l| Ligne3d::Lampe(l.id))));
+                v
+            }
             Groupe3d::Cartes => {
                 let layers = &doc.panels[cur_panel].layers;
                 (0..layers.len()).rev().filter(|&li| crate::espace3d::is_card(&layers[li])).map(|li| Ligne3d::Carte(li, layers[li].id)).collect()
@@ -193,6 +201,21 @@ pub fn sommaire(doc: &crate::document::Document, cur_panel: usize, recherche: &s
         }
     }
     out
+}
+
+/// Partie 200 : la clé d'un objet qu'on glisse dans la timeline de la séquence : l'objet, l'image d'où elle part, celle où elle est,
+/// l'instantané du projet au début du geste (une étape au lâcher).
+pub(crate) struct CleTiree {
+    pub objet: u64,
+    pub de: usize,
+    pub ici: usize,
+    pub snap: crate::history::Edit,
+}
+
+impl std::fmt::Debug for CleTiree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CleTiree({}, {} → {})", self.objet, self.de, self.ici)
+    }
 }
 
 /// Ce que l'onglet 3D retient pendant la séance (pas dans le projet).
@@ -218,6 +241,8 @@ pub(crate) struct Onglet3d {
     pub bande: (Vec<Pane>, Option<Pane>),
     /// Un onglet de la bande cliqué dans sa tête : il passe devant à l'image suivante.
     pub bande_demandee: Option<Pane>,
+    /// Partie 200 : la clé d'objet qu'on glisse dans la timeline de la séquence.
+    pub cle_tiree: Option<CleTiree>,
     /// Les bouts de la boussole peints à la dernière image, par vue (pour les essais) : le cadre, puis (axe, positif, centre).
     #[cfg(test)]
     pub boussoles: Vec<(Option<usize>, Vec<(usize, bool, Pos2)>)>,
@@ -236,6 +261,7 @@ impl Default for Onglet3d {
             sujet: None,
             bande: (Vec::new(), None),
             bande_demandee: None,
+            cle_tiree: None,
             #[cfg(test)]
             boussoles: Vec::new(),
         }
@@ -289,6 +315,9 @@ impl App {
         let sel = &self.espace3d.sel;
         let sujet = if sel.contains(&CAMERA_ID) {
             Some(Pane::Camera3d)
+        } else if sel.iter().any(|&s| crate::miseenscene3dui::lampe_of(s).is_some()) {
+            // (Partie 200 : une lampe, Lumières.)
+            Some(Pane::Lumieres3d)
         } else if sel.iter().any(|&s| crate::poignees3d::objet_of(s).is_some() || crate::espace3d::card_of(s).is_some()) {
             Some(Pane::Objet3d)
         } else {
@@ -528,6 +557,8 @@ impl App {
             }
         }
         if self.o3.montrer_lumieres {
+            // (Partie 200 : les lampes du décor.)
+            self.o3_peindre_lampes(painter, proj);
             if let Some(d) = self.doc.decor_du_plan(self.cur_panel) {
                 let centre: V3 = [0.0, crate::espace3d::Monde::of(&self.doc).sol_y(), 0.0];
                 let loin = m::add(centre, m::scale(d.aspect.soleil(), 4.0));
@@ -593,7 +624,7 @@ impl App {
         if self.case_icone(ui, ph::VIDEO_CAMERA, Some(self.o3.montrer_cameras), "Caméras", "Les caméras des autres plans de la séquence, en plus de celle du plan courant.", "").clicked() {
             self.o3.montrer_cameras = !self.o3.montrer_cameras;
         }
-        if self.case_icone(ui, ph::SUN, Some(self.o3.montrer_lumieres), "Lumières", "Le soleil du décor : sa direction depuis le centre de la scène.", "").clicked() {
+        if self.case_icone(ui, ph::SUN, Some(self.o3.montrer_lumieres), "Lumières", "Le soleil du décor (sa direction depuis le centre de la scène) et ses lampes.", "").clicked() {
             self.o3.montrer_lumieres = !self.o3.montrer_lumieres;
         }
         if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : le décor, les cartes et la caméra.", "espace3d.cadrer").clicked() {

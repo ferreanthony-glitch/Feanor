@@ -5,6 +5,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **La mise en scène 3D** (partie 200, étape 5 sur 5, la dernière, de la maquette de l'onglet 3D, branche `mise-en-scene-3d` partie
+  de main 3446588, format 61 inchangé) : des lampes (outil « Ajouter une lampe » et Propriétés > Lumières, huit par séquence, teinte,
+  intensité, portée, sans ombres, le décor seulement, dans le sommaire et la vue, à tirer) ; les objets du décor animés par des clés
+  (« ◆ Clé », la rangée « Objet choisi » de la timeline de la séquence, la règle des caméras de plan, adoucies, dans toutes les images des
+  plans et l'export) ; « Caché dans le plan » ; « Nouveau plan depuis cette vue ». Un décor immobile garde sa clé d'image d'avant ; un
+  décor animé redessine une fois par image, 0,4 ms par passe. Bilan du chantier 3D (194–200) en 200.6. Essais :
+  `miseenscene3d_tests.rs` (12). **Rien regardé à l'écran, pas de commit** (liste 200.5).
+  Puis 200.7 (vu par Anthony) : le plan qui devenait gris en tirant la caméra dans la vue à côté. Une caméra libre « dans les
+  anciennes limites » dont le cadre tombait hors de la feuille était filmée sur la feuille, où il n'y a rien : elle passe maintenant
+  par le repère de sa caméra (`cadre_sur_la_feuille`). Depuis la partie 159, pas 199 ni 200. Les « fissures » rouges : son sol dessiné.
 - **Les couleurs d'identification du décor 3D, et les aspects Couleurs et Argile** (partie 199, étape 4 sur 5 de la maquette,
   branche `couleurs-3d` partie de main d9c6788, format 61 inchangé) : une couleur par objet du décor (dix de la maquette ou
   « Aucune »), posée par la puce de sa ligne dans Scène 3D ou en haut de Propriétés > Objet, une étape d'annulation, enregistrée,

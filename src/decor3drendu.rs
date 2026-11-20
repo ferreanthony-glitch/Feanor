@@ -54,6 +54,10 @@ pub struct Aspect {
     /// (Absent d'un fichier d'avant : les matières ; un FEANOR d'avant ignore la clé.)
     #[serde(default, skip_serializing_if = "crate::couleurs3d::Rendu::est_matieres")]
     pub rendu: crate::couleurs3d::Rendu,
+    /// Partie 200 : les lampes du décor, prêtes pour le rendu (`miseenscene3d::lampes_vues`, dans le repère où l'on regarde). Jamais
+    /// écrites ici : elles sont enregistrées avec le décor (`Decor3d::lampes`), et remises à chaque rendu.
+    #[serde(skip)]
+    pub lampes: crate::miseenscene3d::LampesVues,
 }
 
 fn oui() -> bool {
@@ -68,7 +72,7 @@ fn hauteur_d_origine() -> f32 {
 
 impl Default for Aspect {
     fn default() -> Aspect {
-        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine(), rendu: Default::default() }
+        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine(), rendu: Default::default(), lampes: Default::default() }
     }
 }
 
@@ -108,11 +112,18 @@ impl Aspect {
     /// `ombrer`, et `plat` (partie 199, l'aspect Couleurs) : la couleur éclairée tirée vers la couleur de base (`couleurs3d::PLAT`),
     /// comme le shader de la carte.
     pub fn ombrer_en(&self, c: [f32; 3], n: V3, d: f32, brume: (f32, f32), plat: bool) -> [f32; 3] {
+        self.ombrer_au(c, n, d, brume, plat, None)
+    }
+
+    /// Partie 200 : `ombrer_en` au point `monde` (le repère où l'on regarde), que les lampes éclairent aussi (`lampes`) ; rien : sans
+    /// les lampes.
+    pub fn ombrer_au(&self, c: [f32; 3], n: V3, d: f32, brume: (f32, f32), plat: bool, monde: Option<V3>) -> [f32; 3] {
         let t = n[1] * 0.5 + 0.5;
         let (sa, ga) = self.ambiances();
         let k = self.couleur_soleil();
         let sun = m::dot(n, self.soleil()).max(0.0);
-        let lit = [0, 1, 2].map(|i| ga[i] + (sa[i] - ga[i]) * t + k[i] * sun);
+        let lampes = monde.map_or([0.0; 3], |p| self.lampes.lumiere(p, n));
+        let lit = [0, 1, 2].map(|i| ga[i] + (sa[i] - ga[i]) * t + k[i] * sun + lampes[i]);
         let mut c2 = [c[0] * lit[0], c[1] * lit[1], c[2] * lit[2]];
         if plat {
             c2 = [0, 1, 2].map(|i| c2[i] + (c[i] - c2[i]) * crate::couleurs3d::PLAT);
@@ -306,6 +317,8 @@ struct Ombrage {
     centre: [f32; 2],
     s: f32,
     ss: f32,
+    /// Partie 200 : la prise, pour retrouver le point du monde d'un pixel (les lampes l'éclairent).
+    prise: Prise,
 }
 
 struct Bande {
@@ -373,7 +386,13 @@ fn raster(t: &Tri, b: &mut Bande, scenes: &[(&Scene3d, M4)], teintes: &[crate::c
             // La distance à l'œil (pour la brume) : la profondeur, allongée selon l'écart au centre de l'image.
             let (dx, dy) = ((px / om.ss - om.centre[0]) / om.s, (py / om.ss - om.centre[1]) / om.s);
             let d = (1.0 / invz) * (1.0 + dx * dx + dy * dy).sqrt();
-            b.couleur[at] = om.aspect.ombrer_en(c, n, d, om.brume, teinte.plate());
+            // (Partie 200 : les lampes éclairent le point du monde de ce pixel : sa profondeur le long du regard.)
+            let monde = (om.aspect.lampes.n > 0).then(|| {
+                let z = 1.0 / invz;
+                let p = om.prise;
+                m::add(p.oeil, m::add(m::scale(p.droite, dx * z), m::add(m::scale(p.haut, -dy * z), m::scale(p.avant, z))))
+            });
+            b.couleur[at] = om.aspect.ombrer_au(c, n, d, om.brume, teinte.plate(), monde);
         }
     }
 }
@@ -438,7 +457,7 @@ pub fn rendre_objets_prof_teintes(objets: &[(&Scene3d, M4)], teintes: &[crate::c
         })
         .fold(0.0f32, f32::max)
         .max(1e-3);
-    let om = Ombrage { aspect: *aspect, brume: aspect.brume_de(dist_max), centre: prise.centre, s: prise.px_par_unite, ss: ss as f32 };
+    let om = Ombrage { aspect: *aspect, brume: aspect.brume_de(dist_max), centre: prise.centre, s: prise.px_par_unite, ss: ss as f32, prise: *prise };
     let rot = [prise.droite, prise.haut, prise.avant];
     for t in &mut tris {
         let moy = m::add(m::add(t.n[0], t.n[1]), t.n[2]);

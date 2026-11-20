@@ -534,3 +534,14 @@ pour l'aspect Couleurs). Aucun maillage n'est refait : une teinte par objet (`co
 couleur de base de ses matières dans l'uniforme de la carte graphique (les drapeaux `z` et `w`), et dans le rendu du processeur
 (`rendre_objets_prof_teintes`). Les règles sans latence tiennent : un changement redessine une fois. L'œil et le cadenas d'un objet
 (section 22) sont maintenant dans le fichier (`Objet3d::cache`, `Objet3d::verrou`), plus pour la séance seulement.
+
+## 24. La mise en scène : lampes, objets animés, objets cachés dans un plan (2026-11-20, branche `mise-en-scene-3d`, partie 200 de `docs/INTERFACE.md`)
+
+Un décor de séquence a des **lampes** (`Decor3d::lampes`, `miseenscene3d::Lampe3d`, huit au plus) : des lumières ponctuelles, sans
+ombres, qui éclairent le décor (pas les cartes). Elles passent au rendu par l'aspect (`Aspect::lampes`, `LampesVues`, jamais écrit avec
+lui) : les réglages d'une passe de la carte graphique (640 octets, `LAMPES_AU`) et `Aspect::ombrer_au` du processeur, avec les mêmes
+formules. Un objet a des **clés** (`Objet3d::cles`) : sa place à une image de la séquence, adoucie entre deux ; et des plans dont
+l'image ne le montre pas (`Objet3d::caches_dans`). L'image gardée du décor (`DecorCle`) compte les poses à l'image, les objets cachés
+dans le plan et les lampes **seulement quand il y en a** (`contenu_a`) : un décor immobile garde exactement sa clé d'avant, un décor
+animé en fait une par image, redessinée une fois dans la même texture. Sans latence : 0,4 ms par passe pour 40 objets en 1920 × 1080,
+huit lampes comprises (mesures de la partie 200).

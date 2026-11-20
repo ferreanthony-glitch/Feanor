@@ -954,7 +954,7 @@ pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Opt
     let camera = doc.camera_seen(index, frame);
     let repere = doc.repere_du_plan(index, frame);
     // Le décor 3D de la séquence (partie 180) : sous tous les calques.
-    let decor = crate::decor3d::item(doc, index, &camera, repere.as_ref());
+    let decor = crate::decor3d::item(doc, index, frame, &camera, repere.as_ref());
     plan_with_camera_layers(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, repere.as_ref(), doc.fps, annotations, decor).0
 }
 

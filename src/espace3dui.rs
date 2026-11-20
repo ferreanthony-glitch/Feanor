@@ -251,6 +251,10 @@ impl App {
                 if let Some(oid) = crate::poignees3d::objet_of(id) {
                     return self.e3_objet(oid).map(|o| (id, crate::poignees3d::xf_de_l_objet(o)));
                 }
+                // (Une lampe, partie 200 : sa place seule.)
+                if let Some(lid) = crate::miseenscene3dui::lampe_of(id) {
+                    return self.o3_xf_de_la_lampe(lid).map(|xf| (id, xf));
+                }
                 let layer = &self.layers()[self.e3_card_layer(id)?];
                 Some((id, world.carte(layer, frame)))
             })
@@ -289,6 +293,8 @@ impl App {
         // Les objets du décor d'abord (partie 184) : les cartes aimantées qui reposent sur eux suivent, puis les cartes choisies
         // se posent sur le décor tel qu'il est devenu.
         self.e3_poser_objets(new);
+        // (Les lampes, partie 200.)
+        self.o3_poser_lampes(new);
         let world = self.e3_world();
         let frame = self.cur_frame;
         for (id, xf) in new {
@@ -658,6 +664,9 @@ impl App {
             if r.clicked() {
                 self.o3_basculer_aimant();
             }
+            // (Partie 200 : « Ajouter une lampe », « Nouveau plan depuis cette vue ».)
+            ui.separator();
+            self.o3_outils_mise_en_scene(ui);
             return;
         }
         // (Avec l'outil Trajectoire, la case « Caméra » ne lui reprend pas le pointeur : elle choisit la caméra, seule, et

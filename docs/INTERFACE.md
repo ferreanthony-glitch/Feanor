@@ -18042,3 +18042,218 @@ Avant tout : garder une copie de `reglages.toml`.
    verrouillés, et les couleurs sont là. Ctrl+Z défait l'œil.
 9. Copie un objet coloré vers une autre séquence, puis duplique la séquence : les copies gardent leur couleur.
 10. Ouvre une copie d'un projet d'avant cette version : rien n'a changé (aucune couleur, Matières, tout montré).
+
+## 200. La mise en scène 3D : lampes, objets animés, objets cachés dans un plan, nouveau plan depuis la vue (2026-11-20, branche mise-en-scene-3d partie de main 3446588)
+
+Étape 5 sur 5, la dernière, de la maquette de l'onglet 3D (`onglet-3d-v8` : `addLampe`, `propsLumiere`, les clés de `eChaise`,
+`objPose`, `keyAt`, `editPose`, `applyAnim`, « ◆ Clé » et la rangée « Objet choisi » de `renderTimeline`, « Caché dans le plan » et
+`hideInPlan`, `newPlanFromView`). **Format des projets inchangé (61)** ; `decors3d.json` reste en version 2 : les nouvelles données sont
+des champs facultatifs, lus à leur valeur par défaut quand ils manquent, jamais écrits à cette valeur (un décor sans lampe, sans clé
+et sans objet caché s'enregistre comme avant). Un FEANOR d'avant lit le fichier d'aujourd'hui (rien n'y interdit les clés inconnues) :
+il ignore les lampes, les clés et les objets cachés.
+
+### 200.1 Ce qui a changé
+
+1. **Les lampes** (`miseenscene3d::Lampe3d`), en plus du soleil et du ciel du décor de la séquence.
+   - **Ajouter** : l'outil « Ajouter une lampe » (une ampoule, dans la barre de gauche de l'onglet 3D, après « Aimanter au sol »), ou
+     le bouton « Ajouter une lampe » de Propriétés > Lumières. La lampe se pose au-dessus du point que regarde la vue en perspective,
+     à 2,2 m au-dessus du sol ; elle est choisie, Propriétés > Lumières passe devant. Une séquence sans décor 3D n'a pas de lampe
+     (l'outil est grisé et le dit : la lampe éclaire le décor).
+   - **Ce qu'elle est** : une lumière ponctuelle, sa place, sa teinte (Ampoule, Blanche, Bleutée, Rouge, ou une autre couleur par le
+     sélecteur), son intensité (0 à 2), sa portée en mètres (0,5 à 30 : rien n'est éclairé au-delà, la lumière s'adoucit jusque-là).
+     Ses réglages sont dans Propriétés > Lumières, une section par lampe (ouverte pour la lampe choisie), avec « Enlever la lampe ».
+   - **Pas d'ombres** : une lampe ponctuelle en demanderait six cartes d'ombres par lampe, hors du budget « sans latence » ; « Porte des
+     ombres » n'est donc pas proposé (Propriétés > Lumières le dit d'une phrase).
+   - **Dans « Scène 3D »**, sous Lumières, après le Soleil et le Ciel : chaque lampe, son œil (éteinte, elle n'éclaire plus ; une
+     étape) et une corbeille (enlever ; une étape).
+   - **Dans la vue** (onglet 3D, quand « Lumières » est allumé) : une marque en losange à sa place, son nom, un pointillé jusqu'au sol ;
+     la choisie à la couleur de la sélection, une éteinte en gris. Un clic la choisit (sa marque passe devant le reste) ; elle se tire
+     comme une carte, ou par les poignées de l'outil Déplacer (partie 184) ; Tourner et Mettre à l'échelle le refusent en le disant.
+     Un geste, une étape « Déplacer une lampe ».
+   - **Ce qu'elle éclaire** : le décor 3D, dans les trois aspects (Matières, Couleurs, Argile), à l'écran (la carte graphique,
+     `decor3dgpu`, `lampes` du shader) et à l'export, avec ou sans carte graphique (le processeur, `Aspect::ombrer_au` : les mêmes
+     formules, `LampesVues::lumiere`). **Elle n'éclaire pas les cartes** : les cartes ne sont pas éclairées par le soleil non plus,
+     seulement assombries là où une ombre les couvre (partie 185) ; les éclairer demanderait de changer toute leur composition.
+   - **Au plus 8 lampes par séquence** (`MAX_LAMPES`). Huit tiennent sans peine : la passe du
+     décor avec huit lampes coûte ce qu'elle coûte sans (mesures en 200.4). Enregistrées avec le décor de la séquence (`lampes`),
+     annulables, copiées avec le décor (partie 190) et par la duplication de la séquence (partie 191), à des numéros neufs.
+2. **Les objets du décor animés par des clés** (`Objet3d::cles`, `miseenscene3d::CleObjet`).
+   - **Une clé** : la place de l'objet (position, rotation autour de la verticale, échelle) à une image de la séquence (comptée depuis
+     la première image de son premier plan). Seule la rotation autour de la verticale : un objet du décor ne tourne que sur elle
+     depuis la partie 181 (`Place3d`), en ajouter deux autres toucherait tout le décor.
+   - **Entre deux clés, adouci** (`3t² − 2t³`, début et fin lents, comme la maquette) ; avant la première et après la dernière,
+     l'objet tient. (Les clés de caméra de FEANOR vont à vitesse constante tant qu'on ne règle pas leurs adoucis : pas de réglage à
+     reprendre ici, la maquette adoucit toujours.)
+   - **Poser une clé** : « ◆ Clé sur … » au bout de la ligne de tête de la timeline de la séquence (en bas de l'onglet 3D, à droite de
+     la lecture et du compteur), ou « ◆ Clé à l'image N » dans Propriétés > Objet, section « Animation » (qui dit aussi combien il y a
+     de clés et à quelles images, et propose « Effacer les clés » : l'objet redevient immobile à sa place de l'image courante).
+   - **La rangée « Objet choisi »** de la timeline de la séquence (partie 198, vide jusqu'ici) montre le nom de l'objet choisi dans la
+     vue et ses clés en losanges, le segment animé entre la première et la dernière. Un clic sur un losange y mène (le plan et
+     l'image ; l'objet reste choisi) ; un clic droit enlève la clé ; un glisser la déplace dans le temps (pas sur une autre clé). Une
+     étape chacun.
+   - **Retoucher un objet animé** suit la règle des caméras de plan (`miseenscene3d::retoucher`) : avec deux clés ou plus, le déplacer
+     (poignées, glisser dans la vue, champs de Propriétés > Objet) règle la clé de l'image courante, créée au besoin ; avec une clé,
+     cette clé ; sans clé, sa place, comme avant. Le chemin est celui de toutes les retouches du décor (`decor3d_appliquer`) ; changer
+     son origine ne le bouge à aucune clé ; l'aimant au sol ne change pas ses clés.
+   - **À l'écran**, à chaque image, un objet animé est à la place de ses clés à l'image courante (`decor3d_suivre_l_image`) : la vue,
+     les poignées et Propriétés le lisent là. **Les images des plans** (dessin, planche, Montage, lecture, vignettes, export) montrent
+     le décor animé à chaque image.
+   - Enregistrées (`cles`), annulables, gardées par la copie (190) et la duplication (191).
+3. **L'image du décor gardée** (`DecorCle`) : son empreinte (`decor3d::contenu_a`) compte les poses des objets **à l'image** et dans le
+   plan (les objets cachés dans ce plan), et les lampes allumées, seulement quand il y en a : **un décor immobile, sans lampe ni objet
+   caché, a exactement l'empreinte d'avant**, la même image à toutes les images de tous ses plans, au même coût (un essai la compare à
+   la formule de la partie 199). Un décor animé fait une autre image à chaque image du mouvement, redessinée une fois dans la même
+   texture (jamais recréée) ; après la dernière clé, l'image est de nouveau la même et gardée. La clé porte le plan et l'image
+   (`DecorCle::plan`, `image`), hors de son égalité : de quoi retrouver les poses (`objets_de`).
+4. **« Caché dans le plan N »** : Propriétés > Objet, section « Dans les plans », une case pour le plan courant
+   (`Objet3d::caches_dans`). L'objet reste dans le décor de la séquence, mais l'image de ce plan ne le montre pas : Storyboard,
+   Montage, vignettes, export, et la vue « Caméra du plan » de l'onglet 3D sur ce plan. La perspective et les vues orthographiques de
+   l'onglet le dessinent encore, entouré de sa boîte en pointillés : on sait qu'il est là. Pour tricher un plan. Enregistré, annulable ;
+   la duplication de la séquence le reporte sur la copie de chaque plan ; copier le décor vers une autre séquence ne le reprend pas
+   (ces plans ne sont pas les siens).
+5. **« Nouveau plan depuis cette vue »** : l'outil (un clap) sous « Ajouter une lampe ».
+   - Un plan neuf **à la fin de la séquence courante**, par le chemin d'un nouveau plan (`structure_op`, `add_scene_after`) : son
+     calque « Dessin », **sa durée celle de Préférences > Montage, « Durée d'un nouveau plan » (2 s d'origine, 48 images à 24 i/s)**.
+   - **Sa caméra** : à l'œil de la vue en perspective de l'onglet 3D, dans sa direction (panoramique et bascule), sans rotation, à la
+     focale proposée la plus proche de celle de la vue (14, 24, 35, 50, 85, 135 ou 200 mm ; l'anamorphique à part). Une caméra hors
+     des anciennes limites est libre (partie 159), comme celle qu'on règle dans la vue.
+   - On y va, sa caméra choisie ; une étape « Nouveau plan depuis la vue ».
+   - **Une vue orthographique** (Dessus, Face, Côté) ou « Caméra du plan » active : l'outil prend la perspective de l'onglet (celle
+     des vues multiples, sinon la vue libre), il n'est pas grisé ; sa bulle le dit.
+
+Le code : `miseenscene3d.rs` (les lampes, les clés et leur adoucissement, `LampesVues`, l'image de la séquence), `miseenscene3dui.rs`
+(les outils, les lampes dans la vue et dans Propriétés > Lumières, la rangée des clés, « ◆ Clé », « Animation », « Dans les plans »,
+la règle des clés dans `decor3d_appliquer`, le nouveau plan), `decor3d.rs` (les champs, leur lecture, l'empreinte, `item`,
+`objets_de`), `decor3drendu.rs` (`Aspect::lampes`, `ombrer_au`), `decor3dgpu.rs` (les réglages d'une passe, 640 octets, et le shader),
+`decor3dui.rs` (la vue, les pointillés, `decor3d_appliquer`), `onglet3d.rs` et `onglet3dui.rs` (le sommaire, la timeline, Propriétés),
+`espace3dui.rs`, `espace3dview.rs`, `poignees3d.rs` (choisir et tirer une lampe), `render.rs`, `app.rs`, `copiedecor.rs`,
+`dupliquerseq.rs`.
+
+### 200.2 Les essais
+
+`miseenscene3d_tests.rs` (12) : une lampe ajoutée par l'outil au-dessus du point visé, sa teinte réglée dans Propriétés, son œil, le
+plafond de huit, l'annulation, enlevée par le sommaire ; les lampes enregistrées, un fichier d'avant (sans elles) et un lecteur d'avant
+(une séquence sans le champ), un fichier abîmé ramené dans ses bornes ; la lumière d'une lampe dans les trois aspects (le processeur ;
+hors de portée ou éteinte : rien ; une lampe rouge rougit), dans la clé de l'image et l'export (et sur la carte graphique quand le banc
+en a une) ; une lampe prise d'un clic dans la vue et tirée en une étape, le manipulateur, Tourner refusé ; l'adoucissement des clés ;
+la règle des caméras de plan avec zéro, une et plusieurs clés (poignées et champ de Propriétés), une couleur qui ne pose pas de clé,
+l'origine qui ne bouge l'objet à aucune clé, « Effacer les clés » ; les losanges de la timeline (un clic y mène, un clic droit
+enlève, un glisser déplace, une étape) ; les clés et les objets cachés enregistrés, un lecteur d'avant, un fichier d'avant, la copie,
+la duplication (les clés, la lampe à un numéro neuf, l'objet caché dans la copie du plan) ; un décor immobile garde la clé de la
+partie 199 à toutes les images, un décor animé en change à chaque image et la garde après sa dernière clé, l'export bouge ; « Caché
+dans le plan » (l'image et l'export de ce plan, pas des autres ; la perspective le dessine en pointillés, « Caméra du plan » non) ; un
+nouveau plan depuis la vue (à la fin de la séquence, son calque, sa durée, sa caméra à l'œil et dans la direction de la vue, 35 mm
+pour 42, une étape ; depuis une vue orthographique, la perspective de l'onglet) ; la mesure de 200.4.
+
+Changés exprès (pour les nouveaux champs, pas leur sens) : `decor3d_tests` et `onglet3d_tests` (les objets construits à la main ont
+les deux champs neufs).
+
+### 200.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran, et la carte graphique sans écran
+  du banc), pas à l'œil. La force et la portée d'une lampe neuve (0,8, 5,5 m), la marque des lampes dans la vue et les pointillés d'un
+  objet caché dans le plan sont à juger à l'œil.
+- Les lampes n'ont pas d'ombres et n'éclairent pas les cartes (voir 200.1) ; une lampe ne se règle qu'à la souris dans la vue ou par
+  ses champs (pas de clés : elle ne bouge pas pendant la séquence).
+- Un objet ne tourne par ses clés qu'autour de la verticale ; les clés n'ont pas de courbe à régler (toujours adoucies).
+- Les clés sont posées en images de la séquence : rallonger ou raccourcir un plan avant elles les décale par rapport à ses plans
+  suivants (comme la maquette).
+- Les lampes vont avec le décor : une séquence sans objet n'en garde pas (enlever le dernier objet les retire de l'enregistrement).
+- La rangée « Objet choisi » montre l'objet choisi dans la vue (le premier, s'il y en a plusieurs).
+
+### 200.4 Mesures (banc d'essai, ce Mac, carte graphique sans écran)
+
+- La clé de l'image du décor (les poses à l'image et l'empreinte, avec la composition du plan) pour 40 objets dont 20 animés :
+  0,015 à 0,022 ms par image, sur le fil de l'interface.
+- Le dessin du décor animé par la carte graphique, feuille de 1920 × 1080, une passe par image : **0,37 à 0,42 ms (médiane), 1,07 ms
+  au pire**, pour un budget d'une passe de 1,6 ms ; **avec huit lampes, 0,36 ms (médiane), 0,69 ms au pire** : les lampes ne coûtent rien
+  qu'on mesure. Avec la relecture de l'image vers le processeur (l'export seulement, pas l'écran) : 6 à 7 ms (médiane), 16 ms au pire.
+- Un décor animé en lecture redessine donc son image une fois par image, dans le budget ; un décor immobile ne redessine rien de plus
+  qu'avant.
+
+### 200.5 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`.
+
+1. Onglet 3D, une séquence avec un décor. Dans la barre de gauche, l'ampoule « Ajouter une lampe » : une lampe apparaît au-dessus du
+   centre de la vue (sa marque, son nom, un pointillé jusqu'au sol), Propriétés > Lumières la montre.
+2. Règle-la : Teinte Rouge, Intensité 2, Portée 3 m ; regarde le décor près d'elle rougir, loin d'elle rien. Passe la vue en Argile,
+   puis en Couleurs : elle éclaire toujours. Ctrl+Z défait chaque réglage.
+3. Tire sa marque dans la vue ; choisis-la puis l'outil Déplacer et tire ses flèches. Ctrl+Z la ramène.
+4. Scène 3D, sous Lumières : sa ligne ; l'œil l'éteint, la corbeille l'enlève. Ajoute huit lampes : l'outil se grise.
+5. Choisis un objet du décor. En bas, la timeline de la séquence : « ◆ Clé sur … » au bout de la ligne du haut. Clique-le à l'image 1,
+   va plus loin dans la séquence, déplace l'objet dans la vue : une deuxième clé apparaît en losange dans la rangée de l'objet.
+6. Lis la séquence (lecture) : l'objet glisse d'une clé à l'autre, en démarrant et en s'arrêtant doucement ; le Storyboard et le Montage
+   le montrent aussi.
+7. Dans la rangée : un clic sur un losange y mène, un clic droit l'enlève, un glisser le déplace. Propriétés > Objet, « Animation » :
+   « ◆ Clé à l'image N », « Effacer les clés ».
+8. Exporte deux images du mouvement : l'objet a bougé.
+9. Propriétés > Objet, « Dans les plans » : coche « Caché dans le plan … ». Le dessin du Storyboard et la vignette de ce plan ne le
+   montrent plus ; le plan suivant, si. Dans l'onglet 3D, la perspective le montre entouré de pointillés, « Caméra du plan » non.
+10. Mets la vue en perspective où tu veux, puis le clap « Nouveau plan depuis cette vue » : un plan neuf à la fin de la séquence, sa
+    caméra filme ce que montrait la vue. Ctrl+Z l'enlève. Recommence depuis « Dessus » : il prend la perspective de l'onglet.
+11. Enregistre, ferme, rouvre : les lampes, les clés et les objets cachés sont là. Ouvre une copie d'un projet d'avant : rien n'a changé.
+
+### 200.6 Bilan du chantier 3D (parties 194–200)
+
+Ce qui est fait, en sept parties : la colonne en pile de panneaux façon Blender (194, retouchée en 195 et 196) ; le panneau Scène du
+Storyboard, du film jusqu'aux calques (197) ; l'onglet 3D, la séquence en trois dimensions avec sa vue en grand (une, deux ou quatre
+vues, la boussole), son sommaire « Scène 3D », ses Propriétés par sujet, sa timeline de la séquence et sa banque 3D (198) ; les
+couleurs d'identification des objets et les aspects Matières, Couleurs et Argile, pour la vue et pour les plans (199) ; la mise en
+scène : lampes, objets animés, objets cachés dans un plan, nouveau plan depuis la vue (200). Tout passe par le moteur d'avant (le décor
+de la partie 180 et ses suites : ombres, bords doux, budget de la machine) ; le format des projets est resté 61.
+
+Laissé de côté exprès : la fenêtre « Ce que filme le plan » de la maquette (Anthony l'a retirée : « Caméra du plan » et les vues
+multiples la remplacent) ; les ombres des lampes et la lumière des lampes sur les cartes (hors du budget « sans latence », ou toute la
+composition des cartes à refaire) ; les rotations d'un objet hors de la verticale et des courbes de clés à régler ; des lampes animées ;
+aucune fonction d'IA.
+
+### 200.7 Vu à l'écran : le plan qui devient gris quand on bouge la caméra
+
+Anthony, dans l'application d'essai (Storyboard, la vue Espace 3D à côté, la feuille en bande à gauche) : « quand je bouge la caméra,
+parfois, ce qui est dans le champ de la caméra disparaît […] même un calque sur lequel j'ai dessiné un sol […] d'un coup ça devient
+gris ». Sur sa vidéo, l'image du plan passe du gris à la bonne image, et revient, pendant qu'il tire la caméra dans la vue.
+
+**La cause** (prouvée sur une copie de son projet, puis par un essai qui la reproduit sur la carte graphique). Une caméra libre
+(partie 159, tirée dans la vue) reste filmée par **le chemin de toujours** (le multiplan, puis le cadre sur la feuille) tant qu'elle
+est « dans les anciennes limites » : bascule et panoramique sous 85°, pas jusqu'à la feuille, et le cadre voit le plan de la feuille
+par ses quatre coins. Mais ce chemin compose le plan **sur la feuille**, le décor 3D compris (son image a la taille de la feuille) :
+une caméra posée haut dans la vue, presque contre le plan de la feuille, qui plonge vers le décor (son « Plan 5 » : 0,95 de la distance
+de référence, bascule −44°, panoramique −37°) a son cadre **bien au-dessus de la feuille** (y ≈ −2 600 px pour une feuille de
+2 160) : il n'y trouve rien, ni décor ni carte, ni même le papier. L'export de ce plan était vide (pas un pixel opaque). En tirant la
+caméra, elle passait d'une image à l'autre de « dans les anciennes limites, cadre hors de la feuille » (gris) à « hors des limites »
+(le repère de sa caméra, la bonne image) : le clignotement.
+
+**Le correctif** : pour une caméra libre, le chemin de toujours ne vaut que si **son cadre est aussi sur la feuille**
+(`Document::cadre_sur_la_feuille`, ses quatre coins à un pixel près ; `camera_filmee_par_la_feuille`) ; sinon le plan passe par le
+repère de sa caméra (`repere_d_un_plan`, partie 159), où le décor et les cartes sont filmés d'où elle est. Les mêmes règles pour
+libérer une caméra tirée dans la vue (`set_current_camera_libre`), pour « Nouveau plan depuis cette vue » et pour dire si une caméra se
+dit par des cadres sur la vignette (`camera_en_cadres`). Une caméra qui n'a jamais été libérée, ou dont le cadre est sur la feuille,
+garde le chemin et les pixels d'avant. Aucune cible ni aucun rendu en plus : le décor est dessiné une fois par changement de caméra,
+comme avant, dans la même texture.
+
+**Depuis quand** : depuis la partie 159 (la caméra libre), avec le décor 3D de la partie 180 ; **ni la partie 199 ni la 200** n'y sont
+pour quelque chose.
+
+**Les hypothèses écartées** (et pourquoi) :
+1. *La vue et l'image du plan se disputent la texture du décor* : non. L'image du plan dessine dans sa texture (`decor3d::id_texture`)
+   avec sa prise à elle, chaque vue dans ses propres cibles (`Moteur::prise`, une par vue, chacune ses réglages et ses objets) ;
+   l'aspect de la vue (partie 199) ne touche que les dessins de la vue. Un essai sur la carte graphique, la vue à côté dans un autre
+   aspect puis le même, ombres, bords doux et une lampe, caméra qui bouge : le décor et la carte sont dans chacune des 40 images.
+2. *Un nouveau rendu montre une texture vide en attendant* : non (le même essai, image par image ; la texture n'est jamais refaite
+   vide, seulement redessinée avant la composition qui la lit).
+3. *Un découpage proche / loin* : c'est bien la géométrie de la caméra, mais pas un découpage : le cadre qui sort de la feuille.
+4. *La clé de l'image du décor de la partie 200* : non (un décor immobile a la clé d'avant ; le plan d'Anthony n'a ni clé ni objet
+   caché).
+
+**Les lignes rouge sombre « en fissures » sur le sol** de la vue « Caméra du plan » : ce sont **les traits de son calque « sol »**,
+un sol dessiné en grille rouge sombre sur un aplat rouge (l'image de son « Plan 5 », maintenant filmée, les montre telles quelles) :
+pas un défaut du rendu (ni ombres en acné, ni profondeur).
+
+Essais (`miseenscene3d_tests.rs`, 3 de plus, 15 en tout) : la caméra du « Plan 5 » sur un décor de quatre murs (dans les anciennes
+limites, cadre hors de la feuille, le repère pris, l'export montre les murs ; ramenée au-dessus de la feuille, le chemin de toujours) ;
+la même caméra tirée en va-et-vient dans la vue à côté, sur la carte graphique : les murs dans chacune des 48 images (sans le
+correctif : vides aux images 0 à 7, 16 à 23, 32 à 39, le clignotement de la vidéo) ; les hypothèses 1 et 2 écartées (ci-dessus).
+
+À tester : rouvrir son projet, Storyboard, la vue à côté, choisir le « Plan 5 » : le décor et le sol dessiné sont dans le plan ; tirer
+la caméra dans la vue, haut et en plongée : l'image du plan ne devient plus grise.

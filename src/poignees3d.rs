@@ -231,6 +231,10 @@ impl App {
     /// comme à l'écran. Sans dessin ni objet touché, la feuille la plus proche (pour attraper un calque vide), comme
     /// `e3_pick`.
     pub(crate) fn e3_pick_tout(&mut self, ray: &Ray) -> Option<u64> {
+        // (Partie 200 : la marque d'une lampe est peinte par-dessus tout : elle l'emporte.)
+        if let Some((_, id)) = self.e3_pick_lampe(ray) {
+            return Some(crate::miseenscene3dui::lampe_selection(id));
+        }
         let (dessin, feuille) = self.e3_pick_cartes(ray);
         let objet = self.e3_pick_objet(ray).map(|(t, id)| (t, objet_selection(id)));
         match (dessin, objet) {
@@ -306,6 +310,10 @@ impl App {
                 Cible::Carte(li) => self.e3_origine_carte_refusee(li),
                 Cible::Objet(_) => None,
             };
+        }
+        // (Partie 200 : une lampe se déplace seulement.)
+        if !self.espace3d.sel.is_empty() && self.espace3d.sel.iter().all(|&s| crate::miseenscene3dui::lampe_of(s).is_some()) && mode != GizmoMode::Move {
+            return Some("Une lampe se déplace seulement : prends l'outil Déplacer.".into());
         }
         let objets = self.e3_objets_choisis();
         if objets.is_empty() {

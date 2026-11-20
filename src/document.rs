@@ -2187,12 +2187,28 @@ impl Document {
         fini && cam.tilt.abs() <= 85.0 && cam.pan.abs() <= 85.0 && d0 - cam.dolly > d0 * 0.02 && cam.sees_reference(self.frame)
     }
 
+    /// Partie 200.7 : **le cadre de la caméra `cam` est sur la feuille** : ses quatre coins y tombent (à un pixel près). Le chemin de
+    /// toujours compose le plan sur la feuille, le décor 3D compris (son image a la taille de la feuille, `DecorCle::feuille`) : un
+    /// cadre qui en sort n'y trouve rien, ni décor ni carte (le plan devenait gris : une caméra posée haut dans la vue, qui plonge
+    /// vers le décor, filme le plan de la feuille bien au-dessus d'elle).
+    pub fn cadre_sur_la_feuille(&self, cam: &Camera) -> bool {
+        let (w, h) = (self.width as f32, self.height as f32);
+        cam.corners(self.frame).iter().all(|c| c.x.is_finite() && c.y.is_finite() && c.x >= -1.0 && c.y >= -1.0 && c.x <= w + 1.0 && c.y <= h + 1.0)
+    }
+
+    /// Partie 200.7 : le chemin de toujours (le multiplan, puis le cadre sur la feuille) sait filmer la caméra `cam` d'un plan dont la
+    /// caméra est libre : elle est dans les anciennes limites, et son cadre est sur la feuille. Sinon, le plan passe par le repère de
+    /// sa caméra (`repere_d_un_plan`), où le décor et les cartes sont filmés d'où elle est.
+    pub fn camera_filmee_par_la_feuille(&self, cam: &Camera) -> bool {
+        self.camera_dans_les_anciennes_limites(cam) && self.cadre_sur_la_feuille(cam)
+    }
+
     /// La caméra du plan `index` se dit par des **cadres sur la feuille** (les mouvements de caméra des Vignettes) : ses clés
     /// sont toutes dans les anciennes limites, sans chemin dans l'espace, et le plan ne vient pas du format 55 en Espace 3D
     /// (son image montre alors ce que la caméra filme, pas la feuille). C'est le cas de tout plan dont la vue de la scène n'a
     /// pas libéré la caméra (partie 159).
     pub fn camera_en_cadres(&self, index: usize) -> bool {
-        self.panels.get(index).is_some_and(|p| !p.espace && p.trajectoire_camera.is_none() && (!p.camera_libre || p.camera.iter().all(|k| self.camera_dans_les_anciennes_limites(&k.cam))))
+        self.panels.get(index).is_some_and(|p| !p.espace && p.trajectoire_camera.is_none() && (!p.camera_libre || p.camera.iter().all(|k| self.camera_filmee_par_la_feuille(&k.cam))))
     }
 
     /// Le changement de repère de la caméra du plan `index` à son image `frame`, s'il en faut un (`repere_d_un_plan`) ; rien :
@@ -2226,7 +2242,8 @@ impl Document {
             *cam != self.default_camera()
         } else {
             // (Un effet du lot 3, partie 172, déplace la caméra dans l'espace : sa caméra est libre, comme posée dans la vue.)
-            (p.camera_libre || p.a_un_effet_dans_l_espace()) && !self.camera_dans_les_anciennes_limites(cam)
+            // (Partie 200.7 : et quand son cadre sort de la feuille, où le chemin de toujours n'a rien à filmer.)
+            (p.camera_libre || p.a_un_effet_dans_l_espace()) && !self.camera_filmee_par_la_feuille(cam)
         };
         (par_la_camera || une_carte_passe()).then(|| crate::espace3d::Monde::of(self).repere_camera(cam))
     }

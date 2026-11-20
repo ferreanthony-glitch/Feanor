@@ -52,7 +52,10 @@ pub const SOLEIL: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
 /// Lissage des bords de la vue Espace 3D (l'image du plan, à la taille de la feuille, n'en a pas besoin : elle est réduite à
 /// l'écran ; sa profondeur partagée avec les cartes a quatre échantillons, partie 193, `PROF`).
 const ECHANTILLONS_VUE: u32 = 4;
-const GLOBAL: u64 = 512;
+/// (Partie 200 : 640 octets, les lampes du décor au bout, `LAMPES_AU`.)
+const GLOBAL: u64 = 640;
+/// Où commencent les lampes dans les réglages d'une passe : leur nombre, puis `MAX_LAMPES` places et `MAX_LAMPES` couleurs.
+const LAMPES_AU: usize = 336;
 /// Les réglages du voile d'une carte (`VOILE`) et leur pas dans le tampon (partie 183).
 const VOILE_OCTETS: u64 = 192;
 const PAS_VOILE: u64 = 256;
@@ -87,6 +90,10 @@ struct Globals {
     cam_u: vec4<f32>,      // haut ; w : centre x
     cam_f: vec4<f32>,      // avant ; w : centre y
     size: vec4<f32>,       // taille de la cible (pixels), ortho (1/0)
+    prof: vec4<f32>,       // proche, loin, ortho (partie 193)
+    lampes_n: vec4<f32>,   // x : combien de lampes (partie 200)
+    lampes_pos: array<vec4<f32>, 8>,   // xyz : la place ; w : la portée (mètres)
+    lampes_col: array<vec4<f32>, 8>,   // rgb : la couleur linéaire fois l'intensité
 };
 struct Obj {
     model: mat4x4<f32>,
@@ -148,6 +155,21 @@ fn shadow(wpos: vec3<f32>, n: vec3<f32>) -> f32 {
         }
     }
     return sum / count;
+}
+
+// Partie 200 : la lumière des lampes du décor en `w` (normale `n`) : chacune, sa couleur, tournée vers elle, et adoucie jusqu'à sa
+// portée (rien au-delà). Les mêmes formules que le processeur (`miseenscene3d::LampesVues::lumiere`).
+fn lampes(w: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    var s = vec3<f32>(0.0);
+    let k = i32(g.lampes_n.x);
+    for (var i = 0; i < k; i = i + 1) {
+        let l = g.lampes_pos[i].xyz - w;
+        let d = length(l);
+        let r = max(g.lampes_pos[i].w, 0.01);
+        let a = clamp(1.0 - d / r, 0.0, 1.0);
+        s = s + g.lampes_col[i].rgb * max(dot(n, l / max(d, 1e-4)), 0.0) * a * a;
+    }
+    return s;
 }
 
 fn finish(c: vec3<f32>) -> vec3<f32> {
@@ -271,7 +293,7 @@ fn eclairer(in: VOut) -> Eclaire {
     let hemi = mix(g.ground_amb.rgb, g.sky_amb.rgb, t);
     // (Partie 189 : et le soleil que les cartes laissent au décor de la vue Espace 3D ; 1 partout ailleurs, `SANS_CARTES`.)
     let sun = max(dot(n, g.key_dir.xyz), 0.0) * shadow(in.wpos, n) * soleil_des_cartes(in.wpos);
-    var c = base.rgb * (hemi + g.key_col.rgb * sun);
+    var c = base.rgb * (hemi + g.key_col.rgb * sun + lampes(in.wpos, n));
     // (Partie 199 : l'aspect Couleurs, éclairé à plat : tiré vers la couleur d'identification, `couleurs3d::PLAT`.)
     if (o.flags.w > 0.5) { c = mix(c, base.rgb, 0.55); }
     let d = length(v);
@@ -1406,6 +1428,13 @@ impl Moteur {
         put(&mut g, 304, &[taille_px[0] as f32, taille_px[1] as f32, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
         // (Partie 193 : de quoi ramener le tampon de profondeur à l'inverse d'une distance, `PROF_DES_ECHANTILLONS`.)
         put(&mut g, 320, &[proche, loin, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
+        // (Partie 200 : les lampes du décor.)
+        let lp = &aspect.lampes;
+        put(&mut g, LAMPES_AU, &[lp.n as f32, 0.0, 0.0, 0.0]);
+        for i in 0..crate::miseenscene3d::MAX_LAMPES {
+            put(&mut g, LAMPES_AU + 16 + i * 16, &lp.pos[i]);
+            put(&mut g, LAMPES_AU + 16 + crate::miseenscene3d::MAX_LAMPES * 16 + i * 16, &lp.col[i]);
+        }
         let mut objets = vec![0u8; (n * PAS_OBJET) as usize];
         let mut rang = 0usize;
         for d in dessins {

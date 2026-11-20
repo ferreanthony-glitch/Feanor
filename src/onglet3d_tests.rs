@@ -36,7 +36,7 @@ fn film() -> Document {
     let mut d = Decor3d::new(crate::decor3drendu::Aspect { ombres: false, ..Default::default() });
     for (nom, x) in [("Maison", -1.0), ("Arbre", 1.5)] {
         let id = doc.alloc();
-        d.objets.push(Objet3d { id, nom: nom.into(), source: "carre.glb".into(), allege: Vec::new(), place: Place3d { position: [x, 0.0, -2.0], rotation_y: 0.0, echelle: 1.0 }, origine: [0.0; 3], aimante: false, modele: modele.clone(), couleur: None, cache: false, verrou: false });
+        d.objets.push(Objet3d { id, nom: nom.into(), source: "carre.glb".into(), allege: Vec::new(), place: Place3d { position: [x, 0.0, -2.0], rotation_y: 0.0, echelle: 1.0 }, origine: [0.0; 3], aimante: false, modele: modele.clone(), couleur: None, cache: false, verrou: false, cles: Vec::new(), caches_dans: Vec::new() });
     }
     doc.decors3d.par_sequence.insert(seq, d);
     doc

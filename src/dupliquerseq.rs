@@ -167,7 +167,14 @@ impl Document {
             Arc::make_mut(&mut self.variantes).insert(neuve, v);
         }
         // Le décor 3D : une copie indépendante, les modèles partagés (partie 190).
+        let caches: Vec<Vec<u64>> = self.decors3d.par_sequence.get(&seq).map(|d| d.objets.iter().map(|o| o.caches_dans.clone()).collect()).unwrap_or_default();
         self.copier_decor_de_sequence(seq, neuve);
+        // (Partie 200 : un objet caché dans un plan de l'originale l'est dans la copie de ce plan ; les objets sont copiés dans l'ordre.)
+        if let Some(d) = self.decors3d.par_sequence.get_mut(&neuve) {
+            for (o, avant) in d.objets.iter_mut().zip(&caches) {
+                o.caches_dans = avant.iter().filter_map(|p| c.plans.get(p).copied()).collect();
+            }
+        }
         // Les traits des dessins copiés : des numéros neufs, communs aux parts d'un même trait dans la copie.
         self.renumeroter_la_copie(&c);
         let index = self.insert_and_normalize(end, copies);

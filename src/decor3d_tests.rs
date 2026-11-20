@@ -134,7 +134,7 @@ fn decor_du_carre(doc: &mut Document, seq: u64, place: Place3d) {
     let aspect = Aspect { ciel: false, brume: false, ombres: false, ..Aspect::default() };
     let modele = Arc::new(Modele3d::new(Arc::new(scene), Arc::new(octets)));
     let mut d = Decor3d::new(aspect);
-    d.objets.push(Objet3d { id, nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false });
+    d.objets.push(Objet3d { id, nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false, cles: Vec::new(), caches_dans: Vec::new() });
     doc.decors3d.par_sequence.insert(seq, d);
 }
 
@@ -795,7 +795,7 @@ fn les_modeles_de_la_banque_se_lisent_et_se_rendent() {
 
 /// Un objet du carré, son origine au point (0, 0, 0) du modèle, à `place`.
 fn objet_du_carre(doc: &mut Document, place: Place3d, modele: Arc<Modele3d>) -> Objet3d {
-    Objet3d { id: doc.alloc(), nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false }
+    Objet3d { id: doc.alloc(), nom: "Carré".into(), source: "carre.glb".into(), allege: Vec::new(), place, origine: [0.0; 3], aimante: false, modele, couleur: None, cache: false, verrou: false, cles: Vec::new(), caches_dans: Vec::new() }
 }
 
 fn modele_du_carre() -> Arc<Modele3d> {

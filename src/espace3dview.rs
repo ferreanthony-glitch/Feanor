@@ -537,7 +537,9 @@ impl App {
                     return;
                 }
                 let objets = !self.e3_objets_choisis().is_empty() && self.espace3d.sel.iter().all(|&s| crate::poignees3d::objet_of(s).is_some());
+                let lampes = self.espace3d.sel.iter().all(|&s| crate::miseenscene3dui::lampe_of(s).is_some());
                 let name = match (gizmo.mode, objets) {
+                    _ if lampes => "Déplacer une lampe",
                     (GizmoMode::Rotate, false) => "Tourner le calque",
                     (GizmoMode::Scale, false) => "Mettre le calque à l'échelle",
                     (_, false) => "Déplacer le calque",
@@ -601,7 +603,13 @@ impl App {
                 (true, true) => Handle::Axis(2),
                 (true, false) => Handle::Plane(2),
             };
-            let name = if id == CAMERA_ID { "Déplacer la caméra" } else { "Déplacer le calque" };
+            let name = if id == CAMERA_ID {
+                "Déplacer la caméra"
+            } else if crate::miseenscene3dui::lampe_of(id).is_some() {
+                "Déplacer une lampe"
+            } else {
+                "Déplacer le calque"
+            };
             self.e3_begin(handle, GizmoMode::Move, gizmo, ray, px, name);
             return;
         }

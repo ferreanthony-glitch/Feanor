@@ -1295,6 +1295,10 @@ pub(crate) mod couleurs3d;
 mod couleurs3dui;
 #[cfg(test)]
 mod couleurs3d_tests;
+pub(crate) mod miseenscene3d;
+mod miseenscene3dui;
+#[cfg(test)]
+mod miseenscene3d_tests;
 pub(crate) mod onglet3d;
 mod onglet3dui;
 #[cfg(test)]
