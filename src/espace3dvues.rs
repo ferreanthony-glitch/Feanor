@@ -856,6 +856,10 @@ impl App {
         if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
+        // (Partie 201 : qui a la main, sous le menu du point de vue.)
+        if !dessine {
+            self.e3_peindre_qui_a_la_main(ui.ctx(), &painter, r, draw, &view, r.left_top() + egui::vec2(8.0, 30.0));
+        }
         if camera {
             painter.rect_stroke(draw, 0.0, Stroke::new(1.0_f32, crate::theme::camera()), egui::StrokeKind::Outside);
         }

@@ -29,7 +29,8 @@ pub(crate) const AIDE_AJOUT: &str = "Il arrive en bas de la colonne ; glisse sa 
 /// L'aide de ↗.
 pub(crate) const AIDE_SORTIR: &str = "L'onglet devant devient un panneau à part, juste au-dessus de Propriétés ; tu peux ensuite le déplacer. Le fermer le remet en onglet.";
 /// Ce que montre Propriétés quand tous ses onglets sont sortis.
-pub(crate) const TOUS_SORTIS: &str = "Tous les onglets sont sortis en panneaux : ferme l'un d'eux (✕), il revient ici.";
+// (Partie 201.6 : « ✕ » n'est pas dans les polices de FEANOR : la croix de l'en-tête, dite en mots.)
+pub(crate) const TOUS_SORTIS: &str = "Tous les onglets sont sortis en panneaux : ferme l'un d'eux (la croix de son en-tête), il revient ici.";
 
 /// Ce que la colonne retient d'une image d'écran à l'autre (rien de cela n'est dans la disposition).
 #[derive(Clone, Debug, Default)]

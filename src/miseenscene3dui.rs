@@ -388,6 +388,7 @@ impl App {
         let Some(orbite) = self.o3_orbite_perspective() else { return };
         let sc = camera_de_la_vue(&orbite.view(1000.0), orbite.focal);
         let (_, z) = self.doc.sequence_run(self.cur_panel);
+        let devant = self.settings.calque_devant_la_camera;
         let avant = self.history.context.replace("Nouveau plan depuis la vue".into());
         let fait = self.structure_op(|d, _| {
             let pi = d.add_scene_after(z - 1);
@@ -397,6 +398,12 @@ impl App {
             let p = &mut d.panels[pi];
             p.camera = vec![crate::camera::CameraKey::new(0, cam)];
             p.camera_libre = libre;
+            // (Partie 201 : son premier calque, devant sa caméra, si elle a quitté la feuille.)
+            if devant {
+                for li in 0..d.panels[pi].layers.len() {
+                    crate::calquedevant::poser_devant(d, pi, li, 0);
+                }
+            }
             Some(pi)
         });
         self.history.context = avant;
@@ -530,7 +537,8 @@ impl App {
         };
         ui.label(RichText::new(texte).small().weak());
         ui.horizontal_wrapped(|ui| {
-            let r = ui.button(format!("◆ Clé à l'image {}", image + 1));
+            // (Partie 201.6 : le losange des clés de la timeline, `ph::DIAMOND` ; « ◆ » n'est pas dans les polices de FEANOR.)
+            let r = ui.button(format!("{} Clé à l'image {}", ph::DIAMOND, image + 1));
             if crate::bulles::bulle(r, "Clé à l'image courante", &format!("Retient la place de « {nom} » à l'image courante."), "").clicked() {
                 self.o3_poser_cle(id);
             }
@@ -547,7 +555,7 @@ impl App {
     pub(crate) fn o3_bouton_cle(&mut self, ui: &mut egui::Ui) {
         let objet = self.o3_objet_des_cles();
         let nom = objet.and_then(|id| self.e3_objet(id)).map(|o| o.nom.clone());
-        let texte = nom.as_ref().map_or("◆ Clé (choisis un objet)".to_string(), |n| format!("◆ Clé sur {n}"));
+        let texte = nom.as_ref().map_or(format!("{} Clé (choisis un objet)", ph::DIAMOND), |n| format!("{} Clé sur {n}", ph::DIAMOND));
         let r = ui.add_enabled(objet.is_some(), egui::Button::new(texte));
         let r = crate::bulles::bulle(r, "Poser une clé", "Retient la place de l'objet du décor choisi à l'image courante.", "");
         if r.clicked() {
@@ -559,8 +567,9 @@ impl App {
 
     /// La rangée « Objet choisi » de la timeline de la séquence : les clés de l'objet choisi en losanges (le segment animé entre la
     /// première et la dernière). Un clic y mène ; un clic droit l'enlève ; un glisser la déplace dans le temps.
-    pub(crate) fn o3_rangee_des_cles(&mut self, ui: &mut egui::Ui, rangee: egui::Rect, piste: egui::Rect, debut: usize, n: usize) {
+    pub(crate) fn o3_rangee_des_cles(&mut self, ui: &mut egui::Ui, rangee: egui::Rect, piste: egui::Rect, fen: crate::timelineseq::Fenetre) {
         let p = ui.painter_at(rangee.union(piste));
+        let p_piste = ui.painter_at(piste);
         let doux = ui.visuals().weak_text_color();
         let Some(id) = self.o3_objet_des_cles() else {
             p.text(pos2(piste.left() + 6.0, rangee.center().y), Align2::LEFT_CENTER, "Choisis un objet du décor pour voir ou poser ses clés.", FontId::proportional(10.0), doux.gamma_multiply(0.8));
@@ -570,17 +579,18 @@ impl App {
         };
         let (a, _) = self.doc.sequence_run(self.cur_panel);
         let base = self.doc.panel_start(a);
-        let x_de = |image: usize| piste.left() + ((base + image).saturating_sub(debut)) as f32 / n as f32 * piste.width();
-        let image_de = |x: f32| (((x - piste.left()) / piste.width().max(1.0)) * n as f32).round().clamp(0.0, (n - 1) as f32) as usize + debut - base;
+        // (Partie 201 : à travers la fenêtre de la timeline, zoomée et défilée.)
+        let x_de = |image: usize| fen.x_de(base + image);
+        let image_de = |x: f32| (fen.f_de(x + fen.points_par_image() * 0.5)).saturating_sub(base);
         let nom = self.e3_objet(id).map(|o| o.nom.clone()).unwrap_or_default();
         let cles: Vec<usize> = self.e3_objet(id).map(|o| o.cles.iter().map(|k| k.image).collect()).unwrap_or_default();
         p.text(pos2(rangee.left() + 6.0, rangee.center().y), Align2::LEFT_CENTER, &nom, FontId::proportional(11.0), ui.visuals().strong_text_color());
         if cles.is_empty() {
-            p.text(pos2(piste.left() + 6.0, rangee.center().y), Align2::LEFT_CENTER, "Pas de clé : « ◆ Clé » en haut retient sa place à l'image courante.", FontId::proportional(10.0), doux.gamma_multiply(0.8));
+            p.text(pos2(piste.left() + 6.0, rangee.center().y), Align2::LEFT_CENTER, format!("Pas de clé : « {} Clé » en haut retient sa place à l'image courante.", ph::DIAMOND), FontId::proportional(10.0), doux.gamma_multiply(0.8));
         }
         if cles.len() > 1 {
             let (x0, x1) = (x_de(cles[0]), x_de(*cles.last().unwrap_or(&0)));
-            p.rect_filled(egui::Rect::from_min_max(pos2(x0, rangee.center().y - 2.0), pos2(x1, rangee.center().y + 2.0)), 1.0, crate::theme::accent().gamma_multiply(0.35));
+            p_piste.rect_filled(egui::Rect::from_min_max(pos2(x0, rangee.center().y - 2.0), pos2(x1, rangee.center().y + 2.0)), 1.0, crate::theme::accent().gamma_multiply(0.35));
         }
         let courante = self.image_de_sequence_courante();
         #[cfg(test)]
@@ -588,6 +598,10 @@ impl App {
         let mut action: Option<(usize, u8, f32)> = None;
         for &k in &cles {
             let c = pos2(x_de(k) + 0.5, rangee.center().y);
+            // (Partie 201 : une clé hors de la partie de la séquence qu'on voit n'est ni peinte ni prise, sauf celle qu'on glisse.)
+            if !(piste.left() - 6.0..=piste.right() + 6.0).contains(&c.x) && self.o3.cle_tiree.as_ref().is_none_or(|g| g.ici != k) {
+                continue;
+            }
             let zone = egui::Rect::from_center_size(c, vec2(12.0, 14.0));
             // (Pendant qu'on la glisse, la clé garde le numéro de l'image d'où elle part : egui suit le même geste.)
             let wid = match &self.o3.cle_tiree {
@@ -597,7 +611,7 @@ impl App {
             let r = ui.interact(zone, ui.id().with(("cle_objet", id, wid)), egui::Sense::click_and_drag());
             let ici = k == courante;
             let couleur = if ici || r.hovered() { crate::theme::POIGNEE_SELECTION } else { Color32::from_rgb(230, 200, 120) };
-            p.add(egui::Shape::convex_polygon(vec![c + vec2(0.0, -5.5), c + vec2(5.5, 0.0), c + vec2(0.0, 5.5), c + vec2(-5.5, 0.0)], couleur, Stroke::new(1.0_f32, Color32::from_black_alpha(140))));
+            p_piste.add(egui::Shape::convex_polygon(vec![c + vec2(0.0, -5.5), c + vec2(5.5, 0.0), c + vec2(0.0, 5.5), c + vec2(-5.5, 0.0)], couleur, Stroke::new(1.0_f32, Color32::from_black_alpha(140))));
             #[cfg(test)]
             vus.push((k, zone));
             let r = crate::bulles::bulle(r, &format!("Clé de {nom}, image {}", k + 1), "Un clic : y aller. Clic droit : enlever cette clé. Glisser : la déplacer dans le temps.", "");

@@ -307,8 +307,17 @@ fn fs_compose_p(v: VOut) -> @location(0) vec4<f32> {
         return c;
     }
     let o = c * visible(v.pos);
-    if (drapeau(2u) && o.a > 0.0) {
-        return assombrir_carte(o, ombre_recue(v.pos.xy));
+    // (Partie 201 : 8, les lampes du décor l'éclairent.)
+    if ((drapeau(2u) || drapeau(8u)) && o.a > 0.0) {
+        var occ = 0.0;
+        if (drapeau(2u)) {
+            occ = ombre_recue(v.pos.xy);
+        }
+        var l = vec3<f32>(0.0);
+        if (drapeau(8u)) {
+            l = lampes_carte(v.pos.xy);
+        }
+        return eclairer_carte(o, occ, l);
     }
     return o;
 }
@@ -322,6 +331,10 @@ fn fs_blend_p(v: VOut) -> @location(0) vec4<f32> {
         vis = visible(v.pos);
         if (drapeau(2u) && vis > 0.0) {
             teinte = vec3<f32>(1.0) - ombre_recue(v.pos.xy) * (vec3<f32>(1.0) - eclair.carte.rgb);
+        }
+        // (Partie 201 : et la lumière des lampes.)
+        if (drapeau(8u) && vis > 0.0) {
+            teinte = teinte * (vec3<f32>(1.0) + lampes_carte(v.pos.xy));
         }
     }
     return fusionner_t(v, item.params.x * vis, teinte);
@@ -340,7 +353,8 @@ fn fusionner_t(v: VOut, opacite: f32, teinte: vec3<f32>) -> vec4<f32> {
         return b;
     }
     var cs = min(raw.rgb / raw.a, vec3<f32>(1.0));
-    if (any(teinte < vec3<f32>(1.0))) {
+    // (Partie 201 : la lumière des lampes la rend plus forte que 1.)
+    if (any(teinte != vec3<f32>(1.0))) {
         cs = vers_srgb(vers_lin(cs) * teinte);
     }
     let mode = u32(item.params.z + 0.5);
@@ -518,6 +532,9 @@ struct Lumiere {
     brume: vec4<f32>,      // début, fin de la brume ; taille de l'image composée
     carte: vec4<f32>,      // ce qui reste d'une carte à l'ombre ; w : la carte d'ombres des cartes est faite
     boite: vec4<f32>,      // où sont les cartes dans leur carte d'ombres (u0, v0, u1, v1)
+    lampes_n: vec4<f32>,   // x : combien de lampes (partie 201)
+    lampes_pos: array<vec4<f32>, 8>,   // xyz : la place ; w : la portée (mètres)
+    lampes_col: array<vec4<f32>, 8>,   // rgb : la couleur linéaire fois l'intensité
 };
 
 // Le point du monde vu au pixel `px` de la feuille, à l'inverse de distance `inv` (`Lumiere::monde`).
@@ -634,6 +651,47 @@ const COMPOSER_OMBRES: &str = r#"
 @group(3) @binding(3) var ombres_decor: texture_depth_2d;
 @group(3) @binding(4) var ombres_cartes: texture_depth_2d;
 @group(3) @binding(5) var s_cmp: sampler_comparison;
+
+// Partie 201 : la lumière des lampes du décor au pixel `px` de la carte (son plan : prof.xyz), sa normale tournée vers l'œil ; les
+// formules du décor (`miseenscene3d::LampesVues::lumiere`, `decor3dgpu`, `lampes`). Rien sans lampe ni là où aucune n'atteint.
+fn lampes_carte(px: vec2<f32>) -> vec3<f32> {
+    let k = i32(eclair.lampes_n.x);
+    if (k <= 0) {
+        return vec3<f32>(0.0);
+    }
+    let inv = item.prof.x * px.x + item.prof.y * px.y + item.prof.z;
+    if (inv <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let p = lum_monde(px, inv);
+    // (La normale de la carte : deux autres points de son plan, à 64 pixels.)
+    let q1 = px + vec2<f32>(64.0, 0.0);
+    let q2 = px + vec2<f32>(0.0, 64.0);
+    let i1 = max(item.prof.x * q1.x + item.prof.y * q1.y + item.prof.z, 1e-9);
+    let i2 = max(item.prof.x * q2.x + item.prof.y * q2.y + item.prof.z, 1e-9);
+    var n = normalize(cross(lum_monde(q1, i1) - p, lum_monde(q2, i2) - p));
+    if (dot(n, eclair.oeil.xyz - p) < 0.0) {
+        n = -n;
+    }
+    var s = vec3<f32>(0.0);
+    for (var i = 0; i < k; i = i + 1) {
+        let l = eclair.lampes_pos[i].xyz - p;
+        let d = length(l);
+        let a = clamp(1.0 - d / max(eclair.lampes_pos[i].w, 0.01), 0.0, 1.0);
+        s = s + eclair.lampes_col[i].rgb * max(dot(n, l / max(d, 1e-4)), 0.0) * a * a;
+    }
+    return s;
+}
+
+// Partie 201 : une carte assombrie de `occ` à l'ombre et éclairée de `l` par les lampes, en lumière linéaire, c × (1 + l)
+// (`Lumiere::eclairer_carte`) ; ni ombre ni lampe : telle quelle.
+fn eclairer_carte(c: vec4<f32>, occ: f32, l: vec3<f32>) -> vec4<f32> {
+    if (occ <= 0.0 && max(max(l.x, l.y), l.z) <= 0.0) {
+        return c;
+    }
+    let lin = vers_lin(min(c.rgb / c.a, vec3<f32>(1.0))) * (vec3<f32>(1.0) - max(occ, 0.0) * (vec3<f32>(1.0) - eclair.carte.rgb)) * (vec3<f32>(1.0) + l);
+    return vec4<f32>(vers_srgb(lin) * c.a, c.a);
+}
 
 // Ce que le décor et les autres cartes cachent du soleil au pixel `px` de la carte (son plan : prof.xyz ; sa pente dans la carte
 // d'ombres : extra.xy) (`Contexte::sur_la_carte`).
@@ -2054,8 +2112,17 @@ impl GpuCanvas {
                 decor_quatre = place.and_then(|p| p.2).unwrap_or(false);
                 lumiere = place.and_then(|p| p.3).map(|l| (id, l, items.len()));
             }
+            // (Partie 201 : sans les ombres du décor, ses lampes seules : une carte ne porte pas d'ombre, et celle qui reçoit les ombres
+            // reçoit leur lumière.)
             let ombre = match (lumiere, item.ombre) {
-                (Some((d, lum, _)), Some(o)) if item.tint.is_none() && (o.porte || o.recoit) => Some(OmbreGpu { decor: d, porte: o.porte, recoit: o.recoit, plan: o.plan, gradient: lum.gradient(&o) }),
+                (Some((d, lum, _)), Some(o)) if item.tint.is_none() && ((o.porte && lum.ombres) || o.recoit) => Some(OmbreGpu {
+                    decor: d,
+                    porte: o.porte && lum.ombres,
+                    recoit: o.recoit && lum.ombres,
+                    lampes: o.recoit && lum.lampes.n > 0,
+                    plan: o.plan,
+                    gradient: lum.gradient(&o),
+                }),
                 _ => None,
             };
             // (Sans texture, rien à poser : la passe de composition saute l'élément.)
@@ -2233,6 +2300,8 @@ struct OmbreGpu {
     decor: CelId,
     porte: bool,
     recoit: bool,
+    /// Partie 201 : les lampes du décor l'éclairent (elle reçoit les ombres, le décor a des lampes).
+    lampes: bool,
     plan: crate::profondeur::PlanCarte,
     gradient: [f32; 2],
 }
@@ -2253,7 +2322,7 @@ struct ItemKey {
     /// La profondeur partagée avec le décor 3D : le décor et le plan de la carte (partie 183).
     prof: Option<(CelId, [u32; 3], bool)>,
     /// Les ombres de la carte, et le décor assombri sous les cartes (partie 185).
-    ombre: Option<(CelId, bool, bool, [u32; 3], [u32; 2])>,
+    ombre: Option<(CelId, bool, bool, bool, [u32; 3], [u32; 2])>,
     decor_ombre: bool,
 }
 
@@ -2279,7 +2348,7 @@ impl ItemKey {
             std::hash::Hasher::finish(&h)
         });
         let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits), item.quatre));
-        let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
+        let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.lampes, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
         ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust, prof, ombre, decor_ombre: item.decor_ombre }
     }
 }
@@ -2371,8 +2440,9 @@ fn groupe_decor(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &V
 
 /// Les ombres des cartes d'un décor 3D sur la carte graphique (partie 185, `ombres.rs`) : gardées avec la texture du décor.
 struct OmbreDecor {
-    /// La part du soleil et le mélange de l'hémisphère à chaque pixel de la feuille (`decor3dgpu::SOLEIL`), dessinés avec le décor.
-    soleil: wgpu::Texture,
+    /// La part du soleil et le mélange de l'hémisphère à chaque pixel de la feuille (`decor3dgpu::SOLEIL`), dessinés avec le décor ;
+    /// rien pour les lampes seules (partie 201).
+    soleil: Option<wgpu::Texture>,
     /// La lumière du rendu du décor (sa carte d'ombres, l'œil, les couleurs).
     lumiere: crate::ombres::Lumiere,
     /// Ses réglages sur la carte, et le groupe qui les donne à la carte d'ombres des cartes.
@@ -2388,8 +2458,7 @@ struct OmbreDecor {
 
 impl OmbreDecor {
     fn bytes(&self) -> u64 {
-        let s = self.soleil.size();
-        s.width as u64 * s.height as u64 * 2 + self.cartes.as_ref().map_or(0, |(c, _)| *c as u64 * *c as u64 * 4)
+        self.soleil.as_ref().map_or(0, |s| s.size().width as u64 * s.size().height as u64 * 2) + self.cartes.as_ref().map_or(0, |(c, _)| *c as u64 * *c as u64 * 4)
     }
 }
 
@@ -2496,7 +2565,7 @@ fn ombres_des_cartes(encoder: &mut wgpu::CommandEncoder, res: &mut CanvasResourc
     if od.groupe.is_none() {
         if let Some((prof, _)) = res.textures.get(&decor).and_then(|t| t.prof.as_ref()) {
             let prof = prof.create_view(&Default::default());
-            let soleil = od.soleil.create_view(&Default::default());
+            let soleil = od.soleil.as_ref().map_or_else(|| res.vides.soleil.clone(), |s| s.create_view(&Default::default()));
             let carte_decor = od.carte_decor.clone().unwrap_or_else(|| res.vides.profondeur.clone());
             let cartes = od.cartes.as_ref().map_or_else(|| res.vides.profondeur.clone(), |c| c.1.clone());
             let prof4 = res.textures.get(&decor).and_then(|t| t.prof4.as_ref()).map(|t| t.create_view(&Default::default()));
@@ -2567,7 +2636,7 @@ fn compose_span(
         }
         // Une carte qui partage la profondeur du décor 3D (partie 183) : les mêmes, qui lisent aussi la profondeur du décor ; et une
         // carte qui reçoit les ombres, ou le décor sous les cartes qui en portent (partie 185) : le groupe de ses ombres.
-        let decor_de = item.prof.map(|(d, _)| d).or(item.ombre.filter(|o| o.recoit).map(|o| o.decor)).or(if item.decor_ombre { item.cel } else { None });
+        let decor_de = item.prof.map(|(d, _)| d).or(item.ombre.filter(|o| o.recoit || o.lampes).map(|o| o.decor)).or(if item.decor_ombre { item.cel } else { None });
         let groupe3 = decor_de.and_then(|d| res.textures.get(&d)).and_then(|t| t.ombre.as_ref().and_then(|o| o.groupe.as_ref()).or(t.prof.as_ref().map(|p| &p.1)));
         let assombri = item.decor_ombre && groupe3.is_some() && !meshed && item.blend == 0;
         let prof = groupe3.filter(|_| !item.decor_ombre || assombri);
@@ -2638,7 +2707,7 @@ impl CallbackTrait for CanvasPaint {
             let mut moteur = resources.remove::<crate::decor3dgpu::Moteur>().unwrap_or_else(|| crate::decor3dgpu::Moteur::new(device, queue));
             if let Some(res) = resources.get_mut::<CanvasResources>() {
                 for j in jobs {
-                    let Some((view, prof, soleil)) = res.textures.get(&j.out).and_then(|t| Some((t.texture.create_view(&Default::default()), t.prof.as_ref()?.0.create_view(&Default::default()), t.ombre.as_ref().map(|o| o.soleil.create_view(&Default::default()))))) else { continue };
+                    let Some((view, prof, soleil)) = res.textures.get(&j.out).and_then(|t| Some((t.texture.create_view(&Default::default()), t.prof.as_ref()?.0.create_view(&Default::default()), t.ombre.as_ref().and_then(|o| o.soleil.as_ref()).map(|s| s.create_view(&Default::default()))))) else { continue };
                     let prof4 = res.textures.get(&j.out).and_then(|t| t.prof4.as_ref()).filter(|_| j.quatre).map(|t| t.create_view(&Default::default()));
                     // (Seulement la profondeur à quatre échantillons, partie 193, si la couleur est à jour ; sinon, ou si la passe de
                     // couleur de ce décor n'est plus là, tout.)
@@ -2695,7 +2764,8 @@ impl CallbackTrait for CanvasPaint {
             // (Le plan de la carte, après le réglage de plus : la profondeur partagée avec le décor 3D, partie 183 ; et ses drapeaux :
             // 1, cachée par le décor ; 2, elle reçoit les ombres, sa pente dans la carte d'ombres au réglage de plus, partie 185.)
             // (Et 4 : la profondeur du décor de dessous a quatre échantillons par pixel, partie 193.)
-            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 } + if item.quatre { 4.0 } else { 0.0 };
+            // (Et 8 : les lampes du décor l'éclairent, partie 201.)
+            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 } + if item.quatre { 4.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.lampes) { 8.0 } else { 0.0 };
             if let Some(plan) = item.prof.map(|p| p.1).or(item.ombre.map(|o| o.plan)) {
                 put_floats(&mut bytes[i * stride + 112..], &[plan[0], plan[1], plan[2], drapeaux]);
             }
@@ -3062,9 +3132,12 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
     }
     // Les ombres des cartes (partie 185, `ombres.rs`) : seulement si le décor a ses ombres sur cet ordinateur ; sa lumière, la part du
     // soleil dessinée avec lui (une troisième cible), et plus tard la carte d'ombres des cartes.
+    // (Partie 201 : ou ses lampes seules, qui éclairent les cartes : la lumière sans soleil ni cartes d'ombres.)
     let lumiere = if aspect.ombres && qualite != crate::decor3dbudget::Qualite::Sans {
         let ec = crate::decor3dgpu::eclairage(&crate::decor3d::dessins_gpu(&objets, aspect), prise.oeil, &aspect, qualite);
-        crate::ombres::Lumiere::de(&ec, &aspect, &prise)
+        crate::ombres::Lumiere::de_avec_lampes(&ec, &aspect, &prise)
+    } else if aspect.lampes.n > 0 {
+        Some(crate::ombres::Lumiere::des_lampes(&aspect, &prise))
     } else {
         None
     };
@@ -3072,30 +3145,36 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
     let entry = res.textures.get_mut(&out).expect("texture du décor présente");
     let avant = entry.bytes();
     match lumiere {
+        // (Partie 201 : sans les ombres, pas de part du soleil à dessiner avec le décor : rien de plus que les réglages de la lumière.)
         Some(lum) => match entry.ombre.as_mut() {
-            Some(o) if o.soleil.size().width == sheet.0 && o.soleil.size().height == sheet.1 => {
+            Some(o) if o.soleil.as_ref().map(|s| (s.size().width, s.size().height)) == lum.ombres.then_some(sheet) => {
                 if o.lumiere != lum {
                     o.lumiere = lum;
                     o.groupe = None;
                 }
             }
             _ => {
-                let soleil = rs.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("décor 3D : soleil"),
-                    size: extent(sheet.0, sheet.1),
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: crate::decor3dgpu::SOLEIL,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
+                let soleil = lum.ombres.then(|| {
+                    rs.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("décor 3D : soleil"),
+                        size: extent(sheet.0, sheet.1),
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: crate::decor3dgpu::SOLEIL,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    })
                 });
+                let ombres = lum.ombres;
                 let uniform = rs.device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D : lumière"), size: crate::ombres::OCTETS, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
                 let groupe_lumiere = rs.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("décor 3D : lumière"), layout: &lumiere_layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }] });
                 entry.ombre = Some(Box::new(OmbreDecor { soleil, lumiere: lum, uniform, groupe_lumiere, carte_decor: None, cartes: None, groupe: None }));
                 // (La part du soleil est à dessiner avec le décor : le rendu d'avant ne l'a pas.)
-                if let Some(state) = entry.fx.as_mut() {
-                    state.done = 0;
+                if ombres {
+                    if let Some(state) = entry.fx.as_mut() {
+                        state.done = 0;
+                    }
                 }
             }
         },

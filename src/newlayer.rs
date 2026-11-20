@@ -84,7 +84,7 @@ impl App {
     }
 
     /// Crée le calque réglé dans la fenêtre (une étape d'annulation).
-    fn create_layer_from(&mut self, f: &NewLayerForm) {
+    pub(crate) fn create_layer_from(&mut self, f: &NewLayerForm) {
         if self.content_refuses() {
             return;
         }
@@ -103,6 +103,8 @@ impl App {
         let at = insert_index(self.layers(), self.cur_layer, f.place);
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
+        // (Partie 201 : devant la caméra du plan, si elle a quitté la feuille.)
+        self.calque_neuf_devant_la_camera(at);
         self.layer_sel.clear();
         self.vsel = None;
         self.commit_structure(snap);

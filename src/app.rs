@@ -1990,7 +1990,8 @@ impl App {
         let mut decor = crate::decor3d::item(&self.doc, self.cur_panel, frame, &camera, repere.as_ref());
         let avec_decor = decor.is_some();
         // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
-        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres));
+        // (Partie 201 : ou ses lampes, qui éclairent les cartes qui reçoivent les ombres.)
+        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0));
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
@@ -3534,6 +3535,8 @@ impl App {
         layer.parent = self.layer().parent;
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
+        // (Partie 201 : devant la caméra du plan, si elle a quitté la feuille.)
+        self.calque_neuf_devant_la_camera(at);
         self.vsel = None;
         self.commit_structure(snap);
     }
@@ -5260,6 +5263,7 @@ impl App {
             // Zoom de la bande du bas : le montage en storyboard, la timeline en animation.
             "bande.zoom_avant" => self.zoom_strip(1.25),
             "bande.zoom_arriere" => self.zoom_strip(1.0 / 1.25),
+            "bande.tout_voir" if self.dans_l_onglet_3d() => self.o3_ajuster_la_timeline(),
             "bande.tout_voir" if board_shown => self.montage_fit = true,
             "bande.tout_voir" => self.fit_timeline(crate::cues::Fit::All),
             // Marques de couleur (13d, `marks.rs`).
@@ -5587,6 +5591,11 @@ impl App {
     /// animation. La tête de lecture reste au même endroit de l'écran (`zoombande.rs`).
     pub(crate) fn zoom_strip(&mut self, f: f32) {
         use crate::zoombande::Strip;
+        // (Partie 201 : dans l'onglet 3D, la timeline de la séquence.)
+        if self.dans_l_onglet_3d() {
+            self.o3_zoomer_la_timeline(f);
+            return;
+        }
         match self.mode {
             Mode::Storyboard => {
                 self.anchor_strip_zoom(Strip::Montage);

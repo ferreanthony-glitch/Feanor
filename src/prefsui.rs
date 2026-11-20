@@ -673,7 +673,11 @@ impl App {
                     let _ = self.settings.save();
                 }
             }
-            Groupe::Camera => self.passe_partout_pref_ui(ui),
+            Groupe::Camera => {
+                self.passe_partout_pref_ui(ui);
+                // (Partie 201.)
+                self.calque_devant_pref_ui(ui);
+            }
             // L'anneau sous le stylet (`anneauui.rs`).
             Groupe::AnneauGeste => self.anneau_geste_prefs_ui(ui),
             Groupe::AnneauCommandes => self.anneau_commandes_prefs_ui(ui),

@@ -545,3 +545,13 @@ l'image ne le montre pas (`Objet3d::caches_dans`). L'image gardée du décor (`D
 dans le plan et les lampes **seulement quand il y en a** (`contenu_a`) : un décor immobile garde exactement sa clé d'avant, un décor
 animé en fait une par image, redessinée une fois dans la même texture. Sans latence : 0,4 ms par passe pour 40 objets en 1920 × 1080,
 huit lampes comprises (mesures de la partie 200).
+
+## 25. Finitions : la timeline de la séquence, les objets d'une séquence à l'autre, qui a la main, un calque neuf devant la caméra (2026-11-20, branche `finitions-3d`, partie 201 de `docs/INTERFACE.md`)
+
+La timeline de la séquence de l'onglet 3D se zoome et défile (`timelineseq.rs`, `Fenetre`). Les objets du décor se copient ou se
+déplacent vers une autre séquence par le menu d'une ligne de « Scène 3D » ou en la glissant sur le sélecteur de séquence
+(`seqdecor3d.rs`, par `decor3d_vers_sequence` de la partie 190). Chaque vue 3D dit qui a la main, le décor ou une carte
+(`quialamain.rs`). Un calque neuf se pose devant une caméra que le chemin de toujours ne filme pas (`calquedevant.rs`, le repère de la
+partie 159). Les lampes éclairent les cartes qui reçoivent les ombres (201.4) : `ombres::Lumiere` porte les lampes, la lumière des lampes seules
+existe sans les ombres du décor, le drapeau 8 des composeurs de la carte graphique et le contexte du processeur ajoutent
+`c × (1 + lampes)` en lumière linéaire ; une carte hors de portée est inchangée au bit près.

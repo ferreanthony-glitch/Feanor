@@ -34,6 +34,8 @@ thread_local! {
     pub(crate) static TIMELINE_SEQ: std::cell::RefCell<Option<(Rect, Vec<(usize, Rect)>)>> = const { std::cell::RefCell::new(None) };
     /// Partie 200 : les losanges des clés de l'objet choisi (image de la séquence, rectangle).
     pub(crate) static CLES_SEQ: std::cell::RefCell<Vec<(usize, Rect)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Partie 201 : le pas de la règle de la timeline de la séquence et ses graduations peintes (images de la séquence).
+    pub(crate) static GRADUATIONS_SEQ: std::cell::RefCell<(usize, Vec<usize>)> = const { std::cell::RefCell::new((0, Vec::new())) };
 }
 
 impl App {
@@ -45,6 +47,8 @@ impl App {
         }
         #[cfg(test)]
         LIGNES_S3D.with(|l| l.borrow_mut().clear());
+        // (Partie 201 : le sélecteur de séquence, en tête.)
+        self.o3_selecteur_de_sequence(ui);
         ui.horizontal(|ui| {
             ui.label(RichText::new(ph::MAGNIFYING_GLASS).weak());
             let r = ui.add(egui::TextEdit::singleline(&mut self.o3.recherche).hint_text("Chercher dans la scène").desired_width(f32::INFINITY));
@@ -53,7 +57,9 @@ impl App {
         let lignes = sommaire(&self.doc, self.cur_panel, &self.o3.recherche, &self.o3.replies);
         egui::ScrollArea::vertical().id_salt("scene3d_liste").auto_shrink([false, false]).show(ui, |ui| {
             for l in lignes {
-                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), LIGNE_H), Sense::click());
+                // (Partie 201 : une ligne d'objet se glisse vers une séquence.)
+                let sens = if matches!(l, Ligne3d::Objet(_)) { Sense::click_and_drag() } else { Sense::click() };
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), LIGNE_H), sens);
                 #[cfg(test)]
                 LIGNES_S3D.with(|v| v.borrow_mut().push((l, rect)));
                 if !ui.is_rect_visible(rect) {
@@ -133,6 +139,9 @@ impl App {
         p.with_clip_rect(Rect::from_min_max(pos2(x + 18.0, rect.top()), pos2(fin_du_nom, rect.bottom()))).text(pos2(x + 20.0, rect.center().y), Align2::LEFT_CENTER, &nom, FontId::proportional(12.0), encre);
         if let Ligne3d::Objet(id) = l {
             self.puce_de_couleur(ui, puce, id);
+            // (Partie 201 : son menu, copier ou déplacer vers une autre séquence ; et le glisser.)
+            self.o3_menu_d_objet(&resp, id);
+            self.o3_glisser_une_ligne(&resp, id);
         }
         let visible = self.scene3d_visible(l);
         let r = crate::layerheads::icon_at(ui, oeil, if visible { ph::EYE } else { ph::EYE_SLASH }, if visible { texte } else { doux.gamma_multiply(0.6) });
@@ -375,37 +384,60 @@ impl App {
             }
             ui.label(RichText::new(format!("image {} / {}", g.saturating_sub(debut) + 1, n)).monospace());
             ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.sequence_of(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
-            // (Partie 200 : « ◆ Clé » pour l'objet choisi, au bout de la ligne.)
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.o3_bouton_cle(ui));
+            // (Partie 200 : « ◆ Clé » pour l'objet choisi, au bout de la ligne ; partie 201 : le zoom de la timeline, avant lui.)
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.o3_bouton_cle(ui);
+                ui.separator();
+                self.o3_reglette_du_zoom(ui);
+            });
         });
         let w = ui.available_width();
         let hauteur = REGLE_H + PLANS_H + 2.0 * RANGEE_H + 4.0;
         let (rect, resp) = ui.allocate_exact_size(vec2(w, hauteur), Sense::click_and_drag());
         let p = ui.painter_at(rect);
         let piste = Rect::from_min_max(pos2(rect.left() + NOMS_W, rect.top()), rect.max);
-        let x_de = |f: usize| piste.left() + (f.saturating_sub(debut)) as f32 / n as f32 * piste.width();
-        let f_de = |x: f32| debut + (((x - piste.left()) / piste.width().max(1.0)) * n as f32).floor().clamp(0.0, (n - 1) as f32) as usize;
+        // (Partie 201 : la piste montre la séquence au zoom de la timeline, à partir de son image `debut_seq`.)
+        let fen = crate::timelineseq::Fenetre::de(piste, debut, n, self.o3.zoom_seq, self.o3.debut_seq);
+        self.o3.debut_seq = fen.depart;
+        // (`bande_survolee` : les raccourcis du zoom de l'image zooment la bande quand le pointeur est dessus, partie 192.)
+        let dessus = ui.rect_contains_pointer(rect);
+        if dessus {
+            self.bande_survolee = true;
+        }
+        self.o3_gestes_de_la_timeline(ui, dessus, fen);
+        let fen = crate::timelineseq::Fenetre::de(piste, debut, n, self.o3.zoom_seq, self.o3.debut_seq);
+        let x_de = |f: usize| fen.x_de(f);
+        let f_de = |x: f32| fen.f_de(x);
         let doux = ui.visuals().weak_text_color();
         p.rect_filled(rect, 0.0, crate::theme::panneau());
+        let p_noms = p.clone();
+        let p = p.with_clip_rect(piste.intersect(rect));
         // Les noms des rangées.
         let regle = Rect::from_min_size(rect.min, vec2(w, REGLE_H));
         let plans = Rect::from_min_size(pos2(rect.left(), regle.bottom()), vec2(w, PLANS_H));
         let cles = Rect::from_min_size(pos2(rect.left(), plans.bottom() + 2.0), vec2(w, RANGEE_H));
         let objet = Rect::from_min_size(pos2(rect.left(), cles.bottom() + 2.0), vec2(w, RANGEE_H));
         for (r, nom) in [(plans, "Plans"), (cles, "Caméra")] {
-            p.text(pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER, nom, FontId::proportional(11.0), doux);
+            p_noms.text(pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER, nom, FontId::proportional(11.0), doux);
         }
-        // La règle : une graduation par seconde.
+        // La règle : ses graduations selon le zoom (partie 201 : des images, des secondes ou des minutes), seulement celles qu'on voit.
         p.rect_filled(Rect::from_min_max(pos2(piste.left(), regle.top()), pos2(piste.right(), regle.bottom())), 0.0, crate::theme::regle());
         let fps = self.doc.fps.max(1) as usize;
-        let mut f = debut.div_ceil(fps) * fps;
-        let pas = ((n / fps).max(1) / 12).max(1) * fps;
-        while f < fin {
-            let x = x_de(f);
+        let pas = crate::timelineseq::pas_de_la_regle(fen.points_par_image(), fps);
+        let premiere = (fen.depart.floor() as usize / pas) * pas;
+        let derniere = ((fen.depart + fen.visibles).ceil() as usize).min(n);
+        let mut graduations = Vec::new();
+        let mut f = premiere;
+        while f <= derniere && f < n {
+            let x = x_de(debut + f);
             p.line_segment([pos2(x, regle.bottom() - 5.0), pos2(x, regle.bottom())], Stroke::new(1.0_f32, doux));
-            p.text(pos2(x + 2.0, regle.top() + 1.0), Align2::LEFT_TOP, format!("{}", (f - debut) / fps), FontId::proportional(9.5), doux);
+            p.text(pos2(x + 2.0, regle.top() + 1.0), Align2::LEFT_TOP, crate::timelineseq::chiffre(f, fps, pas), FontId::proportional(9.5), doux);
+            graduations.push(f);
             f += pas;
         }
+        #[cfg(test)]
+        GRADUATIONS_SEQ.with(|g| *g.borrow_mut() = (pas, graduations.clone()));
+        let _ = &graduations;
         // Les plans, en blocs ; les clés de caméra de chacun.
         let mut blocs = Vec::new();
         for pi in a..z {
@@ -428,7 +460,7 @@ impl App {
         if self.o3_objet_des_cles().is_none() {
             p.text(pos2(objet.left() + 6.0, objet.center().y), Align2::LEFT_CENTER, "Objet choisi", FontId::proportional(11.0), doux);
         }
-        self.o3_rangee_des_cles(ui, Rect::from_min_max(objet.min, pos2(piste.left(), objet.bottom())), Rect::from_min_max(pos2(piste.left(), objet.top()), objet.max), debut, n);
+        self.o3_rangee_des_cles(ui, Rect::from_min_max(objet.min, pos2(piste.left(), objet.bottom())), Rect::from_min_max(pos2(piste.left(), objet.top()), objet.max), fen);
         // La tête de lecture.
         let xg = x_de(g.clamp(debut, fin - 1));
         p.line_segment([pos2(xg, regle.top()), pos2(xg, rect.bottom())], Stroke::new(2.0_f32, crate::timeline::cur_frame()));

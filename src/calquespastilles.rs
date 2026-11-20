@@ -158,6 +158,8 @@ impl App {
         let at = (self.cur_layer + 1).min(self.layers().len());
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
+        // (Partie 201 : devant la caméra du plan, si elle a quitté la feuille.)
+        self.calque_neuf_devant_la_camera(at);
         self.noter_calque_de_personnage();
         self.aplat_cible = None;
         self.vsel = None;

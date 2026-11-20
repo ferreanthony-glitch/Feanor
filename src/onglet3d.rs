@@ -243,6 +243,13 @@ pub(crate) struct Onglet3d {
     pub bande_demandee: Option<Pane>,
     /// Partie 200 : la clé d'objet qu'on glisse dans la timeline de la séquence.
     pub cle_tiree: Option<CleTiree>,
+    /// Partie 201 : le zoom de la timeline de la séquence (1 : toute la séquence) et sa première image visible (relative à la
+    /// séquence), et ce qu'elle montrait à sa dernière image (`timelineseq::Fenetre`).
+    pub zoom_seq: f32,
+    pub debut_seq: f32,
+    pub fenetre_seq: Option<crate::timelineseq::Fenetre>,
+    /// Partie 201 : la liste des séquences du sélecteur de « Scène 3D » est ouverte.
+    pub sequences_ouvertes: bool,
     /// Les bouts de la boussole peints à la dernière image, par vue (pour les essais) : le cadre, puis (axe, positif, centre).
     #[cfg(test)]
     pub boussoles: Vec<(Option<usize>, Vec<(usize, bool, Pos2)>)>,
@@ -262,6 +269,10 @@ impl Default for Onglet3d {
             bande: (Vec::new(), None),
             bande_demandee: None,
             cle_tiree: None,
+            zoom_seq: 1.0,
+            debut_seq: 0.0,
+            fenetre_seq: None,
+            sequences_ouvertes: false,
             #[cfg(test)]
             boussoles: Vec::new(),
         }

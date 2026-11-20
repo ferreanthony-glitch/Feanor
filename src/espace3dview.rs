@@ -852,6 +852,11 @@ impl App {
         if let Some(g) = self.e3_gizmo(&view).filter(|_| !dessine) {
             self.e3_paint_gizmo(&painter, &proj, &g);
         }
+        // (Partie 201 : qui a la main, le décor ou les cartes.)
+        if !dessine {
+            let coin = draw.left_top() + vec2(8.0, if through { 24.0 } else { 8.0 });
+            self.e3_peindre_qui_a_la_main(ui.ctx(), &painter, rect, draw, &view, coin);
+        }
         // Légendes.
         if through {
             painter.rect_stroke(draw, 0.0, Stroke::new(1.0_f32, crate::theme::camera()), egui::StrokeKind::Outside);
@@ -1072,7 +1077,8 @@ impl App {
                         }
                     }
                 } else {
-                    painter.rect_filled(Rect::from_center_size(o, vec2(11.0, 11.0)), 1.0, if hot(Handle::Center) { HOT } else { Color32::from_gray(225) });
+                    // (Partie 201 : à la couleur de qui a la main, le décor ou la carte.)
+                    painter.rect_filled(Rect::from_center_size(o, vec2(11.0, 11.0)), 1.0, if hot(Handle::Center) { HOT } else { self.e3_couleur_de_la_main().unwrap_or(Color32::from_gray(225)) });
                 }
             }
             GizmoMode::Rotate => {

@@ -18257,3 +18257,181 @@ correctif : vides aux images 0 à 7, 16 à 23, 32 à 39, le clignotement de la v
 
 À tester : rouvrir son projet, Storyboard, la vue à côté, choisir le « Plan 5 » : le décor et le sol dessiné sont dans le plan ; tirer
 la caméra dans la vue, haut et en plongée : l'image du plan ne devient plus grise.
+
+## 201. Finitions 3D : timeline de la séquence, lampes sur les cartes, objets d'une séquence à l'autre, qui a la main (2026-11-20, branche finitions-3d partie de main e016b52)
+
+Le chantier choisi par Anthony après la clôture du chantier 3D (parties 194–200). **Format des projets inchangé (61)**, aucun champ
+neuf dans les fichiers du projet ; les réglages de l'application ont une clé de plus, écrite seulement décochée
+(`calque_devant_la_camera`).
+
+### 201.1 Ce qui a changé
+
+1. **La timeline de la séquence de l'onglet 3D se zoome et défile** (`timelineseq.rs`), comme la bande du Storyboard :
+   - **les mêmes gestes** : Ctrl + molette zoome autour de la tête de lecture ; la molette (ou Maj + molette, ou un pavé) fait défiler ;
+     les raccourcis du zoom de la bande (« Zoom avant / arrière de la bande », `bande.zoom_avant`, `bande.zoom_arriere`) et, le pointeur
+     sur la bande, ceux du zoom de l'image (la règle de la partie 192) ; « Bande : tout voir » (`bande.tout_voir`) ajuste ;
+   - **en tête de la bande**, sur la ligne de la lecture, avant « ◆ Clé » : **« Ajuster »** (toute la séquence dans la largeur) et **une
+     réglette de zoom** (de 1 à 200, logarithmique). Les deux boutons « Timeline de la séquence » et « Banque 3D » de la partie 198 restent
+     en tête, à gauche ;
+   - **la règle se gradue selon le zoom** : au moins 56 points entre deux chiffres, en images (« 2 s 05 »), en secondes, en minutes
+     (« 2 min 30 ») ; seules les graduations qu'on voit sont peintes ;
+   - **pendant la lecture, la tête de lecture reste dans la vue** : quand elle en sort, la bande tourne la page (la tête revient au
+     dixième de la largeur) ;
+   - les blocs des plans, les clés de caméra et les losanges des clés d'objet (partie 200 : un clic, un clic droit, un glisser) suivent
+     le zoom ; ce qui sort de la piste n'est ni peint ni pris. Le zoom est de la séance.
+2. **Les lampes éclairent les cartes** (fait après l'accord d'Anthony, 201.4) : une carte qui reçoit les ombres prend la lumière teintée
+   des lampes du décor de sa séquence, sur son encre et son papier, avec la même portée qu'au décor ; une carte qu'aucune lampe
+   n'atteint garde ses pixels d'aujourd'hui, au bit près.
+3. **Les objets du décor d'une séquence à l'autre** (`seqdecor3d.rs`) :
+   - **le sélecteur de séquence** en tête de « Scène 3D » : « Séquence 3 · La cuisine ▾ » (le nom de la séquence, s'il en a un). Un
+     clic ouvre la liste des séquences du film (le nombre d'objets 3D de chacune) ; un clic sur l'une va à son premier plan, comme le
+     Storyboard ;
+   - **le clic droit d'une ligne d'objet** (sur un objet choisi parmi d'autres : tous les choisis) : « Copier vers la séquence ▸ » et
+     « Déplacer vers la séquence ▸ », par le chemin de la partie 190 (`decor3d_vers_sequence`) : une étape d'annulation, déplacer étant
+     copier puis enlever dans la même étape, le budget de la machine vérifié avant ;
+   - **glisser des lignes d'objets** : la liste du sélecteur s'ouvre d'elle-même, la séquence sous le pointeur s'éclaire et dit
+     « déplacer N ici » ou, avec Alt, « copier N ici » ; lâcher déplace, Alt copie. **Aussi sur une ligne de séquence du panneau Scène
+     du Storyboard** (racine Film) : la cible est en place, mais les deux panneaux ne sont pas à l'écran ensemble d'ordinaire (201.3) ;
+   - **ce qui suit** : les clés (partie 200) et les couleurs (199), comme une copie ; « Caché dans le plan » ne garde que les plans de la
+     séquence où l'objet arrive (vers une autre séquence, il part : `Document::poser_copies_3d`) ; les lampes sont au décor, pas aux
+     objets : elles restent dans leur séquence.
+4. **Qui a la main dans la vue 3D** (`quialamain.rs`), le décor ou les cartes, dans chaque vue de l'onglet 3D et dans les vues Espace
+   3D du Storyboard (plein écran et à côté) :
+   - **une étiquette en haut à gauche de la vue** : ce que les poignées et un glisser déplacent, « Décor : Tree oak » (« et 2 autres »),
+     « Carte : Perso 1 », « Lampe : Lampe 1 », « Caméra du plan », avec une pastille, **à la couleur d'identification de l'objet**
+     (partie 199) s'il en a une, sinon à celle de sa sorte (un gris bleuté pour le décor, l'encre du calque, la teinte de la lampe, la
+     couleur des caméras) ; rien quand rien n'est choisi ;
+   - **sous elle, en plus pâle, ce qu'un clic prendrait** quand le pointeur est sur autre chose (« Un clic prend : Carte : Fond ») ;
+   - **le carré central du manipulateur** prend la même couleur ;
+   - rien pendant un geste ni quand on dessine sur une carte.
+5. **Un calque neuf se pose devant la caméra** (Anthony : « qu'un calque créé se place toujours devant la caméra pour simplifier et
+   fluidifier le passage au dessin » ; puis « en tout cas par défaut ») — `calquedevant.rs` :
+   - **quand** : la caméra du plan, à l'image courante, n'est pas filmée par le chemin de toujours (`repere_du_plan` : une caméra libre
+     tirée dans la vue, hors des anciennes limites ou dont le cadre sort de la feuille, partie 200.7 ; un plan du format 55 en Espace
+     3D). Avant, un calque neuf restait sur la feuille, parfois hors du cadre : on dessinait sur rien de visible. **Une caméra qui n'a
+     jamais quitté la feuille ne change rien** : le calque est exactement celui d'avant (un essai le compare champ pour champ) ;
+   - **où** : au milieu du cadre de la caméra à cette image, face à elle (perpendiculaire à son regard, son roulis compris), à la
+     distance de référence fois le zoom de la caméra : sa feuille, à sa taille d'origine, remplit alors le cadre comme la caméra de
+     référence la voit. Son origine (partie 182) est celle d'un calque neuf (le centre de la feuille) ; un calque neuf n'est pas aimanté
+     au sol ;
+   - **par où** : « Nouveau calque » (la barre « + » de la timeline, les menus, la palette, `calque.nouveau_vectoriel`,
+     `calque.nouveau_bitmap`), la fenêtre « Nouveau calque », coller une image comme nouveau calque (qui passe par le même chemin), le
+     calque d'un personnage (les pastilles), le calque d'une vidéo, et le premier calque d'un plan fait par « Nouveau plan depuis cette
+     vue » (partie 200). Un nouveau plan ordinaire a la caméra de toujours : rien ne change ;
+   - **pas** : dupliquer et coller des calques (ils gardent la place de leur source, ce qui est juste pour un double), le calque de
+     couleur (il suit son calque de trait), les surfaces Sol, Mur, Ciel (déjà posées par la vue), les dossiers, les calques d'effet,
+     d'annotation et de couleur unie (ils n'ont pas de place de carte), l'image déposée dans une case de la planche (son calque « Image »
+     est posé par la planche, pas devant une caméra), les calques faits par un collage de clés ;
+   - **un réglage** : Préférences > Caméra, « Placer un nouveau calque devant la caméra », coché d'origine, écrit seulement décoché ;
+     décoché, les calques se créent comme avant ;
+   - dans l'étape d'annulation de la création, comme avant.
+
+Le code : `timelineseq.rs`, `seqdecor3d.rs`, `quialamain.rs`, `calquedevant.rs` (nouveaux) ; `onglet3dui.rs` (la timeline, le
+sélecteur, le menu et le glisser des lignes), `onglet3d.rs` (l'état de la séance), `miseenscene3dui.rs` (les losanges des clés à
+travers le zoom ; le premier calque d'un plan fait depuis la vue), `sceneui.rs` (lâcher sur une séquence), `copiedecor.rs` (« Caché
+dans le plan » vers une autre séquence), `espace3dview.rs`, `espace3dvues.rs` (l'étiquette, le manipulateur), `app.rs`, `newlayer.rs`,
+`calquespastilles.rs`, `videoui.rs` (les chemins de création), `settings.rs`, `prefsui.rs`.
+
+### 201.2 Les essais
+
+`finitions3d_tests.rs` (12 en tout, avec 201.6) : le pas et les chiffres de la règle selon le zoom, la fenêtre de la piste ; la timeline zoomée par les
+raccourcis de la bande (autour de la tête de lecture), défilée à la molette, zoomée à Ctrl + molette, « Ajuster » et « tout voir », la
+tête de lecture gardée dans la vue pendant la lecture ; le sélecteur (la liste, le premier plan de l'autre séquence, le nom) ; le menu
+d'une ligne d'objet, copier et déplacer vers une séquence (une étape, la couleur et les clés suivent, « Caché dans le plan » part, deux
+objets choisis ensemble, Ctrl+Z en une fois) ; glisser des lignes sur une séquence de la liste (Alt copie, sans Alt déplace, une étape) ;
+qui a la main (rien, un objet, deux, sa couleur et celle du manipulateur, une carte, la caméra, ce qu'un clic prendrait, la vue à côté
+du Storyboard) ; un calque neuf devant une caméra libre qui plonge (au milieu du cadre, face à elle, le cadre entier sur sa carte, le
+rayon du centre de la vue la touche en son centre), par la barre, les menus, la fenêtre, le plan fait depuis la vue, le double à la place
+de son original, une étape, ni dossier ni annotation ; la caméra de toujours et le réglage décoché font exactement le calque d'avant, le
+réglage écrit seulement décoché ; les lampes sur les cartes (201.4) : par le processeur, une lampe hors de portée ne change aucun pixel
+de l'export, une lampe blanche éclaire l'encre de la carte, une rouge la teinte, « Reçoit les ombres » décoché n'éclaire rien, avec les
+ombres du décor aussi, la lumière d'un pixel est celle du décor ; sur la carte graphique, les mêmes à l'écran (l'écran entier identique au
+pixel près avec une lampe hors de portée) ; la mesure.
+
+Aucun essai d'avant n'a été changé.
+
+### 201.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil.
+- Les lampes éclairent les cartes de l'image du plan (à l'écran, aux vignettes, à l'export) ; **pas les cartes de la vue Espace 3D**
+  (elles y restent telles qu'elles sont dessinées, comme le soleil ne les y éclaire pas) ; à faire avec les cartes de la vue si Anthony
+  le veut.
+- **Lâcher sur le panneau Scène du Storyboard** : la cible est faite (le même chemin que la liste du sélecteur), mais « + Panneau » ne
+  propose pas la Scène du Storyboard dans l'onglet 3D, ni « Scène 3D » dans le Storyboard (règles des parties 197 et 198) : les deux ne
+  sont pas à l'écran ensemble. Les proposer ensemble est à décider ; pas d'essai de ce lâcher.
+- L'étiquette « qui a la main » regarde ce qu'un clic prendrait seulement quand le pointeur bouge (un rayon contre le décor) ; un objet
+  qui bouge sous un pointeur immobile ne la remet pas à jour avant le prochain mouvement.
+- Le zoom de la timeline de la séquence n'est pas retenu d'une séance à l'autre.
+
+### 201.4 Les lampes sur les cartes : fait
+
+D'abord proposé (arrêté avant, comme la demande le permettait), puis fait sur l'accord d'Anthony, selon ce plan :
+
+- **La lumière** : la même que sur le décor (`LampesVues::lumiere`, partie 200), au point du monde de chaque pixel de la carte (son plan,
+  `OmbreCarte::plan`, et l'œil de la prise, `Lumiere::monde`), sa normale tournée vers l'œil ; ajoutée à l'encre en lumière linéaire :
+  `c × (1 + lumière des lampes)`, le papier de la carte compris s'il en a un ; rien ne change là où aucune lampe n'atteint.
+- **Le drapeau** : « Reçoit les ombres », réutilisé (décoché : ni ombres ni lampes), puisque les deux disent « cette carte prend la
+  lumière du décor » ; sa bulle dit maintenant « Ombres et lampes : … » (`ombres::PHRASE_RECOIT`).
+- **Ce qu'il faut toucher** : `ombres::Lumiere` et son tampon sur la carte graphique (les huit lampes, 272 octets de plus) ; les
+  ressources de la composition (`place_decor`) créées aussi quand le décor a des lampes mais pas d'ombres (avec des cartes d'ombres
+  vides) ; un drapeau 8 dans `fs_compose_p` et `fs_blend_p` ; le contexte du processeur (`ombres::Contexte`), qui n'existe que pour un
+  décor rendu par la carte graphique avec ses ombres, à faire aussi sans elles (les lampes, la prise et les plans des cartes) ; l'export
+  sans carte graphique par le même contexte.
+
+Ce qui est fait :
+- `ombres::Lumiere` porte les lampes (`lampes`) et dit si le décor a ses ombres (`ombres`) ; `Lumiere::de_avec_lampes`,
+  `Lumiere::des_lampes` (les lampes seules : pas de soleil, pas de carte d'ombres) ; `Lumiere::eclairer_carte` (l'ombre et les
+  lampes, en lumière linéaire, `c × (1 − occ × (1 − carte)) × (1 + lampes)` ; ni l'un ni l'autre : `c` au bit près). Ses réglages
+  sur la carte graphique : 512 octets (`ombres::OCTETS`), les huit lampes au bout (`lampes_n`, `lampes_pos`, `lampes_col` du shader).
+- **La carte graphique** (`gpu.rs`) : la lumière du décor est faite aussi quand il a des lampes sans ses ombres, sans texture de la part
+  du soleil (`OmbreDecor::soleil` devient facultative ; les cartes d'ombres vides de `Vides`) ; une carte qui reçoit les ombres a le
+  drapeau 8 quand le décor a des lampes, et ne porte d'ombre qu'avec les ombres du décor ; `fs_compose_p` et `fs_blend_p` appellent
+  `lampes_carte` (le point du monde de chaque pixel par le plan de la carte, sa normale par deux autres points de ce plan) et
+  `eclairer_carte` ; `fusionner_t` applique une teinte plus forte que 1 (avant, seulement plus faible).
+- **Le processeur** (`ombres::contexte`) : sans le soleil d'un rendu du décor par la carte graphique (les ombres éteintes, le décor
+  rendu par le processeur à l'écran, l'export sans carte graphique), un contexte des lampes seules, fait de la clé du décor (ses lampes,
+  sa prise) et des plans et normales des cartes qui reçoivent ; avec le soleil, le même contexte qu'avant, ses lampes en plus.
+- `render.rs`, `app.rs` : les cartes ont leur plan d'ombres (`PlanItem::ombre`) aussi quand le décor a des lampes sans ses ombres.
+
+**Mesures** (ce Mac ; huit lampes et dix cartes de 300 × 300 pixels sur une feuille de 1920 × 1080, `finitions3d_tests.rs`) :
+- l'image composée par le processeur (celle de l'export) : **sans lampe 12,8 ms (médiane), 14,5 ms au pire ; avec les huit lampes
+  17,1 ms, 17,4 ms au pire** (+4 ms pour 900 000 pixels d'encre éclairés) ;
+- l'image composée par la carte graphique, à l'écran, recomposée à chaque image : **sans lampe 1,57 ms (médiane), 7,7 ms au pire ; avec
+  les huit lampes 1,47 ms, 2,9 ms au pire** : rien qu'on mesure. Dans le budget « sans latence ».
+
+### 201.5 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`.
+
+1. Onglet 3D, une séquence de plusieurs plans. En bas, la timeline de la séquence : Ctrl + molette dessus zoome autour de la tête de
+   lecture, la molette la fait défiler ; Alt+1 et Alt+2 aussi ; la règle passe des secondes aux images.
+2. En tête de la bande : la réglette de zoom et « Ajuster » ; les boutons « Timeline de la séquence » et « Banque 3D » sont toujours à
+   gauche. Zoome fort, lance la lecture : la bande tourne la page quand la tête arrive au bord.
+3. En haut de « Scène 3D » : « Séquence N ▾ ». Ouvre la liste, clique une autre séquence : son premier plan.
+4. Clic droit sur un objet du décor : « Copier vers la séquence ▸ », « Déplacer vers la séquence ▸ ». Déplace-le ; Ctrl+Z le ramène.
+5. Glisse une ligne d'objet : la liste des séquences s'ouvre, celle sous le pointeur s'éclaire ; lâche (déplacer), puis recommence
+   avec Alt (copier). Un objet coloré et animé arrive avec sa couleur et ses clés.
+6. Dans la vue : choisis un objet, puis une carte, puis la caméra : l'étiquette en haut à gauche dit qui a la main, à sa couleur, et le
+   carré du manipulateur la suit. Sans rien choisir, passe le pointeur sur un objet puis sur une carte : « Un clic prend : … ».
+7. Storyboard, la vue Espace 3D à côté puis en plein écran : la même étiquette.
+8. Tire la caméra d'un plan haut dans la vue (comme le « Plan 5 »), puis « Nouveau calque » (le « + » de la timeline) : le calque est
+   face à la caméra, au milieu du cadre ; dessine : le trait est dans le plan. Ctrl+Z enlève le calque.
+9. Sur un plan dont la caméra n'a pas bougé : « Nouveau calque » fait le calque de toujours.
+10. Préférences > Caméra : décoche « Placer un nouveau calque devant la caméra », recommence le point 8 : le calque est sur la feuille,
+    comme avant.
+
+### 201.6 Vu à l'écran : « ◆ » en case vide
+
+Vu par le coordinateur dans l'application d'essai : le losange « ◆ » des textes de la partie 200 s'affiche en case vide « □ » (« □ Clé
+sur Tree default », « □ Clé à l'image 1 », « Pas de clé : « □ Clé » en haut… ») : il n'est pas dans les polices de FEANOR. Toutes les
+chaînes des fichiers d'interface des parties 194 à 201 ont été passées au crible des polices chargées (egui sait si un caractère y
+est) : deux manquaient.
+- **« ◆ »** (U+25C6), `miseenscene3dui.rs` : « ◆ Clé sur … », « ◆ Clé (choisis un objet) », « ◆ Clé à l'image N », « Pas de clé :
+  « ◆ Clé » en haut… » ; remplacé par le losange de phosphor (`ph::DIAMOND`), celui des boutons des clés de caméra de la barre.
+- **« ✕ »** (U+2715), `colonneui.rs` : « Tous les onglets sont sortis en panneaux : ferme l'un d'eux (✕), il revient ici. » ; dit en
+  mots, « (la croix de son en-tête) ».
+- Les autres (« · », « — », « … », « → », « › », « ▾ » n'y est pas employé) sont dans les polices.
+
+Essai (`finitions3d_tests.rs`, 9 en tout) : chaque caractère hors ASCII des chaînes littérales de dix-huit fichiers d'interface des
+parties 194 à 201 (ceux qu'elles ont créés, et `decor3dui.rs`, `espace3dview.rs`, `espace3dvues.rs`) est dans les polices de FEANOR ; les
+textes changés, tels qu'ils s'écrivent, aussi ; et l'essai voit bien qu'« ◆ » manque.

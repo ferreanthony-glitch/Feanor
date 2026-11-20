@@ -54,7 +54,7 @@ pub(crate) const NOM_PORTE: &str = "Porte une ombre";
 pub(crate) const PHRASE_PORTE: &str = "L'encre de la carte de ce calque cache le soleil du décor 3D de la séquence : son ombre tombe sur le sol, les objets et les autres cartes. Décoché : la carte ne fait pas d'ombre (un fond peint, un ciel, une lueur).";
 pub(crate) const ACTION_PORTE: &str = "calque.porte_ombre";
 pub(crate) const NOM_RECOIT: &str = "Reçoit les ombres";
-pub(crate) const PHRASE_RECOIT: &str = "La carte de ce calque s'assombrit là où un objet du décor 3D, ou une autre carte, lui cache le soleil, comme une face du décor à l'ombre. Décoché : elle reste telle qu'elle est dessinée.";
+pub(crate) const PHRASE_RECOIT: &str = "Ombres et lampes : la carte de ce calque s'assombrit là où un objet du décor 3D, ou une autre carte, lui cache le soleil, comme une face du décor à l'ombre ; et les lampes du décor l'éclairent, son encre et son papier, de leur couleur (partie 201). Décoché : elle reste telle qu'elle est dessinée.";
 pub(crate) const ACTION_RECOIT: &str = "calque.recoit_ombres";
 
 /// Le biais des comparaisons (en profondeur de la carte d'ombres, de 0 à 1) : celui des ombres du décor sur lui-même
@@ -125,6 +125,11 @@ pub struct Lumiere {
     /// Ce qui reste d'une carte à l'ombre (linéaire, par canal) : la lumière hémisphère d'une face verticale, sur la même lumière
     /// avec le soleil d'une face tournée vers lui.
     pub carte: [f32; 3],
+    /// Partie 201 : le décor a ses ombres (le soleil, ses cartes d'ombres) ; faux : seulement ses lampes (`de_avec_lampes`).
+    pub ombres: bool,
+    /// Partie 201 : les lampes du décor (`miseenscene3d::LampesVues`, dans le repère où l'on regarde) : elles éclairent les cartes qui
+    /// reçoivent les ombres (`eclairer_carte`).
+    pub lampes: crate::miseenscene3d::LampesVues,
 }
 
 impl Lumiere {
@@ -151,7 +156,66 @@ impl Lumiere {
             horizon: aspect.horizon(),
             brume: [ec.brume.0, ec.brume.1, if aspect.brume { crate::decor3drendu::BRUME_MAX } else { 0.0 }],
             carte,
+            ombres: true,
+            lampes: aspect.lampes,
         })
+    }
+
+    /// Partie 201 : `de`, ou, sans ses ombres mais avec des lampes, la lumière de ses lampes seules (rien du soleil : pas de carte
+    /// d'ombres, `taps` 0) ; rien sans ombres ni lampes.
+    pub fn de_avec_lampes(ec: &Eclairage, aspect: &Aspect, prise: &Prise) -> Option<Lumiere> {
+        if let Some(l) = Lumiere::de(ec, aspect, prise) {
+            return Some(l);
+        }
+        (aspect.lampes.n > 0).then(|| Lumiere::des_lampes(aspect, prise))
+    }
+
+    /// La lumière des lampes seules d'un décor d'aspect `aspect` vu de `prise` (partie 201).
+    pub fn des_lampes(aspect: &Aspect, prise: &Prise) -> Lumiere {
+        let (ciel, sol) = aspect.ambiances();
+        Lumiere {
+            light_vp: m::IDENT,
+            inv_light: m::IDENT,
+            prise: *prise,
+            taps: 0,
+            cote: 1,
+            ciel,
+            sol,
+            soleil: aspect.couleur_soleil(),
+            horizon: aspect.horizon(),
+            brume: [0.0; 3],
+            carte: [1.0; 3],
+            ombres: false,
+            lampes: aspect.lampes,
+        }
+    }
+
+    /// Partie 201 : la couleur `c` (prémultipliée, valeurs gamma) d'un pixel de carte au point `p` du monde, de normale `n`, dont
+    /// `occ` (0 à 1) du soleil est caché : assombrie de l'ombre (`assombrir_carte`) et éclairée par les lampes, en lumière linéaire,
+    /// `c × (1 + lumière des lampes)` (la même lumière que sur le décor, `LampesVues::lumiere`). Sans ombre ni lampe qui l'atteigne :
+    /// `c` tel quel, au bit près.
+    pub fn eclairer_carte(&self, c: Color32, p: V3, n: V3, occ: f32) -> Color32 {
+        let a = c.a();
+        if a == 0 {
+            return c;
+        }
+        let l = if self.lampes.n > 0 {
+            // (La normale tournée vers l'œil, comme le décor : une carte se voit des deux côtés.)
+            let n = if m::dot(n, m::sub(self.prise.oeil, p)) < 0.0 { m::scale(n, -1.0) } else { n };
+            self.lampes.lumiere(p, n)
+        } else {
+            [0.0; 3]
+        };
+        if occ <= 0.0 && l.iter().all(|v| *v <= 0.0) {
+            return c;
+        }
+        let k = a as f32 / 255.0;
+        let o: [u8; 3] = std::array::from_fn(|i| {
+            let v = ([c.r(), c.g(), c.b()][i] as f32 / 255.0 / k).min(1.0);
+            let lin = vers_lineaire(v) * (1.0 - occ.max(0.0) * (1.0 - self.carte[i])) * (1.0 + l[i]);
+            (crate::decor3drendu::vers_srgb(lin) * k * 255.0).round().clamp(0.0, 255.0) as u8
+        });
+        Color32::from_rgba_premultiplied(o[0], o[1], o[2], a)
     }
 
     /// Le rayon du filtre des ombres des cartes sur le décor : celui du décor sur lui-même (3 × 3 lectures, 5 × 5 en hautes).
@@ -304,12 +368,19 @@ impl Lumiere {
         put(&mut b, 192, &[self.brume[0], self.brume[1], taille[0], taille[1]]);
         put(&mut b, 208, &[self.carte[0], self.carte[1], self.carte[2], if boite.is_some() { 1.0 } else { 0.0 }]);
         put(&mut b, 224, &boite.unwrap_or([0.0; 4]));
+        // (Partie 201 : les lampes, `lampes_n`, `lampes_pos`, `lampes_col` du shader.)
+        let lp = &self.lampes;
+        put(&mut b, 240, &[lp.n as f32, 0.0, 0.0, 0.0]);
+        for i in 0..crate::miseenscene3d::MAX_LAMPES {
+            put(&mut b, 256 + i * 16, &lp.pos[i]);
+            put(&mut b, 256 + crate::miseenscene3d::MAX_LAMPES * 16 + i * 16, &lp.col[i]);
+        }
         b
     }
 }
 
-/// Taille des réglages de la lumière sur la carte graphique (`Lumiere::octets`).
-pub const OCTETS: u64 = 256;
+/// Taille des réglages de la lumière sur la carte graphique (`Lumiere::octets`) ; partie 201 : 512, les lampes au bout.
+pub const OCTETS: u64 = 512;
 
 /// sRGB (0 à 1) vers linéaire.
 #[inline]
@@ -375,12 +446,15 @@ pub struct Soleil {
 /// soleil), la carte d'ombres des cartes (si l'une en porte), et, pour chaque élément qui reçoit les ombres, son plan et sa pente.
 pub struct Contexte {
     pub lum: Lumiere,
-    soleil: Arc<Soleil>,
-    prof: crate::profondeur::Profondeurs,
+    /// (Partie 201 : rien pour les lampes seules, sans les ombres du décor rendues par la carte graphique.)
+    soleil: Option<Arc<Soleil>>,
+    prof: Option<crate::profondeur::Profondeurs>,
     w: usize,
     h: usize,
     cartes: Option<(Vec<f32>, [f32; 4])>,
-    recepteurs: Vec<Option<(PlanCarte, [f32; 2])>>,
+    /// Pour chaque élément qui reçoit les ombres (et la lumière des lampes, partie 201) : son plan, sa pente dans la carte d'ombres,
+    /// sa normale.
+    recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3)>>,
 }
 
 impl Contexte {
@@ -388,12 +462,13 @@ impl Contexte {
     #[inline]
     pub fn sur_le_decor(&self, x: i64, y: i64, c: Color32) -> Color32 {
         let Some((cartes, boite)) = &self.cartes else { return c };
+        let (Some(soleil), Some(prof)) = (&self.soleil, &self.prof) else { return c };
         if c.a() == 0 || x < 0 || y < 0 || x >= self.w as i64 || y >= self.h as i64 {
             return c;
         }
         let i = y as usize * self.w + x as usize;
-        let inv = self.prof.un(i);
-        let s = [self.soleil.soleil[2 * i], self.soleil.soleil[2 * i + 1]];
+        let inv = prof.un(i);
+        let s = [soleil.soleil[2 * i], soleil.soleil[2 * i + 1]];
         if inv <= 0.0 || s[0] == 0 {
             return c;
         }
@@ -410,7 +485,7 @@ impl Contexte {
     /// soleil à sa carte, s'il reçoit les ombres.
     #[inline]
     pub fn sur_la_carte(&self, idx: usize, x: i64, y: i64, c: Color32) -> Color32 {
-        let Some(Some((plan, g))) = self.recepteurs.get(idx) else { return c };
+        let Some(Some((plan, g, n))) = self.recepteurs.get(idx) else { return c };
         if c.a() == 0 {
             return c;
         }
@@ -419,15 +494,20 @@ impl Contexte {
         if !(inv > 0.0) {
             return c;
         }
-        let l = self.lum.vers_lumiere(self.lum.monde(fx, fy, inv));
-        let r = self.lum.rayon_cartes();
-        let mut vis = self.lum.pcf(&self.soleil.carte, l, *g, r);
-        if let Some((cartes, boite)) = &self.cartes {
-            if vis > 0.0 && dans(boite, l) {
-                vis *= self.lum.pcf(cartes, l, *g, r);
+        let p = self.lum.monde(fx, fy, inv);
+        // (Le soleil, seulement avec les ombres du décor ; partie 201 : et les lampes, `eclairer_carte`.)
+        let mut vis = 1.0;
+        if let Some(soleil) = self.soleil.as_ref().filter(|_| self.lum.ombres) {
+            let l = self.lum.vers_lumiere(p);
+            let r = self.lum.rayon_cartes();
+            vis = self.lum.pcf(&soleil.carte, l, *g, r);
+            if let Some((cartes, boite)) = &self.cartes {
+                if vis > 0.0 && dans(boite, l) {
+                    vis *= self.lum.pcf(cartes, l, *g, r);
+                }
             }
         }
-        self.lum.assombrir_carte(c, 1.0 - vis)
+        self.lum.eclairer_carte(c, p, *n, 1.0 - vis)
     }
 
     /// L'élément `idx` reçoit-il les ombres ?
@@ -450,16 +530,32 @@ pub fn contexte(doc: &Document, plan: &Plan) -> Option<Arc<Contexte>> {
     if !plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.porte || o.recoit) && i.tint.is_none()) {
         return None;
     }
-    let decor = crate::fx::shown(doc, &plan.items[di])?;
-    let soleil = crate::decor3d::soleil_du_rendu(decor.version)?;
+    // (Partie 201 : les lampes du décor éclairent les cartes qui reçoivent les ombres, même sans les ombres du décor, et sans son rendu
+    // par la carte graphique : leur lumière vient de la clé du décor.)
+    let lampes = match &plan.items[di].fond {
+        Some(FondPart::Decor(k)) if k.aspect.lampes.n > 0 && plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.recoit) && i.tint.is_none()) => k.prise().map(|p| (Lumiere::des_lampes(&k.aspect, &p), crate::decor3d::id_of(k))),
+        _ => None,
+    };
     let (w, h) = (doc.width, doc.height);
-    let prof = crate::profondeur::du_decor(&decor, w, h)?;
-    if soleil.soleil.len() != w * h * 2 {
-        return None;
-    }
+    let rendu = crate::fx::shown(doc, &plan.items[di]).and_then(|decor| {
+        let soleil = crate::decor3d::soleil_du_rendu(decor.version)?;
+        let prof = crate::profondeur::du_decor(&decor, w, h)?;
+        (soleil.soleil.len() == w * h * 2).then_some((decor.version, soleil, prof))
+    });
+    let (version, soleil, prof, lum) = match rendu {
+        Some((v, s, p)) => {
+            let lum = s.lum;
+            (v, Some(s), Some(p), lum)
+        }
+        None => {
+            let (lum, v) = lampes?;
+            (v, None, None, lum)
+        }
+    };
     // L'empreinte : le rendu du décor, et pour chaque carte ce qui fait son ombre (son dessin montré, sa place, son plan).
     let mut hs = std::collections::hash_map::DefaultHasher::new();
-    decor.version.hash(&mut hs);
+    version.hash(&mut hs);
+    soleil.is_some().hash(&mut hs);
     let pivot = doc.stage_center();
     for (i, item) in plan.items.iter().enumerate().skip(di + 1) {
         let Some(o) = item.ombre else { continue };
@@ -488,7 +584,7 @@ pub fn contexte(doc: &Document, plan: &Plan) -> Option<Arc<Contexte>> {
             }
         }
     };
-    entree.get_or_init(|| faire(doc, plan, di, soleil, prof)).clone()
+    entree.get_or_init(|| faire(doc, plan, di, lum, soleil, prof)).clone()
 }
 
 /// Oublie les contextes gardés (un autre projet).
@@ -496,12 +592,12 @@ pub fn oublier() {
     GARDES.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
-fn faire(doc: &Document, plan: &Plan, di: usize, soleil: Arc<Soleil>, prof: crate::profondeur::Profondeurs) -> Option<Arc<Contexte>> {
-    let lum = soleil.lum;
+fn faire(doc: &Document, plan: &Plan, di: usize, lum: Lumiere, soleil: Option<Arc<Soleil>>, prof: Option<crate::profondeur::Profondeurs>) -> Option<Arc<Contexte>> {
     let (w, h) = (doc.width, doc.height);
-    let recepteurs: Vec<Option<(PlanCarte, [f32; 2])>> =
-        plan.items.iter().enumerate().map(|(i, item)| item.ombre.filter(|o| i > di && o.recoit && item.tint.is_none()).map(|o| (o.plan, lum.gradient(&o)))).collect();
-    let portees: Vec<&crate::render::PlanItem> = plan.items.iter().skip(di + 1).filter(|i| i.ombre.is_some_and(|o| o.porte) && i.tint.is_none()).collect();
+    let recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3)>> =
+        plan.items.iter().enumerate().map(|(i, item)| item.ombre.filter(|o| i > di && o.recoit && item.tint.is_none()).map(|o| (o.plan, lum.gradient(&o), o.normale))).collect();
+    // (Les ombres des cartes, seulement avec celles du décor.)
+    let portees: Vec<&crate::render::PlanItem> = if lum.ombres { plan.items.iter().skip(di + 1).filter(|i| i.ombre.is_some_and(|o| o.porte) && i.tint.is_none()).collect() } else { Vec::new() };
     let cartes = if portees.is_empty() { None } else { carte_des_cartes(doc, &lum, &portees) };
     if cartes.is_none() && recepteurs.iter().all(Option::is_none) {
         return None;

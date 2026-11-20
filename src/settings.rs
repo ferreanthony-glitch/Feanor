@@ -169,6 +169,10 @@ pub struct Settings {
     /// du poste ; celui des images des plans est dans le décor de chaque séquence (« Dans les plans »).
     #[serde(default, rename = "aspect_vue_3d", skip_serializing_if = "crate::couleurs3d::Rendu::est_matieres")]
     pub aspect_vue_3d: crate::couleurs3d::Rendu,
+    /// Partie 201 : un calque neuf se pose devant la caméra du plan quand elle a quitté la feuille (`calquedevant.rs`) ; coché
+    /// d'origine, écrit seulement décoché.
+    #[serde(default = "yes", rename = "calque_devant_la_camera", skip_serializing_if = "is_true")]
+    pub calque_devant_la_camera: bool,
     // (Partie 165.7 : le réglage « calques_timeline » — trois calques ou toute la pile — n'existe plus, toute la pile est toujours
     // montrée ; une vieille clé, « trois » compris, est ignorée, comme « calques_non_actifs » et « repliage_pistes » avant elle.)
     /// La hauteur de la rangée des plans dans le Storyboard et le Montage : moyenne (d'office) ou en bandeau (`pistes.rs`).
@@ -500,6 +504,7 @@ impl Default for Settings {
             storyboard_calques_replies: false,
             scene: Default::default(),
             aspect_vue_3d: Default::default(),
+            calque_devant_la_camera: true,
             montage_plans: Default::default(),
             montage_grands: default_grands(),
             paint_behind: false,

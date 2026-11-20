@@ -5,6 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **Finitions 3D** (partie 201, branche `finitions-3d` partie de main e016b52, format 61 inchangé) : la timeline de la séquence de
+  l'onglet 3D se zoome, défile, s'ajuste, sa règle suit le zoom, la tête de lecture reste en vue ; un sélecteur de séquence en tête de
+  « Scène 3D », copier ou déplacer des objets vers une autre séquence (menu, glisser, Alt copie) ; l'étiquette « qui a la main » dans les
+  vues 3D ; un calque neuf devant une caméra qui a quitté la feuille (réglage, coché d'origine). Les lampes sur les cartes : arrêté
+  avant, puis fait sur l'accord d'Anthony (201.4 : « Reçoit les ombres » dit « ombres et lampes », une carte hors de portée inchangée au
+  bit près, 17 ms au lieu de 13 à l'export pour 8 lampes et 10 cartes en HD, rien de mesurable sur la carte graphique) ; le « ◆ » en
+  case vide remplacé par le losange de phosphor (201.6). Essais : `finitions3d_tests.rs` (8). **Rien regardé à l'écran, pas de commit** (liste 201.5).
 - **La mise en scène 3D** (partie 200, étape 5 sur 5, la dernière, de la maquette de l'onglet 3D, branche `mise-en-scene-3d` partie
   de main 3446588, format 61 inchangé) : des lampes (outil « Ajouter une lampe » et Propriétés > Lumières, huit par séquence, teinte,
   intensité, portée, sans ombres, le décor seulement, dans le sommaire et la vue, à tirer) ; les objets du décor animés par des clés

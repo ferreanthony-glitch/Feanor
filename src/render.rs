@@ -1033,7 +1033,8 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     // décor, aucun élément ne porte de plan (la composition d'avant, au bit près).
     let avec_decor = decor.is_some();
     // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres.
-    let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.ombres));
+    // (Partie 201 : ou ses lampes, qui éclairent les cartes qui reçoivent les ombres.)
+    let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0));
     let mut decor = decor;
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];

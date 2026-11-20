@@ -102,6 +102,8 @@ impl App {
         let li = (self.cur_layer + 1).min(self.layers().len());
         self.layers_mut().insert(li, layer);
         self.cur_layer = li;
+        // (Partie 201 : devant la caméra du plan, si elle a quitté la feuille.)
+        self.calque_neuf_devant_la_camera(li);
         if end > self.frame_count() && !self.doc.storyboard_locked {
             self.panel_mut().set_length(end);
         }

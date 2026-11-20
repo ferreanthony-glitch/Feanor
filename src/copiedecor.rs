@@ -91,6 +91,8 @@ impl Document {
                 c.modele = m;
             }
             c.place.position[0] += dx;
+            // (Partie 201 : « Caché dans le plan » ne vise que des plans de la séquence où il est posé ; vers une autre séquence, il part.)
+            c.caches_dans.retain(|p| self.panels.iter().enumerate().any(|(i, q)| q.id == *p && self.sequence_of(i) == seq));
             neufs.push(c.id);
             copies.push(c);
         }

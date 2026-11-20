@@ -171,6 +171,10 @@ impl App {
         let encre = if courante { ui.visuals().strong_text_color() } else { ui.visuals().text_color() };
         let g = p.text(pos2(x + 36.0, rect.center().y), Align2::LEFT_CENTER, nom, FontId::proportional(12.5), encre);
         p.text(pos2(g.right() + 8.0, rect.center().y), Align2::LEFT_CENTER, format!("{n} plan{}", if n > 1 { "s" } else { "" }), FontId::proportional(10.5), ui.visuals().weak_text_color());
+        // (Partie 201 : des objets du décor 3D glissés depuis « Scène 3D » se lâchent sur une séquence.)
+        if self.scene_lacher_sur_sequence(ui, &resp, rect, seq) {
+            return;
+        }
         if Self::scene_triangle(ui, rect, x, l.ouvert, "la séquence") {
             self.settings.scene.basculer_sequence(seq, courante);
             let _ = self.settings.save();
