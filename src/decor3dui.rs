@@ -733,13 +733,17 @@ impl App {
                         cle,
                         // (Partie 199 : l'aspect de la vue, un réglage du poste, pas celui des plans.)
                         // (Partie 200 : et ses lampes.)
-                        dessins: crate::decor3d::dessins_gpu(&objets, crate::decor3drendu::Aspect { rendu: self.settings.aspect_vue_3d, lampes: crate::miseenscene3d::lampes_vues(d, &m::IDENT), ..d.aspect }),
+                        // (Partie 202 : et son cyclo.)
+                        dessins: crate::decor3d::dessins_gpu(&objets, crate::decor3drendu::Aspect { rendu: self.settings.aspect_vue_3d, lampes: crate::miseenscene3d::lampes_vues(d, &m::IDENT), cyclo: crate::decor3d::cyclo_vu(d), ..d.aspect }),
                         vue: crate::decor3dgpu::Vue::de_view(view, center),
                         taille_pts: [draw.width(), draw.height()],
                         cible_egui: g.render_state().target_format,
                         qualite,
                         // (Les ombres des cartes, partie 189 : seulement quand ce décor a les siennes.)
                         cartes: self.espace3d.ombres.as_ref().map(|o| o.cartes.clone()),
+                        // (Partie 202 : le ciel du cyclo : toujours par « Caméra du plan », dans une perspective si « Cyclo » est allumé,
+                        // jamais dans une vue orthographique.)
+                        ciel: d.cyclo.is_some() && d.aspect.ciel && view.ortho.is_none() && (par_la_camera || self.o3.montrer_cyclo),
                     };
                     painter.add(eframe::egui_wgpu::Callback::new_paint_callback(draw, cb));
                     sur_la_carte = true;
@@ -880,8 +884,13 @@ impl App {
             if p.soleil {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Soleil");
-                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
-                    ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
+                    // (Partie 202 : avec un cyclo, le soleil est le sien : son heure et sa rotation, dans Propriétés > Monde.)
+                    if d.cyclo.is_some() {
+                        ui.label(egui::RichText::new("suit le cyclo : son heure et sa rotation (Monde)").weak());
+                    } else {
+                        ui.add(egui::DragValue::new(&mut d.aspect.soleil_azimut).speed(1.0).suffix("° autour"));
+                        ui.add(egui::DragValue::new(&mut d.aspect.soleil_hauteur).speed(0.5).range(5.0..=89.0).suffix("° haut"));
+                    }
                 });
             }
             ui.horizontal_wrapped(|ui| {

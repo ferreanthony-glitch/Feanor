@@ -555,3 +555,12 @@ déplacent vers une autre séquence par le menu d'une ligne de « Scène 3D » o
 partie 159). Les lampes éclairent les cartes qui reçoivent les ombres (201.4) : `ombres::Lumiere` porte les lampes, la lumière des lampes seules
 existe sans les ombres du décor, le drapeau 8 des composeurs de la carte graphique et le contexte du processeur ajoutent
 `c × (1 + lampes)` en lumière linéaire ; une carte hors de portée est inchangée au bit près.
+
+## 26. Les cyclos (2026-11-21, branche `cyclos`, partie 202 de `docs/INTERFACE.md`)
+
+Un cyclo par séquence (`cyclos.rs`, `Decor3d::cyclo`), même sans objet : le ciel à l'infini, l'horizon et ses silhouettes, et sa
+lumière, dessinés par FEANOR (neuf choix, puis l'heure, les nuages, la brume, la rotation, la graine, une couleur). Son image
+équirectangulaire (2048 × 1024) est faite une fois hors du fil de l'interface et gardée par ses réglages ; le ciel du décor la lit
+(processeur et carte graphique), le soleil du décor suit le sien (`Aspect::soleil`). Les cartes qui « prennent la lumière du cyclo »
+reçoivent `c × (ambiante + ambiante_soleil × n·soleil)` en lumière linéaire (le drapeau 16 des composeurs, le contexte des ombres du
+processeur), avec les ombres et les lampes ; Jour clair vaut 1.

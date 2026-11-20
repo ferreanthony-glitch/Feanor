@@ -530,6 +530,9 @@ pub struct Layer {
     /// **Reçoit les ombres** (partie 185) : la carte s'assombrit là où un objet du décor, ou une autre carte, lui cache le soleil.
     /// Vrai d'origine.
     pub recoit_ombres: bool,
+    /// **Prend la lumière du cyclo** (partie 202, `cyclos.rs`) : la carte prend la lumière du cyclo de la séquence (`c × ambiante`) ;
+    /// sans cyclo, rien. Vrai d'origine.
+    pub prend_cyclo: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -613,6 +616,7 @@ impl Layer {
             devant_decor: false,
             porte_ombre: true,
             recoit_ombres: true,
+            prend_cyclo: true,
         }
     }
 

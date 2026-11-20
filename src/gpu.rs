@@ -308,16 +308,13 @@ fn fs_compose_p(v: VOut) -> @location(0) vec4<f32> {
     }
     let o = c * visible(v.pos);
     // (Partie 201 : 8, les lampes du décor l'éclairent.)
-    if ((drapeau(2u) || drapeau(8u)) && o.a > 0.0) {
+    // (Partie 202 : 16, elle prend la lumière du cyclo.)
+    if ((drapeau(2u) || drapeau(8u) || drapeau(16u)) && o.a > 0.0) {
         var occ = 0.0;
         if (drapeau(2u)) {
             occ = ombre_recue(v.pos.xy);
         }
-        var l = vec3<f32>(0.0);
-        if (drapeau(8u)) {
-            l = lampes_carte(v.pos.xy);
-        }
-        return eclairer_carte(o, occ, l);
+        return eclairer_carte(o, occ, appoint_carte(v.pos.xy, drapeau(8u), drapeau(16u)));
     }
     return o;
 }
@@ -333,8 +330,9 @@ fn fs_blend_p(v: VOut) -> @location(0) vec4<f32> {
             teinte = vec3<f32>(1.0) - ombre_recue(v.pos.xy) * (vec3<f32>(1.0) - eclair.carte.rgb);
         }
         // (Partie 201 : et la lumière des lampes.)
-        if (drapeau(8u) && vis > 0.0) {
-            teinte = teinte * (vec3<f32>(1.0) + lampes_carte(v.pos.xy));
+        if ((drapeau(8u) || drapeau(16u)) && vis > 0.0) {
+            let a = appoint_carte(v.pos.xy, drapeau(8u), drapeau(16u));
+            teinte = teinte * (a.amb + a.l);
         }
     }
     return fusionner_t(v, item.params.x * vis, teinte);
@@ -535,6 +533,9 @@ struct Lumiere {
     lampes_n: vec4<f32>,   // x : combien de lampes (partie 201)
     lampes_pos: array<vec4<f32>, 8>,   // xyz : la place ; w : la portée (mètres)
     lampes_col: array<vec4<f32>, 8>,   // rgb : la couleur linéaire fois l'intensité
+    amb: vec4<f32>,         // la lumière du cyclo pour les cartes (partie 202) ; w : le décor a un cyclo
+    amb_soleil: vec4<f32>,  // sa part de soleil, fois max(n·dir_soleil, 0)
+    dir_soleil: vec4<f32>,  // vers le soleil
 };
 
 // Le point du monde vu au pixel `px` de la feuille, à l'inverse de distance `inv` (`Lumiere::monde`).
@@ -653,15 +654,25 @@ const COMPOSER_OMBRES: &str = r#"
 @group(3) @binding(5) var s_cmp: sampler_comparison;
 
 // Partie 201 : la lumière des lampes du décor au pixel `px` de la carte (son plan : prof.xyz), sa normale tournée vers l'œil ; les
-// formules du décor (`miseenscene3d::LampesVues::lumiere`, `decor3dgpu`, `lampes`). Rien sans lampe ni là où aucune n'atteint.
-fn lampes_carte(px: vec2<f32>) -> vec3<f32> {
-    let k = i32(eclair.lampes_n.x);
-    if (k <= 0) {
-        return vec3<f32>(0.0);
+// formules du décor (`miseenscene3d::LampesVues::lumiere`, `decor3dgpu`, `lampes`). Partie 202 : et la lumière du cyclo (`amb`), plus
+// sa part de soleil selon la face de la carte. Rien sans lampe ni cyclo : 1 et 0.
+struct Appoint {
+    amb: vec3<f32>,
+    l: vec3<f32>,
+};
+
+fn appoint_carte(px: vec2<f32>, lampes: bool, cyclo: bool) -> Appoint {
+    var a: Appoint;
+    a.amb = vec3<f32>(1.0);
+    a.l = vec3<f32>(0.0);
+    let k = select(0, i32(eclair.lampes_n.x), lampes);
+    let avec_cyclo = cyclo && eclair.amb.w > 0.5;
+    if (k <= 0 && !avec_cyclo) {
+        return a;
     }
     let inv = item.prof.x * px.x + item.prof.y * px.y + item.prof.z;
     if (inv <= 0.0) {
-        return vec3<f32>(0.0);
+        return a;
     }
     let p = lum_monde(px, inv);
     // (La normale de la carte : deux autres points de son plan, à 64 pixels.)
@@ -673,23 +684,27 @@ fn lampes_carte(px: vec2<f32>) -> vec3<f32> {
     if (dot(n, eclair.oeil.xyz - p) < 0.0) {
         n = -n;
     }
+    if (avec_cyclo) {
+        a.amb = eclair.amb.rgb + eclair.amb_soleil.rgb * max(dot(n, eclair.dir_soleil.xyz), 0.0);
+    }
     var s = vec3<f32>(0.0);
     for (var i = 0; i < k; i = i + 1) {
         let l = eclair.lampes_pos[i].xyz - p;
         let d = length(l);
-        let a = clamp(1.0 - d / max(eclair.lampes_pos[i].w, 0.01), 0.0, 1.0);
-        s = s + eclair.lampes_col[i].rgb * max(dot(n, l / max(d, 1e-4)), 0.0) * a * a;
+        let at = clamp(1.0 - d / max(eclair.lampes_pos[i].w, 0.01), 0.0, 1.0);
+        s = s + eclair.lampes_col[i].rgb * max(dot(n, l / max(d, 1e-4)), 0.0) * at * at;
     }
-    return s;
+    a.l = s;
+    return a;
 }
 
-// Partie 201 : une carte assombrie de `occ` à l'ombre et éclairée de `l` par les lampes, en lumière linéaire, c × (1 + l)
-// (`Lumiere::eclairer_carte`) ; ni ombre ni lampe : telle quelle.
-fn eclairer_carte(c: vec4<f32>, occ: f32, l: vec3<f32>) -> vec4<f32> {
-    if (occ <= 0.0 && max(max(l.x, l.y), l.z) <= 0.0) {
+// Une carte assombrie de `occ` à l'ombre, et éclairée par le cyclo et les lampes, en lumière linéaire, c × ombre × (amb + l)
+// (`Lumiere::eclairer_carte_avec`) ; rien de tout cela : telle quelle.
+fn eclairer_carte(c: vec4<f32>, occ: f32, a: Appoint) -> vec4<f32> {
+    if (occ <= 0.0 && max(max(a.l.x, a.l.y), a.l.z) <= 0.0 && all(a.amb == vec3<f32>(1.0))) {
         return c;
     }
-    let lin = vers_lin(min(c.rgb / c.a, vec3<f32>(1.0))) * (vec3<f32>(1.0) - max(occ, 0.0) * (vec3<f32>(1.0) - eclair.carte.rgb)) * (vec3<f32>(1.0) + l);
+    let lin = vers_lin(min(c.rgb / c.a, vec3<f32>(1.0))) * (vec3<f32>(1.0) - max(occ, 0.0) * (vec3<f32>(1.0) - eclair.carte.rgb)) * (a.amb + a.l);
     return vec4<f32>(vers_srgb(lin) * c.a, c.a);
 }
 
@@ -2115,11 +2130,12 @@ impl GpuCanvas {
             // (Partie 201 : sans les ombres du décor, ses lampes seules : une carte ne porte pas d'ombre, et celle qui reçoit les ombres
             // reçoit leur lumière.)
             let ombre = match (lumiere, item.ombre) {
-                (Some((d, lum, _)), Some(o)) if item.tint.is_none() && ((o.porte && lum.ombres) || o.recoit) => Some(OmbreGpu {
+                (Some((d, lum, _)), Some(o)) if item.tint.is_none() && ((o.porte && lum.ombres) || o.recoit || (o.cyclo && lum.cyclo)) => Some(OmbreGpu {
                     decor: d,
                     porte: o.porte && lum.ombres,
                     recoit: o.recoit && lum.ombres,
                     lampes: o.recoit && lum.lampes.n > 0,
+                    cyclo: o.cyclo && lum.cyclo,
                     plan: o.plan,
                     gradient: lum.gradient(&o),
                 }),
@@ -2302,6 +2318,8 @@ struct OmbreGpu {
     recoit: bool,
     /// Partie 201 : les lampes du décor l'éclairent (elle reçoit les ombres, le décor a des lampes).
     lampes: bool,
+    /// Partie 202 : elle prend la lumière du cyclo du décor.
+    cyclo: bool,
     plan: crate::profondeur::PlanCarte,
     gradient: [f32; 2],
 }
@@ -2348,7 +2366,7 @@ impl ItemKey {
             std::hash::Hasher::finish(&h)
         });
         let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits), item.quatre));
-        let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.lampes, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
+        let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.lampes || o.cyclo, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
         ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust, prof, ombre, decor_ombre: item.decor_ombre }
     }
 }
@@ -2636,7 +2654,7 @@ fn compose_span(
         }
         // Une carte qui partage la profondeur du décor 3D (partie 183) : les mêmes, qui lisent aussi la profondeur du décor ; et une
         // carte qui reçoit les ombres, ou le décor sous les cartes qui en portent (partie 185) : le groupe de ses ombres.
-        let decor_de = item.prof.map(|(d, _)| d).or(item.ombre.filter(|o| o.recoit || o.lampes).map(|o| o.decor)).or(if item.decor_ombre { item.cel } else { None });
+        let decor_de = item.prof.map(|(d, _)| d).or(item.ombre.filter(|o| o.recoit || o.lampes || o.cyclo).map(|o| o.decor)).or(if item.decor_ombre { item.cel } else { None });
         let groupe3 = decor_de.and_then(|d| res.textures.get(&d)).and_then(|t| t.ombre.as_ref().and_then(|o| o.groupe.as_ref()).or(t.prof.as_ref().map(|p| &p.1)));
         let assombri = item.decor_ombre && groupe3.is_some() && !meshed && item.blend == 0;
         let prof = groupe3.filter(|_| !item.decor_ombre || assombri);
@@ -2765,7 +2783,7 @@ impl CallbackTrait for CanvasPaint {
             // 1, cachée par le décor ; 2, elle reçoit les ombres, sa pente dans la carte d'ombres au réglage de plus, partie 185.)
             // (Et 4 : la profondeur du décor de dessous a quatre échantillons par pixel, partie 193.)
             // (Et 8 : les lampes du décor l'éclairent, partie 201.)
-            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 } + if item.quatre { 4.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.lampes) { 8.0 } else { 0.0 };
+            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 } + if item.quatre { 4.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.lampes) { 8.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.cyclo) { 16.0 } else { 0.0 };
             if let Some(plan) = item.prof.map(|p| p.1).or(item.ombre.map(|o| o.plan)) {
                 put_floats(&mut bytes[i * stride + 112..], &[plan[0], plan[1], plan[2], drapeaux]);
             }
@@ -3136,7 +3154,7 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
     let lumiere = if aspect.ombres && qualite != crate::decor3dbudget::Qualite::Sans {
         let ec = crate::decor3dgpu::eclairage(&crate::decor3d::dessins_gpu(&objets, aspect), prise.oeil, &aspect, qualite);
         crate::ombres::Lumiere::de_avec_lampes(&ec, &aspect, &prise)
-    } else if aspect.lampes.n > 0 {
+    } else if aspect.lampes.n > 0 || aspect.cyclo.actif {
         Some(crate::ombres::Lumiere::des_lampes(&aspect, &prise))
     } else {
         None

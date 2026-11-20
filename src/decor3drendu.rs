@@ -58,6 +58,10 @@ pub struct Aspect {
     /// écrites ici : elles sont enregistrées avec le décor (`Decor3d::lampes`), et remises à chaque rendu.
     #[serde(skip)]
     pub lampes: crate::miseenscene3d::LampesVues,
+    /// Partie 202 : le cyclo de la séquence, prêt pour le rendu (`cyclos::CycloVu`) : son ciel, sa brume, sa lumière. Jamais écrit ici :
+    /// il est enregistré avec le décor (`Decor3d::cyclo`).
+    #[serde(skip)]
+    pub cyclo: crate::cyclos::CycloVu,
 }
 
 fn oui() -> bool {
@@ -72,26 +76,43 @@ fn hauteur_d_origine() -> f32 {
 
 impl Default for Aspect {
     fn default() -> Aspect {
-        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine(), rendu: Default::default(), lampes: Default::default() }
+        Aspect { facettes: true, ciel: true, brume: true, ombres: true, soleil_azimut: azimut_d_origine(), soleil_hauteur: hauteur_d_origine(), rendu: Default::default(), lampes: Default::default(), cyclo: Default::default() }
     }
 }
 
 impl Aspect {
     /// Vers le soleil (longueur 1).
     pub fn soleil(&self) -> V3 {
+        // (Partie 202 : avec un cyclo, le sien : il suit son heure et sa rotation.)
+        if self.cyclo.actif {
+            return self.cyclo.soleil_dir;
+        }
         let (a, e) = (self.soleil_azimut.to_radians(), self.soleil_hauteur.clamp(5.0, 89.0).to_radians());
         m::normalize([e.cos() * a.sin(), e.sin(), e.cos() * a.cos()])
     }
+    // (Partie 202 : avec un cyclo, ses couleurs et sa lumière.)
     pub fn couleur_soleil(&self) -> [f32; 3] {
+        if self.cyclo.actif {
+            return self.cyclo.soleil;
+        }
         SOLEIL_COULEUR.map(|c| c * SOLEIL_FORCE)
     }
     pub fn ambiances(&self) -> ([f32; 3], [f32; 3]) {
+        if self.cyclo.actif {
+            return (self.cyclo.ciel_amb, self.cyclo.sol_amb);
+        }
         (AMBIANCE_CIEL, AMBIANCE_SOL)
     }
     pub fn horizon(&self) -> [f32; 3] {
+        if self.cyclo.actif {
+            return self.cyclo.horizon;
+        }
         HORIZON
     }
     pub fn zenith(&self) -> [f32; 3] {
+        if self.cyclo.actif {
+            return self.cyclo.zenith;
+        }
         ZENITH
     }
     /// Début et fin de la brume, d'après la distance du coin du décor le plus loin de l'œil.
@@ -100,8 +121,9 @@ impl Aspect {
     }
     /// La couleur du ciel dans la direction `dir` (longueur 1).
     pub fn ciel_vers(&self, dir: V3) -> [f32; 3] {
+        let (h, z) = (self.horizon(), self.zenith());
         let k = dir[1].clamp(0.0, 1.0).powf(0.6);
-        [0, 1, 2].map(|i| HORIZON[i] + (ZENITH[i] - HORIZON[i]) * k)
+        [0, 1, 2].map(|i| h[i] + (z[i] - h[i]) * k)
     }
     /// La couleur (linéaire) d'un point de couleur de base `c`, de normale `n` (tournée vers l'œil), à `d` de l'œil, la brume
     /// allant de `brume` (début, fin). Sans ombre (le rendu par le processeur n'en a pas).
@@ -319,6 +341,8 @@ struct Ombrage {
     ss: f32,
     /// Partie 200 : la prise, pour retrouver le point du monde d'un pixel (les lampes l'éclairent).
     prise: Prise,
+    /// Partie 202 : l'image du cyclo, prise une fois pour tout le rendu.
+    cyclo: Option<std::sync::Arc<crate::cyclos::Equirect>>,
 }
 
 struct Bande {
@@ -457,7 +481,7 @@ pub fn rendre_objets_prof_teintes(objets: &[(&Scene3d, M4)], teintes: &[crate::c
         })
         .fold(0.0f32, f32::max)
         .max(1e-3);
-    let om = Ombrage { aspect: *aspect, brume: aspect.brume_de(dist_max), centre: prise.centre, s: prise.px_par_unite, ss: ss as f32, prise: *prise };
+    let om = Ombrage { aspect: *aspect, brume: aspect.brume_de(dist_max), centre: prise.centre, s: prise.px_par_unite, ss: ss as f32, prise: *prise, cyclo: aspect.cyclo.actif.then(|| crate::cyclos::texture(aspect.cyclo.cle)).flatten() };
     let rot = [prise.droite, prise.haut, prise.avant];
     for t in &mut tris {
         let moy = m::add(m::add(t.n[0], t.n[1]), t.n[2]);
@@ -529,7 +553,11 @@ pub fn rendre_objets_prof_teintes(objets: &[(&Scene3d, M4)], teintes: &[crate::c
                             // Le ciel sous ce que le décor ne couvre pas : la direction du regard à ce pixel.
                             let (dx, dy) = ((x as f32 + 0.5 - prise.centre[0]) / prise.px_par_unite, -((py0 + ry) as f32 + 0.5 - prise.centre[1]) / prise.px_par_unite);
                             let dir = m::normalize(m::add(m::add(m::scale(prise.droite, dx), m::scale(prise.haut, dy)), prise.avant));
-                            let ciel = om.aspect.ciel_vers(dir);
+                            // (Partie 202 : le cyclo, s'il y en a un et que son image est prête.)
+                            let ciel = match &om.cyclo {
+                                Some(img) => img.vers(dir, om.aspect.cyclo.rotation),
+                                None => om.aspect.ciel_vers(dir),
+                            };
                             for k in 0..3 {
                                 let c = if couv > 0.0 { somme[k] / couv } else { 0.0 };
                                 px[k] = (vers_srgb(c * a + ciel[k] * (1.0 - a)) * 255.0).round() as u8;

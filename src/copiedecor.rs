@@ -104,11 +104,13 @@ impl Document {
     /// neuf (`Decor3d::uid`, sa propre texture), le même aspect, les mêmes modèles (partagés), des objets aux numéros neufs, aux
     /// mêmes places. Les deux décors sont ensuite indépendants. Rien si `de` n'a pas de décor ou si `vers` en a déjà un.
     pub fn copier_decor_de_sequence(&mut self, de: u64, vers: u64) -> bool {
-        if de == vers || self.decors3d.par_sequence.get(&vers).is_some_and(|d| !d.objets.is_empty()) {
+        // (Partie 202 : un décor, ce sont des objets ou un cyclo : un cyclo seul se copie aussi.)
+        if de == vers || self.decors3d.par_sequence.get(&vers).is_some_and(|d| d.se_montre()) {
             return false;
         }
-        let Some(source) = self.decors3d.par_sequence.get(&de).filter(|d| !d.objets.is_empty()).cloned() else { return false };
+        let Some(source) = self.decors3d.par_sequence.get(&de).filter(|d| d.se_montre()).cloned() else { return false };
         let mut d = Decor3d::new(source.aspect);
+        d.cyclo = source.cyclo;
         for o in source.objets {
             let mut c = o;
             c.id = self.alloc();

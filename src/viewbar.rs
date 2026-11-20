@@ -594,8 +594,14 @@ impl App {
                 return;
             }
             // (Partie 199 : l'aspect du décor 3D de la séquence dans les plans, quand elle en a un : matières, couleurs, argile.)
-            if self.doc.decor_du_plan(self.cur_panel).is_some() {
-                self.decor_dans_les_plans_ui(ui);
+            // (Partie 202 : et le cyclo de la séquence, dès que le projet a un décor 3D quelque part ; sinon, l'onglet 3D, Propriétés >
+            // Monde.)
+            let decor = self.doc.decor_du_plan(self.cur_panel).is_some();
+            if decor || !self.doc.decors3d.is_empty() {
+                if decor {
+                    self.decor_dans_les_plans_ui(ui);
+                }
+                self.cyclo_picker_ui(ui);
                 ui.add_space(crate::barres::MARGE_TRAIT);
                 ui.separator();
                 ui.add_space(crate::barres::MARGE_TRAIT);

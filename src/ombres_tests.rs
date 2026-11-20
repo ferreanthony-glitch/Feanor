@@ -216,7 +216,7 @@ fn une_carte_n_est_jamais_dans_sa_propre_ombre_et_le_calcul_est_celui_de_la_cart
     let mx = xf.matrix();
     let plan = crate::profondeur::plan_de(&monde, &mx, eye).unwrap();
     let n = m::normalize(m::cross(m::dir(&mx, [1.0, 0.0, 0.0]), m::dir(&mx, [0.0, 1.0, 0.0])));
-    let o = crate::ombres::OmbreCarte { plan, point: m::point(&mx, [0.0; 3]), normale: n, porte: true, recoit: true };
+    let o = crate::ombres::OmbreCarte { plan, point: m::point(&mx, [0.0; 3]), normale: n, porte: true, recoit: true, cyclo: true };
     let g = lum.gradient(&o);
     let centre = lum.vers_lumiere(m::point(&mx, [0.0; 3]));
     for (u, v) in [(0.3, 0.1), (-0.2, 0.35), (0.4, -0.4)] {
@@ -391,7 +391,7 @@ fn sans_decor_l_image_est_la_meme_au_bit_pres() {
     // Des éléments qui porteraient des ombres, sans décor dessous : ignorées, par le processeur comme par la carte graphique.
     let mut faux = plan.clone();
     for i in &mut faux.items {
-        i.ombre = Some(crate::ombres::OmbreCarte { plan: [0.0, 0.0, 0.2], point: [0.0, 0.0, -1.0], normale: [0.0, 0.0, 1.0], porte: true, recoit: true });
+        i.ombre = Some(crate::ombres::OmbreCarte { plan: [0.0, 0.0, 0.2], point: [0.0, 0.0, -1.0], normale: [0.0, 0.0, 1.0], porte: true, recoit: true, cyclo: true });
     }
     assert!(crate::render::composite_full(&doc, &plan) == crate::render::composite_full(&doc, &faux));
     assert!(crate::ombres::contexte(&doc, &faux).is_none(), "rien n'est préparé");

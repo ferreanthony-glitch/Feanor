@@ -3,6 +3,15 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-21
+
+- **Les cyclos** (partie 202, branche `cyclos` partie de main 23cb4e4, format 61 inchangé) : un cyclo par séquence, même sans objet 3D,
+  dessiné par FEANOR (Jour clair, Nuageux, Coucher de soleil, Nuit, Brouillard, Montagne, Ville, Mer, Studio ; heure, nuages, brume,
+  rotation, graine, couleur), derrière les cartes et le décor dans l'image des plans, l'export et l'onglet 3D (bouton « Cyclo ») ; les
+  cartes prennent sa lumière (case « Prend la lumière du cyclo », Jour clair = 1, la Nuit assombrit, une lampe éclaire). Propriétés > Monde,
+  la ligne « Cyclo » de Scène 3D, le choix rapide à côté de « Décor » dans la barre du Storyboard. Image du cyclo : 8 ms, une fois. Essais :
+  `cyclos_tests.rs` (17). **Rien regardé dans l'application, pas de commit** (liste 202.3).
+
 ## 2026-11-20
 
 - **Finitions 3D** (partie 201, branche `finitions-3d` partie de main e016b52, format 61 inchangé) : la timeline de la séquence de

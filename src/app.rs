@@ -1991,7 +1991,8 @@ impl App {
         let avec_decor = decor.is_some();
         // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres, comme les sorties.
         // (Partie 201 : ou ses lampes, qui éclairent les cartes qui reçoivent les ombres.)
-        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0));
+        let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0 || k.aspect.cyclo.actif));
+        let avec_cyclo = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(crate::render::FondPart::Decor(k)) if k.aspect.cyclo.actif));
         for li in order {
             let layer = &layers[li];
             starts[li] = items.len();
@@ -2088,7 +2089,7 @@ impl App {
                     fond: None,
                     pre: card_pre.clone(),
                     profondeur: if avec_decor { crate::profondeur::plan_du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
-                    ombre: if avec_ombres { crate::ombres::du_calque(&world, layer, frame, &camera, repere.as_ref()) } else { None },
+                    ombre: if avec_ombres { crate::ombres::du_calque(&world, layer, frame, &camera, repere.as_ref(), avec_cyclo) } else { None },
                 };
                 // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
                 // (`fond.rs`), la peinture libre ou le trait par-dessus.
@@ -3246,6 +3247,14 @@ impl App {
         }
         if crate::decor3d::pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        // (Partie 202 : l'image d'un cyclo, faite sur un autre fil, est arrivée : les plans et les vues se redessinent une fois.)
+        if crate::cyclos::poll() {
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::cyclos::en_cours() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
         if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));

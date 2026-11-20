@@ -1296,6 +1296,10 @@ mod couleurs3dui;
 #[cfg(test)]
 mod couleurs3d_tests;
 pub(crate) mod miseenscene3d;
+pub(crate) mod cyclos;
+mod cyclosui;
+#[cfg(test)]
+mod cyclos_tests;
 mod quialamain;
 mod timelineseq;
 mod seqdecor3d;

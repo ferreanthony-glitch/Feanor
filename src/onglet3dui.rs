@@ -113,7 +113,7 @@ impl App {
             Ligne3d::Objet(_) => (ph::CUBE, Color32::from_rgb(160, 160, 160)),
             Ligne3d::Camera(_) => (ph::VIDEO_CAMERA, crate::theme::camera()),
             Ligne3d::Soleil => (ph::SUN, Color32::from_rgb(250, 205, 80)),
-            Ligne3d::Ciel => (ph::CLOUD, Color32::from_rgb(140, 180, 230)),
+            Ligne3d::Ciel => (ph::MOUNTAINS, Color32::from_rgb(140, 180, 230)),
             Ligne3d::Lampe(id) => (ph::LIGHTBULB, self.o3_lampe(id).map_or(texte, |l| crate::couleurs3d::color32(l.couleur))),
             Ligne3d::Carte(li, _) => (ph::CARDS, self.layers().get(li).map_or(texte, crate::layerheads::encre_de_sorte)),
             Ligne3d::Groupe(..) => unreachable!(),
@@ -212,8 +212,13 @@ impl App {
                     self.e3_follow_card(s);
                 }
             }
-            Ligne3d::Soleil | Ligne3d::Ciel => {
+            Ligne3d::Soleil => {
                 self.colonne.montrer(crate::dock::Pane::Lumieres3d);
+            }
+            // (Partie 202 : la ligne « Cyclo » mène à sa section, dans Propriétés > Monde.)
+            Ligne3d::Ciel => {
+                self.colonne.montrer(crate::dock::Pane::Monde3d);
+                self.o3.vers_cyclo = true;
             }
             Ligne3d::Lampe(id) => {
                 let s = crate::miseenscene3dui::lampe_selection(id);
@@ -352,6 +357,9 @@ impl App {
         }
         ui.separator();
         self.e3_environnement_ui(ui);
+        // (Partie 202 : le cyclo de la séquence, sa galerie puis ses réglages ; la ligne « Cyclo » de Scène 3D y fait défiler.)
+        ui.separator();
+        self.cyclo_ui(ui);
     }
 
     /// L'onglet Décor : son poids face au budget de l'ordinateur, les ombres, les bords doux, ses objets (en ajouter, copier vers

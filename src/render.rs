@@ -1034,7 +1034,8 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
     let avec_decor = decor.is_some();
     // Les ombres des cartes (partie 185, `ombres.rs`) : seulement sur un décor qui a ses ombres.
     // (Partie 201 : ou ses lampes, qui éclairent les cartes qui reçoivent les ombres.)
-    let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0));
+    let avec_ombres = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.ombres || k.aspect.lampes.n > 0 || k.aspect.cyclo.actif));
+        let avec_cyclo = decor.as_ref().is_some_and(|d| matches!(&d.fond, Some(FondPart::Decor(k)) if k.aspect.cyclo.actif));
     let mut decor = decor;
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
@@ -1077,7 +1078,7 @@ fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame:
             fond: None,
             pre: placed.pre,
             profondeur: if avec_decor { crate::profondeur::plan_du_calque(world, l, frame, camera, repere) } else { None },
-            ombre: if avec_ombres { crate::ombres::du_calque(world, l, frame, camera, repere) } else { None },
+            ombre: if avec_ombres { crate::ombres::du_calque(world, l, frame, camera, repere, avec_cyclo) } else { None },
         };
         // Le remplissage au griffonnage (calque de couleur, `griffonnage.rs`) puis le fond sous le trait (`fond.rs`),
         // juste sous le dessin de son calque (ils ont le plan de sa carte).

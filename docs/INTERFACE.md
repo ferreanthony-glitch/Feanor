@@ -18435,3 +18435,109 @@ est) : deux manquaient.
 Essai (`finitions3d_tests.rs`, 9 en tout) : chaque caractère hors ASCII des chaînes littérales de dix-huit fichiers d'interface des
 parties 194 à 201 (ceux qu'elles ont créés, et `decor3dui.rs`, `espace3dview.rs`, `espace3dvues.rs`) est dans les polices de FEANOR ; les
 textes changés, tels qu'ils s'écrivent, aussi ; et l'essai voit bien qu'« ◆ » manque.
+
+## 202. Les cyclos : le ciel et l'horizon autour du décor, et leur lumière sur les cartes (2026-11-21, branche cyclos partie de main 23cb4e4)
+
+La question d'Anthony : « est-ce que les cartes ne prennent pas la lumière parce qu'il n'y a pas de cyclo autour de l'environnement ? On
+devrait pouvoir en créer avec des choix de cyclo de jour, nuageux, nuit, montagne, ville etc. » Son choix : des cyclos **dessinés par
+FEANOR** (aucune image téléchargée, aucune photo : tout est fait par le code), et des cartes qui **prennent la lumière du cyclo**, case
+par case. **Format des projets inchangé (61)** : deux champs facultatifs, écrits seulement quand ils servent ; un FEANOR d'avant lit les
+fichiers d'aujourd'hui (il ignore les clés).
+
+### 202.1 Ce qui a changé
+
+1. **Un cyclo par séquence** (`cyclos.rs`, `Decor3d::cyclo`) : le ciel à l'infini (son dégradé, ses nuages, le soleil ou la lune, les
+   étoiles), l'horizon et ses silhouettes au loin, le sol au loin, et la lumière qui va avec (l'ambiance du ciel et du sol, le soleil de la
+   partie 185 et ses ombres). **Même sans objet 3D** : une séquence de cartes dessinées seules a son ciel et sa lumière. Un décor sans
+   objet garde ses lampes et son cyclo, et ils s'enregistrent (avant, des lampes seules étaient gardées telles quelles dans le fichier).
+2. **Neuf choix** (`Preset`) : **Jour clair**, **Nuageux**, **Coucher de soleil**, **Nuit** (étoiles, lune), **Brouillard**,
+   **Montagne** (trois couches de crêtes, plus pâles au loin), **Ville** (silhouettes d'immeubles, fenêtres allumées la nuit), **Mer**
+   (horizon plat), **Studio** (le cyclo des photographes : un gris neutre, le sol et le fond d'un seul tenant). Chacun règle le dégradé du
+   ciel, les nuages (un bruit), les silhouettes (tirées de la graine), le sol et la brume, le soleil et les couleurs de l'ambiance. Ensuite,
+   **ses réglages** : l'heure (0 à 24 h : la hauteur et la couleur du soleil ; le soir réchauffe, la nuit assombrit et bleuit), les
+   nuages, la brume, la rotation (le ciel et le soleil tournent autour du décor), la graine (« Autre » : d'autres nuages, d'autres crêtes,
+   une autre ville), la couleur dominante (une teinte sur le ciel et sa lumière). Lisible pour un storyboard, pas photoréaliste.
+3. **Son image** : une fois, de ses réglages, en équirectangulaire 2048 × 1024, **hors du fil de l'interface** (un autre fil ; l'image du
+   plan se redessine une fois quand elle arrive), gardée par l'empreinte de ses réglages (`Cyclo::cle`, sans la rotation : elle tourne à la
+   lecture). **Rien ne se refait au repos ni quand la caméra bouge** : le ciel ne dépend que de la direction du regard.
+4. **Il se dessine derrière tout** : dans l'image des plans (la composition par la carte graphique, l'image par le processeur et
+   l'export), dans « Caméra du plan » de l'onglet 3D (toujours), et dans les vues en perspective de l'onglet 3D derrière le bouton
+   **« Cyclo »** de la barre de la vue (allumé d'office ; jamais dans une vue orthographique). Il remplace le dégradé « Ciel » d'avant ;
+   l'œil de la ligne « Cyclo » de Scène 3D (la case « Ciel » du décor) le cache, sa lumière reste.
+5. **Les cartes prennent la lumière du cyclo** : la case **« Prend la lumière du cyclo »** de la carte choisie (onglet 3D, Propriétés,
+   sous « Reçoit les ombres »), cochée d'office, ne compte que quand la séquence a un cyclo (un projet d'avant garde ses pixels).
+   La lumière d'un pixel de carte : `c × (ambiante + ambiante_soleil × max(n·soleil, 0))` en lumière linéaire, réglée pour que **Jour
+   clair laisse les cartes à leurs couleurs** (1, sans terme de soleil), que **la Nuit les assombrisse et les bleuisse** (0,11 ; 0,14 ;
+   0,32), que **le Coucher de soleil les réchauffe** (1 ; 0,8 ; 0,6) ; les autres choix entre les deux, le Studio à 1. Elle se combine
+   avec les ombres (partie 185) et les lampes (partie 201) : `c × ombre × (ambiante + lampes)` ; **la nuit, une lampe près d'une carte
+   l'éclaire nettement**. Sur la carte graphique (le drapeau 16 des composeurs), par le processeur à l'écran et à l'export (le contexte
+   des ombres des cartes).
+6. **Avec un cyclo, le soleil du décor est le sien** (`Aspect::soleil`) : sa hauteur suit l'heure (la lune, la nuit, haute de 35°), son
+   azimut suit l'heure et la rotation ; les ombres suivent. Les champs « Soleil » de Propriétés > Lumières disent alors « suit le cyclo ».
+   Le soleil du décor n'est pas touché : « Aucun » le retrouve tel qu'il était.
+7. **L'interface** :
+   - **Propriétés > Monde** (onglet 3D), au bas, la section **« Cyclo »** : la galerie (« Aucun », puis les neuf vignettes, faites par le
+     code une fois et gardées), puis les réglages du cyclo choisi. « Aucun » rend l'aspect d'avant.
+   - **Scène 3D** : sous Lumières, la ligne « Ciel » devient **« Cyclo »** (icône de montagnes) ; un clic montre Propriétés > Monde et
+     fait défiler jusqu'à la section.
+   - **Le Storyboard** : le choix rapide est **dans la barre au-dessus du dessin, à côté du « Décor » de la partie 199** : un bouton
+     « Cyclo : Montagne » qui ouvre la liste des choix. Il paraît dès que le projet a un décor 3D quelque part (pour un projet sans
+     3D, l'onglet 3D, Propriétés > Monde). Les réglages fins restent dans l'onglet 3D.
+   - Choisir un cyclo est **une étape d'annulation** (« Cyclo ») ; un réglage tiré, une étape au lâcher (« Retoucher le décor 3D ») ; la
+     case des cartes, une étape (« Prend / Ne prend pas la lumière du cyclo »). Tout s'enregistre.
+8. **Copier le décor** (partie 190) **et dupliquer la séquence** (191) emportent le cyclo ; un cyclo seul (sans objet) se copie aussi.
+
+Ce qui est fait, dans le code :
+- `cyclos.rs` : `Preset`, `Cyclo` (ses réglages, `borne`, `cle`, l'heure du soleil), `CycloVu` (les couleurs et la lumière, `Copy`, dans
+  `Aspect::cyclo`), `Equirect` (l'image, sRGB ; `vers` la lit en bilinéaire), `generer` (réparti sur les cœurs), le cache (`assurer`,
+  `texture`, `poll`, `en_cours` ; huit images gardées), `vignette`.
+- `decor3d.rs` : `Decor3d::cyclo`, `est_vide` (sans objet, lampe ni cyclo : ne s'enregistre pas), `se_montre` (des objets ou un cyclo :
+  `decor_du_plan`) ; `EntreeSequence::cyclo` (facultatif) ; un décor sans objet se lit avec ses lampes et son cyclo ; `contenu_a` compte
+  le cyclo et si son image est prête ; `cyclo_vu`, `aspect_vu` ; `modele_vide` (la pose d'un décor sans objet, pour que son aspect
+  aille au rendu).
+- `decor3drendu.rs` : avec un cyclo, le soleil, sa couleur, les ambiances, l'horizon et le zénith sont les siens, et le ciel se lit dans
+  son image. `decor3dgpu.rs` : le ciel lit l'image du cyclo (groupe 2, `zenith.w`, la rotation dans `size.w`), gardée sur la carte
+  graphique (quatre) ; `VueDecor::ciel`.
+- `ombres.rs`, `gpu.rs` : `OmbreCarte::cyclo`, `Lumiere` porte l'ambiante, son terme de soleil et la direction du soleil (560 octets) ;
+  `eclairer_carte_avec` ; le drapeau 16 ; `du_calque` ne compte la case que sur un décor à cyclo.
+- `document.rs`, `project.rs` : `Layer::prend_cyclo` (écrit seulement décoché). `cyclosui.rs` : la section, la galerie, le choix rapide,
+  la case. `onglet3d.rs` : le bouton « Cyclo », la ligne « Cyclo ». `app.rs` : l'arrivée d'une image redessine.
+
+**Mesures** (ce Mac, `cyclos_tests::mesure_des_cyclos`) :
+- l'image d'un cyclo, 2048 × 1024 : **8 ms** (Montagne 13 ms, Studio 2 ms), sur un autre fil ; les neuf vignettes : 2 ms ;
+- l'export d'un plan de 1920 × 1080 sans objet : **2,8 ms sans cyclo, 4,1 ms avec** (médianes) ; 160 × 90 : 0,22 et 0,25 ms ;
+- la vue Espace 3D qui tourne (une image d'écran par pas, carte graphique) : **1,40 ms sans, 1,38 ms avec** (médianes ; au pire 1,5 ms
+  avec) : rien qu'on mesure. L'image du cyclo n'est faite qu'une fois pendant tout cela (vérifié par l'essai).
+
+### 202.2 Ce qui reste
+
+- **Rien n'a été regardé à l'écran par Anthony ni par le coordinateur** : les images des neuf choix et deux écrans ont été regardés en
+  essai (planche des choix, onglet 3D, Storyboard), pas dans l'application.
+- La couleur dominante part d'un orange ; les choix n'ont pas de réglage de hauteur des silhouettes (la graine seulement).
+- La « Brume » du cyclo règle son image, pas encore la force de la brume du décor sur les objets (la case « Brume » de Monde) ; la
+  couleur de cette brume, elle, est déjà l'horizon du cyclo.
+- Les cartes prennent l'ambiance du cyclo, pas son image (pas de reflets).
+
+### 202.3 Comment Anthony teste (sur une copie de projet)
+
+1. Onglet 3D, une séquence avec un décor. Scène 3D, sous Lumières : la ligne « Cyclo » ; un clic : Propriétés > Monde, la section Cyclo.
+2. Clique les vignettes l'une après l'autre : le ciel change dans « Caméra du plan » et dans la perspective ; la Nuit montre étoiles et
+   lune, la Ville des immeubles, la Montagne des crêtes.
+3. Barre de la vue : éteins « Cyclo » : la perspective n'a plus le ciel ; « Caméra du plan » le garde.
+4. Tire l'heure de 6 h à 21 h : le soleil monte puis se couche, les ombres suivent ; la Rotation tourne le ciel et le soleil.
+5. « Autre » : d'autres nuages, d'autres crêtes. Coche « Couleur dominante » et choisis une teinte.
+6. Storyboard : l'image du plan a le ciel derrière les cartes et le décor. Jour clair : les cartes ont leurs couleurs. Nuit : elles
+   s'assombrissent et bleuissent. Coucher : elles se réchauffent.
+7. La nuit, une lampe (partie 200) près d'une carte : la carte s'éclaire autour d'elle.
+8. Onglet 3D, choisis une carte : décoche « Prend la lumière du cyclo » : elle reprend ses couleurs dessinées. Ctrl+Z.
+9. Dans la barre du Storyboard, « Cyclo : … » à côté de « Décor » : change de cyclo d'ici. « Aucun » : l'image d'avant.
+10. Une séquence sans objet 3D : choisis-lui un cyclo (onglet 3D, Monde) : ses cartes ont un ciel. Enregistre, rouvre : il est là.
+11. Copie le décor vers une autre séquence, duplique la séquence : le cyclo suit.
+12. Exporte une image : le ciel et la lumière des cartes y sont, comme à l'écran.
+
+Essais : `cyclos_tests.rs` (17 : les choix déterministes et distincts, les étoiles, les fenêtres et les crêtes ; l'image faite une fois
+quoi que fasse la caméra ; le cyclo derrière les cartes et le décor, à l'export ; « Aucun » et la case sans cyclo au bit près ; Jour clair
+à 2 près sur la carte ; la Nuit, la lampe la nuit, la case, le Coucher, le Studio, la formule ; la carte graphique ; une séquence sans
+objet ; l'enregistrement, un lecteur d'avant, un fichier d'avant, un fichier abîmé, un calque d'avant ; la copie et la duplication ;
+l'annulation ; la galerie, la ligne de Scène 3D, le choix rapide et la case ; la mesure ; deux écritures de PNG pour regarder, inactives
+sans `FEANOR_CYCLOS_PNG`).

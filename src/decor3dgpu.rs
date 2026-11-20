@@ -331,6 +331,14 @@ fn ciel(in: SkyOut) -> vec4<f32> {
         let y = -(in.pos.y - g.cam_f.w) / s;
         dir = normalize(g.cam_r.xyz * x + g.cam_u.xyz * y + g.cam_f.xyz);
     }
+    // Partie 202 : le cyclo (zenith.w), son image équirectangulaire dans le groupe 2, tournée de size.w (`cyclos::uv`).
+    if (g.zenith.w > 0.5) {
+        let az = atan2(dir.x, dir.z) - g.size.w;
+        let u = fract(az / 6.2831853 + 0.5);
+        let v = (1.5707963 - asin(clamp(dir.y, -1.0, 1.0))) / 3.1415926;
+        let cy = textureSampleLevel(t_base, s_base, vec2<f32>(u, v), 0.0).rgb;
+        return vec4<f32>(finish(cy), 1.0);
+    }
     let e = clamp(dir.y, 0.0, 1.0);
     let k = pow(e, 0.6);
     let c = mix(g.fog_col.rgb, g.zenith.rgb, k);
@@ -822,6 +830,8 @@ pub struct Moteur {
     blanc: wgpu::BindGroup,
     ombre_vide: wgpu::TextureView,
     modeles: HashMap<u64, ModeleGpu>,
+    /// Partie 202 : les images de cyclo envoyées à la carte (leur empreinte, leur groupe), les quatre dernières.
+    cyclos: Vec<(u64, wgpu::BindGroup)>,
     prises: HashMap<u64, Prise3>,
     tic: u64,
     /// Le tic au début de la passe en cours : un modèle qu'elle dessine n'est jamais renvoyé de la carte pour en faire entrer un
@@ -1218,6 +1228,7 @@ impl Moteur {
             blanc,
             ombre_vide,
             modeles: HashMap::new(),
+            cyclos: Vec::new(),
             prises: HashMap::new(),
             tic: 0,
             debut: 0,
@@ -1419,13 +1430,15 @@ impl Moteur {
         put(&mut g, 208, &[hz[0], hz[1], hz[2], if aspect.brume { crate::decor3drendu::BRUME_MAX } else { 0.0 }]);
         put(&mut g, 224, &[brume_debut, brume_fin, if ciel { 1.0 } else { 0.0 }, 1.0]);
         let ze = aspect.zenith();
-        put(&mut g, 240, &[ze[0], ze[1], ze[2], 0.0]);
+        // (Partie 202 : w, le cyclo : son image est posée pour le ciel de cette passe.)
+        let cyclo = if ciel && aspect.cyclo.actif { self.assurer_cyclo(device, queue, aspect.cyclo.cle) } else { None };
+        put(&mut g, 240, &[ze[0], ze[1], ze[2], if cyclo.is_some() { 1.0 } else { 0.0 }]);
         // (Le ciel lit les pixels de la cible : l'échelle et le centre y sont remis en pixels.)
         let kpx = taille_px[0] as f32 / taille_unites[0].max(1e-6);
         put(&mut g, 256, &[r[0], r[1], r[2], s * kpx]);
         put(&mut g, 272, &[u[0], u[1], u[2], c[0] * kpx]);
         put(&mut g, 288, &[f[0], f[1], f[2], c[1] * kpx]);
-        put(&mut g, 304, &[taille_px[0] as f32, taille_px[1] as f32, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
+        put(&mut g, 304, &[taille_px[0] as f32, taille_px[1] as f32, if est_ortho { 1.0 } else { 0.0 }, aspect.cyclo.rotation]);
         // (Partie 193 : de quoi ramener le tampon de profondeur à l'inverse d'une distance, `PROF_DES_ECHANTILLONS`.)
         put(&mut g, 320, &[proche, loin, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
         // (Partie 200 : les lampes du décor.)
@@ -1524,7 +1537,7 @@ impl Moteur {
                 (false, false) => &self.ciel1p,
             });
             pass.set_bind_group(1, &groupe_objets, &[0]);
-            pass.set_bind_group(2, &self.blanc, &[]);
+            pass.set_bind_group(2, cyclo.as_ref().unwrap_or(&self.blanc), &[]);
             pass.draw(0..3, 0..1);
         }
         match (&decor_cartes, self.vue_ombres.as_ref()) {
@@ -1712,10 +1725,42 @@ impl Moteur {
     #[allow(clippy::too_many_arguments)]
     ///
     /// `cartes` (partie 189) : les cartes de la vue qui portent une ombre, quand le décor a ses ombres ; rien : comme avant.
-    pub fn dessiner_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], vue: &Vue, taille_pts: [f32; 2], taille_px: [u32; 2], qualite: crate::decor3dbudget::Qualite, cartes: Option<&CartesVue>) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn dessiner_vue(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], vue: &Vue, taille_pts: [f32; 2], taille_px: [u32; 2], qualite: crate::decor3dbudget::Qualite, cartes: Option<&CartesVue>, ciel: bool) {
         let c = self.cibles(device, cle, taille_px, ECHANTILLONS_VUE, true);
         let (couleur, profondeur, resolue) = (c.couleur.clone(), c.profondeur.clone(), c.resolue.as_ref().map(|r| r.0.clone()));
-        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, None, None, ECHANTILLONS_VUE, false, qualite, cartes);
+        // (Partie 202 : le ciel de la vue, celui du cyclo, quand la vue le montre.)
+        self.dessiner_dans(device, queue, encoder, cle, dessins, vue, taille_pts, taille_px, &couleur, resolue.as_ref(), &profondeur, None, None, ECHANTILLONS_VUE, ciel, qualite, cartes);
+    }
+
+    /// Partie 202 : l'image du cyclo d'empreinte `cle` dans la carte (envoyée une fois ; les quatre dernières gardées), son groupe pour
+    /// le ciel ; rien tant que son image n'est pas prête (`cyclos::texture`).
+    fn assurer_cyclo(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, cle: u64) -> Option<wgpu::BindGroup> {
+        if let Some((_, g)) = self.cyclos.iter().find(|(k, _)| *k == cle) {
+            return Some(g.clone());
+        }
+        let img = crate::cyclos::texture(cle)?;
+        let tex = device.create_texture_with_data(
+            queue,
+            &wgpu::TextureDescriptor {
+                label: Some("cyclo"),
+                size: wgpu::Extent3d { width: img.largeur as u32, height: img.hauteur as u32, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            wgpu::util::TextureDataOrder::LayerMajor,
+            &img.rgba,
+        );
+        let g = groupe_texture(device, &self.layout_texture, &tex.create_view(&Default::default()), &self.echant_base);
+        self.cyclos.push((cle, g.clone()));
+        if self.cyclos.len() > 4 {
+            self.cyclos.remove(0);
+        }
+        Some(g)
     }
 
     /// Pose l'image de la vue `cle` dans la passe d'egui.
@@ -2208,6 +2253,8 @@ pub struct VueDecor {
     /// Les cartes qui portent une ombre et celles qui la reçoivent (partie 189, `ombres3d.rs`), quand le décor a ses ombres ; rien :
     /// le décor de la vue comme avant, au même coût.
     pub cartes: Option<Arc<CartesVue>>,
+    /// Partie 202 : la vue montre le ciel du cyclo (« Caméra du plan », et les perspectives quand « Cyclo » est allumé).
+    pub ciel: bool,
 }
 
 impl CallbackTrait for VueDecor {
@@ -2219,7 +2266,7 @@ impl CallbackTrait for VueDecor {
         mt.assurer_blit(device, queue, self.cible_egui);
         let ppp = screen.pixels_per_point;
         let px = [((self.taille_pts[0] * ppp).round() as u32).max(1), ((self.taille_pts[1] * ppp).round() as u32).max(1)];
-        mt.dessiner_vue(device, queue, encoder, self.cle, &self.dessins, &self.vue, self.taille_pts, px, self.qualite, self.cartes.as_deref());
+        mt.dessiner_vue(device, queue, encoder, self.cle, &self.dessins, &self.vue, self.taille_pts, px, self.qualite, self.cartes.as_deref(), self.ciel);
         mt.menage();
         Vec::new()
     }

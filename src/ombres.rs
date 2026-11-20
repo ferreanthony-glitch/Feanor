@@ -76,6 +76,8 @@ pub struct OmbreCarte {
     /// Porte une ombre, reçoit les ombres (`Layer::porte_ombre`, `Layer::recoit_ombres`).
     pub porte: bool,
     pub recoit: bool,
+    /// Partie 202 : elle prend la lumière du cyclo (`Layer::prend_cyclo`).
+    pub cyclo: bool,
 }
 
 /// La carte de ce calque peut-elle porter ou recevoir des ombres ? Non pour un dossier, un calque d'effet, un calque d'annotation,
@@ -87,8 +89,10 @@ pub fn concerne(layer: &Layer) -> bool {
 /// Les ombres de la carte du calque `layer` à l'image `frame`, posée comme l'image du plan la pose (comme
 /// `profondeur::plan_du_calque`, sans la case « Toujours devant le décor 3D », qui ne touche pas au soleil). Rien si elle ne porte
 /// ni ne reçoit, ou est vue par la tranche.
-pub fn du_calque(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen, repere: Option<&M4>) -> Option<OmbreCarte> {
-    if !concerne(layer) || !(layer.porte_ombre || layer.recoit_ombres) {
+pub fn du_calque(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen, repere: Option<&M4>, cyclo: bool) -> Option<OmbreCarte> {
+    // (Partie 202 : ou si elle prend la lumière du cyclo, quand le décor en a un (`cyclo`) ; sans cyclo, rien ne change.)
+    let prend = cyclo && layer.prend_cyclo;
+    if !concerne(layer) || !(layer.porte_ombre || layer.recoit_ombres || prend) {
         return None;
     }
     let (mx, eye) = match repere {
@@ -101,7 +105,7 @@ pub fn du_calque(world: &Monde, layer: &Layer, frame: usize, camera: &CameraSeen
     if !(len.is_finite() && len > 1e-12) {
         return None;
     }
-    Some(OmbreCarte { plan, point: m::point(&mx, [0.0; 3]), normale: m::scale(n, 1.0 / len), porte: layer.porte_ombre, recoit: layer.recoit_ombres })
+    Some(OmbreCarte { plan, point: m::point(&mx, [0.0; 3]), normale: m::scale(n, 1.0 / len), porte: layer.porte_ombre, recoit: layer.recoit_ombres, cyclo: prend })
 }
 
 // ------------------------------------------------------------------------------------------- la lumière du décor
@@ -130,6 +134,12 @@ pub struct Lumiere {
     /// Partie 201 : les lampes du décor (`miseenscene3d::LampesVues`, dans le repère où l'on regarde) : elles éclairent les cartes qui
     /// reçoivent les ombres (`eclairer_carte`).
     pub lampes: crate::miseenscene3d::LampesVues,
+    /// Partie 202 : le décor a un cyclo ; la lumière qu'il donne aux cartes qui la prennent (`ambiante`, plus `ambiante_soleil` fois
+    /// `max(n·dir_soleil, 0)`), en lumière linéaire.
+    pub cyclo: bool,
+    pub ambiante: [f32; 3],
+    pub ambiante_soleil: [f32; 3],
+    pub dir_soleil: V3,
 }
 
 impl Lumiere {
@@ -158,6 +168,10 @@ impl Lumiere {
             carte,
             ombres: true,
             lampes: aspect.lampes,
+            cyclo: aspect.cyclo.actif,
+            ambiante: if aspect.cyclo.actif { aspect.cyclo.ambiante } else { [1.0; 3] },
+            ambiante_soleil: aspect.cyclo.ambiante_soleil,
+            dir_soleil: aspect.soleil(),
         })
     }
 
@@ -167,7 +181,7 @@ impl Lumiere {
         if let Some(l) = Lumiere::de(ec, aspect, prise) {
             return Some(l);
         }
-        (aspect.lampes.n > 0).then(|| Lumiere::des_lampes(aspect, prise))
+        (aspect.lampes.n > 0 || aspect.cyclo.actif).then(|| Lumiere::des_lampes(aspect, prise))
     }
 
     /// La lumière des lampes seules d'un décor d'aspect `aspect` vu de `prise` (partie 201).
@@ -187,6 +201,10 @@ impl Lumiere {
             carte: [1.0; 3],
             ombres: false,
             lampes: aspect.lampes,
+            cyclo: aspect.cyclo.actif,
+            ambiante: if aspect.cyclo.actif { aspect.cyclo.ambiante } else { [1.0; 3] },
+            ambiante_soleil: aspect.cyclo.ambiante_soleil,
+            dir_soleil: aspect.soleil(),
         }
     }
 
@@ -195,24 +213,32 @@ impl Lumiere {
     /// `c × (1 + lumière des lampes)` (la même lumière que sur le décor, `LampesVues::lumiere`). Sans ombre ni lampe qui l'atteigne :
     /// `c` tel quel, au bit près.
     pub fn eclairer_carte(&self, c: Color32, p: V3, n: V3, occ: f32) -> Color32 {
+        self.eclairer_carte_avec(c, p, n, occ, true, false)
+    }
+
+    /// Partie 202 : `eclairer_carte`, les lampes si `lampes` (elle reçoit les ombres), la lumière du cyclo si `cyclo` (elle la prend) :
+    /// `c × ombre × (ambiante + lampes)` ; sans cyclo, l'ambiante vaut 1. Rien qui change : `c` au bit près.
+    pub fn eclairer_carte_avec(&self, c: Color32, p: V3, n: V3, occ: f32, lampes: bool, cyclo: bool) -> Color32 {
         let a = c.a();
         if a == 0 {
             return c;
         }
-        let l = if self.lampes.n > 0 {
-            // (La normale tournée vers l'œil, comme le décor : une carte se voit des deux côtés.)
-            let n = if m::dot(n, m::sub(self.prise.oeil, p)) < 0.0 { m::scale(n, -1.0) } else { n };
-            self.lampes.lumiere(p, n)
+        // (La normale tournée vers l'œil, comme le décor : une carte se voit des deux côtés.)
+        let n = if m::dot(n, m::sub(self.prise.oeil, p)) < 0.0 { m::scale(n, -1.0) } else { n };
+        let l = if lampes && self.lampes.n > 0 { self.lampes.lumiere(p, n) } else { [0.0; 3] };
+        let amb = if cyclo && self.cyclo {
+            let s = m::dot(n, self.dir_soleil).max(0.0);
+            [0, 1, 2].map(|i| self.ambiante[i] + self.ambiante_soleil[i] * s)
         } else {
-            [0.0; 3]
+            [1.0; 3]
         };
-        if occ <= 0.0 && l.iter().all(|v| *v <= 0.0) {
+        if occ <= 0.0 && l.iter().all(|v| *v <= 0.0) && amb == [1.0; 3] {
             return c;
         }
         let k = a as f32 / 255.0;
         let o: [u8; 3] = std::array::from_fn(|i| {
             let v = ([c.r(), c.g(), c.b()][i] as f32 / 255.0 / k).min(1.0);
-            let lin = vers_lineaire(v) * (1.0 - occ.max(0.0) * (1.0 - self.carte[i])) * (1.0 + l[i]);
+            let lin = vers_lineaire(v) * (1.0 - occ.max(0.0) * (1.0 - self.carte[i])) * (amb[i] + l[i]);
             (crate::decor3drendu::vers_srgb(lin) * k * 255.0).round().clamp(0.0, 255.0) as u8
         });
         Color32::from_rgba_premultiplied(o[0], o[1], o[2], a)
@@ -375,12 +401,17 @@ impl Lumiere {
             put(&mut b, 256 + i * 16, &lp.pos[i]);
             put(&mut b, 256 + crate::miseenscene3d::MAX_LAMPES * 16 + i * 16, &lp.col[i]);
         }
+        // (Partie 202 : la lumière du cyclo pour les cartes, `amb`, `amb_soleil`, `dir_soleil` du shader.)
+        put(&mut b, 512, &[self.ambiante[0], self.ambiante[1], self.ambiante[2], if self.cyclo { 1.0 } else { 0.0 }]);
+        put(&mut b, 528, &[self.ambiante_soleil[0], self.ambiante_soleil[1], self.ambiante_soleil[2], 0.0]);
+        put(&mut b, 544, &[self.dir_soleil[0], self.dir_soleil[1], self.dir_soleil[2], 0.0]);
         b
     }
 }
 
-/// Taille des réglages de la lumière sur la carte graphique (`Lumiere::octets`) ; partie 201 : 512, les lampes au bout.
-pub const OCTETS: u64 = 512;
+/// Taille des réglages de la lumière sur la carte graphique (`Lumiere::octets`) ; partie 201 : 512, les lampes au bout ; partie
+/// 202 : 560, la lumière du cyclo.
+pub const OCTETS: u64 = 560;
 
 /// sRGB (0 à 1) vers linéaire.
 #[inline]
@@ -454,7 +485,7 @@ pub struct Contexte {
     cartes: Option<(Vec<f32>, [f32; 4])>,
     /// Pour chaque élément qui reçoit les ombres (et la lumière des lampes, partie 201) : son plan, sa pente dans la carte d'ombres,
     /// sa normale.
-    recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3)>>,
+    recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3, bool, bool)>>,
 }
 
 impl Contexte {
@@ -485,7 +516,7 @@ impl Contexte {
     /// soleil à sa carte, s'il reçoit les ombres.
     #[inline]
     pub fn sur_la_carte(&self, idx: usize, x: i64, y: i64, c: Color32) -> Color32 {
-        let Some(Some((plan, g, n))) = self.recepteurs.get(idx) else { return c };
+        let Some(Some((plan, g, n, recoit, cyclo))) = self.recepteurs.get(idx) else { return c };
         if c.a() == 0 {
             return c;
         }
@@ -497,7 +528,7 @@ impl Contexte {
         let p = self.lum.monde(fx, fy, inv);
         // (Le soleil, seulement avec les ombres du décor ; partie 201 : et les lampes, `eclairer_carte`.)
         let mut vis = 1.0;
-        if let Some(soleil) = self.soleil.as_ref().filter(|_| self.lum.ombres) {
+        if let Some(soleil) = self.soleil.as_ref().filter(|_| self.lum.ombres && *recoit) {
             let l = self.lum.vers_lumiere(p);
             let r = self.lum.rayon_cartes();
             vis = self.lum.pcf(&soleil.carte, l, *g, r);
@@ -507,7 +538,8 @@ impl Contexte {
                 }
             }
         }
-        self.lum.eclairer_carte(c, p, *n, 1.0 - vis)
+        // (Partie 202 : les lampes pour une carte qui reçoit les ombres, le cyclo pour une carte qui prend sa lumière.)
+        self.lum.eclairer_carte_avec(c, p, *n, 1.0 - vis, *recoit, *cyclo)
     }
 
     /// L'élément `idx` reçoit-il les ombres ?
@@ -527,13 +559,19 @@ const GARDES_MAX: usize = 6;
 /// rendu par la carte graphique, ou aucune carte qui porte ou reçoit (la composition d'avant, sans rien lire de plus).
 pub fn contexte(doc: &Document, plan: &Plan) -> Option<Arc<Contexte>> {
     let di = plan.items.iter().position(|i| matches!(i.fond, Some(FondPart::Decor(_))))?;
-    if !plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.porte || o.recoit) && i.tint.is_none()) {
+    if !plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.porte || o.recoit || o.cyclo) && i.tint.is_none()) {
         return None;
     }
     // (Partie 201 : les lampes du décor éclairent les cartes qui reçoivent les ombres, même sans les ombres du décor, et sans son rendu
     // par la carte graphique : leur lumière vient de la clé du décor.)
+    // (Partie 202 : et le cyclo, pour les cartes qui prennent sa lumière.)
     let lampes = match &plan.items[di].fond {
-        Some(FondPart::Decor(k)) if k.aspect.lampes.n > 0 && plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.recoit) && i.tint.is_none()) => k.prise().map(|p| (Lumiere::des_lampes(&k.aspect, &p), crate::decor3d::id_of(k))),
+        Some(FondPart::Decor(k))
+            if (k.aspect.lampes.n > 0 && plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.recoit) && i.tint.is_none()))
+                || (k.aspect.cyclo.actif && plan.items[di + 1..].iter().any(|i| i.ombre.is_some_and(|o| o.cyclo) && i.tint.is_none())) =>
+        {
+            k.prise().map(|p| (Lumiere::des_lampes(&k.aspect, &p), crate::decor3d::id_of(k)))
+        }
         _ => None,
     };
     let (w, h) = (doc.width, doc.height);
@@ -559,7 +597,7 @@ pub fn contexte(doc: &Document, plan: &Plan) -> Option<Arc<Contexte>> {
     let pivot = doc.stage_center();
     for (i, item) in plan.items.iter().enumerate().skip(di + 1) {
         let Some(o) = item.ombre else { continue };
-        (i, item.cel, item.opacity, o.porte, o.recoit, item.tint.is_some()).hash(&mut hs);
+        (i, item.cel, item.opacity, o.porte, o.recoit, o.cyclo, item.tint.is_some()).hash(&mut hs);
         o.plan.map(f32::to_bits).hash(&mut hs);
         o.normale.map(f32::to_bits).hash(&mut hs);
         if o.porte {
@@ -594,8 +632,8 @@ pub fn oublier() {
 
 fn faire(doc: &Document, plan: &Plan, di: usize, lum: Lumiere, soleil: Option<Arc<Soleil>>, prof: Option<crate::profondeur::Profondeurs>) -> Option<Arc<Contexte>> {
     let (w, h) = (doc.width, doc.height);
-    let recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3)>> =
-        plan.items.iter().enumerate().map(|(i, item)| item.ombre.filter(|o| i > di && o.recoit && item.tint.is_none()).map(|o| (o.plan, lum.gradient(&o), o.normale))).collect();
+    let recepteurs: Vec<Option<(PlanCarte, [f32; 2], V3, bool, bool)>> =
+        plan.items.iter().enumerate().map(|(i, item)| item.ombre.filter(|o| i > di && (o.recoit || (o.cyclo && lum.cyclo)) && item.tint.is_none()).map(|o| (o.plan, lum.gradient(&o), o.normale, o.recoit, o.cyclo && lum.cyclo))).collect();
     // (Les ombres des cartes, seulement avec celles du décor.)
     let portees: Vec<&crate::render::PlanItem> = if lum.ombres { plan.items.iter().skip(di + 1).filter(|i| i.ombre.is_some_and(|o| o.porte) && i.tint.is_none()).collect() } else { Vec::new() };
     let cartes = if portees.is_empty() { None } else { carte_des_cartes(doc, &lum, &portees) };

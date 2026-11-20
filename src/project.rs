@@ -990,6 +990,10 @@ struct LayerEntry {
     porte_ombre: bool,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     recoit_ombres: bool,
+    /// Partie 202 : « Prend la lumière du cyclo » ; absent : vrai, écrit seulement décoché (format 61 inchangé : une version qui ne le
+    /// connaît pas n'a pas de cyclo).
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    prend_cyclo: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2702,6 +2706,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 devant_decor_3d: l.devant_decor,
                 porte_ombre: l.porte_ombre,
                 recoit_ombres: l.recoit_ombres,
+                prend_cyclo: l.prend_cyclo,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -3575,6 +3580,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         devant_decor: l.devant_decor_3d,
                         porte_ombre: l.porte_ombre,
                         recoit_ombres: l.recoit_ombres,
+                        prend_cyclo: l.prend_cyclo,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

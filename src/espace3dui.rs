@@ -821,6 +821,14 @@ impl App {
                     self.basculer_recoit_ombres(li);
                 }
             }
+            // Partie 202 : prend la lumière du cyclo, quand la séquence en a un.
+            if self.doc.decor_du_plan(self.cur_panel).is_some_and(|d| d.cyclo.is_some()) && crate::ombres::concerne(&self.layers()[li]) {
+                let mut prend = self.layers()[li].prend_cyclo;
+                let r = ui.add_enabled(!self.layers()[li].locked, egui::Checkbox::new(&mut prend, crate::cyclosui::NOM_PREND));
+                if self.aide(r, crate::cyclosui::NOM_PREND, crate::cyclosui::PHRASE_PREND, "").clicked() {
+                    self.basculer_prend_cyclo(li);
+                }
+            }
         }
         let mut ouvert = self.espace3d.precis_carte;
         if App::e3_precis(ui, &mut ouvert, "position, rotation, étirement, profondeur") {

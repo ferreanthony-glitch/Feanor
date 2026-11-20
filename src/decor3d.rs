@@ -278,6 +278,8 @@ pub struct Decor3d {
     pub objets: Vec<Objet3d>,
     /// Partie 200 : ses lampes (`miseenscene3d::Lampe3d`, au plus `MAX_LAMPES`), en plus du soleil et du ciel.
     pub lampes: Vec<crate::miseenscene3d::Lampe3d>,
+    /// Partie 202 : son cyclo (`cyclos::Cyclo`), le ciel et l'horizon autour du décor, et leur lumière.
+    pub cyclo: Option<crate::cyclos::Cyclo>,
 }
 
 impl std::fmt::Debug for Decor3d {
@@ -289,7 +291,19 @@ impl std::fmt::Debug for Decor3d {
 impl Decor3d {
     pub fn new(aspect: Aspect) -> Decor3d {
         static SUIVANT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), lampes: Vec::new() }
+        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), lampes: Vec::new(), cyclo: None }
+    }
+
+    /// Partie 202 : sans objet, sans lampe, sans cyclo (un décor vide ne s'enregistre pas, ne se montre pas). Des lampes ou un cyclo
+    /// suffisent à le garder : une séquence sans objet 3D a son ciel et sa lumière.
+    pub fn est_vide(&self) -> bool {
+        self.objets.is_empty() && self.lampes.is_empty() && self.cyclo.is_none()
+    }
+
+    /// Partie 202 : il se montre (`Document::decor_du_plan`) : des objets, ou un cyclo. Des lampes seules se gardent mais ne font
+    /// pas un décor (comme avant la partie 202).
+    pub fn se_montre(&self) -> bool {
+        !self.objets.is_empty() || self.cyclo.is_some()
     }
 
     /// Partie 200 : les objets que montre l'image du plan `plan` (`Panel::id`) : ceux que cet ordinateur montre, sans ceux « cachés
@@ -366,7 +380,7 @@ pub struct Decors3d {
 
 impl Decors3d {
     pub fn is_empty(&self) -> bool {
-        self.par_sequence.values().all(|d| d.objets.is_empty()) && self.gardees.is_empty()
+        self.par_sequence.values().all(Decor3d::est_vide) && self.gardees.is_empty()
     }
 
     /// Le modèle de même empreinte déjà dans le projet (un objet neuf le partage : une lecture, un envoi à la carte).
@@ -383,7 +397,7 @@ impl Decors3d {
 impl Document {
     /// Le décor 3D de la séquence du plan `index` (rien : la séquence n'a aucun objet).
     pub fn decor_du_plan(&self, index: usize) -> Option<&Decor3d> {
-        (index < self.panels.len()).then(|| self.decors3d.par_sequence.get(&self.sequence_of(index))).flatten().filter(|d| !d.objets.is_empty())
+        (index < self.panels.len()).then(|| self.decors3d.par_sequence.get(&self.sequence_of(index))).flatten().filter(|d| d.se_montre())
     }
 }
 
@@ -405,6 +419,9 @@ struct EntreeSequence {
     /// Partie 200 : les lampes de la séquence. Absentes d'un fichier d'avant : aucune ; un FEANOR d'avant ignore la clé.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     lampes: Vec<crate::miseenscene3d::Lampe3d>,
+    /// Partie 202 : le cyclo de la séquence. Absent : aucun ; un FEANOR d'avant ignore la clé.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cyclo: Option<crate::cyclos::Cyclo>,
 }
 
 /// Un objet (version 2).
@@ -483,7 +500,8 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
         return Ok(None);
     }
     let mut decors: Vec<serde_json::Value> = Vec::new();
-    for (&sequence, x) in d.par_sequence.iter().filter(|(_, x)| !x.objets.is_empty()) {
+    // (Partie 202 : un décor sans objet mais avec des lampes ou un cyclo s'enregistre aussi.)
+    for (&sequence, x) in d.par_sequence.iter().filter(|(_, x)| !x.est_vide()) {
         let objets = x
             .objets
             .iter()
@@ -506,7 +524,7 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                 .map_err(|e| e.to_string())
             })
             .collect::<Result<_, _>>()?;
-        decors.push(serde_json::to_value(EntreeSequence { sequence, aspect: x.aspect, objets, lampes: x.lampes.clone() }).map_err(|e| e.to_string())?);
+        decors.push(serde_json::to_value(EntreeSequence { sequence, aspect: x.aspect, objets, lampes: x.lampes.clone(), cyclo: x.cyclo }).map_err(|e| e.to_string())?);
     }
     decors.extend(d.gardees.iter().cloned());
     let mut out = serde_json::to_vec_pretty(&Fichier { version: VERSION_FICHIER, decors }).map_err(|e| e.to_string())?;
@@ -586,6 +604,9 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                         if d.lampes.is_empty() {
                             d.lampes = crate::miseenscene3d::lampes_valides(s.lampes.clone());
                         }
+                        if d.cyclo.is_none() {
+                            d.cyclo = s.cyclo.map(crate::cyclos::Cyclo::borne);
+                        }
                         d.objets.push(o);
                     }
                     Err(e) => {
@@ -595,8 +616,12 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                 }
             }
             // (Partie 200 : les lampes d'une séquence dont aucun objet n'a pu être lu restent dans le fichier, telles quelles.)
-            if !s.lampes.is_empty() && !out.par_sequence.contains_key(&s.sequence) {
-                out.gardees.push(serde_json::json!({ "sequence": s.sequence, "aspect": s.aspect, "objets": [], "lampes": s.lampes }));
+            // (Partie 202 : et un décor sans objet, ses lampes ou son cyclo seuls, est un décor.)
+            if (!s.lampes.is_empty() || s.cyclo.is_some()) && !out.par_sequence.contains_key(&s.sequence) {
+                let mut d = Decor3d::new(s.aspect);
+                d.lampes = crate::miseenscene3d::lampes_valides(s.lampes.clone());
+                d.cyclo = s.cyclo.map(crate::cyclos::Cyclo::borne);
+                out.par_sequence.insert(s.sequence, d);
             }
         } else {
             // Version 1 (partie 180) : un objet, son origine au centre du dessous de sa boîte, à la même place exactement ;
@@ -786,7 +811,34 @@ pub fn contenu_a(d: &Decor3d, plan: Option<u64>, image: usize) -> u64 {
             l.empreinte(&mut h);
         }
     }
+    // (Partie 202 : le cyclo, seulement quand il y en a un : ses réglages, sa rotation, et si son image est prête.)
+    if let Some(c) = &d.cyclo {
+        "cyclo".hash(&mut h);
+        c.cle().hash(&mut h);
+        c.rotation.to_bits().hash(&mut h);
+        crate::cyclos::texture(c.cle()).is_some().hash(&mut h);
+    }
     h.finish()
+}
+
+/// Partie 202 : le cyclo du décor `d`, prêt pour le rendu (son image demandée : faite tout de suite hors du fil de l'interface,
+/// sur un autre fil sinon) ; rien sans cyclo.
+pub fn cyclo_vu(d: &Decor3d) -> crate::cyclos::CycloVu {
+    match &d.cyclo {
+        Some(c) => crate::cyclos::CycloVu { pret: crate::cyclos::assurer(c).is_some(), ..c.vu() },
+        None => Default::default(),
+    }
+}
+
+/// L'aspect du décor `d` pour un rendu dans le repère `repere` : le sien, ses lampes (partie 200) et son cyclo (partie 202).
+pub fn aspect_vu(d: &Decor3d, repere: &M4) -> Aspect {
+    Aspect { lampes: crate::miseenscene3d::lampes_vues(d, repere), cyclo: cyclo_vu(d), ..d.aspect }
+}
+
+/// Partie 202 : un modèle sans rien : la pose d'un décor sans objet vu (son cyclo, ses lampes), pour que son aspect aille au rendu.
+pub fn modele_vide() -> Arc<Modele3d> {
+    static VIDE: std::sync::OnceLock<Arc<Modele3d>> = std::sync::OnceLock::new();
+    VIDE.get_or_init(|| Arc::new(Modele3d::avec_empreinte(Arc::new(Scene3d { primitives: Vec::new(), textures: Vec::new() }), Arc::new(Vec::new()), "vide".into()))).clone()
 }
 
 /// Numéro du dessin dérivé du décor (bit de poids fort mis : il ne tombe jamais sur un vrai dessin).
@@ -811,7 +863,10 @@ pub fn id_texture(decor: u64) -> CelId {
 pub fn item(doc: &Document, index: usize, frame: usize, camera: &crate::document::CameraSeen, repere: Option<&M4>) -> Option<crate::render::PlanItem> {
     let d = doc.decor_du_plan(index)?;
     let plan = doc.panels[index].id;
-    d.vus_dans(plan).next()?;
+    // (Partie 202 : sans objet vu, son cyclo suffit : le ciel, et sa lumière sur les cartes.)
+    if d.vus_dans(plan).next().is_none() && d.cyclo.is_none() {
+        return None;
+    }
     let monde = Monde::of(doc);
     let (repere, oeil) = match repere {
         Some(r) => (*r, monde.eye_reference()),
@@ -819,7 +874,7 @@ pub fn item(doc: &Document, index: usize, frame: usize, camera: &crate::document
     };
     // (Partie 200 : l'image de la séquence, pour les objets animés ; un décor immobile n'en a pas besoin, elle ne change rien.)
     let image = if d.anime() { doc.image_de_sequence(index, frame) } else { 0 };
-    let aspect = Aspect { lampes: crate::miseenscene3d::lampes_vues(d, &repere), ..d.aspect };
+    let aspect = aspect_vu(d, &repere);
     let key = DecorCle { decor: d.uid, contenu: contenu_a(d, Some(plan), image), repere, oeil, feuille: [doc.width, doc.height], cadre: doc.frame, aspect, plan, image };
     key.prise()?;
     Some(crate::render::PlanItem {
@@ -863,7 +918,12 @@ pub fn poses(d: &Decor3d) -> Vec<Pose3d> {
 
 /// Partie 200 : `poses`, sans les objets cachés dans le plan `plan` (rien : aucun n'est retiré).
 pub fn poses_sauf(d: &Decor3d, plan: Option<u64>) -> Vec<Pose3d> {
-    d.vus().filter(|o| plan.is_none_or(|p| !o.cache_dans(p))).map(|o| (o.modele.clone(), o.matrice(), o.couleur)).collect()
+    let v: Vec<Pose3d> = d.vus().filter(|o| plan.is_none_or(|p| !o.cache_dans(p))).map(|o| (o.modele.clone(), o.matrice(), o.couleur)).collect();
+    // (Partie 202 : sans objet, la pose vide : le cyclo va au rendu.)
+    if v.is_empty() && d.cyclo.is_some() {
+        return vec![(modele_vide(), m::IDENT, None)];
+    }
+    v
 }
 
 /// Les objets du décor de la clé `key`, tels qu'ils étaient quand la clé a été faite ; rien : le décor a changé depuis (ou n'est
@@ -871,7 +931,15 @@ pub fn poses_sauf(d: &Decor3d, plan: Option<u64>) -> Vec<Pose3d> {
 pub fn objets_de(doc: &Document, key: &DecorCle) -> Option<Vec<Pose3d>> {
     let d = doc.decors3d.par_sequence.values().find(|d| d.uid == key.decor)?;
     // (Partie 200 : à l'image et dans le plan de la clé : les objets animés à leur pose, sans ceux cachés dans ce plan.)
-    (contenu_a(d, Some(key.plan), key.image) == key.contenu).then(|| d.vus_dans(key.plan).map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice_a(key.image)), o.couleur)).collect())
+    (contenu_a(d, Some(key.plan), key.image) == key.contenu).then(|| {
+        let v: Vec<Pose3d> = d.vus_dans(key.plan).map(|o| (o.modele.clone(), m::mul(&key.repere, &o.matrice_a(key.image)), o.couleur)).collect();
+        // (Partie 202 : sans objet vu, la pose vide : l'aspect du décor, son ciel, va au rendu.)
+        if v.is_empty() {
+            vec![(modele_vide(), m::IDENT, None)]
+        } else {
+            v
+        }
+    })
 }
 
 /// Les triangles que dessinent ces objets (chaque objet compte).
@@ -1060,7 +1128,7 @@ pub fn poser_fil_interface() {
     let _ = FIL_INTERFACE.set(std::thread::current().id());
 }
 
-fn sur_l_interface() -> bool {
+pub(crate) fn sur_l_interface() -> bool {
     FIL_INTERFACE.get().is_some_and(|id| *id == std::thread::current().id())
 }
 

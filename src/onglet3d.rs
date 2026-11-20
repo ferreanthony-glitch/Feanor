@@ -156,7 +156,7 @@ pub fn nom_de(doc: &crate::document::Document, cur_panel: usize, l: Ligne3d) -> 
         Ligne3d::Objet(id) => doc.decor_du_plan(cur_panel).and_then(|d| d.objet(id)).map_or_else(String::new, |o| o.nom.clone()),
         Ligne3d::Camera(pi) => format!("Caméra · {}", crate::storyboard::panel_title(doc, pi)),
         Ligne3d::Soleil => "Soleil".into(),
-        Ligne3d::Ciel => "Ciel".into(),
+        Ligne3d::Ciel => "Cyclo".into(),
         Ligne3d::Lampe(id) => doc.decor_du_plan(cur_panel).and_then(|d| d.lampe(id)).map_or_else(String::new, |l| l.nom.clone()),
         Ligne3d::Carte(li, _) => doc.panels.get(cur_panel).and_then(|p| p.layers.get(li)).map_or_else(String::new, |l| l.name.clone()),
     }
@@ -229,6 +229,10 @@ pub(crate) struct Onglet3d {
     pub montrer_cameras: bool,
     /// Le soleil du décor, dans la vue.
     pub montrer_lumieres: bool,
+    /// Partie 202 : le cyclo de la séquence derrière les vues en perspective (la caméra du plan le montre toujours).
+    pub montrer_cyclo: bool,
+    /// La ligne « Cyclo » de Scène 3D vient d'être choisie : Propriétés > Monde défile jusqu'à sa section.
+    pub vers_cyclo: bool,
     /// La recherche du sommaire « Scène 3D ».
     pub recherche: String,
     /// Les groupes repliés du sommaire.
@@ -262,6 +266,8 @@ impl Default for Onglet3d {
             vise: None,
             montrer_cameras: true,
             montrer_lumieres: true,
+            montrer_cyclo: true,
+            vers_cyclo: false,
             recherche: String::new(),
             replies: Vec::new(),
             cameras_cachees: Vec::new(),
@@ -572,7 +578,9 @@ impl App {
             self.o3_peindre_lampes(painter, proj);
             if let Some(d) = self.doc.decor_du_plan(self.cur_panel) {
                 let centre: V3 = [0.0, crate::espace3d::Monde::of(&self.doc).sol_y(), 0.0];
-                let loin = m::add(centre, m::scale(d.aspect.soleil(), 4.0));
+                // (Partie 202 : avec un cyclo, son soleil.)
+                let vers = d.cyclo.map_or_else(|| d.aspect.soleil(), |c| c.vu().soleil_dir);
+                let loin = m::add(centre, m::scale(vers, 4.0));
                 if let (Some(p), Some(q)) = (proj(centre), proj(loin)) {
                     let jaune = Color32::from_rgb(250, 205, 80);
                     painter.extend(egui::Shape::dashed_line(&[p, q], Stroke::new(1.0_f32, jaune.gamma_multiply(0.7)), 5.0, 4.0));
@@ -637,6 +645,9 @@ impl App {
         }
         if self.case_icone(ui, ph::SUN, Some(self.o3.montrer_lumieres), "Lumières", "Le soleil du décor (sa direction depuis le centre de la scène) et ses lampes.", "").clicked() {
             self.o3.montrer_lumieres = !self.o3.montrer_lumieres;
+        }
+        if self.case_icone(ui, ph::MOUNTAINS, Some(self.o3.montrer_cyclo), "Cyclo", "Le cyclo de la séquence (son ciel et son horizon) derrière les vues en perspective ; la caméra du plan le montre toujours.", "").clicked() {
+            self.o3.montrer_cyclo = !self.o3.montrer_cyclo;
         }
         if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : le décor, les cartes et la caméra.", "espace3d.cadrer").clicked() {
             self.espace3d_fit();
