@@ -1200,7 +1200,8 @@ fn the_panel_is_closed_by_default_opens_on_the_right_and_has_its_actions() {
     assert_eq!(Pane::References.group(), Group::Right);
     l.open(Pane::References);
     assert!(l.contains(Pane::References));
-    assert!(format!("{:?}", l.principal).contains("References"));
+    // (Partie 194 : dans la colonne en pile, à droite.)
+    assert!(l.colonne.contient(Pane::References), "{:?}", l.colonne);
     // Une fenêtre à part pour un deuxième écran.
     l.detach(Pane::References);
     assert!(l.detachees.iter().any(|d| d.panneau == Pane::References));

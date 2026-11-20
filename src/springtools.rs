@@ -73,7 +73,7 @@ impl App {
         self.set_tool(Tool::Select);
         let c = self.ctrl_lasso.get_or_insert(CtrlLasso { since: 0.0, prev: None, spoiled: false });
         c.prev = Some(prev);
-        self.status = "Lasso tant que Ctrl est tenu.".into();
+        self.status = CTRL_STATUT.into();
     }
 
     /// Une fois par image d'écran, avant les raccourcis : les touches d'outil relâchées et Ctrl.
@@ -150,7 +150,15 @@ impl App {
             if let Some(c) = &mut self.ctrl_lasso {
                 c.prev = Some(prev);
             }
-            self.status = "Lasso tant que Ctrl est tenu.".into();
+            self.status = CTRL_STATUT.into();
         }
     }
+
+    /// Ctrl est tenu sur le dessin (le lasso de Ctrl pris, ou l'outil Sélection en main, Ctrl tenu).
+    pub(crate) fn ctrl_tenu(&self) -> bool {
+        self.ctrl_lasso.is_some()
+    }
 }
+
+/// Ce que dit la barre d'état quand Ctrl prend l'outil Sélection (partie 195 : un clic choisit, un glisser entoure).
+pub(crate) const CTRL_STATUT: &str = "Ctrl tenu : un clic choisit l'objet sous le pointeur, un glisser l'entoure (lasso).";

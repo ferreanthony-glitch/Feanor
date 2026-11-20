@@ -596,11 +596,11 @@ fn case_de_la_barre(b: &Banc, icone: &str) -> (Rect, bool) {
     let mut tous = Vec::new();
     b.formes.iter().for_each(|f| zones_des_textes(&f.shape, &mut tous));
     let dessin = b.app.canvas_rect;
-    let barre = Rect::from_min_max(pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), pos2(dessin.right(), dessin.top()));
+    let barre = Rect::from_min_max(pos2(dessin.left(), dessin.top() - crate::viewbar::view_bar_h()), pos2(dessin.right(), dessin.top()));
     // (Partie 160 : les outils de la vue Espace 3D, dont la case « Caméra », sont en tête de la barre d'outils de gauche, au-dessus
     // des outils de dessin ; les options de la vue restent dans la barre au-dessus du dessin.)
     let pinceau = tous.iter().filter(|(t, z)| t == Tool::Brush.icon() && z.center().x < dessin.left()).map(|(_, z)| z.top()).fold(f32::INFINITY, f32::min);
-    let tete = Rect::from_min_max(pos2(0.0, dessin.top() - crate::viewbar::VIEW_BAR_H), pos2(dessin.left(), pinceau));
+    let tete = Rect::from_min_max(pos2(0.0, dessin.top() - crate::viewbar::view_bar_h()), pos2(dessin.left(), pinceau));
     let mut zones: Vec<Rect> = tous.iter().filter(|(t, z)| t == icone && barre.contains(z.center())).map(|(_, z)| *z).collect();
     if zones.is_empty() {
         zones = tous.iter().filter(|(t, z)| t == icone && tete.contains(z.center())).map(|(_, z)| *z).collect();
@@ -629,7 +629,8 @@ fn with_the_trajectory_tool_the_camera_button_of_the_view_bar_chooses_the_camera
     assert!(b.app.e3_trace() && b.app.tool == Tool::Trajectoire);
     let (case, allumee) = case_de_la_barre(&b, ph::CAMERA);
     assert!(!allumee, "la caméra n'est pas choisie : sa case est éteinte");
-    assert!(case_de_la_barre(&b, ph::CUBE).1, "(la case de la vue Espace 3D, elle, est allumée : c'est bien ce fond qu'on lit)");
+    // (Partie 196 : la case de l'espace 3D porte le mot « 3D » à la place du cube.)
+    assert!(case_de_la_barre(&b, "3D").1, "(la case de la vue Espace 3D, elle, est allumée : c'est bien ce fond qu'on lit)");
     let etapes = b.app.history.undo_len();
     // Un clic sur la case « Caméra » : la caméra, seule ; l'outil Trajectoire garde le pointeur.
     cliquer(&mut b, case.center(), Modifiers::NONE);

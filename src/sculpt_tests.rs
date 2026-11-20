@@ -812,6 +812,11 @@ fn the_settings_panel_for_both_tools_draws_without_a_panic() {
     for tool in [Tool::Grab, Tool::Pull] {
         let mut b = banc(LayerKind::Vector, tool);
         b.app.show_pane(crate::dock::Pane::ToolOptions);
+        // (Partie 196.5 : à 1280 × 720, la Couleur garde toute sa hauteur et Propriétés ses 120 points au moins : la colonne défile,
+        // le bas des Réglages est sous l'écran. La Couleur repliée, ils tiennent.)
+        if let Some(k) = b.app.colonne.rang_de(crate::dock::Pane::Color) {
+            b.app.colonne.panneaux[k].replie = true;
+        }
         b.garder_textes = true;
         b.chauffer(3);
         let textes = b.textes.join("|");

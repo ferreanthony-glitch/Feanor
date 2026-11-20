@@ -22,6 +22,12 @@ pub(crate) const LIGNE2_H: f32 = 24.0;
 /// Hauteur de la règle des images, et de l'en-tête de la colonne des calques en face d'elle : les deux lignes de boutons (partie
 /// 165.6). La grille et la colonne commencent leurs calques à la même hauteur : calques et pistes restent alignés.
 pub(crate) const HEADER_H: f32 = REGLE_H + crate::layerheads::ENTETE_H;
+
+// La règle collante de la timeline à la dernière image (partie 195), pour les essais : sa place, ou rien si la timeline n'a pas défilé.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static REGLE_COLLANTE: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+}
 /// Partie 174 : la hauteur de la règle elle-même (les numéros, les crochets d'entrée et de sortie, les marques, les signets, la prise
 /// de la fin du plan, l'image courante), en face des deux lignes de boutons ; dessous, en face de la rangée d'en-tête des colonnes
 /// des calques (`layerheads::ENTETE_H`), la règle continue, vide.
@@ -164,8 +170,12 @@ impl App {
         if resp.changed() {
             self.goto_frame(f.max(0.0) as usize);
         }
-        let resp = ui.label(RichText::new(format!("/ {}", self.frame_label(count.max(1) - 1))).monospace());
-        bulle(resp, "Dernière image du plan", "", "");
+        // (Partie 195 : Ctrl + clic sur le compteur, les numéros d'images ou le time code, `compteur.rs`.)
+        let resp = ui.add(egui::Label::new(RichText::new(format!("/ {}", self.frame_label(count.max(1) - 1))).monospace()).sense(egui::Sense::click()).selectable(false));
+        let resp = bulle(resp, "Dernière image du plan", "Ctrl + clic : en time code ou en numéros d'images.", "");
+        if resp.clicked() && ui.input(|i| i.modifiers.command || i.modifiers.ctrl) {
+            self.basculer_compteur_timeline();
+        }
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
@@ -1337,10 +1347,99 @@ impl App {
             }
         }
 
+        // Partie 195 (Anthony : la règle et le compteur « toujours visibles ») : la timeline défile sous la règle, qui reste en haut de la
+        // bande ; elle se repeint là, par-dessus les calques, et y prend le clic et le glisser de la tête de lecture.
+        self.regle_collante_timeline(ui, &painter, r, marge, cell, cols, c0, c1, &comments, &comment_pole);
+
         if self.following {
             let row = rows.iter().find(|r| r.li == self.cur_layer).copied().unwrap_or(Row { li: 0, top: 0.0, h: ROW_H });
             let target = Rect::from_min_size(pos2(cx - cell * 2.0, grid_top + row.top), vec2(cell * 5.0, row.h));
             ui.scroll_to_rect(target, None);
+        }
+    }
+
+    /// Partie 195 : la règle des images de la grille `r`, quand la timeline a défilé vers le bas (sa place est alors hors de la vue) :
+    /// repeinte en haut de ce qu'on voit (les numéros, l'entrée et la sortie, les signets, les marques, la prise de la fin du plan, la
+    /// case de la tête de lecture, les fanions des commentaires), par-dessus les calques ; un clic ou un glisser y mène la tête de
+    /// lecture. (Les signets, les marques et l'entrée et la sortie s'y voient ; ils se prennent à leur place, la timeline remontée.)
+    #[allow(clippy::too_many_arguments)]
+    fn regle_collante_timeline(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, r: Rect, marge: Rect, cell: f32, cols: usize, c0: usize, c1: usize, comments: &[crate::commentaires::Placed], comment_pole: &dyn Fn(usize) -> f32) {
+        let dy = (ui.clip_rect().top() - r.top()).max(0.0);
+        #[cfg(test)]
+        REGLE_COLLANTE.with(|c| c.set(None));
+        if dy < 0.5 {
+            return;
+        }
+        let rt = r.top() + dy;
+        let bande = Rect::from_min_max(pos2(marge.left(), rt), pos2(r.right(), rt + HEADER_H));
+        #[cfg(test)]
+        REGLE_COLLANTE.with(|c| c.set(Some(bande.intersect(ui.clip_rect()))));
+        let large = ui.painter().with_clip_rect(ui.clip_rect());
+        large.rect_filled(bande, 0.0, theme::regle());
+        let fps = self.doc.fps.max(1) as usize;
+        let time_code = self.time_display == crate::cues::TimeDisplay::TimeCode;
+        let step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].into_iter().find(|s| *s as f32 * cell >= 70.0).unwrap_or(2000);
+        let seconds = [1, 2, 5, 10, 30, 60].into_iter().find(|s| (*s * fps) as f32 * cell >= 80.0).unwrap_or(120);
+        let faible = ui.visuals().weak_text_color();
+        for c in c0..=c1 {
+            let x = r.left() + c as f32 * cell;
+            let color = if c % fps == 0 { theme::graduation_seconde() } else { theme::graduation() };
+            painter.line_segment([pos2(x, rt + REGLE_H - 5.0), pos2(x, rt + HEADER_H)], Stroke::new(1.0_f32, color));
+            let shown = if time_code { c % (fps * seconds) == 0 } else { c == 0 || (c + 1) % step == 0 };
+            if c < cols && shown {
+                painter.text(
+                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, rt + LIGNE1_H * 0.5),
+                    if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
+                    self.frame_label(c),
+                    FontId::monospace(9.0),
+                    faible,
+                );
+            }
+        }
+        let cues = self.panel().cues.clone();
+        let bracket = Stroke::new(2.0_f32, theme::image_courante());
+        if let Some(f) = cues.in_point {
+            let x = r.left() + f as f32 * cell + 1.0;
+            painter.line_segment([pos2(x, rt + 2.0), pos2(x, rt + REGLE_H - 2.0)], bracket);
+        }
+        if let Some(f) = cues.out_point {
+            let x = r.left() + (f + 1) as f32 * cell - 1.0;
+            painter.line_segment([pos2(x, rt + 2.0), pos2(x, rt + REGLE_H - 2.0)], bracket);
+        }
+        for &f in &cues.bookmarks {
+            let x = r.left() + (f as f32 + 0.5) * cell;
+            painter.add(egui::Shape::convex_polygon(vec![pos2(x - 4.0, rt + REGLE_H - 1.0), pos2(x + 4.0, rt + REGLE_H - 1.0), pos2(x, rt + REGLE_H - 7.0)], theme::accent_texte(), Stroke::NONE));
+        }
+        for m in &self.panel().marks {
+            let x = r.left() + m.frame as f32 * cell;
+            painter.add(egui::Shape::convex_polygon(vec![pos2(x, rt + 2.0), pos2(x + 7.0, rt + 2.0), pos2(x, rt + REGLE_H - 2.0)], theme::marque(), Stroke::NONE));
+        }
+        let end_x = r.left() + self.panel().frame_count() as f32 * cell;
+        painter.rect_filled(Rect::from_min_size(pos2(end_x, rt + 2.0), vec2(PLAN_END_W - 2.0, REGLE_H - 4.0)), 2.0, theme::texte_doux());
+        let cx = r.left() + self.cur_frame as f32 * cell;
+        painter.rect_filled(Rect::from_min_size(pos2(cx, rt), vec2(cell, REGLE_H)), 0.0, cur_frame());
+        painter.text(
+            pos2(cx + cell * 0.5, rt + LIGNE1_H * 0.5),
+            Align2::CENTER_CENTER,
+            match self.time_display {
+                crate::cues::TimeDisplay::TimeCode => ((self.cur_frame + self.doc.start_frame).saturating_sub(1) % fps).to_string(),
+                _ => self.frame_label(self.cur_frame),
+            },
+            FontId::monospace(9.0),
+            theme::encre(),
+        );
+        let regle = Rect::from_min_size(pos2(r.left(), rt), vec2(r.width(), HEADER_H));
+        crate::commentairesui::paint_flags(painter, regle, comments, comment_pole, self.comment_ui.sel, None);
+        // Le clic et le glisser sur la règle repeinte : la tête de lecture (posé après la grille, ce rectangle prend le pointeur avant
+        // elle).
+        let resp = ui.interact(bande.intersect(ui.clip_rect()), ui.id().with("regle_collante_timeline"), Sense::click_and_drag());
+        if resp.is_pointer_button_down_on() || resp.clicked() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                let f = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                if f != self.cur_frame {
+                    self.set_frame_free(f);
+                }
+            }
         }
     }
 

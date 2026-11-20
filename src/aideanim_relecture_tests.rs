@@ -93,6 +93,7 @@ fn vue(app: &App, id: &str) -> bool {
 // ------------------------------------------------------------------------------------------------------ 1. le ▶ des annotations
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_play_button_of_the_annotation_tools_stays_on_one_line() {
     let mut app = app_aide("annot", LayerKind::Vector, 1);
     app.espace = crate::workspace::Espace::Vignettes;
@@ -109,6 +110,7 @@ fn the_play_button_of_the_annotation_tools_stays_on_one_line() {
 // ------------------------------------------------------------------------------------------------------ 2. vue quand elle commence
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn each_animation_of_a_suite_is_seen_only_when_it_begins() {
     let mut app = app_aide("suite", LayerKind::Vector, 1);
     let mut e = Ecran::new(0.25);
@@ -219,6 +221,7 @@ fn a_held_key_is_readable_in_both_themes() {
 // ------------------------------------------------------------------------------------------------------ 7. la prise d'outil
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn showing_the_explanations_replays_only_when_the_tool_changes() {
     let mut app = app_aide("prise", LayerKind::Vector, 1);
     let cel = app.doc.new_cel(LayerKind::Bitmap);

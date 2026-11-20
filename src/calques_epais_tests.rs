@@ -196,9 +196,10 @@ fn la_hauteur_de_chaque_ligne_se_regle_et_les_blocs_la_suivent() {
     b.app.settings.taille_icones = 16;
     b.chauffer(6);
     let rows = rangees(&b);
-    assert!(rows.bands_h() >= 21.0 && rows.cam_h() >= 21.0, "{} {}", rows.bands_h(), rows.cam_h());
+    // (Partie 196 : la ligne Séquence n'a plus d'icônes : elle garde ses 18 points ; la caméra garde ⊕.)
+    assert!(rows.bands_h() == 18.0 && rows.cam_h() >= 21.0, "{} {}", rows.bands_h(), rows.cam_h());
     assert!(hauteurs(&b).iter().all(|(_, h)| *h >= 42.0 - 0.5), "{:?}", hauteurs(&b));
-    crate::tailleicones::poser(crate::tailleicones::TAILLE_DEFAUT);
+    crate::tailleicones::poser(crate::tailleicones::TAILLE_ESSAIS);
 }
 
 #[test]

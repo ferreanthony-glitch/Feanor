@@ -80,6 +80,7 @@ fn the_guides_panel_is_gone_from_the_bar_and_from_every_default_set() {
         },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let lue = ancienne.sanitized();
     assert!(!lue.contains(Pane::Guides) && lue.contains(Pane::ToolOptions) && lue.contains(Pane::Sheet));
@@ -189,8 +190,8 @@ fn every_icon_has_a_registered_action_a_name_and_a_description() {
     }
     assert_eq!(pane_de_action("vue.panneau_outils"), None, "les groupes ne sont pas des icônes");
     assert_eq!(pane_de_action("fichier.nouveau"), None);
-    // La barre elle-même est une action de la palette.
-    assert!(crate::keymap::action_info("vue.barre_panneaux").is_some_and(|a| a.implemented));
+    // La barre elle-même n'est plus là (partie 194 : les onglets d'icônes de Propriétés la remplacent), ni son action.
+    assert!(crate::keymap::action_info("vue.barre_panneaux").is_none());
 }
 
 #[test]

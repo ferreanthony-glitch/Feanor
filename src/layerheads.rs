@@ -435,21 +435,31 @@ impl App {
         let size = vec2(w, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
-        let tete = Rect::from_min_size(rect.min, vec2(w, header_h));
-        painter.rect_filled(tete, 0.0, theme::regle());
+        // Partie 195 (Anthony : la règle et le compteur « toujours visibles ») : la timeline défilée vers le bas, l'en-tête de la colonne
+        // (ses deux lignes de boutons, le compteur, l'en-tête des colonnes) reste en haut de ce qu'on voit, en face de la règle collante
+        // de la grille (`timeline::regle_collante_timeline`) ; il se peint alors après les lignes, par-dessus.
+        let dy = (ui.clip_rect().top() - rect.top()).max(0.0);
+        let collante = dy > 0.5;
+        let tete = Rect::from_min_size(rect.min + vec2(0.0, if collante { dy } else { 0.0 }), vec2(w, header_h));
         // (Les messages « calque courant caché » et « dans un dossier fermé » qui étaient là ne servent plus : le calque courant garde sa
         // ligne complète dans tous les cas, partie 165.4 ; son groupe se remontre par son menu, son dossier par son triangle.)
         // Partie 165.6 (Anthony : « Deux lignes de boutons ») : la barre sur deux lignes, la première en face des numéros de la règle,
         // la seconde juste dessous ; la colonne ne prend plus que la largeur de la plus longue des deux.
-        let h1 = crate::timeline::LIGNE1_H.min(header_h);
-        // Partie 174 : sous les deux lignes de boutons, la rangée d'en-tête des colonnes (seulement si l'en-tête a sa hauteur entière).
-        let entete_h = if header_h >= crate::timeline::LIGNE1_H + ENTETE_H { ENTETE_H } else { 0.0 };
-        let ligne1 = Rect::from_min_size(tete.min, vec2(w, h1));
-        let ligne2 = Rect::from_min_max(pos2(tete.left(), tete.top() + h1), pos2(tete.right(), tete.bottom() - entete_h));
-        self.barre_dans_la_colonne_deux_lignes(ui, ligne1, ligne2, crate::barres::Barre::Timeline, crate::timeline::DERNIER_GROUPE_LIGNE1);
-        if entete_h > 0.0 {
-            let entete = Rect::from_min_max(pos2(tete.left(), tete.bottom() - entete_h), tete.max);
-            self.entete_des_colonnes(ui, entete);
+        let peindre_tete = |app: &mut Self, ui: &mut Ui| {
+            ui.painter().with_clip_rect(ui.clip_rect()).rect_filled(tete, 0.0, theme::regle());
+            let h1 = crate::timeline::LIGNE1_H.min(header_h);
+            // Partie 174 : sous les deux lignes de boutons, la rangée d'en-tête des colonnes (seulement si l'en-tête a sa hauteur entière).
+            let entete_h = if header_h >= crate::timeline::LIGNE1_H + ENTETE_H { ENTETE_H } else { 0.0 };
+            let ligne1 = Rect::from_min_size(tete.min, vec2(w, h1));
+            let ligne2 = Rect::from_min_max(pos2(tete.left(), tete.top() + h1), pos2(tete.right(), tete.bottom() - entete_h));
+            app.barre_dans_la_colonne_deux_lignes(ui, ligne1, ligne2, crate::barres::Barre::Timeline, crate::timeline::DERNIER_GROUPE_LIGNE1);
+            if entete_h > 0.0 {
+                let entete = Rect::from_min_max(pos2(tete.left(), tete.bottom() - entete_h), tete.max);
+                app.entete_des_colonnes(ui, entete);
+            }
+        };
+        if !collante {
+            peindre_tete(self, ui);
         }
         #[cfg(test)]
         crate::timeline::LIGNES_PEINTES.with(|l| l.borrow_mut().0 = rows.iter().map(|row| (row.li, rect.top() + header_h + row.top, rect.top() + header_h + row.top + row.h)).collect());
@@ -485,7 +495,9 @@ impl App {
             if let Some(row) = rows.iter().find(|r| r.li == cur) {
                 if self.calques_tiennent(&avant, row.li) {
                     let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(w, row.h));
-                    let r = ligne_toujours_visible(r, ui.clip_rect());
+                    // (Sous l'en-tête resté en haut, s'il l'est.)
+                    let vue = if collante { Rect::from_min_max(pos2(ui.clip_rect().left(), tete.bottom()), ui.clip_rect().max) } else { ui.clip_rect() };
+                    let r = ligne_toujours_visible(r, vue);
                     if (r.top() - (top + row.top)).abs() > 0.5 {
                         // (Détachée de sa place : une ombre sous elle et le fond de la colonne derrière, pour qu'on voie qu'elle flotte.)
                         ui.painter().rect_filled(r.expand2(vec2(0.0, 2.0)), 0.0, theme::regle());
@@ -500,6 +512,11 @@ impl App {
         tient &= self.calques_tiennent(&avant, 0);
         if !tient {
             ui.ctx().request_repaint();
+        }
+        if collante {
+            // (Un fond qui prend le pointeur avant les lignes de dessous, puis la barre et l'en-tête des colonnes.)
+            let _ = ui.interact(tete.intersect(ui.clip_rect()), ui.id().with("tete_collante_timeline"), Sense::click_and_drag());
+            peindre_tete(self, ui);
         }
 
         // Glisser une ligne : un trait montre où le calque va se poser (entre deux lignes), ou le cadre du dossier où il va entrer

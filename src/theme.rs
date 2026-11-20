@@ -918,6 +918,11 @@ pub fn densifier_avec(style: &mut egui::Style, plex: bool) {
     s.interact_size = Vec2::new(32.0, 18.0);
     s.indent = 14.0;
     s.slider_width = 110.0;
+    // Partie 195 (Anthony, sur les curseurs Taille et Opacité de Propriétés : « curseurs + fin ») : un rail de 4 points (8 d'egui) et
+    // une poignée en barrette, deux fois moins large que le rond d'avant, pour tous les curseurs de l'interface.
+    s.slider_rail_height = RAIL_CURSEUR;
+    style.visuals.handle_shape = egui::style::HandleShape::Rect { aspect_ratio: POIGNEE_CURSEUR };
+    let s = &mut style.spacing;
     s.window_margin = Margin::same(6);
     s.menu_margin = Margin::same(4);
     s.scroll = egui::style::ScrollStyle::thin();
@@ -933,6 +938,10 @@ pub fn densifier_avec(style: &mut egui::Style, plex: bool) {
     ]
     .into();
 }
+
+/// Partie 195 : l'épaisseur du rail des curseurs, et la largeur de leur poignée (une barrette) rapportée à sa hauteur.
+pub const RAIL_CURSEUR: f32 = 4.0;
+pub const POIGNEE_CURSEUR: f32 = 0.5;
 
 /// Taille du texte dans les panneaux de la colonne (partie 161, la maquette : 11 pixels) ; celle des petits textes.
 pub const TEXTE_PANNEAU: f32 = 11.5;

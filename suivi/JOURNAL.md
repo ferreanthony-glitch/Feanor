@@ -5,6 +5,34 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **Deuxième tour des retouches vues à l'écran** (partie 196, même branche `colonne-panneaux`, format 61 inchangé) : l'aperçu des
+  Préréglages un tiers plus petit, au milieu, et fixé en haut pendant que la liste défile ; la ligne Séquence de la timeline du
+  Storyboard deux fois plus fine (10 points) et sans icônes, la ligne Caméra sans icônes, leurs commandes au clic droit de la ligne ;
+  les lignes Séquence et Plans restent en haut de la bande quand les pistes défilent ; la barre de la vue commence par la vue
+  caméra, puis « 2D » et « 3D » en mots. Essais : `retouches196_tests.rs` (6), huit fichiers d'essais changés exprès (liste 196.2).
+  **Rien regardé à l'écran, pas de commit** (liste 196.4). Puis 196.5 (vu par le coordinateur à 1384 × 868, 90 %) : la Couleur
+  n'est plus écrasée dans la pile ; un panneau garde la hauteur de son contenu, la colonne défile quand tout ne tient pas,
+  Propriétés a le reste (120 points au moins), une liste ajoutée commence à 230 et ne cède que pour ces 120.
+- **Retouches de la partie 194 vues à l'écran** (partie 195, même branche `colonne-panneaux`, format 61 inchangé) : barres de la vue aux
+  icônes de la timeline, 16 points d'origine pour les deux (« Taille d'origine 16pt ») avec les mêmes marges, interface à 90 % d'origine (« Par défaut »), Préréglages en un aperçu et une liste de noms,
+  règle des temps et compteur toujours visibles quand la bande défile, Ctrl + clic sur le compteur (temps ou images, retenu), plus
+  de vidéos d'explication hors du menu Aide, Couleur sans « Avant · maintenant », nouvelle icône du passe-partout, zoom et
+  inclinaison en curseurs sous le dessin, curseurs plus fins, « Pinceau » et « calque vectoriel » séparés, Propriétés gardant le
+  tiers de la colonne, Ctrl + clic qui choisit l'objet (stylet qui tremble, encre d'un autre calque) avec tous les outils de dessin.
+  Essais : `retouches195_tests.rs` (11), Ctrl + clic dans `dessin_notes_tests` ; 20 essais de l'aide animée ignorés exprès ; la suite
+  complète a les 90 échecs connus du Mac, aucun neuf. **Rien regardé à l'écran, pas de commit** (liste 195.4).
+- **La colonne en pile de panneaux, façon Blender** (partie 194, étape 1 sur 5 de la maquette `onglet-3d-v8` validée par
+  Anthony ; branche `colonne-panneaux` partie de `main` 831e997, format 61 inchangé, disposition des réglages en version 10). La
+  colonne de droite est une seule pile, dans les quatre espaces : chaque panneau a son en-tête (poignée ⠿ à glisser, chevron et
+  titre qui replient, ▲ ▼ ✕), un bord du bas à tirer, un seul grandit (Propriétés, sinon le dernier ouvert) ; « + Panneau » en
+  haut ; **Propriétés** montre les panneaux de réglages en onglets d'icônes verticaux, ↗ sort l'onglet devant en panneau, ✕ l'y
+  remet. La barre des panneaux du bord droit et son action `vue.barre_panneaux` sont retirées ; Affichage > Panneaux et la
+  palette ouvrent toujours chaque panneau. Chaque espace garde sa pile ; la bande du bas a toute la largeur sous la colonne ; les
+  dispositions de la version 9 se convertissent sans perdre un panneau. egui_dock garde la racine (dessin | colonne, bande), la
+  colonne est un seul panneau neuf, `Pane::Colonne`, qui dessine sa pile (`colonne.rs`, `colonneui.rs`) et appelle le contenu
+  d'avant tel quel. Essais : `colonne_tests.rs` (14) ; essais changés exprès listés dans la partie 194.3 ; la suite complète a
+  les 90 échecs connus du Mac, aucun neuf ; la version optimisée se construit. **Rien regardé à l'écran, pas de commit**
+  (liste 194.5 ; garder une copie de `reglages.toml` avant l'essai).
 - **Les bords doux entre le décor 3D et les cartes** (partie 193, branche `bords-doux` partie de `main` 41fa82f, format 61
   inchangé), le choix d'Anthony (« Bords d'occlusion doux »), puis allégée sur son « Allège ». Le bord d'un objet du décor qui passe
   devant une carte, la ligne où une carte inclinée entre dans un objet et le bord du décor contre le ciel ne font plus d'escaliers :

@@ -45,6 +45,8 @@ use crate::raster::Tile;
 pub(crate) const PASTILLE: f32 = 20.0;
 /// Côté d'une case de la colonne (une pastille et son halo).
 const CASE_H: f32 = PASTILLE + 6.0;
+/// La case d'une pastille (partie 195 : la barre de la vue garde au moins sa hauteur, `viewbar::view_bar_h`).
+pub(crate) const CASE_PASTILLE: f32 = CASE_H;
 /// Largeur de la colonne des pastilles : une case, et un souffle de chaque côté.
 pub(crate) const COLONNE_L: f32 = CASE_H + 2.0;
 /// Écart de la colonne au bord droit du dessin.

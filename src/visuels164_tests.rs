@@ -121,37 +121,27 @@ fn the_wheel_changes_the_colour_in_one_step_and_the_old_spot_comes_back() {
     annuler(&mut b);
     annuler(&mut b);
     assert_eq!(couleur_du_trait(&b, cel), [200, 0, 0], "Ctrl+Z rend la couleur du trait");
-    // L'ancienne tache : la couleur d'avant le dernier choix ; un clic y revient, l'autre devient l'ancienne.
+    // (Partie 195 : plus de taches « Avant · maintenant » ; la couleur d'avant reste suivie, sans tache à l'écran.)
     b.app.vsel = None;
     b.app.choose_front([10, 20, 200]);
     b.chauffer(3);
     b.app.choose_front([240, 200, 10]);
     b.chauffer(3);
     assert_eq!(b.app.couleurs.avant_maintenant.avant, Some([10, 20, 200]));
-    clic(&mut b, ou("Couleur d'avant").center(), Modifiers::NONE);
-    assert_eq!(b.app.color, [10, 20, 200], "la tache ancienne revient");
-    assert_eq!(b.app.couleurs.avant_maintenant.avant, Some([240, 200, 10]), "et l'autre devient l'ancienne : aller et retour");
+    assert!(!present("Couleur d'avant") && !present("Couleur de maintenant"));
 }
 
 #[test]
-fn the_old_spot_recolours_the_selection_in_one_step_too() {
+fn the_old_spot_is_gone_from_the_colour_panel() {
+    // Partie 195 (Anthony, sur la capture du panneau Couleur) : les taches « Avant · maintenant » et la ligne « clic sur l'ancienne
+    // pour revenir » sont retirées ; les deux carrés d'avant-plan et d'arrière-plan restent.
     let mut b = banc_164(Espace::Storyboard);
     b.app.color = [200, 0, 0];
     b.chauffer(3);
     b.app.choose_front([0, 0, 200]);
     b.chauffer(3);
-    let cel = avec_un_trait_choisi(&mut b);
-    let avant = etapes(&b);
-    clic(&mut b, ou("Couleur d'avant").center(), Modifiers::NONE);
-    assert_eq!(couleur_du_trait(&b, cel), [200, 0, 0]);
-    assert_eq!(etapes(&b), avant, "le trait était déjà rouge : aucune étape");
-    // On revient au bleu : une étape, que Ctrl+Z défait.
-    let avant = etapes(&b);
-    clic(&mut b, ou("Couleur d'avant").center(), Modifiers::NONE);
-    assert_eq!(couleur_du_trait(&b, cel), [0, 0, 200]);
-    assert_eq!(etapes(&b), avant + 1);
-    annuler(&mut b);
-    assert_eq!(couleur_du_trait(&b, cel), [200, 0, 0]);
+    assert!(!present("Couleur d'avant") && !present("Couleur de maintenant"), "{:?}", vus::noms());
+    assert!(present("Couleur d'avant-plan") && present("Couleur d'arrière-plan"));
 }
 
 #[test]
@@ -161,7 +151,8 @@ fn every_old_colour_setting_is_still_reached() {
     b.app.couleurs.prefs.wheel_shown = true;
     b.chauffer(4);
     // Toujours visibles : la roue, les deux taches, les deux carrés, les neutres et le nuancier.
-    for nom in ["Roue chromatique", "Couleur d'avant", "Couleur de maintenant", "Couleur d'avant-plan", "Couleur d'arrière-plan", "Précis : Couleur"] {
+    // (Partie 195 : sans les taches « Avant · maintenant ».)
+    for nom in ["Roue chromatique", "Couleur d'avant-plan", "Couleur d'arrière-plan", "Précis : Couleur"] {
         assert!(present(nom), "« {nom} » : {:?}", vus::noms());
     }
     assert!(!present("Code hexadécimal") && !present("Nuancier montré"), "les chiffres et les commandes du nuancier sous Précis, replié");
@@ -190,7 +181,7 @@ fn every_old_colour_setting_is_still_reached() {
     b.app.couleurs.prefs.wheel_shown = false;
     b.chauffer(3);
     assert!(vus::ou("Roue chromatique").iter().all(|r| r.width() < 40.0), "un seul à la fois : la roue n'est plus dessinée");
-    for nom in ["Curseurs TSV", "Curseurs RVB", "Curseurs TSL", "Couleur d'avant", "Couleur d'avant-plan"] {
+    for nom in ["Curseurs TSV", "Curseurs RVB", "Curseurs TSL", "Couleur d'avant-plan"] {
         assert!(present(nom), "« {nom} » : {:?}", vus::noms());
     }
 }

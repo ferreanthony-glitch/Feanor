@@ -987,3 +987,53 @@ fn laying_down_a_long_straight_segment_and_choosing_an_object_cost_one_ordinary_
     assert!(mask.at(500, 500) > 0.0);
     assert!(pick.as_millis() < 600, "un clic sur un très grand objet : {pick:?}");
 }
+
+// ------------------------------------------------------------------------------------ partie 195 : Ctrl + clic, quel que soit l'outil
+
+#[test]
+fn ctrl_click_picks_the_stroke_under_the_pointer_even_with_a_shaky_pen_and_ctrl_drag_still_lassoes() {
+    for outil in [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Fill, Tool::Rect, Tool::Text] {
+        let mut b = banc_dessin(LayerKind::Vector);
+        b.app.tool = outil;
+        b.chauffer(2);
+        deux_traits(&mut b);
+        // Un appui au stylet qui bouge de quatre pixels d'écran : toujours un clic, l'objet est choisi.
+        let z = b.app.view.zoom;
+        cliquer_tremble(&mut b, 90.0, 60.0, 4.0 / z, CTRL);
+        assert_eq!(b.app.vsel.as_ref().map(|s| s.items.clone()), Some(vec![0]), "{outil:?} : Ctrl + clic choisit le trait A");
+        assert_eq!(b.app.tool, outil, "{outil:?} : l'outil d'avant revient");
+        // Un clic dans le vide, Ctrl tenu : plus rien.
+        cliquer(&mut b, 300.0, 250.0, CTRL);
+        assert!(b.app.vsel.as_ref().is_none_or(|s| s.items.is_empty()), "{outil:?} : Ctrl + clic dans le vide désélectionne");
+        // Ctrl + glisser autour du trait B : le lasso le prend.
+        glisser(&mut b, &[(30.0, 140.0), (150.0, 140.0), (150.0, 180.0), (30.0, 180.0), (30.0, 141.0)], CTRL);
+        assert_eq!(b.app.vsel.as_ref().map(|s| s.items.clone()), Some(vec![1]), "{outil:?} : Ctrl + glisser reste le lasso");
+    }
+}
+
+#[test]
+fn ctrl_click_on_the_ink_of_another_layer_makes_it_current_and_picks_its_object() {
+    let mut b = banc_dessin(LayerKind::Vector);
+    // Un second calque, vide, au-dessus : le calque courant.
+    b.app.doc.panels[0].layers.push(Layer::new("Dessus", LayerKind::Vector));
+    deux_traits(&mut b);
+    b.app.cur_layer = 1;
+    b.chauffer(3);
+    cliquer(&mut b, 90.0, 160.0, CTRL);
+    assert_eq!(b.app.cur_layer, 0, "le calque de l'encre cliquée devient le calque courant");
+    assert_eq!(b.app.vsel.as_ref().map(|s| s.items.clone()), Some(vec![1]), "et le trait B y est choisi");
+    assert_eq!(b.app.tool, Tool::Brush);
+    // Alt + clic choisit toujours le calque, sans rien choisir d'autre.
+    b.app.cur_layer = 1;
+    b.app.vsel = None;
+    b.chauffer(2);
+    cliquer(&mut b, 90.0, 60.0, Modifiers { alt: true, ..Modifiers::NONE });
+    assert_eq!(b.app.cur_layer, 0);
+    assert!(b.app.vsel.is_none());
+}
+
+/// Un clic en (`x`, `y`) dont le pointeur bouge de `d` (points de la feuille) entre l'appui et le relâché, comme au stylet.
+fn cliquer_tremble(b: &mut Banc, x: f32, y: f32, d: f32, touches: Modifiers) {
+    glisser(b, &[(x, y), (x + d, y + d * 0.5)], touches);
+    b.image(Vec::new(), 1.0 / 60.0);
+}

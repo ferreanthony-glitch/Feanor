@@ -8,7 +8,34 @@ use crate::app::{App, BoardView, Mode};
 use crate::dock::{self, DetachedPanel, DockLayout, Group, Pane};
 
 /// Ce que dit la bulle de la poignée d'un panneau (partie 160).
-pub(crate) const POIGNEE: &str = "Glisser cette poignée : poser le panneau ailleurs, ou le faire flotter. Clic droit : dans une fenêtre à part. L'icône de la barre des panneaux, à droite, l'ouvre, le met devant ou le ferme.";
+pub(crate) const POIGNEE: &str = "Glisser cette poignée : poser le panneau ailleurs, ou le faire flotter. Clic droit : dans une fenêtre à part, ou de retour dans la colonne. Affichage > Panneaux l'ouvre ou le ferme.";
+
+/// L'aide de la poignée de la colonne elle-même (partie 194).
+pub(crate) const POIGNEE_COLONNE: &str = "Glisser cette poignée : poser toute la colonne ailleurs. Chaque panneau de la colonne a sa poignée (⠿), dans son en-tête.";
+
+/// Les panneaux qui défilent seuls (une liste, la bande, le dessin) : ni egui_dock ni la colonne ne leur ajoutent de barre.
+pub(crate) fn defile_seul(pane: Pane) -> bool {
+    // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile (`layers_panel`). L'historique défile
+    // seul, pour rester sur la dernière étape.
+    matches!(
+        pane,
+        Pane::Canvas
+            | Pane::Colonne
+            | Pane::Montage
+            | Pane::Timeline
+            | Pane::XSheet
+            | Pane::Layers
+            | Pane::History
+            | Pane::Comments
+            | Pane::Bruitages
+            | Pane::SuggestionsSonores
+            | Pane::Scenario
+            | Pane::Bibliotheque
+            | Pane::References
+            // (Partie 196 : l'aperçu reste en haut, seule la liste défile, `panneauprereglages.rs`.)
+            | Pane::Prereglages
+    )
+}
 
 /// Ce qu'egui_dock affiche dans chaque onglet.
 struct Panes<'a> {
@@ -41,9 +68,18 @@ impl egui_dock::TabViewer for Panes<'_> {
         }
     }
 
-    /// Clic droit sur un onglet : le panneau dans sa propre fenêtre.
+    /// Clic droit sur un onglet : le panneau dans sa propre fenêtre, ou de retour dans la colonne.
     fn context_menu(&mut self, ui: &mut egui::Ui, tab: &mut Pane, _surface: egui_dock::SurfaceIndex, _node: egui_dock::NodeIndex) {
-        if *tab != Pane::Canvas
+        if !crate::colonne::hors_colonne(*tab)
+            && ui
+                .button("Dans la colonne")
+                .on_hover_text("Le panneau revient dans la colonne de droite : en onglet de Propriétés, ou dans la pile")
+                .clicked()
+        {
+            self.app.colonne_etat.apres.push(crate::colonneui::Apres::DansLaColonne(*tab));
+            ui.close_menu();
+        }
+        if !matches!(*tab, Pane::Canvas | Pane::Colonne)
             && ui
                 .button("Dans une fenêtre à part")
                 .on_hover_text("Une vraie fenêtre, à poser sur un autre écran ; la fermer remet le panneau à sa place")
@@ -54,13 +90,22 @@ impl egui_dock::TabViewer for Panes<'_> {
         }
     }
 
-    /// Le dessin ne se ferme pas et ne flotte pas.
+    /// Le dessin et la colonne ne se ferment pas et ne flottent pas.
     fn closeable(&mut self, tab: &mut Pane) -> bool {
-        *tab != Pane::Canvas
+        !matches!(*tab, Pane::Canvas | Pane::Colonne)
     }
 
     fn allowed_in_windows(&self, tab: &mut Pane) -> bool {
-        *tab != Pane::Canvas
+        !matches!(*tab, Pane::Canvas | Pane::Colonne)
+    }
+
+    /// La colonne dessine ses propres marges (celles de chaque panneau de sa pile).
+    fn tab_style_override(&self, tab: &Pane, global_style: &egui_dock::TabStyle) -> Option<egui_dock::TabStyle> {
+        (*tab == Pane::Colonne).then(|| {
+            let mut s = global_style.clone();
+            s.tab_body.inner_margin = egui::Margin::ZERO;
+            s
+        })
     }
 
     fn clear_background(&self, tab: &Pane) -> bool {
@@ -69,28 +114,16 @@ impl egui_dock::TabViewer for Panes<'_> {
 
     /// Le dessin et la bande gèrent eux-mêmes leur place ; les autres défilent.
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
-        match tab {
-            // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
-            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape.
-            Pane::Canvas
-            | Pane::Montage
-            | Pane::Timeline
-            | Pane::XSheet
-            | Pane::Layers
-            | Pane::History
-            | Pane::Comments
-            | Pane::Bruitages
-            | Pane::SuggestionsSonores
-            | Pane::Scenario
-            | Pane::Bibliotheque
-            | Pane::References => [false, false],
-            _ => [false, true],
-        }
+        if defile_seul(*tab) { [false, false] } else { [false, true] }
     }
 
     /// La bulle de la poignée : le nom du panneau et comment le déplacer.
     fn on_tab_button(&mut self, tab: &mut Pane, response: &egui::Response) {
-        let aide = if *tab == Pane::Canvas { "" } else { POIGNEE };
+        let aide = match *tab {
+            Pane::Canvas => "",
+            Pane::Colonne => POIGNEE_COLONNE,
+            _ => POIGNEE,
+        };
         crate::bulles::bulle(response.clone(), self.app.pane_title(*tab), aide, "");
     }
 }
@@ -125,7 +158,7 @@ impl App {
     }
 
     fn pane_content(&mut self, ui: &mut egui::Ui, pane: Pane) {
-        if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
+        if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Colonne) {
             crate::theme::densifier_panneau(ui.style_mut());
             fit_to_pane(ui);
         }
@@ -191,6 +224,8 @@ impl App {
             Pane::Bibliotheque => self.bibliotheque_panel(ui),
             // Les réglages de la vue Espace 3D (`espace3dpanneau.rs`) : le panneau Réglages, lui, montre toujours l'outil choisi.
             Pane::Espace3d => self.espace3d_panneau(ui),
+            // La colonne en pile (partie 194) : elle dessine ses panneaux, chacun par ce même `pane_ui`.
+            Pane::Colonne => self.colonne_ui(ui),
         }
     }
 
@@ -218,6 +253,12 @@ impl App {
         self.anneau_suivre(ctx);
         // Le panneau Espace 3D passe devant quand la vue s'ouvre, et rend sa place quand elle se ferme (`espace3dpanneau.rs`).
         self.espace3d_panneau_suivre();
+        // Ce qui est rangé hors de la colonne : « déjà là » dans son menu « + Panneau » (pendant l'affichage, l'état d'egui_dock
+        // n'est pas dans `self.dock`).
+        self.colonne_etat.ailleurs = match &self.dock {
+            Some(state) => state.iter_all_tabs().map(|(_, t)| *t).chain(self.detached.iter().map(|d| d.panneau)).collect(),
+            None => Vec::new(),
+        };
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.
@@ -247,6 +288,8 @@ impl App {
             layout.detach(pane);
             self.set_dock_layout(layout);
         }
+        // Ce que la colonne a demandé pendant l'affichage (flotter, fermer, revenir dans la colonne).
+        self.colonne_apres();
         self.show_detached(ctx);
         self.following = false;
     }
@@ -308,6 +351,7 @@ impl App {
                             | Pane::Scenario
                             | Pane::Bibliotheque
                             | Pane::References
+                            | Pane::Prereglages
                     ) {
                         self.pane_ui(ui, pane);
                     } else {
@@ -359,6 +403,7 @@ impl App {
                 .map(|r| egui::Rect::from_min_size(r.min, (r.size() - frame).max(egui::vec2(20.0, 20.0))))
         });
         layout.detachees = self.detached.clone();
+        layout.colonne = self.colonne.clone();
         layout.sanitized()
     }
 
@@ -372,6 +417,7 @@ impl App {
             }
         }
         self.detached = layout.detachees.clone();
+        self.colonne = layout.colonne.clone();
         self.dock = Some(dock::to_state(&layout));
         // Nouvelle disposition : ses parts ne sont pas des bords tirés à la main.
         self.fit_set.clear();
@@ -418,7 +464,10 @@ impl App {
             layout.close(pane);
         }
         self.set_dock_layout(layout);
-        // Un panneau qu'on ouvre passe devant les onglets de son groupe.
+        // Un panneau qu'on ouvre passe devant les onglets de son groupe (dans la pile : devant dans son panneau, déplié).
+        if opening && self.colonne.montrer(pane) {
+            return;
+        }
         if let (true, Some(state)) = (opening, self.dock.as_mut()) {
             if let Some(at) = state.find_tab(&pane) {
                 state.set_active_tab(at);
@@ -433,6 +482,8 @@ impl App {
         }
         if !self.pane_shown(pane) {
             self.toggle_pane(pane);
+        } else if self.colonne.montrer(pane) {
+            // (Dans la pile : devant dans son panneau, et le panneau déplié.)
         } else if let Some(state) = self.dock.as_mut() {
             if let Some(at) = state.find_tab(&pane) {
                 state.set_active_tab(at);
@@ -442,7 +493,8 @@ impl App {
 
     /// `pane` est-il dans l'espace de travail (affiché ou en onglet) ?
     pub(crate) fn pane_shown(&self, pane: Pane) -> bool {
-        self.dock.as_ref().map_or_else(|| self.layout.dock_layout().contains(pane), |s| s.find_tab(&pane).is_some()) || self.detached.iter().any(|d| d.panneau == pane)
+        (self.dock.is_some() && self.colonne.contient(pane))
+            || self.dock.as_ref().map_or_else(|| self.layout.dock_layout().contains(pane), |s| s.find_tab(&pane).is_some()) || self.detached.iter().any(|d| d.panneau == pane)
     }
 
 

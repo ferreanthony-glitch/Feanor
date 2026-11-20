@@ -14,13 +14,13 @@ impl App {
         let mut rect = ui.available_rect_before_wrap();
         // Barre de la vue (plateau / caméra, cadres de composition), sauf dans une vignette.
         if !self.in_card {
-            let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::VIEW_BAR_H));
+            let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::view_bar_h()));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
             // (Les pastilles des personnages sont à l'extrémité droite de cette barre, `view_bar`.)
             // Dessous, les commandes de la vue (en 3D : seulement les vues, pour en sortir).
-            let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::TOOLS_BAR_H), rect.max);
+            let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::tools_bar_h()), rect.max);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;

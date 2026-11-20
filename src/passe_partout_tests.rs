@@ -315,26 +315,27 @@ fn the_bottom_bar_ends_with_the_passe_partout_toggle_and_opacity_slider_in_the_s
     let mut app = app_camera("barre");
     let (textes, _) = glyphes(&mut app, 4);
     let trouver = |glyphe: &str| textes.iter().find(|(t, _)| t.trim() == glyphe).map(|(_, r)| *r);
+    let bulle = |nom: &str| crate::bulles::vus::ou(nom).last().copied();
     // (Partie 160 : ajuster et miroir sont montés dans la barre du haut ; la barre du bas commence par le cadrage et les repères.)
+    // (Partie 195 : le passe-partout a son icône dessinée, un cadre dans un cache, sans glyphe ; on le trouve par sa bulle.)
     let (ajuster, miroir, pelure, lampe, passe) = (
         trouver(ph::CROP).expect("cadrage"),
         trouver(ph::GRID_FOUR).expect("repères"),
         trouver(ph::CIRCLES_THREE).expect("pelure"),
         trouver(ph::LIGHTBULB).expect("table lumineuse"),
-        trouver(ph::SELECTION_INVERSE).expect("passe-partout"),
+        bulle("Passe-partout").expect("passe-partout"),
     );
     // Après tous les autres, de gauche à droite.
     assert!(ajuster.center().x < miroir.center().x && miroir.center().x < pelure.center().x && pelure.center().x < lampe.center().x && lampe.center().x < passe.center().x, "{ajuster:?} {miroir:?} {pelure:?} {lampe:?} {passe:?}");
-    // Même taille d'icône, sur la même ligne que les autres.
-    assert_eq!(passe.size(), lampe.size(), "même icône que les autres : {passe:?} / {lampe:?}");
-    assert!((passe.center().y - lampe.center().y).abs() < 0.5, "sur la même ligne");
-    // Le curseur d'opacité, avec sa valeur en pour cent, juste après l'icône.
-    let valeur = textes.iter().find(|(t, _)| t.trim() == "100 %").map(|(_, r)| *r).expect("la valeur du curseur : « 100 % »");
-    assert!(valeur.center().x > passe.center().x, "le curseur est à droite de l'icône");
-    assert!((valeur.center().y - lampe.center().y).abs() < 3.0);
-    // Même écart que dans le reste de la barre : l'icône suivante du groupe suit la case de l'icône à 2 points près.
-    let ecart_icone_curseur = valeur.min.x - passe.max.x;
-    assert!(ecart_icone_curseur > 0.0 && ecart_icone_curseur < 120.0, "{ecart_icone_curseur}");
+    // Sur la même ligne que les autres, dans une case de la barre.
+    assert!((passe.center().y - lampe.center().y).abs() < 1.0, "sur la même ligne");
+    assert_eq!(passe.size(), egui::Vec2::from(crate::tailleicones::case_de_barre()), "une case de la barre");
+    // Partie 195 : l'opacité est dans le petit panneau de la flèche, juste après l'icône ; puis le zoom et l'inclinaison de la vue.
+    let fleche = bulle("Opacité du passe-partout").expect("la flèche de l'opacité");
+    let zoom = bulle("Zoom de la vue").expect("le curseur du zoom");
+    let inclinaison = bulle("Inclinaison de la vue").expect("le curseur de l'inclinaison");
+    assert!(passe.center().x < fleche.center().x && fleche.center().x < zoom.center().x && zoom.center().x < inclinaison.center().x, "{passe:?} {fleche:?} {zoom:?} {inclinaison:?}");
+    assert!((zoom.center().y - lampe.center().y).abs() < 3.0);
 }
 
 #[test]
@@ -364,7 +365,10 @@ fn clicking_the_bar_icon_toggles_the_passe_partout_and_the_setting_follows() {
     for _ in 0..3 {
         textes = image(&mut app, Vec::new());
     }
-    let centre = textes.iter().find(|(t, _)| t.trim() == ph::SELECTION_INVERSE).map(|(_, r)| r.center()).expect("l'icône");
+    // (Partie 195 : une icône dessinée ; on la trouve par sa bulle.)
+    let _ = &textes;
+    let _ = ph::SELECTION_INVERSE;
+    let centre = crate::bulles::vus::ou("Passe-partout").last().map(|r| r.center()).expect("l'icône");
     // (Le pointeur arrive d'abord sur l'icône, quelques images : un clic dans un écran neuf, sans survol, n'est pas pris.)
     image(&mut app, vec![Event::PointerMoved(centre)]);
     image(&mut app, Vec::new());

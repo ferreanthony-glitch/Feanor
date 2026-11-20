@@ -45,6 +45,10 @@ pub(crate) fn planche(doc: Document, colonnes: usize, zoom: f32) -> Option<Banc>
     b.app.board_zoom = 0.0;
     b.app.vignettes.ouverture_a_faire = false;
     b.chauffer(6);
+    // (Partie 194 : la place du dessin d'avant, que ces captures au pixel près supposent ; la barre des panneaux n'est plus là.)
+    crate::colonne_tests::dessin_d_avant_la_pile(&mut b);
+    b.app.board_zoom = 0.0;
+    b.chauffer(6);
     b.app.board_zoom *= zoom;
     b.app.settings.vignettes.numeros_visibles = false;
     b.chauffer(6);

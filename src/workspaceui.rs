@@ -134,7 +134,6 @@ impl App {
             "vue.panneau_fiche" => self.toggle_pane_group(Group::Right),
             "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
             "vue.reajuster_panneaux" => self.refit_panes(),
-            "vue.barre_panneaux" => self.toggle_panel_bar(),
             // L'ancien panneau Calques (partie 160) : la colonne des calques de la timeline, montrée et mise en main.
             "vue.calques" => self.montrer_colonne_des_calques(),
             // La liste des brosses (l'ancien panneau Pinceaux) : dans les réglages de l'outil.
@@ -194,13 +193,7 @@ impl App {
         ui.menu_button("Panneaux", |ui| {
             ui.checkbox(&mut self.layout.command_bar, "Barre de commandes (en haut)");
             ui.checkbox(&mut self.layout.tool_bar, "Barre d'outils (à gauche)");
-            // La barre des panneaux est un réglage de l'application, pas de l'espace de travail.
-            let key = self.keymap.label("vue.barre_panneaux");
-            let text = if key.is_empty() { "Barre des panneaux (à droite)".to_string() } else { format!("Barre des panneaux (à droite) ({key})") };
-            let resp = ui.checkbox(&mut self.settings.panel_bar, text).on_hover_text("Une icône par panneau de côté, sur le bord droit : un clic l'ouvre, le met devant ou le ferme.");
-            if resp.changed() {
-                let _ = self.settings.save();
-            }
+            // (Plus de barre des panneaux au bord droit, partie 194 : la colonne a « + Panneau », Propriétés ses onglets d'icônes.)
             ui.separator();
             let panes = self.dock_layout();
             let detached = self.detached_panes();
@@ -247,9 +240,10 @@ impl App {
             ui.separator();
             ui.label(
                 egui::RichText::new(
-                    "Glisse l'onglet d'un panneau : il s'aimante sur un bord ou dans un autre panneau, \
-                     ou flotte si on le lâche ailleurs. Clic droit sur l'onglet : « Dans une fenêtre à \
-                     part », pour le poser sur un autre écran.",
+                    "La colonne de droite est une pile de panneaux : glisse la poignée d'un panneau pour le \
+                     ranger plus haut ou plus bas, ou hors de la colonne pour qu'il flotte ; « + Panneau » en \
+                     ajoute un. Clic droit sur un en-tête : « Dans une fenêtre à part », pour le poser sur \
+                     un autre écran.",
                 )
                 .small()
                 .weak(),

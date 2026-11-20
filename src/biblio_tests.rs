@@ -1246,6 +1246,8 @@ fn the_panel_draws_the_folder_in_both_views_with_the_preview_and_never_reads_on_
     b.app.audio_tried = true;
     b.app.settings.bibliotheque.dernier = Some(racine.clone());
     b.app.show_pane(Pane::Bibliotheque);
+    // (Partie 194 : sorti en panneau à lui, toute la largeur et toute la hauteur de la colonne, comme l'onglet d'avant.)
+    crate::colonne_tests::toute_la_place(&mut b.app, crate::dock::Pane::Bibliotheque);
     b.garder_textes = true;
     let t = Instant::now();
     b.chauffer(3);

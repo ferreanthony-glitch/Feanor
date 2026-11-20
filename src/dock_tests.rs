@@ -13,6 +13,31 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
     layout.panes().iter().filter(|p| **p == pane).count()
 }
 
+/// Les onglets de Propriétés, dans la colonne en pile (partie 194 : ce qu'était le groupe des réglages de la colonne).
+fn onglets(l: &DockLayout) -> Vec<Pane> {
+    l.colonne.proprietes().map(|i| l.colonne.panneaux[i].panneaux.clone()).unwrap_or_default()
+}
+
+/// Les panneaux du panneau de la pile qui montre `pane` (la Couleur et les Brosses dédiées ensemble).
+fn groupe(l: &DockLayout, pane: Pane) -> Vec<Pane> {
+    l.colonne.rang_de(pane).map(|i| l.colonne.panneaux[i].panneaux.clone()).unwrap_or_default()
+}
+
+/// La disposition standard de la version 9 (partie 161), comme les réglages la gardaient : la colonne unique (Réglages, Fiche,
+/// Effets en onglets ; la Couleur et les Brosses dédiées dessous), la bande en bas.
+fn standard_v9() -> DockLayout {
+    let row = |part: f32, a: DockNode, b: DockNode| DockNode::Row { part, gauche: Box::new(a), droite: Box::new(b) };
+    let col = |part: f32, a: DockNode, b: DockNode| DockNode::Column { part, haut: Box::new(a), bas: Box::new(b) };
+    let cote = col(0.55, tabs(&[Pane::ToolOptions, Pane::Sheet, Pane::Effects]), tabs(&[Pane::Color, Pane::Personnages]));
+    DockLayout {
+        version: 9,
+        principal: col(1.0 - 290.0 / 820.0, row(1.0 - 290.0 / 1454.0, tabs(&[Pane::Canvas]), cote), tabs(&[Pane::Montage])),
+        fenetres: Vec::new(),
+        detachees: Vec::new(),
+        colonne: Default::default(),
+    }
+}
+
 /// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale), la
 /// feuille d'exposition (13g), l'historique, les commentaires, les bruitages, les suggestions sonores et
 /// les références (ouverts à la demande). Ni le panneau Espace 3D : depuis la partie 152, il arrive en onglet des
@@ -33,7 +58,8 @@ fn the_history_opens_as_a_tab_with_the_effects() {
     assert_eq!(count(&l, Pane::History), 0, "fermé par défaut");
     l.open(Pane::History);
     assert_eq!(count(&l, Pane::History), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects, History]"), "{:?}", l.principal);
+    // (Partie 194 : un onglet de Propriétés, dans la colonne en pile.)
+    assert_eq!(onglets(&l), vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::History]);
     // Rouvrir le groupe ne l'ouvre pas.
     l.close(Pane::History);
     l.close(Pane::Effects);
@@ -47,7 +73,7 @@ fn the_exposure_sheet_opens_next_to_the_effects() {
     assert_eq!(count(&l, Pane::XSheet), 0, "fermée par défaut");
     l.open(Pane::XSheet);
     assert_eq!(count(&l, Pane::XSheet), 1);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects, XSheet]"), "{:?}", l.principal);
+    assert_eq!(onglets(&l), vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::XSheet]);
     // Sans les effets : un onglet des réglages (partie 161 : jamais une deuxième colonne).
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Effects);
@@ -102,7 +128,7 @@ fn back_in_animation_the_exposure_sheet_returns_where_it_was() {
     let back = changed.retour_animation(&saved);
     assert_eq!(count(&back, Pane::XSheet), 1);
     assert_eq!(count(&back, Pane::Sheet), 0, "ce qu'on a fermé reste fermé");
-    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [ToolOptions, Effects, XSheet]"), "{:?}", back.principal);
+    assert_eq!(onglets(&back), vec![Pane::ToolOptions, Pane::Effects, Pane::XSheet]);
     // Une feuille qui n'était pas ouverte ne s'ouvre pas.
     let closed = DockLayout::from_legacy(&Layout::default());
     assert_eq!(closed.retour_animation(&closed), closed);
@@ -126,21 +152,21 @@ fn default_layout_has_every_panel_once() {
     assert!((part - (1.0 - 290.0 / 820.0)).abs() < 1e-4, "{part}");
     let DockNode::Row { gauche: center, droite: tools, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
-    // Une seule colonne (partie 161) : les effets sont un onglet derrière les réglages et la fiche (partie 160 : plus de panneau
-    // Calques, les calques sont dans la colonne de la timeline).
-    assert!(matches!(&**tools, DockNode::Column { .. }), "{tools:?}");
+    // La colonne en pile (partie 194) : un seul panneau d'egui_dock, qui montre la pile (partie 160 : plus de panneau Calques,
+    // les calques sont dans la colonne de la timeline).
+    assert_eq!(**tools, tabs(&[Pane::Colonne]));
     assert_eq!(count(&l, Pane::Layers), 0);
     for p in [Pane::ToolOptions, Pane::Sheet, Pane::Color] {
-        assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
+        assert!(l.colonne.contient(p), "{p:?} à droite");
     }
-    // La fiche est un onglet des réglages (9b).
-    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]"), "{tools:?}");
+    // La fiche est un onglet des réglages (9b), de Propriétés depuis la partie 194.
+    assert_eq!(onglets(&l), vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects]);
 }
 
 #[test]
 fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     // Disposition 6a : la fiche sous les calques.
-    let mut old = DockLayout::from_legacy(&Layout::default());
+    let mut old = standard_v9();
     old.close(Pane::Sheet);
     let mut v1 = old.clone();
     v1.version = 1;
@@ -166,8 +192,8 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     assert!(!l.is_before_6a());
     let d = l.dock_layout();
     assert_eq!(d.version, dock::LAYOUT_VERSION);
-    let s = format!("{:?}", d.principal);
-    assert!(s.contains("Tabs { panneaux: [ToolOptions, Effects, Sheet]"), "{s}");
+    // (Partie 194 : les onglets du groupe des réglages sont ceux de Propriétés.)
+    assert_eq!(onglets(&d), vec![Pane::ToolOptions, Pane::Effects, Pane::Sheet]);
     assert_eq!(count(&d, Pane::Sheet), 1);
 }
 
@@ -178,7 +204,8 @@ fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs(
     // (Le panneau Espace 3D a été un onglet de plus à côté d'eux le 2026-11-12, partie 150 ; depuis la partie 152 il est
     // un onglet des réglages de l'outil, qui n'arrive qu'avec la vue Espace 3D, ou à la demande.)
     let d = DockLayout::from_legacy(&Layout::default());
-    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", d.principal);
+    // (Partie 194 : un panneau de la pile, la Couleur et les Brosses dédiées en onglets dans son en-tête.)
+    assert_eq!(groupe(&d, Pane::Color), vec![Pane::Color, Pane::Personnages]);
     for l in [d, DockLayout::pour_les_vignettes(), DockLayout::pour_le_montage(290.0)] {
         assert_eq!(count(&l, Pane::Brushes), 0, "{:?}", l.principal);
     }
@@ -195,13 +222,13 @@ fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs(
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Personnages);
     l.open(Pane::Personnages);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
+    assert_eq!(groupe(&l, Pane::Color), vec![Pane::Color, Pane::Personnages]);
 }
 
 #[test]
 fn a_saved_layout_that_still_has_the_brushes_tab_loads_without_it() {
     // Une disposition d'avant : couleur, pinceaux, personnages en onglets, le panneau des pinceaux actif.
-    let mut old = DockLayout::from_legacy(&Layout::default());
+    let mut old = standard_v9();
     fn with_brushes(n: &mut DockNode) {
         match n {
             DockNode::Tabs { panneaux, actif } => {
@@ -227,11 +254,12 @@ fn a_saved_layout_that_still_has_the_brushes_tab_loads_without_it() {
     // l'onglet actif est un onglet qui existe.
     let l = Layout { panneaux: Some(back), ..Layout::default() }.dock_layout();
     assert_eq!(count(&l, Pane::Brushes), 0);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
-    // Dans l'état d'egui_dock non plus.
+    assert_eq!(groupe(&l, Pane::Color), vec![Pane::Color, Pane::Personnages]);
+    assert_eq!(l.colonne.panneaux[0].actif, 0, "un onglet devant qui existe");
+    // Dans l'état d'egui_dock non plus (la couleur et les réglages sont dans la pile de la colonne, partie 194).
     let state = dock::to_state(&l);
     assert!(state.find_tab(&Pane::Brushes).is_none());
-    assert!(state.find_tab(&Pane::Color).is_some() && state.find_tab(&Pane::ToolOptions).is_some());
+    assert!(state.find_tab(&Pane::Colonne).is_some() && l.colonne.contient(Pane::Color) && l.colonne.contient(Pane::ToolOptions));
     // Une version d'avant 11c (3) ou d'après : pas de panneau rouvert « à côté de la couleur ».
     let mut v2 = DockLayout::from_legacy(&Layout::default());
     v2.version = 2;
@@ -252,6 +280,7 @@ fn the_brushes_tab_leaves_no_hole_when_it_was_alone_floating_or_in_its_own_windo
             FloatingPanel { panneaux: tabs(&[Pane::Brushes, Pane::Effects]), x: 40.0, y: 40.0, largeur: 300.0, hauteur: 300.0 },
         ],
         detachees: vec![dock::DetachedPanel { panneau: Pane::Brushes, x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 }],
+        colonne: Default::default(),
     };
     let l = old.sanitized();
     assert_eq!(count(&l, Pane::Brushes), 0);
@@ -296,8 +325,8 @@ fn builtin_workspaces_keep_their_meaning() {
 fn layouts_survive_the_trip_through_egui_dock() {
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Sheet);
-    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Sheet]), x: 300.0, y: 200.0, largeur: 260.0, hauteur: 320.0 });
-    // Un groupe de plusieurs onglets dont le deuxième est ouvert.
+    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Sheet, Pane::History]), x: 300.0, y: 200.0, largeur: 260.0, hauteur: 320.0 });
+    // Un groupe de plusieurs onglets dont le deuxième est ouvert (partie 194 : un panneau flottant ; la colonne n'en est qu'un).
     fn second_tab(n: &mut DockNode) -> bool {
         match n {
             DockNode::Tabs { panneaux, actif } if panneaux.len() >= 2 => {
@@ -310,9 +339,11 @@ fn layouts_survive_the_trip_through_egui_dock() {
             }
         }
     }
-    assert!(second_tab(&mut l.principal));
+    assert!(second_tab(&mut l.fenetres[0].panneaux));
     let state = dock::to_state(&l);
     let mut back = dock::from_state(&state, &|_| None);
+    // (La pile de la colonne n'est pas dans l'état d'egui_dock : l'application la garde à côté, `App::colonne`.)
+    back.colonne = l.colonne.clone();
     // Une fenêtre pas encore affichée n'a pas de place connue : on ne compare que l'arbre.
     for w in &mut back.fenetres {
         (w.x, w.y, w.largeur, w.hauteur) = (300.0, 200.0, 260.0, 320.0);
@@ -320,7 +351,8 @@ fn layouts_survive_the_trip_through_egui_dock() {
     assert!(back.close_to(&l), "{back:#?}\n{l:#?}");
     for (_, _, layout) in workspace::builtin() {
         let d = layout.dock_layout();
-        assert!(dock::from_state(&dock::to_state(&d), &|_| None).close_to(&d));
+        let back = DockLayout { colonne: d.colonne.clone(), ..dock::from_state(&dock::to_state(&d), &|_| None) };
+        assert!(back.close_to(&d));
     }
 }
 
@@ -332,16 +364,15 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     l.close(Pane::Sheet);
     assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Effects));
     l.open(Pane::Sheet);
-    // Revenue avec les onglets des réglages (pas avec la couleur).
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Effects, Sheet]"), "{:?}", l.principal);
+    // Revenue avec les onglets des réglages (pas avec la couleur), à son rang (partie 194 : un onglet de Propriétés).
+    assert_eq!(onglets(&l), vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects]);
     // Plus rien du groupe : un onglet des réglages (partie 161 : une seule colonne). (Partie 160 : l'ancien panneau Calques ne se
     // rouvre plus.)
     l.close(Pane::Effects);
     l.open(Pane::Layers);
     assert_eq!(count(&l, Pane::Layers), 0, "le panneau Calques n'existe plus");
     l.open(Pane::Effects);
-    let s = format!("{:?}", l.principal);
-    assert!(s.contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]"), "{s}");
+    assert_eq!(onglets(&l), vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects]);
     assert_eq!(l.principal.clone().une_seule_colonne(), l.principal, "pas de deuxième colonne");
     // La bande revient en bas de tout ; l'ancienne timeline à part ne s'ouvre plus, c'est la bande.
     l.close(Pane::Montage);
@@ -366,6 +397,7 @@ fn layouts_with_a_separate_timeline_come_back_to_one_band() {
         principal: DockNode::Column { part: 0.7, haut: Box::new(tabs(&[Pane::Canvas])), bas: Box::new(tabs(&[Pane::Montage, Pane::XSheet])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let l = old.upgraded();
     assert_eq!(l.version, dock::LAYOUT_VERSION);
@@ -380,6 +412,7 @@ fn layouts_with_a_separate_timeline_come_back_to_one_band() {
         },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let l = v4.upgraded();
     let DockNode::Column { part, bas, .. } = &l.principal else { panic!("{:?}", l.principal) };
@@ -391,6 +424,7 @@ fn layouts_with_a_separate_timeline_come_back_to_one_band() {
         principal: DockNode::Column { part: 0.7, haut: Box::new(tabs(&[Pane::Canvas])), bas: Box::new(tabs(&[Pane::Montage, Pane::Timeline])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     assert!(matches!(&v5.upgraded().principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Montage])));
     let alone = DockLayout {
@@ -398,6 +432,7 @@ fn layouts_with_a_separate_timeline_come_back_to_one_band() {
         principal: DockNode::Column { part: 0.7, haut: Box::new(tabs(&[Pane::Canvas])), bas: Box::new(tabs(&[Pane::Timeline])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let l = alone.upgraded();
     assert_eq!((count(&l, Pane::Montage), count(&l, Pane::Timeline)), (1, 0));
@@ -436,6 +471,7 @@ fn damaged_layouts_are_repaired() {
             FloatingPanel { panneaux: tabs(&[Pane::Tools]), x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 },
         ],
         detachees: Vec::new(),
+        colonne: Default::default(),
     }
     .sanitized();
     assert_eq!(count(&bad, Pane::Tools), 1);
@@ -532,11 +568,12 @@ fn the_effects_pane_comes_back_in_the_middle_column() {
         principal: DockNode::Row { part: 0.8, gauche: Box::new(tabs(&[Pane::Canvas])), droite: Box::new(tabs(&[Pane::ToolOptions, Pane::Guides])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let l = v6.upgraded();
     assert_eq!(l.principal, DockLayout::from_legacy(&Layout::default()).principal);
-    // (Partie 161 : une seule colonne, les effets en onglet derrière les réglages et la fiche.)
-    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet, Effects]");
+    // (Partie 161 : une seule colonne, les effets en onglet derrière les réglages et la fiche ; partie 194 : de Propriétés.)
+    let under = |l: &DockLayout| onglets(l) == vec![Pane::ToolOptions, Pane::Sheet, Pane::Effects];
     assert!(under(&l), "{:?}", l.principal);
     for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
@@ -557,6 +594,7 @@ fn the_old_view_pane_disappears_from_saved_layouts() {
         principal: DockNode::Row { part: 0.8, gauche: Box::new(tabs(&[Pane::Canvas])), droite: Box::new(tabs(&[Pane::ToolOptions, Pane::View])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
+        colonne: Default::default(),
     };
     let l = saved.sanitized();
     assert_eq!(count(&l, Pane::View), 0);

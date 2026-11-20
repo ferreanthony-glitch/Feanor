@@ -736,7 +736,8 @@ fn the_pane_is_closed_by_default_opens_on_the_right_and_has_its_icon_and_command
     assert!(!l.contains(Pane::SuggestionsSonores), "fermé par défaut");
     l.open(Pane::SuggestionsSonores);
     assert!(l.contains(Pane::SuggestionsSonores));
-    assert!(format!("{:?}", l.principal).contains("SuggestionsSonores"), "{:?}", l.principal);
+    // (Partie 194 : dans la colonne en pile, à droite.)
+    assert!(l.colonne.en_onglet_de_proprietes(Pane::SuggestionsSonores), "{:?}", l.colonne);
     assert_eq!(crate::barrepanneaux::pane_de_action("vue.suggestions_sonores"), Some(Pane::SuggestionsSonores));
     for id in ["vue.suggestions_sonores", "suggestion.lire"] {
         assert!(crate::keymap::action_info(id).is_some_and(|a| a.implemented), "{id}");

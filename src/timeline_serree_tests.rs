@@ -228,8 +228,8 @@ fn le_calque_actif_tient_sur_deux_rangees_et_ses_icones_sont_collees_a_droite_so
         let r = un(nom, p0, p1);
         assert!(r.center().y > milieu, "« {nom} » sur la seconde rangée : {r:?} / {milieu}");
     }
-    // Collées à droite : la dernière colonne (la caméra), sur la piste et sur la ligne « Calques », et le dernier bouton des en-têtes
-    // Plans et Caméra finissent tous au même bord, à 3 points de la poignée de la colonne.
+    // Collées à droite : la dernière colonne (la caméra), sur la piste et sur la ligne « Calques », et le dernier bouton de l'en-tête
+    // Plans finissent tous au même bord, à 3 points de la poignée de la colonne.
     let bord = colonne().left() - 3.0;
     let h = haut(&b);
     let fins = [
@@ -237,7 +237,7 @@ fn le_calque_actif_tient_sur_deux_rangees_et_ses_icones_sont_collees_a_droite_so
         // (Partie 179.5 : le « ⋯ » des calques a pris la place de la caméra de l'en-tête.)
         ("⋯ de « Calques »", un(NOMS[5], e0, e1).right()),
         ("⋯ des plans", un("Autres commandes des plans", h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h).right()),
-        ("⋯ de la caméra", un("Autres commandes de la caméra", h + rows.camera_top(), h + rows.camera_top() + rows.cam_h()).right()),
+        // (Partie 196 : la ligne Caméra n'a plus d'icônes à droite ; ses commandes sont à son clic droit.)
     ];
     for (quoi, x) in fins {
         assert!((x - bord).abs() < 1.6, "{quoi} : collé à droite, {x} / {bord} ({fins:?})");
@@ -530,5 +530,5 @@ fn timeline_serree_179_captures() {
             sauver(&mut p, &format!("{prefixe}-6c-liste-ouverte.png"), z.expand2(vec2(0.0, 80.0)), [1920, 1080]);
         }
     }
-    crate::tailleicones::poser(crate::tailleicones::TAILLE_DEFAUT);
+    crate::tailleicones::poser(crate::tailleicones::TAILLE_ESSAIS);
 }

@@ -396,7 +396,8 @@ fn the_colour_panel_shows_the_wheel_then_the_swatches_from_top_to_bottom() {
     let rouge = cases.iter().find(|(f, _)| *f == egui::Color32::from_rgb(205, 45, 45)).expect("une couleur du nuancier");
     assert!(rouge.1.top() > neutres[0].1.bottom(), "le nuancier sous les neutres : {rouge:?} / {:?}", neutres[0]);
     // Le reste est replié : ni curseurs, ni code, ni couleurs récentes, ni commandes du nuancier.
-    assert!(contient(&textes, "Précis : valeurs, nuanciers, mélange") && contient(&textes, "Avant · maintenant"), "{textes:?}");
+    // (Partie 195 : plus de taches « Avant · maintenant », ni leur ligne « clic sur l'ancienne pour revenir ».)
+    assert!(contient(&textes, "Précis : valeurs, nuanciers, mélange") && !contient(&textes, "Avant · maintenant") && !contient(&textes, "clic sur l'ancienne pour revenir"), "{textes:?}");
     assert!(!contient(&textes, "#18181C") && !contient(&textes, "TSV") && !contient(&textes, "pour l'instant") && !contient(&textes, ph::DOTS_THREE), "replié : {textes:?}");
 }
 

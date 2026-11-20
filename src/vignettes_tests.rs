@@ -124,8 +124,9 @@ pub(crate) fn deux_sequences() -> Document {
     doc
 }
 
-/// Largeur de la fenêtre des essais de la planche (`ouvert`).
-pub(crate) const LARGEUR_D_ESSAI: u32 = 1282;
+/// Largeur de la fenêtre des essais de la planche (`ouvert`). (1 248 depuis la partie 194 : la barre des panneaux du bord droit,
+/// 34 points, n'est plus là ; à cette largeur, la planche garde celle qu'elle avait, et les cases leur taille.)
+pub(crate) const LARGEUR_D_ESSAI: u32 = 1248;
 
 /// La vue Vignettes ouverte sur `doc`, `colonnes` vignettes par ligne, une seule page, assez petites pour tenir à l'écran.
 pub(crate) fn ouvert(doc: Document, colonnes: usize) -> Banc {

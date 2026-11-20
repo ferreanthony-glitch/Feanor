@@ -43,7 +43,8 @@ fn clic(b: &mut Banc, p: Pos2) {
 #[test]
 fn the_four_sizes_are_offered_and_anything_else_snaps_to_the_nearest() {
     assert_eq!(ECHELLES, [90, 100, 125, 150]);
-    assert_eq!(ECHELLE_DEFAUT, 100);
+    // (Partie 195 : la taille d'origine est 90 %, Anthony : « Taille d'origine de l'interface 90% ».)
+    assert_eq!(ECHELLE_DEFAUT, 90);
     assert_eq!([facteur(90), facteur(100), facteur(125), facteur(150)], [0.9, 1.0, 1.25, 1.5]);
     for (ecrit, valide) in [(0, 90), (89, 90), (95, 90), (101, 100), (110, 100), (120, 125), (140, 150), (150, 150), (400, 150), (u16::MAX, 150)] {
         assert_eq!(echelle_valide(ecrit), valide, "{ecrit} %");
@@ -53,18 +54,35 @@ fn the_four_sizes_are_offered_and_anything_else_snaps_to_the_nearest() {
 #[test]
 fn the_size_is_remembered_in_the_settings_file_and_the_default_leaves_no_trace() {
     let mut s = Settings::default();
-    assert_eq!(s.echelle, 100);
-    assert!(!toml::to_string(&s).unwrap().contains("echelle_interface"), "100 % : la clé n'est pas écrite");
-    for e in [90, 125, 150] {
+    assert_eq!(s.echelle, 90);
+    assert!(!toml::to_string(&s).unwrap().contains("echelle_interface"), "90 % : la clé n'est pas écrite");
+    for e in [100, 125, 150] {
         s.echelle = e;
         let ecrit = toml::to_string(&s).unwrap();
         assert!(ecrit.contains(&format!("echelle_interface = {e}")), "{ecrit}");
         let relu: Settings = toml::from_str(&ecrit).unwrap();
         assert_eq!(relu.echelle, e);
     }
-    // Des réglages d'avant : 100 %. Une valeur écrite à la main hors liste est ramenée à la plus proche au chargement.
+    // Des réglages sans la clé : la taille d'origine, 90 % (partie 195). Une taille écrite reste la sienne.
     let ancien: Settings = toml::from_str("").unwrap();
-    assert_eq!(ancien.echelle, 100);
+    assert_eq!(ancien.echelle, 90);
+    for e in [100, 125, 150] {
+        let lu = Settings::apres_lecture(toml::from_str(&format!("echelle_interface = {e}")).unwrap());
+        assert_eq!(lu.echelle, e, "une taille déjà choisie n'est pas remplacée");
+    }
+}
+
+#[test]
+fn the_default_size_is_90_percent_and_par_defaut_gives_it_back() {
+    // Partie 195 : « Par défaut », à côté de la liste des tailles, remet 90 %. (Les essais sans fenêtre gardent 100 %, la taille de
+    // leurs mesures.)
+    let mut b = banc();
+    assert_eq!(b.app.settings.echelle, crate::echelle::ECHELLE_ESSAIS);
+    b.app.settings.echelle = 150;
+    b.app.retablir_echelle();
+    assert_eq!(b.app.settings.echelle, 90);
+    b.chauffer(3);
+    assert!((b.ctx.zoom_factor() - 0.9).abs() < 1e-4, "{}", b.ctx.zoom_factor());
 }
 
 #[test]
@@ -101,13 +119,16 @@ fn the_chosen_size_is_applied_live_to_the_interface_and_written_to_disk() {
     assert!((b.app.ppp - 1.5).abs() < 1e-4, "l'application lit les mêmes pixels par point");
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(disque.contains("echelle_interface = 150"), "{disque}");
-    // Un autre choix, tout de suite aussi ; et le retour à 100 % défait la clé du fichier.
-    choix(&mut b, "90 %");
-    b.chauffer(3);
-    assert!((b.ctx.pixels_per_point() - 0.9).abs() < 1e-4);
+    // Un autre choix, tout de suite aussi ; 100 % s'écrit (partie 195 : ce n'est plus la taille d'origine), et le retour à 90 %, la
+    // taille d'origine, défait la clé du fichier.
     choix(&mut b, "100 %");
     b.chauffer(3);
     assert!((b.ctx.pixels_per_point() - 1.0).abs() < 1e-4);
+    let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
+    assert!(disque.contains("echelle_interface = 100"), "{disque}");
+    choix(&mut b, "90 %");
+    b.chauffer(3);
+    assert!((b.ctx.pixels_per_point() - 0.9).abs() < 1e-4);
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(!disque.contains("echelle_interface"), "{disque}");
 }

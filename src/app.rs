@@ -181,7 +181,7 @@ impl Tool {
             Tool::Rect => "Tracer un rectangle, vide ou plein.",
             Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
             Tool::Polyline => "Tracer une suite de segments, clic après clic.",
-            Tool::Select => "Choisir au lasso, au rectangle ou au clic, puis transformer avec la boîte : glisser dedans pour déplacer, un coin ou un côté pour mettre à l'échelle, juste hors d'un coin pour tourner, un bord pour incliner, le point rond pour changer le pivot.",
+            Tool::Select => "Choisir au lasso, au rectangle ou au clic, puis transformer avec la boîte : glisser dedans pour déplacer, un coin ou un côté pour mettre à l'échelle, juste hors d'un coin pour tourner, un bord pour incliner, le point rond pour changer le pivot. Avec n'importe quel outil, Ctrl + clic choisit l'objet sous le pointeur (même sur un autre calque), Ctrl + glisser l'entoure.",
             Tool::SelectColor => "Clic sur une couleur : la zone de cette couleur (bitmap), ou tous les traits et zones de cette couleur (vectoriel). Maj : ajouter.",
             Tool::Picker => "Prendre une couleur sur le dessin.",
             Tool::Pan => "Déplacer la vue.",
@@ -618,6 +618,10 @@ pub struct App {
     /// son onglet).
     pub(crate) detached: Vec<crate::dock::DetachedPanel>,
     pub(crate) detach_request: Option<crate::dock::Pane>,
+    /// La pile de la colonne des panneaux à l'écran (partie 194, `colonne.rs`), que montre le panneau `Pane::Colonne` ; et ce
+    /// que la colonne retient d'une image à l'autre (un panneau glissé, un bord tiré, la hauteur des contenus).
+    pub(crate) colonne: crate::colonne::Colonne,
+    pub(crate) colonne_etat: crate::colonneui::EtatColonne,
     /// La disposition d'animation dont la feuille d'exposition a été retirée en passant au
     /// storyboard (elle n'existe qu'en animation) ; elle revient à sa place au retour.
     pub(crate) exposition_masquee: Option<crate::dock::DockLayout>,
@@ -1114,7 +1118,17 @@ impl App {
         egui_ctx.set_fonts(fonts);
         crate::marque::marquer_polices(egui_ctx);
         crate::demarrage::marque("polices (Segoe UI, icônes)");
-        let settings = crate::settings::Settings::load();
+        #[allow(unused_mut)]
+        let mut settings = crate::settings::Settings::load();
+        // (Partie 195 : la taille d'origine de l'interface est 90 % ; les essais, sans fenêtre, gardent 100 %, la taille de leurs
+        // mesures, sauf ceux qui la règlent eux-mêmes.)
+        if !reel && settings.echelle == crate::echelle::ECHELLE_DEFAUT {
+            settings.echelle = crate::echelle::ECHELLE_ESSAIS;
+        }
+        // (De même, les icônes : 16 points d'origine, 13 pour les essais.)
+        if !reel && settings.taille_icones == crate::tailleicones::TAILLE_DEFAUT {
+            settings.taille_icones = crate::tailleicones::TAILLE_ESSAIS;
+        }
         crate::demarrage::marque("réglages (Settings::load)");
         // Thème de l'interface, dense (12a, `theme.rs`) : celui des réglages.
         let theme_applied = settings.theme;
@@ -1279,7 +1293,8 @@ impl App {
             plan_len_seen: None,
             instance_rename: None,
             smart_rename: None,
-            time_display: Default::default(),
+            // (Partie 195 : le choix du compteur de la timeline, retenu, `compteur.rs`.)
+            time_display: if settings.compteur_timeline_en_temps { crate::cues::TimeDisplay::TimeCode } else { Default::default() },
             timeline_cell: crate::timeline::CELL_W,
             timeline_fit: None,
             empty_x: true,
@@ -1326,6 +1341,8 @@ impl App {
             dock: None,
             detached: Vec::new(),
             detach_request: None,
+            colonne: Default::default(),
+            colonne_etat: Default::default(),
             exposition_masquee: None,
             espace: crate::workspace::Espace::Storyboard,
             vue_camera_du_montage: false,
@@ -5968,16 +5985,8 @@ impl App {
                 .resizable(false)
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
         }
-        // La barre des panneaux, sur le bord droit : avant les panneaux, qui prennent le reste.
-        if self.settings.panel_bar && !concentre && !sans_projet {
-            let _t = crate::perf::section("barre des panneaux");
-            let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(2, 4));
-            egui::SidePanel::right("barre_panneaux")
-                .exact_width(crate::barrepanneaux::LARGEUR)
-                .resizable(false)
-                .frame(frame)
-                .show(ctx, |ui| self.panel_bar(ui));
-        }
+        // (La barre des panneaux du bord droit n'est plus là, partie 194 : les onglets d'icônes de Propriétés, dans la colonne,
+        // la remplacent.)
         // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
         if concentre {
             let _t = crate::perf::section("mode concentration");

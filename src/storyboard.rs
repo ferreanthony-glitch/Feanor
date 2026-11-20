@@ -33,6 +33,37 @@ thread_local! {
 }
 
 pub(crate) const RULER_H: f32 = 18.0;
+
+// La règle collante de la bande du Storyboard à la dernière image (partie 195), et tout le haut collant (règle, séquences, plans ;
+// partie 196), pour les essais.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static REGLE_COLLANTE_MONTAGE: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+    pub(crate) static HAUT_COLLANT_MONTAGE: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+}
+
+/// Partie 196 : recopie, décalées de `dy` vers le bas et rognées à `zone`, les formes de la couche `couche` peintes entre les rangs
+/// `debut` et `fin` qui touchent `contenu` (le haut de la bande : la règle, la ligne des séquences, celle des plans). Elles se peignent
+/// ainsi par-dessus les pistes, en haut de ce qu'on voit, telles qu'elles sont à leur place : vignettes, titres, couleurs, choix.
+pub(crate) fn peindre_en_haut(ctx: &egui::Context, couche: egui::LayerId, debut: usize, fin: usize, contenu: Rect, dy: f32, zone: Rect) {
+    if fin <= debut || !zone.is_positive() {
+        return;
+    }
+    let copies: Vec<egui::epaint::ClippedShape> = ctx.graphics(|g| {
+        g.get(couche).map_or_else(Vec::new, |l| l.all_entries().skip(debut).take(fin - debut).filter(|c| c.shape.visual_bounding_rect().intersects(contenu)).cloned().collect())
+    });
+    let t = egui::emath::TSTransform::from_translation(vec2(0.0, dy));
+    ctx.graphics_mut(|g| {
+        let liste = g.entry(couche);
+        for mut c in copies {
+            c.shape.transform(t);
+            let clip = t.mul_rect(c.clip_rect).intersect(zone);
+            if clip.is_positive() {
+                liste.add(clip, c.shape);
+            }
+        }
+    });
+}
 const SEQ_H: f32 = 17.0;
 pub(crate) const BANDS_H: f32 = SEQ_H + 2.0;
 
@@ -518,7 +549,15 @@ impl App {
                         let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
                         self.row_headers(&mut column, headers, &rows);
                         // (La place vide en haut de la colonne, en face de la règle et de la ligne des séquences : les boutons.)
-                        let ligne = Rect::from_min_size(headers.min, egui::vec2(headers.width() - 6.0, rows.regle_h()));
+                        // (Partie 195 : la bande défilée vers le bas, cette ligne, avec le compteur, reste en haut de ce qu'on voit, en
+                        // face de la règle collante de la bande ; un fond la sépare des pistes qu'elle couvre.)
+                        let dy_ligne = (ui.clip_rect().top() - headers.top()).max(0.0);
+                        let ligne = Rect::from_min_size(headers.min + egui::vec2(0.0, dy_ligne), egui::vec2(headers.width() - 6.0, rows.regle_h()));
+                        if dy_ligne > 0.5 {
+                            let fond = Rect::from_min_size(ligne.min, egui::vec2(headers.width(), rows.regle_h()));
+                            column.painter().with_clip_rect(ui.clip_rect()).rect_filled(fond, 0.0, crate::theme::regle());
+                            let _ = column.interact(fond.intersect(ui.clip_rect()), column.id().with("ligne_collante_montage"), Sense::click_and_drag());
+                        }
                         // Partie 179 (Anthony : la seconde ligne de boutons barrée, ses boutons dans la place vide à droite du temps) :
                         // une seule ligne, quelle que soit la largeur de la colonne ; ce qui n'y tient pas passe sous « Plus… », les
                         // commandes les moins utilisées d'abord (`barres::barre_dans_la_colonne_serree`). (La seconde ligne de la partie
@@ -538,11 +577,17 @@ impl App {
         });
     }
 
-    /// La position dans le film et sa durée (affichage fixe de la barre du montage).
+    /// La position dans le film et sa durée (affichage fixe de la barre du montage). Partie 195 : Ctrl + clic passe du temps aux
+    /// numéros d'images, et retour (`compteur.rs`).
     pub(crate) fn montage_position_ui(&mut self, ui: &mut egui::Ui) {
         let (total, fps) = (self.doc.total_frames(), self.doc.fps);
-        let resp = ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace());
-        crate::bulles::bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
+        let texte = crate::compteur::texte(self.global_frame(), total, fps, self.settings.compteur_en_images);
+        let resp = ui.add(egui::Label::new(RichText::new(texte).monospace()).sense(egui::Sense::click()).selectable(false));
+        let aide = if self.settings.compteur_en_images { "Image courante / nombre d'images du montage. Ctrl + clic : en temps." } else { "Image courante / durée du montage (minutes:secondes:images). Ctrl + clic : en numéros d'images." };
+        let resp = crate::bulles::bulle(resp, "Position", aide, "");
+        if resp.clicked() && ui.input(|i| i.modifiers.command || i.modifiers.ctrl) {
+            self.basculer_compteur();
+        }
     }
 
     /// Le menu « Plans » de la barre du montage (`barres.rs`) : dupliquer, copier, couper, réunir,
@@ -863,6 +908,9 @@ impl App {
             self.trans_track_focus(ui.input(|i| i.pointer.press_origin()), &badges);
         }
 
+        // (Partie 196 : ce qui se peint d'ici à la fin de la barre des séquences, la règle, les plans et les séquences, est recopié en haut
+        // de la bande quand elle défile, `peindre_en_haut`.)
+        let debut_du_haut = ui.ctx().graphics(|g| g.get(painter.layer_id()).map_or(0, |l| l.next_idx().0));
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
         painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::regle());
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
@@ -1120,17 +1168,22 @@ impl App {
                     theme::barre(band == 0, number % 2 == 1)
                 };
                 painter.rect_filled(rect, 3.0, fill);
-                painter.with_clip_rect(rect.shrink(1.0)).text(
-                    pos2(rect.left() + 5.0, rect.center().y),
-                    Align2::LEFT_CENTER,
+                // (Partie 196 : la ligne Séquence, plus fine, a un texte à sa mesure, ses glyphes centrés dans toute la hauteur de la
+                // ligne : la barre, deux points plus basse, ne le coupe pas en haut ni en bas.)
+                let ligne = Rect::from_min_max(pos2(rect.left() + 1.0, y0), pos2(rect.right() - 1.0, y0 + h));
+                crate::timelinesb::mot_au_milieu(
+                    &painter.with_clip_rect(ligne),
+                    rect.left() + 5.0,
+                    ligne.center().y,
                     label,
-                    FontId::proportional(if band == 0 { 10.0 } else { 11.0 }),
+                    if band == 0 { crate::timelinesb::taille_du_mot(h).min(11.0) } else { 11.0 },
                     if depasse { visuals.error_fg_color } else { visuals.text_color() },
                 );
                 runs.push((rect, start));
                 i = end;
             }
         }
+        let fin_du_haut = ui.ctx().graphics(|g| g.get(painter.layer_id()).map_or(0, |l| l.next_idx().0));
 
         // Un clic sur la piste d'un calque donne la main à ses clés (copier, coller, supprimer) ;
         // ailleurs dans le montage, aux plans.
@@ -2068,6 +2121,50 @@ impl App {
         }
         // Les fanions des commentaires, par-dessus la tête de lecture.
         crate::commentairesui::paint_flags(&painter, ruler_rect, &comments, &comment_pole, self.comment_ui.sel, comment_ptr.hover);
+
+        // Partie 195 (Anthony : la règle des temps « toujours visible ») et 196 (« elle reste fixée en haut de la bande, la ligne des plans
+        // également ») : la bande défilée vers le bas, la règle, la ligne des séquences et celle des plans restent en haut de ce qu'on
+        // voit, recopiées par-dessus les pistes (`peindre_en_haut`) ; la tête de lecture et les fanions y sont repeints. Un clic ou un
+        // glisser sur la règle y mène la tête de lecture ; un clic sur un plan le choisit.
+        let dy = (painter.clip_rect().top() - r.top()).max(0.0);
+        #[cfg(test)]
+        REGLE_COLLANTE_MONTAGE.with(|c| c.set(None));
+        #[cfg(test)]
+        HAUT_COLLANT_MONTAGE.with(|c| c.set(None));
+        if dy > 0.5 {
+            let rt = r.top() + dy;
+            let haut_h = rows.blocks_top() + block_h;
+            let bande = Rect::from_min_max(pos2(r.left(), rt), pos2(r.right(), rt + rows.regle_h()));
+            let zone = Rect::from_min_max(pos2(r.left(), rt), pos2(r.right(), rt + haut_h));
+            #[cfg(test)]
+            REGLE_COLLANTE_MONTAGE.with(|c| c.set(Some(bande.intersect(painter.clip_rect()))));
+            #[cfg(test)]
+            HAUT_COLLANT_MONTAGE.with(|c| c.set(Some(zone.intersect(painter.clip_rect()))));
+            painter.rect_filled(zone, 0.0, theme::panneau());
+            let contenu = Rect::from_min_max(r.min, pos2(r.right(), r.top() + haut_h));
+            peindre_en_haut(ui.ctx(), painter.layer_id(), debut_du_haut, fin_du_haut, contenu, dy, zone.intersect(painter.clip_rect()));
+            crate::commentairesui::paint_flags(&painter, bande, &comments, &comment_pole, self.comment_ui.sel, None);
+            painter.line_segment([pos2(gx, rt), pos2(gx, zone.bottom())], Stroke::new(2.0_f32, cur_frame()));
+            painter.add(egui::Shape::convex_polygon(vec![pos2(gx - 5.0, rt), pos2(gx + 5.0, rt), pos2(gx, rt + 7.0)], cur_frame(), Stroke::NONE));
+            painter.line_segment([pos2(zone.left(), zone.bottom()), pos2(zone.right(), zone.bottom())], Stroke::new(1.0_f32, theme::bord()));
+            // (Posé après la bande, ce rectangle prend le pointeur avant elle.)
+            let prise = ui.interact(zone.intersect(painter.clip_rect()), ui.id().with("haut_collant_montage"), Sense::click_and_drag());
+            if let Some(p) = prise.interact_pointer_pos() {
+                let dans_la_regle = p.y < bande.bottom();
+                if dans_la_regle && (prise.is_pointer_button_down_on() || prise.clicked()) {
+                    self.playing = false;
+                    let g = frame_at(p.x);
+                    if g != self.global_frame() {
+                        self.goto_global(g);
+                    }
+                } else if !dans_la_regle && prise.clicked() {
+                    if let Some(i) = blocks.iter().position(|b| p.x >= b.left() && p.x <= b.right()) {
+                        self.board_sel.clear();
+                        self.select_panel(i);
+                    }
+                }
+            }
+        }
 
         if self.following {
             ui.scroll_to_rect(

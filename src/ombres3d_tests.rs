@@ -106,7 +106,8 @@ fn scene_boite() -> Document {
 /// quadrillage et la sélection retirés (rien ne se peint par-dessus les points regardés).
 fn banc_vue(doc: Document, q: Qualite) -> Option<Banc> {
     crate::decor3d::essai_poser(Some(q), None);
-    let mut b = banc_taille(doc, true, 960, 640);
+    // (926 de large depuis la partie 194 : la barre des panneaux du bord droit, 34 points, n'est plus là ; la vue garde sa taille.)
+    let mut b = banc_taille(doc, true, 926, 640);
     b.rs.as_ref()?;
     b.chauffer(2);
     b.app.cur_layer = 0;

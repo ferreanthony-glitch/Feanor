@@ -102,6 +102,7 @@ fn jusqu_au_bout(e: &mut Ecran, app: &mut App) {
 // ------------------------------------------------------------------------------------------------------ le joueur
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_first_take_of_a_tool_plays_its_animation_and_the_second_does_not() {
     let mut app = app_aide("premiere", LayerKind::Vector);
     let mut e = Ecran::new(0.25);
@@ -131,6 +132,7 @@ fn the_first_take_of_a_tool_plays_its_animation_and_the_second_does_not() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn an_animation_of_another_tool_stops_when_the_tool_changes() {
     let mut app = app_aide("change", LayerKind::Vector);
     let mut e = Ecran::new(0.25);
@@ -144,6 +146,7 @@ fn an_animation_of_another_tool_stops_when_the_tool_changes() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_play_button_replays_the_animation() {
     let mut app = app_aide("rejouer", LayerKind::Vector);
     app.settings.explications_vues = aideanim::toutes().map(|a| a.id.to_string()).collect();
@@ -322,7 +325,8 @@ fn the_help_menu_has_the_box_and_the_register_and_the_commands_exist() {
     let aide = &source[source.find("ui.menu_button(\"Aide\"").unwrap()..];
     assert!(aide[..aide.find("aide.a_propos").unwrap()].contains("self.aide_menu_ui(ui)"));
     let menu = include_str!("aideanim.rs");
-    assert!(menu.contains("\"Afficher les explications\"") && menu.contains("\"Registre des explications…\""));
+    // (Partie 195 : plus de case « Afficher les explications » ; le registre reste, seul lieu des animations.)
+    assert!(!menu.contains("ui.checkbox(&mut on, \"Afficher les explications\")") && menu.contains("\"Registre des explications…\""));
 }
 
 // ------------------------------------------------------------------------------------------------------ plus de texte gris
@@ -370,6 +374,7 @@ fn every_tool_has_its_animation() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_first_opening_of_the_vignettes_plays_their_animations() {
     let mut app = app_aide("vignettes", LayerKind::Vector);
     app.espace = crate::workspace::Espace::Vignettes;

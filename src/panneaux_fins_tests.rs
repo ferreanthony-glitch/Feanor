@@ -107,12 +107,13 @@ fn the_3d_view_tools_come_first_in_the_tool_bar_and_its_view_options_stay_up() {
 fn the_group_names_are_gone_each_panel_keeps_a_thin_grip_and_the_bar_says_which_is_in_front() {
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    // Chaque panneau ouvert a une fine poignée (sa bulle porte son nom), pas un onglet écrit.
+    // Partie 194 : chaque panneau de Propriétés a son onglet d'icône (sa bulle porte son nom), à la verticale sur le bord gauche de
+    // la colonne, pas un onglet écrit ; la barre des panneaux du bord droit n'est plus là.
+    let (colonne, _) = partie_de(&b, Pane::Colonne).expect("la colonne");
     for pane in [Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario] {
-        let nom = b.app.pane_title(pane);
-        // (Son icône de la barre des panneaux a la même bulle : on prend la poignée, la fine.)
-        let poignees: Vec<Rect> = vus::ou(nom).into_iter().filter(|r| r.height() <= crate::theme::POIGNEE_ONGLET + 1.0).collect();
-        assert!(!poignees.is_empty(), "{nom} : une poignée de {} points au plus : {:?}", crate::theme::POIGNEE_ONGLET, vus::ou(nom));
+        let (nom, _, _) = crate::colonneui::bulle_de(pane);
+        let onglets: Vec<Rect> = vus::ou(nom).into_iter().filter(|r| r.height() <= 28.0 && r.right() <= colonne.left() + crate::colonneui::BANDE_ONGLETS + 1.0).collect();
+        assert!(!onglets.is_empty(), "{nom} : un onglet d'icône sur le bord gauche de la colonne : {:?}", vus::ou(nom));
     }
     // L'icône allumée dit quel panneau est devant ; un panneau caché derrière un autre a son point.
     use crate::barrepanneaux::EtatIcone;
@@ -291,7 +292,9 @@ fn the_vignettes_have_one_annotations_line_and_no_word_layer() {
 // ------------------------------------------------------------------------------------ partie 161 : amincir
 
 /// Le rectangle de la partie (onglets compris) qui tient `pane` dans la fenêtre principale, et la hauteur de sa barre de poignées.
+/// (Partie 194 : un panneau de la pile de la colonne est dans la partie de la colonne.)
 fn partie_de(b: &Banc, pane: Pane) -> Option<(Rect, f32)> {
+    let pane = if b.app.colonne.contient(pane) { Pane::Colonne } else { pane };
     let state = b.app.dock.as_ref()?;
     let (s, n, _) = state.find_tab(&pane)?;
     if s != egui_dock::SurfaceIndex::main() {
@@ -361,7 +364,8 @@ fn a_saved_two_column_layout_becomes_one_column_and_keeps_every_panel() {
     let n = l.dock_layout();
     assert_eq!(n.version, crate::dock::LAYOUT_VERSION);
     assert!(!deux_colonnes(&n.principal), "{:?}", n.principal);
-    let mut apres = n.panes();
+    // (Partie 194 : la colonne elle-même est un panneau d'egui_dock de plus, qui montre la pile.)
+    let mut apres: Vec<Pane> = n.panes().into_iter().filter(|p| *p != Pane::Colonne).collect();
     let mut avant = avant;
     apres.sort_by_key(|p| format!("{p:?}"));
     avant.sort_by_key(|p| format!("{p:?}"));
@@ -383,10 +387,16 @@ fn no_empty_band_on_top_of_the_panels() {
     assert!(crate::theme::POIGNEE_ONGLET <= 8.0);
     let mut b = banc_dans(Espace::Storyboard);
     b.chauffer(2);
-    for pane in [Pane::ToolOptions, Pane::Color, Pane::Canvas, Pane::Montage] {
+    for pane in [Pane::Colonne, Pane::Canvas, Pane::Montage] {
         let (_, barre) = partie_de(&b, pane).unwrap_or_else(|| panic!("{pane:?}"));
         assert!(barre <= crate::theme::POIGNEE_ONGLET + 1.0, "{pane:?} : {barre} points au-dessus du panneau");
     }
+    // (Partie 194 : dans la colonne, chaque panneau de la pile a son en-tête, celui de la maquette validée : poignée, titre,
+    // ▲ ▼ ✕ ; pas de bande vide.)
+    let tranches = &b.app.colonne_etat.tranches;
+    assert_eq!(tranches.len(), 2);
+    let corps = crate::colonne_tests::corps_dans_la_pile(&b, Pane::Color).expect("la Couleur");
+    assert!((corps.top() - tranches[0].0 - crate::colonne::ENTETE).abs() < 0.5);
     // Les panneaux de la colonne sont plus denses : texte de 11,5, lignes à 2 points d'écart.
     let mut style = (*b.ctx.style()).clone();
     crate::theme::densifier_panneau(&mut style);
@@ -500,14 +510,15 @@ fn the_whole_camera_of_the_3d_space_panel_shows_without_scrolling() {
     // (Partie 162 : le panneau est contextuel ; la caméra choisie, il montre ses graphiques.)
     b.app.espace3d.sel = vec![crate::espace3dgizmo::CAMERA_ID];
     b.chauffer(4);
-    let state = b.app.dock.as_ref().expect("le dock");
-    let (s, n, _) = state.find_tab(&Pane::Espace3d).expect("le panneau Espace 3D");
-    let vue = match &state[s][n] {
-        egui_dock::Node::Leaf { viewport, .. } => *viewport,
-        _ => panic!("une feuille"),
-    };
-    assert!(b.app.pane_shown(Pane::Color), "la Couleur dessous");
-    assert!((vue.width() - crate::dock::COLONNE).abs() <= 3.0, "la colonne de 290 points : {vue:?}");
+    // (Partie 194 : un onglet de Propriétés, dans la colonne en pile ; son corps est à droite de la bande des onglets d'icônes. La
+    // Couleur est au-dessus de Propriétés, et la pile a ses en-têtes : dans cette fenêtre de 1 010 de haut, la caméra entière se
+    // voit sans défiler une fois la Couleur repliée, d'un clic sur son titre.)
+    assert!(b.app.panneau_devant(Pane::Espace3d) && b.app.panneau_devant(Pane::Color), "la Couleur avec lui");
+    b.app.colonne.replier(b.app.colonne.rang_de(Pane::Color).expect("la Couleur"));
+    b.chauffer(4);
+    let vue = crate::colonne_tests::corps_dans_la_pile(&b, Pane::Espace3d).expect("le panneau Espace 3D");
+    let (colonne, _) = partie_de(&b, Pane::Colonne).expect("la colonne");
+    assert!((colonne.width() - crate::dock::COLONNE).abs() <= 3.0, "la colonne de 290 points : {colonne:?}");
     // Toute la caméra, du haut (l'objectif) au bas (« Précis ») : rien sous le bas du panneau, rien hors de la colonne.
     for nom in ["Objectif 18 mm", "Objectif 135 mm", "Champ de la caméra", "Hauteur et plongée", "Panoramique", "Horizon", "Regarder par la caméra", "Viser la sélection", "Précis"] {
         let r = *vus::ou(nom).iter().find(|r| r.center().x > vue.left() && r.center().x < vue.right()).unwrap_or_else(|| panic!("« {nom} » n'est pas dans le panneau : {:?}", vus::noms()));

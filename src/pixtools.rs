@@ -416,7 +416,7 @@ impl App {
                 let click = points.first().copied();
                 let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
-                if points.len() < 3 || extent.width().max(extent.height()) < 4.0 {
+                if points.len() < 3 || extent.width().max(extent.height()) < crate::selobjet::CLIC_MAX {
                     (None, add, click)
                 } else {
                     (Some(points), add, click)
@@ -435,6 +435,10 @@ impl App {
         // il désélectionne.
         let Some(polygon) = polygon else {
             if click.is_some_and(|p| self.bitmap_pick_object(p, add)) {
+                return;
+            }
+            // (Partie 195 : Ctrl tenu, rien ici sur le calque courant : l'objet de l'encre d'un autre calque.)
+            if click.is_some_and(|p| self.ctrl_clic_autre_calque(self.layer_to_screen(p), add)) {
                 return;
             }
             if !add {

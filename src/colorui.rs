@@ -761,32 +761,10 @@ impl App {
         });
     }
 
-    /// « Avant · maintenant » (partie 164.1) : deux taches, la couleur d'avant le dernier choix et celle d'aujourd'hui ; un clic sur
-    /// l'ancienne y revient (et celle d'aujourd'hui devient l'ancienne : deux clics, aller et retour). Dessous, les deux carrés
-    /// d'avant-plan et d'arrière-plan, comme avant (clic sur celui de derrière : les échanger ; clic droit : leur menu).
+    /// Les deux carrés d'avant-plan et d'arrière-plan (clic sur celui de derrière : les échanger ; clic droit : leur menu). Les deux
+    /// taches « Avant · maintenant » de la partie 164.1 et leur ligne « clic sur l'ancienne pour revenir » sont retirées (partie 195,
+    /// Anthony sur la capture du panneau Couleur) ; la couleur d'avant reste suivie (`AvantMaintenant`), sans tache à l'écran.
     fn avant_maintenant_ui(&mut self, ui: &mut egui::Ui) {
-        crate::panneauxvisuels::titre(ui, "Avant · maintenant");
-        let avant = self.couleurs.avant_maintenant.avant;
-        let w = ((ui.available_width() - 6.0) / 2.0).clamp(30.0, 60.0);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), if avant.is_some() { Sense::click() } else { Sense::hover() });
-            crate::visuels164::tache(ui.painter(), r, avant, 3, false);
-            let texte = match avant {
-                Some(c) => format!("{} · clic : revenir à elle.", couleur::hex(c)),
-                None => "Pas encore : choisis une autre couleur, l'ancienne viendra ici.".to_string(),
-            };
-            let resp = crate::bulles::bulle(resp, "Couleur d'avant", &texte, "");
-            if let (true, Some(c)) = (resp.clicked(), avant) {
-                self.choose_front(c);
-                self.status = format!("Retour à la couleur d'avant, {}.", couleur::hex(c));
-            }
-            let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
-            crate::visuels164::tache(ui.painter(), r, Some(self.color), 7, true);
-            crate::bulles::bulle(resp, "Couleur de maintenant", &format!("{} · la couleur d'avant-plan, celle des outils.", couleur::hex(self.color)), "");
-        });
-        ui.label(egui::RichText::new("clic sur l'ancienne pour revenir").small().color(crate::theme::texte_doux()));
-        ui.add_space(2.0);
         self.front_back(ui, 22.0, "");
     }
 

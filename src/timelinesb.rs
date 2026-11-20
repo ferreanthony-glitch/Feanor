@@ -108,7 +108,24 @@ impl App {
         let derniere = r.right() - MARGE_DROITE - case_w;
         (0..n).map(|k| Rect::from_min_size(pos2(derniere - (n - 1 - k) as f32 * pas, r.top() + 1.0), vec2(case_w, (r.height() - 2.0).max(10.0)))).collect()
     }
+}
 
+/// La taille du mot d'une ligne de `h` points de haut (partie 196 : la ligne Séquence, fine, a un mot plus petit ; ses glyphes, accent
+/// et jambage compris, tiennent dans la ligne).
+pub(crate) fn taille_du_mot(h: f32) -> f32 {
+    (h - 1.5).clamp(7.0, 11.5)
+}
+
+/// Peint `mot` à partir de `x`, ses glyphes (pas sa boîte, plus haute) centrés sur `cy` : dans une ligne fine, le mot n'est coupé ni en
+/// haut ni en bas.
+pub(crate) fn mot_au_milieu(painter: &egui::Painter, x: f32, cy: f32, mot: String, taille: f32, encre: Color32) {
+    let g = painter.layout_no_wrap(mot, FontId::proportional(taille), encre);
+    let m = g.mesh_bounds;
+    let y = if m.is_positive() { cy - m.center().y } else { cy - g.size().y * 0.5 };
+    painter.galley(pos2(x, y), g, encre);
+}
+
+impl App {
     /// Le mot d'une rangée (« Plans », « Caméra »…) à l'abscisse `x` de `r` ; rend son bord droit.
     fn mot_d_entete(ui: &egui::Ui, r: Rect, x: f32, mot: &str, encre: Color32) -> f32 {
         let g = ui.painter().layout_no_wrap(mot.to_string(), FontId::proportional(11.5), encre);
@@ -117,38 +134,36 @@ impl App {
         x + w
     }
 
-    /// Partie 179.11 (Anthony : « C'est vrai qu'il manque une ligne de séquence ») : l'en-tête de la rangée des séquences, au format
-    /// de Plans et Caméra : « Séquence », puis collées à droite : nouvelle séquence, renommer la séquence, ses versions (menu),
-    /// « ⋯ » (nouvelle séquence avec les plans choisis, couper la séquence au plan courant). Il n'existe ni « dupliquer », ni
-    /// « supprimer », ni couleur de séquence : une séquence vidée de ses plans s'en va d'elle-même.
+    /// Partie 179.11 (Anthony : « C'est vrai qu'il manque une ligne de séquence ») : l'en-tête de la rangée des séquences. Partie 196
+    /// (Anthony : « La ligne Séquence perd ses raccourcis et devient plus fine (−50 %) ») : le mot « Séquence » seul, à la mesure de la
+    /// ligne ; ses commandes (nouvelle séquence, renommer, versions, dupliquer, nouvelle séquence avec les plans choisis, couper la
+    /// séquence ici) sont au clic droit de la ligne (`menu_sequences_sb`), comme sur une séquence de la bande, et dans le menu
+    /// Storyboard.
     pub(crate) fn entete_sequences_sb(&mut self, ui: &mut egui::Ui, r: Rect) {
+        // (La ligne entière, `r` et son point de marge en haut et en bas : le mot, petit, y garde son accent et son jambage.)
+        let ligne = r.expand2(vec2(0.0, 1.0));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("entete_sequences_sb"));
-        child.set_clip_rect(r.intersect(ui.clip_rect()));
+        child.set_clip_rect(ligne.intersect(ui.clip_rect()));
         let ui = &mut child;
+        let resp = ui.interact(r, ui.id().with("entete_sequences_sb_ligne"), Sense::click());
         let doux = ui.visuals().weak_text_color();
-        Self::mot_d_entete(ui, r, r.left() + 6.0, "Séquence", doux);
-        let c = Self::cases_d_entete(r, 4);
-        let mut lancer: Option<&str> = None;
-        if self.icone_d_entete(ui, c[0], ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle", true) {
-            lancer = Some("sequence.nouvelle");
-        }
-        if self.icone_d_entete(ui, c[1], ph::PENCIL_SIMPLE, "Renommer la séquence", "Le nom de la séquence courante (son titre sur la planche).", "sequence.renommer", true) {
-            lancer = Some("sequence.renommer");
-        }
+        mot_au_milieu(ui.painter(), r.left() + 6.0, ligne.center().y, "Séquence".to_string(), taille_du_mot(ligne.height()), doux);
+        let resp = crate::bulles::bulle(resp, "Séquence", "La ligne des séquences. Clic droit : nouvelle séquence, renommer, versions, dupliquer, nouvelle séquence avec les plans choisis, couper la séquence ici.", "");
+        resp.context_menu(|ui| self.menu_sequences_sb(ui));
+    }
+
+    /// Partie 196 : les commandes de l'ancienne ligne d'icônes de « Séquence », au clic droit de la ligne.
+    pub(crate) fn menu_sequences_sb(&mut self, ui: &mut egui::Ui) {
+        self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+        self.action_item(ui, "Renommer la séquence…", "sequence.renommer");
         if let Some(seq) = self.sequence_courante() {
-            self.menu_d_entete(ui, c[2], ph::STACK, "Versions de la séquence", "Nouvelle version (en gardant ou en copiant les plans, ou vide), passer à une autre, renommer, comparer, supprimer.", |app, ui| {
-                app.variantes_menu_contenu(ui, seq);
-            });
+            ui.menu_button("Versions de la séquence", |ui| self.variantes_menu_contenu(ui, seq));
         }
-        self.menu_d_entete(ui, c[3], ph::DOTS_THREE, "Autres commandes des séquences", "Dupliquer la séquence, nouvelle séquence avec les plans choisis, couper la séquence au plan courant. Aussi au clic droit sur une séquence.", |app, ui| {
-            // (Fusion du 20 novembre : « Dupliquer la séquence », partie 191 de la session du décor 3D, a sa place ici aussi.)
-            app.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
-            app.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
-            app.action_item(ui, "Couper la séquence ici (le plan courant la commence)", "sequence.couper_ici");
-        });
-        if let Some(action) = lancer {
-            self.run_action(action);
-        }
+        ui.separator();
+        // (Fusion du 20 novembre : « Dupliquer la séquence », partie 191 de la session du décor 3D.)
+        self.action_item(ui, "Dupliquer la séquence", "sequence.dupliquer");
+        self.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
+        self.action_item(ui, "Couper la séquence ici (le plan courant la commence)", "sequence.couper_ici");
     }
 
     /// L'en-tête de la rangée des plans : « Plans », puis nouveau plan, dupliquer, versions, transitions (le panneau Préréglages,
@@ -256,14 +271,21 @@ impl App {
         }
         let encre = if camera_seule { ui.visuals().strong_text_color() } else { ui.visuals().text_color() };
         Self::mot_d_entete(ui, r, plie.right() + 3.0, "Caméra", encre);
-        let c = Self::cases_d_entete(r, 4);
+        // (Partie 196, Anthony : « La ligne Caméra perd également ses raccourcis » : plus d'icônes à droite ; leurs commandes sont au
+        // clic droit de la ligne, `menu_camera_sb`.)
+    }
+
+    /// Partie 196 : le clic droit de la ligne Caméra du Storyboard : les commandes de son ancienne ligne d'icônes (clé de caméra ici,
+    /// le panneau Préréglages, remettre la caméra à zéro, convertir les préréglages en clés, copier et coller les clés), puis le menu
+    /// de la caméra de la timeline (clés au début et à la fin, adoucir, les clés choisies…).
+    pub(crate) fn menu_camera_sb(&mut self, ui: &mut egui::Ui) {
         let ici = self.camera_key_here().is_none();
-        let mut lancer: Option<&str> = None;
-        let quoi = if ici { "Une clé de caméra à l'image courante : elle se pose sur la ligne de la caméra." } else { "Il y a déjà une clé de caméra à cette image." };
-        if self.icone_d_entete(ui, c[0], ph::DIAMOND, "Clé de caméra ici", quoi, "camera.cle_ici", ici) {
-            lancer = Some("camera.cle_ici");
+        if ici {
+            self.action_item(ui, "Clé de caméra ici", "camera.cle_ici");
         }
-        if self.icone_d_entete(ui, c[1], ph::FILM_STRIP, "Préréglages de caméra", "Le panneau Préréglages, onglet Caméra : glisser un préréglage sur la caméra d'un plan, ou cliquer pour le poser à la tête de lecture. La caméra se déplie.", "vue.prereglages", true) {
+        let r = ui.button("Préréglages de caméra…");
+        if crate::bulles::bulle(r, "Préréglages de caméra", "Le panneau Préréglages, onglet Caméra : glisser un préréglage sur la caméra d'un plan, ou cliquer pour le poser à la tête de lecture. La caméra se déplie.", "").clicked() {
+            ui.close_menu();
             crate::panneauprereglages::choisir_onglet(ui.ctx(), crate::panneauprereglages::Onglet::Camera);
             self.show_pane(crate::dock::Pane::Prereglages);
             if !self.settings.storyboard_camera_depliee {
@@ -271,25 +293,22 @@ impl App {
             }
         }
         let des_cles = self.doc.panels.get(self.cur_panel).is_some_and(|p| !p.camera.is_empty());
-        if self.icone_d_entete(ui, c[2], ph::ARROW_COUNTER_CLOCKWISE, "Remettre la caméra à zéro", "Les clés de caméra du plan s'en vont : le cadre revient au centre, sans zoom ni rotation (les préréglages restent ; Ctrl+Z).", "camera.reinitialiser", des_cles) {
-            lancer = Some("camera.reinitialiser");
+        if ui.add_enabled(des_cles, egui::Button::new("Remettre la caméra à zéro").shortcut_text(self.keymap.label("camera.reinitialiser"))).clicked() {
+            ui.close_menu();
+            self.run_action("camera.reinitialiser");
         }
+        ui.separator();
         let effets = self.doc.panels.get(self.cur_panel).map_or(0, |p| p.effets_camera.len());
-        self.menu_d_entete(ui, c[3], ph::DOTS_THREE, "Autres commandes de la caméra", "Convertir les préréglages en clés, copier et coller les clés de caméra, clés au début et à la fin, adoucir…", |app, ui| {
-            let resp = ui.add_enabled(effets > 0, egui::Button::new("Convertir les préréglages en clés").shortcut_text(app.keymap.label("camera.effet_appliquer")));
-            if crate::bulles::bulle(resp, "Convertir les préréglages en clés", "Tous les préréglages du plan deviennent des clés de caméra, avec la même image ; une étape d'annulation.", "").clicked() {
-                ui.close_menu();
-                let pi = app.cur_panel;
-                app.convertir_effets_en_cles(pi);
-            }
-            app.action_item(ui, "Copier les clés de caméra choisies", "camera.cles_copier");
-            app.action_item(ui, "Coller les clés de caméra", "camera.cles_coller");
-            ui.separator();
-            app.grid_menu_ui(ui, crate::handles::GridMenu::Camera);
-        });
-        if let Some(action) = lancer {
-            self.run_action(action);
+        let resp = ui.add_enabled(effets > 0, egui::Button::new("Convertir les préréglages en clés").shortcut_text(self.keymap.label("camera.effet_appliquer")));
+        if crate::bulles::bulle(resp, "Convertir les préréglages en clés", "Tous les préréglages du plan deviennent des clés de caméra, avec la même image ; une étape d'annulation.", "").clicked() {
+            ui.close_menu();
+            let pi = self.cur_panel;
+            self.convertir_effets_en_cles(pi);
         }
+        self.action_item(ui, "Copier les clés de caméra choisies", "camera.cles_copier");
+        self.action_item(ui, "Coller les clés de caméra", "camera.cles_coller");
+        ui.separator();
+        self.grid_menu_ui(ui, crate::handles::GridMenu::Camera);
     }
 
     /// L'en-tête de la rangée des préréglages (`r`, la caméra dépliée) : son nom et le nombre de préréglages du plan courant.

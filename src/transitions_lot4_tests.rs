@@ -344,6 +344,8 @@ fn les_vignettes_des_transitions_se_peignent_dans_le_panneau() {
     let doc = film_uni(&[ROUGE, BLEU], 20);
     let mut b = crate::perf_tests::banc_taille(doc, false, 1600, 2600);
     b.app.show_pane(crate::dock::Pane::Prereglages);
+    // (Partie 194 : sorti en panneau à lui, toute la largeur et toute la hauteur de la colonne, comme l'onglet d'avant.)
+    crate::colonne_tests::toute_la_place(&mut b.app, crate::dock::Pane::Prereglages);
     crate::panneauprereglages::choisir_onglet(&b.app.ctx, crate::panneauprereglages::Onglet::Montage);
     b.garder_formes = true;
     b.chauffer(6);

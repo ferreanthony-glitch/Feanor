@@ -75,7 +75,14 @@ pub(crate) fn row_count(layers: &[Layer]) -> usize {
 /// Partie 178 (la timeline du Storyboard dessinée par Anthony) : la ligne des séquences, la plus fine possible. Partie 179.11
 /// (Anthony : « C'est vrai qu'il manque une ligne de séquence ») : elle a son en-tête « Séquence » et ses icônes, comme Plans et
 /// Caméra : 20 points (16 avant), la place d'une case d'icône de 18.
-pub(crate) const SB_SEQ_H: f32 = 20.0;
+/// Partie 196 (Anthony : « La ligne Séquence perd ses raccourcis et devient plus fine (−50 %) ») : 10 points, sans icônes.
+pub(crate) const SB_SEQ_H: f32 = 10.0;
+
+// Les en-têtes Séquence et Plans restés en haut de la colonne à la dernière image (partie 196), pour les essais.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static HAUT_COLLANT_COLONNE: std::cell::Cell<Option<(Rect, Rect)>> = const { std::cell::Cell::new(None) };
+}
 
 /// Parties 179.13 (la hauteur réglée de chaque ligne, `hauteurstimeline.rs`) : la ligne des séquences, celle des plans, celle de la
 /// caméra (repliée) de la timeline du Storyboard ; d'origine `SB_SEQ_H`, `SB_PLAN_H`, `SB_CAM_H`.
@@ -345,16 +352,26 @@ impl App {
         if resp.clicked() {
             self.e3_piste_camera_cliquee();
         }
-        resp.context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
+        // (Partie 196 : dans le Storyboard, les commandes de l'ancienne ligne d'icônes de la caméra aussi, `menu_camera_sb`.)
+        let sb = rows.sb.is_some();
+        resp.context_menu(|ui| if sb { self.menu_camera_sb(ui) } else { self.grid_menu_ui(ui, crate::handles::GridMenu::Camera) });
         let header = lane(rows.blocks_top(), rows.block_h);
-        painter.rect_filled(header, 3.0, teinte(Ligne::Plans, theme::etiquette()));
+        // Partie 196 (Anthony : la ligne Séquence « reste fixée en haut de la bande, la ligne des plans également ») : la bande défilée vers
+        // le bas, leurs en-têtes se peignent en haut de ce qu'on voit, après les autres lignes (en fin de fonction).
+        let dy_haut = (ui.clip_rect().top() - rect.top()).max(0.0);
+        let haut_collant = rows.sb.is_some() && dy_haut > 0.5;
+        if !haut_collant {
+            painter.rect_filled(header, 3.0, teinte(Ligne::Plans, theme::etiquette()));
+        }
         if let Some(sb) = rows.sb {
             // Partie 178 : les en-têtes des rangées de la timeline du Storyboard, chacune avec ses icônes. (Partie 179.11 : la ligne
             // « Séquence » en face de la bande des séquences, sous la barre de lecture.)
             let seq = lane(rows.regle_h(), rows.bands_h());
-            painter.rect_filled(seq, 3.0, teinte(Ligne::Sequence, theme::etiquette()));
-            self.entete_sequences_sb(ui, seq);
-            self.entete_plans_sb(ui, header);
+            if !haut_collant {
+                painter.rect_filled(seq, 3.0, teinte(Ligne::Sequence, theme::etiquette()));
+                self.entete_sequences_sb(ui, seq);
+                self.entete_plans_sb(ui, header);
+            }
             self.entete_camera_sb(ui, cam, camera_seule);
             if sb.prereglages_h > 0.0 {
                 let pr = lane(rows.prereglages_top(), rows.prereglages_h());
@@ -521,6 +538,25 @@ impl App {
             if !(secondary && self.is_chosen_layer(k)) {
                 self.click_layer_head(k, m.command && !secondary, m.shift && !secondary);
             }
+        }
+        // Partie 196 : les en-têtes des lignes Séquence et Plans restés en haut, par-dessus les lignes qui ont défilé (un fond qui prend le
+        // pointeur, puis l'en-tête, ses boutons et ses menus).
+        if haut_collant {
+            let fond = Rect::from_min_max(pos2(rect.left(), rect.top() + dy_haut + rows.regle_h()), pos2(rect.right(), rect.top() + dy_haut + rows.blocks_top() + rows.block_h));
+            let peintre = ui.painter().with_clip_rect(ui.clip_rect());
+            peintre.rect_filled(fond, 0.0, theme::panneau());
+            let _ = ui.interact(fond.intersect(ui.clip_rect()), ui.id().with("haut_collant_colonne"), Sense::click_and_drag());
+            let seq = lane(rows.regle_h() + dy_haut, rows.bands_h());
+            let plans = lane(rows.blocks_top() + dy_haut, rows.block_h);
+            peintre.rect_filled(seq, 3.0, teinte(Ligne::Sequence, theme::etiquette()));
+            peintre.rect_filled(plans, 3.0, teinte(Ligne::Plans, theme::etiquette()));
+            self.entete_sequences_sb(ui, seq);
+            self.entete_plans_sb(ui, plans);
+            #[cfg(test)]
+            HAUT_COLLANT_COLONNE.with(|c| c.set(Some((seq, plans))));
+        } else {
+            #[cfg(test)]
+            HAUT_COLLANT_COLONNE.with(|c| c.set(None));
         }
     }
 

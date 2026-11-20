@@ -689,6 +689,18 @@ mod dock;
 #[cfg(test)]
 mod dock_tests;
 mod dockui;
+// Le compteur des bandes du bas, Ctrl + clic : le temps ou les numéros d'images (partie 195).
+mod compteur;
+#[cfg(test)]
+mod retouches195_tests;
+// Le deuxième tour des retouches vues à l'écran (partie 196).
+#[cfg(test)]
+mod retouches196_tests;
+// La colonne des panneaux en pile, façon Blender (partie 194) : le modèle, et son affichage.
+pub(crate) mod colonne;
+#[cfg(test)]
+mod colonne_tests;
+mod colonneui;
 // Remplissage au griffonnage d'un calque de couleur (ce qu'était le calque CTG, fondu dans le calque de couleur).
 pub mod griffonnage;
 #[cfg(test)]

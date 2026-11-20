@@ -200,7 +200,8 @@ fn the_composition_marks_have_their_own_icon_right_after_cadrage_in_the_bottom_b
     // Même taille d'icône que les autres icônes de la barre (la pelure), même écart que deux cases voisines.
     assert!((reperes.height() - pelure.height()).abs() < 0.5 && (reperes.width() - pelure.width()).abs() < 1.5, "{reperes:?} / {pelure:?}");
     let pas = reperes.center().x - cadrage.center().x;
-    let pas_voisins = crate::barres::CASE[0] + crate::barres::ECART;
+    // (Partie 195 : les barres de la vue ont les cases de la timeline, `tailleicones::case_de_barre`.)
+    let pas_voisins = crate::tailleicones::case_de_barre()[0] + crate::barres::ECART;
     assert!((pas - pas_voisins).abs() < 1.5, "écart Cadrage → repères {pas}, ajuster → zoom {pas_voisins}");
     assert!(!app.reperes_any_on());
     // Un clic ouvre son petit panneau : les repères et l'aspect de leurs traits ; rien du cadrage ni de la perspective.
@@ -332,7 +333,7 @@ fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing
     assert_eq!(b.app.espace, Espace::Storyboard);
     let dessin = b.app.canvas_rect;
     // La barre du haut de la vue : juste au-dessus du dessin, sur toute sa largeur.
-    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), egui::pos2(dessin.right(), dessin.top()));
+    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::view_bar_h()), egui::pos2(dessin.right(), dessin.top()));
     // Aucun personnage au départ : « classique », les trois couleurs neutres, les brosses du décor, « + », l'icône du panneau.
     let cases: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
     assert_eq!(cases.first(), Some(&Case::Choix(Choix::Classique(0))), "plus de pastille ⊘ en tête (2026-10-29)");
@@ -386,7 +387,7 @@ fn the_pastilles_scroll_instead_of_wrapping_when_the_bar_is_too_narrow() {
     }
     b.chauffer(6);
     let dessin = b.app.canvas_rect;
-    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), egui::pos2(dessin.right(), dessin.top()));
+    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::view_bar_h()), egui::pos2(dessin.right(), dessin.top()));
     let rects: Vec<Rect> = b.app.perso.cases.iter().map(|(r, _)| *r).collect();
     assert!(rects.len() >= 18, "toutes les cases sont peintes (elles défilent) : {}", rects.len());
     // Aucune ne passe à la ligne : toutes sur la même ligne, la barre garde sa hauteur, le dessin sa place.

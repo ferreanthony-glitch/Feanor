@@ -111,7 +111,6 @@ const SANS_EFFET_SUR_LE_PROJET: &[&str] = &[
     "vue.couleur",
     "vue.calques",
     "vue.fiche",
-    "vue.barre_panneaux",
     "outil.pinceau",
     "outil.crayon",
     "outil.gomme",

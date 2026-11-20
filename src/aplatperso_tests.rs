@@ -259,6 +259,10 @@ fn the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the
     // Un clic sur le renvoi ouvre (ou montre) le panneau Brosses dédiées.
     clic(&mut b, renvoi.1);
     assert!(b.app.pane_shown(crate::dock::Pane::Personnages), "le clic sur le renvoi montre le panneau Brosses dédiées");
+    // (Partie 196.5 : Brosses dédiées, devant dans le groupe de la Couleur, garde toute la hauteur de son contenu ; la colonne défile
+    // et Propriétés, au minimum, passe sous le bas de l'écran. On le referme, comme au début de l'essai.)
+    b.app.toggle_pane(crate::dock::Pane::Personnages);
+    b.chauffer(4);
     // Un calque ordinaire, lui, a sa case de couleur.
     let ordinaire = b.app.layers().iter().position(|l| l.personnage.is_none()).expect("un calque ordinaire");
     b.app.layers_mut()[ordinaire].fond = Some(FondReglages::default());

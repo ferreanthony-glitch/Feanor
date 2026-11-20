@@ -160,7 +160,8 @@ fn toutes_les_icones_de_la_timeline_du_storyboard_ont_la_meme_taille_barre_de_le
         ("nouveau plan, barre de lecture", hauteur_du_glyphe(&b, ph::PLUS_SQUARE, l0, l1)),
         ("nouveau plan, ligne Plans", hauteur_du_glyphe(&b, ph::PLUS_SQUARE, h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h)),
         ("couper, ligne Plans", hauteur_du_glyphe(&b, ph::SCISSORS, h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h)),
-        ("remise à zéro, ligne Caméra", hauteur_du_glyphe(&b, ph::ARROW_COUNTER_CLOCKWISE, h + rows.camera_top(), h + rows.camera_top() + rows.cam_h())),
+        // (Partie 196 : plus de remise à zéro sur la ligne Caméra, au clic droit de la ligne ; il lui reste ⊕.)
+        ("déplier, ligne Caméra", hauteur_du_glyphe(&b, ph::PLUS_CIRCLE, h + rows.camera_top(), h + rows.camera_top() + rows.cam_h())),
         ("nouveau dossier, ligne Calques", hauteur_du_glyphe(&b, ph::FOLDER_PLUS, c0, c1)),
         ("supprimer, ligne Calques", hauteur_du_glyphe(&b, ph::TRASH, c0, c1)),
         // (Partie 179.15 : plus de punaise sur la ligne ; le losange de l'opacité.)
@@ -201,20 +202,27 @@ fn dans_l_animation_la_barre_de_lecture_a_la_meme_taille_d_icones_et_des_lignes_
 #[test]
 fn la_taille_des_icones_est_retenue_dans_les_reglages_et_l_origine_ne_laisse_pas_de_trace() {
     assert_eq!(TAILLES, [11, 12, 13, 14, 15, 16]);
-    assert_eq!(TAILLE_DEFAUT, 13);
+    // (Partie 195 : 16 points d'origine, Anthony : « Taille d'origine 16pt » ; 13 avant.)
+    assert_eq!(TAILLE_DEFAUT, 16);
     for (ecrit, valide) in [(0, 11), (11, 11), (13, 13), (14, 14), (16, 16), (40, 16)] {
         assert_eq!(taille_valide(ecrit), valide, "{ecrit}");
     }
     let mut s = Settings::default();
-    assert_eq!(s.taille_icones, 13);
-    assert!(!toml::to_string(&s).unwrap().contains("taille_icones"), "13 : la clé n'est pas écrite");
+    assert_eq!(s.taille_icones, 16);
+    assert!(!toml::to_string(&s).unwrap().contains("taille_icones"), "16 : la clé n'est pas écrite");
     s.taille_icones = 15;
     let ecrit = toml::to_string(&s).unwrap();
     assert!(ecrit.contains("taille_icones = 15"), "{ecrit}");
     let relu: Settings = toml::from_str(&ecrit).unwrap();
     assert_eq!(relu.taille_icones, 15);
+    // Sans la clé : la taille d'origine, 16. Une taille écrite reste la sienne, 13 compris (elle s'écrit maintenant).
     let ancien: Settings = toml::from_str("").unwrap();
-    assert_eq!(ancien.taille_icones, 13, "des réglages d'avant : 13");
+    assert_eq!(ancien.taille_icones, 16);
+    s.taille_icones = 13;
+    let ecrit = toml::to_string(&s).unwrap();
+    assert!(ecrit.contains("taille_icones = 13"), "{ecrit}");
+    let relu = Settings::apres_lecture(toml::from_str(&ecrit).unwrap());
+    assert_eq!(relu.taille_icones, 13, "une taille déjà choisie n'est pas remplacée");
 }
 
 #[test]
@@ -249,7 +257,7 @@ fn une_autre_taille_d_icones_agit_tout_de_suite_sur_toute_la_timeline_et_rien_ne
     }
     let _ = (b13, c13);
     // (La taille est retenue pour le fil : les essais suivants de ce fil la retrouvent d'origine.)
-    crate::tailleicones::poser(TAILLE_DEFAUT);
+    crate::tailleicones::poser(crate::tailleicones::TAILLE_ESSAIS);
 }
 
 #[test]
@@ -274,14 +282,18 @@ fn les_preferences_montrent_la_taille_de_l_interface_et_la_taille_des_icones_cot
     assert_eq!(crate::tailleicones::icone(), 15.0, "tout de suite");
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
     assert!(disque.contains("taille_icones = 15"), "{disque}");
-    choisir_dans_la_liste(&mut b, "Taille des icônes", "13 pt (d'origine)");
+    // (Partie 195 : 16 points d'origine ; 13 s'écrit, et le retour à 16 défait la clé.)
+    choisir_dans_la_liste(&mut b, "Taille des icônes", "13 pt");
     let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
-    assert!(!disque.contains("taille_icones"), "13 : plus de clé : {disque}");
+    assert!(disque.contains("taille_icones = 13"), "{disque}");
+    choisir_dans_la_liste(&mut b, "Taille des icônes", "16 pt (d'origine)");
+    let disque = std::fs::read_to_string(crate::donnees::roaming().unwrap().join("reglages.toml")).unwrap();
+    assert!(!disque.contains("taille_icones"), "16 : plus de clé : {disque}");
     choisir_dans_la_liste(&mut b, "Taille de l'interface", "125 %");
     assert_eq!(b.app.settings.echelle, 125);
     b.app.settings.echelle = 100;
     b.chauffer(3);    b.image(vec![Event::PointerMoved(eframe::egui::pos2(5.0, 5.0))], 1.0 / 60.0);
-    crate::tailleicones::poser(TAILLE_DEFAUT);
+    crate::tailleicones::poser(crate::tailleicones::TAILLE_ESSAIS);
 }
 
 /// Partie 179.17 : ouvre la liste déroulante dont la bulle est `nom` (Préférences > Apparence > Tailles) et y choisit `texte` ; rend

@@ -14,6 +14,11 @@
 //!   remplaçait la sélection). Une sélection faite sur un seul calque (trait ou lasso vectoriel) est
 //!   reprise dans le cumul ; une zone bitmap soulevée est d'abord posée.
 //! - **Maj + clic** (sans Ctrl) fait la même chose sur les calques choisis, comme avant.
+//! - **Partie 195** (Anthony : « ctrl+clic ne sélectionne pas un objet, ctrl+clic ne marche qu'en lasso ») : Ctrl + clic choisissait
+//!   l'objet du calque courant seulement, et un clic au stylet qui bougeait de quatre pixels devenait un lasso minuscule, qui ne
+//!   prenait rien. Maintenant un geste de moins de six pixels d'écran est un clic, et Ctrl + clic sur l'encre d'un autre calque du
+//!   plan fait de ce calque le calque courant (comme Alt + clic) et y choisit l'objet (`ctrl_clic_autre_calque`). Un clic dans le
+//!   vide désélectionne toujours ; Ctrl + glisser reste le lasso.
 
 use eframe::egui::{Pos2, Rect};
 
@@ -22,6 +27,10 @@ use crate::multisel::{self, MultiSel, PartKind};
 use crate::pixsel::PixelMask;
 use crate::raster::Raster;
 use crate::vector;
+
+/// Un geste de la Sélection plus petit que ce nombre de pixels d'écran est un clic (il choisit l'objet sous le pointeur), pas un lasso :
+/// un appui au stylet bouge souvent de quelques pixels.
+pub(crate) const CLIC_MAX: f32 = 6.0;
 
 /// Au plus autant de pixels dans un objet (au-delà, c'est tout le dessin : on s'arrête là).
 const MAX_PIXELS: usize = 40_000_000;
@@ -159,6 +168,36 @@ impl App {
     /// Un clic sans glisser avec l'outil Sélection sur plusieurs calques, en `stage` (point de la
     /// feuille) : la forme dessinée sous la souris, sur le calque bitmap le plus haut qui en a une.
     /// `add` : elle s'ajoute à la sélection ou en est retirée. Vrai si une forme a été trouvée.
+    /// Partie 195 : Ctrl + clic (Ctrl tenu) n'a rien trouvé sur le calque courant en `screen` (point de l'écran) : le calque du plan
+    /// dont l'encre est sous le pointeur (`calque_sous_le_point`, celui d'Alt + clic) devient le calque courant, et l'objet y est
+    /// choisi : le trait ou la zone remplie d'un calque vectoriel, la forme d'un seul tenant d'un calque bitmap. Vrai si un objet est
+    /// choisi.
+    pub(crate) fn ctrl_clic_autre_calque(&mut self, screen: Pos2, add: bool) -> bool {
+        if !self.ctrl_tenu() || self.in_card {
+            return false;
+        }
+        let stage = self.view.to_canvas(self.canvas_rect, self.canvas_size(), screen);
+        let Some(li) = self.calque_sous_le_point(stage) else { return false };
+        if li == self.cur_layer {
+            return false;
+        }
+        self.select_layer(li);
+        if self.cur_layer != li || !self.layer().drawable() {
+            return false;
+        }
+        let p = self.to_layer(stage);
+        if self.layer().kind == crate::document::LayerKind::Bitmap {
+            return self.bitmap_pick_object(p, add);
+        }
+        let Some(cel) = self.cel_here() else { return false };
+        let tol = 4.0 / self.layer_zoom();
+        let Some(i) = self.drawing(cel).and_then(|d| d.hit_test(p, tol)) else { return false };
+        self.vsel = Some(crate::vtools::VSelection { cel, items: vec![i] });
+        self.sync_sel_box();
+        self.status = format!("Objet choisi sur « {} ».", self.layer().name);
+        true
+    }
+
     pub(crate) fn multi_pick_object(&mut self, stage: Pos2, add: bool) -> bool {
         let targets = self.multi_targets();
         let tol = 4.0 / self.view.zoom.max(1e-3);

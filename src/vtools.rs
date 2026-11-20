@@ -426,12 +426,16 @@ impl App {
         let Some(drag) = self.vdrag.take() else { return };
         match drag {
             VDrag::Lasso(points) => {
-                let Some(cel) = self.cel_here() else { return };
                 let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
-                if points.len() < 3 || extent.width().max(extent.height()) < 4.0 {
+                if points.len() < 3 || extent.width().max(extent.height()) < crate::selobjet::CLIC_MAX {
+                    // Un clic (partie 195) : rien sous le pointeur sur le calque courant ; Ctrl tenu, l'encre d'un autre calque.
+                    if let Some(&s) = screen.first() {
+                        self.ctrl_clic_autre_calque(s, shift);
+                    }
                     return;
                 }
+                let Some(cel) = self.cel_here() else { return };
                 let Some(d) = self.drawing(cel) else { return };
                 let hits: Vec<usize> = d
                     .elements

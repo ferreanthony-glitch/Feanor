@@ -391,7 +391,8 @@ fn the_comments_pane_is_closed_by_default_and_opens_on_the_right() {
     l.open(Pane::Comments);
     assert!(l.contains(Pane::Comments));
     // (Partie 160 : la colonne du milieu commence par les effets, il n'y a plus de panneau Calques.)
-    assert!(format!("{:?}", l.principal).contains("Effects, Comments"), "{:?}", l.principal);
+    // (Partie 194 : un onglet de Propriétés, dans la colonne en pile à droite, après les effets.)
+    assert!(l.colonne.panes().windows(2).any(|w| w == [Pane::Effects, Pane::Comments]), "{:?}", l.colonne);
     // Une disposition enregistrée garde son nom de panneau.
     assert_eq!(serde_json::to_string(&Pane::Comments).unwrap(), "\"commentaires\"");
 }

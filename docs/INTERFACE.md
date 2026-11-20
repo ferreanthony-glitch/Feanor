@@ -17283,3 +17283,379 @@ les deux cas ; `profondeur_perf` et `ombres_perf` mesurent avec les bords doux. 
    budgets (« … avec les bords doux des cartes ») ; au premier lancement, le budget se remesure une fois.
 9. Coche « Toujours devant le décor 3D » sur toutes les cartes : le décor coûte comme avant (la superposition « Performance ») ;
    décoche-en une : les bords doux reviennent, sans que le décor clignote.
+
+## 194. La colonne en pile de panneaux, façon Blender (2026-11-20, branche colonne-panneaux partie de main 831e997)
+
+Étape 1 sur 5 du chantier validé par Anthony sur la maquette cliquable `onglet-3d-v8` (son comportement, pas ses couleurs : FEANOR
+garde son thème Gris sombre et ses densités). L'idée de la pile et des onglets d'icônes vient de Blender (son éditeur de
+propriétés). **Format des projets inchangé (61)** : seule la disposition retenue dans les réglages de l'application change, et passe
+à la version 10 (`LAYOUT_VERSION`), avec sa conversion.
+
+### 194.1 Ce qui a changé
+
+1. **La colonne de droite est une seule pile de panneaux**, dans les quatre espaces de travail (Vignettes, Storyboard, Animation,
+   Montage). Chaque panneau a un en-tête de 24 points : une **poignée ⠿** (la glisser vers le haut ou le bas range le panneau
+   ailleurs dans la pile, une ligne de la couleur d'accent montre où il tombe ; lâchée hors de la colonne, le panneau flotte), le
+   **chevron et le titre** (un clic replie ou déplie le panneau), puis **▲ ▼ ✕**. Un panneau ouvert qui ne grandit pas a un **bord du
+   bas** qu'on tire pour régler sa hauteur (de 70 à 700 points) ; sans hauteur tirée, il prend celle de son contenu. **Un seul
+   grandit** et prend la hauteur qui reste : Propriétés s'il est là et ouvert, sinon le dernier panneau ouvert. Un panneau replié
+   ne montre que son en-tête. ✕ est grisé sur le dernier panneau (« il faut au moins un panneau »).
+2. **« + Panneau »**, en haut de la colonne, à côté du nom de l'espace de travail : le menu des panneaux que l'espace peut montrer
+   (Propriétés, puis ceux qui servent à ce travail, puis les autres ; ni la feuille d'exposition hors de l'Animation, ni les essais
+   du Labo s'ils ne sont pas ouverts). Ceux qui sont déjà là sont grisés, « (déjà là) ». Le nouveau arrive en bas de la pile.
+3. **Propriétés** montre les panneaux de réglages en **onglets d'icônes verticaux** sur son bord gauche : l'icône, la bulle avec le
+   nom et la description (celles de l'ancienne barre des panneaux, raccourci compris), l'onglet devant allumé. Clic droit sur un
+   onglet : le sortir en panneau, dans une fenêtre à part, le fermer. Son en-tête a **↗ « Sortir l'onglet en panneau »** : l'onglet
+   devant devient un panneau à lui, juste au-dessus de Propriétés. **Fermer ce panneau (✕) le remet en onglet**, à son rang, devant.
+   Tous les onglets sortis : Propriétés le dit et reste. Sont des onglets : Réglages de l'outil, Fiche du plan, Effets, Scénario,
+   Espace 3D, Historique, Commentaires, Bruitages, Préréglages, Feuille d'exposition, Suggestions sonores, Références, Bibliothèque,
+   Mon panneau ; ont toujours leur propre panneau : la Couleur (avec les Brosses dédiées en onglets d'en-tête, comme avant), la
+   Planche des Vignettes, les icônes des outils.
+4. **La barre des panneaux du bord droit (partie 160) n'est plus là** : les onglets d'icônes de Propriétés la remplacent. Son
+   action `vue.barre_panneaux` et sa case d'Affichage > Panneaux sont retirées (un raccourci personnel qui la nommait est ignoré,
+   avec un mot). Les panneaux s'ouvrent toujours par **Affichage > Panneaux** et par la **palette** (actions `vue.*`, même règle de
+   clic : fermé, il s'ouvre ; caché, il passe devant et son panneau se déplie ; visible, il se ferme) : un panneau de réglages
+   arrive en onglet de Propriétés, à son rang ; la Couleur revient en haut ; le reste, ou tout sans Propriétés, en bas de la pile.
+5. **Chaque espace de travail a sa pile**, retenue avec sa disposition et retrouvée à la séance suivante ; « Rétablir la
+   disposition » rend celle d'origine :
+   - Storyboard : la Couleur (et les Brosses dédiées) en haut, puis Propriétés : Réglages de l'outil, Fiche du plan, Effets,
+     Scénario ; Espace 3D quand la vue s'ouvre ; Historique s'il est ouvert.
+   - Animation : la même, sans le Scénario (il n'y était pas).
+   - Vignettes : la Planche, la Couleur, puis Propriétés : Réglages de l'outil et Scénario (avant : le Scénario en onglet avec la
+     Couleur ; la règle de la pile met les réglages dans Propriétés et la Couleur dans son panneau).
+   - Montage : la Fiche du plan (un onglet de Propriétés sorti, ✕ l'y remet), puis Propriétés : Bruitages, Commentaires, Historique.
+6. **La colonne s'arrête au-dessus de la bande du bas** : le montage et la timeline ont toute la largeur de la fenêtre, sous le
+   dessin et la colonne, dans tous les espaces. (Les dispositions d'origine l'étaient déjà ; les dispositions retenues où la bande
+   était ailleurs la retrouvent en bas, à la hauteur qu'elle avait.)
+7. **Ce qui marchait reste** : la colonne garde ses 290 points quelle que soit la fenêtre, son bord se tire ; un panneau se met
+   **dans une fenêtre à part** (clic droit sur son en-tête ; la fermer le remet dans la pile) ou **flotte** (clic droit « Panneau
+   flottant », ou sa poignée lâchée hors de la colonne) ; un panneau flottant revient par le clic droit sur sa poignée, **« Dans la
+   colonne »**. Le panneau Espace 3D (parties 150, 152, 159) arrive en onglet de Propriétés et passe devant quand la vue s'ouvre ;
+   l'onglet d'avant revient devant et l'onglet part quand elle se ferme ; sorti en panneau à lui, il reste. « Réajuster les
+   panneaux » oublie aussi les hauteurs tirées dans la pile. Le contenu de chaque panneau est celui d'avant, appelé tel quel.
+8. **Les dispositions retenues de la version 9** (et d'avant, qui passent par elle) se convertissent sans perdre de panneau : les
+   groupes d'onglets de côté de la fenêtre principale entrent dans la pile ; les panneaux de réglages deviennent, dans leur ordre,
+   les onglets de Propriétés (celui qui était devant dans le groupe du haut reste devant) ; la Couleur, les Brosses dédiées et la
+   Planche gardent un panneau chacun de leurs groupes, au-dessus de Propriétés. Les panneaux flottants et ceux dans leur fenêtre ne
+   bougent pas.
+
+### 194.2 L'architecture, et pourquoi
+
+- **egui_dock garde la racine** : le dessin, la colonne et la bande du bas restent trois panneaux d'egui_dock
+  (`Column(Row(dessin, colonne), bande)`), avec leurs bords à tirer, la largeur de 290 points (`App::fit_columns`), les panneaux
+  flottants et les fenêtres à part. **La colonne est un seul panneau neuf, `Pane::Colonne`**, qui dessine sa pile (`colonneui.rs`)
+  et appelle pour chaque panneau le même `App::pane_ui` qu'un onglet d'egui_dock : aucun contenu n'est touché.
+- **La pile est un modèle à part, `colonne.rs`** (`Colonne`, `PanneauPile`, `Sorte::{Simple, Proprietes}`), retenu dans la
+  disposition (`DockLayout::colonne`) et testé sans interface : ranger, replier, la hauteur bornée, celui qui grandit, sortir et
+  remettre un onglet, ouvrir, « + Panneau ». Une sorte de panneau de plus (la Scène de l'étape 2, un panneau propre à l'onglet 3D)
+  s'ajoute à `Sorte`, ou comme un `Pane` de plus, sans toucher au reste.
+- Pourquoi pas des groupes d'egui_dock empilés : egui_dock n'a ni en-tête repliable, ni panneau qui grandit, ni onglets verticaux,
+  et chaque groupe porte sa barre d'onglets ; la pile aurait été un arbre de partages à corriger à chaque image. Un panneau qui
+  dessine sa pile donne exactement le comportement de la maquette, et l'arbre d'egui_dock reste simple.
+- L'application garde la pile à côté de l'état d'egui_dock (`App::colonne`, comme `App::detached`) : `dock_layout` la remet dans la
+  disposition, `set_dock_layout` la reprend. Ce qui change la disposition entière depuis la pile (faire flotter, fermer par la
+  commande, « Dans la colonne ») attend la fin de l'affichage des panneaux (`App::colonne_apres`).
+
+### 194.3 Les essais
+
+- Nouveau : `colonne_tests.rs` (14 essais) : les piles d'origine des quatre espaces ; ▲ ▼, glisser à une place (à l'écran aussi,
+  par la poignée) ; replier ; la hauteur bornée (et tirée à l'écran) ; celui qui grandit ; le menu « + Panneau » (et un ajout à
+  l'écran) ; sortir un onglet et l'y remettre (à l'écran aussi) ; la pile retenue par espace, « Rétablir », l'aller-retour TOML et
+  JSON, une pile abîmée réparée ; la conversion de dispositions de la version 9 (Storyboard, Montage, Vignettes, la bande à côté de
+  la colonne, une version 8) sans perdre un panneau ; la bande sur toute la largeur sous la colonne (dans l'arbre et à l'écran) ;
+  un panneau ouvert par sa commande qui se montre dans la pile ; le panneau Espace 3D qui suit la vue ; flotter, revenir, fenêtre
+  à part.
+- Essais changés parce que le comportement change exprès (la liste et la raison de chacun sont dans le compte rendu de la branche) :
+  ceux qui lisaient les onglets du groupe des réglages dans l'arbre d'egui_dock lisent ceux de Propriétés (`dock_tests`,
+  `bruitages_tests`, `commentaires_tests`, `references_tests`, `suggestions_tests`, `espace3dpanneau_tests`, `panneaux_fins_tests`) ;
+  ceux qui supposaient la barre des panneaux (`barrepanneaux_tests`, `fermeture_tests`, `panneaux_fins_tests`) ; ceux qui
+  supposaient la géométrie d'avant au pixel près, la barre de 34 points en moins : la fenêtre d'essai réduite d'autant (`ombres3d`,
+  `espace3dvue`, `vignettes_tests::LARGEUR_D_ESSAI` 1 282 → 1 248) ou, à 1 920 de large que les captures supposent, la colonne
+  élargie de 34 points comme un bord tiré (`traits_continus_tests::planche`) ; ceux qui cherchaient une vignette loin dans un
+  panneau à grille (Préréglages, Bibliothèque, Planche avec Précis ouvert) sortent le panneau en panneau à lui et replient les
+  autres (`colonne_tests::toute_la_place`).
+
+### 194.4 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : la pile, ses en-têtes, la ligne de dépôt, le menu « + Panneau » et les onglets d'icônes ne
+  sont vérifiés que par les essais (la vraie fenêtre sans écran, au pixel près des bulles). Leur allure (densité, gris, tailles des
+  icônes) est à juger par Anthony.
+- **Le corps de Propriétés a 31 points de moins en largeur** (la bande des onglets d'icônes) : les vignettes des Préréglages et la
+  grille de la Bibliothèque passent d'une rangée de deux à une ; sortis en panneau (↗), ils retrouvent toute la largeur. Les
+  en-têtes de la pile prennent aussi de la hauteur (24 points chacun, 24 pour « + Panneau ») : dans une fenêtre basse, le panneau
+  Espace 3D, la caméra choisie, défile sous la Couleur ; la Couleur repliée, il tient (essai `the_whole_camera…`, partie 161.4).
+- Le glisser d'un panneau de la pile **dans un autre groupe d'egui_dock** n'existe pas : lâché hors de la colonne, il flotte ; un
+  panneau flottant glissé dans la fenêtre principale y devient un groupe d'egui_dock (sans nom d'onglet, partie 160) ; « Dans la
+  colonne » (clic droit sur sa poignée) le remet dans la pile. On ne range pas les onglets de Propriétés entre eux (ils gardent
+  l'ordre d'avant).
+- La poignée de la colonne elle-même (8 points, egui_dock) se glisse encore : elle range toute la colonne ailleurs.
+- La Scène (étape 2), l'onglet 3D et ses panneaux (étapes suivantes) ne sont pas commencés.
+- Un FEANOR plus ancien ne sait pas lire une disposition de la version 10 (le panneau « colonne ») : il reprendrait les réglages
+  d'origine. Garder une copie de `reglages.toml` avant l'essai.
+
+### 194.5 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : copier `%APPDATA%\…\reglages.toml` (les dispositions retenues y sont converties à la version 10).
+
+1. Ouvre la copie dans le Storyboard : à droite, **« Storyboard » et « + Panneau »** en haut de la colonne, puis **Couleur**
+   (avec les Brosses dédiées en petites icônes dans son en-tête), puis **Propriétés**, qui descend jusqu'à la bande. Plus de barre
+   d'icônes au bord droit de la fenêtre.
+2. Dans Propriétés, les **onglets d'icônes à gauche** : survole-les (nom et description), clique la Fiche, les Effets, le Scénario.
+3. **↗** dans l'en-tête de Propriétés : l'onglet devant devient un panneau au-dessus. Son **✕** le remet en onglet.
+4. **▲ ▼** sur la Couleur : elle passe sous Propriétés et revient. **Glisse sa poignée ⠿** vers le bas : une ligne montre où elle
+   tombe.
+5. **Clic sur le titre** d'un panneau : il se replie (l'en-tête seul), Propriétés prend la place ; reclic : il revient.
+6. **Tire le bord du bas** de la Couleur : elle grandit ou rapetisse ; Affichage > Panneaux > Réajuster les panneaux la remet.
+7. **« + Panneau »** : Bibliothèque arrive en bas ; les panneaux déjà là sont grisés « (déjà là) ».
+8. Clic droit sur un en-tête : **Dans une fenêtre à part**, puis ferme la fenêtre : le panneau revient. **Panneau flottant** (ou
+   lâche une poignée sur le dessin) : il flotte ; clic droit sur sa fine poignée : **Dans la colonne**.
+9. Ouvre la **vue Espace 3D** (le cube) : l'onglet Espace 3D arrive dans Propriétés, devant ; referme la vue : Réglages revient
+   devant, l'onglet part.
+10. Affichage > Panneaux, ou Ctrl+K « Historique » : il arrive en onglet de Propriétés, devant.
+11. **La bande du bas** (montage, timeline) va du bord du dessin au bord droit de la fenêtre, sous la colonne, dans le Storyboard,
+    l'Animation (double-clic sur un plan) et le Montage.
+12. Va dans le **Montage**, change sa pile, reviens au **Storyboard** : chacun a gardé la sienne ; quitte et relance : elles sont là.
+    « Rétablir la disposition » rend celle d'origine de l'espace.
+13. Les **Vignettes** : la Planche, la Couleur, Propriétés (Réglages, Scénario). Dis si cet ordre te va.
+14. Dis si la densité des en-têtes (24 points) et la bande des onglets (30 points) te vont, et ce que tu veux pour les Préréglages
+    et la Bibliothèque, plus étroits en onglet de Propriétés (point 194.4).
+
+## 195. Retouches vues à l'écran de la partie 194 (2026-11-20, branche colonne-panneaux)
+
+Anthony a annoté les captures de la partie 194 prises dans l'application d'essai, puis l'a essayée (Ctrl + clic). Format des projets
+inchangé (61) ; les réglages de l'application ont trois clés de plus (`compteur_en_images`, `compteur_timeline_en_temps`, et
+`echelle_interface` qui s'écrit maintenant pour 100 %).
+
+### 195.1 Ce qui a changé
+
+1. **Les barres de la vue** (au-dessus du dessin : plateau, caméra, cube, à côté, règle, ajuster, zoom, rotation, miroir ; dessous :
+   cadrage, repères, pelure, table lumineuse, passe-partout…) ont **les icônes de la colonne de gauche de la timeline** (Séquence,
+   Plans, Caméra, Calques) : la taille réglée dans Préférences > Tailles > Taille des icônes (`barres::en_barre_compacte`), qui règle
+   les deux ensemble. **Taille d'origine des icônes : 16 points** (Anthony : « Taille d'origine 16pt » ; 13 avant), dans des cases de
+   23. Les barres gardent les mêmes marges, deux points de part et d'autre de la case : 27 points au-dessus comme dessous à 16 points
+   (à 13 points : 26 au-dessus, la place des pastilles des brosses dédiées, et 24 dessous ; 28 avant la partie 195). Une taille déjà
+   écrite dans les réglages reste la sienne ; « Par défaut », à côté de la liste, remet 16 ; sans clé (13 n'était pas écrit), c'est
+   maintenant 16, et 13 s'écrit.
+2. **Taille d'origine de l'interface : 90 %** (Préférences > Apparence > Tailles, « Taille de l'interface » ; 100 % avant). Un
+   « Par défaut » à côté de la liste remet 90 %. Une taille déjà écrite dans les réglages (100, 125 ou 150 %) reste la sienne ;
+   sans clé (la taille d'origine d'avant, 100 %, n'était pas écrite), c'est maintenant 90 %. 100 % s'écrit désormais.
+3. **Le panneau Préréglages** : plus de grille de vignettes. **Un seul écran d'aperçu en haut** joue le préréglage survolé dans la
+   liste, sinon celui qui est choisi (le dernier cliqué ; d'origine le premier) ; il n'anime que le pointeur sur le panneau.
+   Dessous, **la liste des préréglages par leur nom**, rangés par famille comme avant (Caméra · Zooms…, Montage · Transitions,
+   Plans types) ; les onglets Caméra et Montage restent. Glisser un nom sur la timeline et cliquer pour poser à la tête de lecture
+   marchent comme avec les vignettes.
+4. **La règle des temps et le compteur restent toujours visibles** : quand la bande défile vers le bas (beaucoup de calques, une
+   bande basse), la règle reste en haut de la bande, repeinte par-dessus les pistes (numéros, tête de lecture, fanions ; dans
+   l'Animation aussi l'entrée et la sortie, les signets, les marques et la prise de la fin du plan), et la ligne de la colonne de
+   gauche (le compteur, les boutons ; dans l'Animation, ses deux lignes et l'en-tête des colonnes) reste en face d'elle. Un clic ou un
+   glisser sur la règle restée en haut mène la tête de lecture. Dans le Storyboard comme dans l'Animation.
+5. **Le compteur : Ctrl + clic** passe du temps (« 0:00:00 / 0:22:00 ») aux numéros d'images (« image 63 / 528 ») dans le
+   Storyboard, et des numéros d'images au time code dans l'Animation (« / 23 » ↔ « / 0:00:23 ») ; retenu dans les réglages.
+6. **Les petites vidéos d'explication** (parties 153, 155, 156 : la fenêtre qui s'ouvrait à côté d'un outil à sa première prise, au ▶
+   des Réglages, au clic droit « Revoir l'explication », la suite des Vignettes au démarrage) **ne jouent plus hors du menu Aide** :
+   elles sont toutes dans **Aide > Registre des explications**. La case « Afficher les explications » n'y est plus ; sa commande
+   (`aide.explications`) ouvre le registre. (Tout le reste de la machinerie est gardé derrière `aideanim::AIDE_HORS_DU_MENU`.)
+7. **Couleur** : plus de taches « Avant · maintenant », ni la ligne « clic sur l'ancienne pour revenir ». Les deux carrés
+   d'avant-plan et d'arrière-plan restent.
+8. **Le passe-partout a une nouvelle icône**, dessinée : un rectangle sombre plein aux coins arrondis, et dedans, en bas au milieu, un
+   petit rectangle blanc (un cadre dans un cache). Son opacité est dans le petit panneau de la flèche à côté.
+9. **La barre sous le dessin**, après les superpositions : le passe-partout (et sa flèche), un **curseur de zoom** avec sa valeur
+   (5 à 3 200 %, à l'échelle logarithmique ; double-clic pour taper), un **curseur d'inclinaison** (la rotation de la vue, −180° à
+   180°, sa valeur) et **« Remettre la vue droite »**. Le curseur qui était là (« 100 % ») était l'opacité du passe-partout : il est
+   passé dans le panneau de sa flèche. **Le zoom et la rotation de la barre du haut restent** : ils ne sont pas des doublons exacts
+   (leurs petits panneaux ont − et +, « 100 % » et « Ajuster » ; un quart de tour de chaque côté) ; à Anthony de dire s'il les veut
+   encore.
+10. **Des curseurs plus fins**, partout : un rail de 4 points (8 d'egui) et une poignée en barrette, deux fois moins large que le
+    rond d'avant (`theme::RAIL_CURSEUR`, `POIGNEE_CURSEUR`).
+11. **« Pinceau » et « calque vectoriel » ne se touchent plus** dans l'en-tête de Réglages : les écarts de la pile (à zéro, pour
+    coller les panneaux) passaient au contenu de chaque panneau de la colonne ; chaque panneau retrouve les écarts d'origine.
+12. **Un panneau ajouté sous Propriétés ne l'écrase plus** : celui qui grandit garde au moins le tiers de la place de la colonne
+    (`colonne::PART_GRANDIT`) ; les autres se partagent le reste au prorata de ce qu'ils demandent. (Remplacé par la partie 196.5 :
+    cette règle écrasait la Couleur.)
+13. **Ctrl + clic choisit l'objet, avec n'importe quel outil de dessin** (« ctrl+clic ne sélectionne pas un objet, ctrl+clic ne
+    marche qu'en lasso »). Le lasso de Ctrl choisissait déjà l'objet au clic (le trait ou la zone d'un calque vectoriel, la forme d'un
+    seul tenant d'un calque bitmap ; Ctrl + Maj ajoute, sur tous les calques), mais : sur le calque courant seulement, et un clic au
+    stylet qui bougeait de quatre pixels devenait un lasso minuscule qui ne prenait rien. Maintenant un geste de moins de six pixels
+    d'écran est un clic, et Ctrl + clic sur l'encre d'un autre calque du plan en fait le calque courant (comme Alt + clic) et y
+    choisit l'objet. Ctrl + glisser reste le lasso ; Ctrl + clic dans le vide désélectionne ; Alt + clic choisit toujours le calque
+    seul. Pareil avec le pinceau, le crayon, la gomme, le mélangeur, le pot, le dégradé, les formes, le texte, la pipette… et
+    l'outil Sélection (Ctrl + clic : même sur un autre calque). Restent à part, comme avant : Transformer (Ctrl y sert au point fixe
+    et à l'enveloppe), la Trajectoire (Ctrl + clic sur le chemin pose une poignée), la vue Espace 3D (Ctrl + clic y prend une carte)
+    et la planche des Vignettes. Le texte de la barre sous le dessin, la bulle de l'outil Sélection et la barre d'état le disent.
+
+### 195.2 Les essais
+
+- Nouveau : `retouches195_tests.rs` (11) : le compteur et Ctrl + clic (Storyboard et Animation, retenu dans le fichier, relu au
+  démarrage) ; la règle et le compteur qui restent en haut quand la bande défile (Storyboard et Animation, et le clic sur la règle) ;
+  le panneau Préréglages (un aperçu, la liste, le survol, le choisi, le clic qui pose) ; aucune vidéo à côté d'un outil, le registre ;
+  un panneau ajouté sous Propriétés ; les barres de la vue (cases de 20, barres de 26 et 24, l'ordre passe-partout, zoom,
+  inclinaison, remise droite) ; les curseurs ; l'en-tête des Réglages. `echelle_tests` : la taille d'origine 90 %, « Par défaut ».
+  `retouches195_tests` vérifie aussi la taille d'origine des icônes, 16 points, et ses barres (cases de 23, mêmes marges).
+  `tailleicones_tests` : 16 d'origine, 13 s'écrit, une taille écrite gardée. `dessin_notes_tests` : Ctrl + clic au stylet qui tremble avec six outils, Ctrl + glisser, Ctrl + clic dans le vide, sur l'encre
+  d'un autre calque, Alt + clic.
+- Changés exprès : les essais de l'aide animée qui la faisaient jouer à côté d'un outil (`aideflottante_tests`, `aideanim_tests`,
+  `aideanim_relecture_tests` : 20 essais) sont gardés mais ignorés (« partie 195 : … ne jouent plus hors du menu Aide »), et celui du
+  menu Aide vérifie qu'il n'y a plus la case ; `visuels164_tests` et `panneaux_tests` (plus de taches « Avant · maintenant ») ;
+  `echelle_tests` (90 % d'origine, 100 % s'écrit) ; `passe_partout_tests` (l'icône dessinée se trouve par sa bulle, l'opacité dans le
+  panneau de la flèche, le zoom et l'inclinaison après) ; `regle_cadrage_tests` (les cases de la barre du bas) ; `blocscamera_tests`
+  et `timelinesb_tests` (on glisse et on clique la ligne d'un préréglage, plus sa vignette) ; `panneauxvisuels_tests` (la Planche a
+  toute la place de la colonne) ; `dessin_notes_tests` n'a rien perdu. Les essais sans fenêtre gardent 100 % (`App::sans_fenetre`,
+  `echelle::ECHELLE_ESSAIS`), la taille de leurs mesures.
+
+### 195.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil.
+- La règle restée en haut mène la tête de lecture, mais on n'y prend pas les signets, les marques, l'entrée, la sortie, la prise de
+  la fin du plan ni les fanions : ils se prennent à leur place, la bande remontée.
+- Un réglage écrit par une version d'avant sans la clé des icônes (13 points, d'origine alors) devient 16. Les mesures internes
+  (`tailleicones::k`, `mesure`) restent rapportées à 13, la taille pour laquelle les cases d'origine ont été dessinées ; les essais
+  sans fenêtre gardent 13 (`TAILLE_ESSAIS`) et 100 %.
+- Un réglage écrit par une version d'avant sans la clé de taille (100 %, d'origine alors) devient 90 %.
+- L'aperçu des Préréglages joue tant que le pointeur est sur le panneau (l'écran se redessine) ; ailleurs, il s'arrête.
+- Les animations du registre restent ; la fenêtre flottante et son code aussi, éteints.
+
+### 195.4 Comment Anthony teste (sur une copie de projet)
+
+Avant tout : garder une copie de `reglages.toml`.
+
+1. Au lancement sans réglage de taille : l'interface est à 90 %. Préférences > Apparence > Tailles : « Par défaut » remet 90 %.
+2. Préférences > Apparence > Tailles : « Taille des icônes » est à « 16 pt (d'origine) ». Les icônes des barres au-dessus et au-dessous
+   du dessin ont la taille de celles de la colonne de la timeline ; choisis 13 pt : les deux rapetissent ensemble, les barres
+   s'amincissent ; « Par défaut » remet 16. (Une taille que tu avais déjà choisie est gardée.)
+3. Sous le dessin : la nouvelle icône du passe-partout (un cadre blanc dans un cache sombre), sa flèche (l'opacité), puis le curseur
+   du zoom et sa valeur (double-clic : taper 250), le curseur de l'inclinaison et sa valeur, et « Remettre la vue droite ».
+4. Les curseurs de Taille et d'Opacité des Réglages : un rail fin, une poignée en barrette.
+5. Réglages, le Pinceau : « Pinceau » puis, séparé, « calque vectoriel ».
+6. Couleur : plus de « Avant · maintenant ».
+7. « + Panneau » > Préréglages dans une fenêtre basse : Propriétés garde au moins le tiers de la colonne.
+8. Préréglages : un écran d'aperçu en haut, la liste des noms dessous ; survole un nom (l'aperçu le joue), clique (il est choisi et
+   posé à la tête de lecture), glisse un nom sur la piste Caméra.
+9. Storyboard avec beaucoup de calques, bande basse : fais défiler les pistes ; la règle des temps et le compteur restent en haut ;
+   clique sur la règle. Pareil dans l'Animation (double-clic sur un plan).
+10. Ctrl + clic sur le compteur : « image 63 / 528 » ; encore : le temps. Relance FEANOR : le choix est gardé. Dans l'Animation,
+    Ctrl + clic sur « / 23 » : le time code.
+11. Prends un outil jamais pris : aucune petite vidéo ne s'ouvre ; Aide > Registre des explications les a toutes.
+12. Avec le pinceau sur un calque vectoriel : Ctrl + clic sur un trait le choisit (même au stylet) ; Ctrl + glisser entoure ;
+    Ctrl + clic dans le vide désélectionne ; Ctrl + clic sur un trait d'un autre calque en fait le calque courant et le choisit.
+    Pareil sur un calque bitmap. Alt + clic choisit toujours le calque.
+
+## 196. Deuxième tour des retouches vues à l'écran (2026-11-20, branche colonne-panneaux)
+
+Anthony a regardé les retouches de la partie 195 et en demande six de plus. Format des projets inchangé (61) ; rien de neuf dans les
+réglages de l'application (la hauteur d'origine de la ligne Séquence suit la nouvelle mesure : 10).
+
+### 196.1 Ce qui a changé
+
+1. **Préréglages : l'aperçu un tiers plus petit** (« Réduit la taille de l'aperçu de 33 % ») : les deux tiers de la largeur du
+   panneau et de la hauteur d'avant (au plus 147 points de haut, 220 avant), toujours en 16:9, **au milieu** du panneau
+   (`panneauprereglages::apercu_taille`).
+2. **Préréglages : l'aperçu reste visible quand on descend dans la liste** (« L'aperçu reste visible quand on descend dans les
+   presets ») : les onglets Caméra et Montage, l'aperçu et la phrase d'aide restent en haut du panneau ; **seule la liste défile**,
+   dessous (le panneau n'a plus son propre défilement, `dockui::defile_seul`).
+3. **La ligne Séquence de la timeline du Storyboard perd ses icônes et devient deux fois plus fine** (« La ligne Séquence perd ses
+   raccourcis et devient plus fine (−50 %) ») : 10 points au lieu de 20, dans la colonne comme dans la bande (`SB_SEQ_H`). Il lui
+   reste le mot « Séquence », plus petit (`timelinesb::taille_du_mot`), comme les noms des séquences dans la bande : leurs glyphes,
+   accent et jambage compris, sont centrés dans la ligne (`timelinesb::mot_au_milieu`). Dans Préférences, la hauteur de la ligne
+   Séquence va maintenant de 10 à 32 (d'origine 10) et peut descendre à 8 : sans icônes, elle n'a plus à suivre leur taille.
+4. **Les lignes Séquence et Plans restent en haut de la bande** (« Elle reste fixée en haut de la bande, la ligne des plans
+   également ») : quand les pistes défilent vers le bas, la règle et le compteur (partie 195), la ligne Séquence et la ligne Plans
+   restent en haut de ce qu'on voit, dans la colonne comme dans la bande ; les pistes passent dessous. **Plans garde ses icônes**
+   (nouveau plan, dupliquer, versions, transitions, couper, « ⋯ »), qui marchent là-haut. Un clic sur un plan de la ligne restée en
+   haut le choisit ; un clic ou un glisser sur la règle mène la tête de lecture.
+5. **La ligne Caméra perd ses icônes** (« La ligne Caméra perd également ses raccourcis ») : il lui reste ⊕ / ⊖ (déplier, replier la
+   rangée des préréglages) et le mot « Caméra » ; sa hauteur ne change pas.
+6. **La barre au-dessus du dessin** (« l'icône vue caméra prend la première place en partant de la gauche ; l'icône "vue du plateau"
+   devient "2D" ; l'icône "espace 3D" devient "3D" ») : elle commence par **la vue caméra**, puis **« 2D »** (la vue du plateau),
+   puis **« 3D »** (l'Espace 3D), puis le reste comme avant (à côté, règle, ajuster…). « 2D » et « 3D » sont des mots courts en gras,
+   à la taille des icônes, dans des cases de la même taille que les autres ; leurs bulles gardent les noms entiers (« Vue du
+   plateau », « Espace 3D ») et leurs raccourcis ; la case allumée le reste.
+
+**Où sont passées les commandes des icônes enlevées** (aucune n'est perdue) :
+
+| Icône enlevée | Où est son action |
+|---|---|
+| Séquence : Nouvelle séquence | Clic droit sur la ligne Séquence ; « ⋯ » de la ligne Plans ; clic droit sur une séquence de la bande ; palette (Ctrl + K) |
+| Séquence : Renommer la séquence | Clic droit sur la ligne Séquence ; « ⋯ » de la ligne Plans ; clic droit sur une séquence de la bande ; palette |
+| Séquence : Versions de la séquence | Clic droit sur la ligne Séquence (sous-menu) ; clic droit sur une séquence de la bande (sous-menu) |
+| Séquence « ⋯ » : Dupliquer la séquence | Clic droit sur la ligne Séquence ; « ⋯ » de la ligne Plans ; clic droit sur une séquence de la bande ; palette |
+| Séquence « ⋯ » : Nouvelle séquence avec les plans choisis | Clic droit sur la ligne Séquence ; palette |
+| Séquence « ⋯ » : Couper la séquence ici | Clic droit sur la ligne Séquence ; palette |
+| Caméra : Clé de caméra ici | Clic droit sur la ligne Caméra (quand il n'y a pas de clé à l'image courante) ; son raccourci ; palette |
+| Caméra : Préréglages de caméra | Clic droit sur la ligne Caméra, « Préréglages de caméra… » (le panneau, onglet Caméra ; la caméra se déplie) |
+| Caméra : Remettre la caméra à zéro | Clic droit sur la ligne Caméra ; son raccourci ; palette |
+| Caméra « ⋯ » : Convertir les préréglages en clés, copier et coller les clés, le menu de la caméra | Clic droit sur la ligne Caméra (tout le menu d'avant, dessous) |
+
+La timeline de l'Animation n'a pas de ligne Séquence ni de ligne Plans, et sa ligne Caméra n'avait pas d'icônes : rien n'y change
+(sa règle reste en haut depuis la partie 195).
+
+### 196.2 Les essais
+
+- Nouveau : `retouches196_tests.rs` (6, et 3 de la partie 196.5) : l'aperçu un tiers plus petit, en 16:9 ; au milieu, et qui reste avec la phrase et les
+  onglets quand la liste défile ; la ligne Séquence de 10 points sans icônes, la ligne Caméra sans icônes, Plans avec les siennes ;
+  chaque commande enlevée au clic droit de sa ligne (et dans la palette) ; Séquence et Plans restés en haut quand les pistes défilent
+  (leurs en-têtes, « Nouveau plan » qui marche, le clic qui choisit un plan) ; la barre de la vue dans l'ordre vue caméra, 2D, 3D, des
+  cases de la même taille, les mots à la taille des icônes, les bulles et leurs raccourcis, la case allumée.
+- Changés exprès : `ligne_sequence_tests` (le mot seul, 10 points, ses glyphes et ceux des noms de la bande dans la ligne ; la
+  nouvelle séquence au clic droit de la ligne) ; `timelinesb_tests` (hauteurs 10, 26, 22, 24 ; les commandes de la caméra au clic
+  droit ; à la plus petite fenêtre, ⊖ seul sur la ligne Caméra) ; `avantapres165_tests` (« Nouvelle séquence » n'est plus dans la
+  colonne) ; `calques_epais_tests` (la ligne Séquence n'a plus à suivre la taille des icônes) ; `tailleicones_tests` (sur la ligne
+  Caméra, on mesure ⊕ au lieu de la remise à zéro) ; `timeline_serree_tests` (plus de « ⋯ » de la caméra collé à droite) ;
+  `espace3ddirect_tests` (le mot « 3D » de la porte de l'Espace 3D est permis en 2D, comme l'était son icône) ;
+  `trajectoire3d_camera_tests` (la case de l'Espace 3D se trouve par son mot « 3D »).
+
+### 196.3 Ce qui reste
+
+- **Rien n'a été regardé à l'écran** : tout est vérifié par les essais (la vraie fenêtre sans écran), pas à l'œil. En particulier la
+  lisibilité du mot « Séquence » et des noms des séquences dans une ligne de 10 points (8,5 points de police), et le rendu des mots
+  « 2D » et « 3D » en gras.
+- Sur les lignes Séquence et Plans restées en haut, on ne glisse pas un plan ni une séquence (on les choisit) : le glisser se fait la
+  bande remontée.
+- Un réglage de hauteur de la ligne Séquence déjà écrit (par exemple 20) reste le sien ; « Par défaut » remet 10.
+- Le clic droit de la ligne Caméra est le seul chemin vers « Préréglages de caméra… » depuis la timeline ; le panneau s'ouvre aussi
+  par « + Panneau ».
+
+### 196.4 Comment Anthony teste (sur une copie de projet)
+
+1. Ouvre le panneau Préréglages : l'aperçu est plus petit (les deux tiers), au milieu.
+2. Descends dans la liste à la molette : l'aperçu, les onglets et la phrase restent en haut ; seule la liste défile.
+3. Storyboard : la ligne Séquence est deux fois plus fine, avec le mot seul ; les noms des séquences y sont lisibles.
+4. Clic droit sur la ligne Séquence : nouvelle séquence, renommer, versions, dupliquer, nouvelle séquence avec les plans choisis,
+   couper ici. Essaie « Nouvelle séquence ».
+5. La ligne Caméra : ⊕ et le mot seuls. Clic droit dessus : clé de caméra ici, Préréglages de caméra…, remettre à zéro, convertir,
+   copier, coller, puis le menu de la caméra. Essaie « Clé de caméra ici », puis « Remettre la caméra à zéro ».
+6. Un plan avec beaucoup de calques, bande basse : fais défiler les pistes ; la règle, le compteur, la ligne Séquence et la ligne
+   Plans restent en haut. Clique sur un plan de la ligne restée en haut, puis sur « Nouveau plan » de son en-tête.
+7. La barre au-dessus du dessin : la vue caméra en premier, puis « 2D », puis « 3D ». Survole-les : « Vue du plateau », « Espace
+   3D » et leurs raccourcis. Passe de l'une à l'autre : la case allumée suit.
+8. Préférences > Apparence > Tailles > Lignes de la timeline : la hauteur de la ligne Séquence est à 10 ; « Par défaut » la remet à
+   10.
+
+### 196.5 La Couleur écrasée dans la pile (vu après la partie 196)
+
+Dans une fenêtre de 1384 × 868 à 90 %, la pile du Storyboard Couleur / Propriétés / Préréglages, tout ouvert : la Couleur était
+écrasée à environ 55 points (un bout de la roue), et Préréglages coupé (une ligne de sa liste sous l'aperçu). La cause : la règle de
+la partie 195.1, point 12, qui donnait de force le tiers de la place à Propriétés et faisait partager le reste au prorata aux autres.
+Nouvelle règle (`colonne::hauteurs`, `colonne::Voulue`) :
+
+1. **Un panneau qui dit la hauteur de son contenu** (la Couleur, la Planche, un onglet seul…), ou dont on a tiré la hauteur à la main,
+   **la garde toujours**. Quand tout ne tient pas, **la colonne défile** (la molette sur la colonne) : aucun panneau n'est coupé.
+2. **Celui qui grandit** (Propriétés) prend ce qui reste, **au moins 120 points** (`GRANDIT_MIN`) ; il ne prend plus le tiers de
+   force (`PART_GRANDIT` n'existe plus).
+3. **Une liste ajoutée** (Préréglages, Bibliothèque…) commence à **230 points** comme avant. Elle ne rapetisse que si Propriétés
+   passerait sous ses 120 points, et seulement de ce qui lui manque, jusqu'à son plancher : 70 points pour une liste, et pour
+   Préréglages ses onglets, son aperçu, sa phrase, le titre d'une famille et trois lignes de la liste
+   (`panneauprereglages::plancher` ; s'il lui faut plus de 230 points, il commence à ce plancher).
+4. Le cas de la partie 195 (fenêtre d'environ 870 de haut, Couleur repliée, Préréglages ajouté) : Préréglages à sa hauteur d'origine,
+   Propriétés le reste (au moins 120 points), sans défilement.
+
+Essais : `retouches196_tests.rs` (3 de plus) : le calcul (de la place, un peu juste, trop juste) ; 1384 × 868 à 90 % (la Couleur à
+toute la hauteur de son contenu, Propriétés à 120 au moins, Préréglages pas coupé, la colonne plus haute que sa place qui défile à la
+molette jusqu'au bas de Préréglages, son aperçu entier et trois lignes de sa liste) ; une grande fenêtre (Préréglages à 230, Propriétés
+le reste, pas de défilement). Changés exprès : `colonne_tests` (pas assez de place : les hauteurs de contenu gardées, la colonne défile ;
+seules les listes cèdent, au prorata) ; `retouches195_tests` (le cas de la partie 195 refait avec la Couleur repliée ; Propriétés n'a
+plus le tiers de force) ; `aplatperso_tests` (Brosses dédiées montré par le renvoi garde la hauteur de son contenu : on le referme
+avant de lire la ligne « Couleur de l'aplat » de Propriétés) ; `sculpt_tests` (à 1280 × 720, la Couleur repliée pour que les
+Réglages tiennent sans défiler). **Pas regardé à l'écran.**
+
+À tester : la fenêtre de la capture (1384 × 868, 90 %), Couleur, Propriétés et Préréglages ouverts : la roue entière ; la molette
+sur la colonne descend jusqu'au bas de Préréglages. Puis Couleur repliée : tout tient, Propriétés en a le reste.

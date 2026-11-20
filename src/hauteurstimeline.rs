@@ -28,7 +28,10 @@ pub const CAMERA_DEFAUT: u8 = crate::montagerows::SB_CAM_H as u8;
 pub const CALQUES_DEFAUT: u8 = crate::montagerows::LAYER_H as u8;
 
 /// Les hauteurs proposées pour chaque ligne, en points.
-pub const SEQ_CHOIX: [u8; 5] = [18, 20, 24, 28, 32];
+/// (Partie 196 : la ligne Séquence, sans icônes, 10 points d'origine ; elle peut garder ses hauteurs d'avant.)
+pub const SEQ_CHOIX: [u8; 7] = [10, 14, 18, 20, 24, 28, 32];
+/// La hauteur la plus petite de la ligne Séquence, qui n'a plus d'icônes (partie 196).
+pub const SEQ_MIN: f32 = 8.0;
 pub const PLANS_CHOIX: [u8; 6] = [22, 26, 32, 40, 48, 56];
 pub const CAMERA_CHOIX: [u8; 5] = [18, 22, 26, 30, 36];
 pub const CALQUES_CHOIX: [u8; 6] = [36, 40, 44, 48, 56, 64];
@@ -166,7 +169,12 @@ pub fn min_ligne() -> f32 {
 /// La hauteur de la ligne `l` à l'écran (jamais sous `min_ligne`, deux fois pour un calque).
 pub fn hauteur(l: Ligne) -> f32 {
     let v = HAUTEURS.with(|h| h.get())[l.rang()];
-    let min = if l == Ligne::Calques { 2.0 * min_ligne() } else { min_ligne() };
+    let min = match l {
+        Ligne::Calques => 2.0 * min_ligne(),
+        // (Partie 196 : plus d'icônes sur la ligne Séquence ; son mot se fait petit, `timelinesb::taille_du_mot`.)
+        Ligne::Sequence => SEQ_MIN,
+        _ => min_ligne(),
+    };
     v.max(min)
 }
 

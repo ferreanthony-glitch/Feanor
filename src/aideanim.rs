@@ -467,6 +467,10 @@ impl Joueur {
     }
 }
 
+/// Partie 195 : les animations jouent hors du menu Aide (à la prise d'un outil, au ▶ des Réglages, au clic droit d'une icône) ? Non :
+/// elles ne sont plus que dans Aide > Registre des explications.
+pub(crate) const AIDE_HORS_DU_MENU: bool = false;
+
 impl App {
     /// Le contexte de l'aide animée : l'outil en main, précisé par ce qu'il vise (la vue Espace 3D, un calque bitmap, plusieurs
     /// calques), ou l'espace Vignettes.
@@ -541,29 +545,29 @@ impl App {
         self.confort.aide.lecture = Some(crate::aideflottante::Lecture { ids, index: 0, debut: maintenant, ouverture, fin: None, ancres, rect: None, prise: None, vue: maintenant });
     }
 
-    /// Un contexte qui change : ses animations jouent si elles n'ont jamais été vues ; avec Aide > « Afficher les explications », toutes,
-    /// mais seulement à la prise d'un autre outil (pas quand le même outil passe d'un calque vectoriel à un calque bitmap, par exemple).
-    /// Une animation d'un autre outil qui jouait s'arrête.
-    pub(crate) fn aide_suivre(&mut self, maintenant: f64) {
+    /// Un contexte qui change : une animation d'un autre outil qui jouait s'arrête. **Partie 195** (Anthony, sur les captures : les
+    /// petites vidéos d'explication qui s'ouvraient à côté d'un outil « sortent des bulles », elles ne restent que dans le menu Aide) :
+    /// plus rien ne joue de soi-même à la prise d'un outil, ni au démarrage sur la page Vignettes ; les animations sont dans Aide >
+    /// Registre des explications (`aideregistre.rs`).
+    pub(crate) fn aide_suivre(&mut self, _maintenant: f64) {
         let contexte = self.aide_contexte();
         if self.confort.aide.contexte == Some(contexte) {
             return;
         }
         self.confort.aide.contexte = Some(contexte);
-        let prise = self.confort.aide.outil.replace(self.tool) != Some(self.tool);
-        let toutes = self.settings.afficher_explications && prise;
-        let ids: Vec<&'static str> = du_contexte(contexte).into_iter().filter(|a| toutes || !self.settings.explications_vues.iter().any(|v| v == a.id)).map(|a| a.id).collect();
-        if self.confort.aide.auto && !ids.is_empty() {
-            let ancres = crate::aideflottante::ancres_du_contexte(contexte, self.tool);
-            self.aide_jouer(ids, ancres, maintenant);
-        } else if self.confort.aide.en_cours().is_some_and(|id| anim(id).is_some_and(|a| !a.contextes.contains(&contexte))) {
+        self.confort.aide.outil = Some(self.tool);
+        if self.confort.aide.en_cours().is_some_and(|id| anim(id).is_some_and(|a| !a.contextes.contains(&contexte))) {
             self.confort.aide.lecture = None;
         }
     }
 
     /// Le bouton ▶ du titre de « Réglages » : il rejoue les animations de l'outil en main, dans la fenêtre flottante posée à côté de
     /// son icône. Rien si l'outil n'en a pas.
+    /// Partie 195 : plus de ▶ (les animations ne sont plus que dans le menu Aide) ; la place reste vide.
     pub(crate) fn aide_bouton_ui(&mut self, ui: &mut egui::Ui) {
+        if !AIDE_HORS_DU_MENU {
+            return;
+        }
         let contexte = self.aide_contexte();
         let anims = du_contexte(contexte);
         if anims.is_empty() {
@@ -599,37 +603,20 @@ impl App {
         }
     }
 
-    /// Aide > « Afficher les explications » : cochée, les animations rejouent à chaque prise de l'outil.
-    pub(crate) fn aide_basculer_explications(&mut self) {
-        self.settings.afficher_explications = !self.settings.afficher_explications;
-        self.settings_a_ecrire = true;
-        self.status = if self.settings.afficher_explications {
-            "Explications : elles rejouent à chaque prise d'un outil.".into()
-        } else {
-            "Explications : une seule fois par outil. Clic droit sur un outil : Revoir l'explication.".into()
-        };
-    }
-
-    /// Les deux entrées du menu Aide : la case « Afficher les explications » et le registre.
+    /// L'entrée du menu Aide : le registre des explications, seul lieu des animations depuis la partie 195 (« Afficher les
+    /// explications », qui les faisait rejouer à côté de l'outil, n'y est plus).
     pub(crate) fn aide_menu_ui(&mut self, ui: &mut egui::Ui) {
-        let mut on = self.settings.afficher_explications;
-        let resp = ui.checkbox(&mut on, "Afficher les explications");
-        let resp = crate::bulles::bulle(resp, "Afficher les explications", "Cochée : l'animation d'un outil rejoue à côté de son icône chaque fois qu'on le prend. Décochée : une seule fois, la première ; le clic droit sur l'icône (Revoir l'explication) ou le ▶ des Réglages la rejoue.", &self.raccourci("aide.explications"));
-        if resp.clicked() {
-            ui.close_menu();
-            self.usage.source = Some(crate::usage::Source::Menu);
-            self.run_action("aide.explications");
-        } else if resp.secondary_clicked() {
-            ui.close_menu();
-            self.start_assign("aide.explications");
-        }
         self.action_item(ui, "Registre des explications…", "aide.registre");
     }
 
-    /// Les commandes de l'aide animée. Vrai si `action` en était une.
+    /// Les commandes de l'aide animée. Vrai si `action` en était une. (Partie 195 : « aide.explications », l'ancienne case qui faisait
+    /// rejouer les animations à côté de l'outil, ouvre le registre, où elles sont maintenant ; le raccourci qu'on lui avait donné sert.)
     pub(crate) fn aide_action(&mut self, action: &str) -> bool {
         match action {
-            "aide.explications" => self.aide_basculer_explications(),
+            "aide.explications" => {
+                self.confort.aide.registre = true;
+                self.status = "Les explications animées sont dans Aide > Registre des explications.".into();
+            }
             "aide.registre" => self.confort.aide.registre = !self.confort.aide.registre,
             _ => return false,
         }

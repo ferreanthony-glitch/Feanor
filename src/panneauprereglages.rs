@@ -22,6 +22,11 @@
 //! types** (partie 176, `planstypes`) suivent : la vignette montre le plan tel qu'il sera posé (carton, titre, générique qui
 //! monte, écran partagé, carte, inserts) ; on la glisse entre deux plans du montage (charge `planstypes::PlanTypeDrag`), ou sur
 //! un plan pour le lieu et la date et le générique de début.
+//!
+//! **Partie 195** (Anthony, sur la capture du panneau) : plus de grille de vignettes. **Un seul écran d'aperçu, en haut**, joue le
+//! préréglage survolé (sinon celui qui est choisi, le dernier cliqué), et **dessous, la liste des préréglages par leur nom**, rangés
+//! par famille comme avant (les onglets Caméra et Montage restent). On glisse un nom sur la timeline comme on glissait sa vignette ;
+//! un clic le choisit et le pose à la tête de lecture, comme avant. L'aperçu ne s'anime que le pointeur sur le panneau.
 
 use std::sync::OnceLock;
 
@@ -38,8 +43,6 @@ use crate::transitions::{self, Kind, Mix, Side, Zone};
 use crate::transitionsui::TransitionDrag;
 use crate::planstypes::{PlanType, PlanTypeDrag};
 
-/// Largeur d'une vignette, en points.
-const VIGNETTE_W: f32 = 132.0;
 /// Le papier et l'encre des vignettes (un dessin de storyboard, quel que soit le thème).
 const PAPIER: Color32 = Color32::from_rgb(251, 250, 246);
 const ENCRE: Color32 = Color32::from_rgb(30, 30, 34);
@@ -605,58 +608,122 @@ impl Tuile {
     }
 }
 
-/// Les vignettes de `tuiles`, côte à côte : chacune joue son mouvement au survol, se glisse vers la timeline (charge
-/// `PresetDrag` ou `FormeDrag`) ; rend celle qui est cliquée.
-fn vignettes(ui: &mut egui::Ui, tuiles: &[Tuile], fps: u32, maintenant: f32) -> Option<Tuile> {
+/// L'écran d'aperçu dans un panneau de `w` points de large : les deux tiers de la largeur (partie 196 : un tiers de moins), en 16:9,
+/// pas plus de 147 points de haut.
+pub(crate) fn apercu_taille(w: f32) -> egui::Vec2 {
+    let h = (w * 2.0 / 3.0 * 9.0 / 16.0).min(220.0 * 2.0 / 3.0);
+    vec2(h * 16.0 / 9.0, h)
+}
+
+// L'écran d'aperçu et la partie visible de la liste, à la dernière image (partie 196), pour les essais.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static APERCU: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+    pub(crate) static LISTE: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+}
+
+/// La hauteur d'une ligne de la liste (partie 195).
+pub(crate) const LIGNE_H: f32 = 19.0;
+
+/// L'instant du mouvement de `tuile` à montrer, `t` secondes après le début de son aperçu (en boucle, avec une pause) ; `None` : à
+/// l'arrêt, un instant parlant.
+fn instant_de(tuile: Tuile, fps: u32, t: Option<f32>) -> usize {
+    let duree = tuile.duree(fps);
+    match t {
+        Some(t) => {
+            let secondes = duree as f32 / fps.max(1) as f32;
+            let t = t % (secondes + PAUSE);
+            ((t * fps as f32).floor().max(0.0) as usize).min(duree)
+        }
+        // (À l'arrêt : un instant parlant, aux deux tiers du mouvement ; une transition, en son milieu.)
+        None => match tuile {
+            Tuile::Transition(k) => AVANT + images_de_transition(k) / 2,
+            Tuile::PlanType(_) => duree / 2,
+            _ => duree * 2 / 3,
+        },
+    }
+}
+
+/// Les lignes de la liste : le nom de chaque préréglage de `tuiles`, l'un sous l'autre. Chacune se glisse vers la timeline (charge
+/// `PresetDrag`, `FormeDrag`, `TransitionDrag` ou `PlanTypeDrag`) ; rend celle qui est cliquée, et range dans `survolee` celle qui est
+/// sous le pointeur.
+fn liste(ui: &mut egui::Ui, tuiles: &[Tuile], choisie: Option<Tuile>, survolee: &mut Option<Tuile>) -> Option<Tuile> {
     let mut pose = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = vec2(8.0, 10.0);
-        for &tuile in tuiles {
-            let h = VIGNETTE_W * 9.0 / 16.0;
-            // (Sous l'image, le nom sur deux lignes au plus : « Caméra à l'épaule (found footage) » ne déborde pas sur la voisine.)
-            let (rect, resp) = ui.allocate_exact_size(vec2(VIGNETTE_W, h + 30.0), Sense::click_and_drag());
-            let img = Rect::from_min_size(rect.min, vec2(VIGNETTE_W, h));
-            let id = resp.id.with("survol");
-            let duree = tuile.duree(fps);
-            // Au survol, le mouvement joue en boucle depuis le moment où le pointeur est arrivé.
-            let rel = if resp.hovered() && !resp.dragged() {
-                let debut = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(id, || maintenant));
-                let secondes = duree as f32 / fps.max(1) as f32;
-                ui.ctx().request_repaint();
-                let t = (maintenant - debut) % (secondes + PAUSE);
-                ((t * fps as f32).floor().max(0.0) as usize).min(duree)
-            } else {
-                ui.ctx().data_mut(|d| d.remove::<f32>(id));
-                // (À l'arrêt : un instant parlant, aux deux tiers du mouvement ; une transition, en son milieu.)
-                match tuile {
-                    Tuile::Transition(k) => AVANT + images_de_transition(k) / 2,
-                    Tuile::PlanType(_) => duree / 2,
-                    _ => duree * 2 / 3,
-                }
-            };
-            if ui.is_rect_visible(rect) {
-                tuile.peindre(ui.painter(), img, fps, rel);
-                if resp.hovered() {
-                    ui.painter().rect_stroke(img.expand(1.5), 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Outside);
-                }
-                let nom = ui.painter().layout(tuile.label().to_string(), FontId::proportional(11.0), ui.visuals().text_color(), VIGNETTE_W - 4.0);
-                ui.painter().with_clip_rect(rect).galley(pos2(rect.left() + 2.0, img.bottom() + 3.0), nom, ui.visuals().text_color());
+    let w = ui.available_width();
+    for &tuile in tuiles {
+        let (rect, resp) = ui.allocate_exact_size(vec2(w, LIGNE_H), Sense::click_and_drag());
+        if ui.is_rect_visible(rect) {
+            let on = choisie == Some(tuile);
+            if on {
+                ui.painter().rect_filled(rect, 3.0, ui.visuals().selection.bg_fill);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(rect, 3.0, ui.visuals().widgets.hovered.weak_bg_fill);
             }
-            if resp.drag_started() {
-                match tuile {
-                    Tuile::Effet(preset) => egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset }),
-                    Tuile::Forme(forme) => egui::DragAndDrop::set_payload(ui.ctx(), FormeDrag { forme }),
-                    Tuile::Transition(kind) => egui::DragAndDrop::set_payload(ui.ctx(), TransitionDrag { kind }),
-                    Tuile::PlanType(plan) => egui::DragAndDrop::set_payload(ui.ctx(), PlanTypeDrag { plan }),
-                }
-            }
-            let resp = crate::bulles::bulle(resp, tuile.label(), &tuile.note(), "");
-            if resp.clicked() {
-                pose = Some(tuile);
+            let encre = if on { ui.visuals().selection.stroke.color } else { ui.visuals().text_color() };
+            let nom = ui.painter().layout_no_wrap(tuile.label().to_string(), egui::TextStyle::Body.resolve(ui.style()), encre);
+            let y = rect.center().y - nom.size().y * 0.5;
+            ui.painter().with_clip_rect(rect.intersect(ui.clip_rect())).galley(pos2(rect.left() + 6.0, y), nom, encre);
+        }
+        if resp.hovered() || resp.dragged() {
+            *survolee = Some(tuile);
+        }
+        if resp.drag_started() {
+            match tuile {
+                Tuile::Effet(preset) => egui::DragAndDrop::set_payload(ui.ctx(), PresetDrag { preset }),
+                Tuile::Forme(forme) => egui::DragAndDrop::set_payload(ui.ctx(), FormeDrag { forme }),
+                Tuile::Transition(kind) => egui::DragAndDrop::set_payload(ui.ctx(), TransitionDrag { kind }),
+                Tuile::PlanType(plan) => egui::DragAndDrop::set_payload(ui.ctx(), PlanTypeDrag { plan }),
             }
         }
-    });
+        let resp = crate::bulles::bulle(resp, tuile.label(), &tuile.note(), "");
+        if resp.clicked() {
+            pose = Some(tuile);
+        }
+    }
     pose
+}
+
+/// Ce que le panneau retient d'une image à l'autre (dans la mémoire d'egui) : le préréglage choisi de chaque onglet, celui qui était
+/// survolé, et depuis quand l'aperçu joue ce qu'il joue.
+#[derive(Clone, Copy, Debug, Default)]
+struct Apercu {
+    choisie: [Option<Tuile>; 2],
+    survolee: Option<Tuile>,
+    joue: Option<(Tuile, f32)>,
+}
+
+fn id_haut_fixe() -> egui::Id {
+    egui::Id::new("prereglages_haut_fixe")
+}
+
+/// Ce que le panneau garde au moins dans la colonne (partie 196.5) : ses onglets, l'aperçu et la phrase d'aide, puis le titre d'une
+/// famille et trois lignes de la liste ; rien tant qu'il n'a pas été montré.
+pub(crate) fn plancher(ctx: &egui::Context) -> Option<f32> {
+    ctx.data(|d| d.get_temp::<f32>(id_haut_fixe())).map(|fixe| fixe + 6.0 + 18.0 + 3.0 * LIGNE_H)
+}
+
+fn id_apercu() -> egui::Id {
+    egui::Id::new("prereglages_apercu")
+}
+
+/// Le préréglage choisi de l'onglet `o` (le dernier cliqué ; d'origine, le premier de la liste).
+pub(crate) fn choisi(ctx: &egui::Context, o: Onglet) -> Option<&'static str> {
+    let a: Apercu = ctx.data(|d| d.get_temp(id_apercu())).unwrap_or_default();
+    a.choisie[o as usize].or_else(|| premiere(o)).map(Tuile::label)
+}
+
+/// Ce que montre l'écran d'aperçu, à la dernière image : le survolé, sinon le choisi.
+pub(crate) fn montre(ctx: &egui::Context) -> Option<&'static str> {
+    let a: Apercu = ctx.data(|d| d.get_temp(id_apercu())).unwrap_or_default();
+    a.joue.map(|(t, _)| t.label())
+}
+
+/// La première ligne de la liste d'un onglet.
+fn premiere(o: Onglet) -> Option<Tuile> {
+    match o {
+        Onglet::Camera => crate::camfx::Famille::ALL.iter().flat_map(|f| f.presets()).next().map(Tuile::Effet),
+        Onglet::Montage => Kind::ALL.first().copied().map(Tuile::Transition),
+    }
 }
 
 /// Les deux onglets du panneau (partie 175) : la caméra du plan, et le montage (transitions).
@@ -686,6 +753,7 @@ pub(crate) fn choisir_onglet(ctx: &egui::Context, o: Onglet) {
 impl App {
     /// Le panneau Préréglages.
     pub(crate) fn prereglages_panel(&mut self, ui: &mut egui::Ui) {
+        let haut_du_panneau = ui.cursor().top();
         // Les onglets (partie 175) : le panneau est devenu long, la caméra d'un côté, le montage de l'autre.
         let ouvert = onglet(ui.ctx());
         ui.horizontal(|ui| {
@@ -701,34 +769,96 @@ impl App {
         });
         let fps = self.doc.fps;
         let maintenant = ui.input(|i| i.time) as f32;
+        let mut apercu: Apercu = ui.ctx().data(|d| d.get_temp(id_apercu())).unwrap_or_default();
+        let choisie = apercu.choisie[ouvert as usize].or_else(|| premiere(ouvert));
+        // L'écran d'aperçu (partie 195), en haut : le préréglage survolé à l'image d'avant, sinon le choisi. Il joue le pointeur sur le
+        // panneau (le survolé depuis son arrivée, le choisi en boucle), et montre un instant parlant sinon : un panneau ouvert ne fait
+        // pas redessiner FEANOR sans cesse.
+        let sur_le_panneau = ui.rect_contains_pointer(ui.max_rect());
+        let montree = apercu.survolee.or(choisie);
+        // (Partie 196, Anthony : « Réduit la taille de l'aperçu de 33 % » : les deux tiers de la largeur du panneau, en 16:9, au milieu.)
+        let w = ui.available_width();
+        let taille = apercu_taille(w);
+        let (ligne, _) = ui.allocate_exact_size(vec2(w, taille.y), Sense::hover());
+        let ecran = Rect::from_center_size(ligne.center(), taille);
+        let ecran_resp = ui.interact(ecran, ui.id().with("apercu_prereglage"), Sense::hover());
+        #[cfg(test)]
+        APERCU.with(|c| c.set(Some(ecran)));
+        if let Some(tuile) = montree {
+            let debut = match apercu.joue {
+                Some((t, d)) if t == tuile => d,
+                _ => maintenant,
+            };
+            apercu.joue = Some((tuile, debut));
+            let t = sur_le_panneau.then_some(maintenant - debut);
+            if sur_le_panneau {
+                ui.ctx().request_repaint();
+            }
+            let image = Rect::from_center_size(ecran.center(), {
+                let h = ecran.height().min(ecran.width() * 9.0 / 16.0);
+                vec2(h * 16.0 / 9.0, h)
+            });
+            tuile.peindre(ui.painter(), image, fps, instant_de(tuile, fps, t));
+            // (Le nom de ce qui joue, en surimpression : « ▶ Zoom avant ».)
+            let titre = format!("▶ {}", tuile.label());
+            let g = ui.painter().layout_no_wrap(titre, FontId::proportional(10.5), Color32::WHITE);
+            let fond = Rect::from_min_size(image.left_top() + vec2(4.0, 4.0), g.size() + vec2(8.0, 4.0));
+            ui.painter().rect_filled(fond, 3.0, Color32::from_black_alpha(150));
+            ui.painter().galley(fond.min + vec2(4.0, 2.0), g, Color32::WHITE);
+            crate::bulles::bulle(ecran_resp, "Aperçu du préréglage", "Il joue le préréglage sous le pointeur dans la liste, sinon celui qui est choisi.", "");
+        }
+        ui.add_space(4.0);
+        let mut survolee = None;
         let mut pose = None;
         if ouvert == Onglet::Camera {
             ui.label(egui::RichText::new("Glisse un préréglage sur la piste Caméra de la timeline, ou clique dessus pour le poser à la tête de lecture.").small().weak());
-            // Une famille après l'autre (partie 171), sous le titre de la caméra.
-            for famille in crate::camfx::Famille::ALL {
-                ui.add_space(6.0);
-                ui.label(egui::RichText::new(format!("CAMÉRA · {}", famille.label().to_uppercase())).small().strong());
-                let tuiles: Vec<Tuile> = famille.presets().map(Tuile::Effet).collect();
-                pose = vignettes(ui, &tuiles, fps, maintenant).or(pose);
-            }
-            // Les trajectoires toutes faites (C17, partie 172) : le chemin de la caméra du plan, à retoucher dans la vue Espace 3D.
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new("CAMÉRA · TRAJECTOIRES").small().strong());
-            let formes: Vec<Tuile> = Forme::ALL.into_iter().map(Tuile::Forme).collect();
-            pose = vignettes(ui, &formes, fps, maintenant).or(pose);
         } else {
             ui.label(egui::RichText::new("Glisse une transition sur une coupe du montage, un plan type entre deux plans ; ou clique dessus pour le poser à la tête de lecture.").small().weak());
-            // Les transitions du montage (partie 175), sur les coupes.
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new("MONTAGE · TRANSITIONS").small().strong());
-            let transitions: Vec<Tuile> = Kind::ALL.into_iter().map(Tuile::Transition).collect();
-            pose = vignettes(ui, &transitions, fps, maintenant).or(pose);
-            // Les plans types (partie 176), entre les plans ; le lieu et la date et le générique de début, sur un plan.
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new("MONTAGE · PLANS TYPES").small().strong());
-            let plans: Vec<Tuile> = PlanType::ALL.into_iter().map(Tuile::PlanType).collect();
-            pose = vignettes(ui, &plans, fps, maintenant).or(pose);
         }
+        // Partie 196 (Anthony : « L'aperçu reste visible quand on descend dans les presets ») : les onglets, l'aperçu et la phrase restent en
+        // haut du panneau ; seule la liste défile, dessous.
+        // (Partie 196.5 : la hauteur de ce qui reste en haut, pour que la colonne ne serre jamais le panneau sous elle et quelques
+        // lignes de la liste, `plancher`.)
+        let fixe = ui.cursor().top() - haut_du_panneau;
+        if fixe.is_finite() && fixe > 0.0 {
+            ui.ctx().data_mut(|d| d.insert_temp(id_haut_fixe(), fixe));
+        }
+        #[cfg(test)]
+        LISTE.with(|c| c.set(None));
+        egui::ScrollArea::vertical().id_salt(("prereglages_liste", ouvert as u8)).auto_shrink([false, false]).show(ui, |ui| {
+            #[cfg(test)]
+            LISTE.with(|c| c.set(Some(ui.clip_rect())));
+            if ouvert == Onglet::Camera {
+                // Une famille après l'autre (partie 171), sous le titre de la caméra.
+                for famille in crate::camfx::Famille::ALL {
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(format!("CAMÉRA · {}", famille.label().to_uppercase())).small().strong());
+                    let tuiles: Vec<Tuile> = famille.presets().map(Tuile::Effet).collect();
+                    pose = liste(ui, &tuiles, choisie, &mut survolee).or(pose);
+                }
+                // Les trajectoires toutes faites (C17, partie 172) : le chemin de la caméra du plan, à retoucher dans la vue Espace 3D.
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new("CAMÉRA · TRAJECTOIRES").small().strong());
+                let formes: Vec<Tuile> = Forme::ALL.into_iter().map(Tuile::Forme).collect();
+                pose = liste(ui, &formes, choisie, &mut survolee).or(pose);
+            } else {
+                // Les transitions du montage (partie 175), sur les coupes.
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new("MONTAGE · TRANSITIONS").small().strong());
+                let transitions: Vec<Tuile> = Kind::ALL.into_iter().map(Tuile::Transition).collect();
+                pose = liste(ui, &transitions, choisie, &mut survolee).or(pose);
+                // Les plans types (partie 176), entre les plans ; le lieu et la date et le générique de début, sur un plan.
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new("MONTAGE · PLANS TYPES").small().strong());
+                let plans: Vec<Tuile> = PlanType::ALL.into_iter().map(Tuile::PlanType).collect();
+                pose = liste(ui, &plans, choisie, &mut survolee).or(pose);
+            }
+        });
+        if let Some(t) = pose {
+            apercu.choisie[ouvert as usize] = Some(t);
+        }
+        apercu.survolee = survolee;
+        ui.ctx().data_mut(|d| d.insert_temp(id_apercu(), apercu));
         match pose {
             Some(Tuile::Effet(pr)) => self.ajouter_effet_camera_a_la_tete(pr),
             Some(Tuile::Forme(f)) => self.poser_trajectoire_toute_faite_a_la_tete(f),

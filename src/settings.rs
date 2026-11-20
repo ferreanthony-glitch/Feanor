@@ -205,6 +205,8 @@ pub struct Settings {
     #[serde(default = "yes", rename = "panneaux_ajustes")]
     pub panes_fit: bool,
     /// La barre des panneaux, sur le bord droit de la fenêtre (`barrepanneaux.rs`).
+    /// L'ancienne barre des panneaux du bord droit (2026-10-18), montrée ou non : elle n'existe plus depuis la partie 194 (les
+    /// onglets d'icônes de Propriétés la remplacent). Gardé pour lire et réécrire les réglages tels quels.
     #[serde(default = "yes", rename = "barre_panneaux")]
     pub panel_bar: bool,
     #[serde(default, rename = "panneaux_tires_a_la_main", skip_serializing_if = "Vec::is_empty")]
@@ -314,6 +316,13 @@ pub struct Settings {
     /// Aide > « Afficher les explications » : cochée, une animation rejoue à chaque prise de son outil. Décochée d'origine.
     #[serde(default, rename = "afficher_explications", skip_serializing_if = "std::ops::Not::not")]
     pub afficher_explications: bool,
+    /// Partie 195 : le compteur de la bande du Storyboard (« 0:00:00 / 0:22:00 ») en numéros d'images (« image 63 / 528 ») ; Ctrl + clic
+    /// sur lui bascule (`compteur.rs`).
+    #[serde(default, rename = "compteur_en_images", skip_serializing_if = "std::ops::Not::not")]
+    pub compteur_en_images: bool,
+    /// Partie 195 : le compteur de la timeline de l'Animation en time code plutôt qu'en numéros d'images (Ctrl + clic sur lui).
+    #[serde(default, rename = "compteur_timeline_en_temps", skip_serializing_if = "std::ops::Not::not")]
+    pub compteur_timeline_en_temps: bool,
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
@@ -518,6 +527,8 @@ impl Default for Settings {
             experimental: false,
             explications_vues: Vec::new(),
             afficher_explications: false,
+            compteur_en_images: false,
+            compteur_timeline_en_temps: false,
             echelle: crate::echelle::ECHELLE_DEFAUT,
             taille_icones: crate::tailleicones::TAILLE_DEFAUT,
             dossier_accueil: String::new(),

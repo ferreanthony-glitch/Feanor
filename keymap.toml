@@ -2739,11 +2739,6 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
-action = "vue.barre_panneaux"
-touches = []
-source = "FEANOR (sans touche)"
-
-[[raccourci]]
 action = "vue.reajuster_panneaux"
 touches = []
 source = "FEANOR (sans touche)"

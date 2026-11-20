@@ -521,7 +521,12 @@ fn textes_peints(b: &Banc) -> Vec<String> {
 fn sans_3d(b: &Banc, quand: &str) {
     assert!(!dit_la_3d(&b.app.status), "{quand} : la barre d'état dit la 3D : {}", b.app.status);
     assert!(!dit_la_3d(crate::messages::resume(&b.app.status).as_ref()), "{quand}");
-    let peints: Vec<String> = textes_peints(b).into_iter().filter(|t| dit_la_3d(t)).collect();
+    // (Partie 196, Anthony : « l'icône "espace 3D" devient "3D" » : le mot de la porte de l'espace 3D, dans la barre de la vue, est
+    // permis comme l'était son icône ; une seule fois.)
+    let mut peints: Vec<String> = textes_peints(b).into_iter().filter(|t| dit_la_3d(t)).collect();
+    if let Some(k) = peints.iter().position(|t| t == "3D") {
+        peints.remove(k);
+    }
     assert!(peints.is_empty(), "{quand} : l'écran montre {peints:?}");
 }
 

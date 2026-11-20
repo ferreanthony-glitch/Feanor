@@ -195,7 +195,8 @@ fn glisser(b: &mut Banc, bouton: PointerButton, de: Pos2, pas: Vec2, n: usize) -
 /// caméra par sa poignée. Avec la carte graphique quand il y en a une.
 #[test]
 fn every_gesture_of_a_walk_in_a_plan_en_espace_stays_within_the_frame_budget() {
-    let mut b = banc_taille(doc_cartes(8, 1920, 1080), true, 1280, 720);
+    // (1 246 de large depuis la partie 194 : la barre des panneaux du bord droit, 34 points, n'est plus là ; la vue garde sa taille.)
+    let mut b = banc_taille(doc_cartes(8, 1920, 1080), true, 1246, 720);
     b.chauffer(2);
     b.app.cur_layer = 0;
     b.app.run_action("espace3d.basculer");

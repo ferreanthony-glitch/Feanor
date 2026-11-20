@@ -304,13 +304,16 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     b.app.timeline_cell = 20.0;
     (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
     b.app.show_pane(crate::dock::Pane::Prereglages);
+    // (Partie 194 : sorti en panneau à lui, toute la largeur et toute la hauteur de la colonne, comme l'onglet d'avant.)
+    crate::colonne_tests::toute_la_place(&mut b.app, crate::dock::Pane::Prereglages);
     b.garder_formes = true;
     b.chauffer(8);
     let bloc = blocs_peints(&b)[0];
     let cell = bloc.width() / 20.0;
-    // (Les vignettes du haut du panneau, partie 171 : la famille des zooms vient en premier, les secousses sont plus bas.)
+    // (Les lignes du haut du panneau, partie 171 : la famille des zooms vient en premier, les secousses sont plus bas ; partie 195 :
+    // une liste de noms sous un seul aperçu, on prend la ligne par son nom.)
     let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::ZoomOut.label()).map(|(_, r)| r).expect("la vignette « Zoom arrière » dans le panneau");
-    let vignette = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    let vignette = etiquette.center();
     // Lâché sur la rangée des clés de caméra, à l'image 5.
     let cible = pos2(bloc.left() - 25.0 * cell + 0.5 * cell, bloc.top() - 10.0);
     let etapes = b.app.history.undo_len();
@@ -326,7 +329,7 @@ fn une_vignette_du_panneau_glissee_sur_la_timeline_pose_un_bloc_la_ou_on_la_lach
     b.app.cur_frame = 12;
     b.chauffer(2);
     let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::CrashZoom.label()).map(|(_, r)| r).expect("la vignette « Zoom choc »");
-    let p = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    let p = etiquette.center();
     b.image(vec![Event::PointerMoved(p)], DT);
     b.image(vec![bouton(p, true)], DT);
     b.image(vec![bouton(p, false)], DT);
@@ -360,7 +363,7 @@ fn blocs_camera_captures() {
     b.chauffer(8);
     b.app.choisir_bloc_camera(Some(1));
     let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::CrashZoom.label()).map(|(_, r)| r).expect("la vignette « Zoom choc »");
-    let survol = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    let survol = etiquette.center();
     b.image(vec![Event::PointerMoved(survol)], DT);
     for _ in 0..14 {
         b.image(Vec::new(), DT);
@@ -370,7 +373,7 @@ fn blocs_camera_captures() {
     let bloc = blocs_peints(&b)[0];
     let cell = bloc.width() / 40.0;
     let etiquette = textes_peints(&b).into_iter().find(|(t, _)| t == Preset::ZoomOut.label()).map(|(_, r)| r).expect("la vignette « Zoom arrière »");
-    let de = pos2(etiquette.left() + 60.0, etiquette.center().y - 46.0);
+    let de = etiquette.center();
     let vers = pos2(bloc.left() + 44.0 * cell, bloc.top() - 10.0);
     b.image(vec![Event::PointerMoved(de)], DT);
     b.image(vec![bouton(de, true)], DT);

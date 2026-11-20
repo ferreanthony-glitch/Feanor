@@ -2,25 +2,44 @@
 //! ou vue caméra (ce que filme la caméra du plan), et cadres de composition tracés dans le
 //! cadre de la caméra : zones de sécurité et cadre d'un format de diffusion (9:16, 1:1…).
 
-use eframe::egui::{self, vec2, Align2, Color32, FontId, Pos2, Rect, Shape, Stroke, Vec2};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Shape, Stroke, Vec2};
 
 use crate::app::App;
 use crate::frames;
 
 /// Hauteur de la barre.
-pub(crate) const VIEW_BAR_H: f32 = 28.0;
+/// La hauteur de la barre de la vue, au-dessus du dessin (partie 195 : ses icônes ont la taille de celles de la timeline,
+/// `tailleicones.rs`, et la barre s'amincit avec elles : 26 points pour des icônes de 13 ; 28 avant). Les pastilles des brosses
+/// dédiées, au bout, gardent leur case de 26.
+pub(crate) fn view_bar_h() -> f32 {
+    (crate::tailleicones::case_de_barre()[1] + 4.0).max(crate::personnagesui::CASE_PASTILLE)
+}
+
+/// Le zoom du curseur de la barre sous le dessin, en pour cent (partie 195).
+pub(crate) const ZOOM_MIN: f32 = 5.0;
+pub(crate) const ZOOM_MAX: f32 = 3200.0;
+
+/// L'icône du passe-partout (partie 195, le dessin d'Anthony) : un cadre dans un cache. Un rectangle sombre plein aux coins arrondis
+/// (bordé de l'encre des icônes, pour se voir sur une barre sombre), et dedans, en bas au milieu, un petit rectangle blanc.
+pub(crate) fn peindre_passe_partout(painter: &egui::Painter, centre: Pos2, taille: f32, encre: Color32) {
+    let cache = Rect::from_center_size(centre, vec2(taille * 1.05, taille * 0.8));
+    painter.rect_filled(cache, CornerRadius::same((taille * 0.16).round() as u8), Color32::from_gray(22));
+    painter.rect_stroke(cache, CornerRadius::same((taille * 0.16).round() as u8), Stroke::new(1.0, encre), egui::StrokeKind::Inside);
+    let cadre = Rect::from_center_size(pos2(centre.x, cache.bottom() - taille * 0.24), vec2(taille * 0.42, taille * 0.24));
+    painter.rect_filled(cadre, CornerRadius::same(1), Color32::WHITE);
+}
 
 /// Ce que font les touches avec l'outil `tool`, en une ligne sous le dessin (Anthony,
 /// 2026-10-18 : les gestes à touche, comme l'enveloppe ou le lasso de Ctrl, ne se devinent pas).
 pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
     use crate::app::Tool;
     match tool {
-        Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : choisir le calque du dessin cliqué · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
-        Tool::Mixer => "Glisser : étaler et mêler ce qui est peint (bitmap) · Alt + clic : choisir le calque du dessin cliqué · ^ $ : taille",
-        Tool::Fill => "Clic : remplir · Alt + clic : choisir le calque du dessin cliqué",
+        Tool::Brush | Tool::Pencil | Tool::Eraser => "Ctrl + clic : choisir l'objet · Ctrl + glisser : lasso · Alt + clic : choisir le calque du dessin cliqué · Espace : déplacer la vue · ^ $ : taille",
+        Tool::Mixer => "Glisser : étaler et mêler ce qui est peint (bitmap) · Ctrl + clic : choisir l'objet · Ctrl + glisser : lasso · Alt + clic : choisir le calque du dessin cliqué · ^ $ : taille",
+        Tool::Fill => "Clic : remplir · Ctrl + clic : choisir l'objet · Ctrl + glisser : lasso · Alt + clic : choisir le calque du dessin cliqué",
         Tool::Gradient => "Glisser : tracer l'axe (Maj : par 15°) · dans la sélection, sinon dans la zone fermée · Alt : tout le calque",
         Tool::Cutter => "Glisser en travers des bouts à enlever (ou les entourer : geste Lasso) · clic : un bout · Réglages : écart toléré, bouts effilés, dépassements, tous les calques",
-        Tool::Select => "Lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
+        Tool::Select => "Clic : l'objet (Ctrl : même sur un autre calque) · lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
         Tool::SelectColor => "Clic : une couleur (Maj : ajouter) · la boîte se manie comme avec la Sélection",
         Tool::Line => "Glisser : tracer · Maj : par 15°",
         Tool::Rect | Tool::Ellipse => "Glisser : tracer · Maj : carré ou cercle",
@@ -36,8 +55,10 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Camera => "Glisser : déplacer (Maj : à l'horizontale ou à la verticale) · coin : zoomer · rond : tourner (Maj : 15°)",
     }
 }
-/// Hauteur de la barre des commandes de la vue, sous le dessin.
-pub(crate) const TOOLS_BAR_H: f32 = 28.0;
+/// Hauteur de la barre des commandes de la vue, sous le dessin (partie 195 : 24 points pour des icônes de 13 ; 28 avant).
+pub(crate) fn tools_bar_h() -> f32 {
+    crate::tailleicones::case_de_barre()[1] + 4.0
+}
 /// Couleur des zones de sécurité (celle du cadre de format est un réglage : `Settings::cadre_format_couleur`).
 const SAFE: Color32 = crate::theme::CADRAGE_SECURITE;
 
@@ -186,6 +207,10 @@ impl App {
     /// s'ouvrent au clic, au-dessus de l'icône. Comment on regarde (les vues plateau, caméra, Espace 3D, la règle des guides,
     /// puis ajuster, zoom, rotation, miroir) est dans la barre au-dessus du dessin.
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
+        crate::barres::en_barre_compacte(|| self.view_tools_bar_en(ui));
+    }
+
+    fn view_tools_bar_en(&mut self, ui: &mut egui::Ui) {
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
         // Dans l'Espace 3D, on ne dessine pas à plat : cette barre n'a rien à offrir.
         let in3d = self.espace3d.on && !self.camera_view;
@@ -209,6 +234,11 @@ impl App {
             self.table_lumineuse_reglage(ui);
             sep(ui);
             self.passe_partout_reglage(ui);
+            // Partie 195 (Anthony, sur la capture de la barre sous le dessin) : le zoom et l'inclinaison de la vue, en curseurs avec
+            // leur valeur, et « Remettre la vue droite ».
+            sep(ui);
+            self.zoom_curseur(ui);
+            self.inclinaison_curseur(ui);
             // Ce que font les touches avec l'outil courant (Anthony, 2026-10-18, axe d'ergonomie 4).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
@@ -373,30 +403,83 @@ impl App {
     /// `camera.masque`, avec « Assigner un raccourci » au clic droit), et à côté un petit curseur règle son opacité, en pour
     /// cent (100 % d'origine : opaque). La couleur (noir d'origine) est dans Préférences > Dessin. Les deux sont retenus dans
     /// les réglages du poste.
+    ///
+    /// Partie 195 (Anthony, d'un dessin) : son icône est un cadre dans un cache, un rectangle sombre plein avec, en bas au milieu, un
+    /// petit rectangle blanc (`peindre_passe_partout`) ; l'opacité est dans le petit panneau de la flèche à côté (le curseur de la
+    /// barre laisse la place à celui du zoom).
     pub(crate) fn passe_partout_reglage(&mut self, ui: &mut egui::Ui) {
-        use egui_phosphor::regular as ph;
         let on = self.settings.passe_partout_actif;
-        self.command_button(ui, ph::SELECTION_INVERSE, "camera.masque", "Passe-partout", "Couvrir ce qui est hors du cadre de la caméra, noir d'origine (la couleur se règle dans Préférences > Dessin).", Some(on));
-        let mut pct = f32::from(self.settings.passe_partout);
+        let action = "camera.masque";
+        let (nom, description) = ("Passe-partout", "Couvrir ce qui est hors du cadre de la caméra, noir d'origine (la couleur se règle dans Préférences > Dessin).");
+        let resp = ui.scope(|ui| {
+            ui.spacing_mut().button_padding = vec2(1.0, 1.0);
+            ui.add_sized(crate::barres::case_de_barre(), egui::SelectableLabel::new(on, ""))
+        }).inner;
+        peindre_passe_partout(ui.painter(), resp.rect.center(), crate::barres::icone_de_barre(), ui.visuals().text_color());
+        crate::monpanneauui::apprendre(ui.ctx(), action, egui_phosphor::regular::SELECTION_INVERSE, nom, description);
+        if self.aide(resp, nom, description, action).clicked() {
+            self.run_action(action);
+        }
+        let fleche = self.petite_fleche(ui, "Opacité du passe-partout", "À quel point le passe-partout cache le hors-champ.");
+        self.panneau_de_case(ui, "passe_partout", &fleche, 190.0, |app, ui| {
+            ui.horizontal(|ui| {
+                ui.label("Opacité");
+                let mut pct = f32::from(app.settings.passe_partout);
+                let resp = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+                let resp = crate::bulles::bulle(resp, "Opacité du passe-partout", "À quel point le passe-partout cache le hors-champ : 100 %, opaque ; 0 %, rien n'est couvert.", "");
+                if resp.changed() {
+                    app.settings.passe_partout = pct.round().clamp(0.0, 100.0) as u8;
+                }
+                if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+                    let _ = app.settings.save();
+                }
+            });
+        });
+    }
+
+    /// Partie 195 : le zoom de la vue en curseur, sous le dessin, avec sa valeur qu'on tape (double-clic) ; de 5 à 3 200 %, à
+    /// l'échelle logarithmique.
+    pub(crate) fn zoom_curseur(&mut self, ui: &mut egui::Ui) {
+        let avant = (self.view.zoom * self.ppp * 100.0).clamp(ZOOM_MIN, ZOOM_MAX);
+        let mut pct = avant;
         let resp = ui
             .scope(|ui| {
-                ui.spacing_mut().slider_width = 64.0;
-                ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
+                ui.spacing_mut().slider_width = 80.0;
+                ui.add(egui::Slider::new(&mut pct, ZOOM_MIN..=ZOOM_MAX).logarithmic(true).suffix(" %").fixed_decimals(0))
             })
             .inner;
-        let resp = crate::bulles::bulle(resp, "Opacité du passe-partout", "À quel point le passe-partout cache le hors-champ : 100 %, opaque ; 0 %, rien n'est couvert.", "");
-        if resp.changed() {
-            self.settings.passe_partout = pct.round().clamp(0.0, 100.0) as u8;
+        let resp = crate::bulles::bulle(resp, "Zoom de la vue", "Glisser le curseur, ou double-clic sur la valeur pour la taper. Le dessin ne change pas.", "");
+        if resp.changed() && avant > 0.0 && (pct - avant).abs() > 1e-3 {
+            self.zoom_by(pct / avant);
         }
-        if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
-            let _ = self.settings.save();
+    }
+
+    /// Partie 195 : l'inclinaison de la vue (sa rotation) en curseur, de −180° à 180°, sa valeur, et « Remettre la vue droite ».
+    pub(crate) fn inclinaison_curseur(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let avant = self.view.rotation.to_degrees();
+        let mut degres = avant;
+        let resp = ui
+            .scope(|ui| {
+                ui.spacing_mut().slider_width = 70.0;
+                ui.add(egui::Slider::new(&mut degres, -180.0..=180.0).suffix("°").fixed_decimals(0))
+            })
+            .inner;
+        let resp = crate::bulles::bulle(resp, "Inclinaison de la vue", "Tourner la vue pour dessiner plus à l'aise ; le dessin ne change pas. Double-clic sur la valeur pour la taper.", "");
+        if resp.changed() && (degres - avant).abs() > 1e-3 {
+            self.rotate_view(degres - avant);
+        }
+        let droite = self.view.rotation.to_degrees().abs() <= 0.05;
+        let r = ui.add_enabled_ui(!droite, |ui| self.case_icone(ui, ph::ARROW_COUNTER_CLOCKWISE, None, "Remettre la vue droite", "L'inclinaison de la vue revient à 0°.", "vue.reinit_rotation")).inner;
+        if r.clicked() {
+            self.run_action("vue.reinit_rotation");
         }
     }
 
     /// Une petite flèche collée à une icône, qui ouvre ses réglages fins.
     fn petite_fleche(&self, ui: &mut egui::Ui, nom: &str, description: &str) -> egui::Response {
         let text = egui::RichText::new(egui_phosphor::regular::CARET_UP).size(10.0);
-        let resp = ui.add_sized([12.0, crate::barres::CASE[1]], egui::Button::new(text).frame(false));
+        let resp = ui.add_sized([12.0, crate::barres::case_de_barre()[1]], egui::Button::new(text).frame(false));
         crate::bulles::bulle(resp, nom, description, "")
     }
 
@@ -440,6 +523,10 @@ impl App {
     /// passe-partout sont dans la barre sous le dessin. En Espace 3D, ses options de vue (ses outils sont en tête de la barre
     /// d'outils, `toolbars.rs`).
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
+        crate::barres::en_barre_compacte(|| self.view_bar_en(ui));
+    }
+
+    fn view_bar_en(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
         ui.horizontal_centered(|ui| {
@@ -447,24 +534,27 @@ impl App {
             ui.add_space(4.0);
             let cam = self.camera_view;
             let in3d = self.espace3d.on && !cam;
-            if self.case_icone(ui, ph::BOUNDING_BOX, Some(!cam && !in3d), "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
+            // Partie 196 (Anthony : « l'icône vue caméra prend la première place en partant de la gauche ; l'icône "vue du plateau" devient
+            // "2D" ; l'icône "espace 3D" devient "3D" ») : la vue caméra, puis « 2D » et « 3D », des mots courts en gras dans des cases de
+            // la taille des autres ; leurs bulles gardent leurs noms et leurs raccourcis.
+            if self.case_icone(ui, ph::VIDEO_CAMERA, Some(cam), "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
+                self.set_camera_view(true);
+            }
+            if self.case_mot(ui, "2D", Some(!cam && !in3d), "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
                 if self.espace3d.on {
                     self.set_espace3d(false);
                 }
                 self.set_camera_view(false);
             }
-            if self.case_icone(ui, ph::VIDEO_CAMERA, Some(cam), "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
-                self.set_camera_view(true);
-            }
-            let cube = self.case_icone(
+            let cube = self.case_mot(
                 ui,
-                ph::CUBE,
+                "3D",
                 Some(in3d),
                 "Espace 3D",
                 "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
                 "espace3d.basculer",
             );
-            // (La fenêtre de l'aide de l'Espace 3D se pose à côté de cette icône : `aideflottante.rs`.)
+            // (La fenêtre de l'aide de l'Espace 3D se pose à côté de cette case : `aideflottante.rs`.)
             crate::aideflottante::retenir(ui.ctx(), crate::aideflottante::ESPACE3D, cube.rect);
             if cube.clicked() {
                 self.run_action("espace3d.basculer");

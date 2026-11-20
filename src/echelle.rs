@@ -1,6 +1,8 @@
 //! La taille de l'interface (passe « simplicité », 2026-10-21) : 90 %, 100 %, 125 % ou 150 %, au choix dans
 //! Préférences > Apparence. Elle agit tout de suite et se retient dans les réglages de l'application (`reglages.toml`,
-//! clé `echelle_interface`, en pour cent ; absente : 100 %).
+//! clé `echelle_interface`, en pour cent ; absente : la taille d'origine, **90 % depuis la partie 195** — Anthony : « Taille
+//! d'origine de l'interface 90% » ; 100 % avant. Une taille choisie et écrite, 100 %, 125 % ou 150 %, reste la sienne ; « Par
+//! défaut », à côté de la liste, remet 90 %).
 //!
 //! C'est le « facteur de zoom » d'egui (`Context::set_zoom_factor`), celui qui multiplie les pixels par point de l'écran :
 //! tout ce que SHOT dessine en points grandit ou rapetisse, le texte, les boutons, les panneaux. Le dessin, lui, reste le
@@ -20,8 +22,11 @@ use crate::app::App;
 /// Les tailles proposées, en pour cent.
 pub const ECHELLES: [u16; 4] = [90, 100, 125, 150];
 
-/// La taille d'origine.
-pub const ECHELLE_DEFAUT: u16 = 100;
+/// La taille d'origine (partie 195 : 90 % ; 100 % avant).
+pub const ECHELLE_DEFAUT: u16 = 90;
+
+/// La taille des essais sans fenêtre (`App::sans_fenetre`) : celle de leurs mesures, d'avant la partie 195.
+pub const ECHELLE_ESSAIS: u16 = 100;
 
 /// La taille proposée la plus proche de `pour_cent` (un fichier de réglages écrit à la main, ou d'un autre SHOT).
 pub fn echelle_valide(pour_cent: u16) -> u16 {
@@ -69,12 +74,24 @@ impl App {
                 self.settings.echelle = e;
                 let _ = self.settings.save();
             }
+            // (Partie 195 : « Par défaut » remet la taille d'origine, 90 %.)
+            ui.label("");
+            let r = ui.add_enabled(actuelle != ECHELLE_DEFAUT, egui::Button::new("Par défaut").small());
+            if crate::bulles::bulle(r, "Taille d'origine de l'interface", "Remet la taille de l'interface à 90 %, sa taille d'origine.", "").clicked() {
+                self.retablir_echelle();
+            }
             ui.end_row();
             self.taille_icones_prefs_ui(ui);
             // (Parties 179.13 et 179.14 : la hauteur et la couleur de chaque ligne de la timeline.)
             self.lignes_timeline_prefs_ui(ui);
         });
-        ui.label(RichText::new("100 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 125 % ou 150 %.").small().weak());
+        ui.label(RichText::new("90 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 100 %, 125 % ou 150 %.").small().weak());
+    }
+
+    /// « Par défaut » de la taille de l'interface : 90 % (partie 195).
+    pub(crate) fn retablir_echelle(&mut self) {
+        self.settings.echelle = ECHELLE_DEFAUT;
+        let _ = self.settings.save();
     }
 }
 

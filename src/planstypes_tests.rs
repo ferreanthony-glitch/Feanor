@@ -314,6 +314,8 @@ fn les_vignettes_des_plans_types_se_peignent_dans_le_panneau() {
     let doc = film_uni(&[[200, 40, 0], [100, 80, 250]], 24);
     let mut b = crate::perf_tests::banc_taille(doc, false, 1600, 4000);
     b.app.show_pane(crate::dock::Pane::Prereglages);
+    // (Partie 194 : sorti en panneau à lui, toute la largeur et toute la hauteur de la colonne, comme l'onglet d'avant.)
+    crate::colonne_tests::toute_la_place(&mut b.app, crate::dock::Pane::Prereglages);
     crate::panneauprereglages::choisir_onglet(&b.app.ctx, crate::panneauprereglages::Onglet::Montage);
     b.garder_formes = true;
     b.chauffer(6);

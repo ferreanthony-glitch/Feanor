@@ -2,7 +2,7 @@
 //!
 //! 1. L'ordre et la hauteur des rangées : séquences (16), plans (26), caméra (22) et ses préréglages (24, dépliée), calques ;
 //!    l'espace Montage garde sa disposition.
-//! 2. Les icônes des en-têtes des plans et de la caméra, et ce qu'elles font.
+//! 2. Les icônes des en-têtes des plans et de la caméra, et ce qu'elles font (partie 196 : celles de la caméra au clic droit de la ligne).
 //! 3. Une transition : son symbole sur la coupe, son menu au clic, qui la change (annulable) ; un préréglage de transition glissé.
 //! 4. La caméra repliée : ses clés sur la ligne ; dépliée : la rangée des préréglages, deux rangs bas quand deux se chevauchent.
 //! 5. Poser un préréglage de caméra dans le Storyboard, par glisser (caméra repliée ou dépliée) et par clic : comme dans l'Animation.
@@ -170,8 +170,9 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
     let rows = rangees(&b);
     let sb = rows.sb.expect("la disposition du Storyboard");
     assert_eq!(rows.bands_h(), SB_SEQ_H, "la ligne des séquences, la plus fine");
-    // (Partie 179.11 : la ligne des séquences a son en-tête et ses icônes : 20, 16 avant.)
-    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (20.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
+    // (Partie 179.11 : la ligne des séquences a son en-tête et ses icônes : 20, 16 avant. Partie 196 : « La ligne Séquence perd ses
+    // raccourcis et devient plus fine (−50 %) » : 10.)
+    assert_eq!((SB_SEQ_H, SB_PLAN_H, SB_CAM_H, SB_PREREGLAGES_H), (10.0, 26.0, 22.0, 24.0), "les hauteurs de la maquette");
     assert_eq!(rows.block_h, SB_PLAN_H, "la rangée des plans");
     assert_eq!(rows.cam_h(), SB_CAM_H, "la ligne de la caméra");
     assert_eq!(sb.prereglages_h, 0.0, "repliée d'office : pas de rangée des préréglages");
@@ -183,7 +184,8 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
     // Plus contenue qu'avant (la caméra de 16 au-dessus de plans de 56 : les calques commençaient à 111 points).
     // (Partie 179 : plus de seconde ligne de boutons, plus de bande sous la règle.)
     // (Partie 179.11 : la ligne « Séquence » et la barre de lecture en face de la règle : 8 points de plus, 111.)
-    assert!(rows.layers_top() <= 111.5, "le haut des calques : {}", rows.layers_top());
+    // (Partie 196 : la ligne « Séquence » de 10 : 10 points de moins, 101.)
+    assert!(rows.layers_top() <= 101.5, "le haut des calques : {}", rows.layers_top());
     // À l'écran : les plans, leurs en-têtes et celui de la caméra sur ces rangées.
     let h = haut(&b);
     assert!(blocs().iter().all(|r| (r.height() - (SB_PLAN_H - 2.0)).abs() < 0.6), "des plans de 24 points : {:?}", blocs());
@@ -214,7 +216,16 @@ fn les_rangees_du_storyboard_sont_dans_son_ordre_et_aussi_fines_qu_il_l_a_demand
 // ------------------------------------------------------------------------------------------------ 2. les icônes des en-têtes
 
 const ICONES_DES_PLANS: [&str; 6] = ["Nouveau plan", "Dupliquer le plan", "Versions du plan", "Transitions", "Couper le plan à la tête de lecture", "Autres commandes des plans"];
-const ICONES_DE_LA_CAMERA: [&str; 5] = ["Déplier la caméra", "Clé de caméra ici", "Préréglages de caméra", "Remettre la caméra à zéro", "Autres commandes de la caméra"];
+/// (Partie 196, Anthony : « La ligne Caméra perd également ses raccourcis » : ⊕ seul ; le reste est au clic droit de la ligne.)
+const ICONES_DE_LA_CAMERA: [&str; 1] = ["Déplier la caméra"];
+/// Les anciennes icônes de la ligne Caméra (partie 178), qui n'y sont plus (partie 196).
+pub(crate) const ANCIENNES_ICONES_DE_LA_CAMERA: [&str; 4] = ["Clé de caméra ici", "Préréglages de caméra", "Remettre la caméra à zéro", "Autres commandes de la caméra"];
+
+/// Le clic droit sur l'en-tête de la ligne Caméra (`a..z` à l'écran), à droite de son mot.
+pub(crate) fn clic_droit_camera(b: &mut Banc, a: f32, z: f32) {
+    let p = pos2(colonne().left() - 12.0, (a + z) * 0.5);
+    clic_droit(b, p);
+}
 
 /// Les icônes `noms` de la rangée `y0..y1`, dans cet ordre de gauche à droite, sans se toucher, dans la colonne.
 fn icones_en_ordre(noms: &[&str], y0: f32, y1: f32, quoi: &str) -> Vec<Rect> {
@@ -281,12 +292,21 @@ fn les_icones_des_en_tetes_des_plans_et_de_la_camera_lancent_leurs_actions() {
     clic(&mut b, menu, Modifiers::NONE);
     assert!(textes(&b).iter().any(|(t, _)| t.starts_with("Version du plan")), "le menu des versions");
     clic(&mut b, menu, Modifiers::NONE);
-    // La caméra : une clé ici, sur la ligne de la caméra.
+    // La caméra (partie 196 : ses commandes au clic droit de la ligne) : une clé ici, sur la ligne de la caméra.
+    let (a, z) = ligne_camera(&b);
+    for nom in ANCIENNES_ICONES_DE_LA_CAMERA {
+        assert!(vus::ou(nom).iter().all(|r| r.center().y < a || r.center().y > z), "« {nom} » n'est plus sur la ligne Caméra : {:?}", vus::ou(nom));
+    }
     b.app.goto_global(3);
     b.chauffer(2);
     let e = etapes(&b);
     let (a, z) = ligne_camera(&b);
-    clic(&mut b, ou_dans("Clé de caméra ici", a, z).center(), Modifiers::NONE);
+    clic_droit_camera(&mut b, a, z);
+    for mot in ["Clé de caméra ici", "Préréglages de caméra…", "Remettre la caméra à zéro", "Convertir les préréglages en clés", "Copier les clés de caméra choisies", "Coller les clés de caméra"] {
+        assert!(texte(&b, mot).is_some(), "« {mot} » au clic droit de la ligne Caméra : {:?}", textes(&b).into_iter().map(|t| t.0).collect::<Vec<_>>());
+    }
+    let p = texte(&b, "Clé de caméra ici").unwrap().center();
+    clic(&mut b, p, Modifiers::NONE);
     let pi = b.app.cur_panel;
     assert!(b.app.doc.panels[pi].camera.iter().any(|k| k.frame == 3), "une clé de caméra à l'image 3 : {}", b.app.status);
     assert_eq!(etapes(&b), e + 1);
@@ -294,20 +314,18 @@ fn les_icones_des_en_tetes_des_plans_et_de_la_camera_lancent_leurs_actions() {
     let losange = losanges(&b, crate::theme::camera());
     assert!(losange.iter().any(|l| l.center().y > a && l.center().y < z && (l.center().x - x_image(pi, 3)).abs() < 1.0), "son losange sur la ligne : {losange:?}");
     // Remettre la caméra à zéro : les clés s'en vont, une étape.
-    clic(&mut b, ou_dans("Remettre la caméra à zéro", a, z).center(), Modifiers::NONE);
+    clic_droit_camera(&mut b, a, z);
+    assert!(texte(&b, "Clé de caméra ici").is_none(), "une clé à l'image courante : pas d'« ici »");
+    let p = texte(&b, "Remettre la caméra à zéro").expect("dans le menu").center();
+    clic(&mut b, p, Modifiers::NONE);
     assert!(b.app.doc.panels[pi].camera.is_empty(), "{}", b.app.status);
     assert_eq!(etapes(&b), e + 2);
-    // Le « ⋯ » de la caméra.
-    let (a, z) = ligne_camera(&b);
-    let menu = ou_dans("Autres commandes de la caméra", a, z).center();
-    clic(&mut b, menu, Modifiers::NONE);
-    for mot in ["Convertir les préréglages en clés", "Copier les clés de caméra choisies", "Coller les clés de caméra"] {
-        assert!(texte(&b, mot).is_some(), "« {mot} » dans le menu de la caméra");
-    }
-    clic(&mut b, menu, Modifiers::NONE);
     // Préréglages : le panneau, onglet Caméra, et la caméra se déplie.
     let (a, z) = ligne_camera(&b);
-    clic(&mut b, ou_dans("Préréglages de caméra", a, z).center(), Modifiers::NONE);
+    clic_droit_camera(&mut b, a, z);
+    let p = texte(&b, "Préréglages de caméra…").expect("dans le menu").center();
+    clic(&mut b, p, Modifiers::NONE);
+    b.chauffer(3);
     assert_eq!(crate::panneauprereglages::onglet(&b.app.ctx), crate::panneauprereglages::Onglet::Camera);
     assert!(b.app.settings.storyboard_camera_depliee, "la caméra dépliée pour poser des préréglages");
     assert_eq!(rangees(&b).prereglages_h(), SB_PREREGLAGES_H);
@@ -408,16 +426,19 @@ fn camera_repliee_ses_cles_sur_la_ligne_et_depliee_la_rangee_des_preregalges() {
 
 // ------------------------------------------------------------------------------------------------ 5. poser un préréglage
 
-/// Le point d'une vignette du panneau Préréglages, d'après son étiquette (comme `blocscamera_tests`).
+/// Le point de la ligne d'un préréglage dans le panneau Préréglages, d'après son nom (partie 195 : une liste sous un seul aperçu ;
+/// comme `blocscamera_tests`).
 fn vignette(b: &Banc, preset: Preset) -> Pos2 {
-    let e = textes(b).into_iter().find(|(t, _)| t == preset.label()).map(|(_, r)| r).unwrap_or_else(|| panic!("la vignette « {} »", preset.label()));
-    pos2(e.left() + 60.0, e.center().y - 46.0)
+    let e = textes(b).into_iter().find(|(t, _)| t == preset.label()).map(|(_, r)| r).unwrap_or_else(|| panic!("la ligne « {} »", preset.label()));
+    e.center()
 }
 
 #[test]
 fn un_prereglage_se_pose_dans_le_storyboard_par_glisser_et_par_clic_comme_dans_l_animation() {
     let mut b = banc_sb(film(), 1920, 1080, false);
     b.app.show_pane(crate::dock::Pane::Prereglages);
+    // (Partie 194 : sorti en panneau à lui, toute la largeur et toute la hauteur de la colonne, comme l'onglet d'avant.)
+    crate::colonne_tests::toute_la_place(&mut b.app, crate::dock::Pane::Prereglages);
     crate::panneauprereglages::choisir_onglet(&b.app.ctx, crate::panneauprereglages::Onglet::Camera);
     b.chauffer(8);
     // La caméra repliée : glissé sur la ligne de la caméra du plan 2, à son image 5 (la rangée des préréglages s'ouvre pendant le glisser).
@@ -597,7 +618,8 @@ fn a_la_plus_petite_fenetre_rien_ne_deborde_des_en_tetes() {
         let rows = rangees(&b);
         let hh = haut(&b);
         icones_en_ordre(&ICONES_DES_PLANS, hh + rows.blocks_top(), hh + rows.blocks_top() + rows.block_h, &quoi);
-        icones_en_ordre(&["Replier la caméra", "Clé de caméra ici", "Préréglages de caméra", "Remettre la caméra à zéro", "Autres commandes de la caméra"], hh + rows.camera_top(), hh + rows.camera_top() + SB_CAM_H, &quoi);
+        // (Partie 196 : la ligne Caméra n'a plus que ⊖.)
+        icones_en_ordre(&["Replier la caméra"], hh + rows.camera_top(), hh + rows.camera_top() + SB_CAM_H, &quoi);
         let (a, z) = (hh + rows.calques_top(), hh + rows.calques_top() + SB_CALQUES_H);
         // (Partie 179.5 : la ligne « Calques » porte ⊖ et les commandes des calques, plus les icônes des colonnes ; « + » et « ⋯ » y
         // sont toujours, les autres selon la place.)
@@ -614,7 +636,10 @@ fn a_la_plus_petite_fenetre_rien_ne_deborde_des_en_tetes() {
             }
         }
         // Le mot de chaque rangée ne passe pas sous ses icônes.
-        for (mot, premiere) in [("Plans", "Nouveau plan"), ("Caméra", "Clé de caméra ici")] {
+        // (Partie 196 : le mot « Caméra » n'a plus d'icônes à sa droite ; il reste dans la colonne.)
+        let cam = textes(&b).into_iter().find(|(t, r)| t == "Caméra" && r.right() < col.right() && r.center().y > hh + rows.camera_top() && r.center().y < hh + rows.camera_top() + SB_CAM_H).unwrap_or_else(|| panic!("{quoi} : « Caméra »")).1;
+        assert!(cam.right() <= col.left() + 0.5, "{quoi} : « Caméra » dans la colonne : {cam:?}");
+        for (mot, premiere) in [("Plans", "Nouveau plan")] {
             let t = textes(&b).into_iter().filter(|(t, r)| t == mot && r.right() < col.right()).map(|(_, r)| r).find(|r| r.top() > hh + rows.blocks_top() - 1.0).unwrap_or_else(|| panic!("{quoi} : « {mot} »"));
             let i = vus::ou(premiere).into_iter().find(|r| (r.center().y - t.center().y).abs() < 8.0).unwrap_or_else(|| panic!("{quoi} : « {premiere} »"));
             assert!(t.right() <= i.left() + 0.5, "{quoi} : « {mot} » touche « {premiere} » : {t:?} / {i:?}");

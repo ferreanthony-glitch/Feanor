@@ -479,7 +479,8 @@ fn the_pane_is_closed_by_default_opens_on_the_right_and_has_its_icon_and_command
     assert!(!l.contains(Pane::Bruitages), "fermé par défaut");
     l.open(Pane::Bruitages);
     assert!(l.contains(Pane::Bruitages));
-    assert!(format!("{:?}", l.principal).contains("Bruitages"), "{:?}", l.principal);
+    // (Partie 194 : un onglet de Propriétés, dans la colonne en pile à droite.)
+    assert!(l.colonne.en_onglet_de_proprietes(Pane::Bruitages), "{:?}", l.colonne);
     // L'icône de la barre des panneaux et son action.
     assert_eq!(crate::barrepanneaux::pane_de_action("vue.bruitages"), Some(Pane::Bruitages));
     for id in ["vue.bruitages", "bruitage.inserer", "bruitage.ecouter"] {

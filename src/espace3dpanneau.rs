@@ -113,8 +113,18 @@ impl App {
     /// hors de la vue de la scène, aucun onglet ni icône ne dit la 3D ; une disposition enregistrée avant l'y avait laissé). Il
     /// y revient, à sa place, quand elle se rouvre (`espace3d_panneau_montrer`). Ouvert à la main la vue fermée, rangé
     /// ailleurs ou dans sa propre fenêtre : il reste, c'est un choix de l'utilisateur.
+    ///
+    /// Depuis la partie 194, le groupe de Réglages est Propriétés, dans la colonne en pile : un onglet de Propriétés quitte les
+    /// onglets ; sorti en panneau à lui dans la pile, il y reste.
     fn espace3d_panneau_retirer(&mut self) {
         if self.e3_panneau.a_la_main || self.detached.iter().any(|d| d.panneau == Pane::Espace3d) {
+            return;
+        }
+        // (Le groupe de Réglages : Propriétés, s'il a les réglages de l'outil.)
+        if self.colonne.en_onglet_de_proprietes(Pane::Espace3d) {
+            if self.colonne.en_onglet_de_proprietes(Pane::ToolOptions) {
+                self.colonne.retirer(Pane::Espace3d);
+            }
             return;
         }
         let Some(state) = self.dock.as_ref() else { return };
@@ -128,19 +138,27 @@ impl App {
     }
 
     /// La vue s'ouvre. Le panneau n'est pas dans la disposition : il y arrive à sa place (`DockLayout::open` : un onglet
-    /// du groupe de Réglages, après ceux qui y sont ; sans Réglages dans la fenêtre principale, un onglet de son groupe), et
-    /// il y reste ensuite. Puis, là où il est, il passe devant les onglets de son groupe, et l'onglet qui était devant est
-    /// retenu (`Suivi::avant`).
+    /// de Propriétés, à son rang ; Réglages rangé hors de la colonne, un onglet à côté de lui), et il y reste tant que la vue
+    /// est ouverte. Puis, là où il est, il passe devant les onglets de son groupe (son panneau de la pile se déplie), et
+    /// l'onglet qui était devant est retenu (`Suivi::avant`).
     fn espace3d_panneau_montrer(&mut self) {
         let pane = Pane::Espace3d;
         // (Dans sa propre fenêtre, il se voit déjà.)
         if self.detached.iter().any(|d| d.panneau == pane) {
             return;
         }
-        if self.dock.as_ref().is_some_and(|s| s.find_tab(&pane).is_none()) {
+        // (L'onglet devant de Propriétés avant que le panneau y arrive : c'est lui qui repassera devant.)
+        let devant_avant = self.colonne.rang_de(pane).and_then(|i| self.colonne.panneaux[i].devant()).or(self.colonne.onglet_devant());
+        if !self.colonne.contient(pane) && self.dock.as_ref().is_some_and(|s| s.find_tab(&pane).is_none()) {
             let mut layout = self.dock_layout();
             layout.open(pane);
             self.set_dock_layout(layout);
+        }
+        if let Some(i) = self.colonne.rang_de(pane) {
+            let avant = if self.colonne.panneaux[i].est_proprietes() || self.colonne.panneaux[i].panneaux.len() > 1 { devant_avant } else { None }.filter(|d| *d != pane && self.colonne.panneaux[i].panneaux.contains(d));
+            self.colonne.montrer(pane);
+            self.e3_panneau.avant = avant;
+            return;
         }
         let Some(state) = self.dock.as_mut() else { return };
         let Some(ici) = state.find_tab(&pane) else { return };
@@ -155,6 +173,12 @@ impl App {
     /// La vue se ferme : `avant` (Réglages, d'ordinaire) repasse devant le panneau, s'ils partagent encore leur groupe
     /// d'onglets et si le panneau y est encore devant. Le panneau reste dans la disposition.
     fn espace3d_panneau_rendre(&mut self, avant: Pane) {
+        if let (Some(ici), Some(la)) = (self.colonne.rang_de(Pane::Espace3d), self.colonne.rang_de(avant)) {
+            if ici == la && self.colonne.panneaux[ici].devant() == Some(Pane::Espace3d) {
+                self.colonne.mettre_devant(avant);
+            }
+            return;
+        }
         let Some(state) = self.dock.as_mut() else { return };
         let (Some(ici), Some(la)) = (state.find_tab(&Pane::Espace3d), state.find_tab(&avant)) else { return };
         let devant = matches!(&state[ici.0][ici.1], Node::Leaf { active, .. } if *active == ici.2);

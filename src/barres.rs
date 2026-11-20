@@ -591,8 +591,9 @@ fn plus_largeur() -> f32 {
     }
 }
 
-/// Peint `f` en barre de lecture de la timeline (`COMPACTE`).
-fn en_barre_compacte<R>(f: impl FnOnce() -> R) -> R {
+/// Peint `f` en barre de lecture de la timeline (`COMPACTE`) : icônes de la taille de celles de la timeline. Partie 195 : aussi les
+/// deux barres de la vue, au-dessus et au-dessous du dessin (`viewbar.rs`).
+pub(crate) fn en_barre_compacte<R>(f: impl FnOnce() -> R) -> R {
     let avant = COMPACTE.with(|c| c.replace(true));
     let r = f();
     COMPACTE.with(|c| c.set(avant));

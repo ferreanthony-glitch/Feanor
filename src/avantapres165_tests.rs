@@ -328,6 +328,9 @@ fn boutons_dans_la_colonne(b: &Banc, barre: crate::barres::Barre, colonne: (f32,
     let ecran = Rect::from_min_size(pos2(0.0, 0.0), b.taille);
     noms_de_la_barre(b, barre)
         .into_iter()
+        // (Partie 179.11 : « Nouvelle séquence » a quitté la barre pour la ligne « Séquence » ; partie 196 : elle n'est plus dans la
+        // colonne, mais au clic droit de cette ligne.)
+        .filter(|nom| nom != "Nouvelle séquence")
         .map(|nom| {
             let r = *vus::ou(&nom).iter().filter(|r| r.left() >= colonne.0 - 1.0 && r.right() <= colonne.1 + 1.0).min_by(|a, c| a.top().total_cmp(&c.top())).unwrap_or_else(|| panic!("« {nom} » pas dans la colonne {colonne:?} : {:?}", vus::ou(&nom)));
             assert!(ecran.contains_rect(r), "« {nom} » entier à l'écran : {r:?}");

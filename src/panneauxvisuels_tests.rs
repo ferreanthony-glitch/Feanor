@@ -190,6 +190,8 @@ fn a_version_thumbnail_switches_version_and_the_old_buttons_stay_in_precis() {
 fn vignettes() -> Banc {
     let mut b = banc_163(Espace::Vignettes);
     b.app.show_pane(Pane::Vignettes);
+    // (Partie 195 : la Planche, aux écarts d'origine, est plus haute que sa place dans la pile ; les autres panneaux se replient.)
+    crate::colonne_tests::toute_la_place(&mut b.app, Pane::Vignettes);
     b.app.cur_panel = 0;
     b.app.cur_frame = 0;
     b.chauffer(4);
@@ -230,6 +232,8 @@ fn the_zoom_in_pictogram_puts_b_inside_a_and_the_curves_set_the_easing() {
     assert_eq!(pv::courbe_des(&b.app.doc.panels[0].camera, 0..2), Some(Courbe::Brusque), "Ctrl+Z rend la courbe d'avant");
     // « Précis » : les adoucis en images, « Ajouter un cadre ».
     crate::panneauxvisuels::ouvrir_precis(&b.ctx, "Mouvement de caméra", true);
+    // (Partie 194 : Précis ouvert, la Planche est plus haute que sa place dans la pile ; les autres panneaux se replient.)
+    crate::colonne_tests::toute_la_place(&mut b.app, Pane::Vignettes);
     b.chauffer(3);
     for nom in ["Adouci de départ", "Adouci d'arrivée", "Ajouter un cadre"] {
         assert!(present(nom), "« {nom} » sous Précis");

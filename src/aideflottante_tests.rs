@@ -54,6 +54,7 @@ fn clic(b: &mut Banc, p: egui::Pos2, button: PointerButton) {
 // ------------------------------------------------------------------------------------------------------ la place
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_first_take_of_a_tool_opens_the_window_beside_its_icon_and_nothing_plays_in_the_settings() {
     let mut b = banc_aide();
     b.app.settings.explications_vues.retain(|v| !v.starts_with("trajectoire."));
@@ -80,6 +81,7 @@ fn the_first_take_of_a_tool_opens_the_window_beside_its_icon_and_nothing_plays_i
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn a_click_on_a_tool_icon_opens_the_window_and_the_click_does_not_close_it() {
     let mut b = banc_aide();
     b.app.settings.explications_vues.retain(|v| !v.starts_with("trajectoire."));
@@ -96,6 +98,7 @@ fn a_click_on_a_tool_icon_opens_the_window_and_the_click_does_not_close_it() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_space_3d_window_stays_beside_the_icon_that_opened_the_view() {
     let mut b = banc_aide();
     let ids: Vec<&str> = aideanim::du_contexte("espace3d").iter().map(|a| a.id).collect();
@@ -126,6 +129,7 @@ fn nothing_plays_by_itself_where_there_is_no_tool_bar() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_window_fades_away_at_the_end_and_then_the_application_rests() {
     let mut b = banc_aide();
     b.app.settings.explications_vues.retain(|v| v != "degrade.axe");
@@ -145,6 +149,7 @@ fn the_window_fades_away_at_the_end_and_then_the_application_rests() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn a_press_on_the_window_closes_it() {
     let mut b = banc_aide();
     b.app.settings.explications_vues.retain(|v| v != "camera.cadrer");
@@ -242,6 +247,7 @@ fn the_window_stays_on_screen_even_near_an_edge() {
 // ------------------------------------------------------------------------------------------------------ revoir
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn see_the_explanation_again_from_the_right_click_of_a_tool_icon() {
     let mut b = banc_aide();
     let icone = aideflottante::ancre(&b.ctx, Tool::Trajectoire.action()).expect("l'icône de la Trajectoire");
@@ -263,6 +269,7 @@ fn see_the_explanation_again_from_the_right_click_of_a_tool_icon() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_play_button_of_the_settings_opens_the_window_beside_the_tool() {
     let mut b = banc_aide();
     b.chauffer(2);
@@ -309,6 +316,7 @@ fn image(ctx: &egui::Context, app: &mut App, t: f64) -> Vec<egui::epaint::Clippe
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_vignettes_suite_plays_one_after_the_other_in_a_single_window() {
     let mut app = app_seule();
     app.espace = crate::workspace::Espace::Vignettes;
@@ -363,6 +371,7 @@ fn demarrer_sur_les_vignettes(vues: Vec<String>) -> Banc {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn opening_feanor_for_the_first_time_on_the_vignettes_page_plays_the_vignettes_suite() {
     let mut b = demarrer_sur_les_vignettes(Vec::new());
     let suite: Vec<&'static str> = aideanim::du_contexte("vignettes").iter().map(|a| a.id).collect();
@@ -387,6 +396,7 @@ fn opening_feanor_for_the_first_time_on_the_vignettes_page_plays_the_vignettes_s
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_vignettes_suite_at_startup_survives_a_second_tab_and_the_return_to_the_first() {
     let mut b = demarrer_sur_les_vignettes(Vec::new());
     let suite: Vec<&'static str> = aideanim::du_contexte("vignettes").iter().map(|a| a.id).collect();
@@ -415,6 +425,7 @@ fn the_vignettes_suite_at_startup_survives_a_second_tab_and_the_return_to_the_fi
 /// et la suite commençait dès le premier, derrière cette fenêtre ; une image qui tardait (un gros projet adopté) sautait une
 /// animation entière, retenue comme vue. Maintenant elle attend que la séance soit revenue, et une image en retard ne saute rien.
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_vignettes_suite_waits_for_the_session_to_come_back_and_skips_nothing_on_a_slow_frame() {
     let mut b = banc_taille(Document::with_frame(400, 300, 24), false, 1600, 900);
     b.garder_formes = true;
@@ -470,6 +481,7 @@ fn opening_feanor_on_the_vignettes_page_again_plays_nothing_once_seen() {
 }
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn a_press_on_the_startup_vignettes_window_closes_it() {
     let mut b = demarrer_sur_les_vignettes(Vec::new());
     let f = b.app.confort.aide.fenetre().expect("la suite joue");
@@ -483,6 +495,7 @@ fn a_press_on_the_startup_vignettes_window_closes_it() {
 // ------------------------------------------------------------------------------------------------------ le thème clair
 
 #[test]
+#[ignore = "partie 195 : les explications animées ne jouent plus hors du menu Aide (aideanim::AIDE_HORS_DU_MENU)"]
 fn the_window_follows_the_light_theme() {
     use crate::theme::{self, ChoixTheme, ReglageTheme};
     let mut app = app_seule();

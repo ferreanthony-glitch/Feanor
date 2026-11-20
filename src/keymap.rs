@@ -153,7 +153,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("aide.ouvrir_frictions", "Mes frictions notées : ouvrir leur dossier", true, false),
     act("aide.habitudes", "Mes habitudes : les commandes que j'utilise le plus et celles qui ne servent jamais (compteur du poste)", true, false),
     // L'aide animée (partie 153, `aideanim.rs`).
-    act("aide.explications", "Afficher les explications : l'animation d'un outil rejoue à chaque prise (sinon une seule fois)", true, false),
+    act("aide.explications", "Explications animées : ouvrir le registre des animations des outils (menu Aide)", true, false),
     act("aide.registre", "Registre des explications : toutes les animations des outils et les textes des fenêtres", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
@@ -539,7 +539,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.couleur", "Panneau Couleur (ouvrir / fermer)", true, false),
     act("vue.calques", "Calques (la colonne de la timeline)", true, false),
     act("vue.fiche", "Panneau Fiche du plan (ouvrir / fermer)", true, false),
-    act("vue.barre_panneaux", "Barre des panneaux, sur le bord droit (montrer / cacher)", true, false),
     act("role.cle", "Rôle des images visées : clé", true, false),
     act("role.breakdown", "Rôle des images visées : breakdown", true, false),
     act("role.intervalle", "Rôle des images visées : intervalle à faire", true, false),

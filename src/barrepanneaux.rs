@@ -1,23 +1,16 @@
-//! Barre des panneaux (2026-10-18) : une fine bande d'icônes sur le bord droit de la fenêtre, une
-//! icône par panneau de côté ; un clic l'ouvre, le met devant ou le ferme. L'idée vient des
-//! logiciels de retouche (une colonne d'icônes qui allument et éteignent les panneaux) ; les
-//! icônes sont celles de SHOT (`Pane::icon`). Elle n'est pas un panneau de l'espace de travail :
-//! elle est posée avant la zone des panneaux, comme la barre d'outils de gauche.
-//!
-//! Chaque icône est liée à une action (`vue.calques`…), donc une bulle d'aide avec son raccourci,
-//! un clic droit « Assigner un raccourci » et une entrée dans la palette (Ctrl+K) ; les raccourcis
-//! suivent la même règle de clic que l'icône. Le dessin ne coûte que dix icônes : la place des
-//! panneaux n'est lue qu'au clic.
+//! Les panneaux de côté, leurs commandes et la règle de leur clic. Ce fut la barre des panneaux (2026-10-18) : une fine bande
+//! d'icônes sur le bord droit de la fenêtre, une icône par panneau de côté, qui l'ouvrait, le mettait devant ou le fermait
+//! (partie 160 : elle servait d'onglets). Depuis la partie 194, la colonne est une pile de panneaux et **Propriétés montre ses
+//! onglets en icônes verticales** (`colonneui.rs`) : la barre n'est plus dessinée. Restent ici ce qu'elle portait et qui sert
+//! toujours : chaque panneau lié à une action (`vue.fiche`…), son nom et sa description (les bulles des onglets de Propriétés et
+//! du menu « + Panneau »), les panneaux qui servent à chaque espace de travail, et la règle du clic de ces actions (fermé :
+//! l'ouvrir ; caché : le montrer ; visible : le fermer), raccourcis et palette (Ctrl+K) compris.
 
-use eframe::egui::{self, vec2, RichText};
 use egui_dock::{DockState, Node};
 
-use crate::app::{App, Mode};
+use crate::app::App;
 use crate::dock::Pane;
 use crate::workspace::Espace;
-
-/// Largeur de la barre, marges comprises, en points.
-pub(crate) const LARGEUR: f32 = 34.0;
 
 /// Une icône de la barre.
 pub(crate) struct Entree {
@@ -144,6 +137,11 @@ pub(crate) fn entree_de_action(action: &str) -> Option<&'static Entree> {
     GROUPES.iter().flat_map(|g| g.iter()).chain(HORS_BARRE).find(|e| e.action == action)
 }
 
+/// L'entrée d'un panneau (son action, son nom, sa description), s'il en a une.
+pub(crate) fn entree_de_pane(pane: Pane) -> Option<&'static Entree> {
+    GROUPES.iter().flat_map(|g| g.iter()).chain(HORS_BARRE).find(|e| e.pane == pane)
+}
+
 /// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre (ou du menu Labo).
 pub(crate) fn pane_de_action(action: &str) -> Option<Pane> {
     entree_de_action(action).map(|e| e.pane)
@@ -192,10 +190,18 @@ pub(crate) enum EtatIcone {
 impl App {
     /// Le panneau `pane` se voit-il (onglet actif de son groupe, ou fenêtre à part) ? Sans disposition encore, rien n'est caché.
     pub(crate) fn panneau_devant(&self, pane: Pane) -> bool {
-        self.detached.iter().any(|d| d.panneau == pane) || self.dock.as_ref().is_none_or(|s| est_devant(s, pane))
+        if self.detached.iter().any(|d| d.panneau == pane) {
+            return true;
+        }
+        // Dans la pile de la colonne (partie 194) : devant dans son panneau (l'onglet devant de Propriétés), le panneau déplié.
+        if self.dock.is_some() && self.colonne.contient(pane) {
+            return self.colonne.devant(pane);
+        }
+        self.dock.as_ref().is_none_or(|s| est_devant(s, pane))
     }
 
-    /// L'état de l'icône de `pane` dans la barre des panneaux.
+    /// L'état de `pane` (ce que montrait son icône dans l'ancienne barre des panneaux ; depuis la partie 194, son onglet de
+    /// Propriétés allumé ou non) : fermé, caché (un autre onglet devant, son panneau replié) ou visible.
     pub(crate) fn etat_dans_la_barre(&self, pane: Pane) -> EtatIcone {
         match (self.pane_shown(pane), self.panneau_devant(pane)) {
             (false, _) => EtatIcone::Ferme,
@@ -204,7 +210,7 @@ impl App {
         }
     }
 
-    /// Ouvre, met devant ou ferme `pane` selon `regle_clic` (clic sur la barre, ou son action).
+    /// Ouvre, met devant ou ferme `pane` selon `regle_clic` (son action : menu, raccourci, palette).
     pub(crate) fn clic_panneau(&mut self, pane: Pane) {
         let ouvert = self.pane_shown(pane);
         // Une fenêtre à part se voit toujours ; sans disposition encore, rien n'est caché.
@@ -213,49 +219,5 @@ impl App {
             Clic::Ouvrir | Clic::Fermer => self.toggle_pane(pane),
             Clic::Avancer => self.show_pane(pane),
         }
-    }
-
-    /// Basculer la barre elle-même (Affichage > Panneaux), retenu dans les réglages.
-    pub(crate) fn toggle_panel_bar(&mut self) {
-        self.settings.panel_bar = !self.settings.panel_bar;
-        let _ = self.settings.save();
-    }
-
-    /// La barre à l'écran : une icône par panneau, enfoncée quand le panneau est dans l'espace de
-    /// travail.
-    pub(crate) fn panel_bar(&mut self, ui: &mut egui::Ui) {
-        let animation = self.mode == Mode::Animation;
-        let mut groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
-        // (Le panneau Espace 3D n'a son icône que vue de la scène ouverte, partie 159 : hors d'elle, rien ne dit la 3D.)
-        if !self.espace3d_vue_ouverte() {
-            for g in &mut groupes {
-                g.retain(|e| e.pane != Pane::Espace3d);
-            }
-            groupes.retain(|g| !g.is_empty());
-        }
-        ui.vertical_centered(|ui| {
-            ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
-            for (g, groupe) in groupes.iter().enumerate() {
-                if g > 0 {
-                    ui.add_space(3.0);
-                    let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
-                    ui.add_space(3.0);
-                }
-                for e in groupe {
-                    // Les onglets écrits ne sont plus là (partie 160) : l'icône allumée dit quel panneau est devant ; un panneau
-                    // ouvert mais caché derrière un autre a un petit point sous son icône.
-                    let etat = self.etat_dans_la_barre(e.pane);
-                    let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(etat == EtatIcone::Devant, RichText::new(e.pane.icon()).size(crate::barres::ICONE)));
-                    if etat == EtatIcone::Derriere {
-                        let c = resp.rect.center_bottom() - vec2(0.0, 3.0);
-                        ui.painter().circle_filled(c, 1.75, crate::theme::texte_doux());
-                    }
-                    if self.aide(resp, e.nom, e.description, e.action).clicked() {
-                        self.run_action(e.action);
-                    }
-                }
-            }
-        });
     }
 }

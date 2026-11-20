@@ -8,7 +8,7 @@
 //! « Plus… », la légende des clés), dans le Storyboard comme dans l'Animation. Les cases qui les portent grandissent ou rapetissent
 //! avec elle (`k`) ; la hauteur des rangées ne change pas (c'est le rôle de la taille de l'interface, `echelle.rs`).
 //!
-//! Un réglage du poste (`reglages.toml`, clé `taille_icones`, en points ; absente : 13), pas du projet. Préférences > Apparence >
+//! Un réglage du poste (`reglages.toml`, clé `taille_icones`, en points ; absente : 16 depuis la partie 195, 13 avant), pas du projet. Préférences > Apparence >
 //! Tailles, à côté de la taille de l'interface ; il agit à l'image suivante.
 //!
 //! La taille en cours est retenue pour le fil de l'interface (`poser`, à chaque image, depuis les réglages) : les fonctions de
@@ -23,11 +23,20 @@ use crate::app::App;
 /// Les tailles proposées, en points.
 pub const TAILLES: [u8; 6] = [11, 12, 13, 14, 15, 16];
 
-/// La taille d'origine : celle des icônes des lignes Plans et Caméra avant la partie 179.5.
-pub const TAILLE_DEFAUT: u8 = 13;
+/// La taille d'origine : 16 points depuis la partie 195 (Anthony : « Taille d'origine 16pt », avec l'interface à 90 %) ; 13 avant,
+/// celle des icônes des lignes Plans et Caméra avant la partie 179.5. Elle règle ensemble les icônes de la timeline et celles des deux
+/// barres de la vue. Une taille déjà écrite dans les réglages reste la sienne ; « Par défaut » remet 16.
+pub const TAILLE_DEFAUT: u8 = 16;
+
+/// La taille de référence des mesures (`k`, `mesure`) : celle pour laquelle les cases et les largeurs d'origine ont été dessinées.
+pub const TAILLE_REFERENCE: u8 = 13;
+
+/// La taille des essais sans fenêtre (`App::sans_fenetre`) et du fil avant la première image : celle de leurs mesures, d'avant la
+/// partie 195.
+pub const TAILLE_ESSAIS: u8 = 13;
 
 thread_local! {
-    static TAILLE: Cell<f32> = const { Cell::new(TAILLE_DEFAUT as f32) };
+    static TAILLE: Cell<f32> = const { Cell::new(if cfg!(test) { TAILLE_ESSAIS as f32 } else { TAILLE_DEFAUT as f32 }) };
 }
 
 /// La taille proposée la plus proche de `t` (un fichier de réglages écrit à la main).
@@ -56,7 +65,7 @@ pub fn icone() -> f32 {
 
 /// Le rapport à la taille d'origine : les cases des icônes le suivent.
 pub fn k() -> f32 {
-    icone() / f32::from(TAILLE_DEFAUT)
+    icone() / f32::from(TAILLE_REFERENCE)
 }
 
 /// Une largeur d'origine (pour les icônes de 13 points) à la taille en cours, arrondie au point.
@@ -85,6 +94,18 @@ impl App {
         }
         // (L'icône du nouveau plan, à la taille choisie.)
         ui.label(RichText::new(egui_phosphor::regular::PLUS_SQUARE).size(f32::from(actuelle)));
+        // (Partie 195 : « Par défaut » remet la taille d'origine, 16 points.)
+        let r = ui.add_enabled(actuelle != TAILLE_DEFAUT, egui::Button::new("Par défaut").small());
+        if crate::bulles::bulle(r, "Taille d'origine des icônes", "Remet les icônes de la timeline et des barres de la vue à 16 points, leur taille d'origine.", "").clicked() {
+            self.retablir_taille_icones();
+        }
         ui.end_row();
+    }
+
+    /// « Par défaut » de la taille des icônes : 16 points (partie 195).
+    pub(crate) fn retablir_taille_icones(&mut self) {
+        self.settings.taille_icones = TAILLE_DEFAUT;
+        poser(TAILLE_DEFAUT);
+        let _ = self.settings.save();
     }
 }

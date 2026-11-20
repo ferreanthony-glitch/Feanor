@@ -230,7 +230,7 @@ impl App {
         painter.line_segment([pos2(barre.center().x, barre.center().y - 14.0), pos2(barre.center().x, barre.center().y + 14.0)], Stroke::new(2.0_f32, trait_couleur));
 
         // La rangée d'outils de la vue.
-        let outils = Rect::from_min_size(vue.min, vec2(vue.width(), crate::viewbar::TOOLS_BAR_H));
+        let outils = Rect::from_min_size(vue.min, vec2(vue.width(), crate::viewbar::tools_bar_h()));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(outils).id_salt("outils_espace3d_a_cote"));
         child.painter().rect_filled(outils, 0.0, crate::theme::entete());
         child.set_clip_rect(outils);

@@ -300,6 +300,8 @@ impl App {
         self.settings.panes_fixed.clear();
         self.settings.panes_fit = true;
         self.fit_set.clear();
+        // (Et les hauteurs tirées dans la pile de la colonne, partie 194 : chaque panneau reprend celle de son contenu.)
+        self.colonne.oublier_les_hauteurs();
         self.status = match self.settings.save() {
             Ok(()) => "Panneaux réajustés à leur contenu.".into(),
             Err(e) => format!("Réglages non enregistrés : {e}"),

@@ -128,8 +128,8 @@ impl App {
     pub(crate) fn guides_button(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         let on = self.perspective_on();
-        let [w, h] = crate::barres::CASE;
-        let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::ICONE), on);
+        let [w, h] = crate::barres::case_de_barre();
+        let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::icone_de_barre()), on);
         let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on).frame(on).min_size(egui::vec2(w, h)), |ui| {
             ui.set_min_width(260.0);
             self.guides_menu_ui(ui);

@@ -63,12 +63,42 @@ impl App {
     /// et son clic droit « Assigner un raccourci » ; `on` : enfoncée quand c'est vrai, plate sinon. Le clic est à
     /// l'appelant.
     pub(crate) fn case_icone(&self, ui: &mut egui::Ui, icon: &str, on: Option<bool>, name: &str, description: &str, action: &str) -> egui::Response {
-        let text = RichText::new(icon).size(crate::barres::ICONE);
-        let resp = match on {
-            Some(on) => ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(on, text)),
-            None => ui.add_sized(crate::barres::CASE, egui::Button::new(text).frame(false)),
-        };
+        // (Partie 195 : dans les barres de la vue, la taille des icônes de la timeline, `barres::en_barre_compacte`.)
+        let (case, taille) = (crate::barres::case_de_barre(), crate::barres::icone_de_barre());
+        let text = RichText::new(icon).size(taille);
+        let resp = ui
+            .scope(|ui| {
+                // (Des cases plus petites que l'icône et ses marges d'origine : des marges à la mesure de la case.)
+                if case[0] < crate::barres::CASE[0] {
+                    ui.spacing_mut().button_padding = vec2(1.0, 1.0);
+                }
+                match on {
+                    Some(on) => ui.add_sized(case, egui::SelectableLabel::new(on, text)),
+                    None => ui.add_sized(case, egui::Button::new(text).frame(false)),
+                }
+            })
+            .inner;
         crate::monpanneauui::apprendre(ui.ctx(), action, icon, name, description);
+        self.aide(resp, name, description, action)
+    }
+
+    /// Partie 196 : une case des barres qui porte un mot court en gras (« 2D », « 3D ») au lieu d'une icône, de la taille des autres
+    /// cases, allumée quand `on` ; sa bulle, son clic droit « Assigner un raccourci », comme `case_icone`.
+    pub(crate) fn case_mot(&self, ui: &mut egui::Ui, mot: &str, on: Option<bool>, name: &str, description: &str, action: &str) -> egui::Response {
+        let (case, taille) = (crate::barres::case_de_barre(), crate::barres::icone_de_barre());
+        let famille = if crate::marque::polices_pretes(ui.ctx()) { egui::FontFamily::Name(crate::marque::FAMILLE_SEMIBOLD.into()) } else { egui::FontFamily::Proportional };
+        let on_ = on.unwrap_or(false);
+        let text = crate::bulles::encre_etat(RichText::new(mot).font(egui::FontId::new(taille, famille)).strong(), on_);
+        let resp = ui
+            .scope(|ui| {
+                ui.spacing_mut().button_padding = vec2(1.0, 1.0);
+                match on {
+                    Some(on) => ui.add_sized(case, egui::SelectableLabel::new(on, text)),
+                    None => ui.add_sized(case, egui::Button::new(text).frame(false)),
+                }
+            })
+            .inner;
+        crate::monpanneauui::apprendre(ui.ctx(), action, mot, name, description);
         self.aide(resp, name, description, action)
     }
 

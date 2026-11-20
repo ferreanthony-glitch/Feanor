@@ -71,7 +71,7 @@ fn dragging_a_layer_opacity_bar_sends_no_tile_to_the_gpu() {
     }
     // La barre d'opacité d'un calque, dans les en-têtes des calques (sous le dessin : le curseur du passe-partout, dans la barre sous
     // l'image, écrit aussi « 100 % ») : « 100 % ».
-    let bas_du_dessin = b.app.canvas_rect.bottom() + crate::viewbar::TOOLS_BAR_H;
+    let bas_du_dessin = b.app.canvas_rect.bottom() + crate::viewbar::tools_bar_h();
     let Some(&(_, centre)) = vus.iter().find(|(t, c)| t == "100 %" && c.y > bas_du_dessin) else { panic!("aucune barre d'opacité à l'écran : {:?}", vus.iter().map(|v| &v.0).take(60).collect::<Vec<_>>()) };
     b.garder_formes = false;
     let (copies, composes) = carte(&b);
