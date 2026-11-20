@@ -18,10 +18,10 @@ use crate::document::{Document, Layer, LayerKind, LayerTransform};
 use crate::espace3d::Monde;
 use crate::render::{FondPart, Plan};
 
-const BLEU: Color32 = Color32::from_rgb(0, 0, 255);
+pub(crate) const BLEU: Color32 = Color32::from_rgb(0, 0, 255);
 
 /// Un projet de 160 × 90 (feuille 320 × 180), sans calque.
-fn projet() -> Document {
+pub(crate) fn projet() -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     doc.panels[0].length = 24;
     doc.panels[0].layers.clear();
@@ -29,7 +29,7 @@ fn projet() -> Document {
 }
 
 /// Une boîte grise du décor, posée par le bas de son centre en `pos` (mètres), sans aimant.
-fn objet_boite(id: u64, a: [f32; 3], b: [f32; 3], pos: [f32; 3]) -> Objet3d {
+pub(crate) fn objet_boite(id: u64, a: [f32; 3], b: [f32; 3], pos: [f32; 3]) -> Objet3d {
     let mut o = crate::decor3d_tests::objet(id, boite(a, b), pos[0], pos[2]);
     o.place.position = pos;
     o.aimante = false;
@@ -37,7 +37,7 @@ fn objet_boite(id: u64, a: [f32; 3], b: [f32; 3], pos: [f32; 3]) -> Objet3d {
 }
 
 /// Le décor de la séquence du plan 0 : ces objets, sans ciel ni brume ni ombres (le transparent autour du décor se voit).
-fn poser_decor(doc: &mut Document, objets: Vec<Objet3d>) {
+pub(crate) fn poser_decor(doc: &mut Document, objets: Vec<Objet3d>) {
     let seq = doc.sequence_of(0);
     let mut d = Decor3d::new(Aspect { ciel: false, brume: false, ombres: false, ..Aspect::default() });
     d.objets = objets;
@@ -51,7 +51,7 @@ fn la_boite() -> Objet3d {
 
 /// Un calque bitmap avec un rectangle bleu (`x0..x1` × `y0..y1`, pixels de la feuille), à la profondeur où sa carte est à `z`
 /// mètres. Son rang.
-fn calque_bleu(doc: &mut Document, nom: &str, [x0, x1, y0, y1]: [usize; 4], z: f32) -> usize {
+pub(crate) fn calque_bleu(doc: &mut Document, nom: &str, [x0, x1, y0, y1]: [usize; 4], z: f32) -> usize {
     let c = doc.new_cel(LayerKind::Bitmap);
     let r = &mut doc.cels.get_mut(&c).unwrap().raster;
     for y in y0..y1 {
@@ -314,7 +314,7 @@ fn sans_decor_l_image_est_celle_d_avant() {
 // ---------------------------------------------------------------------------------------------- par la carte graphique
 
 /// L'image composée du plan 0 (la feuille, 320 × 180), par la carte graphique, le décor compris (dessiné par elle).
-fn composee(rs: &RenderState, doc: &Document) -> Vec<Color32> {
+pub(crate) fn composee(rs: &RenderState, doc: &Document) -> Vec<Color32> {
     let plan = crate::render::panel_plan_at(doc, 0, 0, None);
     let mut gpu = crate::gpu::GpuCanvas::new(rs);
     let _ = crate::gpu_tests::render_with(&mut gpu, rs, doc, &plan, true);
@@ -378,17 +378,20 @@ fn la_carte_graphique_et_le_processeur_donnent_la_meme_profondeur_du_decor() {
     let (mut comparés, mut vides) = (0, 0);
     for y in 1..h - 1 {
         for x in 1..w - 1 {
-            let voisins = [(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)].map(|(dx, dy): (i32, i32)| prof_cpu[(y as i32 + dy) as usize * w + (x as i32 + dx) as usize]);
+            let voisins = [(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)].map(|(dx, dy): (i32, i32)| prof_cpu.un((y as i32 + dy) as usize * w + (x as i32 + dx) as usize));
             if voisins.iter().all(|v| *v == 0.0) {
                 vides += 1;
-                assert_eq!(prof_gpu[y * w + x], 0.0, "rien à ({x}, {y})");
+                assert_eq!(prof_gpu.echantillons(y * w + x), [0.0; 4], "rien à ({x}, {y})");
                 continue;
             }
             if voisins.iter().any(|v| *v == 0.0 || (*v - voisins[0]).abs() > voisins[0] * 0.01) {
                 continue;
             }
             comparés += 1;
-            let (c, g) = (prof_cpu[y * w + x], prof_gpu[y * w + x]);
+            // (Partie 193 : la carte garde quatre échantillons par pixel ; loin des bords, ils sont tous à la distance du processeur.)
+            let c = prof_cpu.un(y * w + x);
+            let g = prof_gpu.un(y * w + x);
+            assert!(prof_gpu.echantillons(y * w + x).iter().all(|e| (c - e).abs() <= c * 2e-3), "({x}, {y}) : processeur {c}, échantillons {:?}", prof_gpu.echantillons(y * w + x));
             assert!((c - g).abs() <= c * 1e-3, "({x}, {y}) : processeur {} m, carte {} m", 1.0 / c, 1.0 / g);
         }
     }
@@ -449,7 +452,7 @@ fn lire(rs: &RenderState, w: u32, h: u32, jobs: Vec<ClippedPrimitive>) -> Vec<Co
 
 /// Le voile d'une carte de la vue Espace 3D, seul : le décor est dessiné par la passe de la vue, mais pas posé (sa zone de
 /// découpe est vide) ; reste ce que le voile de la carte placée en `xf` remet du décor devant elle.
-fn voile_seul(rs: &RenderState, doc: &Document, xf: &crate::espace3d::Xf) -> Vec<Color32> {
+pub(crate) fn voile_seul(rs: &RenderState, doc: &Document, xf: &crate::espace3d::Xf) -> Vec<Color32> {
     let plan = crate::render::panel_plan_at(doc, 0, 0, None);
     let Some(FondPart::Decor(key)) = plan.items[0].fond.clone() else { panic!() };
     let objets = crate::decor3d::objets_de(doc, &key).unwrap();
@@ -617,6 +620,8 @@ fn temps_de_composition(rs: &RenderState, doc: &Document, plan: &Plan, n: usize)
 #[ignore]
 fn profondeur_perf() {
     let Some(rs) = crate::gpu_tests::headless() else { return };
+    // (Partie 193 : avec les bords doux, le cas le plus cher ; sans eux, c'est le chemin d'avant.)
+    crate::decor3d::essai_bords(Some(true));
     for (sorte, part) in [("pleines", 1usize), ("d'un huitième de la feuille", 8)] {
         let mut doc = Document::with_frame(1920, 1080, 24);
         doc.panels[0].length = 24;

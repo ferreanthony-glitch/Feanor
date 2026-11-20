@@ -31,16 +31,26 @@ use crate::espace3dmath::{self as m, M4, V3};
 const COULEUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PROFONDEUR: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// La profondeur partagée avec les cartes (partie 183, `profondeur.rs`) : l'inverse de la distance à l'œil, le long de son axe, de ce
-/// que le décor montre à chaque pixel de la feuille (0 : rien). Une seconde cible de la passe de l'image du plan. Sur 16 bits : à
-/// 0,05 % près (la tolérance est de 0,4 %), et la moitié moins à lire par pixel de carte à la composition.
-pub const PROF: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+/// que le décor montre à chaque pixel de la feuille (0 : rien). Sur 16 bits : à 0,05 % près (la tolérance est de 0,4 %).
+///
+/// **En quatre échantillons par pixel** (partie 193, les bords doux), à côté de `PROF1`, seulement quand une carte du plan partage
+/// la profondeur et que le décor tient dans le budget avec elle : après la passe de l'image du plan (inchangée), une passe de la
+/// seule profondeur à quatre échantillons (`fs_prof` : pas de couleur, pas de lumière), ramenée
+/// ensuite à l'inverse de la distance de chacun de ses quatre échantillons (`PROF_DES_ECHANTILLONS`), un par canal, aux places de
+/// `profondeur::MOTIF_CARTE`. La composition compte ceux où le décor est plus près que la carte.
+pub const PROF: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+/// La profondeur partagée en une valeur par pixel, celle de la partie 183 (`R16Float`, seconde cible de la passe de couleur), toujours
+/// dessinée : les ombres des cartes la lisent (partie 185), et c'est elle qui cache les cartes quand aucune carte du plan ne partage
+/// la profondeur du décor ou qu'un décor trop lourd n'a pas la place des bords doux dans le budget de cette machine (partie 193,
+/// allégée) : le coût d'avant.
+pub const PROF1: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
 /// Les ombres des cartes sur le décor (partie 185, `ombres.rs`) : à chaque pixel de la feuille, la part du soleil que le décor y a
 /// reçue (`max(n·soleil, 0)` × ses propres ombres) et le mélange de la lumière hémisphère (`n.y / 2 + 1/2`). Une troisième cible
 /// de la passe de l'image du plan, seulement quand le décor a ses ombres : c'est ce qu'il faut pour retirer le soleil là où une
 /// carte le cache, exactement comme le décor ombre ses propres faces.
 pub const SOLEIL: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
 /// Lissage des bords de la vue Espace 3D (l'image du plan, à la taille de la feuille, n'en a pas besoin : elle est réduite à
-/// l'écran).
+/// l'écran ; sa profondeur partagée avec les cartes a quatre échantillons, partie 193, `PROF`).
 const ECHANTILLONS_VUE: u32 = 4;
 const GLOBAL: u64 = 512;
 /// Les réglages du voile d'une carte (`VOILE`) et leur pas dans le tampon (partie 183).
@@ -150,32 +160,74 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     return ombrer(in);
 }
 
+// La profondeur seule de l'image du plan à quatre échantillons (partie 193, `PROF`) : rien n'est éclairé. La place seule
+// (`vs_prof_seul`, sans fragment), et, pour les matières à seuil, la coordonnée de texture et la découpe de `eclairer`.
+struct POut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_prof_seul(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) uv: vec2<f32>) -> @builtin(position) vec4<f32> {
+    return g.vp * (o.model * vec4<f32>(p, 1.0));
+}
+
+@vertex
+fn vs_prof(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) uv: vec2<f32>) -> POut {
+    var out: POut;
+    out.pos = g.vp * (o.model * vec4<f32>(p, 1.0));
+    out.uv = uv;
+    return out;
+}
+
+@fragment
+fn fs_prof(in: POut) {
+    if (o.flags.y > 0.0) {
+        var a = o.color.a;
+        if (o.flags.x > 0.5) {
+            a = a * textureSampleLevel(t_base, s_base, in.uv, 0.0).a;
+        }
+        if (a < o.flags.y) {
+            discard;
+        }
+    }
+}
+
 // L'image du plan (partie 183) : la couleur, et l'inverse de la distance à l'œil le long de son axe (la profondeur que les
-// cartes partagent avec le décor, `profondeur.rs`).
+// cartes partagent avec le décor, `profondeur.rs`), en une valeur par pixel (`PROF1`).
 struct Feuille {
     @location(0) c: vec4<f32>,
     @location(1) p: vec4<f32>,
 };
 
 @fragment
-fn fs_main_feuille(in: VOut) -> Feuille {
+fn fs_main_feuille_p(in: VOut) -> Feuille {
     var out: Feuille;
     out.c = ombrer(in);
     out.p = vec4<f32>(1.0 / max(dot(in.wpos - g.eye.xyz, g.cam_f.xyz), 1e-6), 0.0, 0.0, 1.0);
     return out;
 }
 
-// L'image du plan quand le décor a ses ombres (partie 185) : en plus, la part du soleil et le mélange de l'hémisphère, pour que les
-// ombres des cartes retirent le soleil comme le décor le retire de ses faces à l'ombre (`ombres.rs`).
-struct FeuilleS {
+// Le ciel de l'image du plan : il ne cache rien (profondeur 0).
+@fragment
+fn fs_sky_feuille_p(in: SkyOut) -> Feuille {
+    var out: Feuille;
+    out.c = ciel(in);
+    out.p = vec4<f32>(0.0);
+    return out;
+}
+
+// Et quand le décor a ses ombres (partie 185) : en plus, la part du soleil et le mélange de l'hémisphère, pour que les ombres des
+// cartes retirent le soleil comme le décor le retire de ses faces à l'ombre (`ombres.rs`).
+struct FeuillePS {
     @location(0) c: vec4<f32>,
     @location(1) p: vec4<f32>,
     @location(2) s: vec4<f32>,
 };
 
 @fragment
-fn fs_main_feuille_s(in: VOut) -> FeuilleS {
-    var out: FeuilleS;
+fn fs_main_feuille_ps(in: VOut) -> FeuillePS {
+    var out: FeuillePS;
     let e = eclairer(in);
     out.c = e.c;
     out.p = vec4<f32>(1.0 / max(dot(in.wpos - g.eye.xyz, g.cam_f.xyz), 1e-6), 0.0, 0.0, 1.0);
@@ -184,8 +236,8 @@ fn fs_main_feuille_s(in: VOut) -> FeuilleS {
 }
 
 @fragment
-fn fs_sky_feuille_s(in: SkyOut) -> FeuilleS {
-    var out: FeuilleS;
+fn fs_sky_feuille_ps(in: SkyOut) -> FeuillePS {
+    var out: FeuillePS;
     out.c = ciel(in);
     out.p = vec4<f32>(0.0);
     out.s = vec4<f32>(0.0);
@@ -242,15 +294,6 @@ fn vs_sky(@builtin(vertex_index) i: u32) -> SkyOut {
 @fragment
 fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
     return ciel(in);
-}
-
-// Le ciel de l'image du plan : il ne cache rien (profondeur 0).
-@fragment
-fn fs_sky_feuille(in: SkyOut) -> Feuille {
-    var out: Feuille;
-    out.c = ciel(in);
-    out.p = vec4<f32>(0.0);
-    return out;
 }
 
 fn ciel(in: SkyOut) -> vec4<f32> {
@@ -465,6 +508,46 @@ fn fs(in: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// La profondeur de l'image du plan en quatre échantillons (partie 193, `PROF`) : après la passe de la profondeur seule (`fs_prof`),
+/// chaque pixel de la feuille lit les quatre échantillons de son tampon et y met l'inverse de leur distance à l'œil, le long de son axe (0 là où
+/// rien n'est dessiné : le ciel ne cache rien). Le proche, le loin et l'orthographique de la passe sont dans ses réglages (après
+/// les 320 premiers octets, `dessiner_dans`).
+const PROF_DES_ECHANTILLONS: &str = r#"
+struct Reglages {
+    avant: array<vec4<f32>, 20>,
+    conv: vec4<f32>,     // proche, loin, orthographique (1/0)
+};
+@group(0) @binding(0) var<uniform> g: Reglages;
+@group(0) @binding(1) var t_prof: texture_depth_multisampled_2d;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((i << 1u) & 2u);
+    let y = f32(i & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+}
+
+// L'inverse de la distance d'une profondeur du tampon (`Vue::decoupe` : de 0 au proche à 1 au loin).
+fn inverse(z: f32) -> f32 {
+    if (z >= 1.0) {
+        return 0.0;
+    }
+    let proche = g.conv.x;
+    let loin = g.conv.y;
+    if (g.conv.z > 0.5) {
+        return 1.0 / max(proche + z * (loin - proche), 1e-6);
+    }
+    let k = loin / (loin - proche);
+    return max(1.0 - z / k, 0.0) / proche;
+}
+
+@fragment
+fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let q = vec2<i32>(floor(pos.xy));
+    return vec4<f32>(inverse(textureLoad(t_prof, q, 0)), inverse(textureLoad(t_prof, q, 1)), inverse(textureLoad(t_prof, q, 2)), inverse(textureLoad(t_prof, q, 3)));
+}
+"#;
+
 /// Le voile d'une carte de la vue Espace 3D (partie 183) : sur le quadrilatère de la carte, le décor là où il est plus près
 /// qu'elle, lu dans les cibles de la passe du décor de cette vue (sa couleur lissée et son tampon de profondeur à quatre
 /// échantillons). Posé juste après le dessin de la carte : le décor qui est devant la carte la recouvre.
@@ -519,15 +602,20 @@ fn distance_du_decor(z: f32) -> f32 {
 
 @fragment
 fn fs(in: Out) -> @location(0) vec4<f32> {
+    // (Partie 193 : la distance de la carte à la place de chacun des quatre échantillons du décor, d'après sa pente à l'écran ; une
+    // carte inclinée qui entre dans un objet a un bord lissé. Les dérivées avant tout `discard`.)
+    let pente = vec2<f32>(dpdx(in.dist), dpdy(in.dist));
+    var places = array<vec2<f32>, 4>(vec2<f32>(0.375, 0.125), vec2<f32>(0.875, 0.375), vec2<f32>(0.125, 0.625), vec2<f32>(0.625, 0.875));
     let ndc = in.decoupe.xy / in.decoupe.z;
     let taille = vec2<f32>(v.lin.y, v.lin.z);
     let q = vec2<i32>(floor(vec2<f32>((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * taille));
     if (q.x < 0 || q.y < 0 || q.x >= i32(taille.x) || q.y >= i32(taille.y)) {
         discard;
     }
-    let seuil = in.dist * (1.0 - TOLERANCE_RELATIVE) - TOLERANCE_METRES;
     var devant = 0.0;
     for (var s = 0; s < 4; s = s + 1) {
+        let d = in.dist + dot(pente, places[s] - vec2<f32>(0.5));
+        let seuil = d * (1.0 - TOLERANCE_RELATIVE) - TOLERANCE_METRES;
         let z = textureLoad(t_prof, q, s);
         if (z < 1.0 && distance_du_decor(z) < seuil) {
             devant = devant + 1.0;
@@ -655,15 +743,39 @@ struct Cibles {
     voile: Option<wgpu::BindGroup>,
 }
 
+/// Les tampons de profondeur de l'image du plan (partie 193, `Moteur::feuille4`) : celui de sa passe de couleur (un échantillon,
+/// jeté après elle) et celui de sa passe de profondeur seule (quatre échantillons, gardé : la profondeur des cartes en est tirée).
+struct Feuille4 {
+    taille: [u32; 2],
+    profondeur1: wgpu::TextureView,
+    /// (Fait la première fois qu'une carte partage la profondeur d'un décor : sans elle, rien de plus que la partie 183.)
+    profondeur4: Option<wgpu::TextureView>,
+}
+
 /// Le moteur du décor : pipelines, décors envoyés, prises.
 pub struct Moteur {
-    main1: wgpu::RenderPipeline,
+    /// La vue Espace 3D (quatre échantillons).
     main4: wgpu::RenderPipeline,
-    ciel1: wgpu::RenderPipeline,
     ciel4: wgpu::RenderPipeline,
-    /// L'image du plan avec la part du soleil (partie 185, `SOLEIL`).
-    main1s: wgpu::RenderPipeline,
-    ciel1s: wgpu::RenderPipeline,
+    /// L'image du plan, avec la profondeur en une valeur pour seconde cible (`PROF1`, partie 183) ; et la part du soleil (partie 185,
+    /// `SOLEIL`).
+    main1p: wgpu::RenderPipeline,
+    ciel1p: wgpu::RenderPipeline,
+    main1ps: wgpu::RenderPipeline,
+    ciel1ps: wgpu::RenderPipeline,
+    /// Passes de couleur de l'image du plan et passes de la profondeur à quatre échantillons faites depuis le début (essais).
+    pub passes_couleur: u64,
+    pub passes_quatre: u64,
+    /// La profondeur seule de l'image du plan à quatre échantillons (partie 193, `fs_prof`), et ce qui la ramène à `PROF`
+    /// (`PROF_DES_ECHANTILLONS`).
+    prof4: wgpu::RenderPipeline,
+    /// La même, pour les matières à seuil d'alpha (découpées comme dans la passe de couleur).
+    prof4s: wgpu::RenderPipeline,
+    prof_pipe: wgpu::RenderPipeline,
+    prof_layout: wgpu::BindGroupLayout,
+    /// Les tampons de profondeur de l'image du plan (partie 193), partagés par toutes ses prises (chaque passe les reprend tout
+    /// entiers), refaits quand la taille change.
+    feuille4: Option<Feuille4>,
     ombre_pipe: wgpu::RenderPipeline,
     /// Le poser de la vue sur l'écran d'egui, fait à la première vue (il dépend du format de l'écran).
     blit: Option<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
@@ -883,22 +995,40 @@ impl Moteur {
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D"), bind_group_layouts: &[&layout_global, &layout_objet, &layout_texture], push_constant_ranges: &[] });
         const ATTR: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
         let tampons = [wgpu::VertexBufferLayout { array_stride: 32, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTR }];
-        // (Une échantillon : l'image du plan, avec sa seconde cible, la profondeur partagée avec les cartes, partie 183 ; quatre : la
-        // vue Espace 3D.)
-        let cibles_feuille = [Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL }), Some(wgpu::ColorTargetState { format: PROF, blend: None, write_mask: wgpu::ColorWrites::ALL })];
+        // (Une échantillon : l'image du plan, avec sa profondeur en une valeur, partie 183 ; quatre : la vue Espace 3D.)
         let cibles_vue = [Some(wgpu::ColorTargetState { format: COULEUR, blend: None, write_mask: wgpu::ColorWrites::ALL })];
-        // (Partie 185 : une troisième cible, la part du soleil, quand le décor de l'image du plan a ses ombres.)
-        let cibles_soleil = [cibles_feuille[0].clone(), cibles_feuille[1].clone(), Some(wgpu::ColorTargetState { format: SOLEIL, blend: None, write_mask: wgpu::ColorWrites::ALL })];
-        let principal = |samples: u32, soleil: bool| {
-            let feuille = samples == 1;
+        // (Partie 185 : une seconde cible, la part du soleil, quand le décor de l'image du plan a ses ombres.)
+        let cibles_soleil = [cibles_vue[0].clone(), Some(wgpu::ColorTargetState { format: SOLEIL, blend: None, write_mask: wgpu::ColorWrites::ALL })];
+        // (Et la profondeur en une valeur comme seconde cible, celle de la partie 183 : `PROF1`.)
+        let cible_prof1 = Some(wgpu::ColorTargetState { format: PROF1, blend: None, write_mask: wgpu::ColorWrites::ALL });
+        let cibles_p = [cibles_vue[0].clone(), cible_prof1.clone()];
+        let cibles_ps = [cibles_vue[0].clone(), cible_prof1, cibles_soleil[1].clone()];
+        let feuille_p = |vertex: &str, fragment: &str, soleil: bool, profondeur: wgpu::DepthStencilState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("décor 3D : image du plan, profondeur en une valeur"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some(vertex), buffers: if vertex == "vs_main" { &tampons } else { &[] }, compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some(fragment), targets: if soleil { &cibles_ps } else { &cibles_p }, compilation_options: Default::default() }),
+                primitive: if vertex == "vs_main" { wgpu::PrimitiveState { cull_mode: None, ..Default::default() } } else { wgpu::PrimitiveState::default() },
+                depth_stencil: Some(profondeur),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let ecrit = wgpu::DepthStencilState { format: PROFONDEUR, depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() };
+        let fond = wgpu::DepthStencilState { format: PROFONDEUR, depth_write_enabled: false, depth_compare: wgpu::CompareFunction::Always, stencil: Default::default(), bias: Default::default() };
+        let (main1p, ciel1p) = (feuille_p("vs_main", "fs_main_feuille_p", false, ecrit.clone()), feuille_p("vs_sky", "fs_sky_feuille_p", false, fond.clone()));
+        let (main1ps, ciel1ps) = (feuille_p("vs_main", "fs_main_feuille_ps", true, ecrit), feuille_p("vs_sky", "fs_sky_feuille_ps", true, fond));
+        let principal = |samples: u32| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("décor 3D"),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), buffers: &tampons, compilation_options: Default::default() },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(if soleil { "fs_main_feuille_s" } else if feuille { "fs_main_feuille" } else { "fs_main" }),
-                    targets: if soleil { &cibles_soleil } else if feuille { &cibles_feuille } else { &cibles_vue },
+                    entry_point: Some("fs_main"),
+                    targets: &cibles_vue,
                     compilation_options: Default::default(),
                 }),
                 primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
@@ -908,16 +1038,15 @@ impl Moteur {
                 cache: None,
             })
         };
-        let ciel = |samples: u32, soleil: bool| {
-            let feuille = samples == 1;
+        let ciel = |samples: u32| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("décor 3D : ciel"),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_sky"), buffers: &[], compilation_options: Default::default() },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(if soleil { "fs_sky_feuille_s" } else if feuille { "fs_sky_feuille" } else { "fs_sky" }),
-                    targets: if soleil { &cibles_soleil } else if feuille { &cibles_feuille } else { &cibles_vue },
+                    entry_point: Some("fs_sky"),
+                    targets: &cibles_vue,
                     compilation_options: Default::default(),
                 }),
                 primitive: wgpu::PrimitiveState::default(),
@@ -990,13 +1119,58 @@ impl Moteur {
         );
         let blanc = groupe_texture(device, &layout_texture, &blanc_tex.create_view(&Default::default()), &echant_base);
         let ombre_vide = texture_profondeur(device, [1, 1], 1, true);
+        // La profondeur de l'image du plan en quatre échantillons (partie 193) : ses réglages (ceux de la passe) et son tampon.
+        let prof_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("décor 3D : profondeur des échantillons"), source: wgpu::ShaderSource::Wgsl(PROF_DES_ECHANTILLONS.into()) });
+        let prof_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("décor 3D : profondeur des échantillons"),
+            entries: &[
+                uniforme(0, GLOBAL, false),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: true },
+                    count: None,
+                },
+            ],
+        });
+        let prof_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("décor 3D : profondeur des échantillons"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("décor 3D : profondeur des échantillons"), bind_group_layouts: &[&prof_layout], push_constant_ranges: &[] })),
+            vertex: wgpu::VertexState { module: &prof_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &prof_shader, entry_point: Some("fs"), targets: &[Some(wgpu::ColorTargetState { format: PROF, blend: None, write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let profondeur_seule = |seuil: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("décor 3D : profondeur seule"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some(if seuil { "vs_prof" } else { "vs_prof_seul" }), buffers: &tampons, compilation_options: Default::default() },
+                fragment: seuil.then(|| wgpu::FragmentState { module: &shader, entry_point: Some("fs_prof"), targets: &[], compilation_options: Default::default() }),
+                primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState { format: PROFONDEUR, depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() }),
+                multisample: wgpu::MultisampleState { count: ECHANTILLONS_VUE, mask: !0, alpha_to_coverage_enabled: false },
+                multiview: None,
+                cache: None,
+            })
+        };
         Moteur {
-            main1: principal(1, false),
-            main4: principal(ECHANTILLONS_VUE, false),
-            ciel1: ciel(1, false),
-            ciel4: ciel(ECHANTILLONS_VUE, false),
-            main1s: principal(1, true),
-            ciel1s: ciel(1, true),
+            main4: principal(ECHANTILLONS_VUE),
+            ciel4: ciel(ECHANTILLONS_VUE),
+            main1p,
+            ciel1p,
+            main1ps,
+            ciel1ps,
+            passes_couleur: 0,
+            passes_quatre: 0,
+            prof4: profondeur_seule(false),
+            prof4s: profondeur_seule(true),
+            prof_pipe,
+            prof_layout,
+            feuille4: None,
             ombre_pipe,
             blit: None,
             blit_shader,
@@ -1164,7 +1338,7 @@ impl Moteur {
         couleur: &wgpu::TextureView,
         resolue: Option<&wgpu::TextureView>,
         profondeur: &wgpu::TextureView,
-        prof: Option<&wgpu::TextureView>,
+        prof1: Option<&wgpu::TextureView>,
         soleil_cible: Option<&wgpu::TextureView>,
         echantillons: u32,
         ciel: bool,
@@ -1223,6 +1397,8 @@ impl Moteur {
         put(&mut g, 272, &[u[0], u[1], u[2], c[0] * kpx]);
         put(&mut g, 288, &[f[0], f[1], f[2], c[1] * kpx]);
         put(&mut g, 304, &[taille_px[0] as f32, taille_px[1] as f32, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
+        // (Partie 193 : de quoi ramener le tampon de profondeur à l'inverse d'une distance, `PROF_DES_ECHANTILLONS`.)
+        put(&mut g, 320, &[proche, loin, if est_ortho { 1.0 } else { 0.0 }, 0.0]);
         let mut objets = vec![0u8; (n * PAS_OBJET) as usize];
         let mut rang = 0usize;
         for d in dessins {
@@ -1282,25 +1458,21 @@ impl Moteur {
             pass.set_bind_group(2, &self.blanc, &[]);
             self.poser(&mut pass, dessins, &groupe_objets, &mut 0, false);
         }
-        // (L'image du plan a une seconde cible : la profondeur partagée avec les cartes, partie 183, 0 là où rien n'est dessiné. La
-        // vue garde son tampon de profondeur : le voile de ses cartes le lit, `VoileCarte`.)
-        let cible_prof = prof.map(|v| wgpu::RenderPassColorAttachment { view: v, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } });
-        // (Et, quand le décor de l'image du plan a ses ombres, la part du soleil : partie 185.)
-        let soleil_cible = soleil_cible.filter(|_| prof.is_some());
+        // (Quand le décor de l'image du plan a ses ombres, la part du soleil : partie 185. La vue garde son tampon de profondeur : le
+        // voile de ses cartes le lit, `VoileCarte`.)
         let cible_soleil = soleil_cible.map(|v| wgpu::RenderPassColorAttachment { view: v, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } });
-        let attaches = [
-            Some(wgpu::RenderPassColorAttachment {
-                view: couleur,
-                resolve_target: resolue,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: if resolue.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store } },
-            }),
-            cible_prof,
-            cible_soleil,
-        ];
-        let nombre = if soleil_cible.is_some() { 3 } else if prof.is_some() { 2 } else { 1 };
+        // (Sans les bords doux, la profondeur en une valeur, seconde cible comme à la partie 183 : `PROF1`.)
+        let cible_prof1 = prof1.map(|v| wgpu::RenderPassColorAttachment { view: v, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } });
+        let couleur_att = Some(wgpu::RenderPassColorAttachment {
+            view: couleur,
+            resolve_target: resolue,
+            ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: if resolue.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store } },
+        });
+        let attaches: Vec<Option<wgpu::RenderPassColorAttachment>> = if cible_prof1.is_some() { [couleur_att, cible_prof1, cible_soleil].into_iter().take(if soleil_cible.is_some() { 3 } else { 2 }).collect() } else { [couleur_att, cible_soleil].into_iter().take(if soleil_cible.is_some() { 2 } else { 1 }).collect() };
+        debug_assert!(prof1.is_some() == (echantillons == 1), "l'image du plan a sa profondeur, la vue non");
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("décor 3D"),
-            color_attachments: &attaches[..nombre],
+            color_attachments: &attaches,
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: profondeur, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: if echantillons > 1 { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard } }), stencil_ops: None }),
             timestamp_writes: None,
             occlusion_query_set: None,
@@ -1308,7 +1480,11 @@ impl Moteur {
         pass.set_bind_group(0, &groupe_global, &[]);
         let avec_soleil = soleil_cible.is_some();
         if ciel {
-            pass.set_pipeline(if echantillons > 1 { &self.ciel4 } else if avec_soleil { &self.ciel1s } else { &self.ciel1 });
+            pass.set_pipeline(match (echantillons > 1, avec_soleil) {
+                (true, _) => &self.ciel4,
+                (false, true) => &self.ciel1ps,
+                (false, false) => &self.ciel1p,
+            });
             pass.set_bind_group(1, &groupe_objets, &[0]);
             pass.set_bind_group(2, &self.blanc, &[]);
             pass.draw(0..3, 0..1);
@@ -1319,11 +1495,41 @@ impl Moteur {
                 pass.set_pipeline(&ov.main4c);
                 pass.set_bind_group(3, groupe, &[]);
             }
-            _ => pass.set_pipeline(if echantillons > 1 { &self.main4 } else if avec_soleil { &self.main1s } else { &self.main1 }),
+            _ => pass.set_pipeline(match (echantillons > 1, avec_soleil) {
+                (true, _) => &self.main4,
+                (false, true) => &self.main1ps,
+                (false, false) => &self.main1p,
+            }),
         }
         self.poser(&mut pass, dessins, &groupe_objets, &mut dessines, true);
         drop(pass);
         self.dessines = dessines;
+    }
+
+    /// Comme `poser`, pour la profondeur seule de l'image du plan (partie 193) : sans fragment, sauf pour les matières à seuil.
+    fn poser_profondeur(&self, pass: &mut wgpu::RenderPass<'_>, dessins: &[Dessin], groupe_objets: &wgpu::BindGroup) {
+        let mut base = 0usize;
+        let mut seuil_pose = None;
+        for d in dessins {
+            let Some(mg) = self.modeles.get(&d.id) else { continue };
+            for mc in &mg.morceaux {
+                let (_, tex, seuil) = mg.matieres[mc.prim];
+                let a_seuil = seuil > 0.0;
+                if seuil_pose != Some(a_seuil) {
+                    pass.set_pipeline(if a_seuil { &self.prof4s } else { &self.prof4 });
+                    seuil_pose = Some(a_seuil);
+                }
+                pass.set_bind_group(1, groupe_objets, &[((base + mc.prim) as u64 * PAS_OBJET) as u32]);
+                if a_seuil {
+                    let groupe = tex.and_then(|t| mg.textures.get(t)).and_then(|t| t.as_ref()).map_or(&self.blanc, |t| &t.groupe);
+                    pass.set_bind_group(2, groupe, &[]);
+                }
+                pass.set_vertex_buffer(0, mc.sommets.slice(..));
+                pass.set_index_buffer(mc.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mc.nombre, 0, 0..1);
+            }
+            base += mg.matieres.len();
+        }
     }
 
     fn poser(&self, pass: &mut wgpu::RenderPass<'_>, dessins: &[Dessin], groupe_objets: &wgpu::BindGroup, dessines: &mut usize, textures: bool) {
@@ -1351,14 +1557,75 @@ impl Moteur {
     /// réduite à l'écran.
     #[allow(clippy::too_many_arguments)]
     ///
-    /// `prof` : la texture de même taille (`PROF`) où va la profondeur que les cartes partagent avec le décor (partie 183).
+    /// `prof` : la texture de même taille (`PROF1`) où va la profondeur que les cartes partagent avec le décor (partie 183), en une
+    /// valeur par pixel, seconde cible de la passe de couleur. `prof4` (partie 193, les bords doux : une carte du plan partage la
+    /// profondeur) : la texture (`PROF`) où va aussi la profondeur en quatre échantillons, après la couleur (`profondeur_quatre`).
     ///
     /// `soleil` (partie 185) : la texture de même taille (`SOLEIL`) où va la part du soleil, quand le décor a ses ombres et que
-    /// les cartes peuvent en porter ; rien : deux cibles, comme avant.
-    pub fn dessiner_feuille(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], cible: &wgpu::TextureView, prof: &wgpu::TextureView, soleil: Option<&wgpu::TextureView>, ciel: bool, qualite: crate::decor3dbudget::Qualite) {
-        let profondeur = self.cibles(device, cle, taille, 1, false).profondeur.clone();
-        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur, Some(prof), soleil, 1, ciel, qualite, None);
+    /// les cartes peuvent en porter ; rien : sans elle.
+    pub fn dessiner_feuille(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], cible: &wgpu::TextureView, prof: &wgpu::TextureView, prof4: Option<&wgpu::TextureView>, soleil: Option<&wgpu::TextureView>, ciel: bool, qualite: crate::decor3dbudget::Qualite) {
+        if self.feuille4.as_ref().is_none_or(|f| f.taille != taille) {
+            self.feuille4 = Some(Feuille4 { taille, profondeur1: texture_profondeur(device, taille, 1, false), profondeur4: None });
+        }
+        let profondeur1 = self.feuille4.as_ref().expect("feuille4").profondeur1.clone();
+        self.passes_couleur += 1;
+        self.dessiner_dans(device, queue, encoder, cle, dessins, &Vue::Prise(*prise), [taille[0] as f32, taille[1] as f32], taille, cible, None, &profondeur1, Some(prof), soleil, 1, ciel, qualite, None);
+        if let Some(p4) = prof4 {
+            self.profondeur_quatre(device, queue, encoder, cle, dessins, taille, p4);
+        }
     }
+
+    /// **La profondeur de l'image du plan en quatre échantillons** (partie 193, `PROF`) : la passe de la profondeur seule à quatre
+    /// échantillons, avec les réglages et les objets de la dernière passe de couleur de la prise `cle` (le même décor vu du même œil),
+    /// puis ramenée à l'inverse des distances dans `prof`. Seule, elle sert quand une carte se met à partager la profondeur d'un décor
+    /// déjà dessiné (la couleur n'est pas refaite). Faux si la prise n'a pas encore de passe de couleur.
+    pub fn profondeur_quatre(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, cle: u64, dessins: &[Dessin], taille: [u32; 2], prof: &wgpu::TextureView) -> bool {
+        if !self.prises.get(&cle).is_some_and(|p| p.passe.is_some_and(|ps| ps.taille_px == taille)) {
+            return false;
+        }
+        // (Les modèles sont dans la carte depuis la passe de couleur ; s'il en manquait un, il y revient.)
+        for d in dessins {
+            self.assurer(device, queue, d.id, &d.scene);
+        }
+        if self.feuille4.as_ref().is_none_or(|f| f.taille != taille) {
+            self.feuille4 = Some(Feuille4 { taille, profondeur1: texture_profondeur(device, taille, 1, false), profondeur4: None });
+        }
+        let f = self.feuille4.as_mut().expect("feuille4");
+        let profondeur4 = f.profondeur4.get_or_insert_with(|| texture_profondeur(device, taille, ECHANTILLONS_VUE, true)).clone();
+        self.passes_quatre += 1;
+        let p = &self.prises[&cle];
+        let (groupe_global, groupe_objets) = (p.groupe_global.clone(), p.groupe_objets.clone());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("décor 3D : profondeur seule"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &profondeur4, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }), stencil_ops: None }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_bind_group(0, &groupe_global, &[]);
+            pass.set_bind_group(2, &self.blanc, &[]);
+            self.poser_profondeur(&mut pass, dessins, &groupe_objets);
+        }
+        // Ramenée à l'inverse des distances des quatre échantillons (avec les réglages de la passe : chaque prise a les siens).
+        let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("décor 3D : profondeur des échantillons"),
+            layout: &self.prof_layout,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: p.globals.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&profondeur4) }],
+        });
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("décor 3D : profondeur des échantillons"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: prof, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        pass.set_pipeline(&self.prof_pipe);
+        pass.set_bind_group(0, &groupe, &[]);
+        pass.draw(0..3, 0..1);
+        true
+    }
+
 
     /// La carte d'ombres du soleil de la dernière passe de la prise `cle`, si elle en a dessiné une (partie 185 : les cartes qui
     /// reçoivent les ombres du décor la lisent ; la vue garde la texture tant qu'on la tient).
@@ -2020,14 +2287,14 @@ impl CallbackTrait for RecueCarte {
 pub fn rendre_hors_ecran(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize) -> Option<(Vec<u8>, f32)> {
     // (Avec la part du soleil quand le décor a ses ombres, comme à l'écran, partie 185 : l'étalonnage de la machine mesure la passe
     // telle qu'elle est dessinée.)
-    rendre_hors_ecran_tout(device, queue, mt, dessins, prise, taille, ciel, qualite, fois, false, true).map(|(c, t, _, _)| (c, t))
+    rendre_hors_ecran_tout(device, queue, mt, dessins, prise, taille, ciel, qualite, fois, false, true, false).map(|(c, t, _, _)| (c, t))
 }
 
 /// Comme `rendre_hors_ecran`, et, si `avec_prof`, relit aussi la profondeur que les cartes partagent avec le décor (partie 183 :
 /// l'inverse de la distance à l'œil à chaque pixel, 0 là où rien n'est dessiné), pour la composition des exports.
 #[allow(clippy::too_many_arguments)]
-pub fn rendre_hors_ecran_prof(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize, avec_prof: bool) -> Option<(Vec<u8>, f32, Option<Vec<f32>>)> {
-    rendre_hors_ecran_tout(device, queue, mt, dessins, prise, taille, ciel, qualite, fois, avec_prof, false).map(|(c, t, p, _)| (c, t, p))
+pub fn rendre_hors_ecran_prof(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize, avec_prof: bool) -> Option<(Vec<u8>, f32, Option<crate::profondeur::ProfDecor>)> {
+    rendre_hors_ecran_tout(device, queue, mt, dessins, prise, taille, ciel, qualite, fois, avec_prof, false, true).map(|(c, t, p, _)| (c, t, p))
 }
 
 /// Ce que l'export garde du soleil d'un rendu du décor, pour les ombres des cartes (partie 185, `ombres.rs`) : la part du soleil
@@ -2044,7 +2311,9 @@ pub struct SortieOmbres {
 /// Comme `rendre_hors_ecran_prof`, et, si `avec_ombres` et que le décor a ses ombres, dessine aussi la part du soleil (la troisième
 /// cible de l'écran) et, avec `avec_prof`, relit ce qu'il faut aux ombres des cartes (`SortieOmbres`).
 #[allow(clippy::too_many_arguments)]
-pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize, avec_prof: bool, avec_ombres: bool) -> Option<(Vec<u8>, f32, Option<Vec<f32>>, Option<SortieOmbres>)> {
+///
+/// `quatre` (partie 193) : la profondeur en quatre échantillons (les bords doux), sinon en une valeur (le coût d'avant).
+pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &mut Moteur, dessins: &[Dessin], prise: &Prise, taille: [u32; 2], ciel: bool, qualite: crate::decor3dbudget::Qualite, fois: usize, avec_prof: bool, avec_ombres: bool, quatre: bool) -> Option<(Vec<u8>, f32, Option<crate::profondeur::ProfDecor>, Option<SortieOmbres>)> {
     let max = device.limits().max_texture_dimension_2d;
     if taille[0] > max || taille[1] > max || taille[0] == 0 || taille[1] == 0 {
         return None;
@@ -2062,7 +2331,9 @@ pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &m
         })
     };
     let tex = cible(COULEUR, "décor 3D hors écran");
-    let tex_prof = cible(PROF, "décor 3D hors écran : profondeur");
+    let tex_prof = cible(PROF1, "décor 3D hors écran : profondeur");
+    let tex_prof4 = quatre.then(|| cible(PROF, "décor 3D hors écran : profondeur en quatre échantillons"));
+    let view_prof4 = tex_prof4.as_ref().map(|t| t.create_view(&Default::default()));
     let view = tex.create_view(&Default::default());
     let view_prof = tex_prof.create_view(&Default::default());
     // (La part du soleil, partie 185 : seulement si le décor a ses ombres et qu'on la veut.)
@@ -2072,7 +2343,7 @@ pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &m
     let view_soleil = tex_soleil.as_ref().map(|t| t.create_view(&Default::default()));
     // Une première image : les maillages et les textures partent à la carte (une fois), rien n'est compté.
     let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("décor 3D hors écran") });
-    mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, view_soleil.as_ref(), ciel, qualite);
+    mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, view_prof4.as_ref(), view_soleil.as_ref(), ciel, qualite);
     queue.submit([enc.finish()]);
     let _ = device.poll(wgpu::Maintain::Wait);
     // Les mesures : `fois` images dans une seule soumission (comme à l'écran, où la carte enchaîne les images sans attendre le
@@ -2084,7 +2355,7 @@ pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &m
             let debut = std::time::Instant::now();
             let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("décor 3D mesure") });
             for _ in 0..fois {
-                mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, view_soleil.as_ref(), ciel, qualite);
+                mt.dessiner_feuille(device, queue, &mut enc, u64::MAX - 7, dessins, prise, taille, &view, &view_prof, view_prof4.as_ref(), view_soleil.as_ref(), ciel, qualite);
             }
             queue.submit([enc.finish()]);
             let _ = device.poll(wgpu::Maintain::Wait);
@@ -2093,7 +2364,17 @@ pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &m
     }
     let total = if meilleur.is_finite() { meilleur } else { 0.0 };
     let out = relire(device, queue, &tex, taille, 4)?;
-    let prof = if avec_prof { Some(relire(device, queue, &tex_prof, taille, 2)?.chunks_exact(2).map(|b| de_16_bits(u16::from_ne_bytes([b[0], b[1]]))).collect()) } else { None };
+    let (w, h) = (taille[0] as usize, taille[1] as usize);
+    let prof = if avec_prof {
+        let un: Vec<u16> = relire(device, queue, &tex_prof, taille, 2)?.chunks_exact(2).map(|b| u16::from_ne_bytes([b[0], b[1]])).collect();
+        let quatre = match &tex_prof4 {
+            Some(t) => Some(relire(device, queue, t, taille, 8)?.chunks_exact(8).map(|b| [0, 2, 4, 6].map(|k| u16::from_ne_bytes([b[k], b[k + 1]]))).collect()),
+            None => None,
+        };
+        Some(crate::profondeur::ProfDecor::avec(w, h, un, quatre, crate::profondeur::MOTIF_CARTE))
+    } else {
+        None
+    };
     let ombres = match (&tex_soleil, mt.prises.get(&(u64::MAX - 7)).filter(|p| p.ombre_faite).and_then(|p| p.ombre_tex.as_ref())) {
         (Some(ts), Some(carte)) if avec_prof => {
             let soleil = relire(device, queue, ts, taille, 2)?;
@@ -2106,7 +2387,7 @@ pub fn rendre_hors_ecran_tout(device: &wgpu::Device, queue: &wgpu::Queue, mt: &m
     Some((out, total, prof, ombres))
 }
 
-/// Les pixels d'une texture de `octets` octets par pixel (`COULEUR` : 4, `PROF` : 2), ligne par ligne.
+/// Les pixels d'une texture de `octets` octets par pixel (`COULEUR` : 4, `PROF` : 8, `PROF1` : 2), ligne par ligne.
 fn relire(device: &wgpu::Device, queue: &wgpu::Queue, tex: &wgpu::Texture, taille: [u32; 2], octets: u32) -> Option<Vec<u8>> {
     let ligne = (taille[0] * octets).div_ceil(256) * 256;
     let lecture = device.create_buffer(&wgpu::BufferDescriptor { label: Some("décor 3D relu"), size: ligne as u64 * taille[1] as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
@@ -2132,15 +2413,4 @@ fn relire(device: &wgpu::Device, queue: &wgpu::Queue, tex: &wgpu::Texture, taill
     drop(data);
     lecture.unmap();
     Some(out)
-}
-
-/// Un flottant de 16 bits (IEEE 754, `PROF`) en flottant de 32 bits.
-fn de_16_bits(h: u16) -> f32 {
-    let (signe, exp, frac) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as u32, (h & 0x3ff) as u32);
-    let v = match exp {
-        0 => frac as f32 * (1.0 / 16_777_216.0),
-        31 => if frac == 0 { f32::INFINITY } else { f32::NAN },
-        _ => f32::from_bits(((exp + 112) << 23) | (frac << 13)),
-    };
-    if signe == 1 { -v } else { v }
 }

@@ -238,8 +238,12 @@ fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
 }
 
 // La profondeur du décor 3D posé dessous (partie 183) : l'inverse de la distance à l'œil de ce qu'il montre à chaque pixel de la
-// feuille, 0 là où il n'y a rien (le ciel ne cache rien).
+// feuille, 0 là où il n'y a rien (le ciel ne cache rien) : une valeur par pixel (`decor_prof`, `PROF1`) ; et, avec le drapeau 4,
+// quatre échantillons par pixel (`decor_prof4`), un par canal, aux places du lissage à quatre échantillons de la carte (partie 193,
+// `profondeur::MOTIF_CARTE`).
 @group(3) @binding(0) var decor_prof: texture_2d<f32>;
+@group(3) @binding(6) var decor_prof4: texture_2d<f32>;
+
 
 // Les tolérances de `profondeur.rs` (`TOLERANCE_RELATIVE`, `TOLERANCE_METRES`) : le décor ne cache une carte que s'il est plus
 // près qu'elle d'au moins cela.
@@ -247,12 +251,22 @@ const TOLERANCE_RELATIVE: f32 = 0.004;
 const TOLERANCE_METRES: f32 = 0.01;
 
 // Les drapeaux d'une carte sur un décor (prof.w) : 1, le décor la cache selon sa distance (partie 183) ; 2, elle reçoit les ombres
-// (partie 185).
+// (partie 185) ; 4, la profondeur du décor a quatre échantillons par pixel (partie 193).
 fn drapeau(b: u32) -> bool {
     return (u32(item.prof.w + 0.5) & b) != 0u;
 }
 
-// Le pixel de la carte se voit-il (1) ou le décor, plus près, le cache-t-il (0) ? Comme `profondeur::cache`.
+// L'échantillon de profondeur `decor` cache-t-il la carte, dont l'inverse de la distance y est `carte` ? Comme `profondeur::cache`.
+fn cache_ech(carte: f32, decor: f32) -> f32 {
+    // (1 / décor < (1 − r) / carte − m, multiplié par décor · carte, tous deux positifs : sans division.)
+    if (decor > 0.0 && carte > 0.0 && carte * (1.0 + TOLERANCE_METRES * decor) < decor * (1.0 - TOLERANCE_RELATIVE)) {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+// La part du pixel de la carte qui se voit : 1 tout, 0 rien (le décor, plus près, le cache), et au bord la part de ses quatre
+// échantillons où le décor n'est pas devant (partie 193 : les bords doux). Comme `profondeur::Masque::visible`.
 fn visible(pos: vec4<f32>) -> f32 {
     if (!drapeau(1u)) {
         return 1.0;
@@ -262,19 +276,24 @@ fn visible(pos: vec4<f32>) -> f32 {
     if (p.x < 0 || p.y < 0 || p.x >= taille.x || p.y >= taille.y) {
         return 1.0;
     }
-    let decor = textureLoad(decor_prof, p, 0).r;
-    if (decor <= 0.0) {
+    if (!drapeau(4u)) {
+        // (Une valeur par pixel, `decor3dgpu::PROF1` : le test de la partie 183, au centre, tout ou rien.)
+        return 1.0 - cache_ech(item.prof.x * pos.x + item.prof.y * pos.y + item.prof.z, textureLoad(decor_prof, p, 0).r);
+    }
+    let d = textureLoad(decor_prof4, p, 0);
+    if (max(max(d.x, d.y), max(d.z, d.w)) <= 0.0) {
         return 1.0;
     }
-    let carte = item.prof.x * pos.x + item.prof.y * pos.y + item.prof.z;
-    if (carte <= 0.0) {
-        return 1.0;
-    }
-    // (1 / décor < (1 − r) / carte − m, multiplié par décor · carte, tous deux positifs : sans division.)
-    if (carte * (1.0 + TOLERANCE_METRES * decor) < decor * (1.0 - TOLERANCE_RELATIVE)) {
-        return 0.0;
-    }
-    return 1.0;
+    // (La carte à la place de chaque échantillon, `profondeur::MOTIF_CARTE` : son plan est linéaire sur la feuille.)
+    let c = vec2<f32>(p);
+    let a = item.prof.x;
+    let b = item.prof.y;
+    let o = item.prof.z;
+    let cache = cache_ech(a * (c.x + 0.375) + b * (c.y + 0.125) + o, d.x)
+        + cache_ech(a * (c.x + 0.875) + b * (c.y + 0.375) + o, d.y)
+        + cache_ech(a * (c.x + 0.125) + b * (c.y + 0.625) + o, d.z)
+        + cache_ech(a * (c.x + 0.625) + b * (c.y + 0.875) + o, d.w);
+    return 1.0 - cache * 0.25;
 }
 
 // Une carte qui partage la profondeur du décor (partie 183) : composée comme `fs_compose` ou `fs_blend`, cachée là où le décor
@@ -734,6 +753,11 @@ struct CelTexture {
     /// Le décor 3D (partie 183) : la texture de sa profondeur, de même taille (`decor3dgpu::PROF`), dessinée avec lui, et ce que
     /// la composition des cartes en lit (groupe 3 de `fs_compose_p`, `fs_blend_p`).
     prof: Option<(wgpu::Texture, wgpu::BindGroup)>,
+    /// Et sa profondeur en quatre échantillons par pixel (`decor3dgpu::PROF`, les bords doux, partie 193), faite la première fois
+    /// qu'une carte du plan partage la profondeur du décor ; et la signature du rendu du décor pour laquelle ils sont faits (0 :
+    /// aucun). La profondeur en une valeur (`prof`, celle de la partie 183) est toujours là : les ombres des cartes la lisent.
+    prof4: Option<wgpu::Texture>,
+    quatre_sig: u64,
     /// Le décor 3D avec ses ombres (partie 185) : ce que les ombres des cartes en lisent.
     ombre: Option<Box<OmbreDecor>>,
 }
@@ -749,8 +773,8 @@ struct FxState {
 impl CelTexture {
     /// Poids de la texture sur la carte.
     fn bytes(&self) -> u64 {
-        // (Le décor 3D : sa profondeur à côté, deux octets par pixel, partie 183.)
-        self.rect[2] as u64 * self.rect[3] as u64 * if self.prof.is_some() { 6 } else { 4 } + self.ombre.as_ref().map_or(0, |o| o.bytes())
+        // (Le décor 3D : sa profondeur à côté, deux octets par pixel, ou quatre échantillons de deux octets, parties 183 et 193.)
+        self.rect[2] as u64 * self.rect[3] as u64 * (4 + if self.prof.is_some() { 2 } else { 0 } + if self.prof4.is_some() { 8 } else { 0 }) + self.ombre.as_ref().map_or(0, |o| o.bytes())
     }
 }
 
@@ -920,6 +944,10 @@ struct DecorJob {
     taille: [u32; 2],
     qualite: crate::decor3dbudget::Qualite,
     sig: u64,
+    /// La couleur est à refaire (sinon : seulement la profondeur à quatre échantillons, partie 193).
+    couleur: bool,
+    /// La profondeur en quatre échantillons (les bords doux, partie 193), sinon en une valeur.
+    quatre: bool,
 }
 
 impl CanvasResources {
@@ -1251,6 +1279,8 @@ impl GpuCanvas {
                 carte_d_ombres(3),
                 carte_d_ombres(4),
                 wgpu::BindGroupLayoutEntry { binding: 5, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison), count: None },
+                // (Partie 193 : la profondeur en quatre échantillons, les bords doux.)
+                texture_lue(6),
             ],
         });
         let lumiere_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("calques : lumière du décor 3D"), entries: &[lumiere_entree(0)] });
@@ -1673,9 +1703,11 @@ impl GpuCanvas {
                 entry.last_used = tick;
             }
         }
+        // (Les bords doux, partie 193 : seulement si une carte du plan partage la profondeur du décor.)
+        let cartes = plan.items.iter().any(|i| i.profondeur.is_some());
         for (i, item) in plan.items.iter().enumerate() {
             if let (true, Some(crate::render::FondPart::Decor(key))) = (decor_gpu[i], &item.fond) {
-                resolved[i] = place_decor(rs, res, doc, key, size, tick, &mut bytes);
+                resolved[i] = place_decor(rs, res, doc, key, size, tick, &mut bytes, cartes);
             }
         }
         // Les calques à effets sur la carte graphique : la texture du résultat de chaque pile (créée à
@@ -1965,13 +1997,15 @@ impl GpuCanvas {
         // taille de cette image.
         // (Et, pour le décor 3D, s'il a sa profondeur : partie 183.)
         // (Et sa lumière, s'il a les ombres des cartes : partie 185.)
-        let places: Vec<Option<([u32; 4], (u32, u32), bool, Option<crate::ombres::Lumiere>)>> = {
+        // (Et si cette profondeur a quatre échantillons par pixel : partie 193.)
+        let places: Vec<Option<([u32; 4], (u32, u32), Option<bool>, Option<crate::ombres::Lumiere>)>> = {
             let renderer = self.render_state.renderer.read();
             let textures = renderer.callback_resources.get::<CanvasResources>().map(|res| &res.textures);
-            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims, t.prof.is_some(), t.ombre.as_ref().map(|o| o.lumiere)))).collect()
+            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims, t.prof.is_some().then_some(t.prof4.is_some() && t.quatre_sig != 0 && t.fx.is_some_and(|f| f.wanted == t.quatre_sig)), t.ombre.as_ref().map(|o| o.lumiere)))).collect()
         };
         // Le décor 3D posé dessous, s'il a sa profondeur sur la carte : les cartes qui portent leur plan s'y cachent (partie 183).
         let mut decor: Option<CelId> = None;
+        let mut decor_quatre = false;
         // Sa lumière, s'il a les ombres des cartes, et son rang parmi les éléments composés (partie 185).
         let mut lumiere: Option<(CelId, crate::ombres::Lumiere, usize)> = None;
         let mut items = Vec::with_capacity(plan.items.len() + 1);
@@ -1987,6 +2021,7 @@ impl GpuCanvas {
                 prof: None,
                 ombre: None,
                 decor_ombre: false,
+                quatre: false,
             });
         }
         for ((item, id), place) in plan.items.iter().zip(resolved).zip(&places) {
@@ -2007,6 +2042,7 @@ impl GpuCanvas {
                         prof: None,
                         ombre: None,
                         decor_ombre: false,
+                        quatre: false,
                     });
                 }
                 continue;
@@ -2014,7 +2050,8 @@ impl GpuCanvas {
             // Un élément sans dessin n'est pas composé.
             let Some(id) = *id else { continue };
             if let Some(crate::render::FondPart::Decor(_)) = &item.fond {
-                decor = place.is_some_and(|p| p.2).then_some(id);
+                decor = place.is_some_and(|p| p.2.is_some()).then_some(id);
+                decor_quatre = place.and_then(|p| p.2).unwrap_or(false);
                 lumiere = place.and_then(|p| p.3).map(|l| (id, l, items.len()));
             }
             let ombre = match (lumiere, item.ombre) {
@@ -2078,6 +2115,7 @@ impl GpuCanvas {
                 prof: decor.zip(item.profondeur),
                 ombre,
                 decor_ombre: false,
+                quatre: decor_quatre && item.profondeur.is_some(),
             });
         }
         // Le décor s'assombrit sous les cartes qui portent une ombre (partie 185).
@@ -2185,6 +2223,8 @@ struct GpuItem {
     ombre: Option<OmbreGpu>,
     /// Le décor, assombri sous les cartes qui portent une ombre (partie 185).
     decor_ombre: bool,
+    /// La profondeur du décor de dessous a quatre échantillons par pixel (partie 193 : drapeau 4 des composeurs).
+    quatre: bool,
 }
 
 /// Les ombres d'une carte sur la carte graphique (`GpuItem::ombre`).
@@ -2211,7 +2251,7 @@ struct ItemKey {
     /// Empreinte des effets d'un calque d'ajustement.
     adjust: Option<u64>,
     /// La profondeur partagée avec le décor 3D : le décor et le plan de la carte (partie 183).
-    prof: Option<(CelId, [u32; 3])>,
+    prof: Option<(CelId, [u32; 3], bool)>,
     /// Les ombres de la carte, et le décor assombri sous les cartes (partie 185).
     ombre: Option<(CelId, bool, bool, [u32; 3], [u32; 2])>,
     decor_ombre: bool,
@@ -2238,7 +2278,7 @@ impl ItemKey {
             }
             std::hash::Hasher::finish(&h)
         });
-        let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits)));
+        let prof = item.prof.map(|(decor, plan)| (decor, plan.map(f32::to_bits), item.quatre));
         let ombre = item.ombre.map(|o| (o.decor, o.porte, o.recoit, o.plan.map(f32::to_bits), o.gradient.map(f32::to_bits)));
         ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust, prof, ombre, decor_ombre: item.decor_ombre }
     }
@@ -2272,6 +2312,8 @@ struct Vides {
     lumiere: wgpu::Buffer,
     profondeur: wgpu::TextureView,
     cmp: wgpu::Sampler,
+    /// La profondeur en quatre échantillons d'un décor qui n'en a pas (partie 193).
+    prof4: wgpu::TextureView,
 }
 
 impl Vides {
@@ -2294,6 +2336,7 @@ impl Vides {
             soleil: tex(crate::decor3dgpu::SOLEIL, "ombres : soleil vide"),
             lumiere: device.create_buffer(&wgpu::BufferDescriptor { label: Some("ombres : lumière vide"), size: crate::ombres::OCTETS, usage: wgpu::BufferUsages::UNIFORM, mapped_at_creation: false }),
             profondeur: tex(OMBRE_FORMAT, "ombres : carte vide"),
+            prof4: tex(crate::decor3dgpu::PROF, "décor 3D : quatre échantillons vides"),
             cmp: device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("ombres"),
                 mag_filter: wgpu::FilterMode::Linear,
@@ -2307,7 +2350,9 @@ impl Vides {
 
 /// Le groupe 3 des composeurs d'une carte sur un décor (`prof_layout`) : la profondeur du décor `prof`, et, s'il a ses ombres de
 /// cartes, son soleil, sa lumière et ses deux cartes d'ombres (rien : des vides).
-fn groupe_decor(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &Vides, prof: &wgpu::TextureView, ombres: Option<(&wgpu::TextureView, &wgpu::Buffer, &wgpu::TextureView, &wgpu::TextureView)>) -> wgpu::BindGroup {
+///
+/// `prof4` (partie 193) : sa profondeur en quatre échantillons, s'il l'a (sinon une texture vide).
+fn groupe_decor(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &Vides, prof: &wgpu::TextureView, prof4: Option<&wgpu::TextureView>, ombres: Option<(&wgpu::TextureView, &wgpu::Buffer, &wgpu::TextureView, &wgpu::TextureView)>) -> wgpu::BindGroup {
     let (soleil, lumiere, decor, cartes) = ombres.unwrap_or((&vides.soleil, &vides.lumiere, &vides.profondeur, &vides.profondeur));
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("décor 3D : profondeur et ombres"),
@@ -2319,6 +2364,7 @@ fn groupe_decor(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &V
             wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(decor) },
             wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(cartes) },
             wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&vides.cmp) },
+            wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(prof4.unwrap_or(&vides.prof4)) },
         ],
     })
 }
@@ -2453,7 +2499,8 @@ fn ombres_des_cartes(encoder: &mut wgpu::CommandEncoder, res: &mut CanvasResourc
             let soleil = od.soleil.create_view(&Default::default());
             let carte_decor = od.carte_decor.clone().unwrap_or_else(|| res.vides.profondeur.clone());
             let cartes = od.cartes.as_ref().map_or_else(|| res.vides.profondeur.clone(), |c| c.1.clone());
-            od.groupe = Some(groupe_decor(device, &res.prof_layout, &res.vides, &prof, Some((&soleil, &od.uniform, &carte_decor, &cartes))));
+            let prof4 = res.textures.get(&decor).and_then(|t| t.prof4.as_ref()).map(|t| t.create_view(&Default::default()));
+            od.groupe = Some(groupe_decor(device, &res.prof_layout, &res.vides, &prof, prof4.as_ref(), Some((&soleil, &od.uniform, &carte_decor, &cartes))));
         }
     }
     if let Some(t) = res.textures.get_mut(&decor) {
@@ -2592,8 +2639,17 @@ impl CallbackTrait for CanvasPaint {
             if let Some(res) = resources.get_mut::<CanvasResources>() {
                 for j in jobs {
                     let Some((view, prof, soleil)) = res.textures.get(&j.out).and_then(|t| Some((t.texture.create_view(&Default::default()), t.prof.as_ref()?.0.create_view(&Default::default()), t.ombre.as_ref().map(|o| o.soleil.create_view(&Default::default()))))) else { continue };
-                    moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, &prof, soleil.as_ref(), j.ciel, j.qualite);
+                    let prof4 = res.textures.get(&j.out).and_then(|t| t.prof4.as_ref()).filter(|_| j.quatre).map(|t| t.create_view(&Default::default()));
+                    // (Seulement la profondeur à quatre échantillons, partie 193, si la couleur est à jour ; sinon, ou si la passe de
+                    // couleur de ce décor n'est plus là, tout.)
+                    let couleur = j.couleur || !prof4.as_ref().is_some_and(|p4| moteur.profondeur_quatre(device, queue, encoder, j.out, &j.dessins, j.taille, p4));
+                    if couleur {
+                        moteur.dessiner_feuille(device, queue, encoder, j.out, &j.dessins, &j.prise, j.taille, &view, &prof, prof4.as_ref(), soleil.as_ref(), j.ciel, j.qualite);
+                    }
                     if let Some(t) = res.textures.get_mut(&j.out) {
+                        if !couleur {
+                            continue;
+                        }
                         if let Some(state) = t.fx.as_mut() {
                             state.done = j.sig;
                         }
@@ -2638,7 +2694,8 @@ impl CallbackTrait for CanvasPaint {
             put_item(&mut bytes[i * stride..], &item.corners, &item.color, &item.params);
             // (Le plan de la carte, après le réglage de plus : la profondeur partagée avec le décor 3D, partie 183 ; et ses drapeaux :
             // 1, cachée par le décor ; 2, elle reçoit les ombres, sa pente dans la carte d'ombres au réglage de plus, partie 185.)
-            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 };
+            // (Et 4 : la profondeur du décor de dessous a quatre échantillons par pixel, partie 193.)
+            let drapeaux = if item.prof.is_some() { 1.0 } else { 0.0 } + if item.ombre.is_some_and(|o| o.recoit) { 2.0 } else { 0.0 } + if item.quatre { 4.0 } else { 0.0 };
             if let Some(plan) = item.prof.map(|p| p.1).or(item.ombre.map(|o| o.plan)) {
                 put_floats(&mut bytes[i * stride + 112..], &[plan[0], plan[1], plan[2], drapeaux]);
             }
@@ -2949,6 +3006,8 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
             partial: None,
             fx: Some(FxState::default()),
             prof: None,
+            prof4: None,
+            quatre_sig: 0,
             ombre: None,
         };
         *bytes += entry.bytes();
@@ -2973,13 +3032,20 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
 /// quand la clé change (la caméra ou un objet a bougé) — jamais remplie par le processeur. Rien : le décor a changé depuis la
 /// clé, ou n'est plus dans le projet.
 #[allow(clippy::too_many_arguments)]
-fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key: &crate::decor3d::DecorCle, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
+///
+/// `cartes` (partie 193) : une carte du plan partage la profondeur du décor ; s'il tient dans le budget avec elle, sa profondeur est
+/// dessinée aussi en quatre échantillons (les bords doux) ; sinon, seulement en une valeur, au coût d'avant. Passer de l'un à l'autre
+/// ne redessine pas la couleur du décor : vers les quatre échantillons, seule leur passe est faite ; dans l'autre sens, rien (ceux déjà
+/// faits restent, prêts, jusqu'au prochain rendu).
+#[allow(clippy::too_many_arguments)]
+fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key: &crate::decor3d::DecorCle, sheet: (u32, u32), tick: u64, bytes: &mut u64, cartes: bool) -> Option<CelId> {
     let objets = crate::decor3d::objets_de(doc, key)?;
     let aspect = key.aspect;
     let prise = key.prise()?;
     let out = crate::decor3d::id_texture(key.decor);
     let qualite = if aspect.ombres { crate::decor3d::qualite(crate::decor3d::triangles_de(&objets)) } else { crate::decor3dbudget::Qualite::Sans };
     let sig = crate::decor3d::id_of(key) ^ (qualite as u64) << 1;
+    let quatre = cartes && crate::decor3d::bords_doux(crate::decor3d::triangles_de(&objets), qualite);
     let want = [0, 0, sheet.0, sheet.1];
     if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.prof.is_some() && t.rect == want) {
         if let Some(old) = res.textures.remove(&out) {
@@ -2990,7 +3056,7 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
         // (Sa profondeur, dessinée avec lui : les cartes s'y cachent, partie 183.)
         let prof = prof_texture(&rs.device, &res.prof_layout, &res.vides, sheet);
-        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()), prof: Some(prof), ombre: None };
+        let entry = CelTexture { bind_group, texture, rect: want, dims: sheet, version: 0, last_used: tick, generation: tick, filled: Vec::new(), partial: None, fx: Some(FxState::default()), prof: Some(prof), prof4: None, quatre_sig: 0, ombre: None };
         *bytes += entry.bytes();
         res.textures.insert(out, entry);
     }
@@ -3043,10 +3109,38 @@ fn place_decor(rs: &RenderState, res: &mut CanvasResources, doc: &Document, key:
         // La texture va changer : l'image composée gardée n'est plus bonne.
         entry.generation = tick;
     }
-    if entry.fx.is_some_and(|s| s.done != sig) {
+    let couleur = entry.fx.is_some_and(|s| s.done != sig);
+    // (La profondeur en quatre échantillons, partie 193 : avec la couleur, ou seule si une carte se met à la partager.)
+    let quatre_a_faire = quatre && entry.quatre_sig != sig;
+    if couleur || quatre_a_faire {
+        if quatre && entry.prof4.is_none() {
+            let avant = entry.bytes();
+            let t = rs.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("décor 3D : profondeur en quatre échantillons"),
+                size: extent(sheet.0, sheet.1),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: crate::decor3dgpu::PROF,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            if let Some((p1, g)) = entry.prof.as_mut() {
+                *g = groupe_decor(&rs.device, &res.prof_layout, &res.vides, &p1.create_view(&Default::default()), Some(&t.create_view(&Default::default())), None);
+            }
+            entry.prof4 = Some(t);
+            if let Some(o) = entry.ombre.as_mut() {
+                o.groupe = None;
+            }
+            *bytes = *bytes - avant + entry.bytes();
+        }
+        // (Faits dans cette image, avant la composition qui les lit ; une couleur refaite sans eux les rend vieux.)
+        entry.quatre_sig = if quatre { sig } else if couleur { 0 } else { entry.quatre_sig };
+        // (La profondeur va changer : l'image composée gardée n'est plus bonne.)
+        entry.generation = tick;
         res.decor_jobs.retain(|j| j.out != out);
         let dessins = crate::decor3d::dessins_gpu(&objets, aspect);
-        res.decor_jobs.push(DecorJob { out, dessins, ciel: aspect.ciel, prise, taille: [sheet.0, sheet.1], qualite, sig });
+        res.decor_jobs.push(DecorJob { out, dessins, ciel: aspect.ciel, prise, taille: [sheet.0, sheet.1], qualite, sig, couleur, quatre });
     }
     Some(out)
 }
@@ -3094,7 +3188,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let texture = cel_texture(&rs.device, rect[2], rect[3]);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None, prof: None, ombre: None }
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None, prof: None, prof4: None, quatre_sig: 0, ombre: None }
     });
     *bytes += entry.bytes();
     res.textures.insert(id, entry);
@@ -3109,13 +3203,13 @@ fn prof_texture(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, vides: &V
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: crate::decor3dgpu::PROF,
+        format: crate::decor3dgpu::PROF1,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
     let view = texture.create_view(&Default::default());
     // (Sans ombres de cartes : le reste du groupe est vide, partie 185.)
-    let group = groupe_decor(device, layout, vides, &view, None);
+    let group = groupe_decor(device, layout, vides, &view, None, None);
     (texture, group)
 }
 

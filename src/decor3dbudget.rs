@@ -16,6 +16,13 @@
 //! (`materiel::carte`), ou, sans elle (mémoire partagée d'un Mac, d'un graphisme intégré), un dixième de la mémoire vive, au
 //! plus `decor3d::PLAFONDS.octets_textures`.
 //!
+//! **Les bords doux** (partie 193) : quand une carte du plan partage la profondeur du décor, la carte graphique dessine en plus sa
+//! profondeur à quatre échantillons. L'étalonnage mesure ce surcoût à part (`Chronos::prof4`) : le budget d'un décor reste celui
+//! d'avant (sa passe seule, `BudgetMachine::triangles`, la qualité de ses ombres), et les bords doux ne sont dessinés que si la passe
+//! **plus** leur surcoût tient encore dans le budget d'une passe (`BudgetMachine::bords_doux_pour`, jusqu'à
+//! `BudgetMachine::triangles_bords` triangles sans ombres) ; au-delà, les bords sont nets, au pixel, comme à la partie 183. La règle
+//! des 4 ms tient dans les deux cas, et un décor ne perd ni triangles ni ombres pour les bords doux.
+//!
 //! Sans carte graphique (OpenGL de secours), le décor est rendu par le processeur sur un autre fil (`decor3d::montre`) : le
 //! budget est alors un rendu en `BUDGET_MS_SECOURS` au plus, et pas d'ombres.
 
@@ -97,6 +104,9 @@ impl Cout {
 pub struct Chronos {
     /// Carte graphique : la droite de coût de chaque qualité d'ombres, à la taille de la feuille ; rien : pas de carte.
     pub gpu: Option<[Cout; 3]>,
+    /// Carte graphique : ce que coûtent en plus les bords doux (la profondeur à quatre échantillons, partie 193), à la taille de la
+    /// feuille.
+    pub prof4: Option<Cout>,
     /// Processeur : la droite de coût du rendu de secours et d'export, à la taille du cadre.
     pub cpu: Cout,
     /// Mémoire vidéo et mémoire vive, si on les connaît.
@@ -113,6 +123,9 @@ pub struct BudgetMachine {
     pub date: u64,
     /// Jusqu'à tant de triangles (sans ombres) dans le budget de l'écran.
     pub triangles: u64,
+    /// Jusqu'à tant de triangles (sans ombres) avec les bords doux d'une carte qui partage la profondeur (partie 193).
+    #[serde(default)]
+    pub triangles_bords: u64,
     /// Jusqu'à tant de Mo de textures.
     pub textures_mo: u64,
     /// La carte graphique dessine le décor (sinon : le processeur, sur un autre fil).
@@ -122,6 +135,9 @@ pub struct BudgetMachine {
     pub gpu: Option<[Cout; 3]>,
     #[serde(default)]
     pub cpu: Cout,
+    /// Le surcoût des bords doux (`Chronos::prof4`) ; rien : mesuré avant la partie 193 (le budget se remesure, `vaut_pour`).
+    #[serde(default)]
+    pub prof4: Option<Cout>,
 }
 
 impl BudgetMachine {
@@ -137,12 +153,25 @@ impl BudgetMachine {
         Qualite::TOUTES.into_iter().rev().find(|q| c[*q as usize].ms(triangles) <= ms).unwrap_or(Qualite::Sans)
     }
 
+    /// Les bords doux (partie 193) tiennent-ils dans le budget d'une passe pour un décor de `triangles` triangles dessiné avec les
+    /// ombres `q` ? La passe d'avant plus la profondeur à quatre échantillons. Sans carte graphique : non (le processeur garde la
+    /// profondeur qu'il a).
+    pub fn bords_doux_pour(&self, triangles: u64, q: Qualite) -> bool {
+        match (self.gpu, self.prof4) {
+            (Some(c), Some(p)) => c[q as usize].ms(triangles) + p.ms(triangles) <= Self::ms_par_passe(),
+            _ => false,
+        }
+    }
+
     /// Le temps d'une image exportée par le processeur, pour `triangles` triangles (millisecondes).
     pub fn export_ms(&self, triangles: u64) -> f32 {
         self.cpu.ms(triangles)
     }
 
     pub fn texte(&self) -> String {
+        if self.carte && self.prof4.is_some() && self.triangles_bords < self.triangles {
+            return format!("jusqu'à {} triangles ({} avec les bords doux des cartes), {} Mo de textures", grand_nombre(self.triangles), grand_nombre(self.triangles_bords), self.textures_mo);
+        }
         format!("jusqu'à {} triangles, {} Mo de textures", grand_nombre(self.triangles), self.textures_mo)
     }
 }
@@ -173,7 +202,15 @@ pub fn budget_depuis(ch: &Chronos, cle: String, date: u64) -> BudgetMachine {
         (None, None) => 512 << 20,
     };
     let textures_mo = (memoire.min(crate::decor3d::PLAFONDS.octets_textures) >> 20).max(64);
-    BudgetMachine { cle, date, triangles, textures_mo, carte, gpu: ch.gpu, cpu: ch.cpu }
+    // (Les bords doux : la passe sans ombres plus leur surcoût.)
+    let triangles_bords = match (ch.gpu, ch.prof4) {
+        (Some(c), Some(p)) => {
+            let s = c[Qualite::Sans as usize];
+            Cout { fixe: s.fixe + p.fixe, par_million: s.par_million + p.par_million }.triangles_sous(BudgetMachine::ms_par_passe()).min(plafond)
+        }
+        _ => triangles,
+    };
+    BudgetMachine { cle, date, triangles, triangles_bords, textures_mo, carte, gpu: ch.gpu, cpu: ch.cpu, prof4: ch.prof4 }
 }
 
 /// La clé de cette machine : la carte (nom, API, pilote) et le processeur. Rien de la carte : pas de carte graphique.
@@ -186,8 +223,10 @@ pub fn cle_machine(carte: Option<&eframe::egui_wgpu::wgpu::AdapterInfo>) -> Stri
 }
 
 /// Le budget gardé vaut pour cette machine.
+///
+/// (Un budget de carte graphique mesuré avant la partie 193 n'a pas le surcoût des bords doux : il se remesure une fois.)
 pub fn vaut_pour(b: Option<&BudgetMachine>, cle: &str) -> bool {
-    b.is_some_and(|b| b.cle == cle)
+    b.is_some_and(|b| b.cle == cle && (b.gpu.is_none() || b.prof4.is_some()))
 }
 
 // ------------------------------------------------------------------------------------------------ l'étalonnage
@@ -231,25 +270,32 @@ pub fn etalonner(carte: Option<&eframe::egui_wgpu::RenderState>, feuille: [u32; 
     // (Un million de triangles : assez pour que la pente se lise bien au-dessus du coût fixe et du bruit de mesure.)
     let grosse = std::sync::Arc::new(scene_d_essai(707, 1024));
     let aspect = crate::decor3drendu::Aspect::default();
-    let gpu = carte.and_then(|rs| {
+    let mesures = carte.and_then(|rs| {
         let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
         let mut couts = [Cout::default(); 3];
+        let mut mesure = |s: &std::sync::Arc<Scene3d>, id: u64, q: Qualite, quatre: bool| {
+            let d = [crate::decor3dgpu::Dessin { id, scene: s.clone(), matrice: crate::espace3dmath::IDENT, aspect }];
+            crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, feuille, true, q, 8, false, true, quatre).map(|r| r.1)
+        };
         for q in Qualite::TOUTES {
-            let mut mesure = |s: &std::sync::Arc<Scene3d>, id: u64| {
-                let d = [crate::decor3dgpu::Dessin { id, scene: s.clone(), matrice: crate::espace3dmath::IDENT, aspect }];
-                crate::decor3dgpu::rendre_hors_ecran(&rs.device, &rs.queue, &mut mt, &d, &prise, feuille, true, q, 8).map(|r| r.1)
-            };
-            let (a, b) = (mesure(&petite, 1)?, mesure(&grosse, 2)?);
+            let (a, b) = (mesure(&petite, 1, q, false)?, mesure(&grosse, 2, q, false)?);
             couts[q as usize] = Cout::de_mesures(petite.triangles() as u64, a, grosse.triangles() as u64, b);
         }
+        // Les bords doux (partie 193) : la même passe sans ombres, avec la profondeur à quatre échantillons ; leur surcoût est l'écart
+        // (jamais négatif : une mesure bruitée ne dit pas qu'ils font gagner du temps).
+        let (a, b) = (mesure(&petite, 1, Qualite::Sans, true)?, mesure(&grosse, 2, Qualite::Sans, true)?);
+        let avec = Cout::de_mesures(petite.triangles() as u64, a, grosse.triangles() as u64, b);
+        let s = couts[Qualite::Sans as usize];
+        let prof4 = Cout { fixe: (avec.fixe - s.fixe).max(0.0), par_million: (avec.par_million - s.par_million).max(0.0) };
         // Des ombres ne coûtent jamais moins que pas d'ombres (une mesure bruitée ne doit pas dire le contraire).
         for q in [Qualite::Basses, Qualite::Hautes] {
             let (avant, c) = (couts[q as usize - 1], &mut couts[q as usize]);
             c.fixe = c.fixe.max(avant.fixe);
             c.par_million = c.par_million.max(avant.par_million);
         }
-        Some(couts)
+        Some((couts, prof4))
     });
+    let (gpu, prof4) = (mesures.map(|m| m.0), mesures.map(|m| m.1));
     let cpu = {
         let temps = |s: &Scene3d| {
             let debut = Instant::now();
@@ -261,7 +307,7 @@ pub fn etalonner(carte: Option<&eframe::egui_wgpu::RenderState>, feuille: [u32; 
     };
     let vram = carte.and_then(|rs| crate::materiel::carte(&rs.adapter.get_info()).vram);
     let ram = crate::materiel::memoire().map(|m| m.totale);
-    Chronos { gpu, cpu, vram, ram }
+    Chronos { gpu, prof4, cpu, vram, ram }
 }
 
 // --------------------------------------------------------------------------------------------- en arrière-plan

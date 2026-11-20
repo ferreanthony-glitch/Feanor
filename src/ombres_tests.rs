@@ -588,6 +588,8 @@ fn temps_de_composition(rs: &RenderState, doc: &Document, plan: &Plan, n: usize)
 #[ignore]
 fn ombres_perf() {
     let Some(rs) = crate::gpu_tests::headless() else { return };
+    // (Partie 193 : avec les bords doux, le cas le plus cher.)
+    crate::decor3d::essai_bords(Some(true));
     for (sorte, part) in [("d'un huitième de la feuille", 8usize), ("pleines", 1)] {
         let mut doc = Document::with_frame(1920, 1080, 24);
         doc.panels[0].length = 24;
@@ -660,8 +662,8 @@ fn ombres_perf() {
         for q in [Qualite::Basses, Qualite::Hautes] {
             let mut mt = crate::decor3dgpu::Moteur::new(&rs.device, &rs.queue);
             let taille = [monde.stage[0] as u32, monde.stage[1] as u32];
-            let t2 = crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, taille, true, q, 8, false, false).map(|r| r.1).unwrap_or(0.0);
-            let t3 = crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, taille, true, q, 8, false, true).map(|r| r.1).unwrap_or(0.0);
+            let t2 = crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, taille, true, q, 8, false, false, false).map(|r| r.1).unwrap_or(0.0);
+            let t3 = crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise, taille, true, q, 8, false, true, false).map(|r| r.1).unwrap_or(0.0);
             println!("décor de {} triangles, {} : deux cibles {t2:.2} ms, avec la part du soleil {t3:.2} ms", d[0].scene.triangles(), q.nom());
         }
     }

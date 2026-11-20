@@ -394,6 +394,9 @@ mod origine_tests;
 mod profondeur;
 #[cfg(test)]
 mod profondeur_tests;
+// Les bords doux entre le décor 3D et les cartes (partie 193).
+#[cfg(test)]
+mod bordsdoux_tests;
 // Les poignées de l'Espace 3D sur les objets du décor 3D, et l'origine déplacée dans la vue (partie 184).
 mod poignees3d;
 #[cfg(test)]

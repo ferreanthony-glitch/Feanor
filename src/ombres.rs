@@ -392,7 +392,7 @@ impl Contexte {
             return c;
         }
         let i = y as usize * self.w + x as usize;
-        let inv = self.prof[i];
+        let inv = self.prof.un(i);
         let s = [self.soleil.soleil[2 * i], self.soleil.soleil[2 * i + 1]];
         if inv <= 0.0 || s[0] == 0 {
             return c;

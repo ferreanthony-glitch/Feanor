@@ -5,6 +5,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-20
 
+- **Les bords doux entre le décor 3D et les cartes** (partie 193, branche `bords-doux` partie de `main` 41fa82f, format 61
+  inchangé), le choix d'Anthony (« Bords d'occlusion doux »), puis allégée sur son « Allège ». Le bord d'un objet du décor qui passe
+  devant une carte, la ligne où une carte inclinée entre dans un objet et le bord du décor contre le ciel ne font plus d'escaliers :
+  **lissés sur un pixel**, à l'écran, dans les exports (carte prêtée et composition par le processeur, d'accord à un niveau près), les
+  vignettes, la pipette et la vue Espace 3D ; l'intérieur tout caché ou tout visible comme avant, la tolérance de la partie 183 la
+  même, « Toujours devant » et accroché jamais cachés, les ombres des cartes exactement celles d'avant. La profondeur du décor est
+  dessinée en plus en **quatre échantillons par pixel** (une passe de la profondeur seule à quatre échantillons après la passe de
+  couleur, inchangée), **seulement quand une carte du plan la partage et que le décor tient dans le budget avec elle** : sinon le
+  chemin d'avant, au coût d'avant. Une carte qui décoche « Toujours devant » ne fait faire que cette passe, sans redessiner le décor ;
+  qui la recoche, rien. L'étalonnage mesure son surcoût à part : le budget d'un décor reste celui d'avant (0,9 à 1 M triangles sur le
+  Mac), les bords doux jusqu'à 0,7 M, au-delà des bords nets ; le panneau dit les deux ; un budget gardé se remesure une fois. Coût
+  des bords doux : + 0,3 à 0,6 ms par rendu du décor à la feuille 4K, la composition inchangée, l'export + 1 à 2 ms par image. Toute
+  la passe lissée a été essayée puis écartée (2,5 à 5 fois plus chère avec les ombres). Essais : 12 nouveaux ; les 90 échecs connus du
+  Mac, aucun neuf ; la version optimisée se construit. Compilé et essayé sur le Mac seulement ; **rien regardé à l'écran, pas de
+  commit** (liste 193.6).
 - **La timeline resserrée** (partie 192 dans INTERFACE.md, appelée 179 dans les commits de `timeline-serree`) fusionnée dans
   `main` puis poussée (9b63079), après trois intégrations du `main` de GitHub (parties 180 à 191 de la session du décor 3D, format 61) :
   barre de lecture tout en haut, vraie ligne Séquence, commandes des calques justifiées à droite sur « Calques », tous les calques

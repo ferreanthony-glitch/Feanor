@@ -482,3 +482,33 @@ copie de son décor**. Code : `copiedecor.rs`.
 - **Une séquence née d'une autre** : `Document::copier_decor_de_sequence` (un décor neuf, `uid` neuf, objets aux numéros neufs, mêmes
   modèles et mêmes places), indépendant ensuite.
 - Le fichier ne change pas (format 61, `decors3d.json` version 2).
+
+## 21. Les bords doux entre le décor et les cartes (2026-11-20, branche `bords-doux`, partie 193 de `docs/INTERFACE.md`)
+
+Depuis la partie 183 (section 16), une carte était cachée **tout ou rien** à chaque pixel de la feuille : le bord d'un objet du
+décor qui passe devant une carte, et la ligne où une carte inclinée entre dans un objet, faisaient des escaliers. Ils sont
+maintenant **lissés sur un pixel**, partout où la profondeur est partagée. Code : `profondeur.rs` (`ProfDecor`, `part_cachee`,
+`Masque::visible`).
+
+- **La profondeur du décor en quatre échantillons par pixel, seulement quand une carte la lit.** La passe de l'image du plan est celle
+  d'avant (sa couleur à un échantillon, sa profondeur en une valeur, `PROF1`, que les ombres lisent toujours). Quand une carte du plan
+  partage la profondeur et que le décor tient dans le budget avec les bords doux (`decor3d::bords_doux`,
+  `BudgetMachine::bords_doux_pour` : l'étalonnage mesure leur surcoût à part, `Chronos::prof4` ; le budget d'un décor reste celui
+  d'avant), une passe de la profondeur seule à quatre échantillons (`Moteur::prof4`, sans lumière ni fragment), puis une petite passe
+  (`decor3dgpu::PROF_DES_ECHANTILLONS`) qui ramène ses quatre échantillons à l'inverse de leur distance à l'œil, un par canal d'une
+  seconde texture `Rgba16Float` (`decor3dgpu::PROF`, `CelTexture::prof4`), aux places standard du lissage à quatre échantillons
+  (`profondeur::MOTIF_CARTE`). Une carte qui se met à partager la profondeur ne fait faire que cette passe (`profondeur_quatre`), la
+  couleur du décor n'est pas redessinée ; une carte qui cesse ne fait rien faire. Sinon, les bords nets de la partie 183, au coût
+  d'avant. Toute la passe à quatre échantillons coûtait trop avec les ombres du décor (2,5 à 5 fois plus). Processeur :
+  `rendre_objets_prof` garde, avec la valeur de chaque pixel, les quatre échantillons de son sur-échantillonnage de deux par côté
+  (`MOTIF_GRILLE`).
+- **À la composition**, avec les quatre échantillons (le drapeau 4 des composeurs), la carte est évaluée à la place de chacun (son
+  plan est linéaire sur la feuille) ; la part où le décor est plus près qu'elle (la tolérance de la partie 183, inchangée) est retirée de son opacité : 0, ¼, ½, ¾ ou
+  tout. Carte graphique : `visible` de `fs_compose_p` / `fs_blend_p` ; processeur : `opacite_visible` dans `composite_tile_into`,
+  `composite_world_tile` et `pixel_of`. L'intérieur est tout caché ou tout visible, exactement comme avant.
+- **Les ombres des cartes** (sections 18 et 19) lisent la profondeur en une valeur d'avant (`PROF1`, `ProfDecor::un`) : elles ne
+  changent pas.
+- **La vue Espace 3D** : le voile d'une carte comptait déjà les quatre échantillons du décor de la vue (le bord d'un objet était
+  doux), mais prenait la distance de la carte au centre du pixel ; il la prend maintenant à la place de chaque échantillon, d'après
+  sa pente à l'écran : la ligne où une carte inclinée entre dans un objet est douce aussi.
+- **Sans décor**, rien n'est lu, rien ne change, au bit près.
