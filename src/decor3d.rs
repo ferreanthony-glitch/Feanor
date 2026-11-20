@@ -6,8 +6,8 @@
 //! - **L'élément le plus bas** de l'image du plan (`render::plan_with_camera_layers`, et le dessin à l'écran,
 //!   `App::build_plan_avec`), juste au-dessus du papier ; chaque calque se pose dessus. Juste en profondeur en lui-même (tampon
 //!   de profondeur partagé par tous ses objets) et, depuis la partie 183, **avec les cartes** (`profondeur.rs`) : son rendu garde
-//!   sa profondeur (`calculer`, `profondeur_du_rendu`, la seconde cible de `decor3dgpu`), et une carte est cachée là où le décor
-//!   est plus près qu'elle.
+//!   sa profondeur (`calculer`, `profondeur_du_rendu`, tirée du tampon de `decor3dgpu`, quatre échantillons par pixel depuis la
+//!   partie 193), et une carte est cachée là où le décor est plus près qu'elle (en partie au bord, partie 193).
 //! - **Vu de l'œil de la caméra, aligné sur la feuille** (`decor3drendu::Prise::de_la_feuille`), comme une carte en
 //!   profondeur : l'homographie de la caméra 2D (panoramique, bascule, zoom, rotation) s'applique ensuite à tout le plan, le décor
 //!   défile avec la parallaxe des cartes. Un plan « en Espace 3D » (`Document::repere_du_plan`) pose le décor comme ses cartes :
@@ -784,8 +784,30 @@ pub fn qualite(triangles: u64) -> crate::decor3dbudget::Qualite {
     BUDGET.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map_or(crate::decor3dbudget::Qualite::Sans, |b| b.qualite_pour(triangles))
 }
 
+/// **Les bords doux** (partie 193) d'un décor de `triangles` triangles dessiné avec les ombres `q` tiennent-ils dans le budget de
+/// cette machine (sa passe plus la profondeur à quatre échantillons) ? Sans budget mesuré : non, rien ne ralentit avant la mesure
+/// (les bords sont nets, comme à la partie 183). Les essais les forcent (`essai_bords`).
+pub fn bords_doux(triangles: u64, q: crate::decor3dbudget::Qualite) -> bool {
+    #[cfg(test)]
+    if let Some(b) = BORDS_ESSAI.with(|b| b.get()) {
+        return b;
+    }
+    match BUDGET.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        Some(b) => b.bords_doux_pour(triangles, q),
+        None => false,
+    }
+}
+
+/// Essais : les bords doux pour ce fil (rien : selon le budget).
+#[cfg(test)]
+pub(crate) fn essai_bords(b: Option<bool>) {
+    BORDS_ESSAI.with(|c| c.set(b));
+}
+
 #[cfg(test)]
 thread_local! {
+    /// Essais (partie 193) : les bords doux de ce fil, forcés.
+    static BORDS_ESSAI: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
     /// Essais (partie 185) : la qualité des ombres de ce fil, sans toucher au budget de la machine que les autres essais voient.
     static QUALITE_ESSAI: std::cell::Cell<Option<crate::decor3dbudget::Qualite>> = const { std::cell::Cell::new(None) };
     /// Essais : la carte graphique que l'export de ce fil emprunte (`poser_carte` vaut pour tous les fils).
@@ -813,14 +835,17 @@ fn sur_echantillonnage(feuille: [usize; 2]) -> usize {
 ///
 /// Et, rendu par la carte graphique avec ses ombres, son soleil (partie 185, `ombres::Soleil`) : ce que les ombres des cartes lisent
 /// à la composition de l'export. Le rendu de secours par le processeur n'a pas d'ombres, donc pas de soleil.
-pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Option<Vec<f32>>, Option<crate::ombres::Soleil>) {
+pub fn calculer(objets: &[Pose3d], key: &DecorCle, fils: usize) -> (Raster, Option<crate::profondeur::ProfDecor>, Option<crate::ombres::Soleil>) {
     let [w, h] = key.feuille;
     let Some(prise) = key.prise() else { return (Raster::new(w, h), None, None) };
     let par_la_carte = |device: &eframe::egui_wgpu::wgpu::Device, queue: &eframe::egui_wgpu::wgpu::Queue, mt: &mut Option<crate::decor3dgpu::Moteur>| {
         let mt = mt.get_or_insert_with(|| crate::decor3dgpu::Moteur::new(device, queue));
         let d = dessins_gpu(objets, key.aspect);
         let q = if key.aspect.ombres { qualite(triangles_de(objets)) } else { crate::decor3dbudget::Qualite::Sans };
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran_tout(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1, true, true)));
+        // (Les bords doux, partie 193 : comme à l'écran, si le décor tient dans le budget avec eux ; une carte qui ne partage pas la
+        // profondeur ne les lit pas.)
+        let quatre = bords_doux(triangles_de(objets), q);
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::decor3dgpu::rendre_hors_ecran_tout(device, queue, mt, &d, &prise, [w as u32, h as u32], key.aspect.ciel, q, 1, true, true, quatre)));
         match r {
             Ok(Some((rgba, _, prof, ombres))) => {
                 let soleil = ombres.and_then(|o| crate::ombres::Lumiere::de(&o.eclairage, &key.aspect, &prise).map(|lum| crate::ombres::Soleil { lum, soleil: o.soleil, carte: o.carte }));
@@ -867,7 +892,7 @@ pub fn soleil_du_rendu(version: u64) -> Option<Arc<crate::ombres::Soleil>> {
     garde(|g| g.soleils.get(&version).cloned())
 }
 
-type Rendu = (Raster, Option<Vec<f32>>, Option<crate::ombres::Soleil>);
+type Rendu = (Raster, Option<crate::profondeur::ProfDecor>, Option<crate::ombres::Soleil>);
 
 struct Travail {
     key: DecorCle,
@@ -908,7 +933,7 @@ fn garde<R>(f: impl FnOnce(&mut Garde) -> R) -> R {
     f(g.get_or_insert_with(Garde::default))
 }
 
-fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<Vec<f32>>, soleil: Option<crate::ombres::Soleil>) {
+fn ranger(g: &mut Garde, key: &DecorCle, cel: Arc<Cel>, prof: Option<crate::profondeur::ProfDecor>, soleil: Option<crate::ombres::Soleil>) {
     let id = id_of(key);
     match soleil {
         Some(s) => {

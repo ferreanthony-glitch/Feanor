@@ -374,16 +374,31 @@ pub fn rendre_objets(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2
 }
 
 /// Comme `rendre_objets`, avec **la profondeur** de l'image (partie 183, `profondeur.rs`) : à chaque pixel, l'inverse de la
-/// distance à l'œil (le long de son axe) de ce que le décor y montre, 0 là où il ne couvre pas la moitié du pixel (le ciel n'y
-/// compte pas : il ne cache rien). Avec plusieurs échantillons par pixel, le plus proche de ceux qui le couvrent.
-pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> (Vec<u8>, Vec<f32>) {
+/// distance à l'œil (le long de son axe) de ce que le décor y montre, 0 là où il n'y a rien (le ciel n'y compte pas : il ne cache
+/// rien). En quatre échantillons par pixel (partie 193, `profondeur::ProfDecor`) : à deux échantillons par côté, les quatre
+/// (`MOTIF_GRILLE`) ; à quatre par côté, les quatre aux places de la carte graphique (`MOTIF_CARTE`) ; sinon, un seul, répété
+/// (`MOTIF_CENTRE` : le plus proche de ceux qui couvrent le pixel, s'ils en couvrent la moitié).
+pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usize; 2], ss: usize, fils: usize, aspect: &Aspect) -> (Vec<u8>, crate::profondeur::ProfDecor) {
     let [w, h] = taille;
     let mut out = vec![0u8; w * h * 4];
-    let mut prof = vec![0.0f32; w * h];
-    if w == 0 || h == 0 {
-        return (out, prof);
-    }
     let ss = ss.clamp(1, 4);
+    let motif = match ss {
+        2 => crate::profondeur::MOTIF_GRILLE,
+        4 => crate::profondeur::MOTIF_CARTE,
+        _ => crate::profondeur::MOTIF_CENTRE,
+    };
+    // (Les échantillons gardés, (x, y) dans le pixel sur-échantillonné, aux places du motif.)
+    let gardes: [(usize, usize); 4] = match ss {
+        2 => [(0, 0), (1, 0), (0, 1), (1, 1)],
+        4 => [(1, 0), (3, 1), (0, 2), (2, 3)],
+        _ => [(0, 0); 4],
+    };
+    let quatre = ss == 2 || ss == 4;
+    let mut prof = vec![[0u16; 4]; if quatre { w * h } else { 0 }];
+    let mut prof1 = vec![0u16; w * h];
+    if w == 0 || h == 0 {
+        return (out, crate::profondeur::ProfDecor::avec(w, h, prof1, None, motif));
+    }
     // Les normales tournées vers l'œil : on retourne celles des faces vues de dos avant de rasteriser, sommet par sommet
     // (dans le repère de l'œil, la normale d'une face visible pointe vers l'œil, z < 0).
     let mut tris = Vec::new();
@@ -424,13 +439,16 @@ pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usi
         }
     }
     let fils = if fils == 0 { std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16) } else { fils };
-    let travail = Mutex::new(out.chunks_mut(BANDE * w * 4).zip(prof.chunks_mut(BANDE * w)).enumerate());
+    // (Une valeur par pixel, toujours ; quatre échantillons à deux ou quatre par côté, sinon ce tampon est vide, ses bandes aussi.)
+    let bandes4: Vec<&mut [[u16; 4]]> = if quatre { prof.chunks_mut(BANDE * w).collect() } else { (0..bandes).map(|_| &mut [][..]).collect() };
+    let bandes1: Vec<&mut [u16]> = prof1.chunks_mut(BANDE * w).collect();
+    let travail = Mutex::new(out.chunks_mut(BANDE * w * 4).zip(bandes4.into_iter().zip(bandes1)).enumerate());
     let moitie = (ss * ss).div_ceil(2) as f32;
     std::thread::scope(|sc| {
         for _ in 0..fils.min(bandes) {
             sc.spawn(|| loop {
                 let next = travail.lock().ok().and_then(|mut it| it.next());
-                let Some((bi, (dst, dprof))) = next else { break };
+                let Some((bi, (dst, (dprof, dprof1)))) = next else { break };
                 let lignes_px = dst.len() / (w * 4);
                 let py0 = bi * BANDE;
                 let y0 = py0 * ss;
@@ -453,8 +471,14 @@ pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usi
                                 }
                             }
                         }
+                        if quatre {
+                            dprof[ry * w + x] = gardes.map(|(sx, sy)| {
+                                let at = (ry * ss + sy) * b.w + x * ss + sx;
+                                if b.couvert[at] { crate::profondeur::vers_16_bits(b.invz[at]) } else { 0 }
+                            });
+                        }
                         if couv >= moitie {
-                            dprof[ry * w + x] = pres;
+                            dprof1[ry * w + x] = crate::profondeur::vers_16_bits(pres);
                         }
                         let a = couv / (ss * ss) as f32;
                         let px = &mut dst[(ry * w + x) * 4..(ry * w + x) * 4 + 4];
@@ -483,5 +507,5 @@ pub fn rendre_objets_prof(objets: &[(&Scene3d, M4)], prise: &Prise, taille: [usi
         }
     });
     drop(travail);
-    (out, prof)
+    (out, crate::profondeur::ProfDecor::avec(w, h, prof1, quatre.then_some(prof), motif))
 }

@@ -23,6 +23,10 @@
 //! silhouettes de la trajectoire. Entre elles, les cartes gardent l'ordre de toujours (la pile, ou la distance d'un plan en
 //! Espace 3D).
 //!
+//! **Les bords doux** (partie 193) : la profondeur du décor est gardée en quatre échantillons par pixel (`ProfDecor`), et un pixel
+//! de carte est caché pour la part de ses échantillons où le décor est plus près (`part_cachee`, `Masque::visible`) : son opacité
+//! est multipliée par la part qui se voit. Les bords d'occlusion sont lissés sur un pixel ; l'intérieur ne change pas.
+//!
 //! **Sans décor**, aucun élément ne porte de plan : la composition est exactement celle d'avant, par les mêmes chemins.
 
 use crate::document::{CameraSeen, Layer};
@@ -114,34 +118,209 @@ pub fn cache(plan: &PlanCarte, decor: f32, x: f32, y: f32) -> bool {
     carte * (1.0 + TOLERANCE_METRES * decor) < decor * (1.0 - TOLERANCE_RELATIVE)
 }
 
-/// La profondeur d'un rendu du décor : l'inverse de la distance à l'œil à chaque pixel de la feuille, ligne par ligne (0 : rien).
-pub type Profondeurs = std::sync::Arc<Vec<f32>>;
+/// **Les bords doux** (partie 193) : la profondeur du décor est gardée en **quatre échantillons par pixel**, aux places où la passe
+/// du décor les prend (`Motif`). Un pixel de carte est caché **pour la part de ses échantillons** où le décor est plus près
+/// qu'elle (`part_cachee`) : 0, ¼, ½, ¾ ou tout. Le bord d'un objet du décor qui passe devant une carte, la ligne où une carte
+/// inclinée entre dans un objet, et le bord du décor contre le ciel sont lissés sur un pixel, comme les bords du décor lui-même ;
+/// l'intérieur reste tout caché ou tout visible, comme avant.
+///
+/// Les places des quatre échantillons dans un pixel, depuis son coin haut gauche (en pixels de la feuille).
+pub type Motif = [[f32; 2]; 4];
+/// Le motif de la carte graphique : le lissage à quatre échantillons, aux places standard (les mêmes sur toutes les cartes).
+pub const MOTIF_CARTE: Motif = [[0.375, 0.125], [0.875, 0.375], [0.125, 0.625], [0.625, 0.875]];
+/// Le motif du rendu par le processeur à deux échantillons par côté (`decor3drendu`, une feuille jusqu'à 2,5 Mpx).
+pub const MOTIF_GRILLE: Motif = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
+/// Un seul échantillon, au centre, répété quatre fois (le rendu par le processeur d'une grande feuille) : le bord au pixel, comme
+/// avant la partie 193.
+pub const MOTIF_CENTRE: Motif = [[0.5; 2]; 4];
+
+/// La profondeur d'un rendu du décor (parties 183 et 193) : à chaque pixel de la feuille, ligne par ligne, l'inverse de la distance
+/// à l'œil (le long de son axe) de ce que le décor montre à chacun de ses quatre échantillons (0 : rien, le ciel), en flottants de
+/// 16 bits (à 0,05 % près ; la tolérance est de 0,4 %), comme la texture de la carte graphique (`decor3dgpu::PROF`).
+pub struct ProfDecor {
+    pub w: usize,
+    pub h: usize,
+    /// Une valeur par pixel, celle de la partie 183 (le centre du pixel ; par le processeur, le plus proche des échantillons qui
+    /// couvrent au moins la moitié du pixel) : les ombres des cartes la lisent (partie 185), et elle cache les cartes sans les bords
+    /// doux.
+    un: Vec<u16>,
+    /// Les quatre échantillons de chaque pixel (les bords doux), s'ils sont faits.
+    quatre: Option<Vec<[u16; 4]>>,
+    pub motif: Motif,
+}
+
+impl ProfDecor {
+    /// Une profondeur de `w` × `h` pixels : `ech`, quatre inverses de distance par pixel ; la valeur de chaque pixel en est tirée
+    /// (`un_de`).
+    pub fn new(w: usize, h: usize, ech: Vec<[u16; 4]>, motif: Motif) -> ProfDecor {
+        debug_assert_eq!(ech.len(), w * h);
+        let un = ech.iter().map(|e| vers_16_bits(un_de(e.map(de_16_bits)))).collect();
+        ProfDecor { w, h, un, quatre: Some(ech), motif }
+    }
+
+    /// Une profondeur d'une valeur par pixel (la partie 183 : le bord au pixel), et, si `quatre`, ses quatre échantillons aux places
+    /// `motif`.
+    pub fn avec(w: usize, h: usize, un: Vec<u16>, quatre: Option<Vec<[u16; 4]>>, motif: Motif) -> ProfDecor {
+        debug_assert!(un.len() == w * h && quatre.as_ref().is_none_or(|q| q.len() == w * h));
+        ProfDecor { w, h, un, quatre, motif }
+    }
+
+    pub fn len(&self) -> usize {
+        self.un.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.un.is_empty()
+    }
+
+    /// Les quatre échantillons par pixel (les bords doux) sont-ils là ?
+    pub fn quatre(&self) -> bool {
+        self.quatre.is_some()
+    }
+
+    /// Les quatre échantillons du pixel `i` (sans eux, sa valeur répétée).
+    #[inline]
+    pub fn echantillons(&self, i: usize) -> [f32; 4] {
+        match &self.quatre {
+            Some(q) => q[i].map(de_16_bits),
+            None => [de_16_bits(self.un[i]); 4],
+        }
+    }
+
+    /// **La profondeur du pixel `i`, en une valeur** : celle de la partie 183, ce que les ombres des cartes lisent pour retrouver le
+    /// point du décor (partie 185).
+    #[inline]
+    pub fn un(&self, i: usize) -> f32 {
+        de_16_bits(self.un[i])
+    }
+}
+
+/// La profondeur d'un pixel en une valeur tirée de ses quatre échantillons (`ProfDecor::new`) : le plus proche de ceux que le décor
+/// couvre, s'il en couvre au moins la moitié (la règle du rendu par le processeur) ; 0 sinon.
+#[inline]
+pub fn un_de(e: [f32; 4]) -> f32 {
+    let couverts = e.iter().filter(|&&v| v > 0.0).count();
+    if couverts >= 2 { e.iter().fold(0.0f32, |a, &b| a.max(b)) } else { 0.0 }
+}
+
+/// **La part du pixel de coin (`x0`, `y0`) de la carte de plan `plan` que le décor cache** (partie 193) : la part de ses quatre
+/// échantillons `ech` (aux places `motif`) où le décor est plus près qu'elle (`cache`, la carte prise à la place de chacun).
+#[inline]
+pub fn part_cachee(plan: &PlanCarte, ech: [f32; 4], motif: &Motif, x0: f32, y0: f32) -> f32 {
+    let mut n = 0u32;
+    for s in 0..4 {
+        if cache(plan, ech[s], x0 + motif[s][0], y0 + motif[s][1]) {
+            n += 1;
+        }
+    }
+    n as f32 * 0.25
+}
+
+/// Un flottant de 16 bits (IEEE 754) en flottant de 32 bits.
+#[inline]
+pub fn de_16_bits(h: u16) -> f32 {
+    let (signe, exp, frac) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as u32, (h & 0x3ff) as u32);
+    let v = match exp {
+        0 => frac as f32 * (1.0 / 16_777_216.0),
+        31 => {
+            if frac == 0 {
+                f32::INFINITY
+            } else {
+                f32::NAN
+            }
+        }
+        _ => f32::from_bits(((exp + 112) << 23) | (frac << 13)),
+    };
+    if signe == 1 { -v } else { v }
+}
+
+/// Un flottant de 32 bits en flottant de 16 bits, arrondi au plus près (ce que la carte graphique écrit dans `decor3dgpu::PROF`).
+pub fn vers_16_bits(v: f32) -> u16 {
+    let b = v.to_bits();
+    let signe = ((b >> 16) & 0x8000) as u16;
+    let a = v.abs();
+    if a.is_nan() {
+        return signe | 0x7e00;
+    }
+    if a >= 65520.0 {
+        return signe | 0x7c00;
+    }
+    if a < 6.103_515_6e-5 {
+        // (Sous-normal : un multiple de 2^-24.)
+        return signe | (a * 16_777_216.0).round() as u16;
+    }
+    let e = ((a.to_bits() >> 23) as i32) - 127 + 15;
+    let m = a.to_bits() & 0x7f_ffff;
+    let mut h = ((e as u32) << 10) | (m >> 13);
+    // (Au plus près, à égalité vers le pair.)
+    let reste = m & 0x1fff;
+    if reste > 0x1000 || (reste == 0x1000 && h & 1 == 1) {
+        h += 1;
+    }
+    signe | h as u16
+}
+
+/// La profondeur d'un rendu du décor, gardée avec lui (`decor3d::profondeur_du_rendu`).
+pub type Profondeurs = std::sync::Arc<ProfDecor>;
 
 /// Ce qu'il faut à la composition par le processeur pour cacher une carte derrière le décor : la profondeur du décor (une feuille
 /// de `w` × `h`) et le plan de la carte.
 #[derive(Clone, Copy)]
 pub struct Masque<'a> {
-    pub prof: &'a [f32],
+    pub prof: &'a ProfDecor,
     pub w: usize,
     pub h: usize,
     pub plan: PlanCarte,
 }
 
 impl Masque<'_> {
-    /// Le pixel (`x`, `y`) du monde (la feuille, ou la toile autour) est-il caché ? Hors de la feuille, le décor n'est pas : non.
+    /// **La part du pixel (`x`, `y`) du monde (la feuille, ou la toile autour) qui se voit** : 1 tout visible, 0 tout caché, entre
+    /// les deux au bord (partie 193). Hors de la feuille, le décor n'est pas : 1.
+    #[inline]
+    pub fn visible(&self, x: i64, y: i64) -> f32 {
+        if x < 0 || y < 0 || x >= self.w as i64 || y >= self.h as i64 {
+            return 1.0;
+        }
+        let i = y as usize * self.w + x as usize;
+        let h = match &self.prof.quatre {
+            Some(q) => q[i],
+            // (Une valeur par pixel : le test de la partie 183, au centre, tout ou rien.)
+            None => return if cache(&self.plan, de_16_bits(self.prof.un[i]), x as f32 + 0.5, y as f32 + 0.5) { 0.0 } else { 1.0 },
+        };
+        if h == [0; 4] {
+            return 1.0;
+        }
+        // (Le cas de presque tous les pixels : les quatre échantillons à la même distance, une carte à plat. Un seul test.)
+        if h[0] == h[1] && h[1] == h[2] && h[2] == h[3] && self.plan[0] == 0.0 && self.plan[1] == 0.0 {
+            return if cache(&self.plan, de_16_bits(h[0]), x as f32 + 0.5, y as f32 + 0.5) { 0.0 } else { 1.0 };
+        }
+        1.0 - part_cachee(&self.plan, h.map(de_16_bits), &self.prof.motif, x as f32, y as f32)
+    }
+
+    /// Le pixel (`x`, `y`) est-il tout caché ?
     #[inline]
     pub fn cache(&self, x: i64, y: i64) -> bool {
-        if x < 0 || y < 0 || x >= self.w as i64 || y >= self.h as i64 {
-            return false;
-        }
-        cache(&self.plan, self.prof[y as usize * self.w + x as usize], x as f32 + 0.5, y as f32 + 0.5)
+        self.visible(x, y) <= 0.0
+    }
+}
+
+/// L'opacité `opacite` d'un calque à un pixel dont la part `visible` se voit (`Masque::visible`) : la même si tout se voit (au
+/// bit près, comme avant), rien si tout est caché.
+#[inline]
+pub fn opacite_visible(opacite: u8, visible: f32) -> u8 {
+    if visible >= 1.0 {
+        opacite
+    } else if visible <= 0.0 {
+        0
+    } else {
+        (opacite as f32 * visible).round() as u8
     }
 }
 
 /// La profondeur de l'élément du décor dans une composition par le processeur : celle du rendu montré (`decor3d::profondeur_du_rendu`,
 /// par le numéro de version de son dessin), si elle est à la taille de la feuille.
 pub fn du_decor(cel: &crate::document::Cel, w: usize, h: usize) -> Option<Profondeurs> {
-    crate::decor3d::profondeur_du_rendu(cel.version).filter(|p| p.len() == w * h)
+    crate::decor3d::profondeur_du_rendu(cel.version).filter(|p| p.w == w && p.h == h && p.len() == w * h)
 }
 
 /// Le masque d'un élément du plan, s'il porte le plan de sa carte et qu'un décor avec sa profondeur est dessous.
@@ -149,7 +328,7 @@ pub fn du_decor(cel: &crate::document::Cel, w: usize, h: usize) -> Option<Profon
 pub fn masque<'a>(item: &crate::render::PlanItem, prof: Option<&'a Profondeurs>, w: usize, h: usize) -> Option<Masque<'a>> {
     let plan = item.profondeur?;
     let prof = prof?;
-    Some(Masque { prof: prof.as_slice(), w, h, plan })
+    Some(Masque { prof: prof.as_ref(), w, h, plan })
 }
 
 // ------------------------------------------------------------------------------------------- la case du calque

@@ -15809,8 +15809,9 @@ décor. `profondeur_perf` (ignoré) : les mesures de 183.3.
 - Un **calque d'ajustement résolu par le processeur** (sans carte graphique, ou dans un dossier) compose ce qu'il couvre sans la
   profondeur partagée : les cartes qu'il couvre passent devant le décor dans son résultat. Sur la carte graphique, hors dossier,
   il agit sur l'image déjà cachée.
-- Le bord du décor qui cache une carte est **net, au pixel** (pas lissé) : sur la feuille, deux fois plus fine que l'image, il
-  se voit peu ; dans la vue Espace 3D, il suit les quatre échantillons du décor.
+- ~~Le bord du décor qui cache une carte est **net, au pixel** (pas lissé) : sur la feuille, deux fois plus fine que l'image, il
+  se voit peu ; dans la vue Espace 3D, il suit les quatre échantillons du décor.~~ **Résolu par la partie 193** (les bords doux :
+  le bord est lissé sur un pixel, à quatre échantillons, à l'écran, dans les exports et dans la vue Espace 3D).
 - **Dans la vue Espace 3D**, le voile d'une carte couvre tout son quadrilatère : là où elle est transparente et qu'une autre
   carte, posée plus tôt dans la pile mais plus près que le décor, se voit à travers, le décor peut recouvrir cette autre carte
   (seulement si l'ordre de la pile n'est pas celui des distances). L'image du plan, elle, est juste pixel par pixel.
@@ -16711,3 +16712,198 @@ Le reste des essais : les 90 échecs connus du Mac, aucun neuf.
 7. Une séquence qui a deux versions de séquence (A, B) : duplique-la, passe la copie de A à B : l'originale ne bouge pas.
 8. Enregistre, ferme, rouvre : les deux séquences, leurs dessins, leurs décors ; dans `decors/`, un seul fichier par modèle.
 9. Ctrl+K, « dupliquer la séquence » : la commande est là ; donne-lui une touche par clic droit sur l'entrée de menu si tu veux.
+
+
+## 193. Les bords doux entre le décor 3D et les cartes (2026-11-20, branche `bords-doux` partie de `main` 41fa82f, format 61 inchangé ; numérotée 192 sur la branche, 193 à la fusion : la timeline resserrée, poussée du PC, avait pris le 192)
+
+Le choix d'Anthony (« Bords d'occlusion doux »). Depuis la partie 183, le décor 3D et les cartes se cachent selon leur vraie
+distance, mais **tout ou rien à chaque pixel de la feuille** : là où le bord d'un objet du décor passe devant une carte, et là où
+une carte inclinée entre dans un objet, le bord faisait des **escaliers**, visibles surtout dans les exports. Ces bords sont
+maintenant **lissés sur un pixel**, comme les bords d'un dessin. Format du projet inchangé (61). Compilé et essayé sur le Mac
+seulement ; **rien n'a été regardé à l'écran** (consigne : ne pas lancer FEANOR).
+
+### 193.1 Ce qui change pour Anthony
+
+1. **Le bord d'un objet du décor devant une carte est doux** : un personnage derrière un arbre, un poteau, un mur penché n'a plus
+   de marches le long du tronc ou du toit ; au bord, sur un pixel de la feuille, on voit un peu du personnage et un peu de l'objet.
+2. **Une carte inclinée qui entre dans un objet** (un sol dessiné qui passe sous une marche, une carte tournée qui traverse une
+   boîte) : la ligne d'entrée est douce aussi.
+3. **Le bord du décor contre le ciel ou le vide** : là où le décor ne couvre qu'une partie d'un pixel, il ne cache la carte que pour
+   cette partie. Le décor lui-même est dessiné comme avant (sa couleur au pixel près, sans lissage sur la carte graphique : la
+   feuille est réduite à l'écran).
+4. **Partout où la profondeur est partagée** : l'image du plan à l'écran (et le dessin), les exports (images, films, la carte
+   graphique prêtée comme la composition par le processeur, qui donnent la même image à un niveau près), les vignettes, la pipette,
+   et la vue Espace 3D (le bord d'un objet y était déjà doux ; la ligne d'entrée d'une carte inclinée l'est maintenant aussi).
+5. **Rien d'autre ne bouge** : l'intérieur d'une carte est tout caché ou tout visible, exactement comme avant ; la tolérance de la
+   partie 183 (0,4 % plus 1 cm) est la même, les pieds d'une carte aimantée ne sont pas plus rognés.
+6. **« Toujours devant le décor 3D »** et un calque accroché à la caméra ne sont **jamais** cachés, même en partie au bord.
+7. **Un plan sans décor** donne les mêmes images qu'avant, au bit près, au même coût.
+8. **Les ombres des cartes** (parties 185 et 189) sont exactement celles d'avant : elles lisent la profondeur d'avant, toujours
+   dessinée.
+9. **Allégée** (sur « Allège ») : **les bords doux ne coûtent que quand une carte les lit**. Un plan sans carte qui partage la
+   profondeur du décor (aucune carte, toutes « Toujours devant le décor 3D », accrochées à la caméra, calques d'effet ou
+   d'annotation) est dessiné comme avant la partie 193, au même coût. Le budget d'un décor (ce qui entre, la qualité de ses ombres)
+   est **celui d'avant** ; les bords doux ne s'y ajoutent que s'ils tiennent encore dans le budget de cette machine avec le décor (sur
+   le Mac : un décor jusqu'à 0,7 M triangles sans ombres, contre 0,9 à 1 M sans les bords doux) ; au-delà, les bords sont nets, au
+   pixel, comme à la partie 183, plutôt que de perdre des triangles ou des ombres. Le panneau du décor le dit : « jusqu'à 1,0 M
+   triangles (739 790 avec les bords doux des cartes) ». Décocher « Toujours devant » sur une carte ne redessine pas le décor : seule
+   sa profondeur à quatre échantillons est faite ; la recocher ne refait rien.
+
+### 193.2 Comment c'est fait
+
+- **Une fraction au lieu d'un oui ou non** (`profondeur.rs`). La profondeur du décor est gardée en **quatre échantillons par pixel**
+  (`ProfDecor` : quatre flottants de 16 bits, et leurs places dans le pixel, `Motif`). Un pixel de carte est caché **pour la part de
+  ses échantillons** où le décor est plus près qu'elle (`part_cachee`, avec le test de toujours, `profondeur::cache`, la carte prise
+  à la place de chaque échantillon : son plan est linéaire sur la feuille, une carte inclinée est donc juste à chacun) ; l'opacité de
+  la carte y est multipliée par la part qui se voit (`Masque::visible`, `opacite_visible`) : 0, ¼, ½, ¾ ou tout. Le décor est
+  dessous : il se voit à travers, d'autant. Des trois façons proposées (l'intervalle des profondeurs du pixel, les échantillons, une
+  estimation par les dérivées), **les échantillons** : exacts au lissage à quatre échantillons, ils traitent d'un même calcul le bord
+  d'un objet devant la carte, le bord du décor contre le vide et la ligne d'entrée d'une carte inclinée, pour le même poids qu'un
+  intervalle (une texture de quatre canaux de 16 bits).
+- **Carte graphique** (`decor3dgpu.rs`) : la passe de l'image du plan est **celle d'avant**, à un échantillon, avec sa profondeur en
+  une valeur pour seconde cible (`PROF1`, `R16Float`, la partie 183) et la part du soleil (partie 185). **Quand une carte du plan
+  partage la profondeur** (un élément du plan porte un plan, `GpuCanvas::sync`) **et que le décor tient dans le budget avec les bords
+  doux** (`decor3d::bords_doux`, 193.3), juste après elle, **une passe de la profondeur seule à quatre échantillons** (`prof4` : la
+  place des sommets seule, sans fragment ; `prof4s` pour les matières à seuil d'alpha, découpées comme dans la passe de couleur), puis
+  une petite passe qui ramène ses quatre échantillons à l'inverse de leur distance à l'œil (`PROF_DES_ECHANTILLONS` : le proche et le
+  loin de la passe sont dans ses réglages ; 0 là où rien n'est dessiné), un par canal d'une seconde texture, `PROF` (`Rgba16Float`,
+  faite la première fois qu'il en faut une, `CelTexture::prof4`), aux places standard du lissage à quatre échantillons
+  (`profondeur::MOTIF_CARTE`, les mêmes sur toutes les cartes graphiques). La profondeur de chaque échantillon est celle du tampon,
+  juste en chaque point. Les tampons de profondeur sont **partagés par toutes les prises** de l'image du plan (`Moteur::feuille4` ;
+  celui à quatre échantillons fait la première fois) ; chaque décor n'a plus son tampon à lui.
+  **Les deux cas, sans redessiner la couleur** (`gpu::place_decor`) : la texture du décor garde la signature de son rendu (`fx.done`,
+  la couleur et `PROF1`) et celle de ses quatre échantillons (`quatre_sig`). Une carte qui se met à partager la profondeur d'un décor
+  déjà dessiné ne demande que la profondeur à quatre échantillons (`Moteur::profondeur_quatre`, avec les réglages de la dernière
+  passe de couleur de ce décor) ; une carte qui cesse de la partager ne demande rien (les quatre échantillons restent, prêts, jusqu'au
+  prochain rendu du décor, qui les refait seulement si une carte les lit). Les composeurs savent par un drapeau (4) si les quatre
+  échantillons sont à jour ; l'image composée gardée le compte (`ItemKey`).
+  **Pourquoi pas toute la passe à quatre échantillons**, comme la vue Espace 3D (le décor y aurait gagné des bords lissés) : c'était
+  le premier essai, mesuré trop cher : avec les ombres du décor, la passe coûtait 2,5 à 5 fois plus (980 000 triangles, ombres
+  hautes : 10,3 ms au lieu de 2,3 ms ; le budget de la machine tombait à 0,7 M triangles et ses ombres de « hautes » à « basses »).
+  La profondeur seule ne fait aucun calcul de lumière.
+- **Le budget** (`decor3dbudget.rs`) : l'étalonnage mesure la passe d'avant pour chaque qualité d'ombres, comme avant, et **à part le
+  surcoût des bords doux** (la même passe sans ombres, avec et sans la profondeur à quatre échantillons : `Chronos::prof4`). Le budget
+  d'un décor (`BudgetMachine::triangles`, les verdicts, la qualité des ombres) est celui d'avant la partie 193 ; les bords doux d'un
+  décor de n triangles en ombres q ne sont dessinés que si la passe q plus leur surcoût tient dans le budget d'une passe
+  (`bords_doux_pour`, jusqu'à `triangles_bords` triangles sans ombres). **La règle des 4 ms tient dans les deux cas.** Un budget gardé
+  d'avant la partie 193 n'a pas ce surcoût : il se remesure une fois (`vaut_pour`). Sans budget mesuré : pas de bords doux.
+- **La composition sur la carte** (`gpu.rs`) : avec le drapeau 4, `visible` des composeurs `fs_compose_p` et `fs_blend_p` lit les
+  quatre échantillons (`decor_prof4`) d'une lecture et compte ceux qui cachent la carte ; sans lui, le test de la partie 183 sur
+  `decor_prof`, au centre, tout ou rien. `fs_decor_o` (les ombres des cartes sur le décor) lit toujours `decor_prof`, comme avant.
+- **Processeur** (`profondeur::ProfDecor`) : la profondeur en une valeur par pixel, toujours (celle de la partie 183 ; les ombres la
+  lisent), et ses quatre échantillons s'ils sont là. `decor3drendu::rendre_objets_prof` garde les quatre de son sur-échantillonnage
+  de deux par côté (une feuille jusqu'à 2,5 Mpx, `MOTIF_GRILLE` ; à quatre par côté, ceux qui tombent aux places de la carte
+  graphique) : ils sont déjà calculés, et la clé du rendu du décor ne sait pas quelles cartes le plan a (le lui dire redessinerait la
+  couleur quand une carte change de case) ; au-delà, une valeur seule (le bord au pixel, comme avant). L'export avec la carte prêtée
+  (`decor3d::calculer`) fait les quatre échantillons si le décor tient dans le budget avec eux, la règle de l'écran (une carte qui ne
+  partage pas la profondeur ne les lit pas). `composite_tile_into`, `composite_world_tile` et `pixel_of` passent la part visible à
+  l'opacité du calque, seulement là où la carte a de l'encre.
+- **La vue Espace 3D** (`VoileCarte`) : le voile comptait déjà les quatre échantillons du tampon de profondeur de la vue, mais
+  comparait la distance de la carte au centre du pixel ; il la prend maintenant à la place de chaque échantillon, d'après sa pente à
+  l'écran (`dpdx`, `dpdy`).
+- **Sans décor**, aucun élément ne porte de plan : les composeurs et les boucles de toujours, l'opacité inchangée (au bit près).
+  **Avec un décor et aucune carte qui partage sa profondeur**, les passes d'avant, les composeurs d'avant.
+
+### 193.3 Les mesures sur le Mac de développement
+
+Machine : Apple M5 Pro (Metal), essais en profil d'essai ; la base `main` 41fa82f et cette branche lancées tour à tour, deux fois
+chacune pour la branche (le bruit de la carte est de ± 25 %, partie 180.3 ; entre deux séances, les temps de toute la machine ont
+bougé de 20 % : les deux côtés d'une ligne sont de la même séance).
+
+- **Le décor lui-même** (`decor3d_perf`, la grille d'essai à la feuille 3840 × 2160, sans / basses / hautes ombres) :
+
+  | Triangles | base | sans carte qui partage la profondeur | avec, les bords doux |
+  |---|---|---|---|
+  | 20 000 | 0,65 / 0,67 / 0,66 ms | 0,34–0,95 / 0,66 / 0,66 ms | 0,67–0,68 / 0,97–0,99 / 0,99–1,29 ms |
+  | 180 000 | 0,80 / 1,12 / 1,12 ms | 0,80–0,81 / 0,81 / 1,11–1,13 ms | 0,81–1,15 / 1,13–1,45 / 1,44–1,46 ms |
+  | 980 000 | 1,58 / 1,87 / 2,17 ms | 1,57–1,58 / 1,87–1,89 / 2,17–2,18 ms | 2,17–2,20 / 2,45–2,52 / 2,82 ms |
+  | 2 000 000 | 2,88 / 3,05 / 3,48 ms | 2,87–2,88 / 3,17–3,19 / 3,48–3,49 ms | 3,49–3,50 / 3,80–3,83 / 4,10 ms |
+
+  **Sans carte qui partage la profondeur, le coût d'avant** (les mêmes passes) ; avec les bords doux, + 0,3 à 0,6 ms. `ombres_perf`
+  (la passe d'avant avec la part du soleil) : 980 000 triangles en ombres hautes, 1,93 ms (base : 1,94 ms).
+- **Le budget que l'étalonnage tire** : celui d'un décor, **0,90 à 1,0 M triangles, le même que la base** (0,90 M dans la même séance ;
+  ombres « hautes » pour 100 000 triangles des deux côtés) ; avec les bords doux, **0,70 à 0,74 M**. Un décor entre 0,7 et 1 M
+  triangles reste admis, avec ses ombres, et ses bords d'occlusion sont nets. Le premier essai (toute la passe à quatre
+  échantillons) faisait bien pire : 980 000 triangles en ombres hautes, 10,3 ms ; budget 0,67 à 0,75 M, ombres « basses ».
+- **La composition** (`profondeur_perf`, huit cartes, feuille 3840 × 2160, bords doux) : cartes pleines, + 1,53 à 1,54 ms pour la
+  profondeur partagée, comme la base dans la même séance (+ 1,54 ms ; dans une séance d'avant, + 1,25 à 1,30 contre + 1,29 à 1,31) ;
+  cartes d'un huitième de la feuille, + 0,00 à 0,01 ms. **Une lecture de huit octets au lieu de deux par pixel d'encre ne se voit
+  pas.** Les ombres des cartes (`ombres_perf`) ne changent pas.
+- **L'export par le processeur** (`ombres_perf`, cadre 1920 × 1080, le décor rendu par la carte prêtée, bords doux) : 9 → 10 ms par
+  image (cartes d'un huitième), 15 → 17 ms (cartes pleines) ; avec les ombres des cartes, 32–33 → 33–34 ms et 145–150 → 147–150 ms.
+  Sans les bords doux, le chemin d'avant.
+- L'essai de durée `espace3dcote_tests::a_stroke_with_the_side_view_open_stays_within_the_frame_budget`, seul, trois fois : il
+  réussit (fermée 5,59 à 5,75 ms par image, ouverte 5,83 à 6,22 ms, la mesure de l'essai, qui n'a pas de décor).
+- **La mémoire** à la feuille 3840 × 2160 : sans carte qui partage la profondeur, celle d'avant (la profondeur en une valeur, 17 Mo
+  par décor ; un tampon de profondeur de 33 Mo, partagé maintenant par tous les décors au lieu d'un par décor). Avec les bords doux,
+  en plus : 66 Mo par décor (comptés dans le cache des textures) et le tampon à quatre échantillons, 133 Mo, partagé (pas compté) ;
+  à l'export, 66 Mo relus de plus ; la profondeur gardée avec chaque rendu par le processeur, 17 Mo en une valeur, plus 66 Mo avec
+  les quatre échantillons (le rendu de secours sur une feuille de 2,5 Mpx au plus : 20 Mo).
+
+Ces mesures sont celles du Mac ; **à refaire sur le PC d'Anthony** (`cargo test --lib decor3d_perf -- --ignored --nocapture`, et
+`profondeur_perf`, `ombres_perf`).
+
+### 193.4 Essais (`src/bordsdoux_tests.rs`, 12 nouveaux)
+
+**Le calcul** : flottants de 16 bits (aller-retour, 0 reste 0), la part cachée d'un pixel (tout, la moitié, un quart, rien ; une
+carte inclinée prise à la place de chaque échantillon), un pixel sans décor tout visible, l'opacité inchangée au bit près quand tout
+se voit, la profondeur en une valeur. **Par le processeur** (la feuille composée, le décor rendu par le processeur) : le bord penché
+d'un mur tourné devant une grande carte, sans ciel et avec le ciel — chaque colonne qui passe de la carte au mur le fait par **une
+rampe d'au plus deux pixels, décroissante**, plus d'une colonne sur deux a un pixel de bord, et **tout autre pixel est exactement la
+carte ou exactement le décor seul** (l'intérieur d'avant) ; une carte inclinée et penchée qui entre dans la boîte, une ligne
+d'entrée douce. **Par la carte graphique** : les mêmes, et **l'export par le processeur, le décor rendu par la carte, s'accorde avec
+elle à un niveau près** (au plus 6 admis), les mêmes pixels de bord ; en mode de fusion, des pixels de bord et l'intérieur tout
+caché. « Toujours devant le décor 3D » et accroché à la caméra : **tous les pixels de la carte sont la carte**, par les deux
+chemins. **Sans décor** : la même image avec des plans forcés, et le pixel du monde (vignettes, pipette). **La vue Espace 3D** : le
+voile d'une carte derrière le mur a des pixels en partie couverts à son bord ; celui d'une carte inclinée qui entre dans la boîte en a
+sur la ligne d'entrée, loin des côtés de la boîte (aucun avant cette partie). **Allégée** : sans carte qui partage la profondeur (aucune
+carte, « Toujours devant », accrochée), la passe à quatre échantillons ne tourne pas (le compteur du moteur), la passe de couleur une
+fois, et l'image est celle du chemin d'avant forcé ; « Toujours devant » sur la seule carte : cochée, la couleur seule et la carte
+toute visible ; décochée, les quatre échantillons seuls, **sans redessiner la couleur**, des bords doux, la même image qu'une
+composition neuve ; recochée puis décochée, rien de redessiné ; un décor trop lourd pour les bords doux, des bords nets ; les ombres
+des cartes, les mêmes avec et sans les bords doux ; l'étalonnage donne le budget d'avant, celui des bords doux à part, le texte qui
+les dit, et un budget gardé d'avant la partie 193 se remesure.
+
+Essais d'avant ajustés : `profondeur_tests::la_carte_graphique_et_le_processeur_donnent_la_meme_profondeur_du_decor` lit la
+profondeur en une valeur (`ProfDecor::un`) au lieu d'un tableau, et vérifie en plus que les quatre échantillons de la carte graphique
+sont, loin des bords, à la distance du processeur (à 0,2 % près) ; ses exigences d'avant ne changent pas. Les mesures de chaque
+essai d'étalonnage (`decor3d_tests::chronos`) ont le surcoût des bords doux (un budget sans lui se remesure) ; `decor3d_perf` mesure
+les deux cas ; `profondeur_perf` et `ombres_perf` mesurent avec les bords doux. Aucun autre essai des parties 183, 185 et 189 n'a eu
+à changer. Le reste : les 90 échecs connus du Mac, aucun neuf.
+
+### 193.5 Ce qui n'est pas fait (ou limité)
+
+- **Quatre échantillons** : le bord a cinq valeurs (0, ¼, ½, ¾, tout), comme le lissage de la vue Espace 3D ; pas de lissage plus fin.
+- **La couleur du décor au bord est celle de son pixel entier** : là où le bord d'un objet passe devant une carte, la part de l'objet
+  qui cache la carte prend la couleur que le décor a au centre du pixel (le décor de l'image du plan n'est pas lissé) ; si le centre
+  tombe sur le ciel, un peu du ciel se mêle au bord au lieu de l'objet (au plus la moitié d'un pixel de la feuille, deux fois plus
+  fine que l'image).
+- **Le rendu de secours par le processeur d'une grande feuille** (plus de 2,5 Mpx, un échantillon par pixel) : le bord reste au pixel,
+  comme avant. À deux échantillons par côté, le processeur a deux rangées d'échantillons par pixel : une arête presque horizontale qui
+  passe entre elles n'a pas de pixel de bord (c'est juste, mais moins doux que la carte graphique).
+- **Un décor plus lourd que le budget des bords doux** (sur le Mac, de 0,7 à 1 M triangles sans ombres, moins avec) a des bords
+  d'occlusion nets, au pixel, comme à la partie 183 : il garde ses triangles et ses ombres. L'export suit la même règle.
+- **Le rendu par le processeur** garde ses quatre échantillons dès qu'il sur-échantillonne (feuille de 2,5 Mpx au plus), même sans
+  carte qui les lise : ils sont calculés de toute façon, et le dire à la clé du rendu redessinerait le décor.
+- Le tampon à quatre échantillons partagé (133 Mo pour une feuille 4K, fait la première fois qu'une carte lit les bords doux, puis
+  gardé) n'est pas compté dans le budget du cache ; la profondeur à quatre échantillons de chaque décor (66 Mo), si.
+- **Sans budget mesuré** (le temps du premier étalonnage, ou de la nouvelle mesure d'un budget gardé d'avant la partie 193) : pas de
+  bords doux, les bords nets d'avant.
+- Les limites de la partie 183 restent : un calque d'ajustement résolu par le processeur, le voile de la vue Espace 3D sur tout le
+  quadrilatère de la carte, les effets d'une carte cachés avec elle.
+
+### 193.6 À essayer (sa checklist)
+
+1. Un projet de copie, une séquence avec un décor : un arbre de la banque 3D devant un personnage, et un mur tourné. **Le long du
+   tronc et du haut du mur, plus d'escaliers** sur le personnage : regarde de près (zoom à 400 %) l'image du plan, puis une image
+   exportée.
+2. Une carte de sol inclinée qui passe sous une marche ou dans une boîte : **la ligne d'entrée est douce**.
+3. Anime la profondeur du personnage pour qu'il passe derrière l'arbre : **le bord ne scintille pas** pendant la lecture (J/K/L).
+4. Aimanté au sol sur une dalle : **ses pieds sont comme avant**, rien de plus rogné.
+5. « Toujours devant le décor 3D », puis un calque accroché à la caméra : jamais cachés, même au bord.
+6. Vue Espace 3D (plein écran, à côté) : tourne autour, une carte inclinée qui traverse un objet a un bord d'entrée doux.
+7. Un plan sans décor : les mêmes images qu'avant.
+8. Superposition « Performance » ouverte, un décor au budget : la caméra qui bouge reste fluide. Le panneau du décor dit les deux
+   budgets (« … avec les bords doux des cartes ») ; au premier lancement, le budget se remesure une fois.
+9. Coche « Toujours devant le décor 3D » sur toutes les cartes : le décor coûte comme avant (la superposition « Performance ») ;
+   décoche-en une : les bords doux reviennent, sans que le décor clignote.

@@ -473,7 +473,7 @@ fn ombres_et_ciel_sur_la_carte_graphique() {
 
 fn chronos(gpu_par_million: f32) -> Chronos {
     let c = |extra: f32| Cout { fixe: 0.3, par_million: gpu_par_million * extra };
-    Chronos { gpu: Some([c(1.0), c(1.6), c(2.4)]), cpu: Cout { fixe: 5.0, par_million: 900.0 }, vram: Some(8 << 30), ram: Some(32 << 30) }
+    Chronos { gpu: Some([c(1.0), c(1.6), c(2.4)]), prof4: Some(Cout { fixe: 0.05, par_million: 0.5 }), cpu: Cout { fixe: 5.0, par_million: 900.0 }, vram: Some(8 << 30), ram: Some(32 << 30) }
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn une_cle_de_machine_differente_fait_remesurer_a_l_import() {
 // ------------------------------------------------------------------------------------- allègement, simplification
 
 pub(crate) fn budget_large() -> BudgetMachine {
-    BudgetMachine { cle: crate::decor3dbudget::cle_machine(None), date: 1, triangles: 1_000_000, textures_mo: 512, carte: false, gpu: None, cpu: Cout { fixe: 1.0, par_million: 100.0 } }
+    BudgetMachine { cle: crate::decor3dbudget::cle_machine(None), date: 1, triangles: 1_000_000, triangles_bords: 1_000_000, textures_mo: 512, carte: false, gpu: None, cpu: Cout { fixe: 1.0, par_million: 100.0 }, prof4: None }
 }
 
 #[test]
@@ -741,7 +741,7 @@ fn decor3d_perf() {
     println!("étalonnage (feuille 3840 × 2160, cadre 1920 × 1080) : {ch:#?}");
     let b = budget_depuis(&ch, crate::decor3dbudget::cle_machine(rs.as_ref().map(|r| r.adapter.get_info()).as_ref()), 0);
     println!("machine : {}", b.cle);
-    println!("budget : {} ; ombres pour 100 000 triangles : {:?}", b.texte(), b.qualite_pour(100_000));
+    println!("budget : {} ; ombres pour 100 000 triangles : {:?} ; bords doux (partie 193) jusqu'à {} triangles sans ombres", b.texte(), b.qualite_pour(100_000), b.triangles_bords);
     for cote in [100usize, 300, 700, 1000] {
         let s = crate::decor3dbudget::scene_d_essai(cote, 2048);
         let monde = Monde::new([1920, 1080], [1920, 1080]);
@@ -755,9 +755,10 @@ fn decor3d_perf() {
             let max = rs.device.limits().max_texture_dimension_2d.min(3840);
             let feuille = [max, max * 9 / 16];
             let prise_f = Prise::de_la_feuille(&Monde::new([feuille[0] as usize, feuille[1] as usize], [1920, 1080]), monde.eye_reference()).unwrap();
-            Qualite::TOUTES.map(|q| crate::decor3dgpu::rendre_hors_ecran(&rs.device, &rs.queue, &mut mt, &d, &prise_f, feuille, true, q, 5).map(|r| r.1)).into_iter().collect::<Option<Vec<_>>>()
+            // (Partie 193 : sans carte qui partage la profondeur, la passe d'avant ; avec, les bords doux en plus.)
+            Some([false, true].map(|quatre| Qualite::TOUTES.map(|q| crate::decor3dgpu::rendre_hors_ecran_tout(&rs.device, &rs.queue, &mut mt, &d, &prise_f, feuille, true, q, 5, false, true, quatre).map(|r| r.1)).into_iter().collect::<Option<Vec<_>>>()))
         });
-        println!("{} triangles, texture 2048² : processeur (1920 × 1080) {cpu:.0} ms ; carte (feuille, sans / basses / hautes) {gpu:?} ms", s.triangles());
+        println!("{} triangles, texture 2048² : processeur (1920 × 1080) {cpu:.0} ms ; carte (feuille, sans / basses / hautes ; sans carte qui partage la profondeur, puis avec les bords doux) {gpu:?} ms", s.triangles());
     }
 }
 

@@ -218,7 +218,8 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             prof = crate::fx::shown(doc, item).and_then(|c| crate::profondeur::du_decor(&c, doc.width, doc.height));
         }
         let masque = crate::profondeur::masque(item, prof.as_ref(), doc.width, doc.height);
-        let cache = |x: usize, y: usize| masque.as_ref().is_some_and(|m| m.cache(x as i64, y as i64));
+        // (La part du pixel que le décor laisse voir, partie 193 : 1 sans décor, l'opacité du calque y est alors la même.)
+        let vis = |x: usize, y: usize| masque.as_ref().map_or(1.0, |m| m.visible(x as i64, y as i64));
         let ombrer = ombreur(ombres.as_deref(), rang, item);
         let ombrer = |x: usize, y: usize, c: Color32| ombrer.as_ref().map_or(c, |f| f(x as i64, y as i64, c));
         // Feuille déformée par un maillage (enveloppe, perspective) : calcul de secours, la carte
@@ -231,8 +232,11 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             for y in 0..th {
                 let s = at(ox, oy + y);
                 for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
-                    if src.a() != 0 && !cache(ox + x, oy + y) {
-                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 {
+                        let v = vis(ox + x, oy + y);
+                        if v > 0.0 {
+                            *d = blend_over(*d, ombrer(ox + x, oy + y, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, (ox + x, oy + y));
+                        }
                     }
                 }
             }
@@ -246,8 +250,11 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
                     let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
                     let src = sample(&cel.raster, p.x, p.y);
-                    if src.a() != 0 && !cache(ox + x, oy + y) {
-                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 {
+                        let v = vis(ox + x, oy + y);
+                        if v > 0.0 {
+                            *d = blend_over(*d, ombrer(ox + x, oy + y, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, (ox + x, oy + y));
+                        }
                     }
                 }
             }
@@ -263,8 +270,11 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                 let s = at(ox, oy + y);
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
                     let src = r.get((((ox + x) as f32 + 0.5) * kx) as usize, (((oy + y) as f32 + 0.5) * ky) as usize);
-                    if src.a() != 0 && !cache(ox + x, oy + y) {
-                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    if src.a() != 0 {
+                        let v = vis(ox + x, oy + y);
+                        if v > 0.0 {
+                            *d = blend_over(*d, ombrer(ox + x, oy + y, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, (ox + x, oy + y));
+                        }
                     }
                 }
             }
@@ -278,8 +288,11 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             let s = at(ox, oy + y);
             let row = &tile[y * TILE..y * TILE + tw];
             for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(row).enumerate() {
-                if src.a() != 0 && !cache(ox + x, oy + y) {
-                    *d = blend_over(*d, ombrer(ox + x, oy + y, src), item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                if src.a() != 0 {
+                    let v = vis(ox + x, oy + y);
+                    if v > 0.0 {
+                        *d = blend_over(*d, ombrer(ox + x, oy + y, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, (ox + x, oy + y));
+                    }
                 }
             }
         }
@@ -533,8 +546,9 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
             for y in 0..th {
                 let s = at(ox, oy + y as i64);
                 for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
-                    if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(ox + x as i64, oy + y as i64)) {
-                        *d = blend_over(*d, teinte(ox + x as i64, oy + y as i64, src), item.opacity, item.tint, item.blend, ((ox + x as i64) as usize, (oy + y as i64) as usize));
+                    let v = if src.a() != 0 { masque.as_ref().map_or(1.0, |m| m.visible(ox + x as i64, oy + y as i64)) } else { 0.0 };
+                    if v > 0.0 {
+                        *d = blend_over(*d, teinte(ox + x as i64, oy + y as i64, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, ((ox + x as i64) as usize, (oy + y as i64) as usize));
                     }
                 }
             }
@@ -563,8 +577,9 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
                         continue;
                     }
                     let src = r.get((((wx as f32) + 0.5) * kx) as usize, (((wy as f32) + 0.5) * ky) as usize);
-                    if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(wx, wy)) {
-                        *d = blend_over(*d, teinte(wx, wy, src), item.opacity, item.tint, item.blend, (wx as usize, wy as usize));
+                    let v = if src.a() != 0 { masque.as_ref().map_or(1.0, |m| m.visible(wx, wy)) } else { 0.0 };
+                    if v > 0.0 {
+                        *d = blend_over(*d, teinte(wx, wy, src), crate::profondeur::opacite_visible(item.opacity, v), item.tint, item.blend, (wx as usize, wy as usize));
                     }
                 }
             }
@@ -583,7 +598,7 @@ pub(crate) fn world_item_over(raster: &Raster, inv: Option<Affine>, opacity: u8,
     world_item_over_masque(raster, inv, opacity, tint, blend, tx, ty, buf, stride, origin, None, None);
 }
 
-/// Comme `world_item_over`, les pixels cachés par le décor 3D (`masque`, partie 183) laissés tels quels, et ceux qui restent passés
+/// Comme `world_item_over`, les pixels cachés par le décor 3D (`masque`, partie 183) laissés tels quels (en partie au bord, partie 193), et ceux qui restent passés
 /// par `teinte` (les ombres des cartes, partie 185).
 #[allow(clippy::too_many_arguments)]
 fn world_item_over_masque(raster: &Raster, inv: Option<Affine>, opacity: u8, tint: Option<[u8; 3]>, blend: BlendMode, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64), masque: Option<crate::profondeur::Masque>, teinte: Option<&(dyn Fn(i64, i64, Color32) -> Color32 + Sync)>) {
@@ -604,9 +619,10 @@ fn world_item_over_masque(raster: &Raster, inv: Option<Affine>, opacity: u8, tin
                 }
                 None => raster.get_i(wx, wy),
             };
-            if src.a() != 0 && !masque.as_ref().is_some_and(|m| m.cache(wx, wy)) {
+            let v = if src.a() != 0 { masque.as_ref().map_or(1.0, |m| m.visible(wx, wy)) } else { 0.0 };
+            if v > 0.0 {
                 let src = teinte.map_or(src, |f| f(wx, wy, src));
-                *d = blend_over(*d, src, opacity, tint, blend, (world_dither(wx), world_dither(wy)));
+                *d = blend_over(*d, src, crate::profondeur::opacite_visible(opacity, v), tint, blend, (world_dither(wx), world_dither(wy)));
             }
         }
     }
@@ -892,13 +908,18 @@ fn pixel_of(layers: &[Resolved], base: Color32, x: i64, y: i64) -> Color32 {
                 if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
             }
         };
-        if s.a() != 0 && !l.prof.as_ref().is_some_and(|(p, w, h)| l.item.profondeur.is_some_and(|plan| crate::profondeur::Masque { prof: p, w: *w, h: *h, plan }.cache(x, y))) {
+        // (La part du pixel que le décor laisse voir, partie 193 ; lue seulement là où il y a de l'encre.)
+        let v = match (&l.prof, l.item.profondeur) {
+            (Some((p, w, h)), Some(plan)) if s.a() != 0 => crate::profondeur::Masque { prof: p, w: *w, h: *h, plan }.visible(x, y),
+            _ => 1.0,
+        };
+        if s.a() != 0 && v > 0.0 {
             let s = match &l.ombres {
                 Some((o, _)) if matches!(l.item.fond, Some(FondPart::Decor(_))) => o.sur_le_decor(x, y, s),
                 Some((o, idx)) => o.sur_la_carte(*idx, x, y, s),
                 None => s,
             };
-            c = blend_over(c, s, l.item.opacity, l.item.tint, l.item.blend, (world_dither(x), world_dither(y)));
+            c = blend_over(c, s, crate::profondeur::opacite_visible(l.item.opacity, v), l.item.tint, l.item.blend, (world_dither(x), world_dither(y)));
         }
     }
     c
