@@ -789,6 +789,10 @@ impl App {
             ui.close_menu();
             self.enter_animation(index);
         }
+        // (Partie 204 : l'environnement 3D du plan, dans un projet qui a de la 3D : un projet dessiné à plat n'en a que faire.)
+        if !self.doc.decors3d.is_empty() {
+            self.menu_env_du_plan(ui, index);
+        }
         // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
         if self.partage.is_some() {
             ui.menu_button("Équipe", |ui| self.equipe_menu_items(ui, index));
@@ -971,6 +975,10 @@ impl App {
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         // Les repères « modifié depuis le dernier envoi » posés ce coup-ci : où, et à quel plan (`envoisui.rs`).
         let mut reperes: Vec<(Rect, u64)> = Vec::new();
+        // Partie 204 : les marques des plans sortis de l'environnement de leur séquence, et leurs bulles.
+        let mut marques_env: Vec<(Rect, String)> = Vec::new();
+        #[cfg(test)]
+        crate::planenv::MARQUES.with(|m| m.borrow_mut().clear());
         // Les pastilles de prise (film partagé) de ce coup-ci : la zone et le plan, pour la bulle.
         let mut prises_zones: Vec<(Rect, u64)> = Vec::new();
         // Les notes à traiter de chaque plan (`fildecisionui.rs`) : un seul passage sur les commentaires, et la zone de chaque pastille.
@@ -1044,6 +1052,10 @@ impl App {
                 if let Some(zone) = crate::fildecisionui::peindre_marque_du_bloc(&clip, rect, m) {
                     notes_zones.push((zone, *m));
                 }
+            }
+            // (Partie 204 : l'environnement du plan, s'il n'est pas celui de sa séquence : une marque en bas à droite.)
+            if let Some(m) = self.peindre_marque_env(&clip, rect, i) {
+                marques_env.push(m);
             }
             // Film partagé : qui tient le plan (pastille à sa couleur, en haut à gauche) et qui le regarde.
             if let Some(zone) = self.peindre_pastille(&clip, rect, self.doc.panels[i].id, 1.0) {
@@ -1296,6 +1308,9 @@ impl App {
             }
             if let Some((_, m)) = notes_zones.iter().find(|(z, _)| z.contains(p)) {
                 resp.clone().on_hover_text_at_pointer(crate::fildecisionui::marque_phrase(m));
+            }
+            if let Some((_, phrase)) = marques_env.iter().find(|(z, _)| z.contains(p)) {
+                resp.clone().on_hover_text_at_pointer(phrase.as_str());
             }
             let clip_edge = matches!(
                 self.lane_hit(p, left_at(p.x), ppf, lanes_top),

@@ -18541,3 +18541,242 @@ quoi que fasse la caméra ; le cyclo derrière les cartes et le décor, à l'exp
 objet ; l'enregistrement, un lecteur d'avant, un fichier d'avant, un fichier abîmé, un calque d'avant ; la copie et la duplication ;
 l'annulation ; la galerie, la ligne de Scène 3D, le choix rapide et la case ; la mesure ; deux écritures de PNG pour regarder, inactives
 sans `FEANOR_CYCLOS_PNG`).
+
+## 203. Dessiner son propre cyclo (2026-11-21, branche cyclo-dessine partie de main 85fa0a0)
+
+Anthony : « une option qui permet de créer son propre cyclo dans un espace de dessin ». **Format des projets inchangé (61)** : une clé
+facultative de plus dans le cyclo (`dessin`, la version du dessin) et un dossier à côté (`cyclos/`) ; un FEANOR d'avant ouvre le projet,
+voit le cyclo du choix (ou pas de cyclo, avant la partie 202) et ne perd rien d'autre.
+
+### 203.1 Ce qui a changé
+
+1. **« Dessiner mon cyclo… »** : dans Propriétés > Monde (onglet 3D), sous la galerie des cyclos, avec **« Partir de »** (Vide, ou l'un
+   des neuf choix ; d'office, le choix du cyclo de la séquence) ; et dans le menu « Cyclo : … » de la barre du Storyboard. Il crée un
+   cyclo dessiné pour la séquence et ouvre sa feuille. Une séquence qui en a un montre **« Mon cyclo »** dans la galerie (sa vignette :
+   l'image du cyclo, réduite) et le menu dit « Cyclo : Mon cyclo » ; **« Redessiner »** rouvre sa feuille telle qu'elle est.
+2. **La feuille se dessine dans un onglet à elle, la vue de dessin de FEANOR** : tous ses outils, brosses, couleurs, calques,
+   l'annulation et la pression, rien de réécrit. L'onglet s'appelle « Cyclo de la séquence N » (ou de son nom) ; en tête de la barre
+   au-dessus du dessin, le bandeau **« Cyclo de la séquence N : dessin à 360° · Terminer »**.
+   - **Pourquoi un onglet** (et pas un plan caché, ni un dessin collé au décor) : la feuille est un petit projet FEANOR (un `Document`,
+     un plan d'une image, ses calques et ses dessins), le même que tout projet ; FEANOR sait déjà en garder plusieurs ouverts, chacun
+     avec son historique, ses caches, sa vue (`onglets.rs`, l'échange de l'état du projet). Le projet du film ne la contient pas : ni
+     plan, ni scène, ni image, ni dessin de plus, rien à exclure du montage, des vignettes, des numéros, des durées ni de l'export ; et
+     la vue de dessin, qui travaille sur « le plan courant du projet affiché », n'a rien à savoir. Un plan caché aurait demandé de le
+     sauter dans des centaines d'endroits qui parcourent les plans.
+   - **Fermer l'onglet** (sa croix, Ctrl+W), **enregistrer** (Ctrl+S, « Enregistrer sous… »), **quitter** (la croix de la fenêtre) :
+     « Terminer » d'abord, puis l'action se fait depuis le projet. L'onglet du cyclo n'a jamais rien à enregistrer lui-même, pas de
+     copie de secours.
+3. **La feuille** : une bande panoramique de 360°, **4096 × 1024** (4:1), projetée en cylindre autour du décor : de gauche à droite on
+   tourne sur soi-même, de 60° au-dessus de l'horizon à 30° au-dessous. Mémoire : un calque bitmap peint partout 16 Mo (en tuiles de
+   64 : un calque vide ne coûte rien), la bande aplatie 16 Mo, l'image du cyclo dessiné (4096 × 2048, un pixel de la feuille pour un
+   pixel de l'image) 32 Mo.
+   - **Les repères**, par-dessus le dessin : la **ligne d'horizon** (aux deux tiers de la hauteur, pointillés jaunes), et **0° devant**
+     au milieu (ce que regarde la caméra de référence du décor, vers −z), **90° droite** aux trois quarts (+x), **180° derrière** aux
+     deux bords (+z), **270° gauche** au quart.
+   - **Les bords se rejoignent** : de part et d'autre de la feuille, pâle, un **fantôme** du bord opposé (512 pixels), refait à chaque
+     trait. **Un trait qui passe un bord revient par l'autre** : au lâcher, l'encre posée au-delà du bord droit (ou gauche) d'un calque
+     bitmap est reposée au début de l'autre bord (les tuiles hors de la feuille de la toile infinie, reposées par-dessus). Pas pour un
+     calque vectoriel : ses traits restent où ils sont, le fantôme suffit pour les continuer (203.2).
+4. **Le départ** : la feuille neuve a deux calques bitmap, « Fond du cyclo » et, devant, « Mon horizon » (vide, le calque courant).
+   **Partir d'un choix** peint dans le fond la bande de ce choix (ses nuages, ses crêtes, sa ville), à repeindre ; **Vide** y peint le
+   ciel de fond seul (le dégradé, le soleil). Au-dessus et au-dessous de la bande, le ciel et le sol viennent du choix de base ; il donne
+   aussi la lumière (le soleil, l'ambiance, la lumière des cartes de la partie 202) et ses réglages restent (heure, rotation, brume…).
+5. **L'image** : la bande aplatie (le plan de la feuille par le chemin de l'export, sans papier) se pose dans l'image équirectangulaire
+   du cyclo à l'horizon, sur le ciel de fond du choix (son dégradé, son soleil, ses étoiles, sans nuages ni silhouettes), avec un fondu
+   en haut et en bas de la bande (6 %) ; elle se lit en bilinéaire, ses deux bords joints. L'image passe par le cache de la partie 202,
+   à la version du dessin, sur un autre fil ; elle se refait **une fois par « Terminer » qui a changé le dessin**, jamais pendant qu'on
+   dessine ni quand la caméra bouge. Les images des plans, l'export, « Caméra du plan » et les vues en perspective la montrent.
+6. **« Terminer »** : l'onglet se ferme, le dessin se pose dans le décor de la séquence (**une étape d'annulation**, « Dessiner le
+   cyclo » ; rien si la feuille n'a pas changé), et l'on revient où l'on était : le projet et son plan, l'espace de travail (Storyboard,
+   onglet 3D…), la page, l'outil.
+7. **L'enregistrement** : le dessin s'écrit à côté du projet, `cyclos/<séquence>/cyclo.shot`, un projet FEANOR écrit et relu par
+   `project::save` et `project::load` (ses dessins en PNG, comme ceux des plans) ; seulement quand sa version change. Une séquence qui
+   n'a plus de cyclo dessiné voit son dossier effacé à l'enregistrement suivant. Un dessin qui manque à l'ouverture : un message, le
+   cyclo montre son ciel de fond, sa clé reste (le dessin peut revenir).
+8. **Copier le décor** (partie 190) **et dupliquer la séquence** (191) emportent le dessin (partagé jusqu'à ce qu'on le redessine ; un
+   dossier par séquence à l'enregistrement).
+9. **Retirer** : choisir un autre cyclo, « Aucun », ou « Dessiner mon cyclo… » par-dessus un dessin demande d'abord (**« Retirer le
+   cyclo dessiné ? »** / « Remplacer le cyclo dessiné ? », Annuler) ; c'est une étape d'annulation (« Retirer le cyclo dessiné ») :
+   Ctrl+Z rend le dessin. Les réglages (heure, nuages…) gardent le dessin sans rien demander.
+
+Ce qui est fait, dans le code :
+- `cyclodessin.rs` (neuf) : la feuille (`LARGEUR`, `HAUTEUR`, `E_HAUT`, `E_BAS`, `x_de_l_azimut`, `u_bande`), `DessinCyclo` (son projet,
+  sa version, sa bande aplatie une fois), `signature`, `aplatir`, `composer`, `bande_du_choix`, `feuille`, `fantomes`,
+  `replier_les_bords`, l'enregistrement (`chemin`, `ecrire`, `nettoyer`, `lire_les_dessins`), l'onglet (`Edition`, `dessiner_mon_cyclo`,
+  `terminer_cyclo`, `cyclo_edition_tick`, `peindre_guides_du_cyclo`, `bandeau_du_cyclo`).
+- `cyclos.rs` : `Cyclo::dessin` (dans `cle`), `taille`, `generer_avec` (le ciel de fond seul et la bande), `assurer_dessine`.
+- `decor3d.rs` : `Decor3d::dessin_cyclo` ; l'enregistrement écrit et efface les dessins, la lecture les relit ; `cyclo_vu` passe le
+  dessin. `copiedecor.rs` : la copie l'emporte.
+- `onglets.rs` : le champ de projet `cyclo_edition`, `ouvrir_onglet_du_cyclo`, `fermer_l_onglet_du_cyclo`, le nom de l'onglet, sa croix,
+  quitter. `app.rs`, `enregistrement.rs` : fermer, quitter, enregistrer terminent d'abord. `canvas.rs`, `viewbar.rs` : les repères, les
+  fantômes, le bandeau. `cyclosui.rs` : « Dessiner mon cyclo… », « Partir de », « Mon cyclo », « Redessiner », la confirmation.
+- `perf_tests.rs` : le banc peut annoncer un plus grand côté de texture (`Banc::cote_max`, rien d'office : comme avant), pour la feuille
+  de 4096 pixels.
+
+**Mesures** (ce Mac, `cyclodessin_tests::mesure_du_cyclo_dessine`, essais en parallèle) :
+- aplatir la feuille (4096 × 1024, deux calques) : **85 ms** (163 ms quand d'autres essais tournent), sur un autre fil ;
+- dans l'onglet, du lâcher d'un trait à ses fantômes : **≈ 120 ms**, sans rien figer (l'image d'écran au repos : 0,5 ms) ;
+- l'image du cyclo dessiné (4096 × 2048) : **68 ms** (133 ms en charge), sur un autre fil, une fois par « Terminer » ; après
+  « Terminer », la bande déjà aplatie est reprise : 50 ms ;
+- la feuille de départ (la bande d'un choix) : 73 ms, à l'ouverture.
+
+### 203.2 Ce qui reste
+
+- **Rien n'a été regardé dans l'application par Anthony ni par le coordinateur** : deux écrans du banc ont été regardés (l'onglet du
+  cyclo, départ Montagne, un trait ; le Storyboard après « Terminer », le trait dans le ciel derrière les carrés).
+- Un trait **vectoriel** qui passe un bord ne revient pas par l'autre (le fantôme le montre, on le continue de l'autre côté).
+- Pas d'aperçu 3D pendant qu'on dessine : le cyclo change dans le projet à « Terminer ».
+- Le fond peint au départ garde les couleurs de l'heure du moment : changer ensuite l'heure du cyclo change le ciel au-dessus et
+  au-dessous de la bande, pas la bande (le fondu adoucit la jointure).
+- (Les fantômes à l'ouverture et une carte graphique limitée : faits, 203.4.)
+- Fermer le projet pendant que l'onglet de son cyclo est ouvert : l'onglet du cyclo se ferme à son « Terminer » sans poser le dessin
+  (un message le dit).
+
+### 203.4 Retouches avant vérification (demandées par le coordinateur)
+
+1. **Jamais d'arrêt sur une carte graphique qui accepte de plus petites textures.** À l'ouverture, FEANOR lit la plus grande texture
+   que la fenêtre annonce (`max_texture_side`, celle de la carte graphique) : en deçà de 4096, la feuille neuve prend la plus grande
+   puissance de deux qui y tient, le quart en hauteur (2048 × 512 pour 2048 ; au moins 512 × 128), et la barre d'état le dit ; les
+   fantômes et les repères suivent sa taille (`largeur_pour`, `feuille_sur`, `fantome_de`). Son image de cyclo reste 4096 × 2048 (la
+   bande s'y lit en bilinéaire) ; sur la carte graphique, une image de cyclo plus grande que sa limite est réduite de moitié autant
+   qu'il faut avant d'être envoyée (`cyclos::reduire`). « Redessiner » un cyclo dessiné sur une feuille plus grande que la limite ne
+   l'ouvre pas : un message (« Dessiner mon cyclo… » en fait un neuf). Le dessin d'une grande feuille n'est pas réduit (des calques
+   vectoriels ne se réduisent pas sans perte).
+2. **Les fantômes se voient d'office** : à l'ouverture de l'onglet comme à « Ajuster », la vue cadre la feuille et, de part et
+   d'autre, ses fantômes (512 pixels sur une feuille de 4096).
+
+Essais ajoutés (`cyclodessin_tests.rs`, 17 en tout) : une carte graphique limitée à 2048 (le banc l'annonce) : la galerie ouvre une
+feuille de 2048 × 512, un trait, ses fantômes, « Terminer » pose le cyclo, l'image réduite, la vignette ; « Redessiner » une feuille de
+4096 : un message. Et l'onglet s'ouvre puis « Ajuster » cadre les deux fantômes à l'écran.
+
+### 203.3 Comment Anthony teste (sur une copie de projet)
+
+1. Onglet 3D, une séquence. Scène 3D, la ligne « Cyclo » : Propriétés > Monde, la section Cyclo. « Partir de : Montagne », puis
+   « Dessiner mon cyclo… » : un onglet « Cyclo de la séquence N » s'ouvre, la vue de dessin, la bande de la montagne.
+2. Le bandeau en tête de la barre ; la ligne d'horizon jaune ; 0° devant au milieu, 90° droite, 180° derrière aux bords, 270° gauche.
+3. Dessine des collines sur « Mon horizon » avec ta brosse habituelle, la pression, des couleurs ; ajoute un calque ; Ctrl+Z.
+4. De part et d'autre de la feuille, pâle, le bord opposé (« Ajuster » le recadre). Trace un trait qui sort à droite : au lâcher, son bout
+   revient à gauche.
+5. « Terminer » : retour à l'onglet 3D, au même plan, avec ton outil d'avant. « Caméra du plan » et la perspective montrent ton
+   horizon ; la galerie montre « Mon cyclo ». Ctrl+Z le retire, Ctrl+Y le rend.
+6. Storyboard : l'image du plan a ton horizon derrière les cartes ; le menu « Cyclo : Mon cyclo » ; « Redessiner » rouvre la feuille.
+7. Règle l'heure (le soir) : le ciel et la lumière des cartes changent, ton dessin reste.
+8. Choisis « Nuit » dans la galerie : « Retirer le cyclo dessiné ? » ; Annuler, puis Retirer ; Ctrl+Z le rend.
+9. « Partir de : Vide » : la feuille n'a que le dégradé du ciel ; dessine tout l'horizon.
+10. Enregistre, ferme, rouvre : le cyclo dessiné est là. Copie le décor vers une autre séquence, duplique la séquence : il suit.
+11. Dans l'onglet du cyclo : Ctrl+S, puis la croix de la fenêtre : le dessin va d'abord dans le projet.
+12. Exporte une image : ton horizon y est.
+
+Essais : `cyclodessin_tests.rs` (15 : l'ouvrir depuis la galerie et « Terminer » (onglet, plan, espace, outil, une étape, « Mon cyclo »,
+« Redessiner », sa croix, Ctrl+Z) ; le menu du Storyboard ; la croix de la fenêtre et Ctrl+S depuis l'onglet ; la feuille n'est un plan
+nulle part ; un trait change l'image une fois ; les fantômes, le raccord, les directions ; un trait qui passe le bord revient de
+l'autre côté ; les repères peints ; le départ d'un choix ou vide ; l'enregistrement (relu, pas réécrit sans changement, effacé) ; un
+lecteur d'avant ; la copie et la duplication ; « Retirer le cyclo dessiné ? » et Ctrl+Z ; la mesure ; une écriture de PNG pour
+regarder, inactive sans `FEANOR_CYCLOS_PNG`).
+
+## 204. Un plan qui sort de l'environnement de sa séquence (2026-11-21, branche cyclo-dessine, sur la partie 203)
+
+Anthony : « on doit pouvoir créer un plan qui s'extrait de l'environnement global de la séquence ». **Format des projets inchangé
+(61)** : les environnements des plans sont des entrées de plus dans `decors3d.json`, que un FEANOR d'avant laisse de côté (il les
+garde telles quelles et montre l'environnement de la séquence).
+
+### 204.0 D'abord : l'essai qui échouait une fois sur trois
+
+`cyclos_tests::on_the_gpu_the_cyclo_is_behind_the_card_the_night_darkens_it_and_the_checkbox_leaves_it` échouait parfois en suite
+complète (« #38_38_38 → #38_38_38 »). Reproduit (une fois sur quatre suites complètes), avec la capture de l'écran du banc au moment de
+l'échec : la fenêtre **« Ce décor est lourd »** couvrait l'image du plan (le gris #383838 est le fond des fenêtres), avec « Cet
+ordinateur : jusqu'à **0 triangle** ». **Ce n'était ni le cache des cyclos ni une ressource de la carte graphique partagée entre
+essais** : chaque banc étalonne son budget 3D au départ (`decor3dbudget::lancer`, par fil), et sur un ordinateur très occupé (cinq mille
+essais en parallèle) la mesure du coût fixe d'une passe dépassait le temps d'une image ; `triangles_sous` rendait alors **0**, et le
+moindre décor (deux triangles) était masqué « en attendant ton choix ». **Le même défaut existait dans l'application** : un étalonnage
+fait au premier lancement pendant que l'ordinateur est pris ailleurs masquait tous les décors. **Correction (la cause)** :
+`budget_depuis` ne donne jamais moins de `PLANCHER_TRIANGLES` (5 000 triangles, que tout ordinateur qui fait tourner FEANOR dessine sans
+ralentir ; une mesure plus basse est une mesure faussée). Essai : `decor3d_tests::un_etalonnage_fausse_par_un_ordinateur_occupe_garde_un_plancher`.
+
+### 204.1 Ce qui a changé
+
+1. **Sortir** : un plan peut quitter l'environnement de sa séquence (ses objets 3D, ses lampes, son cyclo et son dessin, son soleil et son
+   ciel). Trois façons : **Propre : vide** ; **Propre : copie de celui de la séquence** (retouchable sans toucher aux autres plans) ;
+   **Lié à la séquence N** : il montre l'environnement de la séquence N **en direct** (une chaise déplacée dans la séquence 2 bouge dans
+   ce plan). **« Détacher »** fait du lien une copie à lui. **« Celui de la séquence »** (ou « Revenir à l'environnement de la
+   séquence ») le rend à sa séquence ; si son environnement propre a été retouché depuis qu'il a été fait, la question d'abord
+   (« Revenir à l'environnement de la séquence ? », Annuler). **Chaque changement est une étape d'annulation** (« Environnement propre
+   vide », « Environnement propre (copie) », « Environnement lié », « Détacher l'environnement », « Revenir à l'environnement de la
+   séquence »). Les plans qui ne sortent pas partagent l'environnement de leur séquence, comme avant.
+2. **Où** : le clic droit d'un bloc de plan (la bande du Storyboard, dans un projet qui a de la 3D quelque part ; la timeline de la
+   séquence de l'onglet 3D), sous-menu « Environnement du plan » ; et dans l'onglet 3D, **Propriétés > Décor**, en tête : « Environnement du plan : celui de la séquence /
+   propre / lié à la séquence N », « Changer… », « Détacher », « Revenir à l'environnement de la séquence ».
+3. **Le seul signe** : une petite marque en bas à droite du bloc du plan, dans la bande du Storyboard et dans la timeline de la séquence
+   de l'onglet 3D : un cube cerné (`ph::CUBE_FOCUS`) pour un environnement **propre**, un maillon (`ph::LINK_SIMPLE`) pour un **lien** ;
+   sa bulle dit « Environnement 3D propre à ce plan » ou « Environnement 3D lié à la séquence N : ce qu'on y change se voit ici ». Et,
+   dans l'onglet 3D, la tête de « Scène 3D » (le sélecteur de séquence de la partie 201) dit lequel on retouche : « Séquence 1 ·
+   environnement propre du plan 2 », ou « Séquence 1 · Plan 2 : environnement de la séquence 2 ».
+4. **Un seul chemin** : `Document::env_cle(plan)` donne la clé de l'environnement d'un plan dans `Decors3d::par_sequence` : sa séquence
+   (d'office), la clé du plan (`cle_de_plan` : son numéro, le bit 62 mis), ou la séquence liée. `decor_du_plan` passe par lui, et tout ce
+   qui lit ou retouche « l'environnement du plan » : l'image des plans, l'export, les vignettes, les ombres (185), les lampes sur les
+   cartes (201), la lumière du cyclo (202), « Caché dans le plan » (200), le budget et les caches (la clé `DecorCle` porte le numéro du
+   décor que la clé désigne : une copie a le sien, un lien celui de la séquence liée), l'onglet 3D quand le plan courant est sorti (Scène
+   3D, Propriétés, les vues, le cyclo et son dessin, copier-coller des objets : ils retouchent l'environnement du plan, ou, lié, celui de
+   la séquence liée), les cartes aimantées au sol (les plans dont l'environnement est celui retouché).
+5. **Les clés des objets animés** (partie 200) se lisent à **l'image de la séquence du plan** (`image_de_sequence`), quel que soit son
+   environnement : une copie s'anime exactement comme l'original ; un plan lié montre l'environnement de l'autre séquence au moment où il
+   est dans la sienne.
+6. **Dupliquer la séquence** (191) : un plan à l'environnement propre donne une copie à l'environnement propre copié (objets neufs ;
+   « Caché dans le plan » suit la copie du plan) ; un lien reste un lien vers la même séquence. **Copier le décor** (190) copie
+   l'environnement de la séquence seulement.
+7. **Supprimer une séquence à laquelle d'autres plans sont liés** (supprimer ses plans) : la question d'abord (« Supprimer une séquence
+   dont l'environnement sert ailleurs ? ») ; oui : ces liens deviennent des copies à leurs plans (`Document::liens_orphelins_en_copies`,
+   aussi par tout autre chemin qui viderait la séquence) ; Ctrl+Z rend la séquence et les liens.
+8. **L'enregistrement** : dans `decors3d.json`, l'environnement propre d'un plan est une entrée `{"plan": …, aspect, objets, lampes,
+   cyclo}` sans `sequence` ; un lien, `{"plan": …, "lie": N, "objets": []}` ; un environnement propre vide, `{"plan": …, "objets": []}`.
+   Un FEANOR d'avant ne lit pas ces entrées (la séquence lui manque) : il les garde telles quelles (et ne retire alors aucun modèle du
+   dossier des décors) et montre l'environnement de la séquence, avec un message. Un cyclo dessiné d'un environnement propre s'écrit dans
+   `cyclos/<la clé du plan>/`. Un plan supprimé n'emporte pas son environnement au fichier. Les plans liés partagent le décor de la
+   séquence liée (les mêmes objets, le même `Arc` des modèles) : rien n'est copié en mémoire.
+
+Ce qui est fait, dans le code : `decor3d.rs` (`PLAN_ENV`, `cle_de_plan`, `plan_de_cle`, `EnvPlan`, `Decors3d::envs`,
+`Document::env_cle`, `copier_env`, `liens_orphelins_en_copies`, `empreinte_env`, l'écriture et la lecture) ; `planenv.rs` (neuf : les
+commandes, le menu, Propriétés > Décor, la marque, les deux questions) ; `document.rs` (`normalize`) ; `dupliquerseq.rs` ; `boardui.rs`
+(`delete_panels` demande, `delete_panels_confirmes`) ; `storyboard.rs` et `onglet3dui.rs` (la marque, le clic droit) ; `seqdecor3d.rs`
+(la tête de Scène 3D) ; les retouches du décor de l'onglet 3D (`decor3dui.rs`, `couleurs3dui.rs`, `poignees3d.rs`, `miseenscene3dui.rs`,
+`onglet3d.rs`, `onglet3dui.rs`, `copiedecor.rs`, `cyclosui.rs`, `cyclodessin.rs`, `origine.rs`) passent par `env_cle` ;
+`decor3dbudget.rs` (le plancher, 204.0).
+
+### 204.2 Ce qui reste
+
+- **Rien n'a été regardé à l'écran**, ni par Anthony ni par le coordinateur ; pas même dans le banc (les essais lisent les marques, les
+  bulles et les images exportées).
+- Un plan rendu de la corbeille ne retrouve pas son environnement propre après une réouverture du projet (en séance, si : il reste en
+  mémoire).
+- « Lié » vers une séquence qui a elle-même ses plans sortis : le lien montre l'environnement de la séquence, pas celui d'un de ses plans.
+- Un FEANOR d'avant dit « objet du décor 3D illisible » pour chaque environnement de plan (il les garde, sans les montrer).
+- Le menu d'un plan du Storyboard a alors une entrée de plus que la douzaine visée (§82) : treize dans un projet qui a de la 3D.
+- Copier le décor (190) d'une séquence vers une autre ne touche pas aux plans liés à l'une ou l'autre (ils suivent la séquence liée, en
+  direct).
+
+### 204.3 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard, clic droit sur le bloc d'un plan d'une séquence qui a un décor : « Environnement du plan » > « Propre : copie de celui de
+   la séquence ». Une petite marque (un cube) en bas à droite du bloc ; sa bulle dit « propre ».
+2. Onglet 3D sur ce plan : la tête de Scène 3D dit « environnement propre du plan N ». Déplace un objet : les autres plans de la
+   séquence ne bougent pas. Choisis un cyclo : seul ce plan l'a.
+3. Ctrl+Z, Ctrl+Y : chaque changement d'environnement est une étape.
+4. Clic droit sur un autre plan : « Lié à la séquence 2 » (une séquence qui a un décor). La marque est un maillon ; sa bulle dit « lié à la
+   séquence 2 ». Va dans la séquence 2, déplace une chaise : le plan lié la montre déplacée.
+5. Propriétés > Décor (onglet 3D, sur le plan lié) : « Détacher ». Déplace encore la chaise dans la séquence 2 : le plan détaché ne suit
+   plus.
+6. Sur le plan à l'environnement propre retouché : « Revenir à l'environnement de la séquence » : la question ; Annuler, puis Revenir ;
+   Ctrl+Z le rend.
+7. « Propre : vide » : le plan n'a plus ni décor ni cyclo ; pose-lui un objet de la Banque 3D.
+8. Exporte le film : chaque plan montre son environnement.
+9. Duplique la séquence : les copies des plans gardent leur environnement propre (copié) ou leur lien.
+10. Supprime la séquence 2 (ses plans) alors qu'un plan y est lié : la question ; Supprimer : le plan lié garde une copie de son
+    environnement ; Ctrl+Z rend tout.
+11. Enregistre, ferme, rouvre : les marques et les environnements sont là.
+12. Un plan jamais sorti : rien ne change (aucune marque, la même image).
+
+Essais : `planenv_tests.rs` (9 : les trois façons de sortir et l'annulation ; le lien en direct et « Détacher » ; « Revenir », sa
+question et Ctrl+Z ; la marque et sa bulle au Storyboard et dans la timeline de la séquence, ses glyphes dans les polices ; l'onglet 3D
+qui retouche l'environnement du plan, son cyclo, la tête de Scène 3D ; les clés à l'image de la séquence du plan ; dupliquer et supprimer
+(la question, les copies, Ctrl+Z) ; l'enregistrement, la relecture et un lecteur d'avant ; les clés du cache et les pixels des plans
+restés) ; et `decor3d_tests::un_etalonnage_fausse_par_un_ordinateur_occupe_garde_un_plancher` (204.0).

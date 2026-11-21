@@ -537,6 +537,12 @@ impl App {
                 self.o3_barre_de_vue(ui);
                 return;
             }
+            // (Partie 203 : l'onglet du dessin d'un cyclo : son bandeau, « Terminer », en tête de la barre.)
+            if self.bandeau_du_cyclo(ui) {
+                ui.add_space(crate::barres::MARGE_TRAIT);
+                ui.separator();
+                ui.add_space(crate::barres::MARGE_TRAIT);
+            }
             let cam = self.camera_view;
             let in3d = self.espace3d.on && !cam;
             // Partie 196 (Anthony : « l'icône vue caméra prend la première place en partant de la gauche ; l'icône "vue du plateau" devient

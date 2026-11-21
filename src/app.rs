@@ -653,6 +653,8 @@ pub struct App {
     /// Le décor 3D de la séquence (`decor3dui.rs`, partie 180) : l'import en cours, la fenêtre « Ce décor est lourd », la
     /// retouche en cours de sa place.
     pub(crate) decor3d: crate::decor3dui::Etat3d,
+    /// Partie 203 : l'onglet affiché est celui du dessin d'un cyclo (`cyclodessin.rs`).
+    pub(crate) cyclo_edition: Option<crate::cyclodessin::Edition>,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
@@ -1366,6 +1368,7 @@ impl App {
             continu: Default::default(),
             jalons_ui: None,
             decor3d: Default::default(),
+            cyclo_edition: None,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -3253,6 +3256,8 @@ impl App {
             self.renderer.invalidate_all();
             ctx.request_repaint();
         }
+        // (Partie 203 : l'onglet du dessin d'un cyclo, ses fantômes au dernier trait.)
+        self.cyclo_edition_tick(ctx);
         if crate::cyclos::en_cours() {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
@@ -3900,6 +3905,16 @@ impl App {
     pub(crate) fn request(&mut self, action: Pending) {
         self.end_stroke();
         self.playing = false;
+        // (Partie 203 : dans l'onglet du dessin d'un cyclo, fermer, c'est « Terminer » ; tout le reste (quitter, ouvrir, nouveau…)
+        // termine d'abord, puis se fait depuis le projet.)
+        if matches!(action, Pending::Quit) {
+            self.terminer_tous_les_cyclos();
+        }
+        if self.cyclo_edition.is_some() {
+            if !self.terminer_cyclo() || matches!(action, Pending::Close) {
+                return;
+            }
+        }
         // La fenêtre « Un projet existe déjà ici » attend sa réponse : la question est déjà posée, rien ne passe avant elle.
         if self.remplacement.is_some() {
             return;
@@ -5703,7 +5718,8 @@ impl App {
         // (Pendant un enregistrement, la fermeture l'attend : `request` retient la demande.)
         // (Tous les onglets comptent : un projet modifié dans un onglet caché retient aussi la fermeture.)
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
-            if self.infos_onglets().iter().any(|i| i.a_perdre()) {
+            // (Partie 203 : un dessin de cyclo en cours va d'abord dans son projet : `request` le termine.)
+            if self.infos_onglets().iter().any(|i| i.a_perdre()) || self.cyclos_en_cours() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.request(Pending::Quit);
             } else if self.quitter_arrete_un_export() {

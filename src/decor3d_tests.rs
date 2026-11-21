@@ -492,6 +492,21 @@ fn le_budget_se_deduit_des_mesures_et_suit_leur_echelle() {
     assert_eq!(cpu.qualite_pour(1000), Qualite::Sans);
 }
 
+/// Partie 204 (l'essai de la carte graphique des cyclos échouait une fois sur trois en suite complète) : un étalonnage fait sur un
+/// ordinateur très occupé mesure un coût fixe plus long qu'une image ; le budget n'en tombe pas à 0 triangle, il garde son plancher,
+/// et un carré n'est pas masqué.
+#[test]
+fn un_etalonnage_fausse_par_un_ordinateur_occupe_garde_un_plancher() {
+    let occupe = |fixe: f32| Cout { fixe, par_million: 50.0 };
+    let ch = Chronos { gpu: Some([occupe(40.0), occupe(45.0), occupe(50.0)]), prof4: Some(Cout { fixe: 5.0, par_million: 1.0 }), cpu: Cout { fixe: 100_000.0, par_million: 9000.0 }, vram: None, ram: None };
+    assert_eq!(occupe(40.0).triangles_sous(BudgetMachine::ms_par_passe()), 0, "la mesure faussée seule donnerait 0");
+    let b = budget_depuis(&ch, "A".into(), 1);
+    assert_eq!((b.triangles, b.triangles_bords), (crate::decor3dbudget::PLANCHER_TRIANGLES, crate::decor3dbudget::PLANCHER_TRIANGLES));
+    let cpu = budget_depuis(&Chronos { gpu: None, ..ch }, "A".into(), 1);
+    assert_eq!(cpu.triangles, crate::decor3dbudget::PLANCHER_TRIANGLES);
+    assert!(b.triangles >= 2, "un carré tient");
+}
+
 #[test]
 fn la_qualite_des_ombres_suit_le_budget_mesure() {
     let b = budget_depuis(&chronos(1.0), "A".into(), 1);

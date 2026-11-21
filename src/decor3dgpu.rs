@@ -1740,6 +1740,10 @@ impl Moteur {
             return Some(g.clone());
         }
         let img = crate::cyclos::texture(cle)?;
+        // (Partie 203 : une image plus grande que ce que la carte graphique accepte (un cyclo dessiné, 4096 de large) est réduite de
+        // moitié autant qu'il faut : jamais d'arrêt sur une texture trop grande.)
+        let max = device.limits().max_texture_dimension_2d.max(1) as usize;
+        let img = if img.largeur > max || img.hauteur > max { std::sync::Arc::new(crate::cyclos::reduire(&img, max)) } else { img };
         let tex = device.create_texture_with_data(
             queue,
             &wgpu::TextureDescriptor {

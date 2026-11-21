@@ -511,8 +511,18 @@ impl App {
         self.follow_frame = true;
     }
 
-    /// Retire les plans `ids` (une étape d'annulation).
+    /// Retire les plans `ids` (une étape d'annulation). Partie 204 : s'ils vident une séquence dont l'environnement sert à d'autres
+    /// plans (liés), la question d'abord (`planenv.rs`).
     pub(crate) fn delete_panels(&mut self, ids: &[u64]) {
+        if !self.sequences_liees_videes(ids).is_empty() {
+            self.o3.suppression_liee = Some(ids.to_vec());
+            return;
+        }
+        self.delete_panels_confirmes(ids);
+    }
+
+    /// `delete_panels`, sans la question de la partie 204 (les liens vers une séquence supprimée deviennent des copies : `normalize`).
+    pub(crate) fn delete_panels_confirmes(&mut self, ids: &[u64]) {
         if self.storyboard_refuses() || !self.partage_peut_toucher(ids) {
             return;
         }

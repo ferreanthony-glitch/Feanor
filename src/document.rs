@@ -2723,6 +2723,10 @@ impl Document {
         let sequences_gardees: HashSet<u64> = seq_order.iter().copied().collect();
         self.scenes.retain(|s| scenes_gardees.contains(&s.id));
         self.sequences.retain(|q| sequences_gardees.contains(&q.id));
+        // (Partie 204 : un plan lié à l'environnement d'une séquence qui n'est plus garde une copie de cet environnement.)
+        if !self.decors3d.envs.is_empty() {
+            self.liens_orphelins_en_copies();
+        }
         // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
         self.prune_comments();
         // Une transition dont un plan a disparu part avec lui (`transitions.rs`).

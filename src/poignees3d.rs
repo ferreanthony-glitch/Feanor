@@ -276,7 +276,7 @@ impl App {
         if objets.is_empty() {
             return;
         }
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return };
         let mut bouge = false;
         for (id, xf) in objets {
@@ -407,7 +407,7 @@ impl App {
                 let xf = self.e3_world().carte(&avant, self.cur_frame);
                 Some(GesteOrigine::Carte { li, avant, xf, boite: self.layer_content_box(li, self.cur_frame) })
             }
-            Cible::Objet(id) => Some(GesteOrigine::Objet { seq: self.doc.sequence_of(self.cur_panel), avant: self.e3_objet(id)?.clone() }),
+            Cible::Objet(id) => Some(GesteOrigine::Objet { seq: self.doc.env_cle(self.cur_panel), avant: self.e3_objet(id)?.clone() }),
         }
     }
 

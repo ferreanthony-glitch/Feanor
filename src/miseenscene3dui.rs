@@ -81,7 +81,7 @@ impl App {
         if self.doc.panels.is_empty() {
             return;
         }
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let anime = self.doc.decors3d.par_sequence.get(&seq).is_some_and(Decor3d::anime);
         if !anime {
             return;
@@ -99,7 +99,7 @@ impl App {
 
     /// Une étape d'annulation nommée `nom` sur le décor de la séquence courante : `f` le change (faux : rien n'a changé, pas d'étape).
     pub(crate) fn o3_etape_decor(&mut self, nom: &str, f: impl FnOnce(&mut Decor3d) -> bool) -> bool {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return false };
         if !f(&mut d) {
             return false;
@@ -214,7 +214,7 @@ impl App {
         if lampes.is_empty() {
             return;
         }
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         if let Some(d) = self.doc.decors3d.par_sequence.get_mut(&seq) {
             for (id, p) in lampes {
                 if let Some(l) = d.lampe_mut(id) {
@@ -308,7 +308,7 @@ impl App {
     /// Le glisser d'une clé dans la timeline : la clé de l'image `de` de l'objet `id` passe à l'image `vers` (pas sur une autre clé) ;
     /// sans étape (le geste a la sienne, `o3_cle_lachee`). Rend l'image où elle est.
     pub(crate) fn o3_deplacer_cle(&mut self, id: u64, de: usize, vers: usize) -> usize {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let courante = self.image_de_sequence_courante();
         let Some(o) = self.doc.decors3d.par_sequence.get_mut(&seq).and_then(|d| d.objet_mut(id)) else { return de };
         if de == vers || o.cles.iter().any(|k| k.image == vers) {
@@ -439,7 +439,7 @@ impl App {
     /// lampe ». La lampe choisie dans la vue est ouverte.
     pub(crate) fn o3_lampes_ui(&mut self, ui: &mut egui::Ui) {
         let Some(d) = self.doc.decor_du_plan(self.cur_panel) else { return };
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let mut nd = d.clone();
         let avant = d.lampes.clone();
         let choisies = self.o3_lampes_choisies();

@@ -85,7 +85,7 @@ impl Preset {
             Preset::Mer => (12.0, 0.2, 0.3),
             Preset::Studio => (13.0, 0.0, 0.0),
         };
-        Cyclo { preset: self, heure, nuages, brume, couleur: None, graine: 1, rotation: 0.0 }
+        Cyclo { preset: self, heure, nuages, brume, couleur: None, graine: 1, rotation: 0.0, dessin: None }
     }
 }
 
@@ -111,6 +111,11 @@ pub struct Cyclo {
     /// La rotation autour de la verticale (degrés) : à la lecture, l'image n'est pas refaite.
     #[serde(default)]
     pub rotation: f32,
+    /// Partie 203 : un cyclo dessiné (`cyclodessin.rs`) : la version de son dessin (une par « Terminer » qui l'a changé). Le choix
+    /// (`preset`) donne alors le ciel au-dessus de la bande dessinée, le sol au-dessous, et la lumière. Rien : un cyclo du choix.
+    /// Un FEANOR d'avant ignore la clé (il voit le cyclo du choix).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dessin: Option<u64>,
 }
 
 fn midi() -> f32 {
@@ -141,6 +146,10 @@ impl Cyclo {
         self.brume.to_bits().hash(&mut h);
         self.couleur.hash(&mut h);
         self.graine.hash(&mut h);
+        // (Partie 203 : le dessin, par sa version ; rien pour un cyclo du choix, dont l'empreinte ne change pas.)
+        if let Some(v) = self.dessin {
+            ("dessin", v).hash(&mut h);
+        }
         h.finish()
     }
 
@@ -457,7 +466,44 @@ fn silhouette(c: &Cyclo, az: f32, e: f32) -> Option<(usize, bool)> {
 
 /// L'image du cyclo `c`, de `largeur` × `hauteur` pixels. Répartie sur les cœurs ; la même graine fait toujours la même image.
 pub fn generer(c: &Cyclo, largeur: usize, hauteur: usize) -> Equirect {
+    generer_avec(c, largeur, hauteur, None)
+}
+
+/// `img` réduite de moitié (une moyenne de quatre pixels) jusqu'à ce que ses côtés tiennent dans `max` (partie 203 : une carte
+/// graphique qui n'accepte pas l'image d'un cyclo dessiné).
+pub fn reduire(img: &Equirect, max: usize) -> Equirect {
+    let mut e = img.clone();
+    while (e.largeur > max || e.hauteur > max) && e.largeur >= 2 && e.hauteur >= 2 {
+        let (w, h) = (e.largeur / 2, e.hauteur / 2);
+        let mut rgba = vec![0u8; w * h * 4];
+        for y in 0..h {
+            for x in 0..w {
+                for k in 0..4 {
+                    let p = |xx: usize, yy: usize| e.rgba[(yy * e.largeur + xx) * 4 + k] as u32;
+                    rgba[(y * w + x) * 4 + k] = ((p(2 * x, 2 * y) + p(2 * x + 1, 2 * y) + p(2 * x, 2 * y + 1) + p(2 * x + 1, 2 * y + 1) + 2) / 4) as u8;
+                }
+            }
+        }
+        e = Equirect { largeur: w, hauteur: h, rgba };
+    }
+    e
+}
+
+/// La taille de l'image d'un cyclo : celle d'un choix ; un cyclo dessiné, le double, pour garder le détail de sa bande
+/// (`cyclodessin::LARGEUR` pixels pour 360°, un pour un).
+pub fn taille(c: &Cyclo) -> (usize, usize) {
+    if c.dessin.is_some() {
+        (LARGEUR * 2, HAUTEUR * 2)
+    } else {
+        (LARGEUR, HAUTEUR)
+    }
+}
+
+/// `generer`, et pour un cyclo dessiné (`Cyclo::dessin`), son ciel de fond seul (le dégradé, le soleil, les étoiles : ni nuages ni
+/// silhouettes) et, par-dessus, la bande dessinée `bande` (`cyclodessin::composer`).
+pub fn generer_avec(c: &Cyclo, largeur: usize, hauteur: usize, bande: Option<&Equirect>) -> Equirect {
     let c = c.borne();
+    let fond_seul = c.dessin.is_some();
     let v = c.vu();
     let mut rgba = vec![0u8; largeur * hauteur * 4];
     let (nuit, studio) = (c.nuit(), c.preset == Preset::Studio);
@@ -498,7 +544,7 @@ pub fn generer(c: &Cyclo, largeur: usize, hauteur: usize) -> Equirect {
                     }
                 }
                 // Les nuages : un bruit sur la sphère, aplati vers l'horizon, sa couverture, ses bords doux.
-                if e > -2.0 && c.nuages > 0.0 {
+                if e > -2.0 && c.nuages > 0.0 && !fond_seul {
                     let p = [dir[0] / (dir[1].abs() + 0.25) * 1.4, dir[1] * 2.0, dir[2] / (dir[1].abs() + 0.25) * 1.4];
                     let n = fbm(c.graine, p, 5);
                     let seuil = 0.72 - c.nuages * 0.42;
@@ -510,7 +556,7 @@ pub fn generer(c: &Cyclo, largeur: usize, hauteur: usize) -> Equirect {
                     col = mix3(col, blanc, a);
                 }
                 // L'horizon : les silhouettes, plus pâles au loin (la perspective aérienne).
-                if let Some((couche, fenetre)) = silhouette(&c, az, e) {
+                if let Some((couche, fenetre)) = silhouette(&c, az, e).filter(|_| !fond_seul) {
                     let sombre = match c.preset {
                         Preset::Montagne => mix3(v.sol.map(|x| x * 0.6), v.horizon, [0.55, 0.32, 0.08][couche.min(2)]),
                         _ => mix3([0.16, 0.17, 0.2], v.horizon, 0.35),
@@ -524,6 +570,10 @@ pub fn generer(c: &Cyclo, largeur: usize, hauteur: usize) -> Equirect {
                 // La brume : vers l'horizon.
                 let b = c.brume * (1.0 - smooth(0.0, 25.0, e.abs()));
                 col = mix3(col, brume, b);
+            }
+            // (Partie 203 : la bande dessinée, par-dessus le ciel de fond.)
+            if let Some(bd) = bande {
+                col = crate::cyclodessin::composer(bd, col, x as f32 / largeur as f32 + 0.5 / largeur as f32, e);
             }
             let o = x * 4;
             for k in 0..3 {
@@ -578,16 +628,28 @@ pub fn texture(cle: u64) -> Option<Arc<Equirect>> {
 
 /// L'image du cyclo `cy` : prête, ou, sur le fil de l'interface, demandée à un autre fil (rien en attendant) ; ailleurs (export,
 /// essais, vignettes), faite tout de suite.
+// (Partie 203 : l'application passe par `assurer_dessine` ; les essais des cyclos du choix, par celle-ci.)
+#[cfg(test)]
 pub fn assurer(cy: &Cyclo) -> Option<Arc<Equirect>> {
+    assurer_dessine(cy, None)
+}
+
+/// `assurer`, avec le dessin d'un cyclo dessiné (partie 203) : sa bande s'aplatit sur le même autre fil que l'image se fait.
+pub fn assurer_dessine(cy: &Cyclo, dessin: Option<Arc<crate::cyclodessin::DessinCyclo>>) -> Option<Arc<Equirect>> {
     let cle = cy.cle();
     if let Some(t) = texture(cle) {
         return Some(t);
     }
+    let faire = move |c: Cyclo, dessin: Option<Arc<crate::cyclodessin::DessinCyclo>>| {
+        let (w, h) = taille(&c);
+        let bande = dessin.filter(|_| c.dessin.is_some()).map(|d| d.bande());
+        generer_avec(&c, w, h, bande.as_deref())
+    };
     if crate::decor3d::sur_l_interface() {
         let c = *cy;
         cache(|k| {
             if !k.en_cours.contains_key(&cle) {
-                let h = std::thread::Builder::new().name("cyclo".into()).spawn(move || generer(&c, LARGEUR, HAUTEUR));
+                let h = std::thread::Builder::new().name("cyclo".into()).spawn(move || faire(c, dessin));
                 if let Ok(h) = h {
                     k.en_cours.insert(cle, h);
                 }
@@ -595,7 +657,7 @@ pub fn assurer(cy: &Cyclo) -> Option<Arc<Equirect>> {
         });
         return None;
     }
-    let img = Arc::new(generer(cy, LARGEUR, HAUTEUR));
+    let img = Arc::new(faire(*cy, dessin));
     cache(|c| ranger(c, cle, img.clone()));
     Some(img)
 }

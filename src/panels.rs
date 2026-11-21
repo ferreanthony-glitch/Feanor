@@ -849,6 +849,11 @@ impl App {
         self.preferences_window(ctx);
         // Renuméroter les plans : la confirmation ; Exporter pour le montage : sa fenêtre.
         self.renumber_window(ctx);
+        // (Partie 203 : « Retirer le cyclo dessiné ? ».)
+        self.cyclo_a_jeter_window(ctx);
+        // (Partie 204 : l'environnement d'un plan.)
+        self.env_a_jeter_window(ctx);
+        self.suppression_liee_window(ctx);
         self.editorial_window(ctx);
         // Fiche technique (tableur) : sa fenêtre (`ficheui.rs`).
         self.fiche_window(ctx);

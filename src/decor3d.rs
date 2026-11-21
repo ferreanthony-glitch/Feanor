@@ -280,6 +280,9 @@ pub struct Decor3d {
     pub lampes: Vec<crate::miseenscene3d::Lampe3d>,
     /// Partie 202 : son cyclo (`cyclos::Cyclo`), le ciel et l'horizon autour du décor, et leur lumière.
     pub cyclo: Option<crate::cyclos::Cyclo>,
+    /// Partie 203 : le dessin d'un cyclo dessiné (`cyclodessin.rs`), quand `cyclo` en a un (`Cyclo::dessin`, sa version). Partagé :
+    /// un « Terminer » qui le change en fait un neuf, les copies de l'annulation, du décor et de la séquence gardent le leur.
+    pub dessin_cyclo: Option<Arc<crate::cyclodessin::DessinCyclo>>,
 }
 
 impl std::fmt::Debug for Decor3d {
@@ -291,7 +294,7 @@ impl std::fmt::Debug for Decor3d {
 impl Decor3d {
     pub fn new(aspect: Aspect) -> Decor3d {
         static SUIVANT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), lampes: Vec::new(), cyclo: None }
+        Decor3d { uid: SUIVANT.fetch_add(1, std::sync::atomic::Ordering::Relaxed), aspect, objets: Vec::new(), lampes: Vec::new(), cyclo: None, dessin_cyclo: None }
     }
 
     /// Partie 202 : sans objet, sans lampe, sans cyclo (un décor vide ne s'enregistre pas, ne se montre pas). Des lampes ou un cyclo
@@ -366,10 +369,39 @@ pub struct Poids {
     pub octets_textures: u64,
 }
 
+/// Partie 204 : la clé d'un environnement propre à un plan dans `Decors3d::par_sequence` : le numéro du plan, ce bit mis (un
+/// numéro de séquence ne l'a jamais). Tout ce qui lit ou retouche un décor par sa clé (l'image, l'export, l'onglet 3D, la copie, les
+/// cyclos dessinés) sert ainsi un plan comme une séquence.
+pub const PLAN_ENV: u64 = 1 << 62;
+
+/// La clé de l'environnement propre au plan `plan` (`Panel::id`).
+pub fn cle_de_plan(plan: u64) -> u64 {
+    PLAN_ENV | plan
+}
+
+/// La clé est celle d'un plan (`cle_de_plan`) : le numéro du plan.
+pub fn plan_de_cle(cle: u64) -> Option<u64> {
+    (cle & PLAN_ENV != 0).then_some(cle & !PLAN_ENV)
+}
+
+/// Partie 204 : l'environnement d'un plan sorti de celui de sa séquence (`Decors3d::envs`) ; un plan qui n'y est pas partage celui de
+/// sa séquence, comme avant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EnvPlan {
+    /// Le sien (`cle_de_plan`) : vide, ou une copie, retouchable. `base` : l'empreinte de son contenu quand il a été fait (rien après
+    /// une ouverture) ; changée, « Revenir » demande avant de le jeter.
+    Propre { base: Option<u64> },
+    /// Celui de la séquence `0`, en direct (une chaise déplacée là-bas bouge ici).
+    Lie(u64),
+}
+
 /// Les décors du projet, par numéro de séquence. Dans `Structure` : l'annulation les rétablit avec le reste.
 #[derive(Clone, Default, Debug)]
 pub struct Decors3d {
+    /// Les décors, par séquence ; partie 204 : et par plan (`cle_de_plan`), pour un plan à l'environnement propre.
     pub par_sequence: BTreeMap<u64, Decor3d>,
+    /// Partie 204 : les plans sortis de l'environnement de leur séquence (`Panel::id`).
+    pub envs: BTreeMap<u64, EnvPlan>,
     /// Les entrées de `decors3d.json` qui n'ont pas pu être lues (fichier manquant ou abîmé ; un objet à la fois) :
     /// réécrites telles quelles, leurs fichiers jamais effacés.
     gardees: Vec<serde_json::Value>,
@@ -380,7 +412,7 @@ pub struct Decors3d {
 
 impl Decors3d {
     pub fn is_empty(&self) -> bool {
-        self.par_sequence.values().all(Decor3d::est_vide) && self.gardees.is_empty()
+        self.par_sequence.values().all(Decor3d::est_vide) && self.gardees.is_empty() && self.envs.is_empty()
     }
 
     /// Le modèle de même empreinte déjà dans le projet (un objet neuf le partage : une lecture, un envoi à la carte).
@@ -395,10 +427,74 @@ impl Decors3d {
 }
 
 impl Document {
-    /// Le décor 3D de la séquence du plan `index` (rien : la séquence n'a aucun objet).
+    /// Le décor 3D du plan `index` (rien : son environnement n'a ni objet ni cyclo) : celui de sa séquence, ou (partie 204) le sien,
+    /// ou celui d'une autre séquence (`env_cle`).
     pub fn decor_du_plan(&self, index: usize) -> Option<&Decor3d> {
-        (index < self.panels.len()).then(|| self.decors3d.par_sequence.get(&self.sequence_of(index))).flatten().filter(|d| d.se_montre())
+        (index < self.panels.len()).then(|| self.decors3d.par_sequence.get(&self.env_cle(index))).flatten().filter(|d| d.se_montre())
     }
+
+    /// Partie 204 : **la clé de l'environnement du plan `index`** dans `Decors3d::par_sequence`, le seul chemin vers « l'environnement
+    /// du plan » : sa séquence (d'office), son environnement propre (`cle_de_plan`), ou la séquence à laquelle il est lié.
+    pub fn env_cle(&self, index: usize) -> u64 {
+        let Some(p) = self.panels.get(index) else { return 0 };
+        match self.decors3d.envs.get(&p.id) {
+            None => self.sequence_of(index),
+            Some(EnvPlan::Propre { .. }) => cle_de_plan(p.id),
+            Some(EnvPlan::Lie(s)) => *s,
+        }
+    }
+
+    /// Partie 204 : les liens vers une séquence qui n'existe plus deviennent des environnements propres, copies du sien (une séquence
+    /// supprimée : `normalize`). Rend combien.
+    pub(crate) fn liens_orphelins_en_copies(&mut self) -> usize {
+        let vivantes: std::collections::HashSet<u64> = self.sequences.iter().map(|s| s.id).collect();
+        let orphelins: Vec<(u64, u64)> = self.decors3d.envs.iter().filter_map(|(&p, e)| match e {
+            EnvPlan::Lie(s) if !vivantes.contains(s) => Some((p, *s)),
+            _ => None,
+        }).collect();
+        for &(plan, seq) in &orphelins {
+            self.copier_env(seq, cle_de_plan(plan), |p| p == plan);
+            self.decors3d.envs.insert(plan, EnvPlan::Propre { base: None });
+        }
+        orphelins.len()
+    }
+
+    /// Partie 204 : une copie indépendante de l'environnement `de` (objets et lampes à des numéros neufs, leurs clés, l'aspect, le
+    /// cyclo et son dessin, partagé) à la clé `vers`, à la place de ce qui y était ; « Caché dans le plan » ne garde que les plans
+    /// `garder`. Rien à copier : `vers` est vide.
+    pub(crate) fn copier_env(&mut self, de: u64, vers: u64, garder: impl Fn(u64) -> bool) {
+        let Some(source) = self.decors3d.par_sequence.get(&de).cloned() else {
+            self.decors3d.par_sequence.remove(&vers);
+            return;
+        };
+        let mut d = Decor3d::new(source.aspect);
+        d.cyclo = source.cyclo;
+        d.dessin_cyclo = source.dessin_cyclo.clone();
+        for o in source.objets {
+            let mut c = o;
+            c.id = self.alloc();
+            c.caches_dans.retain(|p| garder(*p));
+            d.objets.push(c);
+        }
+        for l in source.lampes {
+            let mut c = l;
+            c.id = self.alloc();
+            d.lampes.push(c);
+        }
+        self.decors3d.par_sequence.insert(vers, d);
+    }
+}
+
+/// Partie 204 : l'empreinte de ce que montre un environnement (ses objets et leurs places, ses lampes, son cyclo, son aspect) : un
+/// environnement propre retouché n'a plus celle de sa création.
+pub fn empreinte_env(d: Option<&Decor3d>) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    if let Some(d) = d {
+        contenu_a(d, None, 0).hash(&mut h);
+        (d.aspect.ciel, d.aspect.brume, d.aspect.ombres, d.aspect.facettes, d.aspect.soleil_azimut.to_bits(), d.aspect.soleil_hauteur.to_bits()).hash(&mut h);
+        d.objets.len().hash(&mut h);
+    }
+    h.finish()
 }
 
 // ------------------------------------------------------------------------------------------------ le fichier
@@ -412,7 +508,14 @@ struct Fichier {
 /// Une séquence (version 2).
 #[derive(Serialize, Deserialize)]
 struct EntreeSequence {
+    /// (Partie 204 : absent pour l'environnement d'un plan, `plan` : un FEANOR d'avant ne le lit pas, le garde tel quel.)
+    #[serde(default)]
     sequence: u64,
+    /// Partie 204 : l'environnement propre du plan `plan` (ou, `lie`, son lien vers une séquence).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plan: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lie: Option<u64>,
     #[serde(default)]
     aspect: Aspect,
     objets: Vec<serde_json::Value>,
@@ -501,7 +604,8 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     }
     let mut decors: Vec<serde_json::Value> = Vec::new();
     // (Partie 202 : un décor sans objet mais avec des lampes ou un cyclo s'enregistre aussi.)
-    for (&sequence, x) in d.par_sequence.iter().filter(|(_, x)| !x.est_vide()) {
+    // (Partie 204 : l'environnement propre d'un plan, s'il est encore un environnement propre d'un plan du film.)
+    for (&sequence, x) in d.par_sequence.iter().filter(|(&k, x)| a_enregistrer(doc, k, x)) {
         let objets = x
             .objets
             .iter()
@@ -524,12 +628,42 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                 .map_err(|e| e.to_string())
             })
             .collect::<Result<_, _>>()?;
-        decors.push(serde_json::to_value(EntreeSequence { sequence, aspect: x.aspect, objets, lampes: x.lampes.clone(), cyclo: x.cyclo }).map_err(|e| e.to_string())?);
+        let plan = plan_de_cle(sequence);
+        let mut v = serde_json::to_value(EntreeSequence { sequence, plan, lie: None, aspect: x.aspect, objets, lampes: x.lampes.clone(), cyclo: x.cyclo }).map_err(|e| e.to_string())?;
+        if plan.is_some() {
+            if let Some(o) = v.as_object_mut() {
+                o.remove("sequence");
+            }
+        }
+        decors.push(v);
+    }
+    // (Partie 204 : les plans sortis de l'environnement de leur séquence : un propre vide (rien d'écrit plus haut), un lien.)
+    for (&plan, e) in &d.envs {
+        if !doc.panels.iter().any(|p| p.id == plan) {
+            continue;
+        }
+        let (ecrit, lie) = match e {
+            EnvPlan::Propre { .. } => (d.par_sequence.get(&cle_de_plan(plan)).is_some_and(|x| !x.est_vide()), None),
+            EnvPlan::Lie(s) => (false, Some(*s)),
+        };
+        if !ecrit {
+            decors.push(serde_json::json!({ "plan": plan, "lie": lie, "objets": [] }));
+        }
     }
     decors.extend(d.gardees.iter().cloned());
     let mut out = serde_json::to_vec_pretty(&Fichier { version: VERSION_FICHIER, decors }).map_err(|e| e.to_string())?;
     out.push(b'\n');
     Ok(Some(out))
+}
+
+/// Partie 204 : le décor de clé `cle` s'enregistre : un décor de séquence qui a quelque chose ; l'environnement propre d'un plan du
+/// film qui a quelque chose (un plan parti, ou revenu à sa séquence, n'emporte rien).
+fn a_enregistrer(doc: &Document, cle: u64, d: &Decor3d) -> bool {
+    !d.est_vide()
+        && match plan_de_cle(cle) {
+            None => true,
+            Some(p) => matches!(doc.decors3d.envs.get(&p), Some(EnvPlan::Propre { .. })) && doc.panels.iter().any(|q| q.id == p),
+        }
 }
 
 /// Lit le modèle `fichier` du projet `dir`, une fois par fichier (`lus`) : les objets du même fichier partagent le modèle.
@@ -590,6 +724,14 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                     continue;
                 }
             };
+            // (Partie 204 : l'environnement d'un plan, à sa clé ; son lien vers une séquence.)
+            let cle = s.plan.map_or(s.sequence, cle_de_plan);
+            if let Some(p) = s.plan {
+                out.envs.insert(p, s.lie.map_or(EnvPlan::Propre { base: None }, EnvPlan::Lie));
+                if s.lie.is_some() {
+                    continue;
+                }
+            }
             for ov in s.objets {
                 let lu = serde_json::from_value::<EntreeObjet>(ov.clone()).map_err(|e| e.to_string()).and_then(|e| lire_modele(dir, &e.fichier, &mut lus).map(|mdl| (e, mdl)));
                 match lu {
@@ -600,7 +742,7 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                             Some(p) => o.origine = p,
                             None => o.changer_origine(origine_au_sol(o.modele.bornes)),
                         }
-                        let d = out.par_sequence.entry(s.sequence).or_insert_with(|| Decor3d::new(s.aspect));
+                        let d = out.par_sequence.entry(cle).or_insert_with(|| Decor3d::new(s.aspect));
                         if d.lampes.is_empty() {
                             d.lampes = crate::miseenscene3d::lampes_valides(s.lampes.clone());
                         }
@@ -611,17 +753,17 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
                     }
                     Err(e) => {
                         illisible(warnings, e);
-                        out.gardees.push(serde_json::json!({ "sequence": s.sequence, "aspect": s.aspect, "objets": [ov] }));
+                        out.gardees.push(serde_json::json!({ "sequence": cle, "aspect": s.aspect, "objets": [ov] }));
                     }
                 }
             }
             // (Partie 200 : les lampes d'une séquence dont aucun objet n'a pu être lu restent dans le fichier, telles quelles.)
             // (Partie 202 : et un décor sans objet, ses lampes ou son cyclo seuls, est un décor.)
-            if (!s.lampes.is_empty() || s.cyclo.is_some()) && !out.par_sequence.contains_key(&s.sequence) {
+            if (!s.lampes.is_empty() || s.cyclo.is_some()) && !out.par_sequence.contains_key(&cle) {
                 let mut d = Decor3d::new(s.aspect);
                 d.lampes = crate::miseenscene3d::lampes_valides(s.lampes.clone());
                 d.cyclo = s.cyclo.map(crate::cyclos::Cyclo::borne);
-                out.par_sequence.insert(s.sequence, d);
+                out.par_sequence.insert(cle, d);
             }
         } else {
             // Version 1 (partie 180) : un objet, son origine au centre du dessous de sa boîte, à la même place exactement ;
@@ -645,6 +787,8 @@ pub fn load(dir: &Path, warnings: &mut Vec<String>) -> Decors3d {
             }
         }
     }
+    // (Partie 203 : les dessins des cyclos dessinés.)
+    crate::cyclodessin::lire_les_dessins(dir, &mut out, warnings);
     out
 }
 
@@ -673,6 +817,9 @@ pub(crate) struct SavePlan {
     json: Option<Vec<u8>>,
     utilises: BTreeSet<String>,
     proteger: bool,
+    /// Partie 203 : les dessins des cyclos dessinés à écrire (`cyclodessin::ecrire`), et les séquences dont le dossier se garde.
+    cyclos: Vec<(u64, Arc<crate::cyclodessin::DessinCyclo>)>,
+    cyclos_gardes: BTreeSet<u64>,
 }
 
 pub(crate) fn plan_save(doc: &Document, dir: &Path) -> Result<SavePlan, String> {
@@ -685,6 +832,15 @@ pub(crate) fn plan_save(doc: &Document, dir: &Path) -> Result<SavePlan, String> 
         // modèle, un seul fichier.)
         if plan.utilises.insert(nom) && !chemin.exists() {
             plan.ecrire.push((chemin, o.modele.octets.clone()));
+        }
+    }
+    // (Partie 203 : les cyclos dessinés des décors enregistrés ; un dessin qui n'a pu être lu garde son dossier.)
+    for (&seq, x) in d.par_sequence.iter().filter(|(&k, x)| a_enregistrer(doc, k, x)) {
+        if x.cyclo.is_some_and(|c| c.dessin.is_some()) {
+            plan.cyclos_gardes.insert(seq);
+            if let Some(dc) = &x.dessin_cyclo {
+                plan.cyclos.push((seq, dc.clone()));
+            }
         }
     }
     Ok(plan)
@@ -705,6 +861,11 @@ impl SavePlan {
             crate::project::write_atomic(chemin, octets)?;
             n += 1;
         }
+        for (seq, dc) in &self.cyclos {
+            if crate::cyclodessin::ecrire(dir, *seq, dc)? {
+                n += 1;
+            }
+        }
         if !(self.proteger && self.json.is_none()) {
             crate::project::write_sidecar(&dir.join(FILE), self.json.as_deref(), |t| parse(t).is_ok())?;
         }
@@ -717,8 +878,9 @@ impl SavePlan {
         if !self.actif || self.proteger {
             return 0;
         }
-        let Ok(entries) = std::fs::read_dir(dir.join(DIR)) else { return 0 };
-        let mut n = 0;
+        // (Partie 203 : les dessins des cyclos qui ne le sont plus.)
+        let mut n = crate::cyclodessin::nettoyer(dir, &self.cyclos_gardes);
+        let Ok(entries) = std::fs::read_dir(dir.join(DIR)) else { return n };
         for e in entries.flatten() {
             let nom = e.file_name().to_string_lossy().into_owned();
             if a_nous(&nom) && !self.utilises.contains(&nom) && std::fs::remove_file(e.path()).is_ok() {
@@ -825,7 +987,7 @@ pub fn contenu_a(d: &Decor3d, plan: Option<u64>, image: usize) -> u64 {
 /// sur un autre fil sinon) ; rien sans cyclo.
 pub fn cyclo_vu(d: &Decor3d) -> crate::cyclos::CycloVu {
     match &d.cyclo {
-        Some(c) => crate::cyclos::CycloVu { pret: crate::cyclos::assurer(c).is_some(), ..c.vu() },
+        Some(c) => crate::cyclos::CycloVu { pret: crate::cyclos::assurer_dessine(c, d.dessin_cyclo.clone()).is_some(), ..c.vu() },
         None => Default::default(),
     }
 }

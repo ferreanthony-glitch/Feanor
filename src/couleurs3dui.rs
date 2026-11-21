@@ -29,7 +29,7 @@ impl App {
 
     /// `decor3d_changer_objet`, pour plusieurs objets à la fois (une seule étape).
     pub(crate) fn decor3d_changer_objets(&mut self, ids: &[u64], nom: &str, f: impl Fn(&mut crate::decor3d::Objet3d)) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return };
         let mut un = false;
         for id in ids {
@@ -161,7 +161,7 @@ impl App {
 
     /// « Dans les plans » : l'aspect `r` du décor de la séquence du plan courant dans les images des plans (une étape d'annulation).
     pub(crate) fn decor3d_rendu_dans_les_plans(&mut self, r: Rendu) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return };
         if d.aspect.rendu == r {
             return;
