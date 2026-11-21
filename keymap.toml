@@ -836,6 +836,26 @@ touches = ["+"]
 action = "panneau.retirer_image"
 touches = ["-"]
 
+# Partie 205 : + et − sont pris par la durée du plan (ci-dessus), Alt + et Alt − par l'exposition du dessin courant : les clés
+# choisies prennent Ctrl + et Ctrl − (la touche ) en AZERTY).
+[[raccourci]]
+action = "cles.image_plus"
+touches = ["Ctrl++"]
+
+[[raccourci]]
+action = "cles.image_moins"
+touches = ["Ctrl+-"]
+
+[[raccourci]]
+action = "cles.decaler_suite"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "cles.etirer_proportion"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "panneau.proprietes"
 touches = ["Alt+Entrée"]

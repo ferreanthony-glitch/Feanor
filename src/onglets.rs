@@ -194,6 +194,9 @@ etat_projet! {
     image_drag: Option<(usize, usize)> = None,
     grid_select: Option<crate::handles::GridSelect> = None,
     handle_drag: Option<crate::handles::HandleDrag> = None,
+    // (Partie 205 : la bulle du geste et les vignettes des clés à poser : d'un geste et d'une image d'écran du projet.)
+    bulle_geste: Option<String> = None,
+    cles_vignettes_a_peindre: std::cell::RefCell<Vec<(eframe::egui::Rect, crate::document::CelId, bool)>> = Default::default(),
     grid_menu: Option<crate::handles::GridMenu> = None,
     montage_drag: Option<crate::storyboard::MontageDrag> = None,
     board_drag: Option<crate::boardui::BoardDrag> = None,

@@ -477,6 +477,17 @@ impl App {
         // Dessins : un bloc par exposition, pastille au début du dessin ; miniature du dessin
         // dans les lignes complètes (13d), posée après la boucle (elle a besoin de `self`).
         let mut thumbs: Vec<(Rect, crate::document::CelId, bool)> = Vec::new();
+        // Partie 205 : ce que montre chaque clé (coupure, clé vide hachurée, tête de lecture ; en option vignette et durée).
+        let vide_de = |c: crate::document::CelId| self.doc.cels.get(&c).is_none_or(|c| c.is_empty());
+        let vignettes_des_cles = std::cell::RefCell::new(Vec::new());
+        let habit = crate::clesvue::Habit {
+            vide: &vide_de,
+            tete: Some(self.cur_frame),
+            durees: self.settings.cles_durees,
+            vignettes: self.settings.cles_vignettes.then_some(&vignettes_des_cles),
+            fine: false,
+        };
+        let plan_id = self.doc.panels.get(self.cur_panel).map_or(0, |p| p.id);
         for row in &rows {
             let layer = &self.layers()[row.li];
             let y = grid_top + row.top;
@@ -573,6 +584,7 @@ impl App {
                         2.5,
                         theme::encre(),
                     );
+                    crate::clesvue::habiller(&painter, block, start, end, id, layer.visible, theme::encre(), &habit);
                     // Marque de couleur (13d) : un trait de sa couleur en haut du bloc.
                     if let Some(&k) = layer.color_marks.get(&id) {
                         let strip = Rect::from_min_size(block.min, vec2(block.width(), 4.0));
@@ -611,7 +623,18 @@ impl App {
                 }
                 f = end;
             }
+            // Partie 205 (E) : pendant le glisser d'un bord de clé ou de la fin du plan, la place d'avant en pointillés.
+            self.fantomes_du_geste(&painter, plan_id, row.li, &|f| r.left() + f as f32 * cell, y + 3.0, body_bottom(y, row.h));
+            // Partie 205 (D) : le bord droit d'un dessin survolé (ou tenu) s'allume sur la hauteur de la ligne.
+            if let Some(Handle::Exposure { layer, end, .. }) = lit.filter(|_| self.handle_drag.is_none()) {
+                if layer == row.li {
+                    let x = r.left() + end as f32 * cell;
+                    let zone = Rect::from_min_max(pos2(x - crate::clesvue::BORD_ALLUME * 0.5, y + 1.0), pos2(x + crate::clesvue::BORD_ALLUME * 0.5, body_bottom(y, row.h)));
+                    painter.rect_filled(zone, 1.0, theme::contour().gamma_multiply(0.45));
+                }
+            }
         }
+        thumbs.extend(vignettes_des_cles.into_inner());
         // Un dossier fermé (partie 179, venue de la timeline plus claire) : les clés de ses calques en traits fins sur sa ligne, l'un sous l'autre dans l'ordre de la pile ;
         // un petit écart au début de chaque dessin. On voit encore où ça bouge sans rouvrir le dossier.
         for row in &rows {

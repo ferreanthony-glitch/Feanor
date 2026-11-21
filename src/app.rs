@@ -796,6 +796,11 @@ pub struct App {
     pub(crate) cadrage_cache: std::cell::RefCell<crate::cadrage::Cache>,
     /// Poignée tenue dans la timeline du plan (passe interface, `handles.rs`).
     pub(crate) handle_drag: Option<crate::handles::HandleDrag>,
+    /// Partie 205 : la bulle près du pointeur pendant un glisser de bord de clé ou de fin de plan (« Clé 2 : 12 i (+4) »), peinte une
+    /// fois par image d'écran (`clesvue::bulle_du_geste`) ; rien hors d'un tel geste.
+    pub(crate) bulle_geste: Option<String>,
+    /// Partie 205 (A) : les vignettes des clés à poser après les pistes (rectangle, dessin, calque visible), remplies en peignant.
+    pub(crate) cles_vignettes_a_peindre: std::cell::RefCell<Vec<(eframe::egui::Rect, crate::document::CelId, bool)>>,
     /// Menu du dernier clic droit dans la timeline hors des cases (`handles::GridMenu`).
     pub(crate) grid_menu: Option<crate::handles::GridMenu>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
@@ -1441,6 +1446,8 @@ impl App {
             blocs: Default::default(),
             cadrage_cache: Default::default(),
             handle_drag: None,
+            bulle_geste: None,
+            cles_vignettes_a_peindre: Default::default(),
             grid_menu: None,
             shape_drag: None,
             shape_edit: None,
@@ -5496,6 +5503,14 @@ impl App {
             "sequence.afficher_ordre_film" => self.affichage_ordre_du_film(),
             "montage.duree_plans" => self.open_plans_duration_dialog(),
             "cles.duree" => self.open_key_duration_dialog(),
+            "cles.image_plus" => {
+                self.cles_une_image(true);
+            }
+            "cles.image_moins" => {
+                self.cles_une_image(false);
+            }
+            "cles.decaler_suite" => self.basculer_decaler_suite(),
+            "cles.etirer_proportion" => self.basculer_etirer_proportion(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),
@@ -6134,6 +6149,12 @@ impl App {
         self.workspace_name_window(ctx);
         self.personnages_fenetre(ctx);
         self.scrub_audio();
+        // Partie 205 : la bulle du glisser d'un bord de clé ou de la fin d'un plan (timeline, montage), tant qu'il dure.
+        let geste = self.handle_drag.as_ref().is_some_and(|d| d.montre_un_fantome()) || matches!(&self.montage_drag, Some(crate::storyboard::MontageDrag::Edge(_)));
+        if !geste {
+            self.bulle_geste = None;
+        }
+        self.bulle_du_geste(ctx);
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
         self.dire_le_refus_des_versions();
         self.suivre_sorte_pinceau();

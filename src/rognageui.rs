@@ -108,7 +108,7 @@ pub(crate) struct EdgeDrag {
     snap: Edit,
     /// Dernier décalage demandé (et si Ctrl était tenue), et ce qui en a été fait. Ctrl tenue sur le début ou la fin : les clés
     /// suivent la poignée tenue (`duree-cles`) ; la durée change à l'autre bout du plan.
-    asked: Option<(isize, bool)>,
+    asked: Option<(isize, bool, bool)>,
     pub applied: isize,
     pub glisse: bool,
     /// Ce que dit le geste (barre d'état et étiquette près du bord).
@@ -224,9 +224,12 @@ impl App {
         let Some(MontageDrag::Edge(mut d)) = self.montage_drag.take() else { return };
         let delta = drag_delta(d.kind, d.edge0, (x - d.origin_x) / ppf, &d.snaps, SNAP_PX / ppf);
         // Ctrl se lit à chaque image d'écran : on peut la presser ou la lâcher en cours de geste (tout repart du plan d'avant).
-        let glisse = matches!(d.kind, EdgeKind::Head | EdgeKind::Tail) && crate::handles::keys_follow(&self.ctx.input(|i| i.modifiers));
-        if d.asked != Some((delta, glisse)) {
-            d.asked = Some((delta, glisse));
+        // (Ou le bouton « Décaler la suite » allumé, partie 205.) Maj (ou « Étirer en proportion ») sur la fin : toutes les clés
+        // s'étirent en proportion.
+        let glisse = matches!(d.kind, EdgeKind::Head | EdgeKind::Tail) && self.decaler_la_suite();
+        let proportion = d.kind == EdgeKind::Tail && !glisse && self.etirer_la_proportion();
+        if d.asked != Some((delta, glisse, proportion)) {
+            d.asked = Some((delta, glisse, proportion));
             d.glisse = glisse;
             for b in &d.backups {
                 b.restore(&mut self.doc);
@@ -244,10 +247,18 @@ impl App {
                     (EdgeKind::Roll, _) => Rogner::Roll(delta),
                     (EdgeKind::Slip, _) => Rogner::Slip(delta),
                 };
+                let mut butee = None;
                 let done = if glisse && d.kind == EdgeKind::Tail {
                     // La fin tirée de `delta` images : le plan passe de `old_len` à `old_len + delta`, clés décalées.
                     let n = (old_len as isize + delta).max(1) as usize;
                     self.doc.slide_plan_end(pi, n) as isize - old_len as isize
+                } else if d.kind == EdgeKind::Tail && !self.doc.storyboard_locked {
+                    // Partie 205 : seule la dernière clé de chaque calque change ; raccourcir s'arrête au début de la dernière clé
+                    // + 1 image ; Maj : toutes les clés en proportion.
+                    let n = (old_len as isize + delta).max(1) as usize;
+                    let f = self.doc.poser_fin_du_plan(pi, n, proportion);
+                    butee = f.butee;
+                    f.duree as isize - old_len as isize
                 } else {
                     self.doc.rogner(pi, op).unwrap_or(0)
                 };
@@ -259,14 +270,16 @@ impl App {
                 };
                 d.text = self.edge_text(d.kind, pi, d.applied, old_len);
                 let hint = match (d.kind, glisse) {
-                    (EdgeKind::Tail, false) => " Ctrl pendant le geste : les clés suivent la poignée.",
+                    (EdgeKind::Tail, false) if proportion => " Maj : toutes les clés s'étirent en proportion.",
+                    (EdgeKind::Tail, false) if butee.is_some() => " Butée : la dernière clé d'un calque commence juste avant (Maj : étirer en proportion, Ctrl : les clés suivent la poignée).",
+                    (EdgeKind::Tail, false) => " Seule la dernière clé de chaque calque change (Maj : en proportion, Ctrl : les clés suivent la poignée).",
                     (EdgeKind::Tail, true) => " Ctrl tenue : les clés suivent la poignée, le rythme ne change pas.",
                     (EdgeKind::Head, false) => " Ctrl pendant le geste : les clés gardent leur place depuis le début, la fin change.",
                     (EdgeKind::Head, true) => " Ctrl tenue : les clés gardent leur place depuis le début, la fin change.",
                     _ => "",
                 };
                 // Allongée sans Ctrl : les dernières clés s'étirent (partie 138) ; un calque verrouillé reste tel quel, on le dit.
-                let etire = if d.kind == EdgeKind::Tail && !glisse && d.applied > 0 {
+                let etire = if d.kind == EdgeKind::Tail && !glisse && !proportion && d.applied > 0 {
                     let fin = self.doc.panels[pi].frame_count();
                     match crate::clesduree::verrouilles_courts(&self.doc.panels[pi], fin) {
                         0 => " Dernières clés étirées jusqu'à la fin.".to_string(),
@@ -276,6 +289,8 @@ impl App {
                     String::new()
                 };
                 self.status = format!("{}{hint}{etire}", d.text);
+                // Partie 205 : la bulle près du pointeur, pendant le geste (la durée du plan).
+                self.bulle_geste = (d.kind == EdgeKind::Tail).then(|| crate::clesvue::debut_de_phrase(&d.text));
                 self.renderer.invalidate_all();
             }
         }

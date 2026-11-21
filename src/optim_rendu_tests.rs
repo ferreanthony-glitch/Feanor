@@ -127,6 +127,9 @@ fn dragging_position_keys_and_drawing_keys_sends_no_tile_to_the_gpu() {
     // l'image 2), puis la fin du plan (l'image 5 ne change pas : rien à recomposer).
     use crate::handles::Handle;
     for (handle, gestes, recompose) in [(Handle::Boundary { layer: 0, at: 4 }, [(5, 5), (6, 6), (7, 7)], true), (Handle::PlanEnd, [(30, 30), (25, 25), (20, 20)], false)] {
+        // (Partie 205 : la limite seule ne change plus l'image 5 ; « Décaler la suite » garde le geste qui la recompose. La fin du
+        // plan reste sans touche.)
+        b.app.settings.cles_decaler_suite = handle != Handle::PlanEnd;
         tenir(&mut b, true);
         let (copies, composes) = carte(&b);
         let avant = b.app.doc.panels[0].clone();
@@ -147,6 +150,7 @@ fn dragging_position_keys_and_drawing_keys_sends_no_tile_to_the_gpu() {
         b.chauffer(3);
         assert!(b.app.handle_drag.is_none(), "le geste {handle:?} finit au lâcher");
     }
+    b.app.settings.cles_decaler_suite = false;
     // (Le compteur voit bien un renvoi : `invalidate_all`, pour des pixels, renvoie tout.)
     let (copies, _) = carte(&b);
     b.app.renderer.invalidate_all();

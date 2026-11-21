@@ -18780,3 +18780,154 @@ question et Ctrl+Z ; la marque et sa bulle au Storyboard et dans la timeline de 
 qui retouche l'environnement du plan, son cyclo, la tête de Scène 3D ; les clés à l'image de la séquence du plan ; dupliquer et supprimer
 (la question, les copies, Ctrl+Z) ; l'enregistrement, la relecture et un lecteur d'avant ; les clés du cache et les pixels des plans
 restés) ; et `decor3d_tests::un_etalonnage_fausse_par_un_ordinateur_occupe_garde_un_plancher` (204.0).
+
+## 205. Les bords des clés et la fin du plan : seules les clés voisines changent ; Ctrl, Maj et deux boutons pour le stylet ; + et − ; ce que montre une clé (2026-11-21, branche `bords-cles`)
+
+Anthony : « Feanor échoue à modifier la durée d'un shot sans bouger les clés d'images, ou bouger des clés d'images sans bouger les
+suivantes. Le déplacement de clés n'est pas fluide et clair. » Il a validé les règles 1, 2, 5 et 8 de la proposition, puis l'affichage des
+clés (A à G). Rappel de sa règle : **les clés d'images ne sont pas dans le plan, elles sont sur chaque calque** ; tout s'applique clé par
+clé, calque par calque. Code : `bordscles.rs` (neuf : la fin du plan, la coupure entre deux clés, les deux boutons), `clesvue.rs` (neuf :
+ce que montre une clé), `handles.rs` (la poignée de durée, le bord d'un dessin, la limite entre deux clés), `rognageui.rs` (le bord de fin
+d'un plan dans le montage), `clesduree.rs` (+ et −, `Cible`), `montagerows.rs`, `timeline.rs`, `storyboard.rs`, `barres.rs`,
+`keymap.rs`, `keymap.toml`, `settings.rs`, `echelle.rs`, `app.rs`, `rognage.rs` (un nom d'annulation). Essais : `bordscles_tests.rs`
+(neuf). **Le format de projet ne change pas** ; quatre réglages du poste de plus, écrits seulement quand ils sont allumés.
+
+### 205.1 Ce que faisait le logiciel avant (les essais rouges)
+
+Les essais de la règle 1 et de la règle 2 ont été lancés d'abord sur le code d'avant : **7 rouges sur 9**.
+
+- **Raccourcir un plan coupait des clés** : la poignée de durée tirée de 24 à 10 images rangeait dans la réserve toute la fin, la
+  dernière clé de chaque calque comprise (le plan faisait 10 images, la clé 18-24 disparaissait du plan). Allonger, lui, était déjà
+  juste (partie 138 : seule la dernière clé de chaque calque est tenue jusqu'à la nouvelle fin) ; raccourcir sans passer le début de la
+  dernière clé aussi : ces deux essais étaient verts.
+- **Le bord entre deux clés décalait toute la suite par défaut** (timeline du Storyboard, bord droit d'un dessin dans celle de
+  l'Animation) : tirer la coupure 12 jusqu'à 15 donnait 6-15, 15-21, 21-24 au lieu de 6-15, 15-18, 18-24. Seule Maj (cachée) bougeait la
+  coupure seule. Ni plusieurs calques choisis, ni la barre d'état « Clé 2 : 10 i (+4) ».
+
+### 205.2 Règle 1 : la fin du plan
+
+La poignée de durée au bout de la règle de la timeline, la barre de durée de la fiche du plan (163.1) et le bord de fin d'un plan dans le
+montage.
+
+- **Sans touche** : seule la DERNIÈRE clé de chaque calque s'allonge ou raccourcit ; aucune autre ne bouge. Raccourcir ne coupe ni ne
+  range aucune clé : si la nouvelle fin passe avant le début de la dernière clé d'un calque, **la fin s'arrête à ce début + 1 image**
+  (la butée, le calque le plus long la fixe ; un calque verrouillé compte aussi). La barre d'état le dit : « Durée du plan : 0 s 19 i
+  (-5 i) (butée : la dernière clé de « A » commence à l'image 19 ; Maj : étirer en proportion, Ctrl : les clés suivent la poignée) ».
+  Ce qui sort encore (clés de caméra, d'effets… après la nouvelle fin, la fin des dernières clés) va dans la réserve du plan, comme
+  avant : rien n'est perdu.
+- **Maj tenue** (ou le bouton « Étirer en proportion ») : toutes les clés de chaque calque non verrouillé s'étirent en proportion
+  (chaque limite à son image proportionnelle, arrondie ; au moins une image par clé ; la somme tombe juste sur la nouvelle durée ; les
+  plages vides aussi). Butée : une image par clé (et la dernière clé d'un calque verrouillé entière). Les rôles posés au début d'une clé
+  la suivent. Les clés de caméra, d'effets, de position et d'opacité **ne s'étirent pas** (elles sont au plan ou au calque, pas au
+  dessin) : à voir avec Anthony.
+- **Ctrl tenue** (ou « Décaler la suite ») : inchangé (partie 123), toutes les clés suivent la poignée. Ctrl et Maj ensemble : Ctrl.
+- Une étape d'annulation par geste (« Raccourcir la fin », « Allonger la fin », « Durée du plan, clés étirées en proportion », ou les
+  noms de Ctrl de la partie 123). Échap rend tout. « Durée… », « Changer la durée des plans choisis… », « Rogner le plan » et les
+  touches + et − (durée du plan) gardent leur règle : ce sont des commandes, pas la poignée.
+
+### 205.3 Règle 2 : le bord entre deux clés
+
+Dans la timeline du Storyboard (la limite entre deux clés d'une piste de calque, aussi dans le montage, qui peint les mêmes pistes) et dans
+la timeline de l'Animation (le bord droit d'un dessin).
+
+- **Sans touche** : seules les deux clés de part et d'autre changent ; la coupure se déplace, la clé d'avant prend ou rend du temps à
+  celle d'après ; ni les autres clés, ni le plan ne bougent. Butée : chaque clé garde au moins une image (une plage vide peut
+  disparaître). Le bord droit de la dernière clé d'un calque (rien après) s'allonge dans le vide jusqu'à la fin du plan, comme avant.
+- **Ctrl tenue** (ou « Décaler la suite ») : la clé d'avant s'allonge ou raccourcit et toute la suite du calque se décale d'autant
+  (l'ancien geste par défaut, `ripple_at`). **Comme avant, le plan garde sa durée** : un calque tenu jusqu'à la fin le reste, sa dernière
+  clé absorbe ; pour allonger le plan, sa poignée (ou + / − sur les clés, 205.5, qui l'allongent). Dans le montage, Ctrl tenue au moment
+  de prendre une limite de clés la prend (avant : Ctrl partait en choix au rectangle) ; Ctrl + clic sur une clé choisit toujours.
+- **La sélection agit sur tout** : si la clé tenue (celle d'avant ou celle d'après la coupure) est choisie, chaque autre calque dont une
+  clé est choisie voit sa coupure correspondante bouger du même écart (la fin de sa clé choisie la plus proche, ou son début si la clé
+  tenue est celle d'après), chacun avec ses butées. Les calques verrouillés sont laissés de côté et nommés. Une seule étape d'annulation.
+- **Pendant le geste**, la barre d'état commence par « Clé 2 : 10 i (+4) » (la clé d'avant la coupure, son rang sur le calque, sa durée,
+  l'écart), puis le nombre de calques, ce que fait Ctrl, les calques laissés de côté. Maj n'y change plus rien (c'est le défaut).
+- Ne change pas : glisser une clé entière par son milieu (partie 138 : la placer avant ou après une autre, Maj, Alt, Ctrl + Maj), le
+  début, la fin et la barre d'un calque.
+
+### 205.4 Deux boutons pour le stylet
+
+« Décaler la suite » (flèche vers une barre) et « Étirer en proportion » (flèches écartées), à bascule, dans la barre de la timeline de
+l'Animation (après « Allonger / Raccourcir l'exposition ») et dans la barre de lecture du Storyboard et du montage. Ils tiennent lieu de
+Ctrl et de Maj pour le bord des clés et la fin du plan tant qu'ils sont allumés ; un seul à la fois (allumer l'un éteint l'autre). Bulle :
+nom, raccourci (aucun d'origine ; clic droit pour en donner un), ce qu'il fait. Actions `cles.decaler_suite`, `cles.etirer_proportion`.
+Leur état est un réglage du poste (`cles_decaler_suite`, `cles_etirer_proportion` dans `reglages.toml`), écrit seulement allumé.
+
+### 205.5 + et − sur les clés choisies
+
+Actions `cles.image_plus` et `cles.image_moins` : chaque clé choisie (montage, timeline du Storyboard, images choisies dans l'Animation ;
+sinon la clé sous la tête de lecture du calque courant) gagne ou perd une image, la suite de son calque se décale (comme « ajouter une
+image à la case » des logiciels de storyboard) ; le plan s'allonge si une clé dépasse la fin (les autres calques tiennent leur dernière
+clé jusqu'à la nouvelle fin) ; − laisse une clé d'une image telle quelle. Une étape d'annulation ; « 3 clés allongées d'une image sur 2
+calques ». Le choix suit les clés : on peut appuyer plusieurs fois. Calques verrouillés laissés de côté (règle de « Modifier la durée des
+clés d'images… », dont c'est la même mécanique).
+
+**Raccourcis : Ctrl + et Ctrl −** (la touche « ) » en AZERTY ; le + du pavé numérique aussi). **+ et − seuls sont déjà pris** par la
+durée du plan (`panneau.ajouter_image`, `panneau.retirer_image`) et **Alt + / Alt −** par l'exposition du dessin courant
+(`exposition.allonger`, `exposition.raccourcir`) : je n'en ai volé aucun. Ctrl + et Ctrl − étaient libres (le zoom d'egui au clavier
+est coupé, `zoom_with_keyboard = false`).
+
+### 205.6 Ce que montre une clé sur la ligne de son calque (A à G)
+
+Timeline du Storyboard (et montage : mêmes pistes, `paint_layer_cell`) et timeline de l'Animation. Le look reste (les deux tons qui
+alternent, les couleurs du thème).
+
+- **B, la coupure** : un trait foncé (noir à 60 %) au début de chaque clé, toujours.
+- **F, la clé vide** (F4, un dessin sans trait) : hachurée en biais, toujours (dans l'Animation, elle garde en plus sa couleur de dessin
+  vide).
+- **G, la clé sous la tête de lecture** : soulignée (2 points, la couleur de l'image courante), sur chaque calque du plan courant.
+- **D, le bord au survol** : la zone du bord (5 points) se colore et le curseur passe en ↔ ; le corps de la clé garde la main (glisser
+  la clé). Dans le montage la zone s'ajoute au trait qui y était ; dans l'Animation elle est neuve.
+- **E, pendant un glisser** de bord de clé ou de fin de plan : un fantôme en pointillés de la place d'avant des clés qui ont bougé, et
+  une petite bulle près du pointeur (« Clé 2 : 10 i (+4) », « Durée du plan : … (-4 i) »), en plus de la barre d'état. Pour le bord de
+  fin d'un plan dans le montage : la bulle (le fantôme du bloc existait déjà).
+- **A, la vignette du dessin** dans une clé assez large (au moins deux fois la hauteur de la vignette, et la place de la vignette
+  entière) — **option, éteinte d'origine** : Préférences > Apparence > Tailles, « Vignette dans les clés ». Prise dans le cache des
+  vignettes de calque (composées sur un fil de fond : rien n'est rendu sur le fil de l'écran, ni pendant un geste).
+- **C, la durée** écrite à droite dans une clé assez large (« 12 i ») — **option, éteinte d'origine** : « Durée dans les clés », même
+  endroit. En images seulement, quel que soit le compteur de la timeline.
+
+Les deux options sont des réglages du poste (`cles_vignettes`, `cles_durees`), écrits seulement cochés ; d'anciens réglages se relisent
+éteints.
+
+### 205.7 Essais
+
+`src/bordscles_tests.rs` : la fin du plan (seule la dernière clé, la butée, allonger), le bord (seules deux clés, les butées, le bord
+droit dans l'Animation, la barre d'état, plusieurs calques choisis avec leurs butées et une seule annulation, le calque verrouillé), Maj en
+proportion (×1,5, arrondi juste, une image par clé), Ctrl sur le bord et sur la fin, les deux boutons (exclusifs, écrits seulement
+allumés, dans les deux barres), le vrai Ctrl au clavier par la fenêtre sans écran, l'annulation et Échap, la règle 1 du montage, + et −
+(décalage, plan allongé, choix qui suit, une image au moins, annulation), les raccourcis (Ctrl + / Ctrl −, rien de volé), l'affichage
+(coupure, hachures, soulignement, durée et vignette absentes d'origine puis présentes, seulement dans une clé large), les réglages A et C
+(rien d'écrit d'origine, anciens réglages), le fantôme et la bulle pendant le geste, et la timeline du Storyboard peinte par la vraie
+fenêtre sans écran (durées écrites une fois l'option cochée, bulle).
+Changés : les essais d'avant qui comptaient sur l'ancien défaut du bord (le décalage de la suite) ou du raccourcissement (voir 205.8).
+
+### 205.8 Ce qui n'est pas fait, à voir
+
+- Maj n'étire pas les clés de caméra, d'effets, de position et d'opacité (seules les clés de dessin et leurs rôles).
+- Ctrl sur le bord d'une clé n'allonge pas le plan (comme avant) : la consigne disait « comme aujourd'hui », et aujourd'hui il ne
+  l'allonge pas. À trancher par Anthony.
+- Les touches sont lues à chaque image du geste : Ctrl ou Maj pressées une fois le bord pris marchent partout. Tenues AVANT de prendre
+  le bord, elles peuvent partir dans un autre geste (choix au rectangle, choix d'images) : j'ai fait prendre la limite d'une clé par
+  Ctrl dans la timeline du Storyboard (lu dans le code, pas essayé au pointeur réel) ; pour le reste, presser la touche après avoir
+  pris le bord, ou allumer le bouton du stylet.
+- Dans l'Animation, le bord du dessin s'allume au survol, pas pendant le geste (le fantôme et la bulle prennent le relais).
+- La durée écrite (C) est en images, pas en time code.
+
+### 205.9 À essayer (Anthony, sur une copie de projet)
+
+1. Un plan à deux calques de plusieurs clés : tirer la poignée de durée vers la gauche, loin : seule la dernière clé de chaque calque
+   raccourcit, la fin s'arrête juste après le début de la dernière clé ; la barre d'état dit « butée ».
+2. La même chose en tenant Maj (ou avec « Étirer en proportion » allumé) : toutes les clés rétrécissent ensemble ; puis allonger.
+3. Avec Ctrl : les clés suivent la poignée, comme avant.
+4. Timeline du Storyboard : tirer la limite entre deux clés : seules ces deux clés changent ; la bulle près du pointeur et la barre
+   d'état disent « Clé 2 : 10 i (+4) » ; un fantôme en pointillés montre où elles étaient.
+5. La même chose en tenant Ctrl (ou « Décaler la suite » allumé) : la suite du calque se décale.
+6. Choisir une clé sur deux calques à la même coupure, tirer la coupure : les deux bougent ; Ctrl+Z une fois rend les deux.
+7. Animation : tirer le bord droit d'un dessin : seule la clé suivante s'ajuste.
+8. Choisir trois clés, Ctrl + (la touche + du pavé numérique aussi) : chacune gagne une image, la suite se décale ; Ctrl − : retour.
+9. Regarder les clés : un trait foncé à chaque début, une clé vide (F4) hachurée, la clé sous la tête soulignée, le bord qui s'allume au
+   survol.
+10. Préférences > Apparence > Tailles : cocher « Vignette dans les clés » et « Durée dans les clés » ; zoomer la timeline : les clés
+    larges montrent leur dessin et leur durée. Décocher.
+11. Fermer, rouvrir FEANOR : les boutons allumés le restent ; éteints, rien n'est écrit.
