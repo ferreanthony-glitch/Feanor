@@ -819,3 +819,60 @@ fn escape_closes_the_bin_window_after_restoring_a_chosen_plan_block_even_with_a_
     b.chauffer(1);
     assert!(!b.app.prefs_window, "Échap ferme les Préférences");
 }
+
+/// Partie 209 (vu à l'écran) : dans la fenêtre d'export du film, la liste de la cadence ouverte, un seul Échap fermait la liste **et** la
+/// fenêtre (egui ferme la liste en la peignant, avant que la fenêtre ne demande si une liste est à l'écran). Maintenant le premier Échap ne
+/// ferme que la liste, le second la fenêtre.
+#[test]
+fn escape_with_an_open_list_in_the_export_window_closes_only_the_list() {
+    use eframe::egui::{Event, Key, Modifiers};
+    let echap = || vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }];
+    let mut b = crate::perf_tests::banc(crate::montage_sans_casse_tests::film(), false);
+    b.app.welcome = false;
+    b.chauffer(2);
+    b.app.run_action("fichier.exporter_film");
+    b.chauffer(2);
+    assert!(b.app.export_dialog.is_some(), "la fenêtre de l'export du film est ouverte");
+    if vus::ou("Liste : cadence du film").is_empty() {
+        let p = vus::ou("Précis : Exporter");
+        assert_eq!(p.len(), 1, "{:?}", vus::noms());
+        crate::pistes_tests::clic(&mut b, p[0].center(), Modifiers::NONE);
+        b.chauffer(2);
+    }
+    let l = vus::ou("Liste : cadence du film");
+    assert_eq!(l.len(), 1, "{:?}", vus::noms());
+    crate::pistes_tests::clic(&mut b, l[0].center(), Modifiers::NONE);
+    b.chauffer(2);
+    assert!(crate::exportui::liste_a_l_ecran(&b.ctx), "la liste de la cadence est ouverte, à l'écran");
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(!b.ctx.memory(|m| m.any_popup_open()), "le premier Échap ferme la liste");
+    assert!(b.app.export_dialog.is_some(), "et laisse la fenêtre ouverte");
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(b.app.export_dialog.is_none(), "le second Échap ferme la fenêtre");
+}
+
+/// Partie 209 (vu à l'écran) : la fenêtre « Raccourcis clavier », ouverte depuis les Préférences et posée par-dessus, ne se fermait pas à
+/// Échap ; c'étaient les Préférences, dessous, qui se fermaient. Maintenant Échap ferme d'abord la liste des raccourcis, puis les
+/// Préférences.
+#[test]
+fn escape_closes_the_shortcuts_list_before_the_preferences_under_it() {
+    use eframe::egui::{Event, Key, Modifiers};
+    let echap = || vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }];
+    let mut b = crate::perf_tests::banc(crate::montage_sans_casse_tests::film(), false);
+    b.app.welcome = false;
+    b.chauffer(2);
+    b.app.run_action("fichier.preferences");
+    b.chauffer(2);
+    b.app.show_help = true;
+    b.chauffer(2);
+    assert!(b.app.prefs_window && b.app.show_help, "les Préférences et, par-dessus, la liste des raccourcis");
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(!b.app.show_help, "le premier Échap ferme la liste des raccourcis");
+    assert!(b.app.prefs_window, "et laisse les Préférences ouvertes");
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(!b.app.prefs_window, "le second Échap ferme les Préférences");
+}

@@ -19182,3 +19182,38 @@ une fois sous la charge de la suite (un lecteur simulé sur un autre fil), passe
 5. Fichier > Corbeille : les vignettes lisibles comme dans la timeline ; Échap ferme la fenêtre.
 6. Colonne du Storyboard, + Panneau > Historique puis Préréglages (fenêtre de 868 de haut, 90 %) : la Scène entière, l'Historique avec
    trois étapes, la colonne qui défile ; le fil d'Ariane passe à la ligne entre « Séquence 1 » et « Plan 1 ».
+
+## 209. Échap revu à l'écran : une liste ouverte, la liste des raccourcis (2026-11-21, branche verif-corrections partie de main a52ecf2)
+
+Échap, corrigé à la partie 207 (D6) sans être revu à l'écran (écran verrouillé), revu sur une copie d'essai (`FeanorVerif`, réglages à
+part). Se ferment bien à Échap : les Préférences, la Corbeille (vide), la fenêtre d'export du film sans liste ouverte ; pendant
+l'attente d'une touche (« Assigner un raccourci »), Échap n'annule que l'attente. Deux défauts vus, corrigés, revus à l'écran ensuite.
+Suite entière : 5220 réussis, les 90 échecs de `main`, aucun de plus.
+
+### 209.1 Une liste ouverte : un seul Échap fermait la liste et la fenêtre
+
+Export du film, Précis, la liste « Cadence » ouverte : un Échap fermait la liste **et** la fenêtre. egui ferme la liste en la peignant
+(`popup_below_widget`, sur Échap) ; l'Export et les Préférences demandent `echap_ferme` **après** leur contenu : la liste n'était plus
+ouverte, `liste_a_l_ecran` répondait non, la fenêtre se fermait aussi. `exportui::noter_liste_au_debut`, appelée en tête de chaque image
+(`App::frame`), retient si une liste était à l'écran avant que rien ne soit peint ; `echap_ferme` laisse alors la touche à la liste.
+Le premier Échap ferme la liste, le second la fenêtre. Une liste « oubliée » (que plus rien ne peint, partie 207.6) n'est pas à
+l'écran au début de l'image non plus : elle ne retient toujours pas Échap.
+
+### 209.2 La liste des raccourcis par-dessus les Préférences
+
+Préférences > Raccourcis > « Voir et changer les raccourcis… » : la fenêtre « Raccourcis clavier », posée par-dessus, ne se fermait
+pas à Échap ; les Préférences, dessous, se fermaient. Elle prend maintenant Échap la première (`shortcuts_list_window`, sauf pendant
+une attente de touche ou sous une fenêtre modale) ; les Préférences le lui laissent tant qu'elle est ouverte. Vaut aussi pour la liste
+ouverte par Aide (F1), seule.
+
+### 209.3 Les essais
+
+`corbeille_tests.rs` : `escape_with_an_open_list_in_the_export_window_closes_only_the_list` (ouvre pour de vrai la liste de la cadence,
+notée sous « Liste : cadence du film » ; échoue sans la correction : la fenêtre se fermait), et
+`escape_closes_the_shortcuts_list_before_the_preferences_under_it`.
+
+### 209.4 Ce qui reste
+
+- Échap, quand il ferme une liste (egui) sans que rien ne prenne la touche, va aussi aux raccourcis (« Tout désélectionner ») : déjà
+  noté à la partie 207, inchangé.
+- Les autres fenêtres flottantes (À propos, réglages du projet, Partager…) n'ont pas été passées en revue une à une.

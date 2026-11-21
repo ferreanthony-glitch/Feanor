@@ -30,9 +30,13 @@ use crate::storyboard::duration_label;
 /// peint (son champ a quitté l'écran : une fenêtre fermée, un panneau replié) gardait Échap pour elle **à chaque appui** : la touche était
 /// prise, et aucune fenêtre ne se fermait plus (la Corbeille, l'Export). Seule une liste **à l'écran** (sa zone peinte à cette image ou à
 /// la précédente) garde Échap, et ne le prend pas (egui la ferme) ; une liste oubliée est fermée ici, et la fenêtre aussi.
+///
+/// Partie 209 (vu à l'écran) : l'Export et les Préférences demandent ceci **après** avoir peint leur contenu, et egui ferme la liste
+/// ouverte en la peignant (`popup_below_widget`, sur Échap) : la liste n'était plus « à l'écran », et le même appui fermait aussi la
+/// fenêtre. On regarde donc aussi l'état du début de l'image (`noter_liste_au_debut`).
 pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
     let echap = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::Escape, pressed: true, modifiers, .. } if !modifiers.any())));
-    if !echap || liste_a_l_ecran(ctx) {
+    if !echap || liste_a_l_ecran(ctx) || liste_au_debut(ctx) {
         return false;
     }
     ctx.memory_mut(|m| {
@@ -47,6 +51,24 @@ pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
 /// précédente). Une liste « ouverte » que plus rien ne peint n'en est pas une.
 pub(crate) fn liste_a_l_ecran(ctx: &egui::Context) -> bool {
     ctx.memory(|m| m.any_popup_open() && m.areas().visible_layer_ids().iter().any(|l| m.is_popup_open(l.id)))
+}
+
+fn id_liste_au_debut() -> egui::Id {
+    egui::Id::new("echap_liste_au_debut")
+}
+
+/// Partie 209 : retient, avant que rien ne soit peint, si une liste déroulante est à l'écran ; appelée en tête de chaque image
+/// (`App::frame`).
+pub(crate) fn noter_liste_au_debut(ctx: &egui::Context) {
+    let passe = ctx.cumulative_pass_nr();
+    let liste = liste_a_l_ecran(ctx);
+    ctx.data_mut(|d| d.insert_temp(id_liste_au_debut(), (passe, liste)));
+}
+
+/// Une liste déroulante était à l'écran au début de cette image (même si egui l'a fermée depuis, sur cet Échap).
+fn liste_au_debut(ctx: &egui::Context) -> bool {
+    let passe = ctx.cumulative_pass_nr();
+    ctx.data(|d| d.get_temp::<(u64, bool)>(id_liste_au_debut())).is_some_and(|(p, liste)| p == passe && liste)
 }
 
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
@@ -300,7 +322,7 @@ impl App {
                     }
                     ui.label("Cadence");
                     ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("film_cadence")
+                        let cadence = egui::ComboBox::from_id_salt("film_cadence")
                             .selected_text(if s.rate == VideoRate::Project { format!("{fps} images par seconde (le projet)") } else { s.rate.label().to_string() })
                             .show_ui(ui, |ui| {
                                 for r in VideoRate::CHOICES {
@@ -308,8 +330,11 @@ impl App {
                                     ui.selectable_value(&mut s.rate, r, text);
                                 }
                             })
-                            .response
-                            .on_hover_text("Le projet ne change pas : le film est converti à l'écriture, des images sont répétées ou sautées pour garder la durée.");
+                            .response;
+                        // (Pour l'essai d'Échap sur une liste ouverte, partie 209.)
+                        #[cfg(test)]
+                        crate::bulles::vus::noter("Liste : cadence du film", cadence.rect);
+                        cadence.on_hover_text("Le projet ne change pas : le film est converti à l'écriture, des images sont répétées ou sautées pour garder la durée.");
                     });
                     ui.end_row();
                     if s.format == Format::DnxHr {

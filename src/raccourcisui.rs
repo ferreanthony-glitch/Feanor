@@ -352,6 +352,11 @@ impl App {
                     }
                 });
             });
+        // Partie 209 (vu à l'écran) : Échap ferme cette fenêtre, posée par-dessus les Préférences, et non les Préférences restées dessous
+        // (une attente de touche en cours a déjà pris la touche, `capture_shortcut`).
+        if self.assign.is_none() && !self.modal_open() && crate::exportui::echap_ferme(ctx) {
+            open = false;
+        }
         self.show_help = open;
         if edit {
             self.edit_keymap();

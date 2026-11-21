@@ -494,7 +494,8 @@ impl App {
             .show(ctx, |ui| self.preferences_contenu(ui, &mut sortie));
         // Partie 207 : Échap ferme les Préférences, comme l'Export et la Corbeille (une liste déroulante à l'écran se ferme d'abord ;
         // pendant l'attente d'une touche dans Raccourcis, Échap annule l'attente, `capture_shortcut`, et rien d'autre).
-        if !self.modal_open() && self.export_dialog.is_none() && crate::exportui::echap_ferme(ctx) {
+        // (Partie 209 : la fenêtre « Raccourcis clavier », ouverte depuis ici et posée par-dessus, se ferme la première.)
+        if !self.modal_open() && self.export_dialog.is_none() && !self.show_help && crate::exportui::echap_ferme(ctx) {
             open = false;
         }
         self.prefs_window = open;

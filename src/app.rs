@@ -5885,6 +5885,8 @@ impl App {
     /// `perf_tests.rs` l'appellent directement (sans fenêtre, sans sommeil).
     pub(crate) fn frame(&mut self, ctx: &egui::Context) {
         crate::perf::begin_frame(ctx);
+        // Une liste déroulante à l'écran avant que rien ne soit peint : un Échap ne ferme qu'elle (partie 209, `exportui.rs`).
+        crate::exportui::noter_liste_au_debut(ctx);
         // La fenêtre perd le focus : une retouche de dégradé en cours s'écrit d'abord (rien ne reste « défait »).
         if ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false)))) {
             self.degrade_abandonner();
