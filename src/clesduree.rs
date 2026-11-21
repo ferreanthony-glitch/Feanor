@@ -72,8 +72,7 @@ fn tenu_jusqu_au_bout(l: &Layer, plan_len: usize) -> bool {
 /// tenu jusqu'à la fin du plan (`plan_len`) le reste : sa dernière exposition, si elle n'est pas une des clés, absorbe le décalage
 /// (sans descendre sous une image ; si elle commence déjà après la fin, elle garde sa durée et le plan s'allongera). Renvoie le
 /// nouveau début de chaque clé (dans l'ordre croissant) et si sa dernière exposition est à tenir jusqu'à la fin du plan.
-pub(crate) fn poser_durees(l: &mut Layer, starts: &[usize], n: usize, plan_len: usize) -> (Vec<usize>, bool) {
-    let n = n.max(1);
+pub(crate) fn poser_durees(l: &mut Layer, starts: &[usize], cible: Cible, plan_len: usize) -> (Vec<usize>, bool) {
     let held = tenu_jusqu_au_bout(l, plan_len);
     let mut keys: Vec<(usize, usize)> = starts.iter().filter(|&&s| s < l.frames.len() && l.frames[s].is_some() && l.run_bounds(s).0 == s).map(|&s| (s, l.run_bounds(s).1)).collect();
     keys.sort_unstable();
@@ -83,11 +82,11 @@ pub(crate) fn poser_durees(l: &mut Layer, starts: &[usize], n: usize, plan_len: 
     let mut new_starts = Vec::new();
     for &(s, e) in &keys {
         new_starts.push((s as isize + shift) as usize);
-        shift += n as isize - (e - s) as isize;
+        shift += cible.pour(e - s) as isize - (e - s) as isize;
     }
     // De la dernière à la première : une clé changée ne déplace pas celles d'avant.
     for &(s, e) in keys.iter().rev() {
-        crate::handles::set_run_length(l, s, e, n);
+        crate::handles::set_run_length(l, s, e, cible.pour(e - s));
     }
     let len = l.frames.len();
     let last_start = if len > 0 { l.run_bounds(len - 1).0 } else { 0 };
@@ -97,6 +96,23 @@ pub(crate) fn poser_durees(l: &mut Layer, starts: &[usize], n: usize, plan_len: 
         l.roles.retain(|f, _| *f < plan_len);
     }
     (new_starts, tenir)
+}
+
+/// La durée que prend une clé : la même pour toutes (« Modifier la durée des clés d'images… »), ou la sienne plus ou moins un écart
+/// (+ et −, partie 206). Toujours au moins une image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Cible {
+    Fixe(usize),
+    Ecart(isize),
+}
+
+impl Cible {
+    pub(crate) fn pour(self, old: usize) -> usize {
+        match self {
+            Cible::Fixe(n) => n.max(1),
+            Cible::Ecart(d) => (old as isize + d).max(1) as usize,
+        }
+    }
 }
 
 /// La fenêtre « Modifier la durée des clés d'images… » : les clés visées, le texte du champ, le focus à donner.
@@ -183,6 +199,22 @@ impl App {
             self.status = "Durée refusée : une clé dure au moins une image.".into();
             return false;
         }
+        self.changer_durees_des_cles(keys, Cible::Fixe(n))
+    }
+
+    /// + et − (partie 206, actions `cles.image_plus` et `cles.image_moins`) : chaque clé choisie (ou celle de la tête de lecture)
+    /// gagne ou perd une image, la suite de son calque se décale ; le plan s'allonge si une clé dépasse la fin. Au moins une image.
+    pub(crate) fn cles_une_image(&mut self, plus: bool) -> bool {
+        let keys = self.cles_visees();
+        if keys.is_empty() {
+            self.status = "Pas de clé choisie : choisir des clés de dessins (timeline ou montage), ou placer la tête de lecture sur un dessin.".into();
+            return false;
+        }
+        self.changer_durees_des_cles(&keys, Cible::Ecart(if plus { 1 } else { -1 }))
+    }
+
+    /// Chaque clé `keys` prend la durée `cible` (voir le haut du fichier), en une étape d'annulation. Faux si rien n'a changé.
+    pub(crate) fn changer_durees_des_cles(&mut self, keys: &[KeyRef], cible: Cible) -> bool {
         if self.content_refuses() {
             return false;
         }
@@ -220,11 +252,20 @@ impl App {
                     continue;
                 }
                 let avant = l.frames.clone();
-                let (new_starts, tenir) = poser_durees(l, starts, n, plan_len);
+                // (Les clés qui changent vraiment : − laisse telle quelle une clé d'une image.)
+                let changent = starts.iter().filter(|&&s| s < l.frames.len() && l.frames[s].is_some() && l.run_bounds(s).0 == s).filter(|&&s| {
+                    let (a, b) = l.run_bounds(s);
+                    cible.pour(b - a) != b - a
+                });
+                let changent = changent.count();
+                let (new_starts, tenir) = poser_durees(l, starts, cible, plan_len);
                 if l.frames != avant {
                     calques += 1;
                 }
-                faites += new_starts.len();
+                faites += match cible {
+                    Cible::Fixe(_) => new_starts.len(),
+                    Cible::Ecart(_) => changent,
+                };
                 sel.extend(new_starts.iter().map(|&start| KeyRef { panel: pid, layer: *lid, start }));
                 touches.push((*lid, tenir));
             }
@@ -251,17 +292,34 @@ impl App {
             }
         }
         if calques == 0 {
-            self.status = if verrouilles.is_empty() { format!("Ces clés duraient déjà {n} image{}.", s(n)) } else { format!("Rien n'a changé : calque{} verrouillé{} ({}).", s(verrouilles.len()), s(verrouilles.len()), verrouilles.join(", ")) };
+            let deja = match cible {
+                Cible::Fixe(n) => format!("Ces clés duraient déjà {n} image{}.", s(n)),
+                Cible::Ecart(_) => "Ces clés n'ont déjà qu'une image : une clé garde au moins une image.".to_string(),
+            };
+            self.status = if verrouilles.is_empty() { deja } else { format!("Rien n'a changé : calque{} verrouillé{} ({}).", s(verrouilles.len()), s(verrouilles.len()), verrouilles.join(", ")) };
             return false;
         }
+        // + et − se répètent : dans l'Animation, les images choisies couvrent les clés changées (le choix reste sur elles).
+        let couvre = match cible {
+            Cible::Ecart(_) if self.mode == crate::app::Mode::Animation && self.frame_sel.is_some() => {
+                let p = &self.doc.panels[self.cur_panel];
+                let bornes: Vec<(usize, usize)> = sel.iter().filter(|k| k.panel == p.id).filter_map(|k| p.layers.iter().find(|l| l.id == k.layer).map(|l| l.run_bounds(k.start))).collect();
+                bornes.iter().map(|b| b.0).min().zip(bornes.iter().map(|b| b.1).max())
+            }
+            _ => None,
+        };
         self.key_sel = sel;
         if self.mode == crate::app::Mode::Animation {
-            self.frame_sel = None;
+            self.frame_sel = couvre;
         }
         self.vsel = None;
         self.renderer.invalidate_all();
-        self.commit_as(snap, "Durée des clés");
-        let mut msg = format!("{faites} clé{} passée{} à {n} image{} sur {calques} calque{}", s(faites), s(faites), s(n), s(calques));
+        let (nom, mut msg) = match cible {
+            Cible::Fixe(n) => ("Durée des clés", format!("{faites} clé{} passée{} à {n} image{} sur {calques} calque{}", s(faites), s(faites), s(n), s(calques))),
+            Cible::Ecart(d) if d > 0 => ("Allonger les clés d'une image", format!("{faites} clé{} allongée{} d'une image sur {calques} calque{}", s(faites), s(faites), s(calques))),
+            Cible::Ecart(_) => ("Raccourcir les clés d'une image", format!("{faites} clé{} raccourcie{} d'une image sur {calques} calque{}", s(faites), s(faites), s(calques))),
+        };
+        self.commit_as(snap, nom);
         for pi in allonges {
             let d = self.doc.panels[pi].frame_count();
             msg += &format!(", {} allongé à {}", crate::storyboard::panel_title_phrase(&self.doc, pi), duree_texte(d, fps));

@@ -1363,6 +1363,7 @@ pub mod noms {
     pub const DUREE: &str = "Durée du plan";
     pub const DUREE_CLES_LONGUE: &str = "Allonger le plan, clés décalées";
     pub const DUREE_CLES_COURTE: &str = "Raccourcir le plan, clés décalées";
+    pub const DUREE_PROPORTION: &str = "Durée du plan, clés étirées en proportion";
     pub const RETABLIR: &str = "Rétablir le contenu rogné";
     pub const OUBLIER: &str = "Oublier le contenu rogné";
 }

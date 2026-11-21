@@ -1241,6 +1241,8 @@ impl App {
         };
         let drops = self.drop_view();
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
+        // Partie 206 (A) : les vignettes des clés assez larges, prises dans le cache des vignettes de calque (fil de fond).
+        self.peindre_vignettes_des_cles(ui.ctx(), &painter);
         if rows.sb.is_some() {
             // Partie 178 : la ligne de résumé des calques repliés, les blocs de préréglages de caméra (pris, glissés, étirés comme dans
             // la timeline de l'Animation), puis les traits de coupe des plans, qui traversent la caméra, ses préréglages et les calques.
@@ -1501,9 +1503,12 @@ impl App {
                 // Un choix au rectangle : depuis un espace vide des pistes de calques, ou avec Ctrl
                 // ou Maj depuis n'importe où dans les pistes (`montagekeys::KeyRect`).
                 let mods = ui.input(|i| i.modifiers);
-                let held = mods.command || mods.shift;
+                let sous = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows);
+                // (Partie 206 : Ctrl tenue sur le bord entre deux clés, c'est « décaler la suite » : le bord se prend, pas un rectangle.)
+                let bord = matches!(sous, Some((_, _, Handle::Boundary { .. })));
+                let held = (mods.command && !bord) || mods.shift;
                 let in_tracks = self.row_at(origin, r.top(), rows).is_some();
-                let free = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows).is_none();
+                let free = sous.is_none();
                 // Maj ajoute au choix, Ctrl bascule les clés touchées (comme pour la caméra).
                 (in_tracks && (held || free)).then(|| crate::montagekeys::KeyRect { origin, before: self.key_sel.clone(), add: mods.shift, toggle: mods.command && !mods.shift })
             } {

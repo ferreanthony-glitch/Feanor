@@ -146,6 +146,12 @@ const fn fixe(id: &'static str, groupe: u8) -> Cmd {
     cmd(id, Genre::Fixe, "", "", "", "", true, groupe)
 }
 
+/// Partie 206 : les bulles des deux boutons du stylet (nom, puis la courte description ; le raccourci vient de l'action).
+pub(crate) const BOUTON_DECALER_NOM: &str = "Décaler la suite";
+pub(crate) const BOUTON_DECALER_AIDE: &str = "Allumé, comme Ctrl tenue : tirer le bord d'une clé allonge ou raccourcit la clé d'avant et décale toute la suite du calque ; tirer la fin du plan fait suivre toutes les clés. Éteint : seules les deux clés voisines changent, seule la dernière clé suit la fin.";
+pub(crate) const BOUTON_PROPORTION_NOM: &str = "Étirer en proportion";
+pub(crate) const BOUTON_PROPORTION_AIDE: &str = "Allumé, comme Maj tenue : tirer la fin du plan étire toutes les clés de chaque calque en proportion (arrondies à l'image, au moins une image chacune). Éteint : seule la dernière clé de chaque calque change.";
+
 /// Barre de commandes : les neuf icônes du fichier et de l'édition. Les plans et le transport n'y sont plus, même
 /// sous « Plus… » (simplification des barres, 2026-10-21) : ils sont dans la barre du montage et celle de la
 /// timeline, et toujours à la palette (Ctrl+K) et aux menus. Une commande a un seul endroit principal
@@ -166,6 +172,9 @@ pub(crate) const COMMANDES: &[Cmd] = &[
 /// dans le plan ; le reste sous « Plus… ». (Les vues dessin et vignettes ne sont plus là : Maj+Tab, et
 /// l'onglet Vignettes.)
 pub(crate) const MONTAGE: &[Cmd] = &[
+    // Partie 206 : les deux boutons du stylet, Ctrl et Maj sans clavier, pour les bords des clés et la fin des plans.
+    etat("cles.decaler_suite", ph::ARROW_LINE_RIGHT, BOUTON_DECALER_NOM, BOUTON_DECALER_AIDE, true, 1),
+    etat("cles.etirer_proportion", ph::ARROWS_OUT_LINE_HORIZONTAL, BOUTON_PROPORTION_NOM, BOUTON_PROPORTION_AIDE, true, 1),
     bouton("montage.debut", ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", true, 0),
     bouton("lecture.basculer", ph::PLAY, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", true, 0),
     etat("lecture.boucle", ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", true, 0),
@@ -307,6 +316,8 @@ pub(crate) const TIMELINE: &[Cmd] = &[
     bouton("dessin.dupliquer", ph::COPY, "Dupliquer le dessin", "Une copie du dessin courant, après lui.", false, 2),
     bouton("exposition.allonger", ph::PLUS, "Allonger l'exposition", "Tenir le dessin une image de plus.", true, 2),
     bouton("exposition.raccourcir", ph::MINUS, "Raccourcir l'exposition", "Tenir le dessin une image de moins.", true, 2),
+    etat("cles.decaler_suite", ph::ARROW_LINE_RIGHT, BOUTON_DECALER_NOM, BOUTON_DECALER_AIDE, true, 2),
+    etat("cles.etirer_proportion", ph::ARROWS_OUT_LINE_HORIZONTAL, BOUTON_PROPORTION_NOM, BOUTON_PROPORTION_AIDE, true, 2),
     bouton("dessin.supprimer", ph::TRASH, "Supprimer le dessin", "Retirer le dessin et ses expositions de la timeline.", false, 2),
     bouton("dessin.vider", ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", false, 2),
     reglage("exposition_defaut", ph::HOURGLASS, "Exposition des nouveaux dessins", "Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…).", true, 2),
@@ -666,6 +677,8 @@ pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
         "transition.ajouter" => 26,
         "commentaire.ajouter" => 24,
         "montage.aimanter" => 22,
+        // (Partie 206 : les deux boutons du stylet restent dans la barre tant qu'elle a la place des commandes du film.)
+        "cles.decaler_suite" | "cles.etirer_proportion" => 20,
         // (La même action que le « + » de la ligne « Calques », juste dessous : la première à passer sous « Plus… ».)
         "calque.nouveau_vectoriel" => 1,
         _ => 10,
@@ -1004,6 +1017,8 @@ impl App {
                 v.icone = (if self.doc.storyboard_locked { ph::LOCK } else { ph::LOCK_OPEN }).to_string();
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
+            "cles.decaler_suite" => v.etat = Some(self.settings.cles_decaler_suite),
+            "cles.etirer_proportion" => v.etat = Some(self.settings.cles_etirer_proportion),
             "piste.auto_deplier" => v.etat = Some(self.settings.montage_auto_open),
             "envoi.liste" => v.etat = Some(self.envois_ui.liste),
             "comparer.ouvrir" => v.etat = Some(self.comparaison.is_some()),

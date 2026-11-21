@@ -108,6 +108,29 @@ pub(crate) struct HandleDrag {
     snap: Edit,
     /// Ctrl était tenue à la dernière image du geste (fin du plan) : les clés ont suivi la poignée (`slide_plan_end`).
     glisse: bool,
+    /// Maj était tenue (ou « Étirer en proportion » allumé) à la dernière image du geste (fin du plan) : toutes les clés se sont
+    /// étirées en proportion (partie 206).
+    proportion: bool,
+    /// Le bord entre deux clés (partie 206) : les coupures que le geste déplace, (calque, image), la tenue d'abord ; les autres sont
+    /// celles des calques choisis avec elle (`bordscles::coupes_du_geste`), relevées au début du geste.
+    coupes: Vec<(usize, usize)>,
+}
+
+impl HandleDrag {
+    /// L'id du plan du geste.
+    pub(crate) fn panel_id(&self) -> u64 {
+        self.panel
+    }
+
+    /// Le plan tel qu'il était au début du geste.
+    pub(crate) fn before_panel(&self) -> &Panel {
+        &self.before
+    }
+
+    /// Un geste qui montre le fantôme de la place d'avant et sa bulle (partie 206) : le bord d'une clé, la fin du plan.
+    pub(crate) fn montre_un_fantome(&self) -> bool {
+        matches!(self.handle, Handle::Boundary { .. } | Handle::Exposure { .. } | Handle::PlanEnd)
+    }
 }
 
 /// Ctrl (ou Commande) est tenue : sur la fin d'un plan, les clés suivent la poignée au lieu de rester où elles sont.
@@ -118,7 +141,7 @@ pub(crate) fn keys_follow(m: &egui::Modifiers) -> bool {
 /// Ce que dit la poignée de durée d'un plan : sa bulle (nom, explication) pour la timeline et le montage.
 pub(crate) const BULLE_DUREE_NOM: &str = "Durée du plan";
 pub(crate) const BULLE_DEBUT_AIDE: &str = "Glisser pour raccourcir ou allonger le début du plan (ce qui est rogné reste en réserve) : les clés gardent leur distance à la fin du plan. Ctrl tenue pendant le geste : elles gardent leur place depuis le début du plan, c'est la fin qui change. Alt : déplacer la coupe. Échap : abandonner.";
-pub(crate) const BULLE_DUREE_AIDE: &str = "Glisser pour allonger ou raccourcir le plan : les clés restent où elles sont. Ctrl tenue pendant le geste : toutes les clés (dessins, caméra, position, opacité, effets) suivent la poignée du même nombre d'images, le rythme ne change pas. Échap : abandonner.";
+pub(crate) const BULLE_DUREE_AIDE: &str = "Glisser pour allonger ou raccourcir le plan : seule la dernière clé de chaque calque change, les autres restent où elles sont (raccourcir s'arrête au début de la dernière clé). Maj tenue (ou « Étirer en proportion ») : toutes les clés s'étirent en proportion. Ctrl tenue (ou « Décaler la suite ») : toutes les clés (dessins, caméra, position, opacité, effets) suivent la poignée du même nombre d'images, le rythme ne change pas. Échap : abandonner.";
 
 /// `f` gardé entre les voisins `prev` et `next` (exclus) : l'ordre ne change pas.
 pub fn between(f: usize, prev: Option<usize>, next: Option<usize>) -> usize {
@@ -755,7 +778,13 @@ impl App {
         let snap = self.snapshot();
         let backup = crate::rognageui::PlanBackup::capture(&self.doc, self.cur_panel);
         let before = backup.panel.clone();
-        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap, glisse: false });
+        // Le bord entre deux clés : sa coupure, et celles des calques choisis avec lui (partie 206).
+        let coupes = match handle {
+            Handle::Boundary { layer, at } => self.coupes_du_geste(&before, layer, at),
+            Handle::Exposure { layer, end, .. } => self.coupes_du_geste(&before, layer, end),
+            _ => Vec::new(),
+        };
+        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap, glisse: false, proportion: false, coupes });
         true
     }
 
@@ -802,32 +831,13 @@ impl App {
                 self.renderer.invalidate_params();
                 format!("Clé d'effet : image {}.", label(self, f))
             }
-            // Le bord droit d'un dessin est le début de la clé suivante. Par défaut les clés d'après
-            // suivent (`ripple_at`, ce que faisait déjà cette poignée) ; Maj tenue : seule cette
-            // limite bouge, la clé suivante raccourcit ou s'allonge et le reste ne bouge pas.
-            Handle::Exposure { layer, start, end } => {
-                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                let single = self.key_move_now() == KeyMove::Single && end < l.frames.len();
-                self.key_drag_mode = if single { KeyMove::Single } else { KeyMove::Ripple };
-                if single {
-                    let to = move_boundary(&mut l, end, edge.max(start + 1));
-                    self.put_layer(pi, layer, l, plan_len);
-                    format!("Limite à l'image {} : la clé suivante s'ajuste, la suite ne bouge pas (Maj tenue).", label(self, to))
-                } else {
-                    // Ce qui suit glisse d'autant, sans allonger le plan : un calque tenu jusqu'à
-                    // sa fin le reste (sa dernière exposition absorbe).
-                    let want = edge.max(start + 1) as isize - end as isize;
-                    let d = clamp_ripple_delta(&l, end, want, plan_len);
-                    ripple_at(&mut l, end, d, plan_len);
-                    self.put_layer(pi, layer, l, plan_len);
-                    let n = (end - start) as isize + d;
-                    let s = if n > 1 { "s" } else { "" };
-                    if want > d {
-                        format!("Exposition : {n} image{s} (fin du plan : l'allonger d'abord par la poignée au bout de la règle).")
-                    } else {
-                        format!("Exposition : {n} image{s}.")
-                    }
-                }
+            // Le bord droit d'un dessin est le début de la clé suivante (partie 206) : par défaut seule
+            // cette coupure bouge, la clé suivante raccourcit ou s'allonge et le reste ne bouge pas ;
+            // Ctrl (ou « Décaler la suite ») : les clés d'après suivent (`ripple_at`, l'ancien défaut).
+            // Les calques choisis avec la clé tenue bougent leur coupure du même écart.
+            Handle::Exposure { start, end, .. } => {
+                let Some((before, coupes)) = self.handle_drag.as_ref().map(|d| (d.before.clone(), d.coupes.clone())) else { return };
+                self.tirer_bord_de_cle(pi, &before, &coupes, end, edge.max(start + 1))
             }
             Handle::LayerStart { layer } => {
                 let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
@@ -889,23 +899,12 @@ impl App {
                     (KeyMove::Insert, Some(_)) => String::new(),
                 }
             }
-            // La limite entre deux expositions est le début d'une clé : par défaut les clés d'après
-            // suivent ; Maj tenue : la limite seule bouge, l'une s'allonge et l'autre raccourcit.
-            Handle::Boundary { layer, at } => {
-                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                let single = self.key_move_now() == KeyMove::Single;
-                self.key_drag_mode = if single { KeyMove::Single } else { KeyMove::Ripple };
-                let to = if single {
-                    move_boundary(&mut l, at, edge)
-                } else {
-                    let d = clamp_ripple_delta(&l, at, edge as isize - at as isize, plan_len);
-                    ripple_at(&mut l, at, d, plan_len);
-                    (at as isize + d) as usize
-                };
-                let before = to - l.run_bounds(to.saturating_sub(1)).0;
-                let after = if to < l.frames.len() { l.run_bounds(to).1 - to } else { 0 };
-                self.put_layer(pi, layer, l, plan_len);
-                format!("Expositions : {before} image{} avant la limite, {after} après.", if before > 1 { "s" } else { "" })
+            // La limite entre deux expositions est le début d'une clé (partie 206) : par défaut la
+            // limite seule bouge, l'une s'allonge et l'autre raccourcit ; Ctrl (ou « Décaler la
+            // suite ») : les clés d'après suivent. Les calques choisis avec elle bougent du même écart.
+            Handle::Boundary { at, .. } => {
+                let Some((before, coupes)) = self.handle_drag.as_ref().map(|d| (d.before.clone(), d.coupes.clone())) else { return };
+                self.tirer_bord_de_cle(pi, &before, &coupes, at, edge)
             }
             Handle::PlanEnd => {
                 // La fin se rogne sans rien détruire : ce qui sort va dans la réserve du plan
@@ -915,26 +914,35 @@ impl App {
                 backup.restore(&mut self.doc);
                 // Ctrl tenue (lue à chaque image d'écran : on peut la presser ou la lâcher en cours de geste) : toutes les clés
                 // suivent la poignée du même nombre d'images (`slide_plan_end`) ; sinon seule la durée change.
-                let glisse = keys_follow(&self.ctx.input(|i| i.modifiers));
+                // (Ou le bouton « Décaler la suite » allumé, partie 206.) Sinon, seule la dernière clé de chaque calque change
+                // (partie 206 : raccourcir s'arrête au début de la dernière clé + 1 image) ; Maj (ou « Étirer en proportion ») :
+                // toutes les clés de chaque calque s'étirent en proportion (`Document::poser_fin_du_plan`).
+                let glisse = self.decaler_la_suite();
+                let proportion = !glisse && self.etirer_la_proportion();
+                let mut butee = None;
                 if glisse {
                     self.doc.slide_plan_end(pi, n);
                 } else {
-                    self.doc.set_duration(pi, n);
-                    // Allonger étire la dernière clé de chaque calque jusqu'à la nouvelle fin (partie 138) ; Ctrl ne change pas.
-                    let fin = self.doc.panels[pi].frame_count();
-                    if fin > old {
-                        crate::clesduree::etirer_fins(&mut self.doc.panels[pi], fin);
-                    }
+                    butee = self.doc.poser_fin_du_plan(pi, n, proportion).butee;
                 }
                 if let Some(d) = self.handle_drag.as_mut() {
                     d.glisse = glisse;
+                    d.proportion = proportion;
                 }
                 // (Rogner ou rallonger la fin range des images dans la réserve du plan ou les en sort : aucun dessin n'est créé
                 // ni modifié, seul change ce que l'image courante montre, qui est dans le plan à composer.)
                 self.renderer.invalidate_params();
                 let n = self.doc.panels[pi].frame_count();
-                let base = format!("Durée du plan : {}", crate::storyboard::duration_label(n, self.doc.fps));
-                let how = if glisse {
+                let base = format!("Durée du plan : {} ({:+} i)", crate::storyboard::duration_label(n, self.doc.fps), n as isize - old as isize);
+                let how = if proportion {
+                    match butee {
+                        Some((m, _)) => format!(" (Maj : toutes les clés s'étirent en proportion ; butée à {m} i, chaque clé garde une image)"),
+                        None => " (Maj : toutes les clés s'étirent en proportion)".to_string(),
+                    }
+                } else if let Some((m, qui)) = butee {
+                    let qui = qui.map(|q| format!(" de « {q} »")).unwrap_or_default();
+                    format!(" (butée : la dernière clé{qui} commence à l'image {} ; Maj : étirer en proportion, Ctrl : les clés suivent la poignée)", label(self, m - 1))
+                } else if glisse {
                     let (h, _) = self.doc.hidden(pi);
                     if h > 0 {
                         format!(" (Ctrl tenue : les clés suivent la poignée ; {h} i cachées au début, en réserve)")
@@ -947,9 +955,9 @@ impl App {
                     if fin > old && laisses > 0 {
                         format!(" (dernières clés étirées ; {laisses} calque{} verrouillé{} laissé{} tel{} quel{} ; Ctrl pendant le geste : les clés suivent la poignée)", ss(laisses), ss(laisses), ss(laisses), ss(laisses), ss(laisses))
                     } else if fin > old {
-                        " (dernières clés étirées ; Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                        " (dernières clés étirées ; Maj : en proportion, Ctrl : les clés suivent la poignée)".to_string()
                     } else {
-                        " (Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                        " (dernières clés raccourcies ; Maj : en proportion, Ctrl : les clés suivent la poignée)".to_string()
                     }
                 };
                 match sound_shift_note(&self.doc, pi, old, n) {
@@ -958,6 +966,10 @@ impl App {
                 }
             }
         };
+        // Partie 206 : la bulle près du pointeur reprend le début de la phrase (la clé, sa durée, l'écart).
+        if matches!(handle, Handle::Boundary { .. } | Handle::Exposure { .. } | Handle::PlanEnd) {
+            self.bulle_geste = Some(crate::clesvue::debut_de_phrase(&status));
+        }
         self.status = status;
     }
 
@@ -1079,6 +1091,10 @@ impl App {
             Handle::Mark(_) => p.marks != d.before.marks,
             Handle::Bookmark(_) | Handle::In | Handle::Out => p.cues != d.before.cues,
             Handle::PlanEnd => p.frame_count() != d.before.frame_count(),
+            // Le bord entre deux clés peut changer plusieurs calques (partie 206).
+            Handle::Boundary { .. } | Handle::Exposure { .. } => {
+                p.layers.len() != d.before.layers.len() || p.layers.iter().zip(&d.before.layers).any(|(a, b)| a.frames != b.frames || a.roles != b.roles || a.fx != b.fx)
+            }
             h => {
                 let layer = h.layer().or(match h {
                     Handle::FxKey { layer, .. } => Some(layer),
@@ -1097,6 +1113,7 @@ impl App {
             } else {
                 // La poignée de fin du plan : « Allonger la fin » ou « Raccourcir la fin ».
                 let name = (d.handle == Handle::PlanEnd).then(|| match (d.glisse, plan_now > d.before.frame_count()) {
+                    _ if d.proportion => crate::rognage::noms::DUREE_PROPORTION,
                     (true, true) => crate::rognage::noms::DUREE_CLES_LONGUE,
                     (true, false) => crate::rognage::noms::DUREE_CLES_COURTE,
                     (false, true) => crate::rognage::noms::FIN_LONGUE,
