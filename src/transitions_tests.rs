@@ -737,3 +737,30 @@ fn the_fades_stay_at_the_ends_of_the_film_and_a_split_plan_keeps_its_exit_transi
     assert!(doc.transition_on(Some(a), Some(moitie)).is_none(), "la coupe faite au milieu du plan est franche");
     assert_eq!(zones(&doc).len(), 1);
 }
+
+/// Choix d'Anthony du 2026-11-21 : un plan dupliqué (ou collé) sur une coupe qui a une transition la garde **devant le plan suivant** ;
+/// la coupe entre l'original et sa copie est franche, la transition de l'original attend et revient si la copie s'en va.
+#[test]
+fn a_duplicated_plan_keeps_the_transition_in_front_of_the_next_plan() {
+    let mut doc = film();
+    let (a, b) = (doc.panels[0].id, doc.panels[1].id);
+    doc.set_transition(1, Kind::Dissolve);
+    let i = doc.duplicate_panel_after(0);
+    let copie = doc.panels[i].id;
+    assert_eq!(doc.panels[i + 1].id, b);
+    assert_eq!(doc.transition_on(Some(copie), Some(b)).map(|t| t.kind), Some(Kind::Dissolve));
+    assert!(doc.transition_on(Some(a), Some(copie)).is_none(), "la coupe entre l'original et sa copie est franche");
+    assert_eq!(zones(&doc).len(), 1);
+    // La copie retirée : la transition de l'original joue de nouveau, seule.
+    doc.remove_panels(&[copie]);
+    assert_eq!(doc.transition_on(Some(a), Some(b)).map(|t| t.kind), Some(Kind::Dissolve));
+    assert_eq!((doc.transitions.len(), zones(&doc).len()), (1, 1));
+    // Le fondu de fermeture reste à la fin du film quand on duplique le dernier plan.
+    let mut doc = film();
+    doc.set_transition(3, Kind::Black);
+    let i = doc.duplicate_panel_after(2);
+    let copie = doc.panels[i].id;
+    assert_eq!(i, 3);
+    assert_eq!(doc.transition_on(Some(copie), None).map(|t| t.kind), Some(Kind::Black));
+    assert_eq!(zones(&doc).len(), 1);
+}

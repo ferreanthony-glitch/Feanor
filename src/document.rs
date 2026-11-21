@@ -2834,14 +2834,14 @@ impl Document {
     /// Copie du panneau `index`, juste après lui.
     pub fn duplicate_panel_after(&mut self, index: usize) -> usize {
         let copy = self.duplicate_panel(index);
-        self.insert_and_normalize(index + 1, vec![copy])
+        self.inserer_des_copies(index + 1, vec![copy])
     }
 
     /// Copie de la scène du panneau `index`, juste après elle.
     pub fn duplicate_scene_after(&mut self, index: usize) -> usize {
         let (_, end) = self.scene_run(index);
         let copies = self.duplicate_scene(index);
-        self.insert_and_normalize(end, copies)
+        self.inserer_des_copies(end, copies)
     }
 
     /// Retire le panneau `index` (et sa scène ou sa séquence si elles deviennent vides).
@@ -3273,6 +3273,32 @@ impl Document {
         i
     }
 
+    /// Insère des plans **copiés** (plan ou scène dupliqués, plans collés). La transition de la coupe où ils arrivent reste **devant le
+    /// plan suivant** (choix d'Anthony, 2026-11-21, comme pour une séquence dupliquée, `dupliquerseq.rs`) : elle est copiée à la sortie
+    /// de la dernière copie, la coupe entre l'original et sa copie est franche, et celle de l'original attend (elle revient si les copies
+    /// s'en vont). Le fondu de fermeture reste de même à la fin du film. Avant, la transition restait en attente sans plus se montrer.
+    pub(crate) fn inserer_des_copies(&mut self, at: usize, panels: Vec<Panel>) -> usize {
+        let at = at.min(self.panels.len());
+        let avant = at.checked_sub(1).map(|i| self.panels[i].id);
+        let apres = self.panels.get(at).map(|p| p.id);
+        let (premier, dernier) = (panels[0].id, panels[panels.len() - 1].id);
+        let i = self.insert_and_normalize(at, panels);
+        // (Seulement si les copies sont bien restées entre les deux plans de la coupe, une fois le film remis en ordre.)
+        let rang = |id: u64| self.panels.iter().position(|p| p.id == id);
+        let tient = match (avant.and_then(rang), rang(premier), rang(dernier)) {
+            (Some(a), Some(p), Some(d)) => a + 1 == p && self.panels.get(d + 1).map(|p| p.id) == apres,
+            _ => false,
+        };
+        if tient && self.transition_on(Some(dernier), apres).is_none() {
+            if let Some(mut t) = self.transition_on(avant, apres).cloned() {
+                t.id = self.alloc();
+                t.out = Some(dernier);
+                self.transitions.push(t);
+            }
+        }
+        i
+    }
+
     pub(crate) fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {
         let first = panels[0].id;
         let at = at.min(self.panels.len());
@@ -3470,7 +3496,7 @@ impl Document {
             self.renumeroter_les_copies(copies.values().copied());
             pasted.push(panel);
         }
-        Some(self.insert_and_normalize(index + 1, pasted))
+        Some(self.inserer_des_copies(index + 1, pasted))
     }
 
     /// Donne la couleur de repère `color` (rang dans `marks::COLORS`, ou rien) aux plans `ids`.

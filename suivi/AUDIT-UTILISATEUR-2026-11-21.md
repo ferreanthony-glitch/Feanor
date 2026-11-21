@@ -291,7 +291,7 @@ Vu à l'écran après correction, sur le même projet d'essai (capture `audit-ut
 
 | N° | Ce qui change | Où dans le code |
 |---|---|---|
-| 21 | Un plan **neuf** (plan vide, plan type) inséré sur une coupe qui a une transition la reçoit sur sa coupe d'entrée ; la barre d'état le dit (« La transition de cette coupe a suivi le nouveau plan. »). Un plan neuf en tête ou en fin de film laisse le fondu d'ouverture au début et le fondu de fermeture à la fin. Couper un plan en deux laisse sa transition de sortie à la sortie de la seconde moitié (même défaut, trouvé en corrigeant). Un plan **déplacé**, **dupliqué** ou **collé** sur la coupe ne change rien : la transition attend, comme avant (choix existants, gardés ; voir « À trancher »). | `Document::inserer_un_plan_neuf`, `rattacher_transitions`, `split_panel`, `App::update` |
+| 21 | Un plan **neuf** (plan vide, plan type) inséré sur une coupe qui a une transition la reçoit sur sa coupe d'entrée ; la barre d'état le dit (« La transition de cette coupe a suivi le nouveau plan. »). Un plan neuf en tête ou en fin de film laisse le fondu d'ouverture au début et le fondu de fermeture à la fin. Couper un plan en deux laisse sa transition de sortie à la sortie de la seconde moitié (même défaut, trouvé en corrigeant). Un plan **déplacé** sur la coupe ne change rien : la transition attend, comme avant (choix existant, gardé). Dupliquer et coller : voir « Tranché » plus bas. | `Document::inserer_un_plan_neuf`, `rattacher_transitions`, `split_panel`, `App::update` |
 | 22 | Dans le Storyboard, la colonne prend toute la hauteur de la fenêtre et la bande s'arrête à son bord (disposition 11 ; une disposition retenue qui avait la forme d'origine la reçoit, une autre ne bouge pas). Montage, 3D et Animation gardent la bande sur toute la largeur. | `DockLayout::colonne_haute`, `Settings::apres_lecture` |
 | 23 | Le panneau qui grandit (Propriétés) reçoit la hauteur de son contenu tant que les listes (Scène, Préréglages) peuvent la céder ; elles ne passent pas sous leur plancher. | `colonne::hauteurs` |
 | 24 | Avec l'outil Caméra en main, le passe-partout ne dépasse pas 55 % d'opacité ; il reprend son réglage dès qu'on change d'outil. | `camtools::PASSE_PARTOUT_CAMERA` |
@@ -306,7 +306,7 @@ Vu à l'écran après correction, sur le même projet d'essai (capture `audit-ut
 dernière dessinée gagnait. Avec la colonne sur toute la hauteur, l'ordre de dessin changeait et celles de la planche n'étaient plus
 cliquables : les deux listes s'ajoutent maintenant (`pile_versions_ui`).
 
-**Essais** : suite complète sur Mac, 5 212 réussis, 90 échecs, les mêmes que sans ces changements (comparé essai par essai). Cinq
+**Essais** : suite complète sur Mac, 5 213 réussis, 90 échecs, les mêmes que sans ces changements (comparé essai par essai). Cinq
 essais existants adaptés à la nouvelle forme (colonne haute, champ Zoom), trois ajoutés. **Vu à l'écran** : une version intermédiaire
 (transition, colonne, caméra, dépli). La version finale (règle resserrée aux plans neufs, textes courts, dépli au clic seulement,
 étiquettes) n'a pas pu être revue à l'écran : la capture de la fenêtre a échoué en fin de séance.
@@ -317,9 +317,10 @@ début d'un message long, le reste est dans sa bulle et dans l'historique), pas 
 **Pas fait** : n° 30 (flèche du préréglage hors de ses images), n° 33 (graphique « Flèche » coupé à droite), n° 34 (« Ctrl tenue » sur
 Mac, étiquette sous la poignée). Ils n'étaient pas dans les quatre groupes.
 
-**À trancher** : dupliquer un plan, ou coller des plans, sur une coupe qui a une transition la laisse encore en attente, sans rien
-dire. Deux règles possibles : la transition reste devant le plan suivant (comme pour une séquence dupliquée), ou elle reste à la
-sortie du plan d'origine. Non touché.
+**Tranché par Anthony le 2026-11-21 (« Devant »)** : un plan ou une scène dupliqués, des plans collés sur une coupe qui a une
+transition la gardent **devant le plan suivant** (copiée à la sortie de la dernière copie ; la coupe entre l'original et sa copie est
+franche ; celle de l'original attend et revient si les copies s'en vont), comme pour une séquence dupliquée
+(`Document::inserer_des_copies`). Essais seulement, pas vu à l'écran.
 
 **Limites connues** : rouvrir la bande après l'avoir fermée, ou refaire une colonne vidée, la repose sous la colonne sur toute la
 largeur (l'ancienne forme) ; « Rétablir la disposition » redonne la nouvelle. Une transition déjà restée en attente dans un ancien
