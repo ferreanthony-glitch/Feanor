@@ -224,7 +224,7 @@ impl App {
         let Some(MontageDrag::Edge(mut d)) = self.montage_drag.take() else { return };
         let delta = drag_delta(d.kind, d.edge0, (x - d.origin_x) / ppf, &d.snaps, SNAP_PX / ppf);
         // Ctrl se lit à chaque image d'écran : on peut la presser ou la lâcher en cours de geste (tout repart du plan d'avant).
-        // (Ou le bouton « Décaler la suite » allumé, partie 205.) Maj (ou « Étirer en proportion ») sur la fin : toutes les clés
+        // (Ou le bouton « Décaler la suite » allumé, partie 206.) Maj (ou « Étirer en proportion ») sur la fin : toutes les clés
         // s'étirent en proportion.
         let glisse = matches!(d.kind, EdgeKind::Head | EdgeKind::Tail) && self.decaler_la_suite();
         let proportion = d.kind == EdgeKind::Tail && !glisse && self.etirer_la_proportion();
@@ -253,7 +253,7 @@ impl App {
                     let n = (old_len as isize + delta).max(1) as usize;
                     self.doc.slide_plan_end(pi, n) as isize - old_len as isize
                 } else if d.kind == EdgeKind::Tail && !self.doc.storyboard_locked {
-                    // Partie 205 : seule la dernière clé de chaque calque change ; raccourcir s'arrête au début de la dernière clé
+                    // Partie 206 : seule la dernière clé de chaque calque change ; raccourcir s'arrête au début de la dernière clé
                     // + 1 image ; Maj : toutes les clés en proportion.
                     let n = (old_len as isize + delta).max(1) as usize;
                     let f = self.doc.poser_fin_du_plan(pi, n, proportion);
@@ -289,7 +289,7 @@ impl App {
                     String::new()
                 };
                 self.status = format!("{}{hint}{etire}", d.text);
-                // Partie 205 : la bulle près du pointeur, pendant le geste (la durée du plan).
+                // Partie 206 : la bulle près du pointeur, pendant le geste (la durée du plan).
                 self.bulle_geste = (d.kind == EdgeKind::Tail).then(|| crate::clesvue::debut_de_phrase(&d.text));
                 self.renderer.invalidate_all();
             }

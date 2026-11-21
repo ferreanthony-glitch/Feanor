@@ -639,7 +639,7 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     }
     // (Partie 204 : les plans sortis de l'environnement de leur séquence : un propre vide (rien d'écrit plus haut), un lien.)
     for (&plan, e) in &d.envs {
-        if !doc.panels.iter().any(|p| p.id == plan) {
+        if !plan_garde(doc, plan) {
             continue;
         }
         let (ecrit, lie) = match e {
@@ -656,14 +656,62 @@ pub fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     Ok(Some(out))
 }
 
-/// Partie 204 : le décor de clé `cle` s'enregistre : un décor de séquence qui a quelque chose ; l'environnement propre d'un plan du
-/// film qui a quelque chose (un plan parti, ou revenu à sa séquence, n'emporte rien).
+/// Partie 204 : le décor de clé `cle` s'enregistre : un décor de séquence qui a quelque chose ; l'environnement propre d'un plan
+/// gardé (`plan_garde`) qui a quelque chose (un plan revenu à sa séquence, ou sorti de la corbeille pour de bon, n'emporte rien).
 fn a_enregistrer(doc: &Document, cle: u64, d: &Decor3d) -> bool {
     !d.est_vide()
         && match plan_de_cle(cle) {
             None => true,
-            Some(p) => matches!(doc.decors3d.envs.get(&p), Some(EnvPlan::Propre { .. })) && doc.panels.iter().any(|q| q.id == p),
+            Some(p) => matches!(doc.decors3d.envs.get(&p), Some(EnvPlan::Propre { .. })) && plan_garde(doc, p),
         }
+}
+
+/// Partie 205 : l'environnement du plan `plan` s'enregistre : le plan est dans le film, au garage d'une version de séquence rangée
+/// (`variantes.rs`), ou dans la corbeille qu'on écrit (un plan supprimé retrouve son environnement s'il revient, même après une
+/// réouverture).
+pub(crate) fn plan_garde(doc: &Document, plan: u64) -> bool {
+    doc.plan_vivant(plan) || (!doc.est_partage() && doc.plan_dans_la_corbeille(plan))
+}
+
+impl Document {
+    /// Partie 205 : le plan `plan` est dans le film, ou au garage d'une version de séquence rangée.
+    pub(crate) fn plan_vivant(&self, plan: u64) -> bool {
+        self.panels.iter().any(|q| q.id == plan) || self.variantes.iter().any(|(_, v)| v.garage.contains_key(&plan))
+    }
+
+    /// Partie 205 : la corbeille garde le plan `plan` (une entrée de plan supprimé).
+    pub(crate) fn plan_dans_la_corbeille(&self, plan: u64) -> bool {
+        self.corbeille.entrees.iter().any(|e| e.sorte == crate::corbeille::Sorte::Plan && e.plan == plan)
+    }
+
+    /// Partie 205 : les environnements des plans que plus rien ne garde (ni le film, ni une version rangée, ni la corbeille : la
+    /// corbeille vidée) partent de la mémoire ; ils ne s'enregistraient déjà plus. Rend combien.
+    pub(crate) fn oublier_les_envs_perdus(&mut self) -> usize {
+        let perdus: Vec<u64> = self.decors3d.envs.keys().copied().filter(|&p| !self.plan_vivant(p) && !self.plan_dans_la_corbeille(p)).collect();
+        for &p in &perdus {
+            self.decors3d.envs.remove(&p);
+            self.decors3d.par_sequence.remove(&cle_de_plan(p));
+        }
+        perdus.len()
+    }
+
+    /// Partie 205 : un plan revient de la corbeille sous un numéro neuf (`nouveau`, l'ancien étant pris) : son environnement le suit,
+    /// copié (un propre : des objets neufs, « Caché dans le plan » suit), ou le même lien.
+    pub(crate) fn env_au_numero_neuf(&mut self, ancien: u64, nouveau: u64) {
+        let Some(e) = self.decors3d.envs.get(&ancien).copied() else { return };
+        if let EnvPlan::Propre { .. } = e {
+            self.copier_env(cle_de_plan(ancien), cle_de_plan(nouveau), |p| p == ancien);
+            if let Some(d) = self.decors3d.par_sequence.get_mut(&cle_de_plan(nouveau)) {
+                for o in &mut d.objets {
+                    o.caches_dans = o.caches_dans.iter().map(|&p| if p == ancien { nouveau } else { p }).collect();
+                }
+            }
+        }
+        self.decors3d.envs.insert(nouveau, match e {
+            EnvPlan::Propre { .. } => EnvPlan::Propre { base: None },
+            l => l,
+        });
+    }
 }
 
 /// Lit le modèle `fichier` du projet `dir`, une fois par fichier (`lus`) : les objets du même fichier partagent le modèle.

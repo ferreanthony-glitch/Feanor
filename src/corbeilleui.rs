@@ -176,6 +176,8 @@ impl App {
             return;
         }
         self.history.retirer_de_la_corbeille(&ids);
+        // (Partie 205 : l'environnement 3D propre d'un plan supprimé pour de bon part avec lui.)
+        self.doc.oublier_les_envs_perdus();
         self.modified = true;
         self.status = match n {
             1 => "Supprimé définitivement de la corbeille (ça ne s'annule pas).".into(),

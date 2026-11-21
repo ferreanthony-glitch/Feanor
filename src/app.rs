@@ -796,10 +796,10 @@ pub struct App {
     pub(crate) cadrage_cache: std::cell::RefCell<crate::cadrage::Cache>,
     /// Poignée tenue dans la timeline du plan (passe interface, `handles.rs`).
     pub(crate) handle_drag: Option<crate::handles::HandleDrag>,
-    /// Partie 205 : la bulle près du pointeur pendant un glisser de bord de clé ou de fin de plan (« Clé 2 : 12 i (+4) »), peinte une
+    /// Partie 206 : la bulle près du pointeur pendant un glisser de bord de clé ou de fin de plan (« Clé 2 : 12 i (+4) »), peinte une
     /// fois par image d'écran (`clesvue::bulle_du_geste`) ; rien hors d'un tel geste.
     pub(crate) bulle_geste: Option<String>,
-    /// Partie 205 (A) : les vignettes des clés à poser après les pistes (rectangle, dessin, calque visible), remplies en peignant.
+    /// Partie 206 (A) : les vignettes des clés à poser après les pistes (rectangle, dessin, calque visible), remplies en peignant.
     pub(crate) cles_vignettes_a_peindre: std::cell::RefCell<Vec<(eframe::egui::Rect, crate::document::CelId, bool)>>,
     /// Menu du dernier clic droit dans la timeline hors des cases (`handles::GridMenu`).
     pub(crate) grid_menu: Option<crate::handles::GridMenu>,
@@ -6149,7 +6149,7 @@ impl App {
         self.workspace_name_window(ctx);
         self.personnages_fenetre(ctx);
         self.scrub_audio();
-        // Partie 205 : la bulle du glisser d'un bord de clé ou de la fin d'un plan (timeline, montage), tant qu'il dure.
+        // Partie 206 : la bulle du glisser d'un bord de clé ou de la fin d'un plan (timeline, montage), tant qu'il dure.
         let geste = self.handle_drag.as_ref().is_some_and(|d| d.montre_un_fantome()) || matches!(&self.montage_drag, Some(crate::storyboard::MontageDrag::Edge(_)));
         if !geste {
             self.bulle_geste = None;

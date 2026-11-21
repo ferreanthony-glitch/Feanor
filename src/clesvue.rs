@@ -1,4 +1,4 @@
-//! Partie 205 (Anthony, 2026-11-21) : ce que montre une clé de dessin sur la ligne de son calque, dans la timeline du Storyboard (et
+//! Partie 206 (Anthony, 2026-11-21) : ce que montre une clé de dessin sur la ligne de son calque, dans la timeline du Storyboard (et
 //! le montage, qui peint les mêmes pistes, `montagerows::paint_layer_cell`) et dans celle de l'Animation (`timeline.rs`). Le look ne
 //! change pas (les deux tons qui alternent, `cles_alternees.rs`, les couleurs du thème) ; s'y ajoutent :
 //!
@@ -135,7 +135,7 @@ impl App {
         }
     }
 
-    /// Préférences > Apparence > Tailles, après les lignes de la timeline : les deux cases de la partie 205 (A et C), éteintes d'origine,
+    /// Préférences > Apparence > Tailles, après les lignes de la timeline : les deux cases de la partie 206 (A et C), éteintes d'origine,
     /// écrites dans les réglages du poste seulement quand elles sont cochées.
     pub(crate) fn cles_timeline_prefs_ui(&mut self, ui: &mut egui::Ui) {
         for (nom, aide, vignettes) in [

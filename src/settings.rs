@@ -338,19 +338,19 @@ pub struct Settings {
     /// Partie 195 : le compteur de la timeline de l'Animation en time code plutôt qu'en numéros d'images (Ctrl + clic sur lui).
     #[serde(default, rename = "compteur_timeline_en_temps", skip_serializing_if = "std::ops::Not::not")]
     pub compteur_timeline_en_temps: bool,
-    /// Partie 205 : le bouton « Décaler la suite » de la timeline, allumé (il tient lieu de Ctrl pour le stylet : le bord d'une clé
+    /// Partie 206 : le bouton « Décaler la suite » de la timeline, allumé (il tient lieu de Ctrl pour le stylet : le bord d'une clé
     /// décale la suite du calque, la fin du plan fait suivre les clés). Éteint d'origine.
     #[serde(default, rename = "cles_decaler_suite", skip_serializing_if = "std::ops::Not::not")]
     pub cles_decaler_suite: bool,
-    /// Partie 205 : le bouton « Étirer en proportion » allumé (il tient lieu de Maj : la fin du plan étire toutes ses clés en
+    /// Partie 206 : le bouton « Étirer en proportion » allumé (il tient lieu de Maj : la fin du plan étire toutes ses clés en
     /// proportion). Éteint d'origine.
     #[serde(default, rename = "cles_etirer_proportion", skip_serializing_if = "std::ops::Not::not")]
     pub cles_etirer_proportion: bool,
-    /// Partie 205 : la vignette du dessin dans les clés assez larges des lignes de calques de la timeline (Préférences > Apparence >
+    /// Partie 206 : la vignette du dessin dans les clés assez larges des lignes de calques de la timeline (Préférences > Apparence >
     /// Timeline). Éteinte d'origine.
     #[serde(default, rename = "cles_vignettes", skip_serializing_if = "std::ops::Not::not")]
     pub cles_vignettes: bool,
-    /// Partie 205 : la durée écrite (« 12 i ») dans les clés assez larges. Éteinte d'origine.
+    /// Partie 206 : la durée écrite (« 12 i ») dans les clés assez larges. Éteinte d'origine.
     #[serde(default, rename = "cles_durees", skip_serializing_if = "std::ops::Not::not")]
     pub cles_durees: bool,
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).

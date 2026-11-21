@@ -836,7 +836,7 @@ touches = ["+"]
 action = "panneau.retirer_image"
 touches = ["-"]
 
-# Partie 205 : + et − sont pris par la durée du plan (ci-dessus), Alt + et Alt − par l'exposition du dessin courant : les clés
+# Partie 206 : + et − sont pris par la durée du plan (ci-dessus), Alt + et Alt − par l'exposition du dessin courant : les clés
 # choisies prennent Ctrl + et Ctrl − (la touche ) en AZERTY).
 [[raccourci]]
 action = "cles.image_plus"

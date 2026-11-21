@@ -439,7 +439,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("montage.duree", "Durée du plan : taper la durée exacte…", true, false),
     act("montage.duree_plans", "Changer la durée des plans choisis…", true, false),
     act("cles.duree", "Modifier la durée des clés d'images…", true, false),
-    // Partie 205 : une image de plus ou de moins aux clés choisies (la suite du calque se décale) ; les deux boutons du stylet.
+    // Partie 206 : une image de plus ou de moins aux clés choisies (la suite du calque se décale) ; les deux boutons du stylet.
     act("cles.image_plus", "Allonger d'une image les clés choisies (la suite se décale)", true, true),
     act("cles.image_moins", "Raccourcir d'une image les clés choisies (la suite se décale)", true, true),
     act("cles.decaler_suite", "Décaler la suite (bord d'une clé, fin du plan : comme Ctrl tenue)", true, false),

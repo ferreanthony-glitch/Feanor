@@ -81,8 +81,14 @@ impl App {
         self.decor3d_appliquer(seq, d);
         self.commit_named(snap, nom);
         self.renderer.invalidate_all();
+        // (Partie 205, vu à l'écran : un plan à l'environnement propre disait « pour la séquence ».)
+        let pour = match self.env_du_plan(self.cur_panel) {
+            Some(crate::decor3d::EnvPlan::Propre { .. }) => "pour ce plan (son environnement propre)".to_string(),
+            Some(crate::decor3d::EnvPlan::Lie(s)) => format!("pour la {} (ce plan y est lié)", self.nom_court_de_sequence(s)),
+            None => "pour la séquence".to_string(),
+        };
         self.status = match c {
-            Some(c) => format!("Cyclo « {} » pour la séquence.", c.preset.nom()),
+            Some(c) => format!("Cyclo « {} » {pour}.", c.preset.nom()),
             None => "Plus de cyclo : le ciel d'avant.".into(),
         };
     }

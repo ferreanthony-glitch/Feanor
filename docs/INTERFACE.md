@@ -18744,13 +18744,14 @@ commandes, le menu, Propriétés > Décor, la marque, les deux questions) ; `doc
 
 ### 204.2 Ce qui reste
 
-- **Rien n'a été regardé à l'écran**, ni par Anthony ni par le coordinateur ; pas même dans le banc (les essais lisent les marques, les
-  bulles et les images exportées).
-- Un plan rendu de la corbeille ne retrouve pas son environnement propre après une réouverture du projet (en séance, si : il reste en
-  mémoire).
+(Partie 205 : les captures d'écran, ce qu'elles ont montré et ce qui a été corrigé ; la corbeille après une réouverture ; le menu du
+plan ramené à la douzaine. Ce qui reste après elle : 205.4.)
+
+- ~~**Rien n'a été regardé à l'écran**~~ : regardé dans le banc à la partie 205 (205.1), pas encore par Anthony.
+- ~~Un plan rendu de la corbeille ne retrouve pas son environnement propre après une réouverture du projet~~ : fait (205.2).
 - « Lié » vers une séquence qui a elle-même ses plans sortis : le lien montre l'environnement de la séquence, pas celui d'un de ses plans.
 - Un FEANOR d'avant dit « objet du décor 3D illisible » pour chaque environnement de plan (il les garde, sans les montrer).
-- Le menu d'un plan du Storyboard a alors une entrée de plus que la douzaine visée (§82) : treize dans un projet qui a de la 3D.
+- ~~Le menu d'un plan du Storyboard a alors une entrée de plus que la douzaine visée (§82)~~ : douze au plus (205.3).
 - Copier le décor (190) d'une séquence vers une autre ne touche pas aux plans liés à l'une ou l'autre (ils suivent la séquence liée, en
   direct).
 
@@ -18781,7 +18782,103 @@ qui retouche l'environnement du plan, son cyclo, la tête de Scène 3D ; les cl�
 (la question, les copies, Ctrl+Z) ; l'enregistrement, la relecture et un lecteur d'avant ; les clés du cache et les pixels des plans
 restés) ; et `decor3d_tests::un_etalonnage_fausse_par_un_ordinateur_occupe_garde_un_plancher` (204.0).
 
-## 205. Les bords des clés et la fin du plan : seules les clés voisines changent ; Ctrl, Maj et deux boutons pour le stylet ; + et − ; ce que montre une clé (2026-11-21, branche `bords-cles`)
+## 205. Le plan hors de son environnement, regardé à l'écran ; la corbeille ; le menu du plan (2026-11-21, branche plan-env-retouches partie de main 5946370)
+
+Suite de la partie 204, qui n'avait jamais été vue à l'écran. **Format des projets inchangé (61)** : rien de neuf dans les fichiers ; les
+environnements des plans de la corbeille sont des entrées `plan` de `decors3d.json`, les mêmes qu'à la partie 204.
+
+### 205.1 Regardé à l'écran (le banc, la carte graphique)
+
+`planenv_tests::ecrire_les_ecrans_de_l_environnement_du_plan_en_png` écrit, quand `FEANOR_PLANENV_PNG=<dossier>` est posé (sinon il ne
+fait rien), les vrais écrans de FEANOR sur un projet de deux séquences (la première : un immeuble, un chêne, un banc, le cyclo Montagne ;
+la seconde : un feu de camp, une souche, un sapin, la nuit) dont les plans sont dans les quatre états (resté, propre vide, copie retouchée
+avec un camion, le chêne retiré et le cyclo Ville, lié à la séquence 2) : la bande du Storyboard et ses blocs agrandis, chaque marque
+agrandie, la bulle du lien, le clic droit d'un plan et ses sous-menus, l'onglet 3D sur la copie (Scène 3D, Propriétés > Décor), la
+timeline de la séquence agrandie et son clic droit, et les images des cinq plans côte à côte. Ce qu'on y a vu, et corrigé :
+
+1. **La marque couvrait la durée** : en bas à droite du bloc, elle tombait sur la fin de « 2s 00 » (les deux zéros illisibles, la marque
+   aussi). Elle est maintenant centrée sur la ligne du nom et de la durée, un peu plus grande (12 points, un disque cerclé), et le nom et
+   la durée se rangent à sa gauche (`peindre_marque_env` prend la hauteur de la ligne ; `storyboard.rs` raccourcit le bloc du titre).
+   Même place dans la timeline de la séquence, centrée sur le bloc.
+2. **Le clic droit d'un plan dans la timeline de la séquence n'ouvrait rien** : `context_menu` d'egui 0.31 rend « rien » tant que le menu
+   est ouvert, et la partie 204 oubliait le plan visé dès l'image du clic. Elle demande maintenant à egui si le menu est ouvert
+   (`context_menu_opened`). Essai : `a_right_click_on_a_plan_of_the_3d_timeline_opens_its_environment_choices` (le menu s'ouvre, un
+   choix s'y fait).
+3. **« Séquence 0 · 4 plans »** en tête de la timeline de la séquence sur un plan à l'environnement propre (le numéro venait de la clé de
+   l'environnement, pas de la séquence) : « Séquence 1 · 4 plans ».
+4. **« Cyclo « Ville » pour la séquence. »** dans la barre d'état quand on choisit le cyclo d'un plan à l'environnement propre : « pour ce
+   plan (son environnement propre) » ; lié : « pour la séquence N (ce plan y est lié) ».
+5. **Le sous-menu** montrait l'état d'un plan propre (« Propre (celui-ci) », coché) tout en bas, sous les liens : il vient juste sous
+   « Celui de la séquence ». Propriétés > Décor dit « propre à ce plan » (au lieu de « propre »).
+
+Vu et laissé : les vignettes des blocs de la bande ne montrent que les dessins (pas le décor ; c'est ainsi pour tous les plans, pas
+seulement ceux de la partie 204). Les images des plans (la planche `e-images-des-plans.png`) montrent bien quatre choses différentes : le
+plan resté, le vide, la copie retouchée, le lié (identique au plan de la séquence 2).
+
+### 205.2 La corbeille, après une réouverture
+
+Un plan supprimé va à la corbeille (`corbeille.json`) ; son environnement (partie 204) restait en mémoire, mais l'enregistrement ne
+l'écrivait que pour les plans du film : après une réouverture, le plan rendu revenait dans l'environnement de sa séquence.
+
+- **Ce qui s'enregistre** : `decor3d::plan_garde` : l'environnement d'un plan s'écrit dans `decors3d.json` (les mêmes entrées `plan`,
+  `lie` qu'à la partie 204 : objets, clés, lampes, cyclo et son dessin dans `cyclos/<clé du plan>/`, vide, lien) si le plan est dans le
+  film, **au garage d'une version de séquence rangée** (`variantes.rs` ; c'était le même défaut, pas encore vu), ou **dans la corbeille
+  qu'on écrit** (pas celle d'un projet partagé, qui ne s'écrit pas). Rien de neuf dans `corbeille.json`.
+- **À la restauration**, le plan revient sous son numéro : il retrouve son environnement. Si ce numéro est pris (rare), son environnement
+  le suit sous le numéro neuf (`Document::env_au_numero_neuf` : une copie, « Caché dans le plan » suit ; un lien reste un lien).
+- **Un plan de la corbeille lié à une séquence supprimée entre-temps** : la règle de la partie 204 (`liens_orphelins_en_copies`) : son
+  lien devient une copie de l'environnement de cette séquence ; il revient avec cette copie (si la séquence n'avait plus de décor : vide).
+  La question « Supprimer une séquence dont l'environnement sert ailleurs ? » ne compte plus que les plans du film (un plan de la
+  corbeille ne la pose pas).
+- **Vider la corbeille** (ou supprimer une entrée pour de bon) : les environnements des plans que plus rien ne garde partent de la mémoire
+  (`Document::oublier_les_envs_perdus`) ; ils ne s'écrivaient déjà plus : rien ne reste dans `decors3d.json`.
+
+### 205.3 Le menu d'un plan : la douzaine
+
+Mesuré (`menus_tests::lignes`) : sans 3D, onze entrées (douze avec plusieurs plans choisis : « Changer la durée des plans choisis… ») ;
+avec la 3D, la partie 204 en ajoutait une : douze et **treize**. Les deux transitions sont sœurs (les deux coupes du même plan) et les
+moins courantes du menu : **dans un projet qui a de la 3D**, elles se rangent sous une seule entrée, « Transitions du plan ▸ » (« Au début
+du plan ▸ », « À la fin du plan ▸ »). « Environnement du plan » reste au premier niveau, juste sous « Animer ce plan » : aucun
+sous-menu existant ne lui va (ni la version, ni la couleur, ni couper et réunir), et c'est le seul accès à l'environnement depuis le
+Storyboard. Avant (3D) : Animer ce plan · Environnement du plan ▸ · Nouveau plan après · Dupliquer le plan · Copier · Coller · Supprimer
+· Couper et réunir ▸ · Version du plan ▸ · Couleur du plan ▸ · Transition au début du plan ▸ · Transition à la fin du plan ▸ (· Changer la
+durée des plans choisis…). Après (3D) : les mêmes, les deux transitions sous « Transitions du plan ▸ » : onze, douze avec plusieurs plans.
+**Un projet sans 3D garde son menu**, tel quel.
+
+Dans **la timeline de la séquence** de l'onglet 3D, le clic droit d'un plan n'avait qu'une entrée, le sous-menu « Environnement du
+plan » : ses choix y sont maintenant directement, sous un titre (« Environnement du plan 4 »). Et partout, au-delà de cinq autres
+séquences, « Lié à la séquence N » se range sous « Lié à une autre séquence ▸ » (le sous-menu restait sinon sans limite).
+
+Essai : `menus_tests::the_plan_menu_keeps_a_dozen_entries_in_a_3d_project_and_is_unchanged_without_3d` (les comptes avec et sans 3D, un
+ou plusieurs plans ; aucune commande perdue ; la timeline de la séquence avec huit et trois séquences).
+
+### 205.4 Ce qui reste
+
+- Anthony n'a pas encore regardé : les captures sont dans le dossier des captures du coordinateur (`captures-colonne/204/`, et `avant/`).
+- Le menu du plan d'un film partagé (« Équipe ») avec plusieurs plans choisis a treize entrées (douze sans 3D : inchangé).
+- « Lié » vers une séquence qui a elle-même ses plans sortis : le lien montre l'environnement de la séquence.
+- Un FEANOR d'avant dit « objet du décor 3D illisible » pour chaque environnement de plan (il les garde, sans les montrer) ; c'est aussi
+  vrai pour ceux des plans de la corbeille.
+- « Propre : vide » ou « Propre : copie » sur un plan déjà propre remplace son environnement sans demander (Ctrl+Z le rend).
+- Les vignettes des blocs de la bande ne montrent pas le décor (aucun plan).
+
+### 205.5 Comment Anthony teste (sur une copie de projet)
+
+1. Storyboard : un plan propre, un lié : la marque est à droite du bloc, la durée « 2s 00 » entière à sa gauche.
+2. Onglet 3D, timeline de la séquence : clic droit sur un plan : ses choix d'environnement s'ouvrent ; « Propre : vide » s'applique.
+3. Sur un plan propre : la tête de la timeline dit « Séquence 1 », la barre d'état « pour ce plan » quand on choisit un cyclo.
+4. Clic droit d'un plan au Storyboard : « Transitions du plan ▸ », ses deux sous-menus ; un projet sans 3D : les deux transitions comme
+   avant.
+5. Supprime un plan à l'environnement propre retouché et un plan lié ; enregistre, ferme, rouvre ; rends-les de la corbeille : chacun
+   retrouve le sien (objets, lampes, cyclo, marque).
+6. Supprime un plan lié à la séquence 2, puis supprime la séquence 2 (pas de question) ; rends le plan : il a une copie de son décor.
+7. Vide la corbeille, enregistre : `decors3d.json` n'a plus d'entrée `plan` pour eux.
+
+Essais ajoutés : `planenv_tests.rs` (5 : le clic droit de la timeline de la séquence ; la corbeille après réouverture, propre retouché,
+vide et lié ; le lien vers une séquence supprimée entre-temps ; vider la corbeille ; les captures, inactives sans `FEANOR_PLANENV_PNG`) et
+`menus_tests.rs` (1 : la douzaine).
+
+## 206. Les bords des clés et la fin du plan : seules les clés voisines changent ; Ctrl, Maj et deux boutons pour le stylet ; + et − ; ce que montre une clé (2026-11-21, branche `bords-cles`)
 
 Anthony : « Feanor échoue à modifier la durée d'un shot sans bouger les clés d'images, ou bouger des clés d'images sans bouger les
 suivantes. Le déplacement de clés n'est pas fluide et clair. » Il a validé les règles 1, 2, 5 et 8 de la proposition, puis l'affichage des
@@ -18792,7 +18889,7 @@ d'un plan dans le montage), `clesduree.rs` (+ et −, `Cible`), `montagerows.rs`
 `keymap.rs`, `keymap.toml`, `settings.rs`, `echelle.rs`, `app.rs`, `rognage.rs` (un nom d'annulation). Essais : `bordscles_tests.rs`
 (neuf). **Le format de projet ne change pas** ; quatre réglages du poste de plus, écrits seulement quand ils sont allumés.
 
-### 205.1 Ce que faisait le logiciel avant (les essais rouges)
+### 206.1 Ce que faisait le logiciel avant (les essais rouges)
 
 Les essais de la règle 1 et de la règle 2 ont été lancés d'abord sur le code d'avant : **7 rouges sur 9**.
 
@@ -18804,7 +18901,7 @@ Les essais de la règle 1 et de la règle 2 ont été lancés d'abord sur le cod
   l'Animation) : tirer la coupure 12 jusqu'à 15 donnait 6-15, 15-21, 21-24 au lieu de 6-15, 15-18, 18-24. Seule Maj (cachée) bougeait la
   coupure seule. Ni plusieurs calques choisis, ni la barre d'état « Clé 2 : 10 i (+4) ».
 
-### 205.2 Règle 1 : la fin du plan
+### 206.2 Règle 1 : la fin du plan
 
 La poignée de durée au bout de la règle de la timeline, la barre de durée de la fiche du plan (163.1) et le bord de fin d'un plan dans le
 montage.
@@ -18825,7 +18922,7 @@ montage.
   noms de Ctrl de la partie 123). Échap rend tout. « Durée… », « Changer la durée des plans choisis… », « Rogner le plan » et les
   touches + et − (durée du plan) gardent leur règle : ce sont des commandes, pas la poignée.
 
-### 205.3 Règle 2 : le bord entre deux clés
+### 206.3 Règle 2 : le bord entre deux clés
 
 Dans la timeline du Storyboard (la limite entre deux clés d'une piste de calque, aussi dans le montage, qui peint les mêmes pistes) et dans
 la timeline de l'Animation (le bord droit d'un dessin).
@@ -18835,7 +18932,7 @@ la timeline de l'Animation (le bord droit d'un dessin).
   disparaître). Le bord droit de la dernière clé d'un calque (rien après) s'allonge dans le vide jusqu'à la fin du plan, comme avant.
 - **Ctrl tenue** (ou « Décaler la suite ») : la clé d'avant s'allonge ou raccourcit et toute la suite du calque se décale d'autant
   (l'ancien geste par défaut, `ripple_at`). **Comme avant, le plan garde sa durée** : un calque tenu jusqu'à la fin le reste, sa dernière
-  clé absorbe ; pour allonger le plan, sa poignée (ou + / − sur les clés, 205.5, qui l'allongent). Dans le montage, Ctrl tenue au moment
+  clé absorbe ; pour allonger le plan, sa poignée (ou + / − sur les clés, 206.5, qui l'allongent). Dans le montage, Ctrl tenue au moment
   de prendre une limite de clés la prend (avant : Ctrl partait en choix au rectangle) ; Ctrl + clic sur une clé choisit toujours.
 - **La sélection agit sur tout** : si la clé tenue (celle d'avant ou celle d'après la coupure) est choisie, chaque autre calque dont une
   clé est choisie voit sa coupure correspondante bouger du même écart (la fin de sa clé choisie la plus proche, ou son début si la clé
@@ -18845,7 +18942,7 @@ la timeline de l'Animation (le bord droit d'un dessin).
 - Ne change pas : glisser une clé entière par son milieu (partie 138 : la placer avant ou après une autre, Maj, Alt, Ctrl + Maj), le
   début, la fin et la barre d'un calque.
 
-### 205.4 Deux boutons pour le stylet
+### 206.4 Deux boutons pour le stylet
 
 « Décaler la suite » (flèche vers une barre) et « Étirer en proportion » (flèches écartées), à bascule, dans la barre de la timeline de
 l'Animation (après « Allonger / Raccourcir l'exposition ») et dans la barre de lecture du Storyboard et du montage. Ils tiennent lieu de
@@ -18853,7 +18950,7 @@ Ctrl et de Maj pour le bord des clés et la fin du plan tant qu'ils sont allumé
 nom, raccourci (aucun d'origine ; clic droit pour en donner un), ce qu'il fait. Actions `cles.decaler_suite`, `cles.etirer_proportion`.
 Leur état est un réglage du poste (`cles_decaler_suite`, `cles_etirer_proportion` dans `reglages.toml`), écrit seulement allumé.
 
-### 205.5 + et − sur les clés choisies
+### 206.5 + et − sur les clés choisies
 
 Actions `cles.image_plus` et `cles.image_moins` : chaque clé choisie (montage, timeline du Storyboard, images choisies dans l'Animation ;
 sinon la clé sous la tête de lecture du calque courant) gagne ou perd une image, la suite de son calque se décale (comme « ajouter une
@@ -18867,7 +18964,7 @@ durée du plan (`panneau.ajouter_image`, `panneau.retirer_image`) et **Alt + / A
 (`exposition.allonger`, `exposition.raccourcir`) : je n'en ai volé aucun. Ctrl + et Ctrl − étaient libres (le zoom d'egui au clavier
 est coupé, `zoom_with_keyboard = false`).
 
-### 205.6 Ce que montre une clé sur la ligne de son calque (A à G)
+### 206.6 Ce que montre une clé sur la ligne de son calque (A à G)
 
 Timeline du Storyboard (et montage : mêmes pistes, `paint_layer_cell`) et timeline de l'Animation. Le look reste (les deux tons qui
 alternent, les couleurs du thème).
@@ -18890,7 +18987,7 @@ alternent, les couleurs du thème).
 Les deux options sont des réglages du poste (`cles_vignettes`, `cles_durees`), écrits seulement cochés ; d'anciens réglages se relisent
 éteints.
 
-### 205.7 Essais
+### 206.7 Essais
 
 `src/bordscles_tests.rs` : la fin du plan (seule la dernière clé, la butée, allonger), le bord (seules deux clés, les butées, le bord
 droit dans l'Animation, la barre d'état, plusieurs calques choisis avec leurs butées et une seule annulation, le calque verrouillé), Maj en
@@ -18900,9 +18997,9 @@ allumés, dans les deux barres), le vrai Ctrl au clavier par la fenêtre sans é
 (coupure, hachures, soulignement, durée et vignette absentes d'origine puis présentes, seulement dans une clé large), les réglages A et C
 (rien d'écrit d'origine, anciens réglages), le fantôme et la bulle pendant le geste, et la timeline du Storyboard peinte par la vraie
 fenêtre sans écran (durées écrites une fois l'option cochée, bulle).
-Changés : les essais d'avant qui comptaient sur l'ancien défaut du bord (le décalage de la suite) ou du raccourcissement (voir 205.8).
+Changés : les essais d'avant qui comptaient sur l'ancien défaut du bord (le décalage de la suite) ou du raccourcissement (voir 206.8).
 
-### 205.8 Ce qui n'est pas fait, à voir
+### 206.8 Ce qui n'est pas fait, à voir
 
 - Maj n'étire pas les clés de caméra, d'effets, de position et d'opacité (seules les clés de dessin et leurs rôles).
 - Ctrl sur le bord d'une clé n'allonge pas le plan (comme avant) : la consigne disait « comme aujourd'hui », et aujourd'hui il ne
@@ -18914,7 +19011,7 @@ Changés : les essais d'avant qui comptaient sur l'ancien défaut du bord (le d�
 - Dans l'Animation, le bord du dessin s'allume au survol, pas pendant le geste (le fantôme et la bulle prennent le relais).
 - La durée écrite (C) est en images, pas en time code.
 
-### 205.9 À essayer (Anthony, sur une copie de projet)
+### 206.9 À essayer (Anthony, sur une copie de projet)
 
 1. Un plan à deux calques de plusieurs clés : tirer la poignée de durée vers la gauche, loin : seule la dernière clé de chaque calque
    raccourcit, la fin s'arrête juste après le début de la dernière clé ; la barre d'état dit « butée ».

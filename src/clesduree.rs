@@ -99,7 +99,7 @@ pub(crate) fn poser_durees(l: &mut Layer, starts: &[usize], cible: Cible, plan_l
 }
 
 /// La durée que prend une clé : la même pour toutes (« Modifier la durée des clés d'images… »), ou la sienne plus ou moins un écart
-/// (+ et −, partie 205). Toujours au moins une image.
+/// (+ et −, partie 206). Toujours au moins une image.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Cible {
     Fixe(usize),
@@ -202,7 +202,7 @@ impl App {
         self.changer_durees_des_cles(keys, Cible::Fixe(n))
     }
 
-    /// + et − (partie 205, actions `cles.image_plus` et `cles.image_moins`) : chaque clé choisie (ou celle de la tête de lecture)
+    /// + et − (partie 206, actions `cles.image_plus` et `cles.image_moins`) : chaque clé choisie (ou celle de la tête de lecture)
     /// gagne ou perd une image, la suite de son calque se décale ; le plan s'allonge si une clé dépasse la fin. Au moins une image.
     pub(crate) fn cles_une_image(&mut self, plus: bool) -> bool {
         let keys = self.cles_visees();

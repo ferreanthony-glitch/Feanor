@@ -146,7 +146,7 @@ const fn fixe(id: &'static str, groupe: u8) -> Cmd {
     cmd(id, Genre::Fixe, "", "", "", "", true, groupe)
 }
 
-/// Partie 205 : les bulles des deux boutons du stylet (nom, puis la courte description ; le raccourci vient de l'action).
+/// Partie 206 : les bulles des deux boutons du stylet (nom, puis la courte description ; le raccourci vient de l'action).
 pub(crate) const BOUTON_DECALER_NOM: &str = "Décaler la suite";
 pub(crate) const BOUTON_DECALER_AIDE: &str = "Allumé, comme Ctrl tenue : tirer le bord d'une clé allonge ou raccourcit la clé d'avant et décale toute la suite du calque ; tirer la fin du plan fait suivre toutes les clés. Éteint : seules les deux clés voisines changent, seule la dernière clé suit la fin.";
 pub(crate) const BOUTON_PROPORTION_NOM: &str = "Étirer en proportion";
@@ -172,7 +172,7 @@ pub(crate) const COMMANDES: &[Cmd] = &[
 /// dans le plan ; le reste sous « Plus… ». (Les vues dessin et vignettes ne sont plus là : Maj+Tab, et
 /// l'onglet Vignettes.)
 pub(crate) const MONTAGE: &[Cmd] = &[
-    // Partie 205 : les deux boutons du stylet, Ctrl et Maj sans clavier, pour les bords des clés et la fin des plans.
+    // Partie 206 : les deux boutons du stylet, Ctrl et Maj sans clavier, pour les bords des clés et la fin des plans.
     etat("cles.decaler_suite", ph::ARROW_LINE_RIGHT, BOUTON_DECALER_NOM, BOUTON_DECALER_AIDE, true, 1),
     etat("cles.etirer_proportion", ph::ARROWS_OUT_LINE_HORIZONTAL, BOUTON_PROPORTION_NOM, BOUTON_PROPORTION_AIDE, true, 1),
     bouton("montage.debut", ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", true, 0),
@@ -677,7 +677,7 @@ pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
         "transition.ajouter" => 26,
         "commentaire.ajouter" => 24,
         "montage.aimanter" => 22,
-        // (Partie 205 : les deux boutons du stylet restent dans la barre tant qu'elle a la place des commandes du film.)
+        // (Partie 206 : les deux boutons du stylet restent dans la barre tant qu'elle a la place des commandes du film.)
         "cles.decaler_suite" | "cles.etirer_proportion" => 20,
         // (La même action que le « + » de la ligne « Calques », juste dessous : la première à passer sous « Plus… ».)
         "calque.nouveau_vectoriel" => 1,

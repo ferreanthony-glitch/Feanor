@@ -690,7 +690,7 @@ impl App {
 
         // Les calques de chaque plan, dans son ordre.
         let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
-        // Partie 205 : ce que montre chaque clé (coupure, clé vide hachurée, tête de lecture, et en option vignette et durée).
+        // Partie 206 : ce que montre chaque clé (coupure, clé vide hachurée, tête de lecture, et en option vignette et durée).
         let vide = |c: crate::document::CelId| self.doc.cels.get(&c).is_none_or(|c| c.is_empty());
         let tete_plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         for track in &rows.lanes {
@@ -727,7 +727,7 @@ impl App {
                 };
                 paint_layer_cell(painter, cell, &p.layers[k], &p.layers, ppf, current, hot, &chosen, track.folded, show_name, opacite, &habit);
                 let x0 = cell.left() - 1.0;
-                // Partie 205 : pendant le glisser d'un bord de clé ou de la fin du plan, la place d'avant en pointillés.
+                // Partie 206 : pendant le glisser d'un bord de clé ou de la fin du plan, la place d'avant en pointillés.
                 if !track.folded {
                     self.fantomes_du_geste(painter, p.id, k, &|f| x0 + f as f32 * ppf, cell.top() + 2.0, cell.bottom() - BAR_OFF - BAR_H - 1.0);
                 }
@@ -1064,7 +1064,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
             rang += 1;
             if seg.width() > 0.0 {
                 painter.rect_filled(seg, 1.0, if layer.visible { tint } else { tint.gamma_multiply(0.35) });
-                // Partie 205 : la coupure, la clé vide hachurée, la tête de lecture ; en option la vignette et la durée.
+                // Partie 206 : la coupure, la clé vide hachurée, la tête de lecture ; en option la vignette et la durée.
                 if let Some(cel) = layer.frames[f] {
                     crate::clesvue::habiller(painter, seg, s, e, cel, layer.visible, theme::sur_calque(), habit);
                 }
@@ -1126,7 +1126,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
     if let Some(f) = edge {
         let x = x0 + f as f32 * ppf;
         if x >= cell.left() - 1.0 && x <= cell.right() + 1.0 {
-            // Partie 205 (D) : la zone du bord se colore au survol (le curseur passe en ↔).
+            // Partie 206 (D) : la zone du bord se colore au survol (le curseur passe en ↔).
             let zone = Rect::from_min_max(pos2(x - crate::clesvue::BORD_ALLUME * 0.5, cell.top()), pos2(x + crate::clesvue::BORD_ALLUME * 0.5, cell.bottom()));
             painter.rect_filled(zone.intersect(cell), 1.0, theme::contour().gamma_multiply(0.45));
             painter.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(1.5_f32, theme::contour()));

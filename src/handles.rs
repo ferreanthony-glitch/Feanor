@@ -109,9 +109,9 @@ pub(crate) struct HandleDrag {
     /// Ctrl était tenue à la dernière image du geste (fin du plan) : les clés ont suivi la poignée (`slide_plan_end`).
     glisse: bool,
     /// Maj était tenue (ou « Étirer en proportion » allumé) à la dernière image du geste (fin du plan) : toutes les clés se sont
-    /// étirées en proportion (partie 205).
+    /// étirées en proportion (partie 206).
     proportion: bool,
-    /// Le bord entre deux clés (partie 205) : les coupures que le geste déplace, (calque, image), la tenue d'abord ; les autres sont
+    /// Le bord entre deux clés (partie 206) : les coupures que le geste déplace, (calque, image), la tenue d'abord ; les autres sont
     /// celles des calques choisis avec elle (`bordscles::coupes_du_geste`), relevées au début du geste.
     coupes: Vec<(usize, usize)>,
 }
@@ -127,7 +127,7 @@ impl HandleDrag {
         &self.before
     }
 
-    /// Un geste qui montre le fantôme de la place d'avant et sa bulle (partie 205) : le bord d'une clé, la fin du plan.
+    /// Un geste qui montre le fantôme de la place d'avant et sa bulle (partie 206) : le bord d'une clé, la fin du plan.
     pub(crate) fn montre_un_fantome(&self) -> bool {
         matches!(self.handle, Handle::Boundary { .. } | Handle::Exposure { .. } | Handle::PlanEnd)
     }
@@ -778,7 +778,7 @@ impl App {
         let snap = self.snapshot();
         let backup = crate::rognageui::PlanBackup::capture(&self.doc, self.cur_panel);
         let before = backup.panel.clone();
-        // Le bord entre deux clés : sa coupure, et celles des calques choisis avec lui (partie 205).
+        // Le bord entre deux clés : sa coupure, et celles des calques choisis avec lui (partie 206).
         let coupes = match handle {
             Handle::Boundary { layer, at } => self.coupes_du_geste(&before, layer, at),
             Handle::Exposure { layer, end, .. } => self.coupes_du_geste(&before, layer, end),
@@ -831,7 +831,7 @@ impl App {
                 self.renderer.invalidate_params();
                 format!("Clé d'effet : image {}.", label(self, f))
             }
-            // Le bord droit d'un dessin est le début de la clé suivante (partie 205) : par défaut seule
+            // Le bord droit d'un dessin est le début de la clé suivante (partie 206) : par défaut seule
             // cette coupure bouge, la clé suivante raccourcit ou s'allonge et le reste ne bouge pas ;
             // Ctrl (ou « Décaler la suite ») : les clés d'après suivent (`ripple_at`, l'ancien défaut).
             // Les calques choisis avec la clé tenue bougent leur coupure du même écart.
@@ -899,7 +899,7 @@ impl App {
                     (KeyMove::Insert, Some(_)) => String::new(),
                 }
             }
-            // La limite entre deux expositions est le début d'une clé (partie 205) : par défaut la
+            // La limite entre deux expositions est le début d'une clé (partie 206) : par défaut la
             // limite seule bouge, l'une s'allonge et l'autre raccourcit ; Ctrl (ou « Décaler la
             // suite ») : les clés d'après suivent. Les calques choisis avec elle bougent du même écart.
             Handle::Boundary { at, .. } => {
@@ -914,8 +914,8 @@ impl App {
                 backup.restore(&mut self.doc);
                 // Ctrl tenue (lue à chaque image d'écran : on peut la presser ou la lâcher en cours de geste) : toutes les clés
                 // suivent la poignée du même nombre d'images (`slide_plan_end`) ; sinon seule la durée change.
-                // (Ou le bouton « Décaler la suite » allumé, partie 205.) Sinon, seule la dernière clé de chaque calque change
-                // (partie 205 : raccourcir s'arrête au début de la dernière clé + 1 image) ; Maj (ou « Étirer en proportion ») :
+                // (Ou le bouton « Décaler la suite » allumé, partie 206.) Sinon, seule la dernière clé de chaque calque change
+                // (partie 206 : raccourcir s'arrête au début de la dernière clé + 1 image) ; Maj (ou « Étirer en proportion ») :
                 // toutes les clés de chaque calque s'étirent en proportion (`Document::poser_fin_du_plan`).
                 let glisse = self.decaler_la_suite();
                 let proportion = !glisse && self.etirer_la_proportion();
@@ -966,7 +966,7 @@ impl App {
                 }
             }
         };
-        // Partie 205 : la bulle près du pointeur reprend le début de la phrase (la clé, sa durée, l'écart).
+        // Partie 206 : la bulle près du pointeur reprend le début de la phrase (la clé, sa durée, l'écart).
         if matches!(handle, Handle::Boundary { .. } | Handle::Exposure { .. } | Handle::PlanEnd) {
             self.bulle_geste = Some(crate::clesvue::debut_de_phrase(&status));
         }
@@ -1091,7 +1091,7 @@ impl App {
             Handle::Mark(_) => p.marks != d.before.marks,
             Handle::Bookmark(_) | Handle::In | Handle::Out => p.cues != d.before.cues,
             Handle::PlanEnd => p.frame_count() != d.before.frame_count(),
-            // Le bord entre deux clés peut changer plusieurs calques (partie 205).
+            // Le bord entre deux clés peut changer plusieurs calques (partie 206).
             Handle::Boundary { .. } | Handle::Exposure { .. } => {
                 p.layers.len() != d.before.layers.len() || p.layers.iter().zip(&d.before.layers).any(|(a, b)| a.frames != b.frames || a.roles != b.roles || a.fx != b.fx)
             }

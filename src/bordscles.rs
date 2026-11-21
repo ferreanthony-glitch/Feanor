@@ -1,4 +1,4 @@
-//! La fin d'un plan et le bord entre deux clés d'un calque (partie 205, Anthony, 2026-11-21 : « Feanor échoue à modifier la durée
+//! La fin d'un plan et le bord entre deux clés d'un calque (partie 206, Anthony, 2026-11-21 : « Feanor échoue à modifier la durée
 //! d'un shot sans bouger les clés d'images, ou bouger des clés d'images sans bouger les suivantes. Le déplacement de clés n'est pas
 //! fluide et clair. »). Les clés d'images ne sont pas dans le plan mais sur chaque calque : les règles s'appliquent clé par clé.
 //!
@@ -119,7 +119,7 @@ pub(crate) struct FinPosee {
 }
 
 impl Document {
-    /// La fin du plan `pi` amenée à `n` images (règle 1 de la partie 205). Sans `proportion` : seule la dernière clé de chaque calque
+    /// La fin du plan `pi` amenée à `n` images (règle 1 de la partie 206). Sans `proportion` : seule la dernière clé de chaque calque
     /// change (allonger tient le dernier dessin de chaque calque jusqu'à la nouvelle fin, `clesduree::etirer_fins` ; raccourcir coupe
     /// la fin, ce qui sort va dans la réserve comme avant, mais jamais avant le début de la dernière clé d'un calque + 1 image).
     /// `proportion` (Maj) : toutes les clés de chaque calque non verrouillé s'étirent en proportion ; raccourcir range dans la réserve
@@ -273,7 +273,7 @@ impl App {
     }
 
     /// Le bord tenu (la coupure à l'image `at` du calque `layer`) amené à l'image `to` : chaque coupure du geste repart de l'état d'avant
-    /// le geste et bouge du même écart (règle 2 de la partie 205). La phrase de la barre d'état.
+    /// le geste et bouge du même écart (règle 2 de la partie 206). La phrase de la barre d'état.
     pub(crate) fn tirer_bord_de_cle(&mut self, pi: usize, before: &Panel, coupes: &[(usize, usize)], at: usize, to: usize) -> String {
         let plan_len = before.frame_count();
         let decaler = self.decaler_la_suite();

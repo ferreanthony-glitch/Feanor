@@ -1,4 +1,4 @@
-//! Essais de la partie 205 (`bordscles.rs`) : la fin d'un plan et le bord entre deux clés d'un calque (Anthony, 2026-11-21 : « Feanor
+//! Essais de la partie 206 (`bordscles.rs`) : la fin d'un plan et le bord entre deux clés d'un calque (Anthony, 2026-11-21 : « Feanor
 //! échoue à modifier la durée d'un shot sans bouger les clés d'images, ou bouger des clés d'images sans bouger les suivantes »).
 //!
 //! Les gestes passent par les mêmes appels que l'écran : `begin_handle_drag` / `drag_handle` / `end_handle_drag` (la poignée de durée
