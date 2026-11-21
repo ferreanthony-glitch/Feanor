@@ -92,11 +92,12 @@ impl App {
     }
 
     pub(crate) fn choose_ffmpeg(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .set_title("Où est ffmpeg.exe ?")
-            .add_filter("ffmpeg", &["exe"])
-            .pick_file()
-        else {
+        // (Hors de Windows, ffmpeg n'a pas d'extension : pas de filtre, sinon rien ne se laisse choisir. Audit du 2026-11-21.)
+        let mut choix = rfd::FileDialog::new().set_title(format!("Où est {} ?", crate::export::NOM_FFMPEG));
+        if cfg!(windows) {
+            choix = choix.add_filter("ffmpeg", &["exe"]);
+        }
+        let Some(path) = choix.pick_file() else {
             return;
         };
         self.settings.ffmpeg = Some(path);
@@ -701,7 +702,7 @@ impl App {
                 } else {
                     let (_, etats) = self.fiche_etats(None);
                     let panels: Vec<usize> = shots.iter().map(|f| f.0).collect();
-                    Some(crate::entetepdf::studio(&self.doc, &panels, etats.as_ref(), s.pdf.notes_revision, &crate::incrustation::date_text(crate::incrustation::now_secs())))
+                    Some(crate::entetepdf::studio(&self.doc, &panels, etats.as_ref(), s.pdf.notes_revision, &crate::incrustation::date_text_ici(crate::incrustation::now_secs())))
                 };
                 self.start_job(ExportJob::pdf_layout_studio(&out, &base, shots, boards, self.doc.frame, s.pdf, studio).avec_annotations(s.annotations));
             }
@@ -931,7 +932,7 @@ impl App {
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             if matches!(job.outcome, Some(Ok(_))) {
-                                reveal = bulles::bulle(ui.button(format!("{} Montrer dans l'explorateur", ph::FOLDER_OPEN)), "Montrer dans l'explorateur", "Ouvre le dossier du fichier exporté.", "").clicked();
+                                reveal = bulles::bulle(ui.button(format!("{} {}", ph::FOLDER_OPEN, crate::systeme::MONTRER)), crate::systeme::MONTRER, "Ouvre le dossier du fichier exporté.", "").clicked();
                             }
                             dismiss |= bulles::bulle(ui.button(format!("{} Fermer", ph::CHECK)), "Fermer", "Ferme cette fenêtre (l'export est fini).", "").clicked();
                         });
@@ -1086,15 +1087,17 @@ pub(crate) fn reveal_in_explorer(path: &std::path::Path) {
     if cfg!(test) {
         return;
     }
-    let mut c = std::process::Command::new("explorer.exe");
+    // (Audit du 2026-11-21 : hors de Windows, `explorer.exe` n'existe pas et rien ne s'ouvrait, sans message.)
+    let (programme, arguments) = crate::systeme::commande_montrer(crate::systeme::ICI, path, path.is_file());
+    let mut c = std::process::Command::new(programme);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        if path.is_file() {
-            c.raw_arg(format!("/select,\"{}\"", path.display()));
-        } else {
-            c.raw_arg(format!("\"{}\"", path.display()));
+        for a in &arguments {
+            c.raw_arg(a);
         }
     }
+    #[cfg(not(windows))]
+    c.args(&arguments);
     let _ = c.spawn();
 }

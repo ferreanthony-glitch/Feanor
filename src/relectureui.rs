@@ -440,7 +440,7 @@ impl App {
                     crate::theme::avertir(ui, "Cette page est lourde pour un e-mail : envoyez-la par un lien de partage, ou refaites-la sans la lecture animée.");
                 }
                 ui.label(RichText::new("Envoyez le fichier HTML : il s'ouvre dans n'importe quel navigateur, sur ordinateur ou sur téléphone, sans internet.").small().weak());
-                if ui.button("Montrer dans l'explorateur").clicked() {
+                if ui.button(crate::systeme::MONTRER).clicked() {
                     crate::exportui::reveal_in_explorer(&r.html);
                 }
             }

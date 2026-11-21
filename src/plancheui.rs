@@ -115,7 +115,7 @@ impl App {
     /// Le bloc de titre de la planche des plans `plans` (`entetepdf.rs`) : la série, l'épisode, la version (le dernier envoi), la date ; la séquence quand
     /// tous les plans sont de la même.
     pub(crate) fn planche_entete(&self, plans: &[usize]) -> crate::entetepdf::Entete {
-        let base = crate::entetepdf::Entete::de_projet(&self.doc, self.doc.envois.dernier(), &crate::incrustation::date_text(crate::incrustation::now_secs()));
+        let base = crate::entetepdf::Entete::de_projet(&self.doc, self.doc.envois.dernier(), &crate::incrustation::date_text_ici(crate::incrustation::now_secs()));
         let ids = self.doc.sequence_ids();
         let mut seqs: Vec<u64> = plans.iter().filter_map(|&p| ids.get(p).copied()).collect();
         seqs.sort_unstable();

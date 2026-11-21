@@ -274,7 +274,7 @@ impl App {
                 ui.separator();
                 ui.label(RichText::new(format!("Terminé : {} fichier(s), {:.1} Mo.", r.fichiers, r.octets as f64 / 1_048_576.0)).strong().color(theme::succes()));
                 ui.label(RichText::new(court(&r.racine)).small()).on_hover_text(r.racine.display().to_string());
-                if bulles::icone(ui, ph::FOLDER_OPEN, "Montrer dans l'explorateur", "Ouvre le dossier du paquet.", "").clicked() {
+                if bulles::icone(ui, ph::FOLDER_OPEN, crate::systeme::MONTRER, "Ouvre le dossier du paquet.", "").clicked() {
                     crate::exportui::reveal_in_explorer(&r.manifeste);
                 }
             }

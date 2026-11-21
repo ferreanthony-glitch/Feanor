@@ -41,7 +41,7 @@ impl ActionMessage {
     pub(crate) fn aide(&self) -> &'static str {
         match self {
             ActionMessage::VideoEnAnimation => "Chaque image de la vidéo devient un dessin : le calque se dessine alors comme les autres (annulable).",
-            ActionMessage::MontrerDossier(_) => "Ouvre l'explorateur sur ce qui vient d'être exporté.",
+            ActionMessage::MontrerDossier(_) => crate::systeme::OUVRE_SUR_EXPORT,
             ActionMessage::CrayonnesDeCote(_) => "Renomme crayonnes.json en crayonnes.json.ancien dans le dossier du projet : cet avis ne revient plus. Rien n'est effacé.",
             ActionMessage::CrayonnesRemettre(_) => "Remet crayonnes.json à son nom d'origine.",
             ActionMessage::NommerJalon(_) => "Ouvre la fenêtre des jalons pour donner un nom à celui-ci. Un jalon nommé n'est jamais retiré tout seul.",

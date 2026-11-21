@@ -66,7 +66,7 @@ fn jours_depuis_1970(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// L'écart de l'heure d'ici avec l'heure universelle, en secondes (arrondi au quart d'heure). Zéro hors Windows.
+/// L'écart de l'heure d'ici avec l'heure universelle, en secondes (arrondi au quart d'heure). Zéro là où le système ne le dit pas.
 fn decalage_local() -> i64 {
     #[cfg(windows)]
     {
@@ -92,9 +92,53 @@ fn decalage_local() -> i64 {
         let diff = local - crate::recovery::now_secs() as i64;
         ((diff as f64 / 900.0).round() as i64) * 900
     }
-    #[cfg(not(windows))]
+    // Mac et Linux (audit du 2026-11-21 : zéro ici donnait les heures des jalons et la date du PDF en temps universel) : l'écart que
+    // la bibliothèque C du système donne pour maintenant, heure d'été comprise.
+    #[cfg(all(unix, target_pointer_width = "64"))]
+    {
+        use std::os::raw::{c_char, c_int, c_long};
+        #[repr(C)]
+        struct Tm {
+            sec: c_int,
+            min: c_int,
+            hour: c_int,
+            mday: c_int,
+            mon: c_int,
+            year: c_int,
+            wday: c_int,
+            yday: c_int,
+            isdst: c_int,
+            gmtoff: c_long,
+            zone: *const c_char,
+        }
+        extern "C" {
+            fn localtime_r(t: *const c_long, tm: *mut Tm) -> *mut Tm;
+        }
+        let maintenant = crate::recovery::now_secs() as c_long;
+        let mut tm = Tm { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: std::ptr::null() };
+        // SAFETY: `localtime_r` lit l'instant qu'on lui donne et remplit la structure qu'on lui donne (celle de `struct tm` sur les
+        // Unix 64 bits : neuf entiers, l'écart en secondes, le nom du fuseau) ; un retour nul veut dire « pas de réponse ».
+        let ok = !unsafe { localtime_r(&maintenant, &mut tm) }.is_null();
+        if ok && (-86_400..=86_400).contains(&(tm.gmtoff as i64)) {
+            ((tm.gmtoff as f64 / 900.0).round() as i64) * 900
+        } else {
+            0
+        }
+    }
+    #[cfg(not(any(windows, all(unix, target_pointer_width = "64"))))]
     {
         0
+    }
+}
+
+/// Des secondes depuis 1970 décalées à l'heure d'ici : la date qu'on en tire est celle du calendrier de l'utilisateur (audit du
+/// 2026-11-21 : entre minuit et l'écart avec le temps universel, le PDF et les envois portaient la date de la veille). Les essais
+/// gardent le temps universel : leurs dates ne dépendent pas du fuseau de la machine.
+pub(crate) fn secondes_d_ici(secs: u64) -> u64 {
+    if cfg!(test) {
+        secs
+    } else {
+        (secs as i64 + decalage_local()).max(0) as u64
     }
 }
 

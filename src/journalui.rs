@@ -327,7 +327,7 @@ impl App {
                     ui.label(RichText::new(p.display().to_string()).small());
                 }
                 if let Some(p) = r.pdf.as_ref().or(r.html.as_ref()) {
-                    if bulles::icone(ui, ph::FOLDER_OPEN, "Montrer dans l'explorateur", "Ouvre le dossier du journal.", "").clicked() {
+                    if bulles::icone(ui, ph::FOLDER_OPEN, crate::systeme::MONTRER, "Ouvre le dossier du journal.", "").clicked() {
                         crate::exportui::reveal_in_explorer(p);
                     }
                 }

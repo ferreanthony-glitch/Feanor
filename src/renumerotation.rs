@@ -362,7 +362,7 @@ pub fn chemins(dossier: &Path, base: &str) -> (PathBuf, PathBuf) {
 /// Écrit le CSV dans `csv` et la page lisible au même nom en `.txt` ; rend les deux chemins.
 pub fn ecrire_vers(r: &Rapport, doc: &Document, csv_path: &Path) -> Result<(PathBuf, PathBuf), String> {
     let txt = csv_path.with_extension("txt");
-    let jour = crate::incrustation::date_text(crate::incrustation::now_secs());
+    let jour = crate::incrustation::date_text_ici(crate::incrustation::now_secs());
     crate::export::write_atomic(csv_path, csv(r).as_bytes())?;
     crate::export::write_atomic(&txt, texte(r, doc, &jour).as_bytes())?;
     Ok((csv_path.to_path_buf(), txt))

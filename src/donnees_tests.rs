@@ -93,3 +93,18 @@ fn le_dossier_shot_reprend_l_ancien_une_seule_fois_par_seance() {
     let _ = fs::remove_dir_all(&base);
     let _ = fs::remove_dir_all(&autre);
 }
+
+#[test]
+fn off_windows_the_data_folders_are_the_usual_ones_of_the_system() {
+    use crate::donnees::hors_windows;
+    let maison = PathBuf::from("/Users/marie");
+    // Mac : tout sous Application Support, les copies de secours dans un sous-dossier (pas dans Caches, que le système vide).
+    assert_eq!(hors_windows("APPDATA", &maison, true), PathBuf::from("/Users/marie/Library/Application Support").join(NOM));
+    assert_eq!(hors_windows("LOCALAPPDATA", &maison, true), PathBuf::from("/Users/marie/Library/Application Support").join(NOM).join("Poste"));
+    // Ailleurs : les dossiers de réglages et de données de l'utilisateur.
+    let maison = PathBuf::from("/home/marie");
+    assert_eq!(hors_windows("APPDATA", &maison, false), PathBuf::from("/home/marie/.config").join(NOM));
+    assert_eq!(hors_windows("LOCALAPPDATA", &maison, false), PathBuf::from("/home/marie/.local/share").join(NOM));
+    // Les deux dossiers d'un même système ne sont jamais le même.
+    assert_ne!(hors_windows("APPDATA", &maison, true), hors_windows("LOCALAPPDATA", &maison, true));
+}

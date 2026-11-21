@@ -268,6 +268,11 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// « AAAA-MM-JJ » à l'heure d'ici : la date à écrire sur un document (en-tête de PDF, planche, nom de fichier, incrustation).
+pub fn date_text_ici(secs: u64) -> String {
+    date_text(crate::remplacer::secondes_d_ici(secs))
+}
+
 /// « AAAA-MM-JJ » (date UTC) pour `secs` secondes depuis 1970.
 pub fn date_text(secs: u64) -> String {
     let (y, m, d) = civil_from_days((secs / 86_400) as i64);
@@ -296,7 +301,7 @@ fn text_entier(inc: &Incrustation, doc: &Document, panel: usize, frame: usize, n
     let plan = || crate::storyboard::panel_title(doc, panel.min(doc.panels.len().saturating_sub(1)));
     let sequence = || format!("Séquence {}", doc.sequence_label(doc.sequence_of(panel.min(doc.panels.len().saturating_sub(1)))));
     let title = || doc.properties.title.clone();
-    let date = || date_text(now);
+    let date = || date_text_ici(now);
     match inc.source {
         Source::Timecode => tc(),
         Source::NumeroImage => number(),

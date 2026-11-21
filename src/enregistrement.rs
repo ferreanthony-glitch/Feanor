@@ -323,10 +323,11 @@ impl App {
                 // (L'écriture continue ne dit rien : la barre d'état garde ce qu'elle disait du dessin.)
                 if !silencieux {
                     self.status = format!(
-                        "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). Fichier > Afficher le projet dans l'Explorateur.",
+                        "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). {}",
                         manifest.display(),
                         report.written,
-                        if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() }
+                        if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() },
+                        crate::systeme::OU_RETROUVER
                     );
                 }
                 if same {

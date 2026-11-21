@@ -43,7 +43,35 @@ fn dossier(variable: &str) -> Option<PathBuf> {
         return Some(sous(&bac));
     }
     #[cfg(not(test))]
-    Some(sous(Path::new(&std::env::var_os(variable)?)))
+    {
+        // La variable de Windows d'abord, où qu'on soit : elle permet aussi de lancer FEANOR sur d'autres dossiers.
+        if let Some(base) = std::env::var_os(variable).filter(|v| !v.is_empty()) {
+            return Some(sous(Path::new(&base)));
+        }
+        // Mac et Linux n'ont pas ces variables (audit du 2026-11-21 : sans elles, ni réglages, ni projets récents, ni copie de
+        // secours, ni raccourcis personnels). Le dossier habituel du système, sous le dossier de l'utilisateur.
+        if cfg!(windows) {
+            return None;
+        }
+        let maison = std::env::var_os("HOME").filter(|v| !v.is_empty())?;
+        Some(hors_windows(variable, Path::new(&maison), cfg!(target_os = "macos")))
+    }
+}
+
+/// Le dossier de données hors de Windows, sans variable `APPDATA` ni `LOCALAPPDATA` : sur Mac,
+/// `~/Library/Application Support/SHOT` (réglages, raccourcis, brosses) et son sous-dossier `Poste` (rapports d'erreur, copies de
+/// secours : jamais dans `Caches`, que le système vide) ; ailleurs, `~/.config/SHOT` et `~/.local/share/SHOT`. Pas de reprise de
+/// l'ancien nom : Pelure n'a jamais tourné que sur Windows.
+pub fn hors_windows(variable: &str, maison: &Path, mac: bool) -> PathBuf {
+    let du_poste = variable == "LOCALAPPDATA";
+    if mac {
+        let base = maison.join("Library").join("Application Support").join(NOM);
+        if du_poste { base.join("Poste") } else { base }
+    } else if du_poste {
+        maison.join(".local").join("share").join(NOM)
+    } else {
+        maison.join(".config").join(NOM)
+    }
 }
 
 #[cfg(test)]

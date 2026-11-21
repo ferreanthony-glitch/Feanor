@@ -348,40 +348,74 @@ pub fn video_size(frame: [usize; 2], half: bool) -> [usize; 2] {
 
 // ------------------------------------------------------------------------------------- ffmpeg
 
-/// ffmpeg à utiliser : `PELURE_FFMPEG`, celui choisi dans SHOT, celui posé à côté de SHOT (version portable), celui du
-/// PATH, puis ceux installés avec d'autres logiciels (Krita) ou par winget.
-pub fn find_ffmpeg(saved: Option<&Path>) -> Option<PathBuf> {
+/// Le nom du programme ffmpeg sur ce système (« ffmpeg.exe » sous Windows, « ffmpeg » ailleurs).
+pub const NOM_FFMPEG: &str = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+
+/// Où chercher ffmpeg, dans l'ordre : `PELURE_FFMPEG`, celui choisi dans FEANOR, celui posé à côté de FEANOR (version portable ; sur
+/// Mac, aussi le dossier `Resources` de l'application), ceux du PATH, puis les endroits habituels du système : sous Windows, Krita,
+/// `ProgramFiles\ffmpeg` et winget (dans `local`, `%LOCALAPPDATA%`) ; ailleurs, Homebrew, MacPorts et `/usr/bin` (une application
+/// lancée depuis le Finder n'a pas le PATH du Terminal : sans ces chemins, un ffmpeg installé par Homebrew restait introuvable ;
+/// audit du 2026-11-21). Rien n'est lu sur le disque ici, sauf le dossier de winget.
+pub fn ffmpeg_candidates(
+    force: Option<PathBuf>,
+    saved: Option<&Path>,
+    exe: Option<&Path>,
+    path: Option<&std::ffi::OsStr>,
+    programmes: &[PathBuf],
+    local: Option<&Path>,
+    windows: bool,
+) -> Vec<PathBuf> {
+    let nom = if windows { "ffmpeg.exe" } else { "ffmpeg" };
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(p) = std::env::var_os("PELURE_FFMPEG") {
-        candidates.push(p.into());
-    }
+    candidates.extend(force);
     if let Some(p) = saved {
         candidates.push(p.to_path_buf());
     }
-    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
-        candidates.push(dir.join("ffmpeg.exe"));
-    }
-    if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|d| d.join("ffmpeg.exe")));
-    }
-    for var in ["ProgramFiles", "ProgramFiles(x86)"] {
-        if let Some(root) = std::env::var_os(var).map(PathBuf::from) {
-            candidates.push(root.join("Krita (x64)").join("bin").join("ffmpeg.exe"));
-            candidates.push(root.join("ffmpeg").join("bin").join("ffmpeg.exe"));
-        }
-    }
-    if let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
-        let packages = local.join("Microsoft").join("WinGet").join("Packages");
-        for entry in std::fs::read_dir(packages).into_iter().flatten().flatten() {
-            if entry.file_name().to_string_lossy().starts_with("Gyan.FFmpeg") {
-                for sub in std::fs::read_dir(entry.path()).into_iter().flatten().flatten() {
-                    candidates.push(sub.path().join("bin").join("ffmpeg.exe"));
-                }
+    if let Some(dir) = exe.and_then(Path::parent) {
+        candidates.push(dir.join(nom));
+        if !windows {
+            // `FEANOR.app/Contents/MacOS/feanor` : le ffmpeg livré est dans `Contents/Resources`.
+            if let Some(contents) = dir.parent() {
+                candidates.push(contents.join("Resources").join(nom));
             }
         }
     }
-    candidates.push(PathBuf::from(r"C:\ffmpeg\bin\ffmpeg.exe"));
-    candidates.into_iter().find(|p| p.is_file())
+    if let Some(path) = path {
+        candidates.extend(std::env::split_paths(path).map(|d| d.join(nom)));
+    }
+    if windows {
+        for root in programmes {
+            candidates.push(root.join("Krita (x64)").join("bin").join(nom));
+            candidates.push(root.join("ffmpeg").join("bin").join(nom));
+        }
+        if let Some(local) = local {
+            let packages = local.join("Microsoft").join("WinGet").join("Packages");
+            for entry in std::fs::read_dir(packages).into_iter().flatten().flatten() {
+                if entry.file_name().to_string_lossy().starts_with("Gyan.FFmpeg") {
+                    for sub in std::fs::read_dir(entry.path()).into_iter().flatten().flatten() {
+                        candidates.push(sub.path().join("bin").join(nom));
+                    }
+                }
+            }
+        }
+        candidates.push(PathBuf::from(r"C:\ffmpeg\bin\ffmpeg.exe"));
+    } else {
+        for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"] {
+            candidates.push(Path::new(dir).join(nom));
+        }
+    }
+    candidates
+}
+
+/// ffmpeg à utiliser : le premier de `ffmpeg_candidates` qui est un fichier.
+pub fn find_ffmpeg(saved: Option<&Path>) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok();
+    let path = std::env::var_os("PATH");
+    let programmes: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)"].iter().filter_map(|v| std::env::var_os(v).map(PathBuf::from)).collect();
+    let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    ffmpeg_candidates(std::env::var_os("PELURE_FFMPEG").map(PathBuf::from), saved, exe.as_deref(), path.as_deref(), &programmes, local.as_deref(), cfg!(windows))
+        .into_iter()
+        .find(|p| p.is_file())
 }
 
 /// Encodeurs utiles proposés par un ffmpeg.
@@ -401,8 +435,8 @@ pub struct Encoders {
 pub fn parse_encoders(list: &str) -> Encoders {
     let has = |name: &str| list.lines().any(|l| l.split_whitespace().nth(1) == Some(name));
     Encoders {
-        // libx264 d'abord ; sinon l'encodeur de Windows (h264_mf) avant OpenH264.
-        h264: ["libx264", "h264_mf", "libopenh264"].into_iter().find(|n| has(n)),
+        // libx264 d'abord ; sinon l'encodeur du système (celui du Mac, h264_videotoolbox, ou celui de Windows, h264_mf) avant OpenH264.
+        h264: ["libx264", "h264_videotoolbox", "h264_mf", "libopenh264"].into_iter().find(|n| has(n)),
         prores: has("prores_ks"),
         openh264: has("libopenh264"),
         dnxhd: has("dnxhd"),
@@ -1287,7 +1321,7 @@ impl ExportJob {
         let n = boards.len();
         let (path, name) = (out.to_path_buf(), title.to_string());
         let aspect = frame[0] as f32 / frame[1].max(1) as f32;
-        let date = crate::incrustation::date_text(crate::incrustation::now_secs());
+        let date = crate::incrustation::date_text_ici(crate::incrustation::now_secs());
         let width = layout.image_width();
         let mut job = ExportJob::collect(
             format!("Export du storyboard ({n} images)"),

@@ -42,6 +42,34 @@ J'avais mal jugé ces points : ce sont des choix écrits dans le dépôt, ou ils
 - **Vignette pas rafraîchie après la pose d'un décor (n° 11)** : pas cherché.
 - **Pastille « fx » (n° 20)** : à confirmer à la main avant de toucher.
 
+## Corrections Mac du 2026-11-21 (branche `mac-beta`, partie de main a1268f5)
+
+Anthony a décidé le 2026-11-21 que le Mac fait partie de la bêta. Ces corrections ne changent rien sous Windows (vérifié par `cargo check` pour Windows).
+
+| Défaut | Correction | Fichiers | Essai |
+|---|---|---|---|
+| Rien ne s'enregistrait hors du projet (réglages, récents, copie de secours, raccourcis personnels) | Sans les variables de Windows, les données vont dans `~/Library/Application Support/SHOT` et son sous-dossier `Poste` (secours, rapports). Les variables gardent la priorité. **Vu en vrai** : app lancée sans variables, `reglages.toml` et `Poste/secours` créés au bon endroit. | `donnees.rs` | `donnees_tests::off_windows_…` |
+| ffmpeg introuvable, et impossible à choisir | Recherche de `ffmpeg` sans extension : à côté de l'app, dans `Contents/Resources`, dans le PATH, puis Homebrew, MacPorts et `/usr/bin`. Le sélecteur n'exige plus un `.exe`. L'encodeur H.264 du Mac sert quand libx264 manque. | `export.rs`, `exportui.rs`, `prefsui.rs` | `export_tests::ffmpeg_is_looked_for_…` |
+| « Montrer dans l'explorateur » ne faisait rien ; « Modifier le fichier à la main » lançait le Bloc-notes | `open -R` montre le fichier dans le Finder ; `open -t` ouvre l'éditeur de texte. | `systeme.rs` (nouveau), `exportui.rs`, `app.rs` | `systeme_tests` (2) |
+| Libellés « Explorateur », « Explorateur Windows » | « Finder » sur Mac, dans les menus, les boutons, les messages et la liste des raccourcis. | `systeme.rs` et 9 fichiers | — |
+| Heures en temps universel (jalons, mesure de performance) | L'écart avec l'heure locale est lu auprès du système. | `remplacer.rs` | — |
+| Date de la veille après minuit sur le PDF, la planche, les envois, les noms de fichier (**sur PC aussi**) | Ces dates sont écrites à l'heure locale. L'horodatage du paquet de livraison reste en temps universel, comme son « Z » le dit. | `remplacer.rs`, `incrustation.rs`, `envois.rs` et 8 appelants | — |
+| Outil Texte : aucune police du Mac (« Arial n'est pas sur ce poste ») | Les quatre dossiers de polices du Mac sont lus, dont `Supplemental`. | `text.rs` | `text_tests::the_fonts_of_a_mac_…` |
+| Raccourcis affichés « Ctrl+… » alors que Cmd répond | L'écran écrit « Cmd+… » sur Mac ; le fichier de raccourcis garde « Ctrl ». | `keymap.rs` | — |
+| Case « Bouton et gomme du stylet lus auprès de Windows » | Cachée hors de Windows. | `prefsui.rs` | — |
+| Le dépôt ne compilait pas sur Mac | Le réglage processeur ne vaut plus que pour les PC : `RUSTUP_TOOLCHAIN=stable cargo build --release` suffit. Les essais demandent encore les bibliothèques de remplacement. | `.cargo/config.toml` | construction faite |
+
+Suite complète sur Mac : 5 151 réussis, les mêmes 90 échecs que main, aucun nouveau.
+
+**Reste propre au Mac, non traité :**
+- ffmpeg n'est pas livré avec l'app : il faut le poser dans `Contents/Resources` au moment de fabriquer le `.app`.
+- Pas de vrai `.app` : ni icône, ni signature, ni notarisation ; `rust-toolchain.toml` impose toujours la chaîne Windows.
+- Pression et bouton du stylet : jamais essayés sur Mac.
+- Textes d'aide écrits en dur (« Ctrl + clic », « Ctrl + Entrée ») et touches prises par macOS (Cmd+Tab pour changer d'onglet, F11, Inser).
+- « Ctrl tenu = lasso » et la validation d'une note de planche lisent la vraie touche Control.
+- Clés d'API, « Rester connecté » de Kitsu, serveur de son local : mécanismes Windows.
+- Les 90 essais qui échouent sur Mac n'ont jamais été triés.
+
 ## Comment lire ce rapport
 
 - **Vu à l'écran** : je l'ai fait et regardé moi-même dans l'app.

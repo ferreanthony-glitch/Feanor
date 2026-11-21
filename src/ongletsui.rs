@@ -173,7 +173,7 @@ impl App {
                                         ui.close_menu();
                                     }
                                     ui.separator();
-                                    if ui.add_enabled(info.chemin.is_some(), egui::Button::new("Afficher dans l'Explorateur")).clicked() {
+                                    if ui.add_enabled(info.chemin.is_some(), egui::Button::new(crate::systeme::AFFICHER_DANS)).clicked() {
                                         demande = Some(Demande::Explorateur(i));
                                         ui.close_menu();
                                     }

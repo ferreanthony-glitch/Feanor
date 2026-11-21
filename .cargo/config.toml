@@ -12,5 +12,9 @@
 # quel poste récent. Le LTO (thin ou fat) et `codegen-units = 1` n'ont rien donné et coûtent le
 # double à plusieurs fois le temps de compilation ; `panic = "abort"` n'est pas retenu, car SHOT
 # compte sur les panics rattrapés (rejeu des traits, copie de secours, import vidéo).
-[build]
+#
+# Le réglage ne vaut que pour les processeurs x86-64 (audit du 2026-11-21, le Mac entre dans la bêta) : posé sur `[build]`, il
+# s'appliquait aussi aux Mac à processeur Apple, où ce nom de processeur n'existe pas et faisait planter le compilateur. Sur le
+# poste d'Anthony et tout PC, rien ne change.
+[target.'cfg(target_arch = "x86_64")']
 rustflags = ["-C", "target-cpu=x86-64-v3"]

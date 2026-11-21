@@ -56,7 +56,9 @@ fn fallback_data() -> Arc<Vec<u8>> {
     .clone()
 }
 
-/// Dossiers des polices de Windows : celles du système, puis celles installées pour l'utilisateur.
+/// Dossiers des polices : celles du système, puis celles installées pour l'utilisateur. Sous Windows, `%WINDIR%\Fonts` et le
+/// dossier de l'utilisateur ; sur Mac et ailleurs, `dossiers_hors_windows` (audit du 2026-11-21 : sans eux l'outil Texte ne trouvait
+/// aucune police du Mac, « Arial n'est pas sur ce poste »).
 fn font_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(w) = std::env::var_os("WINDIR") {
@@ -64,6 +66,28 @@ fn font_dirs() -> Vec<PathBuf> {
     }
     if let Some(l) = std::env::var_os("LOCALAPPDATA") {
         dirs.push(PathBuf::from(l).join("Microsoft").join("Windows").join("Fonts"));
+    }
+    if !cfg!(windows) {
+        dirs.extend(dossiers_hors_windows(std::env::var_os("HOME").map(PathBuf::from).as_deref(), cfg!(target_os = "macos")));
+    }
+    dirs
+}
+
+/// Les dossiers de polices d'un Mac (système, compléments, machine, utilisateur) ou d'un autre Unix. Les sous-dossiers ne sont pas
+/// parcourus : `Supplemental`, où le Mac range Arial, Times et les autres, est donc nommé.
+pub(crate) fn dossiers_hors_windows(maison: Option<&Path>, mac: bool) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if mac {
+        dirs.extend(["/System/Library/Fonts", "/System/Library/Fonts/Supplemental", "/Library/Fonts"].map(PathBuf::from));
+        if let Some(m) = maison {
+            dirs.push(m.join("Library").join("Fonts"));
+        }
+    } else {
+        dirs.extend(["/usr/share/fonts/truetype", "/usr/share/fonts/opentype", "/usr/share/fonts", "/usr/local/share/fonts"].map(PathBuf::from));
+        if let Some(m) = maison {
+            dirs.push(m.join(".local").join("share").join("fonts"));
+            dirs.push(m.join(".fonts"));
+        }
     }
     dirs
 }
