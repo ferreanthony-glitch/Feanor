@@ -5,6 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Les clés regardées sur les captures** (partie 208, branche `cles-retouches` ; 207 pris par le Mac) : sur les captures du banc
+  (`FEANOR_BORDSCLES_PNG`), Anthony a demandé qu'une clé vide n'affiche rien que le gris du fond, tout en restant une clé à part entière
+  (bords, pousser, proportion, Ctrl +/−) ; Retour arrière (et Suppr) supprime les clés choisies, la clé d'avant prend leur place ;
+  Alt+Retour arrière vide le dessin (Maj était pris). Les deux boutons du stylet visibles à la largeur d'origine (« Nouveau plan » reste
+  sur la ligne Plans et sous ⋯), une bulle d'une ligne, une seule bulle « Durée du plan », « en proportion » dit, le bord allumé lisible
+  et pendant tout le geste. Fusionné sur son « fusionne » ; à essayer, liste 208.9.
+  Vu : des essais du banc cassent par moments dans main sur une texture « canevas » plus grande que 2048 (2560 × 1440, 3840 × 2160).
 - **Vérification à l'écran : la corbeille, l'aplat, la colonne** (partie 207, branche `verif-corrections` partie de main 3fda30a, puis
   fusionnée avec la partie 206 des bords des clés ; format 61 inchangé) : les 15 vérifications de `a-verifier.md` faites à l'écran sur une
   copie d'essai pour celles qui se pilotent d'ici (1, 3 à 11, 13 en PDF) ; six défauts corrigés. Un plan rendu par la corbeille retrouve
