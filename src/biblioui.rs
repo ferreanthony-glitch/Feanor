@@ -1025,7 +1025,7 @@ fn menu_fichier(ui: &mut egui::Ui, e: &Entree, keymap: &crate::keymap::Keymap, c
         }
         ui.separator();
     }
-    item(ui, "Ouvrir le dossier dans l'Explorateur", "bibliotheque.afficher_explorateur", Commande::Explorateur(e.chemin.clone()));
+    item(ui, crate::systeme::OUVRIR_DOSSIER, "bibliotheque.afficher_explorateur", Commande::Explorateur(e.chemin.clone()));
     item(ui, "Copier le chemin", "bibliotheque.copier_chemin", Commande::CopierChemin(e.chemin.clone()));
 }
 

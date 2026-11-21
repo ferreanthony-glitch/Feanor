@@ -114,3 +114,17 @@ fn text_moves_hits_and_is_saved() {
     assert!(vector::erase_circle(&mut d2, b.center(), 5.0, true));
     assert!(d2.elements.is_empty());
 }
+
+#[test]
+fn the_fonts_of_a_mac_are_looked_for_in_its_four_folders() {
+    use std::path::{Path, PathBuf};
+    let mac = crate::text::dossiers_hors_windows(Some(Path::new("/Users/marie")), true);
+    // Arial, Times et les autres sont dans « Supplemental » : sans lui, l'outil Texte ne les trouvait pas.
+    assert!(mac.contains(&PathBuf::from("/System/Library/Fonts/Supplemental")), "{mac:?}");
+    assert!(mac.contains(&PathBuf::from("/Library/Fonts")) && mac.contains(&PathBuf::from("/Users/marie/Library/Fonts")), "{mac:?}");
+    // Sans dossier d'utilisateur connu : ceux du système seulement.
+    assert_eq!(crate::text::dossiers_hors_windows(None, true).len(), 3);
+    // Ailleurs : les dossiers des Unix, pas ceux du Mac.
+    let autre = crate::text::dossiers_hors_windows(Some(Path::new("/home/marie")), false);
+    assert!(autre.contains(&PathBuf::from("/usr/share/fonts")) && !autre.iter().any(|d| d.starts_with("/System")), "{autre:?}");
+}

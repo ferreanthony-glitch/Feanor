@@ -61,7 +61,7 @@ pub(crate) fn clic(ctx: &egui::Context, action: &str) {
 }
 
 fn aujourd_hui() -> String {
-    crate::incrustation::date_text(crate::incrustation::now_secs())
+    crate::incrustation::date_text_ici(crate::incrustation::now_secs())
 }
 
 impl App {

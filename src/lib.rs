@@ -1431,6 +1431,9 @@ mod espace3dlasso_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;
+mod systeme;
+#[cfg(test)]
+mod systeme_tests;
 #[cfg(test)]
 mod tests;
 mod theme;

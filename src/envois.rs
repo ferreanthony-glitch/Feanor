@@ -266,9 +266,9 @@ pub fn jours_depuis_1970(y: i64, m: u32, j: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// « 20/10/2026 » d'une date en secondes depuis 1970 (temps universel).
+/// « 20/10/2026 » d'une date en secondes depuis 1970, à l'heure d'ici (`remplacer::secondes_d_ici`).
 pub fn date_courte(secs: u64) -> String {
-    let (y, m, d) = crate::projetui::civil_from_days((secs / 86_400) as i64);
+    let (y, m, d) = crate::projetui::civil_from_days((crate::remplacer::secondes_d_ici(secs) / 86_400) as i64);
     format!("{d:02}/{m:02}/{y}")
 }
 

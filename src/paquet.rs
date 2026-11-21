@@ -395,7 +395,7 @@ fn ranger(r: Rangement, annule: &AtomicBool, fait: &AtomicUsize) -> Result<Rappo
             projet: r.entete.projet.clone(),
             episode: r.entete.episode.clone(),
             cadence: r.entete.cadence,
-            envoi: r.entete.envoi.clone().map(|(id, nom, date)| EnvoiManifeste { id, nom, date: crate::incrustation::date_text(date) }),
+            envoi: r.entete.envoi.clone().map(|(id, nom, date)| EnvoiManifeste { id, nom, date: crate::incrustation::date_text_ici(date) }),
             fichiers: manif_fichiers,
         };
         let texte = serde_json::to_string_pretty(&m).map_err(|e| e.to_string())? + "\n";

@@ -817,7 +817,7 @@ impl Meta {
             "" => doc.envois.dernier().map(|e| e.nom.trim().to_string()).unwrap_or_default(),
             v => v.to_string(),
         };
-        Meta { titre, episode: doc.properties.episode.trim().to_string(), version, date: crate::incrustation::date_text(crate::incrustation::now_secs()), papier: opt.papier }
+        Meta { titre, episode: doc.properties.episode.trim().to_string(), version, date: crate::incrustation::date_text_ici(crate::incrustation::now_secs()), papier: opt.papier }
     }
 }
 

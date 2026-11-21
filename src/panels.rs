@@ -124,7 +124,7 @@ impl App {
                 self.action_item(ui, enregistrer, "fichier.enregistrer");
                 self.action_item(ui, "Jalons…", "fichier.jalons");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
-                self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
+                self.action_item(ui, crate::systeme::AFFICHER_PROJET, "fichier.afficher_explorateur");
                 self.action_item(ui, "Nouvel onglet", "onglet.nouveau");
                 self.action_item(ui, "Fermer l'onglet", "fichier.fermer");
                 self.action_item(ui, "Fermer les autres onglets", "onglet.fermer_autres");

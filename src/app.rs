@@ -5686,10 +5686,12 @@ impl App {
                 p
             }
         };
-        match std::process::Command::new("notepad.exe").arg(&path).spawn() {
+        // (Audit du 2026-11-21 : le Bloc-notes n'existe que sous Windows ; ailleurs, l'éditeur de texte du système.)
+        let (programme, arguments, editeur) = crate::systeme::commande_editer(crate::systeme::ICI, &path);
+        match std::process::Command::new(programme).args(&arguments).spawn() {
             Ok(_) => {
                 self.status = format!(
-                    "Raccourcis ouverts dans le Bloc-notes ({}). Enregistre, puis « Recharger » (Fichier > Préférences…, ou la liste des raccourcis, F1).",
+                    "Raccourcis ouverts dans {editeur} ({}). Enregistre, puis « Recharger » (Fichier > Préférences…, ou la liste des raccourcis, F1).",
                     path.display()
                 )
             }

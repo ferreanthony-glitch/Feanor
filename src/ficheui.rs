@@ -440,7 +440,7 @@ impl App {
                 for a in &r.avertissements {
                     crate::theme::avertir(ui, a);
                 }
-                if bulles::icone(ui, ph::FOLDER_OPEN, "Montrer dans l'explorateur", "Ouvre le dossier de la fiche.", "").clicked() {
+                if bulles::icone(ui, ph::FOLDER_OPEN, crate::systeme::MONTRER, "Ouvre le dossier de la fiche.", "").clicked() {
                     crate::exportui::reveal_in_explorer(&r.fichier);
                 }
             }

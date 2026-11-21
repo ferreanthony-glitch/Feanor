@@ -60,7 +60,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.enregistrer", "Enregistrer, ou poser un jalon", true, false),
     act("fichier.jalons", "Jalons du projet", true, false),
     act("fichier.enregistrer_sous", "Enregistrer sous", true, false),
-    act("fichier.afficher_explorateur", "Afficher le projet dans l'Explorateur Windows", true, false),
+    act("fichier.afficher_explorateur", crate::systeme::AFFICHER_PROJET_LONG, true, false),
     act("fichier.fermer", "Fermer le projet (l'onglet)", true, false),
     act("onglet.nouveau", "Nouvel onglet", true, false),
     act("onglet.suivant", "Onglet suivant", true, false),
@@ -759,7 +759,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("bibliotheque.importer_plan", "Bibliothèque : importer le fichier choisi dans le plan", true, false),
     act("bibliotheque.ajouter_references", "Bibliothèque : ajouter le fichier choisi aux références", true, false),
     act("bibliotheque.ajouter_montage", "Bibliothèque : ajouter le fichier choisi au montage", true, false),
-    act("bibliotheque.afficher_explorateur", "Bibliothèque : ouvrir le dossier du fichier choisi dans l'Explorateur", true, false),
+    act("bibliotheque.afficher_explorateur", crate::systeme::OUVRIR_DOSSIER_LONG, true, false),
     act("bibliotheque.copier_chemin", "Bibliothèque : copier le chemin du fichier choisi", true, false),
     act("son.fondu_entree","Fondu d'entrée de l'extrait choisi (poser / retirer)", true, false),
     act("son.fondu_sortie", "Fondu de sortie de l'extrait choisi (poser / retirer)", true, false),
@@ -877,6 +877,10 @@ pub enum KeyMatch {
     Pos(Key),
 }
 
+/// Comment l'écran nomme le modificateur des commandes : « Cmd+ » sur Mac, « Ctrl+ » ailleurs. Les essais gardent « Ctrl+ » sur
+/// tous les postes : ils comparent des libellés écrits une fois pour toutes.
+pub const MODIFICATEUR_COMMANDE: &str = if cfg!(all(target_os = "macos", not(test))) { "Cmd+" } else { "Ctrl+" };
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Combo {
     pub ctrl: bool,
@@ -898,10 +902,13 @@ impl Combo {
         }
     }
 
+    /// Le raccourci tel qu'on le lit à l'écran. Sur Mac, « Ctrl » du fichier veut dire la touche Commande (`matches` lit
+    /// `Modifiers::command`) : l'écran dit « Cmd », la touche qui répond vraiment (audit du 2026-11-21 : il disait « Ctrl+Z » alors
+    /// que seul Cmd+Z annulait). Le fichier de raccourcis garde « Ctrl » partout (`combo_text`), il se partage entre les postes.
     pub fn label(&self) -> String {
         let mut s = String::new();
         if self.ctrl {
-            s += "Ctrl+";
+            s += MODIFICATEUR_COMMANDE;
         }
         if self.shift && !self.any_shift {
             s += "Maj+";

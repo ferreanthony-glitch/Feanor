@@ -275,3 +275,25 @@ fn cancelling_a_video_removes_the_file() {
     assert!(!out.exists(), "la vidéo inachevée est effacée");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn ffmpeg_is_looked_for_where_each_system_puts_it() {
+    use std::path::{Path, PathBuf};
+    let path = std::ffi::OsString::from(if cfg!(windows) { r"C:\outils;C:\bin" } else { "/outils:/bin" });
+    // Mac : sans extension, à côté de FEANOR, dans les Resources de l'application, puis Homebrew (hors du PATH du Finder).
+    let mac = export::ffmpeg_candidates(None, None, Some(Path::new("/Applications/FEANOR.app/Contents/MacOS/feanor")), Some(&path), &[], None, false);
+    assert_eq!(mac[0], PathBuf::from("/Applications/FEANOR.app/Contents/MacOS/ffmpeg"));
+    assert_eq!(mac[1], PathBuf::from("/Applications/FEANOR.app/Contents/Resources/ffmpeg"));
+    assert!(mac.contains(&PathBuf::from("/opt/homebrew/bin/ffmpeg")) && mac.contains(&PathBuf::from("/usr/local/bin/ffmpeg")), "{mac:?}");
+    assert!(mac.iter().all(|p| p.extension().is_none()), "pas de .exe hors de Windows : {mac:?}");
+    // Windows : comme avant, ffmpeg.exe, Krita et le dossier de secours.
+    let win = export::ffmpeg_candidates(None, None, None, None, &[PathBuf::from("Programmes")], None, true);
+    assert!(win.contains(&PathBuf::from("Programmes").join("Krita (x64)").join("bin").join("ffmpeg.exe")), "{win:?}");
+    assert!(win.iter().all(|p| p.to_string_lossy().ends_with("ffmpeg.exe")), "{win:?}");
+    // La variable et le choix de l'utilisateur passent avant tout, dans cet ordre.
+    let choisi = export::ffmpeg_candidates(Some(PathBuf::from("force")), Some(Path::new("choisi")), None, None, &[], None, false);
+    assert_eq!(&choisi[..2], &[PathBuf::from("force"), PathBuf::from("choisi")]);
+    // L'encodeur du Mac sert quand libx264 manque.
+    assert_eq!(export::parse_encoders(" V....D h264_videotoolbox  VideoToolbox\n").h264, Some("h264_videotoolbox"));
+    assert_eq!(export::parse_encoders(" V....D libx264  x\n V....D h264_videotoolbox  x\n").h264, Some("libx264"));
+}

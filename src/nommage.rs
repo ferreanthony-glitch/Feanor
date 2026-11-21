@@ -233,7 +233,7 @@ pub fn remplir(pieces: &[Piece], cx: &Contexte) -> String {
 
 /// AAAAMMJJ du jour (UTC).
 pub fn date_du_jour() -> String {
-    crate::incrustation::date_text(crate::incrustation::now_secs()).replace('-', "")
+    crate::incrustation::date_text_ici(crate::incrustation::now_secs()).replace('-', "")
 }
 
 impl Document {
