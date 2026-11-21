@@ -179,14 +179,22 @@ fn the_dock_edge_above_the_montage_is_clamped_after_display() {
 #[test]
 fn the_chosen_height_is_kept_per_workspace() {
     let (_ctx, mut app) = headless("espaces");
-    let part = |app: &App| match &app.dock_layout().principal {
-        crate::dock::DockNode::Column { part, .. } => *part,
-        other => panic!("{other:?}"),
-    };
+    // (La part de la bande : à la racine, ou sous le dessin seul dans le Storyboard, où la colonne prend toute la hauteur depuis
+    // l'audit du 2026-11-21.)
+    fn part_de(n: &crate::dock::DockNode) -> f32 {
+        match n {
+            crate::dock::DockNode::Column { part, .. } => *part,
+            crate::dock::DockNode::Row { gauche, .. } => part_de(gauche),
+            other => panic!("{other:?}"),
+        }
+    }
+    let part = |app: &App| part_de(&app.dock_layout().principal);
     app.aller_a_l_espace(Espace::Storyboard);
     let mut l = app.dock_layout();
-    if let crate::dock::DockNode::Column { part, .. } = &mut l.principal {
-        *part = 0.5;
+    if let crate::dock::DockNode::Row { gauche, .. } = &mut l.principal {
+        if let crate::dock::DockNode::Column { part, .. } = &mut **gauche {
+            *part = 0.5;
+        }
     }
     app.set_dock_layout(l);
     app.aller_a_l_espace(Espace::Montage);

@@ -255,7 +255,7 @@ impl Document {
         }
         let mut copies = vec![copie];
         self.adopt_scene_layers(&mut copies, scene);
-        self.insert_and_normalize(index + 1, copies)
+        self.inserer_des_copies(index + 1, copies)
     }
 
     /// Les dessins du calque `li` du plan `pi` remplacés par des copies (les noms d'instance et les marques de couleur suivent).

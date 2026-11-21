@@ -10,7 +10,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   déroulante ouverte (la cadence de l'export du film) se fermait avec sa fenêtre au même Échap (egui ferme la liste en la peignant,
   avant que la fenêtre ne demande ; l'état du début de l'image est maintenant retenu) ; la fenêtre « Raccourcis clavier » par-dessus les
   Préférences ne se fermait pas, c'étaient les Préférences dessous. Les deux revus à l'écran après correction. Deux essais dans
-  `corbeille_tests.rs` ; suite entière : les 90 échecs de `main`, aucun de plus.
+  `corbeille_tests.rs` ; suite entière : les 90 échecs de `main`, aucun de plus. Après la fusion avec la partie 208 :
+  97 échecs, les 90 et 7 essais neufs de `bordscles_tests` qui cassent sur le Mac sur la même texture « canevas » de plus de 2048.
+- **Les clés regardées sur les captures** (partie 208, branche `cles-retouches` ; 207 pris par le Mac) : sur les captures du banc
+  (`FEANOR_BORDSCLES_PNG`), Anthony a demandé qu'une clé vide n'affiche rien que le gris du fond, tout en restant une clé à part entière
+  (bords, pousser, proportion, Ctrl +/−) ; Retour arrière (et Suppr) supprime les clés choisies, la clé d'avant prend leur place ;
+  Alt+Retour arrière vide le dessin (Maj était pris). Les deux boutons du stylet visibles à la largeur d'origine (« Nouveau plan » reste
+  sur la ligne Plans et sous ⋯), une bulle d'une ligne, une seule bulle « Durée du plan », « en proportion » dit, le bord allumé lisible
+  et pendant tout le geste. Fusionné sur son « fusionne » ; à essayer, liste 208.9.
+  Vu : des essais du banc cassent par moments dans main sur une texture « canevas » plus grande que 2048 (2560 × 1440, 3840 × 2160).
 - **Vérification à l'écran : la corbeille, l'aplat, la colonne** (partie 207, branche `verif-corrections` partie de main 3fda30a, puis
   fusionnée avec la partie 206 des bords des clés ; format 61 inchangé) : les 15 vérifications de `a-verifier.md` faites à l'écran sur une
   copie d'essai pour celles qui se pilotent d'ici (1, 3 à 11, 13 en PDF) ; six défauts corrigés. Un plan rendu par la corbeille retrouve

@@ -59,6 +59,8 @@ thread_local! {
     /// Partie 165.6 : le haut et le bas de chaque ligne de calque (rang du calque, haut, bas) dans la colonne (`.0`) et dans la grille
     /// (`.1`), à la dernière image : les essais vérifient que calques et pistes sont alignés.
     pub(crate) static LIGNES_PEINTES: std::cell::RefCell<(Vec<(usize, f32, f32)>, Vec<(usize, f32, f32)>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) };
+    /// Partie 208 : l'abscisse de l'image 0 de la grille et la largeur d'une image, à la dernière image (`bordscles_tests.rs`).
+    pub(crate) static GRILLE_PEINTE: std::cell::Cell<Option<(f32, f32)>> = const { std::cell::Cell::new(None) };
 }
 
 /// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
@@ -386,6 +388,8 @@ impl App {
         let camera_seule = self.e3_camera_seule();
         #[cfg(test)]
         LIGNES_PEINTES.with(|l| l.borrow_mut().1 = rows.iter().map(|row| (row.li, grid_top + row.top, grid_top + row.top + row.h)).collect());
+        #[cfg(test)]
+        GRILLE_PEINTE.with(|g| g.set(Some((r.left(), cell))));
         for row in &rows {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(marge.left(), grid_top + row.top), vec2(size.x + MARGE_AVANT, row.h)).shrink2(vec2(0.0, 1.0));
@@ -477,8 +481,9 @@ impl App {
         // Dessins : un bloc par exposition, pastille au début du dessin ; miniature du dessin
         // dans les lignes complètes (13d), posée après la boucle (elle a besoin de `self`).
         let mut thumbs: Vec<(Rect, crate::document::CelId, bool)> = Vec::new();
-        // Partie 206 : ce que montre chaque clé (coupure, clé vide hachurée, tête de lecture ; en option vignette et durée).
-        let vide_de = |c: crate::document::CelId| self.doc.cels.get(&c).is_none_or(|c| c.is_empty());
+        // Partie 206 : ce que montre chaque clé (coupure, tête de lecture ; en option vignette et durée) ; partie 208 : une clé vide
+        // ne montre rien (`clesvue::cle_vide`, décidé par calque plus bas).
+        let vide_de = |_: crate::document::CelId| false;
         let vignettes_des_cles = std::cell::RefCell::new(Vec::new());
         let habit = crate::clesvue::Habit {
             vide: &vide_de,
@@ -562,7 +567,14 @@ impl App {
                     painter.line_segment([cross.left_top(), cross.right_bottom()], stroke);
                     painter.line_segment([cross.left_bottom(), cross.right_top()], stroke);
                 }
-                if let Some(id) = layer.frames[start] {
+                // Partie 208 (Anthony : « une clé vide n'affiche rien, si ce n'est le gris du fond de la timeline ») : ni couleur, ni
+                // pastille, ni miniature, ni nom, ni trait, ni soulignement. Son bord s'allume encore au survol (plus bas).
+                // (Elle n'est vide qu'à l'affichage : ses limites restent lisibles, la coupure à son début.)
+                if layer.frames[start].is_some_and(|id| crate::clesvue::cle_vide(&self.doc, layer, id)) {
+                    let block = Rect::from_min_max(pos2(r.left() + start as f32 * cell + 1.0, y + 3.0), pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)));
+                    crate::clesvue::peindre_coupure(&painter, block);
+                }
+                if let Some(id) = layer.frames[start].filter(|&id| !crate::clesvue::cle_vide(&self.doc, layer, id)) {
                     let block = Rect::from_min_max(
                         pos2(r.left() + start as f32 * cell + 1.0, y + 3.0),
                         pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
@@ -625,13 +637,18 @@ impl App {
             }
             // Partie 206 (E) : pendant le glisser d'un bord de clé ou de la fin du plan, la place d'avant en pointillés.
             self.fantomes_du_geste(&painter, plan_id, row.li, &|f| r.left() + f as f32 * cell, y + 3.0, body_bottom(y, row.h));
-            // Partie 206 (D) : le bord droit d'un dessin survolé (ou tenu) s'allume sur la hauteur de la ligne.
-            if let Some(Handle::Exposure { layer, end, .. }) = lit.filter(|_| self.handle_drag.is_none()) {
-                if layer == row.li {
-                    let x = r.left() + end as f32 * cell;
-                    let zone = Rect::from_min_max(pos2(x - crate::clesvue::BORD_ALLUME * 0.5, y + 1.0), pos2(x + crate::clesvue::BORD_ALLUME * 0.5, body_bottom(y, row.h)));
-                    painter.rect_filled(zone, 1.0, theme::contour().gamma_multiply(0.45));
-                }
+            // Partie 206 (D) : le bord droit d'un dessin survolé s'allume sur la hauteur de la ligne ; partie 208 : une bande claire
+            // bordée de sombre, et pendant tout le geste, à sa place de l'instant (comme dans le Storyboard).
+            let bord = match self.handle_drag.as_ref() {
+                Some(d) if matches!(d.handle, Handle::Exposure { .. }) && d.panel_id() == plan_id => d.bord_tenu(),
+                Some(_) => None,
+                None => match lit {
+                    Some(Handle::Exposure { layer, end, .. }) => Some((layer, end)),
+                    _ => None,
+                },
+            };
+            if let Some((_, end)) = bord.filter(|b| b.0 == row.li) {
+                crate::clesvue::peindre_bord_allume(&painter, r.left() + end as f32 * cell, y + 1.0, body_bottom(y, row.h));
             }
         }
         thumbs.extend(vignettes_des_cles.into_inner());

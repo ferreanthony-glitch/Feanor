@@ -3,7 +3,11 @@
 //! change pas (les deux tons qui alternent, `cles_alternees.rs`, les couleurs du thème) ; s'y ajoutent :
 //!
 //! - **B, la coupure** : un trait foncé au début de chaque clé (toujours) ;
-//! - **F, la clé vide** (F4, un dessin sans trait) hachurée, pour la distinguer d'un dessin tenu (toujours) ;
+//! - **F, la clé vide** (F4, un dessin sans trait) : partie 208 (Anthony : « Plutôt que des rayures, une clé vide n'affiche rien,
+//!   si ce n'est le gris du fond de la timeline ») : ni couleur, ni vignette, ni durée, ni soulignement (`cle_vide` ; les timelines
+//!   ne l'habillent pas). Elle n'est vide qu'à l'affichage (Anthony : « On peut agir dessus comme une clé pleine ») : ses deux
+//!   limites restent lisibles (la coupure à son début, `peindre_coupure`, et celle de la clé suivante), choisie elle a le même
+//!   cadre que les autres, son bord s'allume au survol ;
 //! - **G, la clé sous la tête de lecture** soulignée, sur chaque calque (toujours) ;
 //! - **A, la vignette du dessin** dans la clé assez large (option, éteinte d'origine : `Settings::cles_vignettes`), prise dans le
 //!   cache des vignettes de calque (`layersui::layer_thumb`, composées sur un fil de fond ; rien n'est rendu sur le fil de l'écran) ;
@@ -11,29 +15,31 @@
 //! - **E, pendant un glisser** de bord ou de fin de plan : le fantôme en pointillés de la place d'avant (`fantomes`) et une petite
 //!   bulle près du pointeur (`App::bulle_du_geste`).
 //!
-//! (D, le bord qui s'allume au survol, est peint par chaque timeline avec sa poignée : `BORD_ALLUME`.)
+//! (D, le bord qui s'allume au survol et pendant tout le geste, est peint par chaque timeline avec sa poignée :
+//! `peindre_bord_allume`, partie 208 : une bande claire de `BORD_ALLUME` points bordée de sombre.)
 
 use std::cell::RefCell;
 
 use eframe::egui::{self, pos2, vec2, Color32, FontId, Painter, Rect, Stroke};
 
 use crate::app::App;
-use crate::document::{CelId, Layer};
+use crate::document::{CelId, Document, Layer};
 
 /// B : le trait de la coupure au début de chaque clé.
 pub(crate) const COUPURE: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 150);
 pub(crate) const COUPURE_W: f32 = 1.5;
-/// F : les hachures d'une clé vide.
-pub(crate) const HACHURE: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 70);
-pub(crate) const HACHURE_PAS: f32 = 5.0;
 /// G : le soulignement de la clé sous la tête de lecture.
 pub(crate) const SOULIGNE_H: f32 = 2.0;
-/// D : la largeur de la zone du bord qui s'allume au survol.
-pub(crate) const BORD_ALLUME: f32 = 5.0;
+/// D : la largeur de la bande claire du bord qui s'allume au survol et pendant le geste (partie 208 : 4 points pleins, au lieu de
+/// 5 points à peine éclaircis).
+pub(crate) const BORD_ALLUME: f32 = 4.0;
+/// D : la bande du bord allumé (le contour du thème, presque opaque) et le liseré sombre de chaque côté, qui la détache de la clé.
+const BORD_ALLUME_ALPHA: f32 = 0.92;
+const BORD_LISERE: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 170);
 
 /// Ce qu'une timeline donne à `habiller` pour les clés d'un calque.
 pub(crate) struct Habit<'a> {
-    /// Le dessin n'a aucun trait (une clé vide, F4).
+    /// F (partie 208) : la clé de ce dessin est vide (`cle_vide`) : la timeline n'en peint rien, ni fond, ni habit.
     pub vide: &'a dyn Fn(CelId) -> bool,
     /// L'image de la tête de lecture dans ce plan (rien : la tête n'est pas dans ce plan).
     pub tete: Option<usize>,
@@ -42,19 +48,46 @@ pub(crate) struct Habit<'a> {
     /// A : la vignette du dessin ; les cases où la poser (le rectangle, le dessin, le calque visible) s'ajoutent ici, la timeline les
     /// peint après les clés.
     pub vignettes: Option<&'a RefCell<Vec<(Rect, CelId, bool)>>>,
-    /// Une bande fine (piste repliée) : ni vignette, ni durée, ni hachures, juste la coupure et le soulignement.
+    /// Une bande fine (piste repliée) : ni vignette, ni durée, juste la coupure et le soulignement.
     pub fine: bool,
 }
 
-/// Les hachures d'une clé vide dans `seg`.
-pub(crate) fn hachurer(painter: &Painter, seg: Rect) {
-    let p = painter.with_clip_rect(seg.intersect(painter.clip_rect()));
-    let h = seg.height();
-    let mut x = seg.left() - h;
-    while x < seg.right() {
-        p.line_segment([pos2(x, seg.bottom()), pos2(x + h, seg.top())], Stroke::new(1.0_f32, HACHURE));
-        x += HACHURE_PAS;
+/// F (partie 208) : la clé de `cel` sur le calque `layer` est vide, elle n'affiche rien : un dessin sans trait (F4). Pas sur un calque
+/// d'effet (ses dessins sont tous vides, ses clés se montrent), ni quand un calque de couleur y a des griffonnages (ils remplissent
+/// des zones).
+pub(crate) fn cle_vide(doc: &Document, layer: &Layer, cel: CelId) -> bool {
+    layer.effet.is_none()
+        && doc.cels.get(&cel).is_none_or(|c| c.is_empty())
+        && layer.couleur.as_ref().and_then(|c| c.griffonnages.get(&cel)).and_then(|g| doc.cels.get(g)).is_none_or(|c| c.is_empty())
+}
+
+/// B : la coupure au début de la clé peinte dans `seg` (aussi au début d'une clé vide, partie 208, qui n'a rien d'autre).
+pub(crate) fn peindre_coupure(painter: &Painter, seg: Rect) {
+    if seg.width() <= 0.0 || !seg.intersects(painter.clip_rect()) {
+        return;
     }
+    painter.line_segment([pos2(seg.left() + COUPURE_W * 0.5, seg.top()), pos2(seg.left() + COUPURE_W * 0.5, seg.bottom())], Stroke::new(COUPURE_W, COUPURE));
+}
+
+/// D (partie 208) : le bord allumé à l'abscisse `x`, de `haut` à `bas` : une bande claire de `BORD_ALLUME` points, un liseré sombre
+/// de chaque côté. Les clés gardent leurs couleurs.
+pub(crate) fn peindre_bord_allume(painter: &Painter, x: f32, haut: f32, bas: f32) {
+    let demi = BORD_ALLUME * 0.5;
+    let bande = Rect::from_min_max(pos2(x - demi, haut), pos2(x + demi, bas));
+    painter.rect_filled(bande, 1.0, crate::theme::contour().gamma_multiply(BORD_ALLUME_ALPHA));
+    for bord in [bande.left() - 0.5, bande.right() + 0.5] {
+        painter.line_segment([pos2(bord, haut), pos2(bord, bas)], Stroke::new(1.0_f32, BORD_LISERE));
+    }
+}
+
+/// La bulle du geste sur la fin d'un plan (partie 208, la même dans l'Animation, la timeline du Storyboard et le montage) :
+/// « Durée du plan : 1s 16 (-8 i) », et « · toutes les clés en proportion » avec Maj ou « Étirer en proportion ».
+pub(crate) fn bulle_fin_du_plan(n: usize, fps: u32, ecart: isize, proportion: bool) -> String {
+    let mut t = format!("Durée du plan : {} ({ecart:+} i)", crate::storyboard::duration_label(n, fps));
+    if proportion {
+        t += " · toutes les clés en proportion";
+    }
+    t
 }
 
 /// Le texte de la durée d'une clé de `n` images.
@@ -62,15 +95,12 @@ pub(crate) fn texte_duree(n: usize) -> String {
     format!("{n} i")
 }
 
-/// La clé (dessin `cel`, images `start` à `end` exclue) peinte dans `seg` : sa coupure, ses hachures si elle est vide, son
-/// soulignement sous la tête de lecture, et, en option, sa vignette et sa durée.
+/// La clé (dessin `cel`, images `start` à `end` exclue) peinte dans `seg` : sa coupure, son soulignement sous la tête de lecture, et,
+/// en option, sa vignette et sa durée. (Une clé vide, `cle_vide`, n'est pas habillée : la timeline ne l'appelle pas.)
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn habiller(painter: &Painter, seg: Rect, start: usize, end: usize, cel: CelId, visible: bool, encre: Color32, h: &Habit) {
     if seg.width() <= 0.0 || !seg.intersects(painter.clip_rect()) {
         return;
-    }
-    if !h.fine && (h.vide)(cel) {
-        hachurer(painter, seg);
     }
     let mut libre = seg.left() + 2.0;
     if let Some(cases) = h.vignettes.filter(|_| !h.fine) {
@@ -90,8 +120,8 @@ pub(crate) fn habiller(painter: &Painter, seg: Rect, start: usize, end: usize, c
             painter.galley(pos2(seg.right() - 3.0 - galley.size().x, seg.center().y - galley.size().y * 0.5), galley, encre);
         }
     }
-    // B : la coupure (par-dessus les hachures et la vignette).
-    painter.line_segment([pos2(seg.left() + COUPURE_W * 0.5, seg.top()), pos2(seg.left() + COUPURE_W * 0.5, seg.bottom())], Stroke::new(COUPURE_W, COUPURE));
+    // B : la coupure (par-dessus la vignette).
+    peindre_coupure(painter, seg);
     // G : la clé sous la tête de lecture.
     if h.tete.is_some_and(|f| f >= start && f < end) {
         let r = Rect::from_min_max(pos2(seg.left(), seg.bottom() - SOULIGNE_H), seg.right_bottom());
@@ -182,7 +212,9 @@ impl App {
             .interactable(false)
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.label(egui::RichText::new(texte.as_str()).size(12.0));
+                    // (Partie 208 : sur une ligne. La zone garde la largeur de ses premières images ; le texte qui s'allonge pendant
+                    // le geste passait à la ligne, « Clé 2 : 10 i / (+4) ».)
+                    ui.add(egui::Label::new(egui::RichText::new(texte.as_str()).size(12.0)).extend());
                 });
             });
     }

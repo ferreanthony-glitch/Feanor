@@ -301,7 +301,11 @@ fn choisir_un_effet_dans_le_panneau_le_montre_tout_de_suite_sans_cle() {
     app.tool = Tool::Camera;
     // Changer l'intensité au glisser : l'image change aussitôt, en une étape d'annulation.
     let avant = a_l_ecran(&mut app, 10);
-    let champ = ecran.ou(&mut app, "100 %");
+    // (Le plus bas des « 100 % » : celui de l'intensité de l'effet ; au-dessus, le champ Zoom de la caméra dit aussi 100 %.)
+    let champ = {
+        let textes = ecran.chauffer(&mut app, 3);
+        textes.iter().filter(|(t, _)| t == "100 %").map(|(_, r)| *r).max_by(|a, b| a.top().total_cmp(&b.top())).expect("« 100 % » dans le panneau")
+    };
     let etapes = app.history.undo_len();
     ecran.glisser(&mut app, champ.center(), champ.center() + vec2(60.0, 0.0));
     let v2 = app.doc.panels[0].effets_camera[0];
