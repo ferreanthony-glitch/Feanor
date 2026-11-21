@@ -20,6 +20,14 @@ pub(crate) fn doc_174() -> Document {
     doc.panels[0].set_length(24);
     let calque = |doc: &mut Document, nom: &str, de: usize, a: usize| {
         let cel = doc.new_cel(LayerKind::Vector);
+        // (Un trait dans chaque dessin : depuis la partie 208, une clé vide n'affiche rien.)
+        if let Some(c) = doc.cels.get_mut(&cel) {
+            if let Some(v) = c.vector.as_mut() {
+                let points = vec![crate::vector::VPoint { x: 8.0, y: 8.0, r: 2.0 }, crate::vector::VPoint { x: 30.0, y: 20.0, r: 2.0 }];
+                v.elements.push(crate::vector::Element::Stroke { points, color: [0, 0, 0], opacity: 1.0, hardness: 1.0, brush: None, trace: Default::default() });
+            }
+            c.rerender();
+        }
         let mut l = Layer::new(nom, LayerKind::Vector);
         l.frames = (0..a).map(|f| (f >= de).then_some(cel)).collect();
         l

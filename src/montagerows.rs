@@ -690,8 +690,8 @@ impl App {
 
         // Les calques de chaque plan, dans son ordre.
         let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
-        // Partie 206 : ce que montre chaque clé (coupure, clé vide hachurée, tête de lecture, et en option vignette et durée).
-        let vide = |c: crate::document::CelId| self.doc.cels.get(&c).is_none_or(|c| c.is_empty());
+        // Partie 206 : ce que montre chaque clé (coupure, tête de lecture, et en option vignette et durée) ; partie 208 : une clé vide
+        // ne montre rien.
         let tete_plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         for track in &rows.lanes {
             let row = track.row;
@@ -713,11 +713,18 @@ impl App {
                     continue;
                 }
                 let current = i == self.cur_panel && self.calque_montre_courant(k);
-                let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
+                let mut hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
+                // Partie 208 : le bord d'une clé tenu reste allumé pendant tout le geste, à sa place de l'instant.
+                if let (Some((Handle::Boundary { .. }, true)), Some((l, f))) = (hot, self.handle_drag.as_ref().filter(|d| d.panel_id() == p.id).and_then(|d| d.bord_tenu())) {
+                    if l == k {
+                        hot = Some((Handle::Boundary { layer: l, at: f }, false));
+                    }
+                }
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
                 let show_name = row_name != Some(p.layers[k].name.as_str());
                 // (Partie 178 : dans le Storyboard, les images d'un calque moins opaque sont plus pâles.)
                 let opacite = if rows.sb.is_some() { p.layers[k].opacity.clamp(0.0, 1.0) } else { 1.0 };
+                let vide = |c: crate::document::CelId| crate::clesvue::cle_vide(&self.doc, &p.layers[k], c);
                 let habit = crate::clesvue::Habit {
                     vide: &vide,
                     tete: (tete_plan == Some(p.id)).then_some(self.cur_frame),
@@ -1053,6 +1060,8 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
     let mut rang = 0;
     while f < layer.frames.len() {
         let (s, e) = layer.run_bounds(f);
+        // (Partie 208 : une clé vide n'affiche rien, on voit le fond de la ligne ; choisie ou survolée, son cadre se voit encore.)
+        let vide = layer.frames[f].is_some_and(|c| (habit.vide)(c));
         if layer.frames[f].is_some() {
             let seg = Rect::from_min_max(
                 pos2((x0 + s as f32 * ppf).max(cell.left()), cell.top() + pad),
@@ -1063,10 +1072,15 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
             let tint = if opacite < 1.0 { tint.gamma_multiply(0.3 + 0.7 * opacite) } else { tint };
             rang += 1;
             if seg.width() > 0.0 {
-                painter.rect_filled(seg, 1.0, if layer.visible { tint } else { tint.gamma_multiply(0.35) });
-                // Partie 206 : la coupure, la clé vide hachurée, la tête de lecture ; en option la vignette et la durée.
-                if let Some(cel) = layer.frames[f] {
+                if !vide {
+                    painter.rect_filled(seg, 1.0, if layer.visible { tint } else { tint.gamma_multiply(0.35) });
+                }
+                // Partie 206 : la coupure, la tête de lecture ; en option la vignette et la durée.
+                if let Some(cel) = layer.frames[f].filter(|_| !vide) {
                     crate::clesvue::habiller(painter, seg, s, e, cel, layer.visible, theme::sur_calque(), habit);
+                } else if vide {
+                    // (Une clé vide : sa coupure seule, ses deux limites restent lisibles.)
+                    crate::clesvue::peindre_coupure(painter, seg);
                 }
                 // Une clé choisie : cerclée de la couleur du choix ; survolée (on la prend par son
                 // milieu pour la déplacer) : de blanc.
@@ -1115,8 +1129,8 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
             }
         }
     }
-    // Un bord pris (début, fin, limite entre deux dessins) : un trait blanc sur la hauteur de la
-    // piste (pendant le geste, la limite a bougé : le dessin le montre).
+    // Un bord pris (début, fin, limite entre deux dessins) : une bande claire sur la hauteur de la piste (pendant le geste d'une
+    // limite, l'appelant donne sa place de l'instant, partie 208).
     let edge = match hot {
         Some(Handle::LayerStart { .. }) => content_bounds(layer).map(|(a, _)| a),
         Some(Handle::LayerEnd { .. }) => content_bounds(layer).map(|(_, b)| b),
@@ -1126,10 +1140,9 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
     if let Some(f) = edge {
         let x = x0 + f as f32 * ppf;
         if x >= cell.left() - 1.0 && x <= cell.right() + 1.0 {
-            // Partie 206 (D) : la zone du bord se colore au survol (le curseur passe en ↔).
-            let zone = Rect::from_min_max(pos2(x - crate::clesvue::BORD_ALLUME * 0.5, cell.top()), pos2(x + crate::clesvue::BORD_ALLUME * 0.5, cell.bottom()));
-            painter.rect_filled(zone.intersect(cell), 1.0, theme::contour().gamma_multiply(0.45));
-            painter.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(1.5_f32, theme::contour()));
+            // Partie 206 (D) : le bord s'allume au survol (le curseur passe en ↔) ; partie 208 : une bande claire, bordée de sombre,
+            // et pendant tout le geste.
+            crate::clesvue::peindre_bord_allume(&painter.with_clip_rect(cell.intersect(painter.clip_rect())), x, cell.top(), cell.bottom());
         }
     }
     // Les calques de couleur liés à ce calque de trait (l'aplat) n'ont pas de piste : un liseré de leur couleur (rose) sous le bloc, tant

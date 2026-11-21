@@ -208,13 +208,23 @@ impl App {
     pub(crate) fn key_menu_core(&mut self, ui: &mut Ui, kind: KeyKind) {
         let st = self.key_menu_state(kind);
         for e in core_entries(kind, st) {
-            // (Suppr vide le dessin des clés, il ne les supprime plus : cette commande-ci n'a pas de touche, `choixtout.rs`.)
-            let shortcut = if kind == KeyKind::Drawing && e.cmd == KeyCmd::Delete { String::new() } else { self.keymap.label(e.cmd.action()) };
+            // (Partie 208 : Suppr et Retour arrière suppriment de nouveau les clés de dessin choisies, `choixtout.rs`.)
+            let shortcut = self.keymap.label(e.cmd.action());
             let resp = ui.add_enabled(e.enabled, egui::Button::new(&e.label).shortcut_text(shortcut));
             let resp = if e.hint.is_empty() { resp } else { crate::bulles::bulle(resp, &e.label, &e.hint, "") };
             if resp.clicked() {
                 ui.close_menu();
                 self.run_key_cmd(kind, e.cmd);
+            }
+            // Partie 208 : après « Supprimer », vider le dessin des clés (elles restent), avec son raccourci.
+            if kind == KeyKind::Drawing && e.cmd == KeyCmd::Delete {
+                let nom = if st.n > 1 { format!("Vider le dessin des clés ({})", st.n) } else { "Vider le dessin de la clé".to_string() };
+                let resp = ui.add_enabled(st.has_target && !self.key_sel.is_empty(), egui::Button::new(&nom).shortcut_text(self.keymap.label("cles.vider_dessin")));
+                let resp = crate::bulles::bulle(resp, &nom, "Le dessin de chaque clé choisie est effacé ; les clés restent, avec leur durée.", "");
+                if resp.clicked() {
+                    ui.close_menu();
+                    self.vider_cles();
+                }
             }
         }
     }

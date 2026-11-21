@@ -19182,3 +19182,147 @@ une fois sous la charge de la suite (un lecteur simulé sur un autre fil), passe
 5. Fichier > Corbeille : les vignettes lisibles comme dans la timeline ; Échap ferme la fenêtre.
 6. Colonne du Storyboard, + Panneau > Historique puis Préréglages (fenêtre de 868 de haut, 90 %) : la Scène entière, l'Historique avec
    trois étapes, la colonne qui défile ; le fil d'Ariane passe à la ligne entre « Séquence 1 » et « Plan 1 ».
+
+## 208. Les clés regardées sur les captures : une clé vide n'affiche rien ; les deux boutons du stylet visibles ; une bulle d'une ligne ; le bord allumé plus lisible et pendant tout le geste ; Retour arrière supprime la clé (2026-11-21, branche `cles-retouches`, sur la partie 206)
+
+Les captures de la partie 206 (la timeline du Storyboard, le geste sur un bord de clé et sur la fin d'un plan, la timeline de
+l'Animation) ont montré des défauts. Anthony, en plus : « Plutôt que des rayures, une clé vide n'affiche rien, si ce n'est le gris du
+fond de la timeline. » Puis : « corrige le reste », et : « Une clé vide n'est pas véritablement vide. On peut agir dessus comme une
+clé pleine. Étirer le temps ou pousser / être poussée par les clés précédentes et suivantes. » Code : `clesvue.rs`, `montagerows.rs`, `timeline.rs`, `handles.rs`, `bordscles.rs`,
+`rognageui.rs`, `barres.rs`, `choixtout.rs`, `clescommun.rs`, `app.rs`, `keymap.rs`, `keymap.toml`. Essais : `bordscles_tests.rs`. **Le format de projet ne change pas**, aucun réglage nouveau.
+
+### 208.1 Ce que faisait le logiciel avant (les essais rouges)
+
+Les essais ont été lancés d'abord sur le code de la partie 206 : **9 rouges sur 9** (ceux du point 7, sur les gestes, sont verts
+d'emblée : aucun geste ne traitait la clé vide à part, voir 208.2 bis). Point 8 : 5 rouges sur 5 (Retour arrière et Suppr
+vidaient le dessin, aucune touche pour vider).
+
+- Une clé vide (un dessin sans trait, F4) était hachurée sur sa couleur de clé (Storyboard, montage) ou peinte en gris clair avec sa
+  pastille, sa miniature blanche et son trait (Animation).
+- À la largeur d'origine de la colonne de gauche (340 points), « Décaler la suite » et « Étirer en proportion » passaient sous « ⋯ »
+  (avec « Importer un son » et le menu Son).
+- La bulle du geste passait à la ligne (« Clé 2 : 10 i / (+4) ») : la zone d'egui garde la largeur de ses premières images, et le texte
+  s'allonge pendant le geste.
+- La fin d'un plan dans la timeline du Storyboard avait deux bulles : une bande noire en haut et la bulle près du pointeur, toutes deux
+  avec la phrase du rognage (« Plan 1, fin raccourcie de 8 i : durée 1s 16 (40 i) · fin rognée de 8 i »).
+- Avec « Étirer en proportion » (ou Maj), la bulle ne le disait pas.
+- Le bord allumé au survol : 5 points de blanc à 45 % (le trait clair de 1,5 point dans le Storyboard) sur la sarcelle des clés, à peine
+  visible. Pendant le geste il s'éteignait, dans le Storyboard comme dans l'Animation (le fantôme et la bulle prenaient le relais).
+- Un calque d'effet n'a que des dessins vides : il fallait que ses clés restent visibles (essai ajouté pour ne pas le casser).
+
+### 208.2 Une clé vide n'affiche rien
+
+Partout (timeline du Storyboard, montage, timeline de l'Animation) : une clé dont le dessin n'a aucun trait n'a ni couleur, ni
+hachures, ni pastille, ni miniature, ni nom, ni durée écrite, ni soulignement de la tête de lecture : on voit le gris du fond de la
+ligne du calque. Restent, pour que ses deux limites se lisent : le trait de coupure à son début et celui au début de la clé suivante ;
+le bord qui s'allume au survol ; et, choisie, le même cadre de choix que les autres clés (survolée par son milieu, le même cadre
+blanc). **Pas sur un calque d'effet** (ses dessins sont tous vides, ses clés se montrent comme avant) ni quand un calque de couleur y a
+des griffonnages (ils remplissent des zones) : `clesvue::cle_vide`. Une marque de couleur posée sur une clé vide ne se voit plus non
+plus.
+
+### 208.2 bis Une clé vide n'est vide qu'à l'affichage (point 7)
+
+Pour tous les gestes, elle se comporte exactement comme une clé pleine. Vérifié dans le code : aucun geste ne regarde le contenu du
+dessin (le bord entre deux clés, la fin du plan, Maj, Ctrl, + et −, le choix, le glisser par le milieu travaillent sur les images du
+calque, pas sur les traits) ; les essais de la partie 206 tournaient d'ailleurs déjà sur des dessins vides. Rien n'a donc changé dans
+les gestes ; des essais le gardent : ses deux bords se tirent (roll avec la voisine), « Décaler la suite » (Ctrl) la fait pousser la
+suite et la fait pousser par la clé d'avant, la fin du plan raccourcit une dernière clé vide jusqu'à sa butée (une image), « Étirer en
+proportion » (Maj) l'étire avec les autres, Ctrl + l'allonge et décale la suite, prise par son milieu elle se glisse ; dans la
+timeline du Storyboard ses deux bords prennent le pointeur (↔) et s'allument, et choisie elle a son cadre.
+
+### 208.3 Les deux boutons du stylet dans la barre, à la largeur d'origine
+
+La barre de lecture de la timeline du Storyboard range ses commandes par usage (partie 179) : les moins utilisées passent sous « ⋯ »
+quand la place manque. « Décaler la suite » et « Étirer en proportion » avaient le rang 20 : à 340 points, ils partaient sous « ⋯ ».
+À 340 points, après la lecture et le temps, la barre n'a la place que de trois boutons : c'étaient « Nouveau plan », le menu Plans et
+« Décaler la suite » une fois son rang monté ; « Étirer en proportion » restait sous « ⋯ ». **Choix : les deux boutons passent au
+rang 56 (au-dessus de « Comparer »), et « Nouveau plan » descend au rang 2 dans cette barre : c'est la même action que le « ⊞ » de
+la ligne « Plans », juste dessous, qui reste toujours là** (la même règle que « Nouveau calque vectoriel » et le « + » de la ligne
+« Calques », partie 179). À la largeur d'origine, la barre montre donc : la lecture, le temps, « Décaler la suite », « Étirer en
+proportion », le menu Plans, « ⋯ » et la légende. « Nouveau plan » est sous « ⋯ » (avec son nom, son raccourci et son épingle) et
+toujours sur la ligne « Plans » : aucun bouton n'est perdu, le menu Plans (plus utilisé) reste. Ils ne sont pas mis « en tête » (le
+groupe de la lecture, jamais sous « ⋯ ») : la largeur minimale de la colonne aurait grandi d'autant.
+
+### 208.3 bis Retour arrière et Suppr suppriment les clés choisies ; vider leur dessin : Alt+Retour arrière (point 8)
+
+Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac. On trouve un autre raccourci pour vider le dessin,
+Maj+Retour arrière par exemple. »
+
+- **Suppr et Retour arrière sur des clés de dessin choisies** (la timeline ou le montage a la main, rien n'est choisi sur le dessin,
+  pas dans les Vignettes : la même garde qu'avant, `suppr_vise_les_cles`) **suppriment les clés** : la clé d'avant s'allonge pour
+  remplir leur place (comme Ctrl+X sans copier ; sinon celle d'après), le plan garde sa durée, le dessin d'une clé supprimée va à la
+  corbeille. Les clés des calques verrouillés sont laissées de côté et nommées. Une étape d'annulation ; la barre d'état : « 2 clés
+  supprimées : les voisines les remplacent. Laissé de côté : « B » (verrouillé). » (`choixtout::supprimer_cles_choisies`.) Avant, ces
+  deux touches vidaient le dessin (règle du 2026-11-10, partie 132).
+- **Vider le dessin des clés choisies** (les clés restent, avec leur durée) : nouvelle action `cles.vider_dessin`, **Alt+Retour
+  arrière et Alt+Suppr**. Maj+Retour arrière et Maj+Suppr, proposés par Anthony, sont déjà pris (« Effacer ce qui est hors de la
+  sélection » et « Remplir la sélection », son choix du 2026-10-20) : Alt, les touches libres les plus proches (l'essai des
+  raccourcis vérifie qu'aucune touche n'a deux actions). À changer en un clic droit si une autre lui va mieux.
+- Le menu du clic droit d'une clé de dessin montre « Supprimer la clé » avec Suppr, puis « Vider le dessin de la clé » avec
+  Alt+Retour arrière.
+- Rien ne change pour les autres usages de Suppr (clés de caméra, d'effets, de position, d'opacité, bibliothèque, références,
+  commentaires, sélection sur le dessin, champs de texte).
+
+### 208.4 La bulle du geste sur une ligne
+
+`clesvue::bulle_du_geste` : le texte ne passe plus à la ligne (`Label::extend`), quelle que soit la largeur que la zone a gardée.
+
+### 208.5 La fin du plan : une seule bulle, les mots de l'Animation
+
+Dans la timeline du Storyboard (et le montage, qui a le même geste) : plus de bande noire en haut pour la fin d'un plan ; la seule
+bulle est près du pointeur : « Durée du plan : 1s 16 (-8 i) », comme dans l'Animation (206.6 E). La barre d'état garde sa phrase
+(« Plan 1, fin raccourcie de 8 i : durée… »). Le début d'un plan, la coupe entre deux plans et le contenu glissé gardent leur étiquette
+en haut (ils n'ont pas de bulle). Avec « Étirer en proportion » allumé (ou Maj tenue), la bulle ajoute « · toutes les clés en
+proportion », dans les trois timelines (`clesvue::bulle_fin_du_plan`).
+
+### 208.6 Le bord allumé : plus lisible, et pendant tout le geste
+
+Le bord allumé est une bande de 4 points du contour du thème (blanc en thème sombre) presque opaque, bordée d'un liseré sombre de
+chaque côté (`clesvue::peindre_bord_allume`) ; les clés gardent leurs couleurs. Il s'allume au survol et **reste allumé pendant tout le
+geste, à la place de l'instant du bord**, dans la timeline du Storyboard (et le montage) comme dans celle de l'Animation
+(`HandleDrag::bord_tenu`, posé par `tirer_bord_de_cle`). Dans le Storyboard, les bords de début et de fin d'un calque (sa barre)
+prennent la même bande.
+
+### 208.7 Essais
+
+`src/bordscles_tests.rs`, section « Partie 208 » : la clé vide sans rien dedans dans la timeline du Storyboard (par la vraie fenêtre
+sans écran ; la coupure de la clé suivante reste) et dans celle de l'Animation (miniatures allumées), les clés d'un calque d'effet
+gardées, les deux boutons hors de « ⋯ » à la largeur d'origine (340), la bulle sur une ligne quand son texte s'allonge, la fin du plan
+du Storyboard (une seule bulle, « Durée du plan : … (-4 i) », la barre d'état gardée, plus de texte peint en haut), la bulle qui dit
+« toutes les clés en proportion » (Animation et Storyboard, et pas quand le bouton est éteint), le bord allumé (bande claire) au survol et
+pendant le geste dans le Storyboard et dans l'Animation. Changés : l'essai de la partie 206 sur l'habillage d'une clé (plus de hachures) et celui de la timeline du Storyboard par la vraie
+fenêtre (ses dessins ont un trait : une clé vide n'écrit plus sa durée) ; `tailleicones_tests` mesure « Décaler la suite » dans la
+barre de lecture au lieu de « Nouveau plan » ; `colonne_calques_tests::doc_174` met un trait dans ses dessins (ses clés étaient
+vides, elles ne se peignaient plus). Point 8 : `bordscles_tests` (Retour arrière et Suppr suppriment, une étape, le calque verrouillé
+nommé ; les touches : Retour arrière et Suppr = Supprimer, Alt+Retour arrière et Alt+Suppr = Vider le dessin ; vider garde les clés),
+rouges d'abord ; et quatre essais de `multicalques_tests` qui attendaient « Suppr vide le dessin » remis à la nouvelle règle (le vidage
+passe par `cles.vider_dessin` ; Suppr supprime, laisse le calque verrouillé et le nomme ; une sélection restée sur une autre image
+n'empêche pas la suppression ; dans les Vignettes et sans clé choisie, rien n'est supprimé).
+Les captures (`FEANOR_BORDSCLES_PNG`) sont prises à la largeur d'origine de la colonne, avec une capture de plus : le geste sur le bord
+d'un dessin dans l'Animation.
+
+### 208.8 Ce qui n'est pas fait, à voir
+
+- Une marque de couleur sur une clé vide ne se voit plus.
+- « Vider le dessin des clés » est sur Alt+Retour arrière / Alt+Suppr, pas sur Maj+Retour arrière (pris) : à confirmer par Anthony.
+- À la largeur d'origine, « Nouveau plan » n'est plus dans la barre de lecture (il est sur la ligne « Plans », juste dessous, et sous
+  « ⋯ ») ; il y revient dès que la colonne est un peu plus large.
+
+### 208.9 À essayer (Anthony, sur une copie de projet)
+
+1. Un calque avec une clé vide (F4 sans dessiner) : dans la timeline du Storyboard, dans le montage et dans celle de l'Animation, à sa
+   place on voit le gris du fond de la ligne, entre deux traits de coupure (à son début et au début de la clé suivante).
+2. Passer sur un bord d'une clé vide : il s'allume, on peut le tirer ; avec « Décaler la suite » elle pousse la suite ; la choisir :
+   elle a son cadre ; Ctrl + l'allonge ; la prendre par son milieu et la glisser.
+3. Un calque d'effet : ses clés se voient toujours.
+4. La colonne de gauche du Storyboard à sa largeur d'origine (double-clic sur sa barre si besoin) : « Décaler la suite » et « Étirer en
+   proportion » sont dans la barre de lecture, avec le menu Plans ; « Nouveau plan » est sur la ligne « Plans », juste dessous.
+5. Tirer le bord entre deux clés sur 4 ou 5 images : la bulle reste sur une ligne (« Clé 2 : 10 i (+4) »).
+6. Tirer la fin d'un plan dans la timeline du Storyboard : une seule bulle, près du pointeur, « Durée du plan : 1s 16 (-8 i) » ; la
+   barre d'état dit toujours « Plan 1, fin raccourcie… ».
+7. La même chose avec « Étirer en proportion » allumé (ou Maj) : la bulle finit par « · toutes les clés en proportion ».
+8. Choisir deux clés (et une sur un calque verrouillé), Retour arrière : elles disparaissent, la clé d'avant prend leur place, la
+   barre d'état nomme le calque verrouillé ; Ctrl+Z les rend. Alt+Retour arrière sur des clés choisies : leur dessin se vide, elles
+   restent. Clic droit sur une clé : « Supprimer » (Suppr) et « Vider le dessin » (Alt+Retour arrière).
+9. Survoler un bord de clé : une bande claire nette ; la prendre et tirer : elle reste allumée et suit le pointeur jusqu'au lâcher, dans
+   le Storyboard comme dans l'Animation (bord droit d'un dessin).

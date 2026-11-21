@@ -5,9 +5,12 @@
 //!   (valeur absolue, comme les logiciels de dessin courants). Chacun à sa façon : sa valeur fixe, ou la clé d'opacité de l'image
 //!   courante s'il en a (`Layer::set_opacity_at`). Un glissé fait une seule étape (`App::edited`). Comme pour un seul calque, un
 //!   calque verrouillé change aussi (le verrou protège le dessin, pas les réglages du calque).
-//! - **Suppr sur des clés choisies** (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : le dessin de chaque
-//!   clé est vidé, la clé reste avec sa durée. Un dessin tenu sur plusieurs clés n'est vidé qu'une fois. Calques verrouillés ou
-//!   masqués laissés de côté. Une seule étape. Supprimer vraiment les clés : le menu de la piste (« Supprimer les clés… »).
+//! - **Suppr et Retour arrière sur des clés choisies** (la timeline ou le montage a la main, rien n'est choisi sur le dessin) :
+//!   partie 208 (Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac ») : les clés sont supprimées, la clé d'avant
+//!   prend leur place (comme Ctrl+X sans copier, `delete_keys`). Calques verrouillés laissés de côté et nommés. Une seule étape.
+//! - **Vider le dessin des clés choisies** (`cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr ; c'était Suppr avant la partie
+//!   207) : le dessin de chaque clé est vidé, la clé reste avec sa durée. Un dessin tenu sur plusieurs clés n'est vidé qu'une fois.
+//!   Calques verrouillés ou masqués laissés de côté. Une seule étape.
 
 use crate::app::App;
 use crate::document::CelId;
@@ -45,14 +48,55 @@ impl App {
             || (self.board_shown() && (!self.vignettes.annot.selection.is_empty() || !self.board_notes.is_empty()))
     }
 
-    /// Suppr vide-t-il les clés choisies ? La timeline ou le montage a la main, des clés sont choisies, rien n'est choisi sur le
-    /// dessin, et ce n'est pas la planche des Vignettes (là, Suppr n'efface que ce qui y est choisi).
-    pub(crate) fn suppr_vide_les_cles(&self) -> bool {
+    /// Suppr (ou Retour arrière) vise-t-il les clés choisies ? La timeline ou le montage a la main, des clés sont choisies, rien
+    /// n'est choisi sur le dessin, et ce n'est pas la planche des Vignettes (là, Suppr n'efface que ce qui y est choisi).
+    pub(crate) fn suppr_vise_les_cles(&self) -> bool {
         self.key_focus && !self.key_sel.is_empty() && !self.board_shown() && !self.in_card && !self.selection_sur_le_dessin()
     }
 
-    /// Suppr sur les clés choisies : leurs dessins sont vidés, les clés restent. Une étape, tout ou rien. (Sans clé choisie, Suppr
-    /// n'efface rien : la règle du 2026-10-18 ; `suppr_vide_les_cles`.)
+    /// Partie 208 : Suppr et Retour arrière sur les clés choisies (`suppr_vise_les_cles`) : les clés sont supprimées, la clé
+    /// d'avant s'allonge pour remplir leur place (`delete_keys`, comme Ctrl+X sans copier). Les clés des calques verrouillés (ou
+    /// d'un dossier verrouillé) sont laissées de côté et nommées. Une étape.
+    pub(crate) fn supprimer_cles_choisies(&mut self) {
+        self.end_stroke();
+        if self.content_refuses() {
+            return;
+        }
+        let mut gardees = Vec::new();
+        let mut laisses: Vec<String> = Vec::new();
+        for k in self.key_sel.clone() {
+            let Some(p) = self.doc.panels.iter().find(|p| p.id == k.panel) else { continue };
+            let Some(li) = p.layers.iter().position(|l| l.id == k.layer) else { continue };
+            let l = &p.layers[li];
+            let raison = if l.folder || l.video.is_some() {
+                Some("pas de dessin")
+            } else if l.locked || crate::folders::locked_by_folder(&p.layers, li) {
+                Some("verrouillé")
+            } else {
+                None
+            };
+            match raison {
+                Some(r) => {
+                    let t = format!("« {} » ({r})", l.name);
+                    if !laisses.contains(&t) {
+                        laisses.push(t);
+                    }
+                }
+                None => gardees.push(k),
+            }
+        }
+        let laisses = if laisses.is_empty() { String::new() } else { format!(" Laissé{} de côté : {}.", if laisses.len() > 1 { "s" } else { "" }, laisses.join(", ")) };
+        if gardees.is_empty() {
+            self.status = format!("Aucune clé à supprimer.{laisses}");
+            return;
+        }
+        self.key_sel = gardees;
+        self.delete_keys(false);
+        self.status += &laisses;
+    }
+
+    /// « Vider le dessin des clés choisies » (`cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr ; Suppr avant la partie 208) :
+    /// leurs dessins sont vidés, les clés restent. Une étape, tout ou rien.
     pub(crate) fn vider_cles(&mut self) {
         let choix = self.key_sel.clone();
         self.vider_dessins_des_cles(&choix, true);
@@ -144,7 +188,7 @@ impl App {
         }
         let s = |k: usize| if k > 1 { "s" } else { "" };
         self.status = if parle_cles {
-            format!("{n} clé{} vidée{} sur {m} calque{} (les clés restent, avec leur durée ; pour les supprimer : clic droit sur la piste).{}", s(n), s(n), s(m), laisses.unwrap_or_default())
+            format!("{n} clé{} vidée{} sur {m} calque{} (les clés restent, avec leur durée ; pour les supprimer : Suppr ou Retour arrière).{}", s(n), s(n), s(m), laisses.unwrap_or_default())
         } else {
             format!("Dessin vidé sur {m} calque{} à cette image.{}", s(m), laisses.unwrap_or_default())
         };
