@@ -183,7 +183,7 @@ impl App {
 
     /// La séquence du plan courant, comme cible d'un ajout (devant la caméra).
     pub(crate) fn decor3d_cible_ici(&self) -> Cible3d {
-        Cible3d { seq: self.doc.sequence_of(self.cur_panel), xz: None }
+        Cible3d { seq: self.doc.env_cle(self.cur_panel), xz: None }
     }
 
     /// Lit et mesure `chemin` sur un autre fil, pour l'ajouter au décor de la séquence du plan courant ; la suite à
@@ -425,7 +425,7 @@ impl App {
 
     /// « Enlever le décor 3D de la séquence » : tous ses objets (une étape d'annulation).
     pub(crate) fn decor3d_enlever(&mut self) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         if self.doc.decor_du_plan(self.cur_panel).is_none() {
             self.status = "Cette séquence n'a pas de décor 3D.".into();
             return;
@@ -440,7 +440,7 @@ impl App {
     /// « Enlever » un objet du décor de la séquence du plan courant (une étape d'annulation) ; ceux qui reposaient sur lui
     /// redescendent.
     pub(crate) fn decor3d_enlever_objet(&mut self, id: u64) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         self.decor3d_changer(seq, "Enlever un objet 3D", |d, _| {
             let i = d.objets.iter().position(|o| o.id == id)?;
             let o = d.objets.remove(i);
@@ -458,7 +458,7 @@ impl App {
     /// « Dupliquer » un objet : la copie (même modèle, partagé : rien n'est relu ni renvoyé à la carte) posée juste à côté, à sa
     /// droite (une étape d'annulation).
     pub(crate) fn decor3d_dupliquer_objet(&mut self, id: u64) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let mut neuf = None;
         self.decor3d_changer(seq, "Dupliquer un objet 3D", |d, doc| {
             let o = d.objet(id)?.clone();
@@ -814,7 +814,7 @@ impl App {
     pub(crate) fn decor3d_appliquer(&mut self, seq: u64, mut d: Decor3d) {
         // (Partie 200 : un objet animé de la séquence courante retouché suit la règle des caméras de plan, `miseenscene3d::retoucher` ;
         // l'aimant ne change pas ses clés.)
-        let courante = !self.doc.panels.is_empty() && self.doc.sequence_of(self.cur_panel) == seq;
+        let courante = !self.doc.panels.is_empty() && self.doc.env_cle(self.cur_panel) == seq;
         let retouches = if courante { crate::miseenscene3dui::places_retouchees(self.doc.decors3d.par_sequence.get(&seq), &d) } else { Vec::new() };
         let notes = crate::decor3daimant::aimanter(&mut d, Monde::of(&self.doc).sol_y());
         if !notes.is_empty() {
@@ -839,7 +839,7 @@ impl App {
     /// l'onglet 3D) ; toutes : le décor tel que le panneau Espace 3D le montre, dans son en-tête repliable. La même retouche,
     /// la même étape d'annulation, quelle que soit la partie.
     pub(crate) fn decor3d_reglages_de(&mut self, ui: &mut egui::Ui, p: PartiesDecor) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else {
             ui.add_space(6.0);
             if p.decor {

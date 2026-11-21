@@ -564,3 +564,19 @@ lumière, dessinés par FEANOR (neuf choix, puis l'heure, les nuages, la brume, 
 (processeur et carte graphique), le soleil du décor suit le sien (`Aspect::soleil`). Les cartes qui « prennent la lumière du cyclo »
 reçoivent `c × (ambiante + ambiante_soleil × n·soleil)` en lumière linéaire (le drapeau 16 des composeurs, le contexte des ombres du
 processeur), avec les ombres et les lampes ; Jour clair vaut 1.
+
+## 27. Le cyclo dessiné (2026-11-21, branche `cyclo-dessine`, partie 203 de `docs/INTERFACE.md`)
+
+Un cyclo peut être dessiné (`cyclodessin.rs`) : une bande panoramique de 360° (4096 × 1024, de +60° à −30°, 0° devant vers −z, 90° à
+droite vers +x), un petit projet FEANOR dessiné dans un onglet à lui (la vue de dessin, ses outils), posé dans le décor à « Terminer »
+(`Decor3d::dessin_cyclo`, `Cyclo::dessin`, sa version). Sa bande aplatie se pose à l'horizon de l'image équirectangulaire du cyclo
+(`composer`, 4096 × 2048), sur le ciel de fond du choix de base, qui donne aussi la lumière. Enregistré à côté du projet,
+`cyclos/<séquence>/cyclo.shot`.
+
+## 28. L'environnement d'un plan (2026-11-21, branche `cyclo-dessine`, partie 204 de `docs/INTERFACE.md`)
+
+Un plan peut sortir de l'environnement de sa séquence : propre (vide, ou une copie), ou lié à une autre séquence (en direct).
+`Document::env_cle` est le seul chemin vers l'environnement d'un plan : la clé dans `Decors3d::par_sequence` de sa séquence, de son
+environnement propre (`cle_de_plan`, le numéro du plan avec le bit 62) ou de la séquence liée ; `Decors3d::envs` dit quels plans sont
+sortis. L'image, l'export, l'onglet 3D, les ombres, les lampes, le cyclo, les caches suivent ; les clés des objets animés se lisent à
+l'image de la séquence du plan.

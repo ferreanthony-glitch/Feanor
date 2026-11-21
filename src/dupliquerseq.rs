@@ -175,6 +175,22 @@ impl Document {
                 o.caches_dans = avant.iter().filter_map(|p| c.plans.get(p).copied()).collect();
             }
         }
+        // (Partie 204 : un plan sorti de l'environnement de la séquence : sa copie aussi. Un environnement propre est copié pour la copie
+        // du plan (« Caché dans le plan » le suit) ; un lien vers une autre séquence reste un lien vers elle.)
+        let sortis: Vec<(u64, u64, crate::decor3d::EnvPlan)> = c.plans.iter().filter_map(|(&src, &neuf)| self.decors3d.envs.get(&src).map(|e| (src, neuf, *e))).collect();
+        for (src, neuf, e) in sortis {
+            if let crate::decor3d::EnvPlan::Propre { .. } = e {
+                self.copier_env(crate::decor3d::cle_de_plan(src), crate::decor3d::cle_de_plan(neuf), |p| p == src);
+                if let Some(d) = self.decors3d.par_sequence.get_mut(&crate::decor3d::cle_de_plan(neuf)) {
+                    for o in &mut d.objets {
+                        for p in &mut o.caches_dans {
+                            *p = neuf;
+                        }
+                    }
+                }
+            }
+            self.decors3d.envs.insert(neuf, e);
+        }
         // Les traits des dessins copiés : des numéros neufs, communs aux parts d'un même trait dans la copie.
         self.renumeroter_la_copie(&c);
         let index = self.insert_and_normalize(end, copies);

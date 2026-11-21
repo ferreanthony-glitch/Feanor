@@ -5,6 +5,18 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Un plan qui sort de l'environnement de sa séquence** (partie 204, sur la 203, branche `cyclo-dessine`, format 61 inchangé) : propre
+  (vide ou copie), ou lié à une autre séquence en direct ; « Détacher », « Revenir » (demandé si retouché) ; une marque sur le bloc du
+  plan (Storyboard, timeline de la séquence) ; un seul chemin, `Document::env_cle` ; dupliquer garde, supprimer une séquence liée demande
+  puis copie. Et l'essai GPU des cyclos qui échouait une fois sur trois : un étalonnage sur un ordinateur très occupé donnait un budget de
+  0 triangle (le décor masqué) ; un plancher de 5 000 triangles (204.0). Essais : `planenv_tests.rs` (9) et un pour le plancher.
+  **Rien regardé, pas de commit** (liste 204.3).
+- **Dessiner son propre cyclo** (partie 203, branche `cyclo-dessine` partie de main 85fa0a0, format 61 inchangé) : « Dessiner mon
+  cyclo… » (Partir de : Vide ou un choix) ouvre une feuille panoramique de 360° (4096 × 1024) dans un onglet à elle, la vue de dessin de
+  FEANOR avec tous ses outils ; horizon, 0°/90°/180°/270°, fantômes des bords, un trait bitmap qui passe un bord revient par l'autre ;
+  « Terminer » la pose dans le décor (une étape d'annulation) et revient où l'on était ; l'image du cyclo se refait une fois (68 ms, sur
+  un autre fil). Enregistré dans `cyclos/<séquence>/`, copié et dupliqué avec le décor ; retirer demande d'abord. Essais :
+  `cyclodessin_tests.rs` (17). Retouches 203.4 : une feuille plus petite sur une carte graphique limitée (jamais d'arrêt), les fantômes cadrés d'office. **Rien regardé dans l'application, pas de commit** (liste 203.3).
 - **Les cyclos** (partie 202, branche `cyclos` partie de main 23cb4e4, format 61 inchangé) : un cyclo par séquence, même sans objet 3D,
   dessiné par FEANOR (Jour clair, Nuageux, Coucher de soleil, Nuit, Brouillard, Montagne, Ville, Mer, Studio ; heure, nuages, brume,
   rotation, graine, couleur), derrière les cartes et le décor dans l'image des plans, l'export et l'onglet 3D (bouton « Cyclo ») ; les

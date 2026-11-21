@@ -241,7 +241,7 @@ impl App {
     /// L'œil d'une ligne : une carte, celui de son calque (`agir_colonne`) ; un objet, caché dans la vue et l'image (pour la séance) ;
     /// une caméra, cachée dans la vue ; le soleil, sa marque dans la vue ; le ciel, celui du décor (une étape d'annulation).
     pub(crate) fn scene3d_basculer_oeil(&mut self, l: Ligne3d) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         match l {
             Ligne3d::Objet(id) => {
                 // (Partie 199 : gardé dans le projet, une étape d'annulation.)
@@ -368,6 +368,9 @@ impl App {
         if self.panneau_film_vide(ui) {
             return;
         }
+        // (Partie 204 : l'environnement du plan, en tête : celui de la séquence, le sien, ou lié à une autre séquence.)
+        self.env_du_plan_ui(ui);
+        ui.separator();
         self.decor3d_reglages_de(ui, PartiesDecor { decor: true, ..PartiesDecor::RIEN });
     }
 
@@ -391,7 +394,7 @@ impl App {
                 self.toggle_play_scope(true);
             }
             ui.label(RichText::new(format!("image {} / {}", g.saturating_sub(debut) + 1, n)).monospace());
-            ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.sequence_of(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
+            ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.env_cle(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
             // (Partie 200 : « ◆ Clé » pour l'objet choisi, au bout de la ligne ; partie 201 : le zoom de la timeline, avant lui.)
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.o3_bouton_cle(ui);
@@ -448,6 +451,9 @@ impl App {
         let _ = &graduations;
         // Les plans, en blocs ; les clés de caméra de chacun.
         let mut blocs = Vec::new();
+        let mut marques_env: Vec<(Rect, String)> = Vec::new();
+        #[cfg(test)]
+        crate::planenv::MARQUES.with(|m| m.borrow_mut().clear());
         for pi in a..z {
             let s = self.doc.panel_start(pi);
             let e = s + self.doc.panels[pi].frame_count();
@@ -459,6 +465,10 @@ impl App {
                 p.rect_stroke(b, 3.0, Stroke::new(1.5_f32, crate::theme::contour()), egui::StrokeKind::Inside);
             }
             p.with_clip_rect(b.shrink(2.0)).text(pos2(b.left() + 5.0, b.center().y), Align2::LEFT_CENTER, crate::storyboard::panel_title(&self.doc, pi), FontId::proportional(11.0), ui.visuals().text_color());
+            // (Partie 204 : l'environnement du plan, s'il n'est pas celui de la séquence.)
+            if let Some(m) = self.peindre_marque_env(&p.with_clip_rect(b), b, pi) {
+                marques_env.push(m);
+            }
             for k in &self.doc.panels[pi].camera {
                 let c = pos2(x_de(s + k.frame) + 0.5, cles.center().y);
                 p.add(egui::Shape::convex_polygon(vec![c + vec2(0.0, -5.0), c + vec2(5.0, 0.0), c + vec2(0.0, 5.0), c + vec2(-5.0, 0.0)], crate::theme::camera(), Stroke::NONE));
@@ -486,7 +496,27 @@ impl App {
                 }
             }
         }
-        crate::bulles::bulle(resp, "Timeline de la séquence", "Ses plans, la tête de lecture, les clés de caméra de chaque plan. Un clic sur un plan y mène ; glisser sur la règle déplace la tête de lecture. La vue et la caméra du plan suivent.", "");
+        // (Partie 204 : la bulle de la marque d'environnement ; le clic droit d'un plan, son menu.)
+        if let Some(pos) = resp.hover_pos() {
+            if let Some((_, phrase)) = marques_env.iter().find(|(z, _)| z.contains(pos)) {
+                resp.clone().on_hover_text_at_pointer(phrase.as_str());
+            }
+        }
+        if resp.secondary_clicked() {
+            if let Some(pos) = resp.interact_pointer_pos() {
+                self.o3.menu_plan = blocs.iter().find(|(_, b)| b.contains(pos)).map(|(pi, _)| self.doc.panels[*pi].id);
+            }
+        }
+        if let Some(id) = self.o3.menu_plan {
+            let ouvert = resp.context_menu(|ui| match self.doc.panels.iter().position(|p| p.id == id) {
+                Some(pi) => self.menu_env_du_plan(ui, pi),
+                None => ui.close_menu(),
+            });
+            if ouvert.is_none() {
+                self.o3.menu_plan = None;
+            }
+        }
+        crate::bulles::bulle(resp, "Timeline de la séquence", "Ses plans, la tête de lecture, les clés de caméra de chaque plan. Un clic sur un plan y mène ; glisser sur la règle déplace la tête de lecture ; clic droit sur un plan : son environnement 3D. La vue et la caméra du plan suivent.", "");
     }
 
     /// La banque 3D, dans la bande du bas de l'onglet 3D.

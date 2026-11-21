@@ -103,6 +103,10 @@ impl App {
     /// l'enregistrement est lancé (ou en file derrière celui qui dure).
     pub(crate) fn save_then(&mut self, then: Option<Pending>) -> bool {
         self.end_stroke();
+        // (Partie 203 : le dessin d'un cyclo s'enregistre avec son projet : « Terminer », puis le projet s'enregistre.)
+        if self.cyclo_edition.is_some() && !self.terminer_cyclo() {
+            return false;
+        }
         match self.path.clone() {
             // Un projet à l'ancien nom (`Bus/Bus.pelure`) s'enregistre en `Bus/Bus.shot`, dans le même dossier : seul le
             // manifeste change de nom, l'ancien part une fois le nouveau écrit (`project::retirer_ancien_manifeste`). Un
@@ -128,6 +132,9 @@ impl App {
 
     pub(crate) fn save_as_then(&mut self, then: Option<Pending>) -> bool {
         self.end_stroke();
+        if self.cyclo_edition.is_some() && !self.terminer_cyclo() {
+            return false;
+        }
         // Sans nom de fichier : le titre du projet (un projet importé, 14a), sinon « Mon film ».
         let title: String = self.doc.properties.title.trim().chars().map(|c| if r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
         let name = format!("{}.{}", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }), project::EXTENSION);

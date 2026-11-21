@@ -91,7 +91,13 @@ impl App {
         // (Un glisser d'objets ouvre la liste : on y voit où les lâcher.)
         let glisse = egui::DragAndDrop::has_payload_of_type::<GlisseDecor3d>(ui.ctx());
         let ouverte = self.o3.sequences_ouvertes || glisse;
-        let texte = format!("{} {}", self.o3_nom_de_sequence(seq), if ouverte { ph::CARET_UP } else { ph::CARET_DOWN });
+        // (Partie 204 : un plan sorti de l'environnement de sa séquence : ce qu'on retouche ici est le sien, ou celui de la séquence liée.)
+        let nom = match self.env_du_plan(self.cur_panel) {
+            None => self.o3_nom_de_sequence(seq),
+            Some(crate::decor3d::EnvPlan::Propre { .. }) => format!("{} · environnement propre du {}", self.o3_nom_de_sequence(seq), crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase()),
+            Some(crate::decor3d::EnvPlan::Lie(s)) => format!("{} · {} : environnement de la {}", self.o3_nom_de_sequence(seq), crate::storyboard::panel_title(&self.doc, self.cur_panel), self.nom_court_de_sequence(s)),
+        };
+        let texte = format!("{nom} {}", if ouverte { ph::CARET_UP } else { ph::CARET_DOWN });
         let r = ui.add(egui::Button::new(RichText::new(texte).strong()).frame(false));
         if crate::bulles::bulle(r, "Séquence de l'onglet 3D", "Ouvre la liste des séquences du film : un clic va au premier plan de l'une d'elles. Glisser des objets du décor sur une séquence de la liste les y déplace (Alt : les y copie).", "").clicked() {
             self.o3.sequences_ouvertes = !self.o3.sequences_ouvertes;
@@ -147,7 +153,7 @@ impl App {
     /// Le menu du clic droit d'une ligne d'objet de « Scène 3D » : copier ou déplacer l'objet (ou les objets choisis) vers une autre
     /// séquence.
     pub(crate) fn o3_menu_d_objet(&mut self, resp: &egui::Response, id: u64) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let autres: Vec<(u64, String)> = self.doc.sequence_order().into_iter().filter(|&q| q != seq).map(|q| (q, self.o3_nom_de_sequence(q))).collect();
         let ids = self.o3_objets_du_geste(id);
         let mut geste = None;
@@ -177,7 +183,7 @@ impl App {
     /// Une ligne d'objet de « Scène 3D » qu'on commence à glisser : elle porte ses objets (ou les objets choisis).
     pub(crate) fn o3_glisser_une_ligne(&mut self, resp: &egui::Response, id: u64) {
         if resp.drag_started() {
-            let g = GlisseDecor3d { seq: self.doc.sequence_of(self.cur_panel), ids: self.o3_objets_du_geste(id) };
+            let g = GlisseDecor3d { seq: self.doc.env_cle(self.cur_panel), ids: self.o3_objets_du_geste(id) };
             resp.dnd_set_drag_payload(g);
         }
         if let Some(g) = egui::DragAndDrop::payload::<GlisseDecor3d>(&resp.ctx) {

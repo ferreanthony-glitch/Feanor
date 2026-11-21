@@ -284,6 +284,8 @@ etat_projet! {
     jalons_ui: Option<crate::jalonsui::Fenetre> = None,
     // --- le décor 3D de la séquence (`decor3dui.rs`) : import en cours, fenêtre « Ce décor est lourd »
     decor3d: crate::decor3dui::Etat3d = Default::default(),
+    // --- partie 203 : l'onglet est celui du dessin d'un cyclo (`cyclodessin.rs`) : d'où il vient, ses fantômes
+    cyclo_edition: Option<crate::cyclodessin::Edition> = None,
 }
 
 
@@ -405,11 +407,14 @@ impl App {
         match &t.etat {
             None => {
                 let vierge = self.onglet_vierge();
+                // (Partie 203 : l'onglet du dessin d'un cyclo se nomme d'après sa séquence ; il n'a rien à enregistrer : son dessin va
+                // dans son projet à « Terminer ».)
+                let cyclo = self.cyclo_edition.as_ref().map(|e| format!("Cyclo de {}", e.nom_sequence));
                 InfosOnglet {
                     id: t.id,
-                    nom: nom_de(self.path.as_deref(), self.import_source.as_deref(), vierge),
+                    nom: cyclo.clone().unwrap_or_else(|| nom_de(self.path.as_deref(), self.import_source.as_deref(), vierge)),
                     chemin: self.path.clone(),
-                    modifie: self.modified,
+                    modifie: self.modified && cyclo.is_none(),
                     ecriture: self.saving.is_some(),
                     actif: true,
                     vierge,
@@ -418,11 +423,12 @@ impl App {
             }
             Some(e) => {
                 let vierge = Self::est_vierge(e.welcome, &e.path, &e.import_source, e.modified, e.history.is_empty(), e.saving.is_some(), e.open_job.is_some());
+                let cyclo = e.cyclo_edition.as_ref().map(|e| format!("Cyclo de {}", e.nom_sequence));
                 InfosOnglet {
                     id: t.id,
-                    nom: nom_de(e.path.as_deref(), e.import_source.as_deref(), vierge),
+                    nom: cyclo.clone().unwrap_or_else(|| nom_de(e.path.as_deref(), e.import_source.as_deref(), vierge)),
                     chemin: e.path.clone(),
-                    modifie: e.modified,
+                    modifie: e.modified && cyclo.is_none(),
                     ecriture: e.saving.is_some(),
                     actif: false,
                     vierge,
@@ -685,6 +691,46 @@ impl App {
         true
     }
 
+    /// Partie 203 : un onglet neuf pour le dessin d'un cyclo (`cyclodessin.rs`), avec ce projet `doc`, juste à droite de l'onglet
+    /// affiché, qui devient l'onglet affiché. Sans copie de secours : le dessin va dans son projet à « Terminer ».
+    pub(crate) fn ouvrir_onglet_du_cyclo(&mut self, doc: Document) -> bool {
+        if !self.onglet_libre() {
+            return false;
+        }
+        let (reserve, textures) = self.sortir_de_l_onglet();
+        self.continu_avant_de_ranger();
+        let mut e = Box::new(EtatProjet::vierge(self.gpu.is_some()));
+        self.echanger_etat(&mut e);
+        e.reserve_fx = Some(reserve);
+        e.textures_gpu = textures;
+        self.onglets[self.actif].etat = Some(e);
+        let id = self.prochain_onglet;
+        self.prochain_onglet += 1;
+        self.onglets.insert(self.actif + 1, Onglet { id, etat: None, vu_le: Instant::now() });
+        self.actif += 1;
+        self.entrer_dans_l_onglet(None, None);
+        self.load_doc(doc);
+        true
+    }
+
+    /// Partie 203 : l'onglet affiché, celui d'un cyclo, se ferme ; l'onglet `vers` (son projet) revient. Rend le projet du dessin et
+    /// ce que l'onglet savait du cyclo.
+    pub(crate) fn fermer_l_onglet_du_cyclo(&mut self, vers: usize) -> (Document, Option<crate::cyclodessin::Edition>) {
+        let i = self.actif;
+        self.bascule(vers, true);
+        let mut ferme = self.onglets.remove(i);
+        if self.actif > i {
+            self.actif -= 1;
+        }
+        let (doc, ed) = match ferme.etat.as_mut() {
+            Some(e) => (std::mem::replace(&mut e.doc, Document::new(16, 16, 24)), e.cyclo_edition.take()),
+            None => (Document::new(16, 16, 24), None),
+        };
+        self.jeter_onglet(ferme);
+        self.session_a_ecrire = true;
+        (doc, ed)
+    }
+
     /// Juste avant qu'un projet prenne la place du projet affiché (Ouvrir, Nouveau, récents, imports) : dans un
     /// onglet neuf si le réglage « Ouvrir dans un nouvel onglet » est allumé et que l'onglet affiché sert déjà.
     /// Rend faux si l'onglet neuf n'a pas pu s'ouvrir (un travail tient le projet affiché) : rien ne doit alors
@@ -821,6 +867,14 @@ impl App {
     /// Ferme l'onglet `i`. Un onglet modifié passe d'abord à l'écran (la boîte « Modifications non enregistrées »).
     pub(crate) fn fermer_onglet(&mut self, i: usize) {
         if i >= self.onglets.len() {
+            return;
+        }
+        // (Partie 203 : fermer l'onglet d'un cyclo, c'est « Terminer » : son dessin va dans son projet.)
+        let cyclo = if i == self.actif { self.cyclo_edition.is_some() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.cyclo_edition.is_some()) };
+        if cyclo {
+            if self.activer_onglet(i) {
+                self.terminer_cyclo();
+            }
             return;
         }
         if i == self.actif {
@@ -1010,6 +1064,8 @@ impl App {
     /// Une demande de fermeture de la fenêtre ou « Quitter » : tout de suite si rien n'est à perdre, sinon une
     /// seule boîte qui liste les projets modifiés ; des écritures en cours sont attendues.
     pub(crate) fn demander_a_quitter(&mut self) {
+        // (Partie 203 : les dessins de cyclo en cours vont d'abord dans leurs projets.)
+        self.terminer_tous_les_cyclos();
         self.end_stroke();
         self.playing = false;
         // L'écriture continue : ces projets-là s'écrivent sans rien demander ; on attend leur écriture, puis on quitte.

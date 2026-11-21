@@ -190,11 +190,18 @@ pub fn grand_nombre(n: u64) -> String {
 }
 
 /// Le budget qu'on tire des mesures.
+/// Le moins de triangles qu'un budget mesuré donne : tout ordinateur qui fait tourner FEANOR en dessine autant sans ralentir ; une
+/// mesure plus basse est une mesure faussée (l'ordinateur occupé ailleurs pendant l'étalonnage).
+pub const PLANCHER_TRIANGLES: u64 = 5_000;
+
 pub fn budget_depuis(ch: &Chronos, cle: String, date: u64) -> BudgetMachine {
     let plafond = crate::decor3d::PLAFONDS.triangles as u64;
+    // (Partie 204 : jamais moins que `PLANCHER_TRIANGLES`. Un étalonnage fait quand l'ordinateur est très occupé mesure un coût fixe
+    // plus long que le temps d'une image : le budget tombait à 0 triangle, et le moindre décor (un carré) était masqué « en attendant
+    // ton choix ».)
     let (triangles, carte) = match ch.gpu {
-        Some(c) => (c[Qualite::Sans as usize].triangles_sous(BudgetMachine::ms_par_passe()).min(plafond), true),
-        None => ((ch.cpu.triangles_sous(BUDGET_MS_SECOURS * MARGE)).min(plafond), false),
+        Some(c) => (c[Qualite::Sans as usize].triangles_sous(BudgetMachine::ms_par_passe()).clamp(PLANCHER_TRIANGLES, plafond), true),
+        None => ((ch.cpu.triangles_sous(BUDGET_MS_SECOURS * MARGE)).clamp(PLANCHER_TRIANGLES, plafond), false),
     };
     let memoire = match (ch.vram, ch.ram) {
         (Some(v), _) => v / 4,
@@ -206,7 +213,7 @@ pub fn budget_depuis(ch: &Chronos, cle: String, date: u64) -> BudgetMachine {
     let triangles_bords = match (ch.gpu, ch.prof4) {
         (Some(c), Some(p)) => {
             let s = c[Qualite::Sans as usize];
-            Cout { fixe: s.fixe + p.fixe, par_million: s.par_million + p.par_million }.triangles_sous(BudgetMachine::ms_par_passe()).min(plafond)
+            Cout { fixe: s.fixe + p.fixe, par_million: s.par_million + p.par_million }.triangles_sous(BudgetMachine::ms_par_passe()).clamp(PLANCHER_TRIANGLES.min(triangles), plafond)
         }
         _ => triangles,
     };

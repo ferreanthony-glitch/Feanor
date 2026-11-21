@@ -1296,6 +1296,12 @@ mod couleurs3dui;
 #[cfg(test)]
 mod couleurs3d_tests;
 pub(crate) mod miseenscene3d;
+pub(crate) mod cyclodessin;
+mod planenv;
+#[cfg(test)]
+mod planenv_tests;
+#[cfg(test)]
+mod cyclodessin_tests;
 pub(crate) mod cyclos;
 mod cyclosui;
 #[cfg(test)]

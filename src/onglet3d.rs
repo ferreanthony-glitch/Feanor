@@ -233,6 +233,15 @@ pub(crate) struct Onglet3d {
     pub montrer_cyclo: bool,
     /// La ligne « Cyclo » de Scène 3D vient d'être choisie : Propriétés > Monde défile jusqu'à sa section.
     pub vers_cyclo: bool,
+    /// Partie 203 : un choix qui retirerait le cyclo dessiné attend sa confirmation ; et le départ d'un dessin neuf (« Partir de »).
+    pub cyclo_a_jeter: Option<crate::cyclosui::ActionCyclo>,
+    pub cyclo_depart: Option<crate::cyclodessin::Depart>,
+    /// Partie 204 : « Revenir à l'environnement de la séquence ? » (le plan, `Panel::id`) ; la suppression de plans qui viderait une
+    /// séquence dont l'environnement sert à d'autres plans (`planenv.rs`) ; le plan visé par le clic droit de la timeline de la
+    /// séquence.
+    pub env_a_jeter: Option<u64>,
+    pub suppression_liee: Option<Vec<u64>>,
+    pub menu_plan: Option<u64>,
     /// La recherche du sommaire « Scène 3D ».
     pub recherche: String,
     /// Les groupes repliés du sommaire.
@@ -268,6 +277,11 @@ impl Default for Onglet3d {
             montrer_lumieres: true,
             montrer_cyclo: true,
             vers_cyclo: false,
+            cyclo_a_jeter: None,
+            cyclo_depart: None,
+            env_a_jeter: None,
+            suppression_liee: None,
+            menu_plan: None,
             recherche: String::new(),
             replies: Vec::new(),
             cameras_cachees: Vec::new(),
@@ -656,7 +670,7 @@ impl App {
 
     /// Les ombres du décor de la séquence, allumées ou éteintes (une étape d'annulation, la retouche du décor).
     pub(crate) fn o3_basculer_ombres(&mut self) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return };
         d.aspect.ombres = !d.aspect.ombres;
         self.decor3d_retoucher(seq, d);
@@ -668,7 +682,7 @@ impl App {
     pub(crate) fn o3_basculer_aimant(&mut self) {
         let objets = self.e3_objets_choisis();
         if !objets.is_empty() {
-            let seq = self.doc.sequence_of(self.cur_panel);
+            let seq = self.doc.env_cle(self.cur_panel);
             let Some(mut d) = self.doc.decor_du_plan(self.cur_panel).cloned() else { return };
             let oui = !objets.iter().all(|id| d.objet(*id).is_some_and(|o| o.aimante));
             for id in &objets {

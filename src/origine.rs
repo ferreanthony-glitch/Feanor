@@ -351,7 +351,9 @@ impl App {
     /// d'annulation : elle fait partie de celle de la retouche du décor. Vrai si une carte a bougé.
     pub(crate) fn reposer_les_cartes_aimantees(&mut self, seq: u64) -> bool {
         let decor = self.doc.decors3d.par_sequence.get(&seq).filter(|d| !d.objets.is_empty()).cloned();
-        let plans: Vec<usize> = (0..self.doc.panels.len()).filter(|&pi| self.doc.sequence_of(pi) == seq).collect();
+        // (Partie 204 : les plans dont l'environnement est celui-là : ceux de la séquence restés avec elle, ceux qui y sont liés, ou le plan
+        // à l'environnement propre.)
+        let plans: Vec<usize> = (0..self.doc.panels.len()).filter(|&pi| self.doc.env_cle(pi) == seq).collect();
         let mut bouge = false;
         for pi in plans {
             if !self.doc.panels[pi].layers.iter().any(|l| l.aimante_au_sol) {

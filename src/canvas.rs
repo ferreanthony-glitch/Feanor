@@ -84,7 +84,9 @@ impl App {
             // On cadre la caméra (centrée sur la feuille), avec un peu de hors-champ autour.
             let [fw, fh] = self.doc.frame;
             let margin = if [fw, fh] == [self.doc.width, self.doc.height] { 1.0 } else { 1.12 };
-            self.view.fit(rect, vec2(fw as f32, fh as f32) * margin);
+            // (Partie 203 : la feuille d'un cyclo, avec ses fantômes de part et d'autre, à l'ouverture comme à « Ajuster ».)
+            let fantomes = if self.cyclo_edition.is_some() { 2.0 * crate::cyclodessin::fantome_de(self.doc.width) as f32 } else { 0.0 };
+            self.view.fit(rect, vec2(fw as f32 * margin + fantomes, fh as f32 * margin));
             self.fit_pending = false;
         }
         if let Some(z) = zone {
@@ -290,6 +292,9 @@ impl App {
         // (La grande case d'un mouvement de caméra a ses propres cadres, A, B, C… : `vignettecamui.rs`.)
         if zone.is_none() {
             self.paint_camera(&painter, rect);
+            // (Partie 203 : la feuille d'un cyclo, son horizon, ses directions et ses fantômes ; après le cadre, qui assombrit ce qui
+            // est hors de la feuille.)
+            self.peindre_guides_du_cyclo(&painter);
             // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
             self.paint_incrustations(ui.ctx(), &painter);
         }

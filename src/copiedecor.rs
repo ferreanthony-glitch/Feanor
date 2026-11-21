@@ -92,7 +92,7 @@ impl Document {
             }
             c.place.position[0] += dx;
             // (Partie 201 : « Caché dans le plan » ne vise que des plans de la séquence où il est posé ; vers une autre séquence, il part.)
-            c.caches_dans.retain(|p| self.panels.iter().enumerate().any(|(i, q)| q.id == *p && self.sequence_of(i) == seq));
+            c.caches_dans.retain(|p| self.panels.iter().enumerate().any(|(i, q)| q.id == *p && self.env_cle(i) == seq));
             neufs.push(c.id);
             copies.push(c);
         }
@@ -111,6 +111,8 @@ impl Document {
         let Some(source) = self.decors3d.par_sequence.get(&de).filter(|d| d.se_montre()).cloned() else { return false };
         let mut d = Decor3d::new(source.aspect);
         d.cyclo = source.cyclo;
+        // (Partie 203 : et son dessin, partagé : un « Terminer » dans l'une en fait un neuf, l'autre garde le sien.)
+        d.dessin_cyclo = source.dessin_cyclo.clone();
         for o in source.objets {
             let mut c = o;
             c.id = self.alloc();
@@ -162,7 +164,7 @@ impl App {
     /// Met en presse les objets `ids` du décor de la séquence du plan courant : leur nom pour la barre d'état et leur nombre ;
     /// rien s'il n'y a rien à copier (la barre d'état le dit).
     fn decor3d_mettre_en_presse(&mut self, ids: &[u64]) -> Option<(String, usize)> {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let Some(d) = self.doc.decor_du_plan(self.cur_panel) else {
             self.status = "Cette séquence n'a pas de décor 3D : rien à copier.".into();
             return None;
@@ -196,7 +198,7 @@ impl App {
     /// Coupe les objets `ids` : copiés, puis enlevés du décor (une étape d'annulation) ; ceux qui reposaient dessus redescendent.
     pub(crate) fn decor3d_couper(&mut self, ids: &[u64]) {
         let Some((texte, n)) = self.decor3d_mettre_en_presse(ids) else { return };
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         if self.decor3d_transferer("Couper des objets 3D", Some((seq, ids)), None).is_some() {
             let (s, le) = if n > 1 { ("s", "les") } else { ("", "le") };
             let notes = std::mem::take(&mut self.status);
@@ -211,7 +213,7 @@ impl App {
             self.status = "Aucun objet 3D copié.".into();
             return;
         };
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         let ici = self.doc.decors3d.par_sequence.get(&seq);
         let encore_la = p.epoque == self.doc_epoch && p.seq == seq && p.objets.iter().any(|o| ici.is_some_and(|d| d.objet(o.id).is_some_and(|x| x.place == o.place)));
         let dx = if encore_la { pas_a_cote(&p.objets) * (p.a_cote + 1) as f32 } else { 0.0 };
@@ -232,7 +234,7 @@ impl App {
     /// séquence du plan courant vont, à la même place, dans le décor de la séquence `vers` (une étape d'annulation). Envoyés, ils
     /// quittent celui-ci.
     pub(crate) fn decor3d_vers_sequence(&mut self, ids: &[u64], vers: u64, deplacer: bool) {
-        let seq = self.doc.sequence_of(self.cur_panel);
+        let seq = self.doc.env_cle(self.cur_panel);
         if vers == seq {
             self.status = "C'est déjà la séquence de ce décor.".into();
             return;

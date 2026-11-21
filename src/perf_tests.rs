@@ -200,6 +200,9 @@ pub(crate) struct Banc {
     /// Les commandes de fenêtre (`ViewportCommand`) envoyées par l'application depuis le début, dans l'ordre : de quoi
     /// vérifier la taille de la fenêtre d'accueil (`accueilfenetre.rs`).
     pub commandes: Vec<egui::ViewportCommand>,
+    /// Le plus grand côté de texture que la fenêtre annonce (`RawInput::max_texture_side`) ; rien : celui d'egui par défaut (2048),
+    /// comme avant. Partie 203 : la feuille d'un cyclo (4096 de large) en a besoin, comme une vraie carte graphique.
+    pub cote_max: Option<usize>,
 }
 
 /// Efface les dossiers `shot-perf-bac-*` du dossier temporaire plus vieux que `age` (date de modification).
@@ -267,7 +270,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default(), demander_fermeture: false, fermeture_retenue: false, commandes: Vec::new() };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default(), demander_fermeture: false, fermeture_retenue: false, commandes: Vec::new(), cote_max: None };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -337,7 +340,7 @@ impl Banc {
     /// Une image d'écran, `dt` secondes après la précédente, avec ces événements.
     pub fn image(&mut self, events: Vec<Event>, dt: f64) -> Mesure {
         self.t += dt;
-        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, modifiers: self.touches, ..RawInput::default() };
+        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, modifiers: self.touches, max_texture_side: self.cote_max, ..RawInput::default() };
         input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
         let fermeture = std::mem::take(&mut self.demander_fermeture);
         if fermeture {
