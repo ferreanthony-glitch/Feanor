@@ -87,6 +87,12 @@ pub(crate) fn panel_title(doc: &Document, index: usize) -> String {
     format!("Plan {}", doc.scene_label(doc.panels[index].scene))
 }
 
+/// « plan 2A » : `panel_title` au milieu d'une phrase. Seul le mot « Plan » perd sa majuscule : le numéro garde ses lettres
+/// (« 2A », pas « 2a » comme le donnait `to_lowercase` ; audit du 2026-11-21).
+pub(crate) fn panel_title_phrase(doc: &Document, index: usize) -> String {
+    format!("plan {}", doc.scene_label(doc.panels[index].scene))
+}
+
 /// Les secondes de la règle du montage à peindre, de `lo` à `hi` compris, bornées par `last` : celles dont la graduation tombe
 /// dans `clip` (en x), plus celles, à gauche, dont le texte (« 12:34 », à droite de la graduation) peut encore y entrer. La
 /// graduation de la seconde `s` est à `left + s × fps × ppf`. Rien à peindre : `lo > hi`.
@@ -178,7 +184,7 @@ impl App {
     /// Nouveau plan juste après le plan courant, dans la même séquence.
     pub(crate) fn new_panel(&mut self) {
         if self.structure_op(|d, i| Some(d.add_scene_after(i))) {
-            self.status = format!("Nouveau {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
+            self.status = format!("Nouveau {}.", panel_title_phrase(&self.doc, self.cur_panel));
         }
     }
 
@@ -313,7 +319,7 @@ impl App {
             return;
         }
         if self.structure_op_dessins(|d, i| d.split_plan(i, at)) {
-            self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
+            self.status = format!("Plan coupé : la suite est le {}.", panel_title_phrase(&self.doc, self.cur_panel));
         } else {
             self.status = "Place la tête de lecture dans le plan, après sa première image, pour le couper.".into();
         }

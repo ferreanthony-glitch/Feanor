@@ -85,7 +85,7 @@ impl App {
             // (Parties 179.13 et 179.14 : la hauteur et la couleur de chaque ligne de la timeline.)
             self.lignes_timeline_prefs_ui(ui);
         });
-        ui.label(RichText::new("90 % et 13 points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 100 %, 125 % ou 150 %.").small().weak());
+        ui.label(RichText::new(format!("90 % et {} points : les tailles d'origine. Pour un grand écran ou une vue fatiguée, 100 %, 125 % ou 150 %.", crate::tailleicones::TAILLE_DEFAUT)).small().weak());
     }
 
     /// « Par défaut » de la taille de l'interface : 90 % (partie 195).

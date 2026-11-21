@@ -3847,6 +3847,8 @@ impl App {
         };
         if self.history.undo(&mut self.doc, &mut nav) {
             self.after_history(nav);
+            // (Audit du 2026-11-21 : le message de ce qu'on vient de défaire, « Plan coupé… », restait dans la barre d'état.)
+            self.status = "Annulé.".into();
         } else {
             self.status = "Rien à annuler.".into();
         }
@@ -3867,6 +3869,7 @@ impl App {
         };
         if self.history.redo(&mut self.doc, &mut nav) {
             self.after_history(nav);
+            self.status = "Rétabli.".into();
         } else {
             self.status = "Rien à rétablir.".into();
         }

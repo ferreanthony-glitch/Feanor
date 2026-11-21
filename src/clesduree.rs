@@ -264,7 +264,7 @@ impl App {
         let mut msg = format!("{faites} clé{} passée{} à {n} image{} sur {calques} calque{}", s(faites), s(faites), s(n), s(calques));
         for pi in allonges {
             let d = self.doc.panels[pi].frame_count();
-            msg += &format!(", {} allongé à {}", crate::storyboard::panel_title(&self.doc, pi).to_lowercase(), duree_texte(d, fps));
+            msg += &format!(", {} allongé à {}", crate::storyboard::panel_title_phrase(&self.doc, pi), duree_texte(d, fps));
         }
         if !verrouilles.is_empty() {
             msg += &format!(" ; laissé{} de côté (verrouillé{}) : {}", s(verrouilles.len()), s(verrouilles.len()), verrouilles.iter().map(|v| format!("« {v} »")).collect::<Vec<_>>().join(", "));

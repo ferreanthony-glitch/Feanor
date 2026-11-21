@@ -1203,7 +1203,7 @@ impl App {
         if ok {
             self.cur_frame = 0;
             self.board_sel = vec![self.doc.panels[self.cur_panel].id];
-            self.status = format!("Plan coupé : la vignette de droite commence le {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+            self.status = format!("Plan coupé : la vignette de droite commence le {}.", crate::storyboard::panel_title_phrase(&self.doc, self.cur_panel));
         }
         ok
     }

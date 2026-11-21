@@ -69,3 +69,14 @@ fn times_are_said_simply() {
     assert_eq!(ago(190.0), "il y a 3 min");
     assert_eq!(ago(3_900.0), "il y a 1 h 05");
 }
+#[test]
+fn a_corner_card_sits_above_the_notifications_and_keeps_its_place_without_them() {
+    use crate::messages::decalage_carte;
+    // Pas de notification : la carte garde sa place d'origine.
+    assert_eq!(decalage_carte(0.0), 120.0);
+    // Une notification d'une ligne tient sous la carte : rien ne bouge.
+    assert_eq!(decalage_carte(40.0), 120.0);
+    // Une pile haute (un chemin de projet sur quatre lignes, ou trois notifications) : la carte monte juste au-dessus.
+    assert_eq!(decalage_carte(150.0), 36.0 + 150.0 + 8.0);
+    assert!(decalage_carte(150.0) > 36.0 + 150.0, "la carte ne touche pas la pile");
+}
