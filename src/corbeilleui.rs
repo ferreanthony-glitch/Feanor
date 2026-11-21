@@ -12,7 +12,7 @@ use eframe::egui::{self, Align2, Color32, TextureHandle, TextureOptions};
 
 use crate::app::App;
 use crate::corbeille::Charge;
-use crate::document::CelId;
+use crate::document::{Cel, CelId, Document, Layer, LayerKind};
 
 const VIGNETTE: [usize; 2] = [96, 54];
 
@@ -50,20 +50,30 @@ pub(crate) fn octets_texte(n: u64) -> String {
     }
 }
 
-/// La miniature d'un dessin sur le papier (96 × 54 échantillons).
-fn miniature(raster: &crate::raster::Raster, paper: [u8; 3]) -> egui::ColorImage {
-    let [w, h] = VIGNETTE;
-    let (rw, rh) = (raster.width.max(1), raster.height.max(1));
-    let mut pixels = Vec::with_capacity(w * h);
-    for y in 0..h {
-        for x in 0..w {
-            let p = raster.get((x * rw / w).min(rw - 1), (y * rh / h).min(rh - 1));
-            let a = p.a() as f32 / 255.0;
-            let mix = |c: u8, bg: u8| (c as f32 + bg as f32 * (1.0 - a)).min(255.0) as u8;
-            pixels.push(Color32::from_rgb(mix(p.r(), paper[0]), mix(p.g(), paper[1]), mix(p.b(), paper[2])));
-        }
+/// La vignette d'une entrée (partie 206), faite comme celle d'un bloc de la timeline (`render::thumbnail`) : **la partie filmée** (le
+/// cadre, au centre de la feuille), chaque pixel la moyenne exacte de tout ce qu'il couvre, à `w × h` pixels (ceux de l'écran, densité
+/// comprise). Avant : toute la feuille (deux fois le cadre, d'office), un échantillon par point de 96 × 54 : sur une feuille de 3840 ×
+/// 2160, un trait de 6 pixels tombait entre les échantillons, la vignette restait presque blanche.
+pub(crate) fn miniature(cel: &Cel, tete: &crate::project::Tete, paper: [u8; 3], w: usize, h: usize) -> egui::ColorImage {
+    let (fw, fh) = (tete.largeur.max(1), tete.hauteur.max(1));
+    let mut mini = Document::new(fw, fh, tete.cadence.max(1));
+    if tete.cadre[0] > 0 && tete.cadre[1] > 0 {
+        mini.frame = tete.cadre;
     }
-    egui::ColorImage { size: [w, h], pixels }
+    mini.paper = paper;
+    let id = mini.alloc();
+    mini.cels.insert(id, Cel { raster: cel.raster.clone(), vector: None, version: 0, fond: None });
+    let mut calque = Layer::new("Dessin", LayerKind::Bitmap);
+    calque.frames = vec![Some(id)];
+    mini.panels[0].layers = vec![calque];
+    let plan = crate::render::panel_plan_at(&mini, 0, 0, Some(paper));
+    crate::render::thumbnail(&mini, &plan, &mini.default_camera(), w.max(1), h.max(1))
+}
+
+/// Ce qu'il faut pour la vignette d'une entrée : son dessin en mémoire, ou à relire du dossier du projet.
+enum Source {
+    Memoire(Box<Cel>),
+    Fichier(CelId),
 }
 
 impl App {
@@ -185,6 +195,22 @@ impl App {
         };
     }
 
+    /// Partie 206 : Échap ferme la Corbeille, comme les autres fenêtres ; une confirmation en cours (« Supprimer… », « Vider… ») est
+    /// d'abord abandonnée. Appelée **avant les raccourcis** (`handle_shortcuts`) : la touche est prise, elle ne fait rien d'autre
+    /// (« Tout désélectionner », la sélection d'un bloc…) ; une fois la fenêtre fermée, Échap retrouve son usage. Une fenêtre modale
+    /// par-dessus, ou une liste déroulante à l'écran, la gardent pour elles.
+    pub(crate) fn corbeille_echap(&mut self, ctx: &egui::Context) {
+        if self.corbeille_ui.is_none() || self.modal_open() {
+            return;
+        }
+        if crate::exportui::echap_ferme(ctx) {
+            match self.corbeille_ui.as_mut() {
+                Some(fen) if fen.confirmation.is_some() => fen.confirmation = None,
+                _ => self.corbeille_ui = None,
+            }
+        }
+    }
+
     /// La fenêtre, à chaque image d'écran tant qu'elle est ouverte.
     pub(crate) fn corbeille_fenetre_ui(&mut self, ctx: &egui::Context) {
         // (Une restauration lue sur un autre fil se pose ici, fenêtre ouverte ou non.)
@@ -243,8 +269,13 @@ impl App {
                 }
             }
         }
+        // Les vignettes se font toutes sur un autre fil (une vignette exacte coûte quelques millisecondes) : celles dont le dessin est
+        // en mémoire avec une copie du dessin (ses tuiles sont partagées, rien n'est recopié), les autres relues du dossier.
         let paper = self.doc.paper;
-        let mut a_lire: Vec<(u64, CelId, usize, usize)> = Vec::new();
+        let ppp = ctx.pixels_per_point().max(1.0);
+        let taille = ((VIGNETTE[0] as f32 * ppp).round() as usize, (VIGNETTE[1] as f32 * ppp).round() as usize);
+        let dossier = self.dossier_de_la_corbeille();
+        let mut a_lire: Vec<(u64, Source, crate::project::Tete)> = Vec::new();
         for e in self.doc.corbeille.entrees.iter() {
             if fen.vignettes.contains_key(&e.id) || fen.en_attente.contains(&e.id) {
                 continue;
@@ -254,35 +285,30 @@ impl App {
                     fen.vignettes.insert(e.id, None);
                 }
                 Some(cel) => match self.doc.cels.get(&cel) {
-                    Some(c) => {
-                        let tex = ctx.load_texture(format!("corbeille-{}", e.id), miniature(&c.raster, paper), TextureOptions::LINEAR);
-                        fen.vignettes.insert(e.id, Some(tex));
+                    Some(c) => a_lire.push((e.id, Source::Memoire(Box::new(c.clone())), e.tete.clone())),
+                    None if dossier.is_some() => a_lire.push((e.id, Source::Fichier(cel), e.tete.clone())),
+                    None => {
+                        fen.vignettes.insert(e.id, None);
                     }
-                    None => a_lire.push((e.id, cel, e.tete.largeur, e.tete.hauteur)),
                 },
             }
         }
         if !a_lire.is_empty() && fen.lecteur.is_none() {
-            match self.dossier_de_la_corbeille() {
-                Some(d) => {
-                    fen.en_attente.extend(a_lire.iter().map(|(id, ..)| *id));
-                    let (tx, rx) = channel();
-                    std::thread::spawn(move || {
-                        for (id, cel, w, h) in a_lire {
-                            let img = crate::project::charger_un_dessin_avec(&d, cel, w, h, true).ok().map(|c| miniature(&c.raster, paper));
-                            if tx.send((id, img)).is_err() {
-                                return;
-                            }
-                        }
-                    });
-                    fen.lecteur = Some(rx);
-                }
-                None => {
-                    for (id, ..) in a_lire {
-                        fen.vignettes.insert(id, None);
+            fen.en_attente.extend(a_lire.iter().map(|(id, ..)| *id));
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                for (id, source, tete) in a_lire {
+                    let cel = match source {
+                        Source::Memoire(c) => Some(*c),
+                        Source::Fichier(cel) => dossier.as_deref().and_then(|d| crate::project::charger_un_dessin_avec(d, cel, tete.largeur, tete.hauteur, true).ok()),
+                    };
+                    let img = cel.map(|c| miniature(&c, &tete, paper, taille.0, taille.1));
+                    if tx.send((id, img)).is_err() {
+                        return;
                     }
                 }
-            }
+            });
+            fen.lecteur = Some(rx);
         }
         if fen.lecteur.is_some() || fen.calcul_taille.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
@@ -329,7 +355,7 @@ impl App {
                                 supprimer = Some(e.id);
                             }
                             let r = ui.button("Restaurer");
-                            if crate::bulles::bulle(r, "Restaurer", "Un plan revient à sa place s'il en a encore une, sinon à la fin de sa séquence ; des calques reviennent dans leur plan. Une seule étape d'annulation.", "").clicked() {
+                            if crate::bulles::bulle(r, "Restaurer", "Un plan revient à sa place s'il en a encore une, sinon à la fin de sa séquence, sous son numéro s'il n'est à personne d'autre ; le dernier plan d'une séquence supprimée la ramène avec lui. Des calques reviennent dans leur plan. Une seule étape d'annulation.", "").clicked() {
                                 restaurer = Some(e.id);
                             }
                         });

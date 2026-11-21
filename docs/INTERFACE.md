@@ -18877,3 +18877,157 @@ ou plusieurs plans ; aucune commande perdue ; la timeline de la séquence avec h
 Essais ajoutés : `planenv_tests.rs` (5 : le clic droit de la timeline de la séquence ; la corbeille après réouverture, propre retouché,
 vide et lié ; le lien vers une séquence supprimée entre-temps ; vider la corbeille ; les captures, inactives sans `FEANOR_PLANENV_PNG`) et
 `menus_tests.rs` (1 : la douzaine).
+
+## 206. Vérification à l'écran : la corbeille, l'aplat, la colonne (2026-11-21, branche verif-corrections partie de main 3fda30a)
+
+Anthony a regardé FEANOR comme un storyboarder, sur une copie de bac à sable de main 3fda30a (numérotation des plans verrouillée, celle
+d'un projet neuf). Six défauts. **Format des projets inchangé (61)** : la corbeille a des champs facultatifs de plus (`origine`), qu'une
+version d'avant ignore et qu'une entrée d'avant n'a pas.
+
+### 206.1 Le plan rendu par la corbeille sous un autre numéro (D1, celui du PDF client)
+
+**Vu** : plans 1, 2, 3, 4 ; le 2 part à la corbeille (Édition > Supprimer), puis Fichier > Corbeille > Restaurer : il revient entre le 1
+et le 3, mais nommé « Plan 1A ». La barre d'état disait « « Plan 2 » restauré à sa place. », un « Nouveau plan » juste après devenait
+« Plan 1B », et le PDF imprimait « Séquence 1 — plan 1A ».
+
+**Cause** : le numéro d'un plan (au sens du découpage) est celui de sa scène (`Scene::number`), et la corbeille ne gardait que la case
+(`Panel`). À la restauration, `restaurer_entree` mettait la case dans une **scène neuve** (`new_scene`), sans numéro ; `assign_numbers` lui
+en donnait un entre ses voisins : 1A. Ce n'était pas voulu : la partie 104.3 dit « il garde son numéro si libre (sinon un neuf) ».
+
+**Corrigé** (`corbeille.rs`, `numerotation.rs`) :
+- Une entrée de plan garde son **origine** (`Origine` : la scène, son nom, son numéro verrouillé ; la séquence, son nom choisi, son numéro,
+  ses voisines). À la restauration : le reste du même plan est juste à côté (une case d'un plan de plusieurs cases) : elle le rejoint ;
+  sinon le plan revient sous sa scène, son nom, et **son numéro s'il n'est à aucun autre plan** (ni du film, ni annulé). Sinon un neuf,
+  comme avant, et la phrase dit le vrai nom : « « Plan 2 » restauré à sa place : son numéro est pris, il devient « Plan 1A ». » (en
+  numérotation suivie, un rang qui a changé : « … ; c'est maintenant « Plan 3 ». »).
+- **Un numéro de la corbeille n'est pas redonné** : `assign_numbers` le réserve, comme celui d'un plan annulé (`numeros_de_la_corbeille`).
+  Avant, le dernier plan supprimé, un plan neuf au bout du film reprenait son « 4 » ; il est maintenant « 4A », et le 4 revient avec son plan.
+- Après une réouverture, pareil (l'origine est dans `corbeille.json`).
+
+### 206.2 Le dernier plan d'une séquence supprimée revient ailleurs (D5)
+
+**Vu** : la Séquence 2 n'a que le plan 5 ; le supprimer retire la séquence ; Restaurer le mettait « à la fin de la séquence courante ».
+
+**Cause** : la séquence n'existait plus, et la corbeille ne savait ni son nom ni sa place.
+
+**Corrigé** : l'origine garde son nom choisi, son numéro verrouillé et ses séquences voisines. Restaurer la **recrée sous son numéro
+d'identifiant** (le même : les réglages qui y tiennent dans la séance, son décor 3D par exemple, la retrouvent), avec son nom et son numéro
+s'il est libre, **entre ses voisines** : « « Plan 5 » restauré avec sa séquence (« Poursuite »), à sa place dans le film. » Une seule étape
+d'annulation, séquence comprise. Une entrée d'avant (sans origine) recrée sa séquence au bout du film, sans nom (« … à la fin du film »).
+
+### 206.3 Un liseré de la couleur de l'aplat le long des traits ouverts (D2)
+
+**Vu** : un aplat rouge sur un calque vectoriel : les formes fermées se remplissent, mais chaque trait **ouvert** a un mince liseré rouge
+sur toute sa longueur, des deux côtés (le débord de 3 px). Invisible en blanc sur papier blanc.
+
+**Cause** (`fond::couverture_de_la_boite`) : la forme de l'aplat est le dedans (`!outside`) rongé de `trous − debord` ; or le dedans comprend
+les murs (le trait épaissi de `trous`, qui ferme les trous). Un trait ouvert était donc une forme mince, que le débord entourait. Rien
+dans ce document ne le voulait ; seul l'en-tête de `fond.rs` disait « plus un débord de `debord` pixels autour du trait », et un essai
+(`fond_tests::small_gaps_are_closed_big_ones_are_not`) disait d'un anneau ouvert « le trait garde son fond » : changé exprès.
+
+**Corrigé** : le **cœur** d'une forme est ce qui est à plus de `2 × trous` pixels du dehors ; un trait ouvert de moins de `2 × trous`
+pixels d'épaisseur n'en a pas. La forme d'avant ne reste qu'à moins de `2 × (trous + debord) + 1` pixels d'un cœur : une forme fermée a
+exactement la même forme qu'avant, coins compris (vérifié pixel pour pixel sur un carré, un rond et un triangle à 60°) ; un trait ouvert
+loin d'elle n'a plus rien ; un trait ouvert qui sort d'une forme garde son débord sur une vingtaine de pixels près d'elle.
+
+**Le message** « Aplat : 1 clé(s) retouchée(s) pendant le calcul n'ont pas été changées… » juste après le changement de couleur : **faux**,
+une course. Avec la portée « La clé » (celle d'origine), la forme de la clé est repeinte sur un fil de travail (`lancer_teinte`) ; un
+deuxième changement (le sélecteur repris, une couleur tapée) partait avant l'arrivée du premier : le premier était posé (la couleur
+**intermédiaire**), le second abandonné, et la barre d'état parlait d'une retouche qui n'avait pas eu lieu. Maintenant le dernier changement
+d'une clé remplace les précédents encore en route (ils ne sont pas posés, sans rien dire), et un changement repeint aussi la forme peinte
+aux couleurs que les changements d'avant y ont mises (sans cela, un deuxième changement de couleur de la même clé ne changeait rien).
+
+### 206.4 Les vignettes de la corbeille presque blanches (D3)
+
+**Cause** : la fenêtre faisait sa vignette elle-même, un échantillon par point de 96 × 54 sur **toute la feuille** (deux fois le cadre
+d'office) : un trait de 6 pixels sur 3840 × 2160 tombait entre les échantillons (0 point touché, mesuré).
+
+**Corrigé** : `corbeilleui::miniature` passe par le rendu des vignettes de la timeline (`render::thumbnail`) : la partie filmée, chaque
+pixel la moyenne exacte de ce qu'il couvre, à la densité de l'écran. La même image que la timeline, pixel pour pixel (essai), le trait
+lisible d'un bout à l'autre. Toutes les vignettes se font sur un autre fil (celles en mémoire aussi : quelques millisecondes chacune).
+
+### 206.5 La Scène coupée dans la colonne du Storyboard (D4)
+
+**Vu** (868 points de haut, 90 %) : Scène, Couleur, Propriétés et Historique : la deuxième ligne de calque de la Scène coupée à moitié
+par son bord du bas ; avec Préréglages en plus, la Scène réduite à sa barre et à une ligne, l'Historique à une étape, alors que la colonne
+défilait.
+
+**Ce qui est voulu, et gardé** : la Scène et l'Historique sont des listes. Partie 196.5, point 3 : « Elle ne rapetisse que si Propriétés
+passerait sous ses 120 points, et seulement de ce qui lui manque, jusqu'à son plancher » ; partie 197.1 : la Scène « commence à 230
+points (une liste) et cède comme une liste ». Le plancher d'une liste était 70 points : la Scène y perdait son arbre (sa barre en prend
+une quarantaine), l'Historique ses étapes (ses boutons et le trait en prennent une trentaine).
+
+**Corrigé** (`colonneui::colonne_voulue`) : la Scène dit la hauteur de son arbre, barre comprise (`scene::Arbre::barre`, mesurée à chaque
+image) : **quand il tient dans ses 230 points, elle la garde, comme un contenu** (la colonne défile plutôt) ; plus long, il cède comme une
+liste, jusqu'à sa barre et trois lignes. L'Historique cède jusqu'à ses boutons et trois étapes. **Le fil d'Ariane** passe à la ligne entre
+ses éléments, jamais au milieu de « Séquence 1 » : « › » est peint avec l'élément qui le suit, un élément plus large que la colonne
+est coupé par « … » (le nom entier dans la bulle).
+
+### 206.6 Échap ne fermait pas la Corbeille (D6)
+
+**Premier tour** : les fenêtres modales se ferment à Échap (`Modal::should_close`), la fenêtre « Exporter » et celle d'un export appellent
+aussi `exportui::echap_ferme` (qui laisse d'abord se fermer une liste déroulante ouverte). La Corbeille, une `egui::Window`, n'avait
+rien : elle fait pareil ; pendant une confirmation (« Supprimer… », « Vider… »), Échap l'abandonne d'abord.
+
+**Revu à l'écran** : le bloc du plan 5 (le dernier de la Séquence 2) choisi dans la timeline, Édition > Supprimer, Fichier > Corbeille >
+Restaurer (la séquence revient, la Corbeille est vide) : Échap, trois fois, ne fermait plus la fenêtre (plus tôt dans la séance, il la
+fermait). **La cause** n'était pas le bloc choisi ni « Tout désélectionner » (les raccourcis lisent Échap sans le prendre) : `echap_ferme`
+**prenait la touche puis ne fermait rien** quand egui croyait une liste déroulante ouverte (`any_popup_open`). Or une liste dont le
+champ a quitté l'écran (un champ de couleur d'une fenêtre fermée, d'un panneau replié, le choix de couleur d'un menu refermé) reste
+« ouverte » dans la mémoire d'egui : il ne la ferme, à Échap ou au clic dehors, que quand quelqu'un la peint. Plus aucun Échap ne
+fermait alors ni la Corbeille, ni l'Export (`Modal::should_close` attend lui aussi qu'aucune liste ne soit ouverte).
+
+**Corrigé** :
+- `echap_ferme` ne laisse Échap qu'à une liste **à l'écran** (`liste_a_l_ecran` : la zone qui porte son numéro est peinte à cette image
+  ou à la précédente), sans prendre la touche (egui la ferme). Une liste oubliée est fermée, et la fenêtre aussi.
+- La Corbeille prend Échap **avant les raccourcis** (`corbeille_echap`, à côté de `reglages_droit_echap`) : le premier Échap la ferme et
+  ne fait rien d'autre (le bloc et les clés choisis restent) ; ensuite Échap retrouve son usage. Une fenêtre modale par-dessus garde la
+  touche.
+- **Les Préférences ne se fermaient pas du tout à Échap** (seule la fenêtre « Exporter », dans le même fichier, le faisait) : elles le
+  font, par `echap_ferme`. Pendant l'attente d'une touche dans Raccourcis, Échap annule l'attente et rien d'autre (`capture_shortcut`
+  prend maintenant la touche).
+
+### 206.7 Les essais
+
+`corbeille_tests.rs` (7) : le numéro rendu dans la séance et après réouverture (et « Plan 2A » pour le plan neuf qui suit, le titre du
+PDF) ; le numéro pris (Renuméroter) : un neuf, et la phrase le dit ; le numéro de la corbeille pas redonné, une case rendue à son plan ;
+la séquence recréée entre ses voisines, nom et numéro, dans la séance et après réouverture, une étape d'annulation ; la vignette égale à
+celle de la timeline (zigzag de 6 px sur 3840 × 2160) ; Échap dans l'application entière ; Échap après la restauration du plan d'un bloc
+choisi, avec une liste oubliée : la Corbeille, « Exporter », la fenêtre d'un export et les Préférences se ferment au premier appui, le
+choix du bloc reste. `fond_tests.rs` (1, et 1 changé) : rien autour
+d'un trait ouvert, les formes fermées inchangées pixel pour pixel. `aplatsur_tests.rs` (1) : deux changements de couleur de suite, la
+dernière gagne, sans faux message, puis un troisième. `scene_tests.rs` (1, et 1 changé) : la Scène entière et l'Historique à trois étapes
+avec 4 et 5 panneaux à 1384 × 868 et 90 % (rouge avant : la ligne « Décor » coupée), le fil d'Ariane sur une ligne par élément.
+Changé exprès : `aplatperso_tests::the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the_panel` (fenêtre de
+900 points : la Scène, qui ne cède plus sous la hauteur de son arbre, laissait Propriétés à 120 points et la ligne de la portée sous
+son bord ; la Scène en est retirée, comme dans les autres essais de la pile). Suite entière : 5 193 réussis, 90 échecs, ceux de `main`
+(aucun de plus, aucun de moins) ; `suggestions_tests::a_provider_error_is_told_in_the_status_bar_and_the_cue_keeps_its_state` a échoué
+une fois sous la charge de la suite (un lecteur simulé sur un autre fil), passe seul et dans la suite refaite.
+
+### 206.8 Ce qui reste
+
+- **Rien regardé à l'écran après les corrections.**
+- **Le prix** : dans une fenêtre basse, la Scène entière laisse moins à Propriétés qu'avant (elle cédait jusqu'à 70 points).
+- Une petite forme fermée dont tout le dedans tient à moins de `2 × trous` pixels du dehors (un anneau de moins d'environ 12 pixels de
+  diamètre avec « Fermer les trous » à 6) n'a plus de cœur : elle n'a plus d'aplat. Un trait ouvert plus épais que `2 × trous` pixels
+  en garde un (il est lui-même une forme).
+- Une séquence recréée retrouve son nom et son numéro (et son identifiant). Ce qu'elle portait ailleurs (son décor 3D, ses versions
+  rangées, que `elaguer_variantes` retire avec elle) n'est pas dans la corbeille : **non vérifié**, dans la séance comme après une
+  réouverture ; elle revient sans doute sans ses versions rangées.
+- Une entrée d'avant cette partie n'a pas d'origine : numéro neuf, séquence recréée au bout du film.
+- Quand la colonne défile de toute façon, une liste plus longue que sa hauteur d'origine (Préréglages, une Scène longue, l'Historique)
+  rapetisse encore jusqu'à son plancher (partie 196.5) ; la garder entière serait une ligne dans `colonne::hauteurs` (ne céder que si
+  cela suffit à Propriétés), mais c'est changer la règle de la 196.5 : à décider avec Anthony.
+- Deux changements de couleur « La clé » rapides laissent une étape « Aplat : couleur » vide pour le premier (Ctrl+Z n'y défait rien).
+
+### 206.9 Comment Anthony teste (sur une copie de projet, numérotation verrouillée)
+
+1. Plans 1 à 4 ; supprime le 2, restaure-le : « Plan 2 », la phrase « restauré à sa place » ; un Nouveau plan après lui : « Plan 2A » ;
+   l'export PDF dit « Séquence 1 — plan 2 ». Puis supprime, enregistre, ferme, rouvre, restaure : pareil.
+2. Supprime le 2, Renuméroter, restaure : un numéro neuf, et la barre d'état le dit.
+3. Supprime le dernier plan d'une Séquence 2 nommée ; restaure : la séquence revient à sa place, son nom.
+4. Un aplat rouge : les traits ouverts sans liseré, les formes fermées avec leur débord ; change la couleur deux fois vite : pas de
+   message « retouchée(s) », la dernière couleur.
+5. Fichier > Corbeille : les vignettes lisibles comme dans la timeline ; Échap ferme la fenêtre.
+6. Colonne du Storyboard, + Panneau > Historique puis Préréglages (fenêtre de 868 de haut, 90 %) : la Scène entière, l'Historique avec
+   trois étapes, la colonne qui défile ; le fil d'Ariane passe à la ligne entre « Séquence 1 » et « Plan 1 ».

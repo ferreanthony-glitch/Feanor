@@ -172,6 +172,23 @@ impl App {
                     Some(m) => colonne::Voulue::souple_au_moins(colonne::HAUTEUR_DEFAUT, m + 2.0 * MARGE_Y + 1.0),
                     None => colonne::Voulue::souple(colonne::HAUTEUR_DEFAUT),
                 },
+                // (Partie 206 : la Scène dit la hauteur de son arbre, barre comprise, quand il tient dans sa hauteur d'origine : elle
+                // la garde, comme un contenu. Plus long, il cède comme une liste, mais garde sa barre et trois lignes de l'arbre.)
+                Some(Pane::Scene) if self.scene_arbre.barre > 0.0 => {
+                    let marges = 2.0 * MARGE_Y + 1.0;
+                    let contenu = self.scene_arbre.barre + self.scene_arbre.hauteur + marges;
+                    if contenu <= colonne::HAUTEUR_DEFAUT {
+                        colonne::Voulue::ferme(contenu)
+                    } else {
+                        colonne::Voulue::souple_au_moins(colonne::HAUTEUR_DEFAUT, self.scene_arbre.barre + 3.0 * crate::scene::H_PLAN + marges)
+                    }
+                }
+                // (Partie 206 : l'Historique garde ses boutons et trois étapes ; il n'en montrait plus qu'une.)
+                Some(Pane::History) => {
+                    let s = &self.ctx.style().spacing;
+                    let ligne = s.interact_size.y + s.item_spacing.y;
+                    colonne::Voulue::souple_au_moins(colonne::HAUTEUR_DEFAUT, 4.0 * ligne + 8.0 + 2.0 * MARGE_Y + 1.0)
+                }
                 _ => colonne::Voulue::souple(colonne::HAUTEUR_DEFAUT),
             },
         })

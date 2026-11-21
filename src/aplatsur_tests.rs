@@ -1047,3 +1047,27 @@ fn the_colour_choice_is_held_while_dragging_and_laid_down_when_released() {
     f.app.attendre_aplat_multi();
     assert_eq!(f.peinture(0).get(50, 40).r(), 200);
 }
+
+/// Partie 206 : deux changements de couleur « la clé » de suite (le sélecteur repris avant que la forme de la clé soit repeinte, sur un
+/// fil de travail) : le dernier gagne, et la barre d'état ne dit pas « retouchée(s) pendant le calcul » (rien n'a été retouché) ; puis
+/// un troisième, après l'arrivée du deuxième, change encore la couleur de la forme.
+#[test]
+fn two_quick_key_colour_changes_end_on_the_last_colour_without_a_false_warning() {
+    let mut f = fix_vert("portee-deux");
+    f.app.aplat_portee = AplatPortee::Cle;
+    f.app.choisir_couleur_aplat(0, [200, 10, 10], 1);
+    f.app.appliquer_couleur_aplat();
+    // (Le premier résultat n'est pas encore posé : le deuxième changement part tout de suite.)
+    f.app.choisir_couleur_aplat(0, [10, 10, 200], 2);
+    f.app.appliquer_couleur_aplat();
+    f.app.attendre_aplat_multi();
+    assert!(!f.app.status.contains("retouchée"), "{}", f.app.status);
+    let forme = f.peinture(0).get(30, 70);
+    assert_eq!((forme.r(), forme.g(), forme.b(), forme.a()), (10, 10, 200, 255), "la forme a la dernière couleur");
+    f.app.choisir_couleur_aplat(0, [250, 200, 0], 3);
+    f.app.appliquer_couleur_aplat();
+    f.app.attendre_aplat_multi();
+    let forme = f.peinture(0).get(30, 70);
+    assert_eq!((forme.r(), forme.g(), forme.b()), (250, 200, 0), "un changement de plus change encore la forme");
+    assert!(!f.app.status.contains("retouchée"), "{}", f.app.status);
+}

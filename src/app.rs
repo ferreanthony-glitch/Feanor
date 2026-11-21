@@ -5955,6 +5955,8 @@ impl App {
         self.anneau_echap(ctx);
         // Et pour une note de friction en cours (`frictionui.rs`).
         self.friction_echap(ctx);
+        // Et la Corbeille ouverte (partie 206, `corbeilleui.rs`) : elle se ferme d'abord.
+        self.corbeille_echap(ctx);
         // Le compteur d'usage : l'heure de cette image, les clics d'icônes de la précédente, l'écriture au repos (`usageui.rs`).
         self.usage_suivre(ctx);
         self.handle_shortcuts(ctx);

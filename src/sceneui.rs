@@ -75,8 +75,15 @@ impl App {
     }
 
     fn scene_panel_en(&mut self, ui: &mut egui::Ui) {
+        // (Partie 206 : la hauteur de la barre est retenue, pour la hauteur que le panneau demande à la colonne, `colonne_voulue`.)
+        let haut = ui.cursor().top();
         self.scene_barre(ui);
         ui.add_space(2.0);
+        let barre = ui.cursor().top() - haut;
+        if barre.is_finite() && (barre - self.scene_arbre.barre).abs() > 0.5 {
+            self.scene_arbre.barre = barre;
+            ui.ctx().request_repaint();
+        }
         let ou = self.scene_ou();
         self.scene_arbre.a_jour(&self.doc, &self.settings.scene, ou);
         #[cfg(test)]
@@ -126,16 +133,21 @@ impl App {
                 }
             }
             ui.add_space(6.0);
+            // Le fil d'Ariane : il passe à la ligne **entre** ses éléments, jamais au milieu de l'un (partie 206 : « Film › Séquence » /
+            // « 1 › Plan 1A ») ; « › » reste collé à l'élément qui le suit ; un élément plus large que la colonne est coupé par « … »
+            // (le nom entier dans la bulle).
             let fil = crate::scene::fil(&self.doc, self.settings.scene.racine, self.cur_panel);
             let n = fil.len();
+            let large = ui.max_rect().width();
             for (k, t) in fil.into_iter().enumerate() {
-                if k > 0 {
-                    ui.label(RichText::new("›").small().weak());
-                }
-                if k + 1 == n {
-                    ui.label(RichText::new(t).small().strong());
-                } else {
-                    ui.label(RichText::new(t).small().weak());
+                let texte = if k > 0 { format!("› {t}") } else { t.clone() };
+                let rich = if k + 1 == n { RichText::new(&texte).small().strong() } else { RichText::new(&texte).small().weak() };
+                let police = egui::TextStyle::Small.resolve(ui.style());
+                let tient = ui.fonts(|f| f.layout_no_wrap(texte.clone(), police, egui::Color32::WHITE).size().x) <= large;
+                let label = egui::Label::new(rich).wrap_mode(if tient { egui::TextWrapMode::Extend } else { egui::TextWrapMode::Truncate });
+                let r = ui.add(label);
+                if !tient {
+                    r.on_hover_text(t);
                 }
             }
         });

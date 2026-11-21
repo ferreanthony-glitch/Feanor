@@ -492,6 +492,11 @@ impl App {
             .pivot(egui::Align2::CENTER_TOP)
             .default_pos(egui::pos2(ecran.center().x, ecran.top() + 60.0))
             .show(ctx, |ui| self.preferences_contenu(ui, &mut sortie));
+        // Partie 206 : Échap ferme les Préférences, comme l'Export et la Corbeille (une liste déroulante à l'écran se ferme d'abord ;
+        // pendant l'attente d'une touche dans Raccourcis, Échap annule l'attente, `capture_shortcut`, et rien d'autre).
+        if !self.modal_open() && self.export_dialog.is_none() && crate::exportui::echap_ferme(ctx) {
+            open = false;
+        }
         self.prefs_window = open;
         if let Some(a) = sortie.action {
             self.run_action(a);

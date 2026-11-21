@@ -92,7 +92,45 @@ pub struct Entree {
     pub id_max: u64,
     /// La feuille au moment où l'entrée a été jetée (les dessins ont cette taille).
     pub(crate) tete: Tete,
+    /// Partie 206 : de quoi rendre au plan son numéro, et sa séquence si elle est partie avec lui.
+    pub origine: Origine,
     pub contenu: Contenu,
+}
+
+/// Partie 206 : ce qu'un plan jeté garde de son plan au sens du découpage (`Scene` : numéro, nom) et de sa séquence (numéro, nom choisi,
+/// voisines dans le film), pour revenir sous son numéro et, si sa séquence n'existe plus, la recréer à sa place. Champs facultatifs de
+/// `corbeille.json` (format 61 inchangé) : une entrée d'avant n'en a aucun, elle revient comme avant (numéro neuf, séquence recréée au
+/// bout du film).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Origine {
+    /// La scène du plan (0 : inconnue, ou un petit plan « Images rognées », qui revient toujours comme un plan neuf).
+    #[serde(default, skip_serializing_if = "zero")]
+    pub scene: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scene_nom: String,
+    /// Son numéro en numérotation verrouillée (vide en numérotation suivie).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scene_numero: String,
+    /// Le nom choisi de la séquence (vide : son numéro).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sequence_nom: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sequence_numero: String,
+    /// Les séquences voisines, dans l'ordre du film : une séquence recréée revient entre elles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence_avant: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence_apres: Option<u64>,
+}
+
+fn zero(v: &u64) -> bool {
+    *v == 0
+}
+
+impl Origine {
+    fn est_vide(&self) -> bool {
+        *self == Origine::default()
+    }
 }
 
 /// La corbeille du projet. Les entrées sont partagées (`Arc`) : une étape d'annulation ne les recopie pas.
@@ -156,6 +194,51 @@ impl Document {
         })
     }
 
+    /// Partie 206 : le numéro et le nom du plan `index` (sa scène), ceux de sa séquence et ses séquences voisines.
+    fn origine_pour_la_corbeille(&self, index: usize) -> Origine {
+        let scene = self.panels[index].scene;
+        let sequence = self.sequence_of(index);
+        let (scene_nom, scene_numero) = self.scene(scene).map_or_else(Default::default, |s| (s.name.clone(), if self.numbering_locked { s.number.clone() } else { String::new() }));
+        let (sequence_nom, sequence_numero) =
+            self.sequences.iter().find(|s| s.id == sequence).map_or_else(Default::default, |s| (s.name.clone(), if self.numbering_locked { s.number.clone() } else { String::new() }));
+        let ordre = self.sequence_order();
+        let k = ordre.iter().position(|&q| q == sequence);
+        Origine {
+            scene,
+            scene_nom,
+            scene_numero,
+            sequence_nom,
+            sequence_numero,
+            sequence_avant: k.and_then(|k| k.checked_sub(1)).map(|i| ordre[i]),
+            sequence_apres: k.and_then(|k| ordre.get(k + 1).copied()),
+        }
+    }
+
+    /// Partie 206 : un plan du film (ou un plan annulé, qui reviendra avec le sien) a déjà ce numéro.
+    fn numero_de_plan_pris(&self, n: &crate::numerotation::Num) -> bool {
+        self.scenes.iter().any(|s| crate::numerotation::Num::parse(&s.number).as_ref() == Some(n)) || self.annules.plans.iter().any(|g| crate::numerotation::Num::parse(&g.scene.number).as_ref() == Some(n))
+    }
+
+    fn numero_de_sequence_pris(&self, n: &crate::numerotation::Num) -> bool {
+        self.sequences.iter().any(|s| crate::numerotation::Num::parse(&s.number).as_ref() == Some(n)) || self.annules.plans.iter().any(|g| crate::numerotation::Num::parse(&g.sequence.number).as_ref() == Some(n))
+    }
+
+    /// Partie 206 : les numéros des plans et des séquences que la corbeille garde et que le film n'a plus : la numérotation
+    /// verrouillée ne les redonne pas (`assign_numbers`), ils reviendront avec leur plan.
+    pub(crate) fn numeros_de_la_corbeille(&self) -> (Vec<crate::numerotation::Num>, Vec<crate::numerotation::Num>) {
+        let (mut plans, mut sequences) = (Vec::new(), Vec::new());
+        for e in self.corbeille.entrees.iter().filter(|e| e.sorte == Sorte::Plan) {
+            let o = &e.origine;
+            if o.scene != 0 && self.scene(o.scene).is_none() {
+                plans.extend(crate::numerotation::Num::parse(&o.scene_numero));
+            }
+            if e.sequence != 0 && !self.sequences.iter().any(|s| s.id == e.sequence) {
+                sequences.extend(crate::numerotation::Num::parse(&o.sequence_numero));
+            }
+        }
+        (plans, sequences)
+    }
+
     /// Range une entrée : numéro, date, plus grand numéro cité.
     fn ranger_dans_la_corbeille(&mut self, mut e: Entree) {
         e.id = self.alloc();
@@ -199,6 +282,7 @@ impl Document {
         let panel = p.clone();
         // Les versions rangées du plan partent avec lui (et reviennent avec lui).
         let versions = self.versions.remove(&id);
+        let origine = self.origine_pour_la_corbeille(index);
         let e = Entree {
             id: 0,
             date: 0,
@@ -216,6 +300,7 @@ impl Document {
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
+            origine,
             contenu: Contenu::Vif { panel, reserve, commentaires, versions },
         };
         self.ranger_dans_la_corbeille(e);
@@ -252,6 +337,7 @@ impl Document {
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
+            origine: Origine::default(),
             contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new(), versions: None },
         };
         self.ranger_dans_la_corbeille(e);
@@ -316,6 +402,7 @@ impl Document {
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
+            origine: Origine::default(),
             contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new(), versions: None },
         };
         self.ranger_dans_la_corbeille(e);
@@ -330,7 +417,9 @@ impl Document {
     }
 
     /// Remet l'entrée `id` dans le film, d'après `charge` (son contenu, relu au besoin : `charger`). Un plan revient derrière le plan qui
-    /// le précédait s'il existe encore, sinon à la fin de sa séquence, sinon à la fin de `sequence_courante` ; des calques
+    /// le précédait s'il existe encore, sinon à la fin de sa séquence ; si sa séquence n'existe plus, elle revient avec lui, à sa place
+    /// entre ses voisines (partie 206) ; sinon à la fin de `sequence_courante`. Il retrouve son numéro (numérotation verrouillée) s'il
+    /// n'est à aucun autre plan, sinon un neuf, et la phrase le dit ; des calques
     /// reviennent dans leur plan, qui doit exister. Rend la phrase à dire et le plan à rendre courant. Une seule étape
     /// d'annulation (l'appelant la prend), qui rend aussi l'entrée à la corbeille.
     pub(crate) fn restaurer_entree(&mut self, id: u64, charge: Charge, sequence_courante: u64) -> Result<(String, usize), String> {
@@ -365,20 +454,59 @@ impl Document {
                     // (Partie 205 : son environnement 3D, s'il en avait un à lui, le suit sous son numéro neuf.)
                     self.env_au_numero_neuf(ancien, panel.id);
                 }
-                // Où : derrière le plan d'avant, sinon à la fin de la séquence, sinon à la fin de la séquence courante.
+                // Où : derrière le plan d'avant, sinon à la fin de la séquence ; partie 206 : sa séquence n'existe plus (il en était le
+                // dernier plan), elle revient, avec son nom et son numéro, à sa place dans le film ; sinon à la fin de la séquence courante.
+                let o = &e.origine;
+                let sequence_partie = e.sequence != 0 && !self.sequences.iter().any(|s| s.id == e.sequence);
                 let (at, place) = match e.precedent.and_then(|a| self.panels.iter().position(|p| p.id == a)).or_else(|| e.apres.and_then(|a| self.panels.iter().position(|p| p.id == a))) {
-                    Some(i) => (i + 1, "à sa place"),
-                    None if e.suivant.is_some_and(|s| self.panels.iter().any(|p| p.id == s)) => (self.panels.iter().position(|p| Some(p.id) == e.suivant).unwrap_or(0), "à sa place"),
+                    Some(i) => (i + 1, "à sa place".to_string()),
+                    None if e.suivant.is_some_and(|s| self.panels.iter().any(|p| p.id == s)) => (self.panels.iter().position(|p| Some(p.id) == e.suivant).unwrap_or(0), "à sa place".to_string()),
+                    None if sequence_partie => {
+                        let premier_de = |doc: &Document, q: u64| (0..doc.panels.len()).find(|&i| doc.sequence_of(i) == q);
+                        let dernier_de = |doc: &Document, q: u64| (0..doc.panels.len()).rev().find(|&i| doc.sequence_of(i) == q);
+                        let n = self.panels.len();
+                        let (at, a_sa_place) = match (o.sequence_apres.and_then(|q| premier_de(self, q)), o.sequence_avant.and_then(|q| dernier_de(self, q))) {
+                            (Some(i), _) => (i, true),
+                            (None, Some(i)) => (i + 1, true),
+                            (None, None) => (n, n == 0),
+                        };
+                        let numero = crate::numerotation::Num::parse(&o.sequence_numero).filter(|num| self.numbering_locked && !self.numero_de_sequence_pris(num));
+                        let nom_seq = if o.sequence_nom.trim().is_empty() { String::new() } else { o.sequence_nom.clone() };
+                        self.sequences.push(crate::document::Sequence { id: e.sequence, name: nom_seq, number: numero.map(|n| n.text()).unwrap_or_default() });
+                        let ou = if a_sa_place { "à sa place dans le film" } else { "à la fin du film" };
+                        (at, if e.sequence_nom.is_empty() { format!("avec sa séquence, {ou}") } else { format!("avec sa séquence (« {} »), {ou}", e.sequence_nom) })
+                    }
                     None => match (0..self.panels.len()).rev().find(|&i| self.sequence_of(i) == e.sequence).filter(|_| e.sequence != 0) {
-                        Some(i) => (i + 1, "à la fin de sa séquence"),
+                        Some(i) => (i + 1, "à la fin de sa séquence".to_string()),
                         None => {
                             let n = self.panels.len();
-                            ((0..n).rev().find(|&i| self.sequence_of(i) == sequence_courante).map_or(n, |i| i + 1), "à la fin de la séquence courante")
+                            ((0..n).rev().find(|&i| self.sequence_of(i) == sequence_courante).map_or(n, |i| i + 1), "à la fin de la séquence courante".to_string())
                         }
                     },
                 };
-                let sequence = if at > 0 { self.sequence_of(at - 1) } else { self.sequence_of(0) };
-                panel.scene = self.new_scene(sequence);
+                let recreee = sequence_partie && self.sequences.iter().any(|s| s.id == e.sequence);
+                let sequence = if recreee || self.panels.is_empty() {
+                    e.sequence
+                } else if at > 0 {
+                    self.sequence_of(at - 1)
+                } else {
+                    self.sequence_of(0)
+                };
+                // Partie 206 : son plan (au sens du découpage). Le reste du même plan est juste à côté : il le rejoint. Sinon, s'il n'existe
+                // plus, il revient sous le même numéro et le même nom ; son numéro verrouillé, s'il n'est à personne d'autre. Sinon un neuf.
+                let voisin = |k: Option<usize>| k.and_then(|k| self.panels.get(k)).map(|p| p.scene);
+                let mut numero_pris = false;
+                panel.scene = if o.scene != 0 && self.scene(o.scene).is_some_and(|s| s.sequence == sequence) && (voisin(at.checked_sub(1)) == Some(o.scene) || voisin(Some(at)) == Some(o.scene)) {
+                    o.scene
+                } else if o.scene != 0 && self.scene(o.scene).is_none() {
+                    let numero = crate::numerotation::Num::parse(&o.scene_numero).filter(|_| self.numbering_locked);
+                    let libre = numero.clone().filter(|n| !self.numero_de_plan_pris(n));
+                    numero_pris = numero.is_some() && libre.is_none();
+                    self.scenes.push(crate::document::Scene { id: o.scene, name: o.scene_nom.clone(), number: libre.map(|n| n.text()).unwrap_or_default(), sequence });
+                    o.scene
+                } else {
+                    self.new_scene(sequence)
+                };
                 let nouveau = panel.id;
                 if let Some(r) = reserve {
                     self.reserves.insert(nouveau, r);
@@ -394,7 +522,16 @@ impl Document {
                 }
                 let index = self.insert_and_normalize(at, vec![panel]);
                 self.retirer_de_la_corbeille(id);
-                Ok((format!("« {} » restauré {place}.", e.titre), index))
+                // (La phrase dit le nom qu'il a maintenant, s'il a changé : un numéro pris, ou un autre rang en numérotation suivie.)
+                let titre = crate::storyboard::panel_title(self, index);
+                let phrase = if numero_pris {
+                    format!("« {} » restauré {place} : son numéro est pris, il devient « {titre} ».", e.titre)
+                } else if titre != e.titre && e.titre.starts_with("Plan ") {
+                    format!("« {} » restauré {place} ; c'est maintenant « {titre} ».", e.titre)
+                } else {
+                    format!("« {} » restauré {place}.", e.titre)
+                };
+                Ok((phrase, index))
             }
         }
     }
@@ -491,6 +628,9 @@ struct EntreeFichier {
     #[serde(default)]
     id_max: u64,
     tete: Tete,
+    /// Partie 206 (facultatif : une entrée d'avant n'en a pas).
+    #[serde(default, skip_serializing_if = "Origine::est_vide")]
+    origine: Origine,
     contenu: serde_json::Value,
     #[serde(default)]
     rognage: Option<serde_json::Value>,
@@ -550,6 +690,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
             vignette: e.vignette,
             id_max: e.id_max,
             tete: e.tete.clone(),
+            origine: e.origine.clone(),
             contenu,
             rognage,
             commentaires,
@@ -591,6 +732,7 @@ pub(crate) fn parse(text: &str) -> Result<Corbeille, String> {
                 vignette: e.vignette,
                 id_max: e.id_max.max(e.id),
                 tete: e.tete,
+                origine: e.origine,
                 contenu: Contenu::Fichier { plan: e.contenu, reserve: e.rognage, commentaires: e.commentaires, versions: e.versions },
             })
         })

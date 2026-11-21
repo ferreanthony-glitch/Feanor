@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Vérification à l'écran : la corbeille, l'aplat, la colonne** (partie 206, branche `verif-corrections` partie de main 3fda30a, format
+  61 inchangé) : six défauts vus par Anthony, corrigés. Un plan rendu par la corbeille retrouve son numéro verrouillé (il revenait
+  « Plan 1A », jusque dans le PDF), un neuf s'il est pris et la phrase le dit ; le numéro d'un plan de la corbeille n'est plus redonné.
+  Le dernier plan d'une séquence supprimée la ramène, nom et numéro, à sa place. L'aplat n'entoure plus les traits ouverts d'un liseré de
+  sa couleur, et deux changements de couleur rapides ne disent plus « retouchée(s) pendant le calcul » (une course). Les vignettes de la
+  corbeille sont celles de la timeline. La Scène garde la hauteur de son arbre dans la colonne, l'Historique trois étapes, le fil
+  d'Ariane passe à la ligne entre ses éléments. Échap ferme la Corbeille, même quand egui croit ouverte une liste déroulante que plus rien ne peint (revu à l'écran : elle prenait la touche à chaque appui, l'Export aussi) ; les Préférences se ferment aussi à Échap. Essais : 7 dans `corbeille_tests.rs`, 1 dans `fond_tests.rs`,
+  `aplatsur_tests.rs` et `scene_tests.rs` ; suite entière : les 90 échecs de `main`, aucun de plus. **Pas regardé à l'écran après les corrections, pas de commit** (liste 206.9).
 - **Le plan hors de son environnement, regardé** (partie 205, branche `plan-env-retouches` partie de main 5946370, format 61 inchangé) :
   des captures d'écran du banc (`FEANOR_PLANENV_PNG`) ont montré quatre défauts, corrigés : la marque couvrait la durée du bloc, le clic
   droit de la timeline de la séquence n'ouvrait rien, « Séquence 0 » en tête de cette timeline, « pour la séquence » dit du cyclo d'un
