@@ -191,7 +191,15 @@ impl App {
     /// Pose `preset` à la tête de lecture du plan courant (un clic dans le panneau Préréglages).
     pub(crate) fn ajouter_effet_camera_a_la_tete(&mut self, preset: Preset) {
         let f = self.cur_frame;
-        self.ajouter_effet_camera(preset, f);
+        if self.ajouter_effet_camera(preset, f).is_none() {
+            return;
+        }
+        // La rangée des préréglages du Storyboard se déplie pour montrer le bloc posé (audit du 2026-11-21 : repliée, un clic sur un
+        // préréglage ne laissait voir qu'un trait jaune de quelques points). Un glisser vise la rangée qu'on voit : il ne déplie rien.
+        if !self.settings.storyboard_camera_depliee {
+            self.settings.storyboard_camera_depliee = true;
+            let _ = self.settings.save();
+        }
     }
 
     /// « Convertir en clés » quand le plan a des effets vivants : ils deviennent tous des clés de caméra, exactement celles
@@ -426,6 +434,15 @@ impl App {
                     ui.close_menu();
                 }
             });
+        }
+        // Le nom du bloc sous le pointeur, en bulle (audit du 2026-11-21 : un bloc court n'a pas la place d'écrire son nom, « Zoom choc »
+        // sur 8 images se lisait « Zoc »).
+        if self.blocs.glisse.is_none() {
+            if let Some((i, _)) = resp.hover_pos().and_then(sous) {
+                let v = &effets[i];
+                let texte = format!("{} · images {} à {}\nGlisser : le déplacer. Tirer un bord : sa durée. Clic : le régler dans le panneau Caméra.", v.params.preset.label(), self.frame_label(v.start.min(len - 1)), self.frame_label(v.last_frame(len)));
+                resp.clone().on_hover_text_at_pointer(texte);
+            }
         }
         // Peindre les blocs (le plan s'arrête à `len` : au-delà, le bloc est pâle, l'effet y est coupé).
         let fin_du_plan = left + len as f32 * cell;

@@ -5877,6 +5877,14 @@ impl eframe::App for App {
         }
         self.frame_start = Some(std::time::Instant::now());
         self.frame(ctx);
+        // Une transition que l'insertion d'un plan vient de déplacer sur une autre coupe (`Document::rattacher_transitions`) : on le dit,
+        // à la suite du message du geste, au lieu de la laisser changer de place sans un mot.
+        let n = std::mem::take(&mut self.doc.transitions_rattachees);
+        if n > 0 {
+            let suite = if n == 1 { "La transition de cette coupe a suivi le nouveau plan.".to_string() } else { format!("{n} transitions ont suivi les nouveaux plans.") };
+            // (Devant le message du geste : la barre d'état ne montre que le début d'un message long, `messages::resume`.)
+            self.status = if self.status.is_empty() { suite } else { format!("{suite} {}", self.status) };
+        }
     }
 }
 

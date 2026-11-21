@@ -484,7 +484,7 @@ pub const COLONNE: f32 = 290.0;
 /// panneaux côte à côte se fondent en une, `DockNode::une_seule_colonne`) ; 10 depuis la partie 194 (la colonne est une pile de
 /// panneaux, `DockLayout::colonne`, que montre un seul panneau `Pane::Colonne` ; la bande du bas a toute la largeur, sous elle :
 /// `DockLayout::vers_la_pile`).
-pub const LAYOUT_VERSION: u32 = 10;
+pub const LAYOUT_VERSION: u32 = 11;
 
 /// La bande du bas : une seule (Anthony, 2026-10-17 : « je ne veux pas de double timeline ») ;
 /// elle montre le montage en storyboard, la timeline en animation.
@@ -813,7 +813,10 @@ impl DockLayout {
         // Partie 197 : le panneau Scène en haut de la pile (Scène, Couleur, Propriétés), comme dans la maquette validée. Une pile déjà
         // enregistrée ne le reçoit pas : « + Panneau » ou « Rétablir la disposition ».
         d.colonne.panneaux.insert(0, crate::colonne::PanneauPile::simple(Pane::Scene));
-        d.sanitized()
+        let mut d = d.sanitized();
+        // La colonne prend toute la hauteur, la bande s'arrête à son bord (`colonne_haute`).
+        d.colonne_haute();
+        d
     }
 
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
@@ -972,6 +975,22 @@ impl DockLayout {
             return;
         };
         self.principal = column(part, reste, tabs(vec![Pane::Montage]));
+    }
+
+    /// La colonne sur toute la hauteur de la fenêtre, la bande du bas sous le dessin seulement (Storyboard, audit du 2026-11-21 : sur
+    /// un écran de portable, la bande sous la colonne ne laissait à celle-ci que 480 points de haut pour quatre panneaux). Ne touche
+    /// qu'à la forme d'origine (le dessin et la colonne côte à côte, la bande sous les deux) ; une disposition arrangée autrement
+    /// reste comme elle est. Les parts sont gardées : la bande a la même hauteur, la colonne la même largeur (`App::fit_columns`).
+    pub(crate) fn colonne_haute(&mut self) {
+        let seule = |n: &DockNode, p: Pane| matches!(n, DockNode::Tabs { panneaux, .. } if panneaux.as_slice() == [p]);
+        let ok = matches!(&self.principal, DockNode::Column { haut, bas, .. }
+            if seule(bas, Pane::Montage) && matches!(&**haut, DockNode::Row { droite, .. } if seule(droite, Pane::Colonne)));
+        if !ok {
+            return;
+        }
+        let DockNode::Column { part, haut, bas } = std::mem::replace(&mut self.principal, tabs(Vec::new())) else { return };
+        let DockNode::Row { part: large, gauche, droite } = *haut else { return };
+        self.principal = DockNode::Row { part: large, gauche: Box::new(DockNode::Column { part, haut: gauche, bas }), droite };
     }
 
     /// Le dessin seul.

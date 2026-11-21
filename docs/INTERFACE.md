@@ -2420,6 +2420,10 @@ SHOT) : voir « À vérifier à l'écran ».
 | **Passe-partout** | le voile autour du cadre de la caméra de « Estomper le hors-champ » | masque |
 | **GIF animé** | l'export `.gif`, sans son | |
 
+**Retouche du 2026-11-21** (audit utilisateur, lot 5, accord d'Anthony) : avec l'outil Caméra en main, le passe-partout ne dépasse pas
+55 % d'opacité (`camtools::PASSE_PARTOUT_CAMERA`), pour voir où l'on cadre ; il reprend son réglage dès qu'on change d'outil. Le même outil
+montre, sur un plan animé, le cadre de la première clé (« Début »), celui de la dernière (« Fin ») et le chemin du centre du cadre.
+
 ### Où et quels gestes
 
 | Commande | Où | Raccourci |
@@ -15018,6 +15022,9 @@ d'être très épaisses. La taille de la timeline doit rester la plus contenue p
 projet (format 60 inchangé) : deux réglages d'affichage du poste. L'espace Montage garde sa disposition (la caméra au-dessus des
 plans, la hauteur des plans au choix, les transitions en formes).
 
+**Retouche du 2026-11-21** (audit utilisateur, lot 5, accord d'Anthony) : poser un préréglage par un clic déplie la rangée (un glisser ne déplie rien), pour
+qu'on voie le bloc posé ; le nom d'un bloc vient en bulle au survol (un bloc court ne peut pas l'écrire).
+
 ### 178.1 Ce qui change pour lui (espace Storyboard)
 
 | Rangée | Avant | Maintenant |
@@ -17327,6 +17334,10 @@ propriétés). **Format des projets inchangé (61)** : seule la disposition rete
 6. **La colonne s'arrête au-dessus de la bande du bas** : le montage et la timeline ont toute la largeur de la fenêtre, sous le
    dessin et la colonne, dans tous les espaces. (Les dispositions d'origine l'étaient déjà ; les dispositions retenues où la bande
    était ailleurs la retrouvent en bas, à la hauteur qu'elle avait.)
+   **Changé le 2026-11-21 pour le Storyboard seulement** (audit utilisateur, lot 5, accord d'Anthony) : la colonne y prend toute la
+   hauteur de la fenêtre et la bande s'arrête à son bord (`DockLayout::colonne_haute`, disposition 11). Sur un portable, la bande sous
+   la colonne ne laissait à celle-ci que 480 points pour quatre panneaux. Montage, 3D et Animation gardent la bande sur toute la largeur.
+   Dans la pile, le panneau qui grandit reçoit la hauteur de son contenu tant que les listes peuvent la céder (`colonne::hauteurs`).
 7. **Ce qui marchait reste** : la colonne garde ses 290 points quelle que soit la fenêtre, son bord se tire ; un panneau se met
    **dans une fenêtre à part** (clic droit sur son en-tête ; la fermer le remet dans la pile) ou **flotte** (clic droit « Panneau
    flottant », ou sa poignée lâchée hors de la colonne) ; un panneau flottant revient par le clic droit sur sa poignée, **« Dans la

@@ -109,9 +109,17 @@ impl App {
     /// bande est en cours ; `clip` : la partie visible de la bande (une étiquette hors d'elle ne se survole pas).
     pub(crate) fn pile_versions_ui(&mut self, ui: &mut egui::Ui, etiquettes: &[EtiquetteBloc], occupe: bool, clip: Rect) {
         let ctx = ui.ctx().clone();
-        if !etiquettes.is_empty() || !self.pile_versions.etiquettes.is_empty() {
+        // (La planche et la bande du montage passent toutes deux par ici dans la même image d'écran : la seconde ajoute ses étiquettes à
+        // celles de la première au lieu de les remplacer. Avant, la dernière dessinée gagnait, et l'ordre de dessin des panneaux,
+        // qui dépend de la disposition, décidait de quelles étiquettes on pouvait cliquer.)
+        let image = ctx.cumulative_pass_nr();
+        let meme_image = self.pile_versions.image == Some(image);
+        if meme_image {
+            self.pile_versions.etiquettes.extend(etiquettes.iter().map(|e| (e.zone, e.plan)));
+        } else if !etiquettes.is_empty() || !self.pile_versions.etiquettes.is_empty() {
             self.pile_versions.etiquettes = etiquettes.iter().map(|e| (e.zone, e.plan)).collect();
         }
+        self.pile_versions.image = Some(image);
         // Rien à faire : pas d'étiquette et pas de pile (le cas de presque tous les projets).
         if etiquettes.is_empty() && self.pile_versions.ouverte().is_none() {
             return;

@@ -639,6 +639,14 @@ impl Settings {
         if s.montage_layout.as_ref().is_some_and(crate::workspace::est_le_montage_d_avant) {
             s.montage_layout = None;
         }
+        // Disposition 11 : dans le Storyboard, la colonne prend toute la hauteur et la bande s'arrête à son bord. Une disposition
+        // retenue qui avait encore la forme d'origine la reçoit ; une disposition arrangée autrement ne bouge pas.
+        if let Some(d) = s.layout.as_mut().and_then(|l| l.panneaux.as_mut()) {
+            if d.version < crate::dock::LAYOUT_VERSION {
+                *d = d.clone().upgraded();
+                d.colonne_haute();
+            }
+        }
         // (Le côté storyboard n'est jamais l'animation.)
         if s.storyboard_space == Espace::Animation {
             s.storyboard_space = Espace::Storyboard;

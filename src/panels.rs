@@ -496,7 +496,8 @@ impl App {
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
             // (Dans les Vignettes, plus le mot « calque », partie 160 : la case n'a pas de calques à montrer.)
-            if self.espace != crate::workspace::Espace::Vignettes {
+            // (Ni avec l'outil Caméra : la caméra est celle du plan, pas d'un calque.)
+            if self.espace != crate::workspace::Espace::Vignettes && self.tool != crate::app::Tool::Camera {
                 ui.label(
                     RichText::new(if vector { "calque vectoriel" } else { "calque bitmap" })
                         .small()

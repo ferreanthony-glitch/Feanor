@@ -566,7 +566,10 @@ pub fn hauteurs(total: f32, voulues: &[Option<Voulue>], grandit: Option<usize>) 
     let autres = || voulues.iter().enumerate().filter(move |(i, _)| Some(*i) != grandit).filter_map(|(_, v)| *v);
     let demandes: f32 = autres().map(|v| v.h.max(0.0)).sum();
     // Les listes cèdent ce qui manque à celui qui grandit, pas plus, au prorata de ce qu'elles peuvent céder, jamais sous leur plancher.
-    let manque = if grandit.is_some() { (GRANDIT_MIN - (reste - demandes)).max(0.0) } else { 0.0 };
+    // (Audit du 2026-11-21 : celui qui grandit et qui dit la hauteur de son contenu, les réglages de la caméra par exemple, la reçoit tant
+    // que les listes peuvent la céder ; avant, il n'avait que `GRANDIT_MIN` d'assuré et défilait à côté d'une liste à moitié vide.)
+    let besoin = grandit.and_then(|g| voulues[g]).filter(|v| v.plancher >= v.h).map_or(GRANDIT_MIN, |v| v.h.max(GRANDIT_MIN));
+    let manque = if grandit.is_some() { (besoin - (reste - demandes)).max(0.0) } else { 0.0 };
     let cedable: f32 = autres().map(|v| (v.h - v.plancher).max(0.0)).sum();
     let part = if cedable > 0.0 { (manque / cedable).min(1.0) } else { 0.0 };
     let mut out: Vec<f32> = voulues

@@ -1628,6 +1628,9 @@ pub struct Document {
     /// Transitions du montage, rangées par coupe (`transitions.rs`) ; enregistrées à côté du
     /// manifeste, dans `transitions.json`.
     pub transitions: Vec<crate::transitions::Transition>,
+    /// Combien de transitions l'insertion d'un plan neuf vient de rattacher à une autre coupe (`inserer_un_plan_neuf`) : l'application le dit dans la
+    /// barre d'état puis remet le compte à zéro. Pas enregistré.
+    pub transitions_rattachees: usize,
     /// Sons proposés par la lecture du storyboard (`indications.rs`) ; enregistrés à côté du
     /// manifeste, dans `sons_proposes.json`. Hors de l'annulation.
     pub sons_proposes: crate::indications::SonsProposes,
@@ -1735,6 +1738,7 @@ impl Document {
             comments: Vec::new(),
             reserves: Default::default(),
             transitions: Vec::new(),
+            transitions_rattachees: 0,
             sons_proposes: Default::default(),
             references: Vec::new(),
             personnages: Vec::new(),
@@ -1813,6 +1817,7 @@ impl Document {
             comments: structure.comments,
             reserves: structure.reserves,
             transitions: structure.transitions,
+            transitions_rattachees: 0,
             sons_proposes: Default::default(),
             references: structure.references,
             personnages: structure.personnages,
@@ -1867,6 +1872,7 @@ impl Document {
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
             transitions: self.transitions.clone(),
+            transitions_rattachees: 0,
             sons_proposes: self.sons_proposes.clone(),
             references: self.references.clone(),
             personnages: self.personnages.clone(),
@@ -2747,7 +2753,7 @@ impl Document {
     /// Nouveau panneau juste après le panneau `index`, dans la même scène.
     pub fn add_panel_after(&mut self, index: usize) -> usize {
         let panel = self.make_panel(self.panels[index].scene);
-        self.insert_and_normalize(index + 1, vec![panel])
+        self.inserer_un_plan_neuf(index + 1, panel)
     }
 
     /// Nouvelle scène (avec un panneau) après la scène du panneau `index`, dans la même séquence.
@@ -2755,7 +2761,7 @@ impl Document {
         let (_, end) = self.scene_run(index);
         let scene = self.new_scene(self.sequence_of(index));
         let panel = self.make_panel(scene);
-        self.insert_and_normalize(end, vec![panel])
+        self.inserer_un_plan_neuf(end, panel)
     }
 
     /// Nouvelle scène (un panneau) juste avant celle du panneau `index`, dans la même séquence
@@ -2764,7 +2770,7 @@ impl Document {
         let (start, _) = self.scene_run(index);
         let scene = self.new_scene(self.sequence_of(index));
         let panel = self.make_panel(scene);
-        self.insert_and_normalize(start, vec![panel])
+        self.inserer_un_plan_neuf(start, panel)
     }
 
     /// Nouveau projet fait des plans `ids` (13e, « nouveau projet à partir des plans choisis »),
@@ -3092,7 +3098,15 @@ impl Document {
         let (first_id, second_id) = (first.id, second.id);
         self.split_comments(first_id, second_id, at);
         self.annules_suivre_coupe(first_id, second_id);
-        Some(self.insert_and_normalize(index + 1, vec![second]))
+        let i = self.insert_and_normalize(index + 1, vec![second]);
+        // La transition de sortie du plan coupé (vers le plan suivant, ou le fondu de fin du film) suit sa seconde moitié : elle reste
+        // où elle était dans le film. (Audit du 2026-11-21 : elle restait attachée à la première moitié et ne se montrait plus.)
+        for t in &mut self.transitions {
+            if t.out == Some(first_id) {
+                t.out = Some(second_id);
+            }
+        }
+        Some(i)
     }
 
     /// Réunit le panneau `index` et le suivant, s'il est dans la même scène : les images du
@@ -3247,6 +3261,16 @@ impl Document {
         let id = self.alloc();
         self.cels.insert(id, cel);
         id
+    }
+
+    /// Insère un plan **neuf** (vide, ou un plan type) : une transition posée sur la coupe où il arrive passe sur sa coupe d'entrée
+    /// (`rattacher_transitions`, audit du 2026-11-21) ; `transitions_rattachees` le compte, pour la barre d'état. Les copies (dupliquer,
+    /// coller) et les retours (corbeille, plan écarté) ne passent pas par ici : leur transition attend, comme avant.
+    pub(crate) fn inserer_un_plan_neuf(&mut self, at: usize, panel: Panel) -> usize {
+        let id = panel.id;
+        let i = self.insert_and_normalize(at, vec![panel]);
+        self.transitions_rattachees += self.rattacher_transitions(id);
+        i
     }
 
     pub(crate) fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {
