@@ -6,7 +6,7 @@
 //! La forme du fond est déduite du trait, à chaque changement : tout ce que le trait enferme (les
 //! trous du trait jusqu'à `2 × trous` pixels sont fermés), plus un débord de `debord` pixels autour
 //! du trait de ces formes ; une seule forme globale, au bord adouci. Un trait ouvert, qui n'enferme rien, n'a ni
-//! aplat ni débord (partie 206 : il était entouré d'un liseré de la couleur de l'aplat). Ce qu'on peint dans le fond (strate Fond)
+//! aplat ni débord (partie 207 : il était entouré d'un liseré de la couleur de l'aplat). Ce qu'on peint dans le fond (strate Fond)
 //! reste dans cette forme et passe sous le trait.
 
 use eframe::egui::Color32;
@@ -272,7 +272,7 @@ pub(crate) fn geometrie_dans(line: &Raster, r: &FondReglages, monde: bool) -> Op
 
 /// La couverture (0 à 255) de chaque pixel d'un rectangle de travail `bw × bh` dont `outside` dit le dehors.
 ///
-/// Partie 206 : **le débord ne prolonge que les formes qui existent**. Le dedans (`!outside`) comprend aussi le trait épaissi
+/// Partie 207 : **le débord ne prolonge que les formes qui existent**. Le dedans (`!outside`) comprend aussi le trait épaissi
 /// de `trous` (les murs) : un trait ouvert, qui n'enferme rien, était donc une « forme » mince, que le débord entourait sur
 /// toute sa longueur (un liseré de la couleur de l'aplat des deux côtés du trait, invisible en blanc sur papier blanc). Le
 /// **cœur** d'une forme est ce qui est à plus de `2 × trous` pixels du dehors (`coeur_de_la_forme`) : un trait ouvert de moins
@@ -307,7 +307,7 @@ fn couverture_de_la_boite(outside: &[bool], bw: usize, bh: usize, r: &FondReglag
     cover.iter().zip(&d_coeur).map(|(&c, &d)| (c * (portee + 1.0 - d.sqrt()).clamp(0.0, 1.0) * 255.0).round() as u8).collect()
 }
 
-/// Partie 206 : la distance au dehors (pixels) au-delà de laquelle un pixel est le cœur d'une forme (`couverture_de_la_boite`) :
+/// Partie 207 : la distance au dehors (pixels) au-delà de laquelle un pixel est le cœur d'une forme (`couverture_de_la_boite`) :
 /// `2 × trous`, deux pixels de plus au moins (fermer les trous à 0 : un trait de moins de 4 pixels n'a pas de cœur).
 fn coeur_de_la_forme(r: &FondReglages) -> f64 {
     let trous = r.trous as f64;

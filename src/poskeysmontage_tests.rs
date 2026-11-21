@@ -406,8 +406,8 @@ fn the_gestures_of_the_drawing_under_are_unchanged() {
     glisser(&mut b, pos2(l.x(12) - PPF * 0.5, l.cy), pos2(l.x(14) - PPF * 0.5, l.cy), Modifiers::NONE);
     let frames = &b.app.doc.panels[0].layers[0].frames;
     assert_eq!((frames[12], frames[13], frames[14]), (a, a, c), "la limite est passée de 12 à 14");
-    // (La suite du calque est poussée de deux images, avec ses clés de position : c'était déjà ainsi.)
-    assert_eq!(cles(&b, 0), vec![4, 10, 18], "les clés d'après la limite suivent les images poussées");
+    // (Partie 206 : seule la limite bouge, la suite du calque et ses clés de position restent où elles sont ; avant, Ctrl le fait.)
+    assert_eq!(cles(&b, 0), vec![4, 10, 16], "les clés d'après la limite ne bougent pas");
     assert!(b.app.pos_ui.sel.is_empty() && b.app.pos_ui.drag.is_none());
     b.app.undo();
     assert_eq!(b.app.doc.panels[0].layers[0].frames[13], c);

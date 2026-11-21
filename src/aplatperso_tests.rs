@@ -238,7 +238,7 @@ fn a_l_ecran(b: &Banc) -> Vec<(String, Pos2)> {
 #[test]
 fn the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the_panel() {
     let mut b = banc();
-    // (Partie 206 : la Scène garde maintenant la hauteur de son arbre au lieu de céder jusqu'à 70 points ; dans cette fenêtre de 900
+    // (Partie 207 : la Scène garde maintenant la hauteur de son arbre au lieu de céder jusqu'à 70 points ; dans cette fenêtre de 900
     // points, Propriétés n'aurait plus que ses 120 points et la ligne de la portée serait sous son bord. Cet essai porte sur Propriétés :
     // la Scène est retirée, comme dans les autres essais de la pile, `colonne_tests::sans_la_scene`.)
     crate::colonne_tests::sans_la_scene(&mut b.app);

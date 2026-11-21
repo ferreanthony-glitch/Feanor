@@ -855,6 +855,11 @@ mod clesordre;
 mod clesduree;
 #[cfg(test)]
 mod clesglisser_tests;
+mod bordscles;
+mod clesvue;
+// La fin d'un plan et le bord entre deux clés : seules les clés voisines changent ; Ctrl, Maj et les boutons du stylet (partie 206).
+#[cfg(test)]
+mod bordscles_tests;
 // Durée d'un nouveau plan, durée des plans choisis.
 mod dureeplans;
 #[cfg(test)]

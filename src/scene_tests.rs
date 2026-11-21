@@ -171,7 +171,7 @@ fn the_three_roots_show_the_plan_the_sequence_or_the_film_with_their_breadcrumb(
         assert_eq!(vus::ou(&ici(&format!("Depuis : {}", r.nom()))).len(), 1, "{r:?}");
     }
     let t = mots_dans(&b, Rect::EVERYTHING);
-    // (Partie 206 : « › » est peint avec l'élément qui le suit, pour qu'ils passent à la ligne ensemble.)
+    // (Partie 207 : « › » est peint avec l'élément qui le suit, pour qu'ils passent à la ligne ensemble.)
     assert!(t.iter().any(|x| *x == format!("› {}", f[2])) && t.iter().any(|x| *x == format!("› {}", f[1])), "le fil d'Ariane est peint : {f:?} {t:?}");
     // Séquence : les deux plans de la séquence ; le courant déplié jusqu'à ses calques, l'autre replié.
     clic(&mut b, vus::ou(&ici("Depuis : Séquence"))[0].center(), Modifiers::NONE);
@@ -433,7 +433,7 @@ fn the_root_and_the_folds_are_kept_in_the_settings() {
     assert_eq!(crate::settings::Settings::load().scene.racine, Racine::Sequence);
 }
 
-// ------------------------------------------------------------------------------------------------ partie 206 : la Scène entière
+// ------------------------------------------------------------------------------------------------ partie 207 : la Scène entière
 
 /// Le corps du panneau `k` de la pile, à l'écran (sa tranche sans l'en-tête ni le bord du bas).
 fn corps_de(b: &Banc, k: usize) -> Rect {
@@ -443,7 +443,7 @@ fn corps_de(b: &Banc, k: usize) -> Rect {
     Rect::from_min_max(pos2(zone.left(), haut + colonne::ENTETE), pos2(zone.right(), bas - bord))
 }
 
-/// Partie 206 (vu à l'écran, 868 points de haut à 90 %) : avec l'Historique, puis les Préréglages, ajoutés à la pile d'origine du
+/// Partie 207 (vu à l'écran, 868 points de haut à 90 %) : avec l'Historique, puis les Préréglages, ajoutés à la pile d'origine du
 /// Storyboard (Scène, Couleur, Propriétés), la Scène était coupée (sa deuxième ligne de calque à moitié), puis réduite à sa barre et à
 /// une ligne ; l'Historique à une étape. La Scène garde maintenant la hauteur de son arbre quand il tient dans sa hauteur d'origine,
 /// l'Historique ses boutons et trois étapes ; et le fil d'Ariane passe à la ligne entre ses éléments, jamais au milieu de « Séquence 1 ».

@@ -75,7 +75,7 @@ impl App {
     }
 
     fn scene_panel_en(&mut self, ui: &mut egui::Ui) {
-        // (Partie 206 : la hauteur de la barre est retenue, pour la hauteur que le panneau demande à la colonne, `colonne_voulue`.)
+        // (Partie 207 : la hauteur de la barre est retenue, pour la hauteur que le panneau demande à la colonne, `colonne_voulue`.)
         let haut = ui.cursor().top();
         self.scene_barre(ui);
         ui.add_space(2.0);
@@ -133,7 +133,7 @@ impl App {
                 }
             }
             ui.add_space(6.0);
-            // Le fil d'Ariane : il passe à la ligne **entre** ses éléments, jamais au milieu de l'un (partie 206 : « Film › Séquence » /
+            // Le fil d'Ariane : il passe à la ligne **entre** ses éléments, jamais au milieu de l'un (partie 207 : « Film › Séquence » /
             // « 1 › Plan 1A ») ; « › » reste collé à l'élément qui le suit ; un élément plus large que la colonne est coupé par « … »
             // (le nom entier dans la bulle).
             let fil = crate::scene::fil(&self.doc, self.settings.scene.racine, self.cur_panel);

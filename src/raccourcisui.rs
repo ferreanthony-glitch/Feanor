@@ -89,7 +89,7 @@ impl App {
         for (k, p, m) in keys {
             if k == egui::Key::Escape {
                 self.assign = None;
-                // (La touche est prise : elle n'a annulé que l'attente, elle ne ferme pas aussi les Préférences, partie 206.)
+                // (La touche est prise : elle n'a annulé que l'attente, elle ne ferme pas aussi les Préférences, partie 207.)
                 ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                 return true;
             }

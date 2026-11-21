@@ -376,7 +376,7 @@ impl Document {
         let scenes = self.scene_order();
         let mut nums: Vec<Option<Num>> = scenes.iter().map(|&id| self.scene(id).and_then(|s| Num::parse(&s.number))).collect();
         if nums.iter().any(Option::is_none) {
-            // (Le numéro d'un plan annulé n'est pas redonné : il reviendra avec lui. Partie 206 : ni celui d'un plan de la corbeille.)
+            // (Le numéro d'un plan annulé n'est pas redonné : il reviendra avec lui. Partie 207 : ni celui d'un plan de la corbeille.)
             let mut pris: Vec<Num> = self.annules.plans.iter().filter_map(|g| Num::parse(&g.scene.number)).collect();
             pris.extend(self.numeros_de_la_corbeille().0);
             fill(&mut nums, &pris);

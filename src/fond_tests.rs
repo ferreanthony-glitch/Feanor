@@ -53,7 +53,7 @@ fn small_gaps_are_closed_big_ones_are_not() {
     let r = FondReglages::default();
     // Un trou de 8 px (moins de 2 × 6) : fermé.
     assert_eq!(at(&silhouette(&ring(8.0), &r), 100, 100), 255);
-    // Un trou de 40 px : le dedans fuit. Partie 206 : le trait, devenu ouvert, n'enferme plus rien ; il n'a plus ni fond ni débord
+    // Un trou de 40 px : le dedans fuit. Partie 207 : le trait, devenu ouvert, n'enferme plus rien ; il n'a plus ni fond ni débord
     // (avant : « le trait garde son fond », un liseré de la couleur de l'aplat le long du trait).
     let open = silhouette(&ring(40.0), &r);
     assert_eq!(at(&open, 100, 100), 0, "le dedans fuit par le trou");
@@ -367,7 +367,7 @@ fn a_line_leaving_the_sheet_gets_its_shape_and_its_fond_outside_too() {
         assert_eq!(live.get_i(x, y), whole.get_i(x, y), "({x}, {y})");
     }
 }
-/// Partie 206 : un trait ouvert, qui n'enferme rien, n'a ni aplat ni débord ; le débord d'une forme fermée est entier, coins compris ; un
+/// Partie 207 : un trait ouvert, qui n'enferme rien, n'a ni aplat ni débord ; le débord d'une forme fermée est entier, coins compris ; un
 /// trait ouvert qui sort d'une forme ne garde le débord que tout près d'elle.
 #[test]
 fn an_open_line_gets_no_aplat_and_no_halo_but_closed_shapes_keep_their_margin() {

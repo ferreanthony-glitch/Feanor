@@ -92,12 +92,12 @@ pub struct Entree {
     pub id_max: u64,
     /// La feuille au moment où l'entrée a été jetée (les dessins ont cette taille).
     pub(crate) tete: Tete,
-    /// Partie 206 : de quoi rendre au plan son numéro, et sa séquence si elle est partie avec lui.
+    /// Partie 207 : de quoi rendre au plan son numéro, et sa séquence si elle est partie avec lui.
     pub origine: Origine,
     pub contenu: Contenu,
 }
 
-/// Partie 206 : ce qu'un plan jeté garde de son plan au sens du découpage (`Scene` : numéro, nom) et de sa séquence (numéro, nom choisi,
+/// Partie 207 : ce qu'un plan jeté garde de son plan au sens du découpage (`Scene` : numéro, nom) et de sa séquence (numéro, nom choisi,
 /// voisines dans le film), pour revenir sous son numéro et, si sa séquence n'existe plus, la recréer à sa place. Champs facultatifs de
 /// `corbeille.json` (format 61 inchangé) : une entrée d'avant n'en a aucun, elle revient comme avant (numéro neuf, séquence recréée au
 /// bout du film).
@@ -194,7 +194,7 @@ impl Document {
         })
     }
 
-    /// Partie 206 : le numéro et le nom du plan `index` (sa scène), ceux de sa séquence et ses séquences voisines.
+    /// Partie 207 : le numéro et le nom du plan `index` (sa scène), ceux de sa séquence et ses séquences voisines.
     fn origine_pour_la_corbeille(&self, index: usize) -> Origine {
         let scene = self.panels[index].scene;
         let sequence = self.sequence_of(index);
@@ -214,7 +214,7 @@ impl Document {
         }
     }
 
-    /// Partie 206 : un plan du film (ou un plan annulé, qui reviendra avec le sien) a déjà ce numéro.
+    /// Partie 207 : un plan du film (ou un plan annulé, qui reviendra avec le sien) a déjà ce numéro.
     fn numero_de_plan_pris(&self, n: &crate::numerotation::Num) -> bool {
         self.scenes.iter().any(|s| crate::numerotation::Num::parse(&s.number).as_ref() == Some(n)) || self.annules.plans.iter().any(|g| crate::numerotation::Num::parse(&g.scene.number).as_ref() == Some(n))
     }
@@ -223,7 +223,7 @@ impl Document {
         self.sequences.iter().any(|s| crate::numerotation::Num::parse(&s.number).as_ref() == Some(n)) || self.annules.plans.iter().any(|g| crate::numerotation::Num::parse(&g.sequence.number).as_ref() == Some(n))
     }
 
-    /// Partie 206 : les numéros des plans et des séquences que la corbeille garde et que le film n'a plus : la numérotation
+    /// Partie 207 : les numéros des plans et des séquences que la corbeille garde et que le film n'a plus : la numérotation
     /// verrouillée ne les redonne pas (`assign_numbers`), ils reviendront avec leur plan.
     pub(crate) fn numeros_de_la_corbeille(&self) -> (Vec<crate::numerotation::Num>, Vec<crate::numerotation::Num>) {
         let (mut plans, mut sequences) = (Vec::new(), Vec::new());
@@ -418,7 +418,7 @@ impl Document {
 
     /// Remet l'entrée `id` dans le film, d'après `charge` (son contenu, relu au besoin : `charger`). Un plan revient derrière le plan qui
     /// le précédait s'il existe encore, sinon à la fin de sa séquence ; si sa séquence n'existe plus, elle revient avec lui, à sa place
-    /// entre ses voisines (partie 206) ; sinon à la fin de `sequence_courante`. Il retrouve son numéro (numérotation verrouillée) s'il
+    /// entre ses voisines (partie 207) ; sinon à la fin de `sequence_courante`. Il retrouve son numéro (numérotation verrouillée) s'il
     /// n'est à aucun autre plan, sinon un neuf, et la phrase le dit ; des calques
     /// reviennent dans leur plan, qui doit exister. Rend la phrase à dire et le plan à rendre courant. Une seule étape
     /// d'annulation (l'appelant la prend), qui rend aussi l'entrée à la corbeille.
@@ -454,7 +454,7 @@ impl Document {
                     // (Partie 205 : son environnement 3D, s'il en avait un à lui, le suit sous son numéro neuf.)
                     self.env_au_numero_neuf(ancien, panel.id);
                 }
-                // Où : derrière le plan d'avant, sinon à la fin de la séquence ; partie 206 : sa séquence n'existe plus (il en était le
+                // Où : derrière le plan d'avant, sinon à la fin de la séquence ; partie 207 : sa séquence n'existe plus (il en était le
                 // dernier plan), elle revient, avec son nom et son numéro, à sa place dans le film ; sinon à la fin de la séquence courante.
                 let o = &e.origine;
                 let sequence_partie = e.sequence != 0 && !self.sequences.iter().any(|s| s.id == e.sequence);
@@ -492,7 +492,7 @@ impl Document {
                 } else {
                     self.sequence_of(0)
                 };
-                // Partie 206 : son plan (au sens du découpage). Le reste du même plan est juste à côté : il le rejoint. Sinon, s'il n'existe
+                // Partie 207 : son plan (au sens du découpage). Le reste du même plan est juste à côté : il le rejoint. Sinon, s'il n'existe
                 // plus, il revient sous le même numéro et le même nom ; son numéro verrouillé, s'il n'est à personne d'autre. Sinon un neuf.
                 let voisin = |k: Option<usize>| k.and_then(|k| self.panels.get(k)).map(|p| p.scene);
                 let mut numero_pris = false;
@@ -628,7 +628,7 @@ struct EntreeFichier {
     #[serde(default)]
     id_max: u64,
     tete: Tete,
-    /// Partie 206 (facultatif : une entrée d'avant n'en a pas).
+    /// Partie 207 (facultatif : une entrée d'avant n'en a pas).
     #[serde(default, skip_serializing_if = "Origine::est_vide")]
     origine: Origine,
     contenu: serde_json::Value,

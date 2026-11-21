@@ -50,7 +50,7 @@ pub(crate) fn octets_texte(n: u64) -> String {
     }
 }
 
-/// La vignette d'une entrée (partie 206), faite comme celle d'un bloc de la timeline (`render::thumbnail`) : **la partie filmée** (le
+/// La vignette d'une entrée (partie 207), faite comme celle d'un bloc de la timeline (`render::thumbnail`) : **la partie filmée** (le
 /// cadre, au centre de la feuille), chaque pixel la moyenne exacte de tout ce qu'il couvre, à `w × h` pixels (ceux de l'écran, densité
 /// comprise). Avant : toute la feuille (deux fois le cadre, d'office), un échantillon par point de 96 × 54 : sur une feuille de 3840 ×
 /// 2160, un trait de 6 pixels tombait entre les échantillons, la vignette restait presque blanche.
@@ -195,7 +195,7 @@ impl App {
         };
     }
 
-    /// Partie 206 : Échap ferme la Corbeille, comme les autres fenêtres ; une confirmation en cours (« Supprimer… », « Vider… ») est
+    /// Partie 207 : Échap ferme la Corbeille, comme les autres fenêtres ; une confirmation en cours (« Supprimer… », « Vider… ») est
     /// d'abord abandonnée. Appelée **avant les raccourcis** (`handle_shortcuts`) : la touche est prise, elle ne fait rien d'autre
     /// (« Tout désélectionner », la sélection d'un bloc…) ; une fois la fenêtre fermée, Échap retrouve son usage. Une fenêtre modale
     /// par-dessus, ou une liste déroulante à l'écran, la gardent pour elles.

@@ -1048,7 +1048,7 @@ fn the_colour_choice_is_held_while_dragging_and_laid_down_when_released() {
     assert_eq!(f.peinture(0).get(50, 40).r(), 200);
 }
 
-/// Partie 206 : deux changements de couleur « la clé » de suite (le sélecteur repris avant que la forme de la clé soit repeinte, sur un
+/// Partie 207 : deux changements de couleur « la clé » de suite (le sélecteur repris avant que la forme de la clé soit repeinte, sur un
 /// fil de travail) : le dernier gagne, et la barre d'état ne dit pas « retouchée(s) pendant le calcul » (rien n'a été retouché) ; puis
 /// un troisième, après l'arrivée du deuxième, change encore la couleur de la forme.
 #[test]

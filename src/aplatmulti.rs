@@ -91,7 +91,7 @@ enum Retour {
 }
 
 struct Resultat {
-    /// Partie 206 : le numéro du changement de couleur « la clé » qui l'a lancé (`lancer_teinte`) ; rien pour un remplissage.
+    /// Partie 207 : le numéro du changement de couleur « la clé » qui l'a lancé (`lancer_teinte`) ; rien pour un remplissage.
     teinte: Option<u64>,
     cel: CelId,
     strate: bool,
@@ -127,7 +127,7 @@ fn calculer(t: Travail) -> Option<Resultat> {
 /// de couleur sans que le calque, et donc les autres dessins, en changent (`aplatcouleur.rs`). Le calcul de la forme est celui de
 /// l'aplat affiché ; la peinture est opaque, l'aplat la montre dans sa forme seulement, au bord adouci de la forme.
 ///
-/// Partie 206 : `avant`, les couleurs que les changements « la clé » d'avant ont posées sur ce dessin pendant la séance : la forme
+/// Partie 207 : `avant`, les couleurs que les changements « la clé » d'avant ont posées sur ce dessin pendant la séance : la forme
 /// peinte de l'une d'elles prend aussi la nouvelle (sans cela, un deuxième changement de couleur de la même clé ne changeait rien).
 #[allow(clippy::too_many_arguments)]
 fn teinter(teinte: u64, cel: CelId, trait_: Raster, r: crate::fond::FondReglages, mut peinture: Raster, coupe: Raster, new: [u8; 3], avant: &[[u8; 3]], versions: (u64, u64)) -> Option<Retour> {
@@ -197,7 +197,7 @@ pub(crate) struct Travaux {
     silencieux: bool,
     /// Des résultats arrivés pendant qu'on dessine sur leur dessin : posés à la fin du geste (ils comptent encore dans `en_route`).
     differes: Vec<Option<Retour>>,
-    /// Partie 206 : par dessin, le dernier changement de couleur « la clé » lancé (son numéro) et les couleurs que ces changements
+    /// Partie 207 : par dessin, le dernier changement de couleur « la clé » lancé (son numéro) et les couleurs que ces changements
     /// y ont posées. Un résultat d'un changement d'avant qui arrive après qu'un autre est parti n'est pas posé, sans rien dire :
     /// ce n'était pas un dessin retouché pendant le calcul (la barre d'état le disait), et le dernier changement doit gagner.
     teintes: std::collections::HashMap<CelId, (u64, Vec<[u8; 3]>)>,

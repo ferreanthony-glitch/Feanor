@@ -577,7 +577,7 @@ fn the_window_and_a_restore_never_freeze_the_interface_thread() {
     }
     assert_eq!(app2.doc.corbeille.len(), 99);
 }
-// ------------------------------------------------------------------ partie 206 : le numéro et la séquence d'un plan restauré
+// ------------------------------------------------------------------ partie 207 : le numéro et la séquence d'un plan restauré
 
 fn noms_des_plans(app: &App) -> Vec<String> {
     (0..app.doc.panels.len()).map(|i| crate::storyboard::panel_title(&app.doc, i)).collect()
@@ -697,7 +697,7 @@ fn the_last_plan_of_a_deleted_sequence_brings_its_sequence_back_at_its_place() {
     }
 }
 
-/// Partie 206 : la vignette d'une entrée se fait comme celle d'un bloc de la timeline (la partie filmée, chaque pixel la moyenne de ce
+/// Partie 207 : la vignette d'une entrée se fait comme celle d'un bloc de la timeline (la partie filmée, chaque pixel la moyenne de ce
 /// qu'il couvre) : un zigzag noir de 6 pixels sur une feuille de 3840 × 2160 s'y lit, comme dans la timeline (avant : presque blanc).
 #[test]
 fn the_bin_thumbnail_is_made_like_the_timeline_thumbnail_and_a_thin_line_shows() {
@@ -732,7 +732,7 @@ fn the_bin_thumbnail_is_made_like_the_timeline_thumbnail_and_a_thin_line_shows()
     assert!(le_plus_fonce < 200, "{le_plus_fonce}");
 }
 
-/// Partie 206 : Échap ferme la fenêtre de la corbeille, comme les autres fenêtres (dans l'application entière, pas seulement dans sa
+/// Partie 207 : Échap ferme la fenêtre de la corbeille, comme les autres fenêtres (dans l'application entière, pas seulement dans sa
 /// fonction) ; pendant une confirmation, il l'abandonne d'abord.
 #[test]
 fn escape_closes_the_bin_window_and_first_cancels_a_confirmation() {
@@ -756,7 +756,7 @@ fn escape_closes_the_bin_window_and_first_cancels_a_confirmation() {
     assert_eq!(b.app.doc.panels.len(), 3, "et rien d'autre ne bouge");
 }
 
-/// Partie 206 (vu à l'écran après la partie 206) : le bloc du dernier plan de la Séquence 2 choisi dans la timeline, supprimé, rendu par
+/// Partie 207 (vu à l'écran après la partie 207) : le bloc du dernier plan de la Séquence 2 choisi dans la timeline, supprimé, rendu par
 /// la Corbeille (alors vide) : Échap, trois fois, ne fermait plus la fenêtre. La cause : une liste déroulante qu'egui croyait encore
 /// ouverte alors que plus rien ne la peignait (un champ de couleur dont la fenêtre ou le panneau a disparu) ; `echap_ferme` prenait la
 /// touche et ne fermait rien, à chaque appui. Maintenant la Corbeille se ferme au premier Échap, avant tout autre usage de la touche ; et
