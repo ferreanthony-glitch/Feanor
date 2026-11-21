@@ -5,6 +5,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Les bords des clés et la fin du plan** (partie 206, branche `bords-cles` partie de main 5946370, format inchangé ; le 205 était
+  pris par le Mac) : la fin du plan ne change que la dernière clé de chaque calque et s'arrête en butée (Maj : toutes en proportion,
+  Ctrl : comme avant) ; le bord entre deux clés ne change que ces deux-là (Ctrl : la suite se décale), sur tous les calques choisis, une
+  annulation ; boutons « Décaler la suite » et « Étirer en proportion » pour le stylet ; Ctrl + / Ctrl − (+ et − seuls étaient pris) ;
+  coupure, survol, fantôme et bulle, clé vide hachurée, clé sous la tête soulignée ; vignette et durée dans les clés en option
+  (Préférences > Apparence). Anthony garde : Ctrl sur un bord n'allonge pas le plan, Maj n'étire que les clés de dessin. Essais :
+  `bordscles_tests.rs` (24). Fusionné sur son « fusionne » ; à essayer, liste 206.9.
+  Vu en passant, déjà dans main sans ce travail : 7 essais (`onglets_tests`, `optim_rendu_tests`) cassent sur une texture « canevas »
+  3840 × 2160 plus grande que la limite 2048 du banc.
 - **Le plan hors de son environnement, regardé** (partie 205, branche `plan-env-retouches` partie de main 5946370, format 61 inchangé) :
   des captures d'écran du banc (`FEANOR_PLANENV_PNG`) ont montré quatre défauts, corrigés : la marque couvrait la durée du bloc, le clic
   droit de la timeline de la séquence n'ouvrait rien, « Séquence 0 » en tête de cette timeline, « pour la séquence » dit du cyclo d'un
