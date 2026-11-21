@@ -362,6 +362,8 @@ impl Document {
                 let ancien = panel.id;
                 if self.panels.iter().any(|p| p.id == ancien) {
                     panel.id = self.alloc();
+                    // (Partie 205 : son environnement 3D, s'il en avait un à lui, le suit sous son numéro neuf.)
+                    self.env_au_numero_neuf(ancien, panel.id);
                 }
                 // Où : derrière le plan d'avant, sinon à la fin de la séquence, sinon à la fin de la séquence courante.
                 let (at, place) = match e.precedent.and_then(|a| self.panels.iter().position(|p| p.id == a)).or_else(|| e.apres.and_then(|a| self.panels.iter().position(|p| p.id == a))) {

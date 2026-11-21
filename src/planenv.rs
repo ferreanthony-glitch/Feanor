@@ -67,13 +67,16 @@ impl App {
         }
     }
 
-    /// Peint la marque du plan `index` dans le coin bas droit de son bloc `rect` ; rend la zone de la marque et sa bulle.
-    pub(crate) fn peindre_marque_env(&self, painter: &egui::Painter, rect: egui::Rect, index: usize) -> Option<(egui::Rect, String)> {
+    /// Peint la marque du plan `index` à droite de son bloc `rect`, centrée sur la hauteur `cy` (la ligne du nom et de la durée) ;
+    /// rend la zone de la marque et sa bulle. (Partie 205, vu à l'écran : en bas à droite, elle couvrait la fin de la durée
+    /// « 2s 00 » ; le nom et la durée se rangent maintenant à sa gauche, `zone.left()`.)
+    pub(crate) fn peindre_marque_env(&self, painter: &egui::Painter, rect: egui::Rect, index: usize, cy: f32) -> Option<(egui::Rect, String)> {
         let (icone, phrase) = self.marque_env(index)?;
-        let taille = 11.0_f32.min(rect.height() - 4.0).max(7.0);
-        let c = egui::pos2(rect.right() - 4.0 - taille * 0.6, rect.bottom() - 3.0 - taille * 0.6);
-        let zone = egui::Rect::from_center_size(c, egui::vec2(taille * 1.3, taille * 1.3));
-        painter.circle_filled(c, taille * 0.72, crate::theme::panneau().gamma_multiply(0.85));
+        let taille = 12.0_f32.min(rect.height() - 8.0).max(7.0);
+        let rayon = taille * 0.72;
+        let c = egui::pos2(rect.right() - 7.0 - rayon, cy.clamp(rect.top() + rayon + 1.0, rect.bottom() - rayon - 1.0));
+        let zone = egui::Rect::from_center_size(c, egui::vec2(rayon * 2.0 + 2.0, rayon * 2.0 + 2.0));
+        painter.circle(c, rayon, crate::theme::panneau(), egui::Stroke::new(1.0_f32, crate::theme::accent().gamma_multiply(0.55)));
         painter.text(c, egui::Align2::CENTER_CENTER, icone, egui::FontId::proportional(taille), crate::theme::accent());
         #[cfg(test)]
         MARQUES.with(|m| m.borrow_mut().push((self.doc.panels[index].id, zone, phrase.clone())));
@@ -173,12 +176,23 @@ impl App {
         true
     }
 
-    /// Le sous-menu « Environnement du plan » (le clic droit d'un bloc de plan, au Storyboard et dans la timeline de la séquence).
+    /// Le sous-menu « Environnement du plan » (le clic droit d'un bloc de plan au Storyboard).
     pub(crate) fn menu_env_du_plan(&mut self, ui: &mut egui::Ui, index: usize) {
         if index >= self.doc.panels.len() {
             return;
         }
         ui.menu_button("Environnement du plan", |ui| self.menu_env_items(ui, index));
+    }
+
+    /// Partie 205 : le clic droit d'un bloc de plan dans la timeline de la séquence (onglet 3D) : ses entrées directement, sous un
+    /// titre (le menu n'avait qu'une entrée, ce sous-menu).
+    pub(crate) fn menu_env_du_plan_a_plat(&mut self, ui: &mut egui::Ui, index: usize) {
+        if index >= self.doc.panels.len() {
+            return;
+        }
+        ui.label(RichText::new(format!("Environnement du {}", crate::storyboard::panel_title(&self.doc, index).to_lowercase())).weak());
+        ui.separator();
+        self.menu_env_items(ui, index);
     }
 
     /// Propriétés > Décor (onglet 3D) : « Environnement du plan : celui de la séquence / propre / lié à la séquence N », et ses
@@ -190,7 +204,7 @@ impl App {
         let i = self.cur_panel;
         let texte = match self.env_du_plan(i) {
             None => "celui de la séquence".to_string(),
-            Some(EnvPlan::Propre { .. }) => "propre".to_string(),
+            Some(EnvPlan::Propre { .. }) => "propre à ce plan".to_string(),
             Some(EnvPlan::Lie(s)) => format!("lié à la {}", self.nom_court_de_sequence(s)),
         };
         ui.horizontal_wrapped(|ui| {
@@ -221,13 +235,20 @@ impl App {
         });
     }
 
-    /// Les entrées du sous-menu (sans le titre).
+    /// Au-delà de ce nombre d'autres séquences, « Lié à la séquence N » va dans un sous-menu (le menu reste court, §82).
+    const LIENS_A_PLAT: usize = 5;
+
+    /// Les entrées du sous-menu (sans le titre). Partie 205 : l'état du plan d'abord (« Celui de la séquence », ou « Propre (celui-ci) »
+    /// juste dessous, cochés), puis les autres choix ; plus de cinq autres séquences : « Lié à une autre séquence ▸ ».
     fn menu_env_items(&mut self, ui: &mut egui::Ui, index: usize) {
         let env = self.env_du_plan(index);
         let seq = self.doc.sequence_of(index);
         let mut choix = None;
         if ui.selectable_label(env.is_none(), "Celui de la séquence").clicked() {
             choix = Some(ChoixEnv::Sequence);
+            ui.close_menu();
+        }
+        if matches!(env, Some(EnvPlan::Propre { .. })) && ui.selectable_label(true, "Propre (celui-ci)").clicked() {
             ui.close_menu();
         }
         if ui.selectable_label(false, "Propre : vide").clicked() {
@@ -238,18 +259,22 @@ impl App {
             choix = Some(ChoixEnv::Copie);
             ui.close_menu();
         }
-        for q in self.doc.sequence_order().into_iter().filter(|&q| q != seq) {
-            let nom = format!("Lié à la {}", self.nom_court_de_sequence(q));
-            if ui.selectable_label(env == Some(EnvPlan::Lie(q)), nom).clicked() {
-                choix = Some(ChoixEnv::Lie(q));
-                ui.close_menu();
+        let autres: Vec<(u64, String)> = self.doc.sequence_order().into_iter().filter(|&q| q != seq).map(|q| (q, format!("Lié à la {}", self.nom_court_de_sequence(q)))).collect();
+        let mut liens = |ui: &mut egui::Ui, choix: &mut Option<ChoixEnv>| {
+            for (q, nom) in &autres {
+                if ui.selectable_label(env == Some(EnvPlan::Lie(*q)), nom.as_str()).clicked() {
+                    *choix = Some(ChoixEnv::Lie(*q));
+                    ui.close_menu();
+                }
             }
+        };
+        if autres.len() > Self::LIENS_A_PLAT {
+            ui.menu_button("Lié à une autre séquence", |ui| liens(ui, &mut choix));
+        } else {
+            liens(ui, &mut choix);
         }
         if matches!(env, Some(EnvPlan::Lie(_))) && ui.button("Détacher (en faire une copie à ce plan)").clicked() {
             choix = Some(ChoixEnv::Detacher);
-            ui.close_menu();
-        }
-        if matches!(env, Some(EnvPlan::Propre { .. })) && ui.selectable_label(true, "Propre (celui-ci)").clicked() {
             ui.close_menu();
         }
         if let Some(c) = choix {
@@ -287,7 +312,8 @@ impl App {
 
     /// Partie 204 : supprimer les plans `ids` viderait des séquences auxquelles d'autres plans sont liés : la liste de ces séquences.
     pub(crate) fn sequences_liees_videes(&self, ids: &[u64]) -> Vec<u64> {
-        let liees: std::collections::BTreeSet<u64> = self.doc.decors3d.envs.iter().filter(|(p, _)| !ids.contains(p)).filter_map(|(_, e)| if let EnvPlan::Lie(s) = e { Some(*s) } else { None }).collect();
+        // (Partie 205 : seuls les plans du film comptent ; un plan lié qui est dans la corbeille devient une copie sans question.)
+        let liees: std::collections::BTreeSet<u64> = self.doc.decors3d.envs.iter().filter(|(p, _)| !ids.contains(p) && self.doc.panels.iter().any(|q| q.id == **p)).filter_map(|(_, e)| if let EnvPlan::Lie(s) = e { Some(*s) } else { None }).collect();
         liees
             .into_iter()
             .filter(|&s| {

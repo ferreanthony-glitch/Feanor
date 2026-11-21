@@ -394,7 +394,7 @@ impl App {
                 self.toggle_play_scope(true);
             }
             ui.label(RichText::new(format!("image {} / {}", g.saturating_sub(debut) + 1, n)).monospace());
-            ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.env_cle(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
+            ui.label(RichText::new(format!("Séquence {} · {} plan{}", self.doc.sequence_label(self.doc.sequence_of(self.cur_panel)), z - a, if z - a > 1 { "s" } else { "" })).small().weak());
             // (Partie 200 : « ◆ Clé » pour l'objet choisi, au bout de la ligne ; partie 201 : le zoom de la timeline, avant lui.)
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.o3_bouton_cle(ui);
@@ -466,7 +466,7 @@ impl App {
             }
             p.with_clip_rect(b.shrink(2.0)).text(pos2(b.left() + 5.0, b.center().y), Align2::LEFT_CENTER, crate::storyboard::panel_title(&self.doc, pi), FontId::proportional(11.0), ui.visuals().text_color());
             // (Partie 204 : l'environnement du plan, s'il n'est pas celui de la séquence.)
-            if let Some(m) = self.peindre_marque_env(&p.with_clip_rect(b), b, pi) {
+            if let Some(m) = self.peindre_marque_env(&p.with_clip_rect(b), b, pi, b.center().y) {
                 marques_env.push(m);
             }
             for k in &self.doc.panels[pi].camera {
@@ -502,17 +502,20 @@ impl App {
                 resp.clone().on_hover_text_at_pointer(phrase.as_str());
             }
         }
-        if resp.secondary_clicked() {
+        // (Partie 205, vu à l'écran : le menu ne s'ouvrait jamais. `context_menu` d'egui 0.31 rend `None` tant que le menu reste
+        // ouvert ; le plan visé était oublié dès l'image du clic. On demande à egui si le menu est ouvert.)
+        let vient_d_ouvrir = resp.secondary_clicked();
+        if vient_d_ouvrir {
             if let Some(pos) = resp.interact_pointer_pos() {
                 self.o3.menu_plan = blocs.iter().find(|(_, b)| b.contains(pos)).map(|(pi, _)| self.doc.panels[*pi].id);
             }
         }
         if let Some(id) = self.o3.menu_plan {
-            let ouvert = resp.context_menu(|ui| match self.doc.panels.iter().position(|p| p.id == id) {
-                Some(pi) => self.menu_env_du_plan(ui, pi),
+            resp.context_menu(|ui| match self.doc.panels.iter().position(|p| p.id == id) {
+                Some(pi) => self.menu_env_du_plan_a_plat(ui, pi),
                 None => ui.close_menu(),
             });
-            if ouvert.is_none() {
+            if !resp.context_menu_opened() && !vient_d_ouvrir {
                 self.o3.menu_plan = None;
             }
         }

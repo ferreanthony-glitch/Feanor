@@ -5,6 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Le plan hors de son environnement, regardé** (partie 205, branche `plan-env-retouches` partie de main 5946370, format 61 inchangé) :
+  des captures d'écran du banc (`FEANOR_PLANENV_PNG`) ont montré quatre défauts, corrigés : la marque couvrait la durée du bloc, le clic
+  droit de la timeline de la séquence n'ouvrait rien, « Séquence 0 » en tête de cette timeline, « pour la séquence » dit du cyclo d'un
+  plan. Un plan rendu de la corbeille après une réouverture retrouve son environnement (propre, vide, lié ; lié à une séquence supprimée
+  entre-temps : une copie) ; vider la corbeille n'en laisse rien. Le menu du plan, dans un projet 3D, range les deux transitions sous
+  « Transitions du plan » : douze entrées au plus ; sans 3D, inchangé. Essais : 5 dans `planenv_tests.rs`, 1 dans `menus_tests.rs`.
+  **Pas regardé par Anthony, pas de commit** (liste 205.5).
 - **Un plan qui sort de l'environnement de sa séquence** (partie 204, sur la 203, branche `cyclo-dessine`, format 61 inchangé) : propre
   (vide ou copie), ou lié à une autre séquence en direct ; « Détacher », « Revenir » (demandé si retouché) ; une marque sur le bloc du
   plan (Storyboard, timeline de la séquence) ; un seul chemin, `Document::env_cle` ; dupliquer garde, supprimer une séquence liée demande

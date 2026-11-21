@@ -790,7 +790,8 @@ impl App {
             self.enter_animation(index);
         }
         // (Partie 204 : l'environnement 3D du plan, dans un projet qui a de la 3D : un projet dessiné à plat n'en a que faire.)
-        if !self.doc.decors3d.is_empty() {
+        let a_la_3d = !self.doc.decors3d.is_empty();
+        if a_la_3d {
             self.menu_env_du_plan(ui, index);
         }
         // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
@@ -837,9 +838,17 @@ impl App {
         // le menu Storyboard) et « Importer un son au début du plan » (menu Son) quittent ce menu.
         ui.separator();
         self.plan_color_menu(ui);
-        // Les coupes de part et d'autre du plan (`transitionsui.rs`).
-        self.cut_menu_named(ui, index, "Transition au début du plan");
-        self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
+        // Les coupes de part et d'autre du plan (`transitionsui.rs`). Partie 205 : dans un projet qui a de la 3D, « Environnement du
+        // plan » ferait treize entrées (§82 : une douzaine) ; les deux transitions, sœurs, se rangent alors sous une seule entrée.
+        if a_la_3d {
+            ui.menu_button("Transitions du plan", |ui| {
+                self.cut_menu_named(ui, index, "Au début du plan");
+                self.cut_menu_named(ui, index + 1, "À la fin du plan");
+            });
+        } else {
+            self.cut_menu_named(ui, index, "Transition au début du plan");
+            self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
+        }
         if self.board_selection().len() > 1 {
             self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
         }
@@ -1054,7 +1063,11 @@ impl App {
                 }
             }
             // (Partie 204 : l'environnement du plan, s'il n'est pas celui de sa séquence : une marque en bas à droite.)
-            if let Some(m) = self.peindre_marque_env(&clip, rect, i) {
+            // (Partie 205 : centrée sur la ligne du nom et de la durée ; le nom et la durée se rangent à sa gauche.)
+            let ligne = if bandeau { rect.center().y - 1.0 } else { rect.bottom() - 13.0 };
+            let mut rect_titre = rect;
+            if let Some(m) = self.peindre_marque_env(&clip, rect, i, ligne) {
+                rect_titre.max.x = m.0.left() + 4.0;
                 marques_env.push(m);
             }
             // Film partagé : qui tient le plan (pastille à sa couleur, en haut à gauche) et qui le regarde.
@@ -1070,7 +1083,7 @@ impl App {
             // n'est affichée que si elle tient à côté.
             let gauche = if bandeau { rect.left() + 3.0 + thumb_h * aspect + 5.0 } else { rect.left() + 5.0 };
             let titre = crate::storyboard::panel_title_n(&self.doc, &numeros, i);
-            zones_versions.extend(self.peindre_titre_du_bloc(&clip, rect, i, titre, gauche, bandeau, duration, visuals.text_color(), visuals.weak_text_color()));
+            zones_versions.extend(self.peindre_titre_du_bloc(&clip, rect_titre, i, titre, gauche, bandeau, duration, visuals.text_color(), visuals.weak_text_color()));
             // Les clés de tous les calques du plan, en petits traits le long du bas du bloc (`clesplan.rs`), de la couleur de leur calque ;
             // calculées une fois par changement du document.
             let cles = self.cles_blocs.pour(self.history.serial(), &self.doc.panels[i], pointer_tenu);
