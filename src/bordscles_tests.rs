@@ -480,3 +480,289 @@ fn the_storyboard_timeline_paints_cuts_and_the_bubble_through_the_real_window() 
     assert!(vus.iter().any(|t| t == "Clé 2 : 10 i (+4)"), "{vus:?}");
     b.app.end_handle_drag();
 }
+
+// ------------------------------------------------------------------ Les écrans en PNG (pour Anthony)
+
+/// Un dessin vectoriel de traits simples (chaque trait : ses points, en pixels de l'image du plan, 1280 × 720).
+fn dessin(doc: &mut Document, traits: &[&[(f32, f32)]], couleur: [u8; 3]) -> CelId {
+    use crate::vector::{Element, VPoint};
+    let mut cel = crate::document::Cel::new(doc.width, doc.height, LayerKind::Vector);
+    // (Les points sont donnés dans le cadre de la caméra, centré sur la feuille.)
+    let o = doc.frame_rect().min;
+    for t in traits {
+        // (Des points serrés : le trait suit la ligne brisée.)
+        let mut points = Vec::new();
+        for w in t.windows(2) {
+            let ((x0, y0), (x1, y1)) = (w[0], w[1]);
+            let n = ((x1 - x0).hypot(y1 - y0) / 6.0).ceil().max(1.0) as usize;
+            for k in 0..n {
+                let u = k as f32 / n as f32;
+                points.push(VPoint { x: o.x + x0 + (x1 - x0) * u, y: o.y + y0 + (y1 - y0) * u, r: 9.0 });
+            }
+        }
+        let &(xe, ye) = t.last().unwrap();
+        points.push(VPoint { x: o.x + xe, y: o.y + ye, r: 9.0 });
+        cel.vector.as_mut().expect("vectoriel").elements.push(Element::Stroke { points, color: couleur, opacity: 1.0, hardness: 1.0, brush: None, trace: Default::default() });
+    }
+    cel.rerender();
+    doc.add_cel(cel)
+}
+
+/// Un cercle en ligne brisée.
+fn rond(cx: f32, cy: f32, r: f32) -> Vec<(f32, f32)> {
+    (0..=24).map(|k| k as f32 / 24.0 * std::f32::consts::TAU).map(|a| (cx + r * a.cos(), cy + r * a.sin())).collect()
+}
+
+/// Un bonhomme en bâtons, la tête en `x`, les bras levés de `bras` pixels.
+fn bonhomme(doc: &mut Document, x: f32, bras: f32) -> CelId {
+    let tete = rond(x, 230.0, 45.0);
+    dessin(
+        doc,
+        &[&tete, &[(x, 275.0), (x, 470.0)], &[(x - 110.0, 330.0 - bras), (x, 320.0), (x + 110.0, 330.0 - bras)], &[(x - 80.0, 640.0), (x, 470.0), (x + 80.0, 640.0)]],
+        [30, 30, 40],
+    )
+}
+
+/// Un décor : l'horizon, une maison, un arbre.
+fn paysage(doc: &mut Document, dx: f32) -> CelId {
+    let arbre = rond(1000.0 + dx, 300.0, 90.0);
+    dessin(
+        doc,
+        &[&[(0.0, 520.0), (1280.0, 520.0)], &[(150.0 + dx, 520.0), (150.0 + dx, 330.0), (300.0 + dx, 220.0), (450.0 + dx, 330.0), (450.0 + dx, 520.0)], &[(1000.0 + dx, 520.0), (1000.0 + dx, 390.0)], &arbre],
+        [40, 70, 120],
+    )
+}
+
+/// Un effet : des éclairs en zigzag.
+fn eclair(doc: &mut Document, x: f32) -> CelId {
+    dessin(doc, &[&[(x, 60.0), (x + 60.0, 160.0), (x - 20.0, 200.0), (x + 70.0, 330.0)], &[(x + 160.0, 90.0), (x + 210.0, 170.0), (x + 150.0, 210.0), (x + 220.0, 300.0)]], [200, 60, 30])
+}
+
+/// Un calque nommé `nom` : chaque clé (début, fin exclue) et son dessin.
+fn calque_de(nom: &str, cles: &[(usize, usize, CelId)]) -> Layer {
+    let mut l = Layer::new(nom, LayerKind::Vector);
+    for &(s, e, c) in cles {
+        for f in s..e {
+            l.set(f, Some(c));
+        }
+    }
+    l
+}
+
+/// Le projet des captures : trois plans (48, 36, 30 images), trois calques (Décor, Perso, Effet) aux clés de durées différentes, une
+/// clé vide sur Perso (26-32 du plan 1).
+fn doc_des_captures() -> Document {
+    let mut doc = Document::with_frame(1280, 720, 24);
+    doc.add_scene_after(0);
+    doc.add_scene_after(1);
+    // Plan 1.
+    let (d1, d2) = (paysage(&mut doc, 0.0), paysage(&mut doc, -120.0));
+    let (p1, p2, p3, p5) = (bonhomme(&mut doc, 500.0, 0.0), bonhomme(&mut doc, 560.0, 80.0), bonhomme(&mut doc, 640.0, 160.0), bonhomme(&mut doc, 760.0, -60.0));
+    let pv = doc.new_cel(LayerKind::Vector);
+    let (e1, e2) = (eclair(&mut doc, 300.0), eclair(&mut doc, 700.0));
+    // Plan 2.
+    let d3 = paysage(&mut doc, 80.0);
+    let (p6, p7, p8) = (bonhomme(&mut doc, 300.0, 40.0), bonhomme(&mut doc, 420.0, 120.0), bonhomme(&mut doc, 600.0, 0.0));
+    let e3 = eclair(&mut doc, 900.0);
+    // Plan 3.
+    let d4 = paysage(&mut doc, -200.0);
+    let (p9, p10) = (bonhomme(&mut doc, 900.0, 0.0), bonhomme(&mut doc, 700.0, 100.0));
+    let (e4, e5) = (eclair(&mut doc, 200.0), eclair(&mut doc, 500.0));
+    let plans: [(usize, Vec<Layer>); 3] = [
+        (
+            48,
+            vec![
+                calque_de("Décor", &[(0, 30, d1), (30, 48, d2)]),
+                calque_de("Perso", &[(0, 8, p1), (8, 14, p2), (14, 26, p3), (26, 32, pv), (32, 48, p5)]),
+                calque_de("Effet", &[(4, 12, e1), (12, 20, e2)]),
+            ],
+        ),
+        (36, vec![calque_de("Décor", &[(0, 36, d3)]), calque_de("Perso", &[(0, 12, p6), (12, 18, p7), (18, 36, p8)]), calque_de("Effet", &[(6, 30, e3)])]),
+        (30, vec![calque_de("Décor", &[(0, 30, d4)]), calque_de("Perso", &[(0, 10, p9), (10, 30, p10)]), calque_de("Effet", &[(0, 15, e4), (15, 30, e5)])]),
+    ];
+    for (pi, (n, layers)) in plans.into_iter().enumerate() {
+        doc.panels[pi].layers = layers;
+        doc.panels[pi].set_length(n);
+    }
+    doc
+}
+
+fn png(dir: &str, nom: &str, rgba: &[u8], w: u32, h: u32) {
+    image::save_buffer(format!("{dir}/{nom}"), rgba, w, h, image::ColorType::Rgba8).unwrap();
+}
+
+/// La part `r` de l'écran, à l'échelle 1.
+fn decouper(rgba: &[u8], w: u32, h: u32, r: egui::Rect) -> (Vec<u8>, u32, u32) {
+    let x0 = r.left().max(0.0).floor() as u32;
+    let y0 = r.top().max(0.0).floor() as u32;
+    let x1 = (r.right().ceil() as u32).min(w);
+    let y1 = (r.bottom().ceil() as u32).min(h);
+    let mut out = Vec::new();
+    for y in y0..y1 {
+        let o = ((y * w + x0) * 4) as usize;
+        out.extend_from_slice(&rgba[o..o + ((x1 - x0) * 4) as usize]);
+    }
+    (out, x1 - x0, y1 - y0)
+}
+
+type Banc = crate::perf_tests::Banc;
+
+const DT: f64 = 1.0 / 60.0;
+
+fn blocs_sb() -> Vec<egui::Rect> {
+    crate::storyboard::BLOCS_DU_MONTAGE.with(|x| x.borrow().clone())
+}
+
+/// La bande de la timeline du Storyboard : de la barre de lecture (ses deux boutons) au bas des pistes de calques.
+fn bande_sb(b: &Banc) -> egui::Rect {
+    let rows = b.app.montage_rows(300.0);
+    let haut = blocs_sb()[0].top() - 2.0 - rows.blocks_top();
+    let mut r = egui::Rect::from_min_max(egui::pos2(0.0, haut - 4.0), egui::pos2(b.taille.x, haut + rows.background_top() + 16.0));
+    for nom in [crate::barres::BOUTON_DECALER_NOM, crate::barres::BOUTON_PROPORTION_NOM] {
+        for q in crate::bulles::vus::ou(nom) {
+            r = r.union(q.expand(6.0));
+        }
+    }
+    r.intersect(egui::Rect::from_min_size(egui::Pos2::ZERO, b.taille))
+}
+
+fn bouton_g(p: egui::Pos2, pressed: bool) -> egui::Event {
+    egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE }
+}
+
+/// Prend en `de`, tire de `dx` points en huit pas, et reste enfoncé.
+fn prendre_et_tirer(b: &mut Banc, de: egui::Pos2, dx: f32) {
+    b.image(vec![egui::Event::PointerMoved(de)], DT);
+    b.image(vec![bouton_g(de, true)], DT);
+    for k in 1..=8 {
+        b.image(vec![egui::Event::PointerMoved(de + egui::vec2(dx * k as f32 / 8.0, 0.0))], DT);
+    }
+    // (La bulle d'egui se mesure à sa première passe et se montre à la suivante.)
+    for _ in 0..4 {
+        b.image(vec![egui::Event::PointerMoved(de + egui::vec2(dx, 0.0))], DT);
+    }
+}
+
+/// Échap pendant le geste, puis le bouton lâché, le pointeur loin.
+fn echap_et_lacher(b: &mut Banc, p: egui::Pos2) {
+    b.image(vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }], DT);
+    b.image(vec![bouton_g(p, false)], DT);
+    b.image(vec![egui::Event::PointerMoved(egui::pos2(5.0, 5.0))], DT);
+    b.chauffer(4);
+}
+
+/// Le point du bord à l'abscisse `x` : cherché au curseur ↔, de haut en bas de la bande.
+fn trouver_le_bord(b: &mut Banc, x: f32) -> egui::Pos2 {
+    let r = bande_sb(b);
+    let mut y = r.top();
+    while y < r.bottom() {
+        b.image(vec![egui::Event::PointerMoved(egui::pos2(x, y))], DT);
+        b.image(Vec::new(), DT);
+        if b.curseur == egui::CursorIcon::ResizeHorizontal {
+            return egui::pos2(x, y + 4.0);
+        }
+        y += 3.0;
+    }
+    panic!("aucun bord à x = {x}");
+}
+
+/// (Pour regarder : `FEANOR_BORDSCLES_PNG=<dossier>` écrit les écrans de la partie 206 : la timeline du Storyboard au repos, le
+/// survol d'un bord de clé, le geste sur ce bord, le geste sur la fin d'un plan sans touche et en proportion, les options A et C, la
+/// timeline de l'Animation. Chaque écran entier, et la timeline recadrée, à taille réelle.)
+#[test]
+fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
+    use crate::workspace::Espace;
+    use egui::{pos2, vec2, Event, Pos2, Rect};
+    let Ok(dir) = std::env::var("FEANOR_BORDSCLES_PNG") else { return };
+    if crate::gpu_tests::headless().is_none() {
+        return;
+    }
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut b = crate::perf_tests::banc_taille(doc_des_captures(), true, 1600, 1000);
+    b.app.set_espace(Espace::Storyboard);
+    b.app.settings.storyboard_calques_replies = false;
+    // (La colonne de gauche assez large pour que la barre de lecture montre « Décaler la suite » et « Étirer en proportion ».)
+    b.app.montage_head_w = crate::montagehead::clamp_head_w(640.0);
+    b.app.montage_zoom = 8.0;
+    // La tête de lecture au milieu de la clé 14-26 de Perso, plan 1.
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 1, 18);
+    b.garder_formes = true;
+    b.chauffer(8);
+    b.attendre_vignettes();
+    b.chauffer(4);
+    let (w, h) = (b.taille.x as u32, b.taille.y as u32);
+    let ecran_plein = Rect::from_min_size(Pos2::ZERO, b.taille);
+    let ppf = b.app.montage_zoom;
+    let ecrire = |b: &Banc, nom: &str| {
+        let ecran = b.capturer().unwrap();
+        png(&dir, &format!("{nom}-ecran.png"), &ecran, w, h);
+        let (z, zw, zh) = decouper(&ecran, w, h, bande_sb(b));
+        png(&dir, &format!("{nom}-timeline.png"), &z, zw, zh);
+    };
+    let x_bord = |f: usize| blocs_sb()[0].left() - 1.0 + f as f32 * ppf;
+
+    // a) Au repos (le pointeur loin).
+    b.image(vec![Event::PointerMoved(pos2(5.0, 5.0))], DT);
+    b.chauffer(4);
+    ecrire(&b, "a-repos");
+    // b) Le survol du bord entre la clé 2 (8-14) et la clé 3 (14-26) de Perso.
+    let p = trouver_le_bord(&mut b, x_bord(14));
+    for _ in 0..4 {
+        b.image(vec![Event::PointerMoved(p)], DT);
+    }
+    ecrire(&b, "b-survol-du-bord");
+    // c) Le geste sur ce bord, 4 images à droite, pas lâché.
+    prendre_et_tirer(&mut b, p, 4.0 * ppf);
+    assert!(b.app.handle_drag.is_some(), "le geste du bord est pris");
+    ecrire(&b, "c-geste-du-bord");
+    echap_et_lacher(&mut b, p + vec2(4.0 * ppf, 0.0));
+    // d) La fin du plan 1 (le bord droit de son bloc), 8 images à gauche, sans touche.
+    let bl = blocs_sb()[0];
+    let q = pos2(bl.right(), bl.center().y);
+    prendre_et_tirer(&mut b, q, -8.0 * ppf);
+    ecrire(&b, "d-geste-fin-du-plan");
+    echap_et_lacher(&mut b, q + vec2(-8.0 * ppf, 0.0));
+    // e) La même chose, « Étirer en proportion » allumé.
+    b.app.run_action("cles.etirer_proportion");
+    b.chauffer(3);
+    prendre_et_tirer(&mut b, q, -8.0 * ppf);
+    ecrire(&b, "e-geste-fin-du-plan-en-proportion");
+    echap_et_lacher(&mut b, q + vec2(-8.0 * ppf, 0.0));
+    b.app.run_action("cles.etirer_proportion");
+    // f) Les options A (vignette du dessin) et C (« 12 i »), la timeline zoomée.
+    b.app.settings.cles_vignettes = true;
+    b.app.settings.cles_durees = true;
+    b.app.montage_zoom = 22.0;
+    b.chauffer(6);
+    b.attendre_vignettes();
+    b.chauffer(30);
+    b.attendre_vignettes();
+    b.chauffer(4);
+    ecrire(&b, "f-options-vignette-et-duree");
+    b.app.settings.cles_vignettes = false;
+    b.app.settings.cles_durees = false;
+    // g) La timeline de l'Animation (plan 1), au repos ; puis la poignée de durée tirée vers la gauche.
+    b.app.set_espace(Espace::Animation);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 1, 18);
+    b.chauffer(10);
+    b.attendre_vignettes();
+    b.chauffer(4);
+    let ecran = b.capturer().unwrap();
+    png(&dir, "g-animation-ecran.png", &ecran, w, h);
+    let lignes = crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().clone());
+    let prise = crate::timeline::PRISE_FIN_DU_PLAN.with(|c| c.get());
+    let bas = lignes.1.iter().map(|l| l.2).fold(0.0_f32, f32::max);
+    let haut = prise.map_or(bas - 200.0, |r| r.top()) - 60.0;
+    let zone = Rect::from_min_max(pos2(0.0, haut), pos2(b.taille.x, bas + 30.0)).intersect(ecran_plein);
+    let (z, zw, zh) = decouper(&ecran, w, h, zone);
+    png(&dir, "g-animation-timeline.png", &z, zw, zh);
+    if let Some(r) = prise {
+        let q = r.center();
+        prendre_et_tirer(&mut b, q, -60.0);
+        let ecran = b.capturer().unwrap();
+        png(&dir, "g-animation-geste-duree-ecran.png", &ecran, w, h);
+        let (z, zw, zh) = decouper(&ecran, w, h, zone);
+        png(&dir, "g-animation-geste-duree-timeline.png", &z, zw, zh);
+        echap_et_lacher(&mut b, q + vec2(-60.0, 0.0));
+    }
+}
