@@ -21,6 +21,11 @@ fn camera_color() -> Color32 {
 /// du cadre de la caméra, à la place de l'ancien voile gris translucide). Préférences > Dessin > Passe-partout.
 pub const PASSE_PARTOUT_DEFAUT: u8 = 100;
 
+/// Opacité la plus forte du passe-partout tant que l'outil Caméra est en main, en pour cent (audit du 2026-11-21 : sous un passe-partout
+/// opaque, on cadrait à l'aveugle, sans voir le dessin hors du cadre ni l'endroit où on emmenait la caméra). Un passe-partout réglé
+/// plus clair que cela dans les Préférences reste comme il est.
+pub const PASSE_PARTOUT_CAMERA: u8 = 55;
+
 /// Couleur d'origine du passe-partout : noir.
 pub const PASSE_PARTOUT_COULEUR: [u8; 3] = [0, 0, 0];
 
@@ -450,7 +455,10 @@ impl App {
         } else {
             passe_partout_alpha(self.settings.passe_partout)
         };
-        let passe_partout = passe_partout_couleur(self.settings.passe_partout_couleur, self.settings.passe_partout);
+        // Avec l'outil Caméra en main, le passe-partout s'éclaircit : on voit le dessin hors du cadre, donc où l'on cadre.
+        let editing = self.tool == crate::app::Tool::Camera;
+        let pourcent = if editing && !self.playing { self.settings.passe_partout.min(PASSE_PARTOUT_CAMERA) } else { self.settings.passe_partout };
+        let passe_partout = passe_partout_couleur(self.settings.passe_partout_couleur, pourcent);
         // Le trait du cadre : un pixel de l'écran, net, et un liseré sombre qui le garde visible sur n'importe quel fond.
         let ppp = painter.ctx().pixels_per_point();
         if fills_stage && infinite {
@@ -495,7 +503,6 @@ impl App {
             return;
         }
         let quad: Vec<Pos2> = corners.iter().map(|c| to_s(*c)).collect();
-        let editing = self.tool == crate::app::Tool::Camera;
         // Cadre fin (1 pixel de l'écran, 1,5 avec l'outil Caméra), posé sur la grille des pixels pour rester net,
         // sur un liseré sombre de 3 pixels qui le détache d'un fond clair comme d'un fond sombre.
         let line = crisp_quad(&quad, ppp);
@@ -513,6 +520,7 @@ impl App {
             if editing { camera_color() } else { Color32::from_gray(225) },
         );
         if editing {
+            self.peindre_mouvement_de_camera(painter, &to_s, &cam);
             let r = self.rotate_handle(&corners);
             painter.line_segment([quad[0] + (quad[1] - quad[0]) * 0.5, r], Stroke::new(1.0_f32, camera_color()));
             painter.circle(r, 5.5, Color32::WHITE, Stroke::new(1.5_f32, camera_color()));
@@ -532,6 +540,42 @@ impl App {
             painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, camera_color()));
             // La flèche ou la cible de l'effet vivant qu'on règle (partie 171).
             self.peindre_poignee_effet(painter, rect);
+        }
+    }
+
+    /// Le mouvement de la caméra du plan, avec l'outil Caméra en main (audit du 2026-11-21 : on ne voyait que le cadre de l'image
+    /// courante) : le cadre de la première clé (« Début ») et celui de la dernière (« Fin ») en pointillés, et le chemin du centre du
+    /// cadre de l'une à l'autre, un point à chaque clé. Rien pour une caméra fixe ; un cadre confondu avec celui de l'image courante
+    /// n'est pas redessiné.
+    fn peindre_mouvement_de_camera(&self, painter: &egui::Painter, to_s: &dyn Fn(Pos2) -> Pos2, courante: &Camera) {
+        let keys = &self.doc.panels[self.cur_panel].camera;
+        if keys.len() < 2 {
+            return;
+        }
+        let frame = self.doc.frame;
+        let (fw, fh) = (frame[0] as f32 / 2.0, frame[1] as f32 / 2.0);
+        let couleur = camera_color();
+        let pale = couleur.gamma_multiply(0.75);
+        let centre = |c: &Camera| to_s(c.to_stage(frame, fw, fh));
+        // Le chemin : le centre du cadre, d'image en image (64 points au plus), avec les adoucis.
+        let (a, b) = (keys[0], keys[keys.len() - 1]);
+        let pas = ((b.frame.saturating_sub(a.frame)) / 64).max(1);
+        let defaut = self.doc.default_camera();
+        let mut chemin: Vec<Pos2> = (a.frame..b.frame).step_by(pas).map(|f| centre(&camera::camera_at(keys, f, defaut))).collect();
+        chemin.push(centre(&b.cam));
+        painter.add(Shape::line(chemin, Stroke::new(1.5_f32, pale)));
+        for k in keys {
+            painter.circle_filled(centre(&k.cam), 3.0, couleur);
+        }
+        for (k, nom) in [(a, "Début"), (b, "Fin")] {
+            if k.cam == *courante {
+                continue;
+            }
+            let quad = k.cam.corners(frame).map(to_s);
+            let mut ferme = quad.to_vec();
+            ferme.push(quad[0]);
+            painter.extend(Shape::dashed_line(&ferme, Stroke::new(1.0_f32, pale), 6.0, 4.0));
+            painter.text(quad[3] + vec2(4.0, 3.0), egui::Align2::LEFT_TOP, nom, egui::FontId::proportional(11.0), pale);
         }
     }
 
@@ -617,8 +661,16 @@ impl App {
                     eases = Some((k, values[k]));
                 }
             });
-            if here.is_none() {
-                ui.label(RichText::new("Place-toi sur une clé de caméra pour régler ses adoucis.").small().weak());
+            // Ce que fait un réglage de la caméra ici, dit en clair (audit du 2026-11-21 : rien ne disait qu'une caméra sans clé est un
+            // cadrage fixe, ni qu'entre deux clés un réglage en pose une). Une ligne courte, le détail en bulle : pas de long texte gris
+            // dans les réglages d'un outil (partie 153, `aideanim_tests`).
+            if keys.len() < 2 {
+                ui.label(RichText::new("Cadrage fixe : une clé au début et à la fin l'animent.").small().weak()).on_hover_text(
+                    "Sans clé (ou avec une seule), la caméra a le même cadrage sur tout le plan, où que soit la tête de lecture : la régler change tout le plan. Pour un mouvement, pose une clé au début et une clé à la fin, puis va sur chacune (les flèches ci-dessus) pour la cadrer.",
+                );
+            } else if here.is_none() {
+                ui.label(RichText::new("Entre deux clés : régler la caméra pose une clé ici.").small().weak())
+                    .on_hover_text("La caméra est animée : un réglage fait hors d'une clé en pose une nouvelle à cette image. Pour retoucher une clé existante, va dessus avec les flèches ci-dessus ; ses adoucis se règlent là aussi.");
             }
         });
         if let Some((side, value)) = eases {
@@ -648,6 +700,17 @@ impl App {
         let mut next = None;
         section(ui, "Caméra à cette image", &mut |ui| {
             egui::Grid::new("caméra_position").num_columns(2).show(ui, |ui| {
+                // Le zoom en pour cent (audit du 2026-11-21 : il ne se lisait que dans la focale et la distance). C'est l'objectif, dit
+                // autrement : 100 % = la focale de référence.
+                ui.label("Zoom");
+                let mut zoom = cam.zoom * 100.0;
+                let r = ui
+                    .add(egui::DragValue::new(&mut zoom).speed(0.5).range(5.0..=5000.0).suffix(" %").max_decimals(0))
+                    .on_hover_text("Le zoom de l'objectif : 100 %, le cadre entier ; 200 %, deux fois plus serré. C'est la focale, dite en pour cent.");
+                if self.edited(&r) {
+                    next = Some(Camera { zoom: (zoom / 100.0).clamp(0.05, 50.0), ..cam });
+                }
+                ui.end_row();
                 ui.label("Position");
                 ui.horizontal(|ui| {
                     let r = ui.add(egui::DragValue::new(&mut x).speed(2.0).prefix("X ").max_decimals(0)).on_hover_text("Décalage horizontal depuis le centre de la feuille (px)");

@@ -881,6 +881,39 @@ impl Document {
         self.transitions.retain(|t| t.out.is_none_or(|o| ids.contains(&o)) && t.inn.is_none_or(|i| ids.contains(&i)));
     }
 
+    /// Le plan `neuf` vient d'être inséré (plan vide, plan type glissé sur une coupe). La transition de la coupe où il arrive reste à
+    /// la sortie du plan d'avant : elle passe sur la coupe d'entrée du plan neuf, au lieu de rester dans le projet sans plus se montrer
+    /// nulle part (audit du 2026-11-21). Le fondu d'ouverture reste en tête du film, le fondu de fermeture à sa fin. Si la coupe visée
+    /// a déjà sa transition, elle attend, comme avant. Un plan déplacé, dupliqué ou collé là ne passe pas par ici (`Document::inserer_un_plan_neuf`).
+    /// Renvoie le nombre de transitions rattachées.
+    pub(crate) fn rattacher_transitions(&mut self, neuf: u64) -> usize {
+        let Some(x) = self.panels.iter().position(|p| p.id == neuf) else { return 0 };
+        let avant = x.checked_sub(1).map(|i| self.panels[i].id);
+        let apres = self.panels.get(x + 1).map(|p| p.id);
+        // (La coupe d'avant le plan neuf, la coupe d'après : ce qu'elles deviennent si la transition y va.)
+        let libre = |ts: &[Transition], out: Option<u64>, inn: Option<u64>| !ts.iter().any(|t| t.out == out && t.inn == inn);
+        let cible = match (avant, apres) {
+            // Entre deux plans : la transition de leur coupe passe à l'entrée du plan neuf.
+            (Some(_), Some(_)) => Some(((avant, apres), (avant, Some(neuf)))),
+            // En tête du film : le fondu d'ouverture reste au début du film.
+            (None, Some(_)) => Some(((None, apres), (None, Some(neuf)))),
+            // En fin de film : le fondu de fermeture reste à la fin du film.
+            (Some(_), None) => Some(((avant, None), (Some(neuf), None))),
+            (None, None) => None,
+        };
+        let Some((de, vers)) = cible else { return 0 };
+        if !libre(&self.transitions, vers.0, vers.1) {
+            return 0;
+        }
+        match self.transitions.iter_mut().find(|t| t.out == de.0 && t.inn == de.1) {
+            Some(t) => {
+                (t.out, t.inn) = vers;
+                1
+            }
+            None => 0,
+        }
+    }
+
     /// Ce que montre l'image `g` du film (voir `mix_in`) ; rien sans transition.
     pub fn mix_at(&self, g: usize) -> Option<(Zone, Mix)> {
         if self.transitions.is_empty() {

@@ -134,7 +134,7 @@ fn each_workspace_has_its_own_default_stack_and_keeps_every_panel_it_had() {
     assert_eq!(pile(&sb), vec![simple(&[Pane::Scene]), simple(&[Pane::Color, Pane::Personnages]), props(&[Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Scenario])]);
     assert_eq!(sb.colonne.onglet_devant(), Some(Pane::ToolOptions), "les Réglages de l'outil devant");
     assert_eq!(sb.version, dock::LAYOUT_VERSION);
-    assert_eq!(dock::LAYOUT_VERSION, 10);
+    assert_eq!(dock::LAYOUT_VERSION, 11);
     // Animation : la même, sans le Scénario (il n'y était pas).
     let anim = Espace::Animation.defaut().dock_layout();
     assert_eq!(pile(&anim), vec![simple(&[Pane::Color, Pane::Personnages]), props(&[Pane::ToolOptions, Pane::Sheet, Pane::Effects])]);
@@ -549,7 +549,8 @@ fn a_version_9_layout_becomes_a_stack_without_losing_a_panel() {
 
 #[test]
 fn the_bottom_band_spans_the_whole_width_under_the_column_in_every_workspace() {
-    for e in [Espace::Storyboard, Espace::Animation, Espace::Montage] {
+    // (Sauf dans le Storyboard depuis l'audit du 2026-11-21 : la colonne y prend toute la hauteur, voir l'essai suivant.)
+    for e in [Espace::Animation, Espace::Montage] {
         assert!(bande_sous_tout(&e.defaut().dock_layout().principal), "{e:?} : {:?}", e.defaut().dock_layout().principal);
     }
     // Rouvrir la bande : de nouveau dessous, sur toute la largeur.
@@ -568,7 +569,7 @@ fn the_bottom_band_spans_the_whole_width_under_the_column_in_every_workspace() {
     assert!(bande_sous_tout(&l.principal), "{:?}", l.principal);
 
     // À l'écran (1 920 × 1 080) : la bande va du bord du dessin au bord droit de la fenêtre, sous la colonne.
-    for e in [Espace::Storyboard, Espace::Montage] {
+    for e in [Espace::Montage] {
         let b = banc_dans(e);
         let (dessin, colonne, bande) = (place(&b, Pane::Canvas), place(&b, Pane::Colonne), place(&b, Pane::Montage));
         assert!(colonne.bottom() <= bande.top() + 1.0, "{e:?} : la colonne s'arrête au-dessus de la bande ({colonne:?}, {bande:?})");
@@ -576,6 +577,62 @@ fn the_bottom_band_spans_the_whole_width_under_the_column_in_every_workspace() {
         assert!(bande.right() >= b.ctx.screen_rect().right() - 1.0, "{e:?} : plus de barre des panneaux au bord droit");
         assert!((colonne.width() - dock::COLONNE).abs() < 6.0, "{e:?} : la colonne garde ses 290 points ({})", colonne.width());
     }
+}
+
+/// Audit utilisateur du 2026-11-21 (lot 5) : dans le Storyboard, la colonne prend toute la hauteur de la fenêtre et la bande s'arrête à
+/// son bord ; une disposition retenue d'avant (version 10) qui avait la forme d'origine la reçoit, une autre ne bouge pas.
+#[test]
+fn in_the_storyboard_the_column_takes_the_whole_height_and_the_band_stops_at_its_edge() {
+    let haute = |n: &DockNode| match n {
+        DockNode::Row { gauche, droite, .. } => {
+            **droite == tabs(&[Pane::Colonne]) && matches!(&**gauche, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::Canvas]) && **bas == tabs(&[Pane::Montage]))
+        }
+        _ => false,
+    };
+    let d = Espace::Storyboard.defaut().dock_layout();
+    assert!(haute(&d.principal), "{:?}", d.principal);
+    // La forme d'origine d'avant : convertie, la bande à la même hauteur.
+    let mut avant = DockLayout::pour_le_montage(290.0);
+    assert!(bande_sous_tout(&avant.principal));
+    let DockNode::Column { part, .. } = avant.principal.clone() else { unreachable!() };
+    avant.colonne_haute();
+    assert!(haute(&avant.principal), "{:?}", avant.principal);
+    assert!(matches!(&avant.principal, DockNode::Row { gauche, .. } if matches!(&**gauche, DockNode::Column { part: p, .. } if (*p - part).abs() < 1e-6)));
+    // Une disposition arrangée autrement reste comme elle est.
+    let mut autre = DockLayout::pour_les_vignettes();
+    let garde = autre.principal.clone();
+    autre.colonne_haute();
+    assert_eq!(autre.principal, garde);
+    // Les réglages lus : la disposition 10 du Storyboard passe à la nouvelle forme, celle du Montage garde la sienne.
+    let mut vieux = DockLayout::pour_le_montage(290.0);
+    vieux.version = 10;
+    let mut s = crate::settings::Settings::default();
+    s.layout = Some(Layout { panneaux: Some(vieux.clone()), ..Layout::default() });
+    s.montage_layout = Some(Layout { panneaux: Some(vieux), ..Layout::default() });
+    let s = crate::settings::Settings::apres_lecture(s);
+    assert!(haute(&s.layout.as_ref().unwrap().dock_layout().principal));
+    assert!(bande_sous_tout(&s.montage_layout.as_ref().unwrap().dock_layout().principal));
+    // À l'écran : la colonne descend jusqu'au bas de la bande, la bande s'arrête à son bord gauche.
+    let b = banc_dans(Espace::Storyboard);
+    let (dessin, colonne, bande) = (place(&b, Pane::Canvas), place(&b, Pane::Colonne), place(&b, Pane::Montage));
+    assert!(colonne.bottom() >= bande.bottom() - 1.0, "la colonne va jusqu'en bas ({colonne:?}, {bande:?})");
+    assert!(bande.right() <= colonne.left() + 1.0 && bande.left() <= dessin.left() + 1.0, "la bande s'arrête à la colonne ({bande:?}, {colonne:?})");
+    assert!((colonne.width() - dock::COLONNE).abs() < 6.0, "la colonne garde ses 290 points ({})", colonne.width());
+}
+
+/// Audit utilisateur du 2026-11-21 (lot 5) : le panneau qui grandit et qui dit la hauteur de son contenu la reçoit tant que les listes
+/// peuvent la céder ; elles ne passent jamais sous leur plancher.
+#[test]
+fn the_growing_panel_gets_the_height_of_its_content_while_the_lists_can_give_it() {
+    let h = colonne::hauteurs(800.0, &[Some(Voulue::souple(230.0)), Some(Voulue::souple(230.0)), Some(Voulue::ferme(400.0))], Some(2));
+    assert!((h[2] - 400.0).abs() < 1.0, "{h:?}");
+    assert!(h[0] >= colonne::HAUTEUR_MIN && h[0] < 230.0 && (h[0] - h[1]).abs() < 0.01, "{h:?}");
+    // Trop peu de place : les listes à leur plancher, pas en dessous ; celui qui grandit a le reste.
+    let h = colonne::hauteurs(500.0, &[Some(Voulue::souple(230.0)), Some(Voulue::souple(230.0)), Some(Voulue::ferme(400.0))], Some(2));
+    assert!((h[0] - colonne::HAUTEUR_MIN).abs() < 0.01 && h[2] >= colonne::GRANDIT_MIN, "{h:?}");
+    // Assez de place : personne ne cède.
+    let h = colonne::hauteurs(1200.0, &[Some(Voulue::souple(230.0)), Some(Voulue::ferme(400.0))], Some(1));
+    assert!((h[0] - 230.0).abs() < 0.01 && h[1] >= 400.0, "{h:?}");
 }
 
 // ------------------------------------------------------------------------------------------------ 11. ouvrir par sa commande

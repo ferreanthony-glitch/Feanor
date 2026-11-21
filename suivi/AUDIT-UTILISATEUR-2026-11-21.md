@@ -228,6 +228,104 @@ Il s'est reproduit après les 26 lettres tapées au hasard, sans aucun champ de 
 - **Son** (import, lecture, pistes) et **import d'image** : ils passent par le sélecteur de fichier de macOS, que je ne peux piloter qu'en prenant l'écran ; la demande est restée sans réponse. Un son et une image de test sont prêts.
 - **Pelure d'oignon**, effets de trait (tremblement, écriture…), sélection au lasso.
 
+## Lot 5 — caméras, timeline, préréglages (vu à l'écran, main d9960bc, Mac 1728 × 1117)
+
+Demande d'Anthony : « teste les caméras, la timeline et les présets. C'est pas très pratique et pas très clair. » Essai dans le
+Storyboard seulement, sur un projet neuf de deux plans. Ce qui marche : poser une clé, glisser une clé (les suivantes suivent, la
+barre d'état le dit), poser un préréglage par un clic ou en le glissant, le déplacer, l'étirer, poser une transition, poser un plan
+type, annuler et rétablir chacun de ces gestes. Aucun plantage.
+
+**Défaut**
+
+21. **Une transition disparaît sans rien dire quand on insère un plan sur sa coupe.** Fondu enchaîné entre les plans 1 et 2, puis
+    « Carton noir » glissé entre les deux : plus de symbole ⋈ sur aucune des deux coupes, plus de fondu, et la barre d'état ne parle
+    que du carton. La transition reste écrite dans le projet, attachée à la paire de plans 1 et 2 (`transitions.rs`, `transition_on`) :
+    elle dort, invisible, et reviendrait toute seule si les deux plans redevenaient voisins. Vaut pour toute insertion, pas seulement
+    les plans types. À trancher : la rattacher à l'une des deux coupes neuves, ou la retirer en le disant.
+
+**Pas pratique**
+
+22. **La colonne de droite n'a que 480 points de haut sur un portable**, parce que la timeline passe dessous sur toute la largeur.
+    Avec Scène, Couleur, Propriétés et Préréglages ouverts, le panneau Préréglages ne montre que son aperçu, aucun nom
+    (`lot5-colonne-ecrasee.jpg`) ; les réglages de l'outil Caméra tiennent dans une fenêtre de quatre lignes et demandent quatre
+    écrans de défilement. Pour lire la liste il faut replier les trois autres panneaux, donc aussi celui où se règle le préréglage
+    qu'on vient de poser. Pendant ce temps la timeline a 130 points vides sous ses pistes.
+23. **La place rendue par un panneau replié ne va pas au panneau qui en manque.** Couleur replié : Scène grandit et reste à moitié
+    vide, Propriétés et Préréglages restent écrasés.
+24. **Avec l'outil Caméra, on cadre à l'aveugle.** Le passe-partout noir à 100 % (choix d'Anthony, partie 47) cache tout ce qui est
+    hors du cadre, y compris quand on tient l'outil qui sert à choisir ce qu'on cadre. La flèche d'un « Zip pan » pointe vers un
+    cadre d'arrivée dessiné dans le noir (`lot5-cadre-dans-le-noir.jpg`). Proposition, pas un défaut : le passe-partout s'éclaircit
+    tant que l'outil Caméra est en main.
+25. **Sur un plan animé, on ne voit que le cadre de l'image courante** : ni le cadre de départ, ni celui d'arrivée, ni le chemin.
+    Les Vignettes montrent A, B et une flèche ; le Storyboard non.
+26. **Pas de champ « Zoom ».** Le zoom se lit « Z 1867 » et « Focale 65 mm · champ 31° · grossissement 186 % ». Pour un plan en 2D,
+    un storyboarder cherche un pourcentage qu'il peut écrire.
+
+**Pas clair**
+
+27. **Rien ne dit qu'une caméra sans clé est un cadrage fixe.** Zoomer à l'image 1 pose une clé ; aller à la fin et déplacer le cadre
+    ne pose pas de deuxième clé, cela déplace le cadrage de tout le plan (règle écrite dans `camtools.rs` : moins de deux clés, la
+    seule clé est réécrite à l'image 1). C'est cohérent, mais ni la barre d'état ni le panneau ne le disent, et on croit avoir fait
+    un mouvement. Il faut d'abord « Clé à la fin », qui ne déplace pas la tête de lecture : le geste suivant règle donc la clé du
+    début.
+28. **Le nom d'un bloc de préréglage est illisible à la taille d'origine** : « Zoom choc » sur 8 images s'écrit « Zoc »
+    (`lot5-bloc-illisible.jpg`).
+29. **Caméra repliée, un préréglage n'est qu'un trait jaune de 20 points sous les clés.** Choix d'Anthony (partie 178), noté parce
+    que la pose par un clic dans le panneau ne déplie pas la ligne : on clique, et presque rien ne bouge à l'écran.
+30. **La flèche du préréglage choisi reste dessinée hors de ses images** : le « Zip pan » des images 1 à 15 montre encore sa flèche et
+    son cadre d'arrivée à l'image 48.
+31. **Le titre du panneau dit « Caméra · calque vectoriel »** : la mention du calque n'a pas de sens pour cet outil.
+32. **La barre d'état coupe ses phrases** (« Clé de caméra à l'image 48… », « Zoom choc posé des images 25 à 32, vivant, sans clé… ») :
+    le rappel « raccourcis du montage » ou « raccourcis des clés » lui prend la place à gauche.
+33. **Le graphique « Flèche » du préréglage est coupé à droite** par le bord du panneau : le cadre d'arrivée sort de la vue.
+34. Mac : la bulle du bord d'un plan dit encore « Ctrl tenue », et l'étiquette « Caméra (animée) » passe sous la poignée de rotation
+    quand le cadre est petit.
+
+**Pas essayé dans ce lot** : le clic droit (menu de la ligne Caméra, réglages d'une transition), refusé par le pilotage en
+arrière-plan ; la lecture ; la timeline de l'Animation ; la caméra des Vignettes et celle de l'Espace 3D ; les trajectoires toutes
+faites ; « Convertir en clés » ; les poignées de lissage ; un vrai stylet.
+
+### Lot 5 — corrections (2026-11-21, branche `audit-cameras`, accord d'Anthony sur les quatre groupes)
+
+Vu à l'écran après correction, sur le même projet d'essai (capture `audit-utilisateur-2026-11-21/lot5-apres-corrections.jpg`).
+
+| N° | Ce qui change | Où dans le code |
+|---|---|---|
+| 21 | Un plan **neuf** (plan vide, plan type) inséré sur une coupe qui a une transition la reçoit sur sa coupe d'entrée ; la barre d'état le dit (« La transition de cette coupe a suivi le nouveau plan. »). Un plan neuf en tête ou en fin de film laisse le fondu d'ouverture au début et le fondu de fermeture à la fin. Couper un plan en deux laisse sa transition de sortie à la sortie de la seconde moitié (même défaut, trouvé en corrigeant). Un plan **déplacé** sur la coupe ne change rien : la transition attend, comme avant (choix existant, gardé). Dupliquer et coller : voir « Tranché » plus bas. | `Document::inserer_un_plan_neuf`, `rattacher_transitions`, `split_panel`, `App::update` |
+| 22 | Dans le Storyboard, la colonne prend toute la hauteur de la fenêtre et la bande s'arrête à son bord (disposition 11 ; une disposition retenue qui avait la forme d'origine la reçoit, une autre ne bouge pas). Montage, 3D et Animation gardent la bande sur toute la largeur. | `DockLayout::colonne_haute`, `Settings::apres_lecture` |
+| 23 | Le panneau qui grandit (Propriétés) reçoit la hauteur de son contenu tant que les listes (Scène, Préréglages) peuvent la céder ; elles ne passent pas sous leur plancher. | `colonne::hauteurs` |
+| 24 | Avec l'outil Caméra en main, le passe-partout ne dépasse pas 55 % d'opacité ; il reprend son réglage dès qu'on change d'outil. | `camtools::PASSE_PARTOUT_CAMERA` |
+| 25 | Sur un plan animé, l'outil Caméra montre le cadre de la première clé (« Début »), celui de la dernière (« Fin ») en pointillés, et le chemin du centre du cadre avec un point par clé. | `App::peindre_mouvement_de_camera` |
+| 26 | Champ « Zoom » en pour cent, en tête de « Caméra à cette image ». | `camera_panel` |
+| 27 | Le panneau dit « Cadrage fixe : une clé au début et à la fin l'animent. » sans mouvement, et « Entre deux clés : régler la caméra pose une clé ici. » hors d'une clé ; le détail est dans la bulle de la ligne (pas de long texte gris dans les réglages d'un outil, partie 153). | `camera_panel` |
+| 28 | Le nom d'un bloc de préréglage vient en bulle au survol, avec ses images. **Pas vu à l'écran** : le survol simulé ne déclenche pas les bulles. | `blocs_camera_du_plan` |
+| 29 | Poser un préréglage par un **clic** déplie la rangée des préréglages. Un glisser ne déplie rien (il vise la rangée qu'on voit ; essai existant gardé). | `ajouter_effet_camera_a_la_tete` |
+| 31 | Le titre du panneau dit « Caméra », sans « calque vectoriel ». | `panels.rs` |
+
+**Trouvé en corrigeant** : les étiquettes de version (« V2 ») de la planche et celles du montage se partageaient une seule liste, la
+dernière dessinée gagnait. Avec la colonne sur toute la hauteur, l'ordre de dessin changeait et celles de la planche n'étaient plus
+cliquables : les deux listes s'ajoutent maintenant (`pile_versions_ui`).
+
+**Essais** : suite complète sur Mac, 5 213 réussis, 90 échecs, les mêmes que sans ces changements (comparé essai par essai). Cinq
+essais existants adaptés à la nouvelle forme (colonne haute, champ Zoom), trois ajoutés. **Vu à l'écran** : une version intermédiaire
+(transition, colonne, caméra, dépli). La version finale (règle resserrée aux plans neufs, textes courts, dépli au clic seulement,
+étiquettes) n'a pas pu être revue à l'écran : la capture de la fenêtre a échoué en fin de séance.
+
+**Retiré** : le n° 32 (barre d'état qui coupe ses phrases). C'est un choix du 2026-10-21 (`messages::resume` : la barre ne montre que le
+début d'un message long, le reste est dans sa bulle et dans l'historique), pas un effet du rappel « raccourcis du montage ».
+
+**Pas fait** : n° 30 (flèche du préréglage hors de ses images), n° 33 (graphique « Flèche » coupé à droite), n° 34 (« Ctrl tenue » sur
+Mac, étiquette sous la poignée). Ils n'étaient pas dans les quatre groupes.
+
+**Tranché par Anthony le 2026-11-21 (« Devant »)** : un plan ou une scène dupliqués, des plans collés sur une coupe qui a une
+transition la gardent **devant le plan suivant** (copiée à la sortie de la dernière copie ; la coupe entre l'original et sa copie est
+franche ; celle de l'original attend et revient si les copies s'en vont), comme pour une séquence dupliquée
+(`Document::inserer_des_copies`). Essais seulement, pas vu à l'écran.
+
+**Limites connues** : rouvrir la bande après l'avoir fermée, ou refaire une colonne vidée, la repose sous la colonne sur toute la
+largeur (l'ancienne forme) ; « Rétablir la disposition » redonne la nouvelle. Une transition déjà restée en attente dans un ancien
+projet n'est pas rattachée à l'ouverture.
+
 ## Relevé dans le code, pas encore vu à l'écran
 
 Valable aussi sur PC :

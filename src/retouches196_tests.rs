@@ -312,19 +312,10 @@ fn at_1384_by_868_and_90_percent_colour_keeps_its_content_height_no_panel_is_cut
     assert!(corps(&b, prop).0 >= colonne::GRANDIT_MIN - 0.5, "Propriétés : {}", corps(&b, prop).0);
     let plancher = crate::panneauprereglages::plancher(&b.app.ctx).expect("le plancher des Préréglages");
     assert!(corps(&b, prer).0 >= plancher - 0.5, "Préréglages pas coupé : {} / {plancher}", corps(&b, prer).0);
-    // Tout ne tient pas : la pile est plus haute que la colonne, qui défile.
+    // (Audit du 2026-11-21 : dans le Storyboard la colonne prend maintenant toute la hauteur de la fenêtre. À cette taille, la pile
+    // qui débordait de 480 points de colonne y tient : plus besoin de défiler pour voir Préréglages en entier.)
     let bas = b.app.colonne_etat.tranches.last().unwrap().1;
-    assert!(bas > zone.bottom() + 20.0, "plus haute que la colonne : {bas} / {zone:?}");
-    // La molette sur la colonne : elle descend jusqu'au bas de Préréglages ; la liste y montre ses lignes.
-    let haut_avant = b.app.colonne_etat.tranches[0].0;
-    let sur = pos2(zone.center().x, zone.top() + 60.0);
-    for _ in 0..30 {
-        b.image(vec![Event::PointerMoved(sur)], 1.0 / 60.0);
-        b.image(vec![Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -120.0), modifiers: Modifiers::NONE }], 1.0 / 60.0);
-    }
-    b.chauffer(4);
-    let haut_apres = b.app.colonne_etat.tranches[0].0;
-    assert!(haut_apres < haut_avant - 20.0, "la colonne a défilé : {haut_avant} → {haut_apres}");
+    assert!(bas <= zone.bottom() + 1.0, "la pile tient dans la colonne : {bas} / {zone:?}");
     let (_, (p0, p1)) = corps(&b, prer);
     assert!(p1 <= zone.bottom() + 1.0 && p0 >= zone.top() - 1.0, "Préréglages entier à l'écran, en bas : {p0}..{p1} / {zone:?}");
     let apercu = crate::panneauprereglages::APERCU.with(|c| c.get()).unwrap();

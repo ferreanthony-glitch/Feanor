@@ -84,7 +84,11 @@ fn the_three_spaces_have_their_own_starting_layouts() {
     let mut retire = avec.clone();
     retire.close(Pane::Scenario);
     retire.close(Pane::Scene);
-    assert_eq!(retire.panes(), sans.panes(), "rien d'autre ne change");
+    // (Les mêmes panneaux ; leur ordre dans l'arbre diffère depuis l'audit du 2026-11-21 : dans le Storyboard, la colonne prend toute
+    // la hauteur, la bande est sous le dessin seul.)
+    let ensemble = |l: &crate::dock::DockLayout| l.panes().into_iter().collect::<std::collections::HashSet<_>>();
+    assert_eq!(ensemble(&retire), ensemble(&sans), "rien d'autre ne change");
+    assert_eq!(retire.panes().len(), sans.panes().len());
     assert!(animation.montage_height > storyboard.montage_height, "l'animation : la bande (la timeline) plus haute");
     assert!(animation.sheet_width > storyboard.sheet_width, "et les calques plus larges");
     // Montage : la bande en grand, les panneaux de dessin repliés, la fiche du plan gardée.

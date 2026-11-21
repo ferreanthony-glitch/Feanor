@@ -184,6 +184,8 @@ pub struct Pile {
     pub zone: Option<Rect>,
     /// Les étiquettes « V2 » posées à l'image d'avant : leur zone et leur plan (essais, gestes).
     pub etiquettes: Vec<(Rect, u64)>,
+    /// L'image d'écran qui a rempli `etiquettes` en dernier : dans la même image, un second panneau ajoute les siennes (`pile_versions_ui`).
+    pub image: Option<u64>,
 }
 
 impl Pile {
@@ -224,11 +226,11 @@ impl Pile {
 
     pub fn ouvrir(&mut self, plan: u64) {
         // (`premiere` : tout en bas d'abord, les versions les plus récentes sont les plus proches du bloc.)
-        *self = Pile { plan: Some(plan), premiere: usize::MAX, etiquettes: std::mem::take(&mut self.etiquettes), ..Pile::default() };
+        *self = Pile { plan: Some(plan), premiere: usize::MAX, etiquettes: std::mem::take(&mut self.etiquettes), image: self.image, ..Pile::default() };
     }
 
     pub fn fermer(&mut self) {
-        *self = Pile { etiquettes: std::mem::take(&mut self.etiquettes), ..Pile::default() };
+        *self = Pile { etiquettes: std::mem::take(&mut self.etiquettes), image: self.image, ..Pile::default() };
     }
 
     /// Le plan dont la pile est ouverte.
