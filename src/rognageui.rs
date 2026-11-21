@@ -289,8 +289,13 @@ impl App {
                     String::new()
                 };
                 self.status = format!("{}{hint}{etire}", d.text);
-                // Partie 206 : la bulle près du pointeur, pendant le geste (la durée du plan).
-                self.bulle_geste = (d.kind == EdgeKind::Tail).then(|| crate::clesvue::debut_de_phrase(&d.text));
+                // Partie 206 : la bulle près du pointeur, pendant le geste (la durée du plan). Partie 207 : la seule bulle de la fin
+                // d'un plan (plus de bande noire en haut, `paint_edge_drag`), avec les mots de l'Animation : « Durée du plan : 1s 16
+                // (-8 i) », et ce que fait « Étirer en proportion » (ou Maj). La barre d'état garde sa phrase.
+                self.bulle_geste = (d.kind == EdgeKind::Tail).then(|| {
+                    let n = self.doc.panels[pi].frame_count();
+                    crate::clesvue::bulle_fin_du_plan(n, self.doc.fps, n as isize - old_len as isize, proportion)
+                });
                 self.renderer.invalidate_all();
             }
         }
@@ -401,7 +406,8 @@ impl App {
             painter.line_segment([pos2(x, top - 4.0), pos2(x, bottom + 4.0)], Stroke::new(1.5_f32, accent));
             painter.circle_filled(pos2(x, top - 4.0), 3.0, accent);
         }
-        if d.text.is_empty() {
+        // (Partie 207 : la fin d'un plan n'a que la bulle près du pointeur, `bulle_du_geste`.)
+        if d.text.is_empty() || d.kind == EdgeKind::Tail {
             return;
         }
         let pi = self.doc.panels.iter().position(|p| p.id == d.backups[0].panel.id).unwrap_or(0);

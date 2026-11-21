@@ -114,6 +114,8 @@ pub(crate) struct HandleDrag {
     /// Le bord entre deux clés (partie 206) : les coupures que le geste déplace, (calque, image), la tenue d'abord ; les autres sont
     /// celles des calques choisis avec elle (`bordscles::coupes_du_geste`), relevées au début du geste.
     coupes: Vec<(usize, usize)>,
+    /// Partie 207 : le bord tenu (le bord d'une clé), (calque, image) à sa place de l'instant : il reste allumé pendant tout le geste.
+    bord: Option<(usize, usize)>,
 }
 
 impl HandleDrag {
@@ -125,6 +127,16 @@ impl HandleDrag {
     /// Le plan tel qu'il était au début du geste.
     pub(crate) fn before_panel(&self) -> &Panel {
         &self.before
+    }
+
+    /// Partie 207 : le bord de clé tenu à sa place de l'instant (calque, image) : les timelines l'allument pendant tout le geste.
+    pub(crate) fn bord_tenu(&self) -> Option<(usize, usize)> {
+        self.bord
+    }
+
+    /// Le bord tenu a bougé jusqu'à l'image `f` du calque `layer` (`bordscles::tirer_bord_de_cle`).
+    pub(crate) fn poser_bord(&mut self, layer: usize, f: usize) {
+        self.bord = Some((layer, f));
     }
 
     /// Un geste qui montre le fantôme de la place d'avant et sa bulle (partie 206) : le bord d'une clé, la fin du plan.
@@ -784,7 +796,12 @@ impl App {
             Handle::Exposure { layer, end, .. } => self.coupes_du_geste(&before, layer, end),
             _ => Vec::new(),
         };
-        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap, glisse: false, proportion: false, coupes });
+        let bord = match handle {
+            Handle::Boundary { layer, at } => Some((layer, at)),
+            Handle::Exposure { layer, end, .. } => Some((layer, end)),
+            _ => None,
+        };
+        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap, glisse: false, proportion: false, coupes, bord });
         true
     }
 
@@ -966,9 +983,14 @@ impl App {
                 }
             }
         };
-        // Partie 206 : la bulle près du pointeur reprend le début de la phrase (la clé, sa durée, l'écart).
-        if matches!(handle, Handle::Boundary { .. } | Handle::Exposure { .. } | Handle::PlanEnd) {
+        // Partie 206 : la bulle près du pointeur reprend le début de la phrase (la clé, sa durée, l'écart). Partie 207 : pour la fin
+        // du plan, la durée et l'écart, et ce que fait « Étirer en proportion » (ou Maj).
+        if matches!(handle, Handle::Boundary { .. } | Handle::Exposure { .. }) {
             self.bulle_geste = Some(crate::clesvue::debut_de_phrase(&status));
+        } else if handle == Handle::PlanEnd {
+            let (old, proportion) = self.handle_drag.as_ref().map_or((0, false), |d| (d.before.frame_count(), d.proportion));
+            let n = self.doc.panels.get(pi).map_or(0, Panel::frame_count);
+            self.bulle_geste = Some(crate::clesvue::bulle_fin_du_plan(n, self.doc.fps, n as isize - old as isize, proportion));
         }
         self.status = status;
     }

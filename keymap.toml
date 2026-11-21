@@ -156,7 +156,15 @@ touches = ["Suppr"]
 [[raccourci]]
 action = "edition.supprimer"
 touches = ["Retour arrière"]
-source = "proposition (second raccourci)"
+source = "proposition (second raccourci) ; partie 207 : sur des clés choisies, Suppr et Retour arrière les suppriment (pas de Suppr sur Mac)"
+
+# Partie 207 (Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac. On trouve un autre raccourci pour vider le
+# dessin, Maj+Retour arrière par exemple ») : Maj+Retour arrière et Maj+Suppr sont pris (« Effacer ce qui est hors de la
+# sélection », « Remplir la sélection », plus bas) ; Alt, les plus proches libres.
+[[raccourci]]
+action = "cles.vider_dessin"
+touches = ["Alt+Retour arrière", "Alt+Suppr"]
+source = "choix d'Anthony, 2026-11-21 (Maj+Retour arrière proposé, déjà pris : Alt)"
 
 # Maj+Suppr est pris par « Effacer ce qui est hors de la sélection »
 # (plus bas) : la touche de la commande en réserve est retirée

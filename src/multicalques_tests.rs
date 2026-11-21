@@ -1122,7 +1122,9 @@ fn the_opacity_field_sets_every_chosen_layer_in_one_step() {
 }
 
 #[test]
-fn delete_on_chosen_keys_empties_their_drawings_once_and_keeps_the_keys() {
+fn emptying_the_drawing_of_chosen_keys_empties_each_drawing_once_and_keeps_the_keys() {
+    // (Partie 207, point 8 : c'était Suppr ; Suppr et Retour arrière suppriment maintenant les clés, « Vider le dessin des clés
+    // choisies » est sur Alt+Retour arrière et Alt+Suppr.)
     let mut b = banc_cles(Tool::Brush);
     // Le dessin de la clé de l'image 2 du calque 0 est aussi montré à l'image 3 par une seconde clé (la même image tenue deux fois).
     let partage = cel_de(&b, 0, 2);
@@ -1133,7 +1135,7 @@ fn delete_on_chosen_keys_empties_their_drawings_once_and_keeps_the_keys() {
     b.app.key_focus = true;
     let dessins = dessins_des_cles(&b);
     let n0 = etapes(&b);
-    b.app.run_action("edition.supprimer");
+    b.app.run_action("cles.vider_dessin");
     for &(li, cel) in &dessins {
         assert!(!encre(&b, cel, pos2(200.0, y_de(li))) && !encre(&b, cel, pos2(130.0, y_de(li))), "calque {li}, dessin {cel} : vidé");
     }
@@ -1155,10 +1157,18 @@ fn delete_leaves_a_locked_layer_and_keeps_deleting_a_canvas_selection_first() {
     let mut b = banc_cles(Tool::Brush);
     b.app.doc.panels[0].layers[1].locked = true;
     b.app.key_focus = true;
-    b.app.run_action("edition.supprimer");
+    b.app.run_action("cles.vider_dessin");
     assert!(encre(&b, cel_de(&b, 1, 2), pos2(200.0, y_de(1))), "le calque verrouillé n'est pas vidé");
     assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "l'autre l'est");
     assert!(b.app.status.contains("verrouillé"), "{}", b.app.status);
+    // Suppr (partie 207 : supprime les clés) laisse aussi de côté le calque verrouillé, et le nomme.
+    let mut b = banc_cles(Tool::Brush);
+    b.app.doc.panels[0].layers[1].locked = true;
+    b.app.key_focus = true;
+    b.app.run_action("edition.supprimer");
+    assert!(cle_ici(&b, 1, 2) && cle_ici(&b, 1, 4), "les clés du calque verrouillé restent");
+    assert!(!cle_ici(&b, 0, 2) && !cle_ici(&b, 0, 4), "celles de l'autre sont supprimées");
+    assert!(b.app.status.contains("verrouillé") && b.app.status.contains("Calque 1"), "{}", b.app.status);
     // Une sélection sur le dessin : Suppr l'efface, elle, et pas les clés.
     let mut b = banc_cles(Tool::Select);
     let cel = cel_de(&b, 0, 0);
@@ -1167,6 +1177,7 @@ fn delete_leaves_a_locked_layer_and_keeps_deleting_a_canvas_selection_first() {
     b.app.run_action("edition.supprimer");
     assert!(vect(&b, cel).elements.is_empty(), "la sélection du dessin est effacée");
     assert!(encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "les clés ne sont pas vidées");
+    assert!(cle_ici(&b, 0, 2) && cle_ici(&b, 1, 2), "ni supprimées");
 }
 
 #[test]
@@ -1480,13 +1491,13 @@ fn undo_during_a_long_computation_does_not_freeze_and_shows_the_progress() {
 }
 
 #[test]
-fn delete_empties_the_chosen_keys_even_with_a_selection_left_on_another_frame() {
+fn delete_removes_the_chosen_keys_even_with_a_selection_left_on_another_frame() {
     let mut b = banc_cles(Tool::Brush);
     let ailleurs = cel_de(&b, 0, 4);
     b.app.vsel = Some(crate::vtools::VSelection { cel: ailleurs, items: vec![0] });
     b.app.key_focus = true;
     b.app.run_action("edition.supprimer");
-    assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "les clés choisies sont vidées ({})", b.app.status);
+    assert!(!cle_ici(&b, 0, 2) && !cle_ici(&b, 1, 2), "les clés choisies sont supprimées ({})", b.app.status);
 }
 
 #[test]
@@ -1497,11 +1508,13 @@ fn delete_on_the_board_never_empties_keys_and_without_chosen_keys_does_nothing()
     b.app.key_focus = true;
     b.app.run_action("edition.supprimer");
     assert!(encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "dans les Vignettes, Suppr ne vide pas les clés");
+    assert!(cle_ici(&b, 0, 2), "ni ne les supprime");
     let mut b = banc_cles(Tool::Brush);
     b.app.key_sel.clear();
     b.app.key_focus = true;
     b.app.run_action("edition.supprimer");
     assert!(encre(&b, cel_de(&b, 0, 0), pos2(200.0, y_de(0))), "sans clé choisie, Suppr n'efface rien");
+    assert!(cle_ici(&b, 0, 0) && cle_ici(&b, 0, 2), "ni ne supprime de clé");
 }
 
 #[test]

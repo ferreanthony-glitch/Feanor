@@ -4889,9 +4889,12 @@ impl App {
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
-            // Suppr sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : leurs dessins se
-            // vident, les clés restent (`choixtout.rs`). Supprimer les clés : le menu de la piste.
-            "edition.supprimer" if self.suppr_vide_les_cles() => self.vider_cles(),
+            // Suppr et Retour arrière sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : les
+            // clés sont supprimées, celle d'avant prend leur place (partie 207, Anthony : « Retour arrière supprime la clé car pas de
+            // Suppr sur Mac »). Vider leur dessin, les clés restant : `cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr
+            // (`choixtout.rs`).
+            "edition.supprimer" if self.suppr_vise_les_cles() => self.supprimer_cles_choisies(),
+            "cles.vider_dessin" => self.vider_cles(),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
             // une copie du dessin (F5), ou vide (F4).

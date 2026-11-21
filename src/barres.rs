@@ -661,7 +661,9 @@ pub(crate) fn largeur_mesuree(b: Barre) -> f32 {
 /// passent jamais sous « Plus… ».
 pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
     match id {
-        "panneau.nouveau" => 90,
+        // (Partie 207 : la même action que le « ⊞ » de la ligne « Plans », juste dessous, qui reste toujours là : elle passe sous
+        // « Plus… » avant les deux boutons du stylet, qui n'ont pas d'autre place dans le Storyboard.)
+        "panneau.nouveau" => 2,
         "mode.basculer" => 85,
         "edition.supprimer" => 80,
         "plans" => 70,
@@ -677,8 +679,8 @@ pub(crate) fn rang_dans_la_barre(id: &str) -> u32 {
         "transition.ajouter" => 26,
         "commentaire.ajouter" => 24,
         "montage.aimanter" => 22,
-        // (Partie 206 : les deux boutons du stylet restent dans la barre tant qu'elle a la place des commandes du film.)
-        "cles.decaler_suite" | "cles.etirer_proportion" => 20,
+        // (Partie 206 : les deux boutons du stylet. Partie 207 : ils restent dans la barre à la largeur d'origine de la colonne.)
+        "cles.decaler_suite" | "cles.etirer_proportion" => 56,
         // (La même action que le « + » de la ligne « Calques », juste dessous : la première à passer sous « Plus… ».)
         "calque.nouveau_vectoriel" => 1,
         _ => 10,

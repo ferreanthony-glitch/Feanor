@@ -157,7 +157,9 @@ fn toutes_les_icones_de_la_timeline_du_storyboard_ont_la_meme_taille_barre_de_le
     let mesures = [
         ("lire, barre de lecture", hauteur_du_glyphe(&b, ph::PLAY, l0, l1)),
         ("début, barre de lecture", hauteur_du_glyphe(&b, ph::SKIP_BACK, l0, l1)),
-        ("nouveau plan, barre de lecture", hauteur_du_glyphe(&b, ph::PLUS_SQUARE, l0, l1)),
+        // (Partie 207 : à la largeur d'origine de la colonne, « Nouveau plan » laisse sa place dans la barre de lecture aux deux boutons
+        // du stylet ; il reste sur la ligne Plans.)
+        ("décaler la suite, barre de lecture", hauteur_du_glyphe(&b, ph::ARROW_LINE_RIGHT, l0, l1)),
         ("nouveau plan, ligne Plans", hauteur_du_glyphe(&b, ph::PLUS_SQUARE, h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h)),
         ("couper, ligne Plans", hauteur_du_glyphe(&b, ph::SCISSORS, h + rows.blocks_top(), h + rows.blocks_top() + rows.block_h)),
         // (Partie 196 : plus de remise à zéro sur la ligne Caméra, au clic droit de la ligne ; il lui reste ⊕.)
