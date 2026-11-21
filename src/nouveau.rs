@@ -435,6 +435,23 @@ pub fn file_stem(name: &str) -> String {
     s.trim_end_matches(['.', ' ']).to_string()
 }
 
+/// Un chemin trop long pour sa case, abrégé par le milieu : le début (le disque, le serveur) et la fin (le dossier où l'on range)
+/// restent lisibles, « … » remplace ce qui est entre. `max` compte des caractères, pas des octets ; un chemin qui tient reste tel quel.
+/// Le chemin entier se lit dans la bulle du champ.
+pub fn abrege_milieu(texte: &str, max: usize) -> String {
+    let n = texte.chars().count();
+    let max = max.max(5);
+    if n <= max {
+        return texte.to_string();
+    }
+    let garde = max - 1;
+    let debut = garde / 3;
+    let fin = garde - debut;
+    let tete: String = texte.chars().take(debut).collect();
+    let queue: String = texte.chars().skip(n - fin).collect();
+    format!("{tete}…{queue}")
+}
+
 /// Dossier proposé la première fois : Documents, sinon le dossier de l'utilisateur.
 pub fn default_folder() -> PathBuf {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);

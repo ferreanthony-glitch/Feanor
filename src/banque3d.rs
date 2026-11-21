@@ -64,6 +64,55 @@ pub fn lire_catalogue(texte: &str) -> Result<Vec<ModeleBanque>, String> {
     Ok(c.modeles)
 }
 
+/// Le nom français de chaque modèle de la banque, par le nom de son fichier dans le catalogue. Courts : ils tiennent sous une vignette.
+pub const NOMS_FR: [(&str, &str); 45] = [
+    ("building-type-a", "Maison A"),
+    ("building-type-c", "Maison C"),
+    ("building-type-f", "Maison F"),
+    ("driveway-long", "Allée longue"),
+    ("tree-large", "Grand arbre"),
+    ("tree-small", "Petit arbre"),
+    ("building-a", "Immeuble"),
+    ("building-skyscraper-a", "Gratte-ciel"),
+    ("detail-parasol-a", "Parasol"),
+    ("campfire_logs", "Feu de camp"),
+    ("fence_simple", "Barrière"),
+    ("flower_redA", "Fleur rouge"),
+    ("grass_large", "Herbe haute"),
+    ("log", "Rondin"),
+    ("path_stone", "Pas de pierre"),
+    ("plant_bush", "Buisson"),
+    ("rock_largeA", "Gros rocher"),
+    ("rock_smallA", "Petit rocher"),
+    ("stone_largeC", "Grosse pierre C"),
+    ("stone_largeD", "Grosse pierre D"),
+    ("stone_smallG", "Petite pierre G"),
+    ("stone_smallH", "Petite pierre H"),
+    ("stone_tallH", "Pierre haute H"),
+    ("stone_tallI", "Pierre haute I"),
+    ("stump_round", "Souche"),
+    ("tree_default", "Arbre"),
+    ("tree_fat", "Arbre large"),
+    ("tree_oak", "Chêne"),
+    ("tree_pineTallA", "Grand pin"),
+    ("tree_simple", "Arbre simple"),
+    ("construction-cone", "Cône de chantier"),
+    ("construction-fence", "Grille de chantier"),
+    ("dumpster", "Benne"),
+    ("light-curved", "Lampadaire"),
+    ("road-bend", "Virage"),
+    ("road-crossroad", "Carrefour"),
+    ("road-straight", "Route droite"),
+    ("traffic-light", "Feu tricolore"),
+    ("detail-barrier-strong-type-b", "Glissière béton"),
+    ("detail-barrier-type-b", "Glissière"),
+    ("detail-bench", "Banc"),
+    ("truck-flat", "Camion plateau"),
+    ("truck-green", "Camion vert"),
+    ("wall-c-flat-low", "Muret"),
+    ("wall-fence", "Mur grillagé"),
+];
+
 /// Les modèles de la banque (le catalogue rangé dans le programme, lu une fois).
 pub fn modeles() -> &'static [ModeleBanque] {
     static M: OnceLock<Vec<ModeleBanque>> = OnceLock::new();
@@ -76,8 +125,13 @@ pub fn octets(chemin: &str) -> Option<&'static [u8]> {
 }
 
 impl ModeleBanque {
-    /// « building type a », « campfire logs » : le nom du fichier, lisible.
+    /// « Maison A », « Feu de camp » : le nom du modèle en français (`NOMS_FR`, audit du 2026-11-21 : les noms de fichier anglais
+    /// étaient coupés sous les vignettes, « onstruction con… »). Un modèle sans nom français garde le nom de son fichier, lisible
+    /// (« building type a »). La recherche trouve toujours le nom du fichier (« tree ») en plus du nom français (« arbre »).
     pub fn nom_lisible(&self) -> String {
+        if let Some((_, fr)) = NOMS_FR.iter().find(|(nom, _)| *nom == self.nom) {
+            return fr.to_string();
+        }
         let n = self.nom.replace(['-', '_'], " ");
         let mut c = n.chars();
         c.next().map(|p| p.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()

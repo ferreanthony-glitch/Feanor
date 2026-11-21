@@ -1218,7 +1218,7 @@ impl Session {
 
     fn titre(doc: &Document, plan: u64) -> String {
         match doc.panels.iter().position(|p| p.id == plan) {
-            Some(i) => crate::storyboard::panel_title(doc, i).to_lowercase(),
+            Some(i) => crate::storyboard::panel_title_phrase(doc, i),
             None => "un plan".into(),
         }
     }

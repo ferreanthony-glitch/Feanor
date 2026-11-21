@@ -176,7 +176,7 @@ impl App {
         }
         let texte = self.conseil_texte(c);
         let mut compris = false;
-        egui::Area::new(egui::Id::new("conseil_unique")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -120.0)).show(ctx, |ui| {
+        egui::Area::new(egui::Id::new("conseil_unique")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, crate::messages::au_dessus_des_notifications(ctx)).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(theme::eleve()).stroke(egui::Stroke::new(1.0_f32, theme::accent_texte())).show(ui, |ui| {
                 ui.set_max_width(340.0);
                 ui.horizontal(|ui| {

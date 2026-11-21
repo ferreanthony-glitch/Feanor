@@ -497,7 +497,7 @@ impl App {
             return;
         }
         let mut reponse = None;
-        egui::Area::new(egui::Id::new("diagnostic_offre")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -120.0)).show(ctx, |ui| {
+        egui::Area::new(egui::Id::new("diagnostic_offre")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, crate::messages::au_dessus_des_notifications(ctx)).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(theme::eleve()).stroke(egui::Stroke::new(1.0_f32, theme::accent_texte())).show(ui, |ui| {
                 ui.set_max_width(400.0);
                 ui.label(RichText::new("Régler FEANOR pour cette machine ?").strong().color(theme::texte_fort()));

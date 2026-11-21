@@ -107,6 +107,27 @@ pub fn ago(secs: f64) -> String {
     }
 }
 
+/// Sous quelle clé la pile des notifications dit sa hauteur aux cartes du même coin.
+const HAUT_NOTIFICATIONS: &str = "notifications_haut";
+
+/// Où ancrer une carte du coin bas droit (la visite du premier jour, un conseil, l'offre du diagnostic) pour qu'elle ne recouvre pas
+/// les notifications : à sa place d'origine (120 points au-dessus du bas) tant qu'elles tiennent dessous, sinon juste au-dessus de leur
+/// pile. (Audit du 2026-11-21 : « Première fois sur FEANOR ? » se posait sur « Nouveau projet enregistré dans… », illisible.)
+pub(crate) fn au_dessus_des_notifications(ctx: &egui::Context) -> Vec2 {
+    let haut = ctx.data(|d| d.get_temp::<f32>(egui::Id::new(HAUT_NOTIFICATIONS))).unwrap_or(0.0);
+    Vec2::new(-16.0, -decalage_carte(haut))
+}
+
+/// La distance au bas de la fenêtre d'une carte du coin, pour une pile de notifications de cette hauteur (0 : pas de notification).
+pub(crate) fn decalage_carte(pile: f32) -> f32 {
+    const ORIGINE: f32 = 120.0;
+    if pile <= 0.0 {
+        ORIGINE
+    } else {
+        ORIGINE.max(36.0 + pile + 8.0)
+    }
+}
+
 impl App {
     /// Une fois par image : un message nouveau rejoint l'historique, et les importants deviennent
     /// des notifications.
@@ -179,7 +200,7 @@ impl App {
         if !self.toasts.is_empty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
             let mut closed = None;
-            egui::Area::new(egui::Id::new("notifications"))
+            let pile = egui::Area::new(egui::Id::new("notifications"))
                 .order(egui::Order::Foreground)
                 .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -36.0))
                 .show(ctx, |ui| {
@@ -198,9 +219,13 @@ impl App {
                         ui.add_space(4.0);
                     }
                 });
+            // La hauteur de la pile, pour les cartes du même coin (`au_dessus_des_notifications`).
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new(HAUT_NOTIFICATIONS), pile.response.rect.height()));
             if let Some(k) = closed {
                 self.toasts.remove(k);
             }
+        } else {
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new(HAUT_NOTIFICATIONS), 0.0_f32));
         }
         if !self.messages_window {
             return;

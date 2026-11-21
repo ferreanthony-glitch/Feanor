@@ -330,7 +330,7 @@ impl App {
                 if ok {
                     self.cur_frame = fin;
                     self.board_sel = vec![self.doc.panels[self.cur_panel].id];
-                    self.status = format!("Plans réunis : la vignette de droite est une image du {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+                    self.status = format!("Plans réunis : la vignette de droite est une image du {}.", crate::storyboard::panel_title_phrase(&self.doc, self.cur_panel));
                 } else {
                     self.status = "Ces deux plans ne sont pas dans la même séquence : impossible de les réunir.".into();
                 }

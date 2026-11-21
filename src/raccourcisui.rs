@@ -170,7 +170,10 @@ impl App {
                             crate::theme::avertir(ui, format!("Déjà pris par {} : il le perdra.", names.join(", ")));
                         }
                         ui.horizontal(|ui| {
-                            if ui.button("Remplacer").on_hover_text("Ce raccourci devient le seul de la commande.").clicked() {
+                            // (Audit du 2026-11-21 : « Remplacer » ne se dit que s'il y a quelque chose à remplacer, un raccourci de la
+                            // commande ou la touche d'une autre.)
+                            let verbe = if current.is_empty() && others.is_empty() { "Assigner" } else { "Remplacer" };
+                            if ui.button(verbe).on_hover_text("Ce raccourci devient le seul de la commande.").clicked() {
                                 choice = Some("remplacer");
                             }
                             if !current.is_empty() && ui.button("Ajouter").on_hover_text("Garder aussi le raccourci actuel.").clicked() {

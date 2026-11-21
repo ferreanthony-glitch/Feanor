@@ -154,7 +154,7 @@ impl App {
     /// Nouveau plan juste avant le plan courant, dans sa séquence ; il devient le plan courant.
     pub(crate) fn new_panel_before(&mut self) {
         if self.structure_op(|d, i| Some(d.add_scene_before(i))) {
-            let title = crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase();
+            let title = crate::storyboard::panel_title_phrase(&self.doc, self.cur_panel);
             self.status = format!("Nouveau {title}, avant l'ancien plan courant.");
         }
     }

@@ -154,9 +154,13 @@ impl NewDocDialog {
             ui.label("Dossier");
             ui.horizontal(|ui| {
                 let courant = self.folder.display().to_string();
-                let resp = egui::ComboBox::from_id_salt("dossier_nouveau_projet").selected_text(courant.as_str()).width(champ).show_ui(ui, |ui| {
+                // Un chemin long est abrégé par le milieu (audit du 2026-11-21 : sans cela la liste s'élargit, pousse « Parcourir… » hors du
+                // panneau et déborde sur les projets récents). Le chemin entier reste dans la bulle.
+                let place = ((champ - 28.0) / 6.6).floor().max(12.0) as usize;
+                let resp = egui::ComboBox::from_id_salt("dossier_nouveau_projet").selected_text(crate::nouveau::abrege_milieu(&courant, place)).width(champ).show_ui(ui, |ui| {
                     for d in cx.dossiers {
-                        if ui.selectable_label(*d == self.folder, d.display().to_string()).clicked() {
+                        let entier = d.display().to_string();
+                        if ui.selectable_label(*d == self.folder, crate::nouveau::abrege_milieu(&entier, place)).on_hover_text(entier.as_str()).clicked() {
                             self.folder = d.clone();
                         }
                     }

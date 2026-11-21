@@ -178,7 +178,7 @@ impl App {
 
     fn titre_court(&self, plan: u64) -> String {
         match self.doc.panels.iter().position(|p| p.id == plan) {
-            Some(i) => crate::storyboard::panel_title(&self.doc, i).to_lowercase(),
+            Some(i) => crate::storyboard::panel_title_phrase(&self.doc, i),
             None => "ce plan".into(),
         }
     }

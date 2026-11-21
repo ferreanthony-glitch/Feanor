@@ -254,3 +254,18 @@ fn the_new_project_gets_the_chosen_values() {
     assert_eq!(doc.frame, [MAX_PX, MIN_PX]);
     assert_eq!(doc.fps, 1);
 }
+
+#[test]
+fn a_long_folder_path_is_shortened_in_the_middle_and_a_short_one_is_kept() {
+    // Un chemin qui tient reste tel quel.
+    assert_eq!(abrege_milieu("C:\\Films", 40), "C:\\Films");
+    // Un chemin long garde son début et sa fin, « … » entre les deux, et tient dans la place donnée.
+    let long = "/Volumes/Serveur/Productions/2026/Série/Épisode 12/Storyboard/Travail/Anthony";
+    let court = abrege_milieu(long, 30);
+    assert_eq!(court.chars().count(), 30);
+    assert!(court.starts_with("/Volumes/"), "{court}");
+    assert!(court.ends_with("Travail/Anthony"), "{court}");
+    assert!(court.contains('…'));
+    // Les accents comptent pour un caractère : pas de coupure au milieu d'une lettre.
+    assert_eq!(abrege_milieu("ééééééééééééé", 7).chars().count(), 7);
+}

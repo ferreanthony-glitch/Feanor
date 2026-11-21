@@ -105,3 +105,18 @@ fn le_credit_de_kenney_est_dans_a_propos() {
     let source = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("aproposui.rs")).unwrap();
     assert!(source.contains("banque3d::CREDIT"));
 }
+
+#[test]
+fn every_model_of_the_bank_has_a_short_french_name_of_its_own() {
+    let modeles = banque3d::modeles();
+    assert_eq!(modeles.len(), banque3d::NOMS_FR.len(), "un modèle ajouté au catalogue reçoit son nom français");
+    let mut vus = std::collections::HashSet::new();
+    for m in modeles {
+        let fr = banque3d::NOMS_FR.iter().find(|(nom, _)| *nom == m.nom).map(|(_, fr)| *fr).unwrap_or_else(|| panic!("pas de nom français pour {}", m.nom));
+        assert_eq!(m.nom_lisible(), fr);
+        assert!(fr.chars().count() <= 18, "« {fr} » ne tient pas sous une vignette");
+        assert!(vus.insert(fr), "« {fr} » est donné deux fois");
+        // La recherche trouve le nom français comme le nom du fichier.
+        assert!(m.correspond(fr) && m.correspond(&m.nom), "{fr}");
+    }
+}
