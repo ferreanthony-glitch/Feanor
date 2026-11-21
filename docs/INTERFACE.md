@@ -19029,7 +19029,161 @@ Changés : les essais d'avant qui comptaient sur l'ancien défaut du bord (le d�
     larges montrent leur dessin et leur durée. Décocher.
 11. Fermer, rouvrir FEANOR : les boutons allumés le restent ; éteints, rien n'est écrit.
 
-## 207. Les clés regardées sur les captures : une clé vide n'affiche rien ; les deux boutons du stylet visibles ; une bulle d'une ligne ; le bord allumé plus lisible et pendant tout le geste ; Retour arrière supprime la clé (2026-11-21, branche `cles-retouches`, sur la partie 206)
+## 207. Vérification à l'écran : la corbeille, l'aplat, la colonne (2026-11-21, branche verif-corrections partie de main 3fda30a)
+
+Anthony a regardé FEANOR comme un storyboarder, sur une copie de bac à sable de main 3fda30a (numérotation des plans verrouillée, celle
+d'un projet neuf). Six défauts. **Format des projets inchangé (61)** : la corbeille a des champs facultatifs de plus (`origine`), qu'une
+version d'avant ignore et qu'une entrée d'avant n'a pas.
+
+### 207.1 Le plan rendu par la corbeille sous un autre numéro (D1, celui du PDF client)
+
+**Vu** : plans 1, 2, 3, 4 ; le 2 part à la corbeille (Édition > Supprimer), puis Fichier > Corbeille > Restaurer : il revient entre le 1
+et le 3, mais nommé « Plan 1A ». La barre d'état disait « « Plan 2 » restauré à sa place. », un « Nouveau plan » juste après devenait
+« Plan 1B », et le PDF imprimait « Séquence 1 — plan 1A ».
+
+**Cause** : le numéro d'un plan (au sens du découpage) est celui de sa scène (`Scene::number`), et la corbeille ne gardait que la case
+(`Panel`). À la restauration, `restaurer_entree` mettait la case dans une **scène neuve** (`new_scene`), sans numéro ; `assign_numbers` lui
+en donnait un entre ses voisins : 1A. Ce n'était pas voulu : la partie 104.3 dit « il garde son numéro si libre (sinon un neuf) ».
+
+**Corrigé** (`corbeille.rs`, `numerotation.rs`) :
+- Une entrée de plan garde son **origine** (`Origine` : la scène, son nom, son numéro verrouillé ; la séquence, son nom choisi, son numéro,
+  ses voisines). À la restauration : le reste du même plan est juste à côté (une case d'un plan de plusieurs cases) : elle le rejoint ;
+  sinon le plan revient sous sa scène, son nom, et **son numéro s'il n'est à aucun autre plan** (ni du film, ni annulé). Sinon un neuf,
+  comme avant, et la phrase dit le vrai nom : « « Plan 2 » restauré à sa place : son numéro est pris, il devient « Plan 1A ». » (en
+  numérotation suivie, un rang qui a changé : « … ; c'est maintenant « Plan 3 ». »).
+- **Un numéro de la corbeille n'est pas redonné** : `assign_numbers` le réserve, comme celui d'un plan annulé (`numeros_de_la_corbeille`).
+  Avant, le dernier plan supprimé, un plan neuf au bout du film reprenait son « 4 » ; il est maintenant « 4A », et le 4 revient avec son plan.
+- Après une réouverture, pareil (l'origine est dans `corbeille.json`).
+
+### 207.2 Le dernier plan d'une séquence supprimée revient ailleurs (D5)
+
+**Vu** : la Séquence 2 n'a que le plan 5 ; le supprimer retire la séquence ; Restaurer le mettait « à la fin de la séquence courante ».
+
+**Cause** : la séquence n'existait plus, et la corbeille ne savait ni son nom ni sa place.
+
+**Corrigé** : l'origine garde son nom choisi, son numéro verrouillé et ses séquences voisines. Restaurer la **recrée sous son numéro
+d'identifiant** (le même : les réglages qui y tiennent dans la séance, son décor 3D par exemple, la retrouvent), avec son nom et son numéro
+s'il est libre, **entre ses voisines** : « « Plan 5 » restauré avec sa séquence (« Poursuite »), à sa place dans le film. » Une seule étape
+d'annulation, séquence comprise. Une entrée d'avant (sans origine) recrée sa séquence au bout du film, sans nom (« … à la fin du film »).
+
+### 207.3 Un liseré de la couleur de l'aplat le long des traits ouverts (D2)
+
+**Vu** : un aplat rouge sur un calque vectoriel : les formes fermées se remplissent, mais chaque trait **ouvert** a un mince liseré rouge
+sur toute sa longueur, des deux côtés (le débord de 3 px). Invisible en blanc sur papier blanc.
+
+**Cause** (`fond::couverture_de_la_boite`) : la forme de l'aplat est le dedans (`!outside`) rongé de `trous − debord` ; or le dedans comprend
+les murs (le trait épaissi de `trous`, qui ferme les trous). Un trait ouvert était donc une forme mince, que le débord entourait. Rien
+dans ce document ne le voulait ; seul l'en-tête de `fond.rs` disait « plus un débord de `debord` pixels autour du trait », et un essai
+(`fond_tests::small_gaps_are_closed_big_ones_are_not`) disait d'un anneau ouvert « le trait garde son fond » : changé exprès.
+
+**Corrigé** : le **cœur** d'une forme est ce qui est à plus de `2 × trous` pixels du dehors ; un trait ouvert de moins de `2 × trous`
+pixels d'épaisseur n'en a pas. La forme d'avant ne reste qu'à moins de `2 × (trous + debord) + 1` pixels d'un cœur : une forme fermée a
+exactement la même forme qu'avant, coins compris (vérifié pixel pour pixel sur un carré, un rond et un triangle à 60°) ; un trait ouvert
+loin d'elle n'a plus rien ; un trait ouvert qui sort d'une forme garde son débord sur une vingtaine de pixels près d'elle.
+
+**Le message** « Aplat : 1 clé(s) retouchée(s) pendant le calcul n'ont pas été changées… » juste après le changement de couleur : **faux**,
+une course. Avec la portée « La clé » (celle d'origine), la forme de la clé est repeinte sur un fil de travail (`lancer_teinte`) ; un
+deuxième changement (le sélecteur repris, une couleur tapée) partait avant l'arrivée du premier : le premier était posé (la couleur
+**intermédiaire**), le second abandonné, et la barre d'état parlait d'une retouche qui n'avait pas eu lieu. Maintenant le dernier changement
+d'une clé remplace les précédents encore en route (ils ne sont pas posés, sans rien dire), et un changement repeint aussi la forme peinte
+aux couleurs que les changements d'avant y ont mises (sans cela, un deuxième changement de couleur de la même clé ne changeait rien).
+
+### 207.4 Les vignettes de la corbeille presque blanches (D3)
+
+**Cause** : la fenêtre faisait sa vignette elle-même, un échantillon par point de 96 × 54 sur **toute la feuille** (deux fois le cadre
+d'office) : un trait de 6 pixels sur 3840 × 2160 tombait entre les échantillons (0 point touché, mesuré).
+
+**Corrigé** : `corbeilleui::miniature` passe par le rendu des vignettes de la timeline (`render::thumbnail`) : la partie filmée, chaque
+pixel la moyenne exacte de ce qu'il couvre, à la densité de l'écran. La même image que la timeline, pixel pour pixel (essai), le trait
+lisible d'un bout à l'autre. Toutes les vignettes se font sur un autre fil (celles en mémoire aussi : quelques millisecondes chacune).
+
+### 207.5 La Scène coupée dans la colonne du Storyboard (D4)
+
+**Vu** (868 points de haut, 90 %) : Scène, Couleur, Propriétés et Historique : la deuxième ligne de calque de la Scène coupée à moitié
+par son bord du bas ; avec Préréglages en plus, la Scène réduite à sa barre et à une ligne, l'Historique à une étape, alors que la colonne
+défilait.
+
+**Ce qui est voulu, et gardé** : la Scène et l'Historique sont des listes. Partie 196.5, point 3 : « Elle ne rapetisse que si Propriétés
+passerait sous ses 120 points, et seulement de ce qui lui manque, jusqu'à son plancher » ; partie 197.1 : la Scène « commence à 230
+points (une liste) et cède comme une liste ». Le plancher d'une liste était 70 points : la Scène y perdait son arbre (sa barre en prend
+une quarantaine), l'Historique ses étapes (ses boutons et le trait en prennent une trentaine).
+
+**Corrigé** (`colonneui::colonne_voulue`) : la Scène dit la hauteur de son arbre, barre comprise (`scene::Arbre::barre`, mesurée à chaque
+image) : **quand il tient dans ses 230 points, elle la garde, comme un contenu** (la colonne défile plutôt) ; plus long, il cède comme une
+liste, jusqu'à sa barre et trois lignes. L'Historique cède jusqu'à ses boutons et trois étapes. **Le fil d'Ariane** passe à la ligne entre
+ses éléments, jamais au milieu de « Séquence 1 » : « › » est peint avec l'élément qui le suit, un élément plus large que la colonne
+est coupé par « … » (le nom entier dans la bulle).
+
+### 207.6 Échap ne fermait pas la Corbeille (D6)
+
+**Premier tour** : les fenêtres modales se ferment à Échap (`Modal::should_close`), la fenêtre « Exporter » et celle d'un export appellent
+aussi `exportui::echap_ferme` (qui laisse d'abord se fermer une liste déroulante ouverte). La Corbeille, une `egui::Window`, n'avait
+rien : elle fait pareil ; pendant une confirmation (« Supprimer… », « Vider… »), Échap l'abandonne d'abord.
+
+**Revu à l'écran** : le bloc du plan 5 (le dernier de la Séquence 2) choisi dans la timeline, Édition > Supprimer, Fichier > Corbeille >
+Restaurer (la séquence revient, la Corbeille est vide) : Échap, trois fois, ne fermait plus la fenêtre (plus tôt dans la séance, il la
+fermait). **La cause** n'était pas le bloc choisi ni « Tout désélectionner » (les raccourcis lisent Échap sans le prendre) : `echap_ferme`
+**prenait la touche puis ne fermait rien** quand egui croyait une liste déroulante ouverte (`any_popup_open`). Or une liste dont le
+champ a quitté l'écran (un champ de couleur d'une fenêtre fermée, d'un panneau replié, le choix de couleur d'un menu refermé) reste
+« ouverte » dans la mémoire d'egui : il ne la ferme, à Échap ou au clic dehors, que quand quelqu'un la peint. Plus aucun Échap ne
+fermait alors ni la Corbeille, ni l'Export (`Modal::should_close` attend lui aussi qu'aucune liste ne soit ouverte).
+
+**Corrigé** :
+- `echap_ferme` ne laisse Échap qu'à une liste **à l'écran** (`liste_a_l_ecran` : la zone qui porte son numéro est peinte à cette image
+  ou à la précédente), sans prendre la touche (egui la ferme). Une liste oubliée est fermée, et la fenêtre aussi.
+- La Corbeille prend Échap **avant les raccourcis** (`corbeille_echap`, à côté de `reglages_droit_echap`) : le premier Échap la ferme et
+  ne fait rien d'autre (le bloc et les clés choisis restent) ; ensuite Échap retrouve son usage. Une fenêtre modale par-dessus garde la
+  touche.
+- **Les Préférences ne se fermaient pas du tout à Échap** (seule la fenêtre « Exporter », dans le même fichier, le faisait) : elles le
+  font, par `echap_ferme`. Pendant l'attente d'une touche dans Raccourcis, Échap annule l'attente et rien d'autre (`capture_shortcut`
+  prend maintenant la touche).
+
+### 207.7 Les essais
+
+`corbeille_tests.rs` (7) : le numéro rendu dans la séance et après réouverture (et « Plan 2A » pour le plan neuf qui suit, le titre du
+PDF) ; le numéro pris (Renuméroter) : un neuf, et la phrase le dit ; le numéro de la corbeille pas redonné, une case rendue à son plan ;
+la séquence recréée entre ses voisines, nom et numéro, dans la séance et après réouverture, une étape d'annulation ; la vignette égale à
+celle de la timeline (zigzag de 6 px sur 3840 × 2160) ; Échap dans l'application entière ; Échap après la restauration du plan d'un bloc
+choisi, avec une liste oubliée : la Corbeille, « Exporter », la fenêtre d'un export et les Préférences se ferment au premier appui, le
+choix du bloc reste. `fond_tests.rs` (1, et 1 changé) : rien autour
+d'un trait ouvert, les formes fermées inchangées pixel pour pixel. `aplatsur_tests.rs` (1) : deux changements de couleur de suite, la
+dernière gagne, sans faux message, puis un troisième. `scene_tests.rs` (1, et 1 changé) : la Scène entière et l'Historique à trois étapes
+avec 4 et 5 panneaux à 1384 × 868 et 90 % (rouge avant : la ligne « Décor » coupée), le fil d'Ariane sur une ligne par élément.
+Changé exprès : `aplatperso_tests::the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the_panel` (fenêtre de
+900 points : la Scène, qui ne cède plus sous la hauteur de son arbre, laissait Propriétés à 120 points et la ligne de la portée sous
+son bord ; la Scène en est retirée, comme dans les autres essais de la pile). Suite entière : 5 193 réussis, 90 échecs, ceux de `main`
+(aucun de plus, aucun de moins) ; `suggestions_tests::a_provider_error_is_told_in_the_status_bar_and_the_cue_keeps_its_state` a échoué
+une fois sous la charge de la suite (un lecteur simulé sur un autre fil), passe seul et dans la suite refaite.
+
+### 207.8 Ce qui reste
+
+- **Rien regardé à l'écran après les corrections.**
+- **Le prix** : dans une fenêtre basse, la Scène entière laisse moins à Propriétés qu'avant (elle cédait jusqu'à 70 points).
+- Une petite forme fermée dont tout le dedans tient à moins de `2 × trous` pixels du dehors (un anneau de moins d'environ 12 pixels de
+  diamètre avec « Fermer les trous » à 6) n'a plus de cœur : elle n'a plus d'aplat. Un trait ouvert plus épais que `2 × trous` pixels
+  en garde un (il est lui-même une forme).
+- Une séquence recréée retrouve son nom et son numéro (et son identifiant). Ce qu'elle portait ailleurs (son décor 3D, ses versions
+  rangées, que `elaguer_variantes` retire avec elle) n'est pas dans la corbeille : **non vérifié**, dans la séance comme après une
+  réouverture ; elle revient sans doute sans ses versions rangées.
+- Une entrée d'avant cette partie n'a pas d'origine : numéro neuf, séquence recréée au bout du film.
+- Quand la colonne défile de toute façon, une liste plus longue que sa hauteur d'origine (Préréglages, une Scène longue, l'Historique)
+  rapetisse encore jusqu'à son plancher (partie 196.5) ; la garder entière serait une ligne dans `colonne::hauteurs` (ne céder que si
+  cela suffit à Propriétés), mais c'est changer la règle de la 196.5 : à décider avec Anthony.
+- Deux changements de couleur « La clé » rapides laissent une étape « Aplat : couleur » vide pour le premier (Ctrl+Z n'y défait rien).
+
+### 207.9 Comment Anthony teste (sur une copie de projet, numérotation verrouillée)
+
+1. Plans 1 à 4 ; supprime le 2, restaure-le : « Plan 2 », la phrase « restauré à sa place » ; un Nouveau plan après lui : « Plan 2A » ;
+   l'export PDF dit « Séquence 1 — plan 2 ». Puis supprime, enregistre, ferme, rouvre, restaure : pareil.
+2. Supprime le 2, Renuméroter, restaure : un numéro neuf, et la barre d'état le dit.
+3. Supprime le dernier plan d'une Séquence 2 nommée ; restaure : la séquence revient à sa place, son nom.
+4. Un aplat rouge : les traits ouverts sans liseré, les formes fermées avec leur débord ; change la couleur deux fois vite : pas de
+   message « retouchée(s) », la dernière couleur.
+5. Fichier > Corbeille : les vignettes lisibles comme dans la timeline ; Échap ferme la fenêtre.
+6. Colonne du Storyboard, + Panneau > Historique puis Préréglages (fenêtre de 868 de haut, 90 %) : la Scène entière, l'Historique avec
+   trois étapes, la colonne qui défile ; le fil d'Ariane passe à la ligne entre « Séquence 1 » et « Plan 1 ».
+
+## 208. Les clés regardées sur les captures : une clé vide n'affiche rien ; les deux boutons du stylet visibles ; une bulle d'une ligne ; le bord allumé plus lisible et pendant tout le geste ; Retour arrière supprime la clé (2026-11-21, branche `cles-retouches`, sur la partie 206)
 
 Les captures de la partie 206 (la timeline du Storyboard, le geste sur un bord de clé et sur la fin d'un plan, la timeline de
 l'Animation) ont montré des défauts. Anthony, en plus : « Plutôt que des rayures, une clé vide n'affiche rien, si ce n'est le gris du
@@ -19037,10 +19191,10 @@ fond de la timeline. » Puis : « corrige le reste », et : « Une clé vide n'e
 clé pleine. Étirer le temps ou pousser / être poussée par les clés précédentes et suivantes. » Code : `clesvue.rs`, `montagerows.rs`, `timeline.rs`, `handles.rs`, `bordscles.rs`,
 `rognageui.rs`, `barres.rs`, `choixtout.rs`, `clescommun.rs`, `app.rs`, `keymap.rs`, `keymap.toml`. Essais : `bordscles_tests.rs`. **Le format de projet ne change pas**, aucun réglage nouveau.
 
-### 207.1 Ce que faisait le logiciel avant (les essais rouges)
+### 208.1 Ce que faisait le logiciel avant (les essais rouges)
 
 Les essais ont été lancés d'abord sur le code de la partie 206 : **9 rouges sur 9** (ceux du point 7, sur les gestes, sont verts
-d'emblée : aucun geste ne traitait la clé vide à part, voir 207.2 bis). Point 8 : 5 rouges sur 5 (Retour arrière et Suppr
+d'emblée : aucun geste ne traitait la clé vide à part, voir 208.2 bis). Point 8 : 5 rouges sur 5 (Retour arrière et Suppr
 vidaient le dessin, aucune touche pour vider).
 
 - Une clé vide (un dessin sans trait, F4) était hachurée sur sa couleur de clé (Storyboard, montage) ou peinte en gris clair avec sa
@@ -19056,7 +19210,7 @@ vidaient le dessin, aucune touche pour vider).
   visible. Pendant le geste il s'éteignait, dans le Storyboard comme dans l'Animation (le fantôme et la bulle prenaient le relais).
 - Un calque d'effet n'a que des dessins vides : il fallait que ses clés restent visibles (essai ajouté pour ne pas le casser).
 
-### 207.2 Une clé vide n'affiche rien
+### 208.2 Une clé vide n'affiche rien
 
 Partout (timeline du Storyboard, montage, timeline de l'Animation) : une clé dont le dessin n'a aucun trait n'a ni couleur, ni
 hachures, ni pastille, ni miniature, ni nom, ni durée écrite, ni soulignement de la tête de lecture : on voit le gris du fond de la
@@ -19066,7 +19220,7 @@ blanc). **Pas sur un calque d'effet** (ses dessins sont tous vides, ses clés se
 des griffonnages (ils remplissent des zones) : `clesvue::cle_vide`. Une marque de couleur posée sur une clé vide ne se voit plus non
 plus.
 
-### 207.2 bis Une clé vide n'est vide qu'à l'affichage (point 7)
+### 208.2 bis Une clé vide n'est vide qu'à l'affichage (point 7)
 
 Pour tous les gestes, elle se comporte exactement comme une clé pleine. Vérifié dans le code : aucun geste ne regarde le contenu du
 dessin (le bord entre deux clés, la fin du plan, Maj, Ctrl, + et −, le choix, le glisser par le milieu travaillent sur les images du
@@ -19076,7 +19230,7 @@ suite et la fait pousser par la clé d'avant, la fin du plan raccourcit une dern
 proportion » (Maj) l'étire avec les autres, Ctrl + l'allonge et décale la suite, prise par son milieu elle se glisse ; dans la
 timeline du Storyboard ses deux bords prennent le pointeur (↔) et s'allument, et choisie elle a son cadre.
 
-### 207.3 Les deux boutons du stylet dans la barre, à la largeur d'origine
+### 208.3 Les deux boutons du stylet dans la barre, à la largeur d'origine
 
 La barre de lecture de la timeline du Storyboard range ses commandes par usage (partie 179) : les moins utilisées passent sous « ⋯ »
 quand la place manque. « Décaler la suite » et « Étirer en proportion » avaient le rang 20 : à 340 points, ils partaient sous « ⋯ ».
@@ -19089,7 +19243,7 @@ proportion », le menu Plans, « ⋯ » et la légende. « Nouveau plan » est s
 toujours sur la ligne « Plans » : aucun bouton n'est perdu, le menu Plans (plus utilisé) reste. Ils ne sont pas mis « en tête » (le
 groupe de la lecture, jamais sous « ⋯ ») : la largeur minimale de la colonne aurait grandi d'autant.
 
-### 207.3 bis Retour arrière et Suppr suppriment les clés choisies ; vider leur dessin : Alt+Retour arrière (point 8)
+### 208.3 bis Retour arrière et Suppr suppriment les clés choisies ; vider leur dessin : Alt+Retour arrière (point 8)
 
 Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac. On trouve un autre raccourci pour vider le dessin,
 Maj+Retour arrière par exemple. »
@@ -19109,11 +19263,11 @@ Maj+Retour arrière par exemple. »
 - Rien ne change pour les autres usages de Suppr (clés de caméra, d'effets, de position, d'opacité, bibliothèque, références,
   commentaires, sélection sur le dessin, champs de texte).
 
-### 207.4 La bulle du geste sur une ligne
+### 208.4 La bulle du geste sur une ligne
 
 `clesvue::bulle_du_geste` : le texte ne passe plus à la ligne (`Label::extend`), quelle que soit la largeur que la zone a gardée.
 
-### 207.5 La fin du plan : une seule bulle, les mots de l'Animation
+### 208.5 La fin du plan : une seule bulle, les mots de l'Animation
 
 Dans la timeline du Storyboard (et le montage, qui a le même geste) : plus de bande noire en haut pour la fin d'un plan ; la seule
 bulle est près du pointeur : « Durée du plan : 1s 16 (-8 i) », comme dans l'Animation (206.6 E). La barre d'état garde sa phrase
@@ -19121,7 +19275,7 @@ bulle est près du pointeur : « Durée du plan : 1s 16 (-8 i) », comme dans l'
 en haut (ils n'ont pas de bulle). Avec « Étirer en proportion » allumé (ou Maj tenue), la bulle ajoute « · toutes les clés en
 proportion », dans les trois timelines (`clesvue::bulle_fin_du_plan`).
 
-### 207.6 Le bord allumé : plus lisible, et pendant tout le geste
+### 208.6 Le bord allumé : plus lisible, et pendant tout le geste
 
 Le bord allumé est une bande de 4 points du contour du thème (blanc en thème sombre) presque opaque, bordée d'un liseré sombre de
 chaque côté (`clesvue::peindre_bord_allume`) ; les clés gardent leurs couleurs. Il s'allume au survol et **reste allumé pendant tout le
@@ -19129,9 +19283,9 @@ geste, à la place de l'instant du bord**, dans la timeline du Storyboard (et le
 (`HandleDrag::bord_tenu`, posé par `tirer_bord_de_cle`). Dans le Storyboard, les bords de début et de fin d'un calque (sa barre)
 prennent la même bande.
 
-### 207.7 Essais
+### 208.7 Essais
 
-`src/bordscles_tests.rs`, section « Partie 207 » : la clé vide sans rien dedans dans la timeline du Storyboard (par la vraie fenêtre
+`src/bordscles_tests.rs`, section « Partie 208 » : la clé vide sans rien dedans dans la timeline du Storyboard (par la vraie fenêtre
 sans écran ; la coupure de la clé suivante reste) et dans celle de l'Animation (miniatures allumées), les clés d'un calque d'effet
 gardées, les deux boutons hors de « ⋯ » à la largeur d'origine (340), la bulle sur une ligne quand son texte s'allonge, la fin du plan
 du Storyboard (une seule bulle, « Durée du plan : … (-4 i) », la barre d'état gardée, plus de texte peint en haut), la bulle qui dit
@@ -19147,14 +19301,14 @@ n'empêche pas la suppression ; dans les Vignettes et sans clé choisie, rien n'
 Les captures (`FEANOR_BORDSCLES_PNG`) sont prises à la largeur d'origine de la colonne, avec une capture de plus : le geste sur le bord
 d'un dessin dans l'Animation.
 
-### 207.8 Ce qui n'est pas fait, à voir
+### 208.8 Ce qui n'est pas fait, à voir
 
 - Une marque de couleur sur une clé vide ne se voit plus.
 - « Vider le dessin des clés » est sur Alt+Retour arrière / Alt+Suppr, pas sur Maj+Retour arrière (pris) : à confirmer par Anthony.
 - À la largeur d'origine, « Nouveau plan » n'est plus dans la barre de lecture (il est sur la ligne « Plans », juste dessous, et sous
   « ⋯ ») ; il y revient dès que la colonne est un peu plus large.
 
-### 207.9 À essayer (Anthony, sur une copie de projet)
+### 208.9 À essayer (Anthony, sur une copie de projet)
 
 1. Un calque avec une clé vide (F4 sans dessiner) : dans la timeline du Storyboard, dans le montage et dans celle de l'Animation, à sa
    place on voit le gris du fond de la ligne, entre deux traits de coupure (à son début et au début de la clé suivante).

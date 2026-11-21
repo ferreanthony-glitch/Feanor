@@ -53,10 +53,12 @@ fn small_gaps_are_closed_big_ones_are_not() {
     let r = FondReglages::default();
     // Un trou de 8 px (moins de 2 × 6) : fermé.
     assert_eq!(at(&silhouette(&ring(8.0), &r), 100, 100), 255);
-    // Un trou de 40 px : le fond ne couvre que le trait et son débord.
+    // Un trou de 40 px : le dedans fuit. Partie 207 : le trait, devenu ouvert, n'enferme plus rien ; il n'a plus ni fond ni débord
+    // (avant : « le trait garde son fond », un liseré de la couleur de l'aplat le long du trait).
     let open = silhouette(&ring(40.0), &r);
     assert_eq!(at(&open, 100, 100), 0, "le dedans fuit par le trou");
-    assert_eq!(at(&open, 100, 50), 255, "le trait garde son fond");
+    assert_eq!(at(&open, 100, 50), 0, "le trait ouvert n'a pas d'aplat");
+    assert_eq!(at(&open, 100, 54), 0, "ni de débord");
     // Plus de fermeture : 2 × 25 > 40.
     let wide = silhouette(&ring(40.0), &FondReglages { trous: 25, ..r });
     assert_eq!(at(&wide, 100, 100), 255);
@@ -364,4 +366,60 @@ fn a_line_leaving_the_sheet_gets_its_shape_and_its_fond_outside_too() {
     for (x, y) in [(-20, 100), (20, 100), (-30, 100), (30, 100), (-300, 100)] {
         assert_eq!(live.get_i(x, y), whole.get_i(x, y), "({x}, {y})");
     }
+}
+/// Partie 207 : un trait ouvert, qui n'enferme rien, n'a ni aplat ni débord ; le débord d'une forme fermée est entier, coins compris ; un
+/// trait ouvert qui sort d'une forme ne garde le débord que tout près d'elle.
+#[test]
+fn an_open_line_gets_no_aplat_and_no_halo_but_closed_shapes_keep_their_margin() {
+    let r = FondReglages::default();
+    // Un zigzag de 6 px d'épaisseur, ouvert.
+    let zigzag = line(200, 200, |x, y| {
+        let creneau = 20.0 - ((x % 40.0) - 20.0).abs();
+        (y - 100.0 - creneau).abs() < 3.0 && (20.0..180.0).contains(&x)
+    });
+    assert!(silhouette(&zigzag, &r).iter().all(|&c| c == 0), "rien autour d'un trait ouvert");
+    // Un carré fermé (trait de 3 px, coins droits) et un trait ouvert qui en sort sur 80 px, vers la droite.
+    let carre = line(200, 200, |x, y| {
+        let bord = |v: f32, a: f32| (v - a).abs() < 1.5;
+        let dans = |v: f32| (40.0..=100.0).contains(&v);
+        ((bord(x, 40.0) || bord(x, 100.0)) && dans(y)) || ((bord(y, 40.0) || bord(y, 100.0)) && dans(x)) || (bord(y, 70.0) && (100.0..=180.0).contains(&x))
+    });
+    let c = silhouette(&carre, &r);
+    assert_eq!(at(&c, 70, 70), 255, "le dedans");
+    assert_eq!(at(&c, 103, 50), 255, "le débord d'un côté");
+    assert_eq!(at(&c, 101, 101), 255, "le débord au coin");
+    // Une forme fermée seule (le carré, un rond, un triangle aigu) : exactement la forme d'avant, pixel pour pixel, coins compris.
+    let avant = |l: &Raster| {
+        let g = crate::fond::geometrie(l, &r).unwrap();
+        let d = edt(&g.outside, g.bw, g.bh);
+        let mut out = vec![0u8; l.width * l.height];
+        for y in 0..g.bh {
+            for x in 0..g.bw {
+                let k = y * g.bw + x;
+                let c = if g.outside[k] { 0.0 } else { (d[k].sqrt() - (r.trous - r.debord) as f64).clamp(0.0, 1.0) };
+                out[(g.by0 + y) * l.width + g.bx0 + x] = (c * 255.0).round() as u8;
+            }
+        }
+        out
+    };
+    let seul = line(200, 200, |x, y| {
+        let bord = |v: f32, a: f32| (v - a).abs() < 1.5;
+        let dans = |v: f32| (40.0..=100.0).contains(&v);
+        ((bord(x, 40.0) || bord(x, 100.0)) && dans(y)) || ((bord(y, 40.0) || bord(y, 100.0)) && dans(x))
+    });
+    let triangle = line(200, 200, |x, y| {
+        // Un triangle à la pointe de 60° environ : trois côtés de 3 px.
+        let cote = |ax: f32, ay: f32, bx: f32, by: f32| {
+            let (dx, dy) = (bx - ax, by - ay);
+            let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+            ((x - ax - t * dx).powi(2) + (y - ay - t * dy).powi(2)).sqrt() < 1.5
+        };
+        cote(100.0, 20.0, 50.0, 110.0) || cote(50.0, 110.0, 150.0, 110.0) || cote(150.0, 110.0, 100.0, 20.0)
+    });
+    for (nom, l) in [("carré", seul), ("rond", ring(0.0)), ("triangle", triangle)] {
+        assert!(silhouette(&l, &r) == avant(&l), "{nom} : la forme d'une forme fermée ne change pas");
+    }
+    assert_eq!(at(&c, 160, 73), 0, "loin de la forme, le trait ouvert n'a pas de liseré");
+    assert_eq!(at(&c, 160, 70), 0);
+    assert!(at(&c, 104, 73) > 0, "tout près d'elle, il garde le débord de la forme");
 }

@@ -391,7 +391,7 @@ fn each_key_starts_with_a_dark_cut_and_the_key_under_the_playhead_is_underlined(
     let lignes = segments(&s);
     assert!(lignes.iter().any(|p| (p[0].x - p[1].x).abs() < 0.01 && (p[0].x - seg.left()).abs() < 1.5), "{lignes:?}");
     assert_eq!(lignes.len(), 1, "un seul trait : la coupure");
-    // (F, la clé vide : partie 207, elle n'affiche rien, la timeline ne l'habille pas ; plus de hachures.)
+    // (F, la clé vide : partie 208, elle n'affiche rien, la timeline ne l'habille pas ; plus de hachures.)
     // G : la tête de lecture dans la clé : un soulignement en bas ; ailleurs, rien.
     let souligne = |s: &[egui::Shape]| s.iter().any(|f| matches!(f, egui::Shape::Rect(r) if (r.rect.bottom() - seg.bottom()).abs() < 0.01 && r.rect.height() <= crate::clesvue::SOULIGNE_H + 0.01));
     assert!(souligne(&formes_de(seg, 0, 12, false, Some(5), false, false).0));
@@ -445,7 +445,7 @@ fn while_dragging_a_cut_the_old_place_is_a_dotted_ghost_and_a_bubble_says_the_ne
 
 #[test]
 fn the_storyboard_timeline_paints_cuts_and_the_bubble_through_the_real_window() {
-    // (Des dessins avec un trait : depuis la partie 207, une clé vide n'affiche rien, ni sa durée.)
+    // (Des dessins avec un trait : depuis la partie 208, une clé vide n'affiche rien, ni sa durée.)
     let mut doc = doc_deux_calques();
     let cels: Vec<CelId> = doc.panels[0].layers.iter().flat_map(|l| l.frames.iter().flatten().copied()).collect();
     for c in cels {
@@ -685,7 +685,7 @@ fn trouver_le_bord(b: &mut Banc, x: f32) -> egui::Pos2 {
 
 /// (Pour regarder : `FEANOR_BORDSCLES_PNG=<dossier>` écrit les écrans de la partie 206 : la timeline du Storyboard au repos, le
 /// survol d'un bord de clé, le geste sur ce bord, le geste sur la fin d'un plan sans touche et en proportion, les options A et C, la
-/// timeline de l'Animation ; partie 207 : la colonne de gauche à sa largeur d'origine, et dans l'Animation le survol puis le geste sur
+/// timeline de l'Animation ; partie 208 : la colonne de gauche à sa largeur d'origine, et dans l'Animation le survol puis le geste sur
 /// le bord droit d'un dessin. Chaque écran entier, et la timeline recadrée, à taille réelle.)
 #[test]
 fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
@@ -699,7 +699,7 @@ fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
     let mut b = crate::perf_tests::banc_taille(doc_des_captures(), true, 1600, 1000);
     b.app.set_espace(Espace::Storyboard);
     b.app.settings.storyboard_calques_replies = false;
-    // (Partie 207 : la colonne de gauche à sa largeur d'origine ; la barre de lecture y montre « Décaler la suite » et « Étirer en
+    // (Partie 208 : la colonne de gauche à sa largeur d'origine ; la barre de lecture y montre « Décaler la suite » et « Étirer en
     // proportion ».)
     b.app.montage_zoom = 8.0;
     // La tête de lecture au milieu de la clé 14-26 de Perso, plan 1.
@@ -783,7 +783,7 @@ fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
         png(&dir, "g-animation-geste-duree-timeline.png", &z, zw, zh);
         echap_et_lacher(&mut b, q + vec2(-60.0, 0.0));
     }
-    // h) Partie 207 : le bord droit de la clé 8-14 de Perso dans l'Animation, survolé, puis tiré de 3 images (pas lâché).
+    // h) Partie 208 : le bord droit de la clé 8-14 de Perso dans l'Animation, survolé, puis tiré de 3 images (pas lâché).
     b.chauffer(3);
     if let (Some((gauche, cell)), Some((_, haut, bas))) =
         (crate::timeline::GRILLE_PEINTE.with(|g| g.get()), crate::timeline::LIGNES_PEINTES.with(|l| l.borrow().1.iter().copied().find(|l| l.0 == 1)))
@@ -803,7 +803,7 @@ fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
         png(&dir, "h-animation-geste-du-bord-timeline.png", &z, zw, zh);
         echap_et_lacher(&mut b, p + vec2(3.0 * cell, 0.0));
     }
-    // i) Partie 207, point 7 : la clé vide (26-32 de Perso) choisie dans la timeline du Storyboard : son cadre de choix, ses deux
+    // i) Partie 208, point 7 : la clé vide (26-32 de Perso) choisie dans la timeline du Storyboard : son cadre de choix, ses deux
     // coupures.
     b.app.set_espace(Espace::Storyboard);
     b.app.montage_zoom = 8.0;
@@ -814,7 +814,7 @@ fn ecrire_les_ecrans_des_bords_des_cles_en_png() {
     ecrire(&b, "i-cle-vide-choisie");
 }
 
-// ------------------------------------------------------------------ Partie 207 : les retouches vues sur les captures
+// ------------------------------------------------------------------ Partie 208 : les retouches vues sur les captures
 
 /// Toutes les formes d'une liste, celles des groupes (`Shape::Vec`) comprises.
 fn a_plat(formes: &[egui::epaint::ClippedShape]) -> Vec<egui::Shape> {
@@ -902,7 +902,7 @@ fn an_empty_key_shows_nothing_but_the_grey_of_the_storyboard_timeline() {
     let zone = egui::Rect::from_min_max(egui::pos2(x0 + 26.0 * ppf, pleine.top()), egui::pos2(x0 + 32.0 * ppf - 1.0, pleine.bottom()));
     // (Le trait de coupure déborde d'un demi-trait en haut et en bas.)
     let dedans = formes_dans(&b.formes, zone.expand2(egui::vec2(0.0, crate::clesvue::COUPURE_W)));
-    // Rien que la coupure à son début (partie 207, point 7 : ses deux limites restent lisibles).
+    // Rien que la coupure à son début (partie 208, point 7 : ses deux limites restent lisibles).
     assert!(seule_la_coupure(&dedans, x0 + 26.0 * ppf + crate::clesvue::COUPURE_W * 0.5), "rien dans la clé vide que sa coupure : {dedans:?}");
     // Le trait de coupure au début de la clé suivante reste.
     let x = x0 + 32.0 * ppf + crate::clesvue::COUPURE_W * 0.5;
@@ -1087,7 +1087,7 @@ fn the_lit_edge_stays_lit_during_the_whole_gesture_in_the_animation_timeline() {
     echap_et_lacher(&mut b, p + egui::vec2(3.0 * cell, 0.0));
 }
 
-// ------------------------------------------------------------------ Partie 207, point 7 : une clé vide n'est vide qu'à l'affichage
+// ------------------------------------------------------------------ Partie 208, point 7 : une clé vide n'est vide qu'à l'affichage
 
 #[test]
 fn an_empty_chosen_key_shows_the_same_selection_frame_as_the_others() {
@@ -1176,7 +1176,7 @@ fn the_edges_of_an_empty_key_are_taken_by_the_pointer_in_the_storyboard_timeline
     }
 }
 
-// ------------------------------------------------------------------ Partie 207, point 8 : Retour arrière supprime la clé
+// ------------------------------------------------------------------ Partie 208, point 8 : Retour arrière supprime la clé
 
 #[test]
 fn backspace_and_delete_remove_the_chosen_keys_and_their_neighbours_fill_the_place() {

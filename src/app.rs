@@ -4890,7 +4890,7 @@ impl App {
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
             // Suppr et Retour arrière sur les clés choisies (la timeline ou le montage a la main, rien n'est choisi sur le dessin) : les
-            // clés sont supprimées, celle d'avant prend leur place (partie 207, Anthony : « Retour arrière supprime la clé car pas de
+            // clés sont supprimées, celle d'avant prend leur place (partie 208, Anthony : « Retour arrière supprime la clé car pas de
             // Suppr sur Mac »). Vider leur dessin, les clés restant : `cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr
             // (`choixtout.rs`).
             "edition.supprimer" if self.suppr_vise_les_cles() => self.supprimer_cles_choisies(),
@@ -5973,6 +5973,8 @@ impl App {
         self.anneau_echap(ctx);
         // Et pour une note de friction en cours (`frictionui.rs`).
         self.friction_echap(ctx);
+        // Et la Corbeille ouverte (partie 207, `corbeilleui.rs`) : elle se ferme d'abord.
+        self.corbeille_echap(ctx);
         // Le compteur d'usage : l'heure de cette image, les clics d'icônes de la précédente, l'écriture au repos (`usageui.rs`).
         self.usage_suivre(ctx);
         self.handle_shortcuts(ctx);

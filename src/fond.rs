@@ -5,7 +5,8 @@
 //!
 //! La forme du fond est déduite du trait, à chaque changement : tout ce que le trait enferme (les
 //! trous du trait jusqu'à `2 × trous` pixels sont fermés), plus un débord de `debord` pixels autour
-//! du trait ; une seule forme globale, au bord adouci. Ce qu'on peint dans le fond (strate Fond)
+//! du trait de ces formes ; une seule forme globale, au bord adouci. Un trait ouvert, qui n'enferme rien, n'a ni
+//! aplat ni débord (partie 207 : il était entouré d'un liseré de la couleur de l'aplat). Ce qu'on peint dans le fond (strate Fond)
 //! reste dans cette forme et passe sous le trait.
 
 use eframe::egui::Color32;
@@ -270,21 +271,47 @@ pub(crate) fn geometrie_dans(line: &Raster, r: &FondReglages, monde: bool) -> Op
 }
 
 /// La couverture (0 à 255) de chaque pixel d'un rectangle de travail `bw × bh` dont `outside` dit le dehors.
+///
+/// Partie 207 : **le débord ne prolonge que les formes qui existent**. Le dedans (`!outside`) comprend aussi le trait épaissi
+/// de `trous` (les murs) : un trait ouvert, qui n'enferme rien, était donc une « forme » mince, que le débord entourait sur
+/// toute sa longueur (un liseré de la couleur de l'aplat des deux côtés du trait, invisible en blanc sur papier blanc). Le
+/// **cœur** d'une forme est ce qui est à plus de `2 × trous` pixels du dehors (`coeur_de_la_forme`) : un trait ouvert de moins
+/// de `2 × trous` pixels d'épaisseur n'en a pas ; une forme fermée, si (son intérieur). La couverture d'avant ne reste qu'à
+/// moins de `2 × (trous' + debord) + 1` pixels d'un cœur (`trous'` : l'écart entre le bord du cœur et le trait) : tout le
+/// débord d'une forme fermée, coins compris, rien autour d'un trait ouvert loin d'elle ; un trait ouvert qui sort d'une forme
+/// garde le débord sur ses premiers pixels (une vingtaine).
 fn couverture_de_la_boite(outside: &[bool], bw: usize, bh: usize, r: &FondReglages) -> Vec<u8> {
     let trous = r.trous as f64;
     let debord = r.debord as f64;
+    let d_out = edt(outside, bw, bh);
+    // Le cœur des formes : rien, aucun aplat (seulement des traits ouverts).
+    let seuil = coeur_de_la_forme(r);
+    let coeur: Vec<bool> = d_out.iter().map(|&d| d > seuil * seuil).collect();
+    if !coeur.iter().any(|&c| c) {
+        return vec![0; bw * bh];
+    }
     // La forme fermée, rendue à sa vraie taille : rongée de `trous - debord` (ou agrandie si le
     // débord est plus grand), au bord adouci d'un pixel.
     let grow = debord - trous;
     let cover: Vec<f64> = if grow <= 0.0 {
-        let d_out = edt(outside, bw, bh);
         d_out.iter().zip(outside).map(|(&d, &o)| if o { 0.0 } else { (d.sqrt() - (-grow)).clamp(0.0, 1.0) }).collect()
     } else {
         let inside: Vec<bool> = outside.iter().map(|&o| !o).collect();
         let d_in = edt(&inside, bw, bh);
         d_in.iter().map(|&d| (grow + 1.0 - d.sqrt()).clamp(0.0, 1.0)).collect()
     };
-    cover.iter().map(|&c| (c * 255.0).round() as u8).collect()
+    // Loin de tout cœur : le débord d'un trait ouvert, qui part (au bord adouci d'un pixel). Le double de l'écart entre le bord du
+    // cœur et celui de la forme : un coin aigu de la forme (jusqu'à 60°) garde tout son débord, son cœur y étant plus en retrait.
+    let portee = 2.0 * (seuil - trous + debord) + 1.0;
+    let d_coeur = edt(&coeur, bw, bh);
+    cover.iter().zip(&d_coeur).map(|(&c, &d)| (c * (portee + 1.0 - d.sqrt()).clamp(0.0, 1.0) * 255.0).round() as u8).collect()
+}
+
+/// Partie 207 : la distance au dehors (pixels) au-delà de laquelle un pixel est le cœur d'une forme (`couverture_de_la_boite`) :
+/// `2 × trous`, deux pixels de plus au moins (fermer les trous à 0 : un trait de moins de 4 pixels n'a pas de cœur).
+fn coeur_de_la_forme(r: &FondReglages) -> f64 {
+    let trous = r.trous as f64;
+    trous + trous.max(2.0)
 }
 
 /// La forme du fond d'après le trait `line` : une couverture de 0 à 255 par pixel du dessin

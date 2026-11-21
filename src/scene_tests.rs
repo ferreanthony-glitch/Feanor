@@ -171,7 +171,8 @@ fn the_three_roots_show_the_plan_the_sequence_or_the_film_with_their_breadcrumb(
         assert_eq!(vus::ou(&ici(&format!("Depuis : {}", r.nom()))).len(), 1, "{r:?}");
     }
     let t = mots_dans(&b, Rect::EVERYTHING);
-    assert!(t.iter().any(|x| *x == f[2]) && t.iter().any(|x| x == "›"), "le fil d'Ariane est peint : {f:?}");
+    // (Partie 207 : « › » est peint avec l'élément qui le suit, pour qu'ils passent à la ligne ensemble.)
+    assert!(t.iter().any(|x| *x == format!("› {}", f[2])) && t.iter().any(|x| *x == format!("› {}", f[1])), "le fil d'Ariane est peint : {f:?} {t:?}");
     // Séquence : les deux plans de la séquence ; le courant déplié jusqu'à ses calques, l'autre replié.
     clic(&mut b, vus::ou(&ici("Depuis : Séquence"))[0].center(), Modifiers::NONE);
     assert_eq!(b.app.settings.scene.racine, Racine::Sequence, "le clic choisit la racine");
@@ -430,4 +431,66 @@ fn the_root_and_the_folds_are_kept_in_the_settings() {
     let mut b = banc_dans(film(), Espace::Storyboard);
     clic(&mut b, vus::ou(&ici("Depuis : Séquence"))[0].center(), Modifiers::NONE);
     assert_eq!(crate::settings::Settings::load().scene.racine, Racine::Sequence);
+}
+
+// ------------------------------------------------------------------------------------------------ partie 207 : la Scène entière
+
+/// Le corps du panneau `k` de la pile, à l'écran (sa tranche sans l'en-tête ni le bord du bas).
+fn corps_de(b: &Banc, k: usize) -> Rect {
+    let (haut, bas) = b.app.colonne_etat.tranches[k];
+    let bord = if Some(k) == b.app.colonne.qui_grandit() { 0.0 } else { colonne::BORD };
+    let zone = b.app.colonne_etat.zone.expect("la colonne");
+    Rect::from_min_max(pos2(zone.left(), haut + colonne::ENTETE), pos2(zone.right(), bas - bord))
+}
+
+/// Partie 207 (vu à l'écran, 868 points de haut à 90 %) : avec l'Historique, puis les Préréglages, ajoutés à la pile d'origine du
+/// Storyboard (Scène, Couleur, Propriétés), la Scène était coupée (sa deuxième ligne de calque à moitié), puis réduite à sa barre et à
+/// une ligne ; l'Historique à une étape. La Scène garde maintenant la hauteur de son arbre quand il tient dans sa hauteur d'origine,
+/// l'Historique ses boutons et trois étapes ; et le fil d'Ariane passe à la ligne entre ses éléments, jamais au milieu de « Séquence 1 ».
+#[test]
+fn the_scene_panel_keeps_its_tree_whole_and_history_three_steps_in_a_full_storyboard_column() {
+    let mut doc = Document::with_frame(64, 48, 24);
+    doc.add_scene_after(0);
+    for p in &mut doc.panels {
+        p.layers = vec![Layer::new("Dessin", LayerKind::Vector), Layer::new("Décor", LayerKind::Vector)];
+        p.set_length(24);
+    }
+    let mut b = banc_taille(doc, false, 1384, 868);
+    b.app.set_espace(Espace::Storyboard);
+    b.app.settings.echelle = 90;
+    b.garder_formes = true;
+    (b.app.cur_panel, b.app.cur_layer) = (0, 0);
+    b.chauffer(6);
+    assert_eq!(b.app.colonne.panneaux[0].panneaux, vec![Pane::Scene], "la pile d'origine, la Scène en haut");
+    for ajout in [Pane::History, Pane::Prereglages] {
+        b.app.colonne.ajouter(ajout);
+        b.chauffer(10);
+        assert!(b.app.colonne.panneaux.iter().all(|p| !p.replie), "tous ouverts");
+        let scene = corps_de(&b, b.app.colonne.rang_de(Pane::Scene).unwrap());
+        let l = lignes();
+        assert!(l.len() >= 3, "{l:?}");
+        for (q, r) in &l {
+            assert!(r.bottom() <= scene.bottom() + 0.5, "avec {ajout:?} : la ligne {q:?} ({r:?}) coupée par le bas de la Scène ({scene:?})");
+        }
+        let contenu = b.app.scene_arbre.barre + b.app.scene_arbre.hauteur;
+        assert!(scene.height() >= contenu, "avec {ajout:?} : la Scène ({}) garde tout son arbre ({contenu})", scene.height());
+        let histo = corps_de(&b, b.app.colonne.rang_de(Pane::History).unwrap());
+        assert!(histo.height() >= 4.0 * 22.0, "avec {ajout:?} : l'Historique garde ses boutons et trois étapes : {}", histo.height());
+    }
+    // Le fil d'Ariane : chacun de ses éléments sur une seule ligne.
+    let mut vus = 0;
+    fn chercher(s: &Shape, vus: &mut usize) {
+        match s {
+            Shape::Text(t) if t.galley.text().starts_with("› ") => {
+                *vus += 1;
+                assert_eq!(t.galley.rows.len(), 1, "« {} » coupé en {} lignes", t.galley.text(), t.galley.rows.len());
+            }
+            Shape::Vec(v) => v.iter().for_each(|s| chercher(s, vus)),
+            _ => {}
+        }
+    }
+    for s in &b.formes {
+        chercher(&s.shape, &mut vus);
+    }
+    assert_eq!(vus, 2, "« › Séquence 1 » et « › Plan 1 » sont peints");
 }

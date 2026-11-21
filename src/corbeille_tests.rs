@@ -11,6 +11,7 @@ use crate::document::Document;
 use crate::montage_sans_casse_tests::{annuler, appli, film_en_empreintes, inventaire, NOM};
 use crate::project::{self, Reuse};
 use crate::rognage::Rogner;
+use crate::bulles::vus;
 
 fn dossier(nom: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("shot-corbeille-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
@@ -575,4 +576,246 @@ fn the_window_and_a_restore_never_freeze_the_interface_thread() {
         app2.corbeille_sonder();
     }
     assert_eq!(app2.doc.corbeille.len(), 99);
+}
+// ------------------------------------------------------------------ partie 207 : le numéro et la séquence d'un plan restauré
+
+fn noms_des_plans(app: &App) -> Vec<String> {
+    (0..app.doc.panels.len()).map(|i| crate::storyboard::panel_title(&app.doc, i)).collect()
+}
+
+fn entree_du_plan(app: &App, plan: u64) -> u64 {
+    app.doc.corbeille.entrees.iter().find(|e| e.plan == plan).expect("le plan est dans la corbeille").id
+}
+
+#[test]
+fn a_restored_plan_gets_its_locked_number_back_in_the_session_and_after_reopening() {
+    for rouvrir in [false, true] {
+        let nom = if rouvrir { "numero-rouvert" } else { "numero" };
+        let mut app = appli(nom);
+        app.doc.lock_numbering();
+        let ids = ids_plans(&app);
+        app.delete_panels(&[ids[1]]);
+        assert_eq!(noms_des_plans(&app), ["Plan 1", "Plan 3", "Plan 4"], "un trou : les autres gardent leur numéro");
+        if rouvrir {
+            let d = dossier(nom);
+            let m = manifeste(&d);
+            enregistrer(&app.doc, &m);
+            app = rouvert(&m, nom);
+            assert!(app.doc.numbering_locked);
+        }
+        let e = entree_du_plan(&app, ids[1]);
+        restaurer(&mut app, e);
+        assert_eq!(noms_des_plans(&app), ["Plan 1", "Plan 2", "Plan 3", "Plan 4"], "il revient sous son numéro (rouvert : {rouvrir})");
+        assert_eq!(app.status, "« Plan 2 » restauré à sa place.", "la phrase dit le vrai nom");
+        assert_eq!(crate::storyboard::panel_long_title(&app.doc, 1), "Séquence 1 — plan 2", "ce qu'imprime le PDF");
+        // Un plan neuf juste après lui : la règle d'insertion, depuis son numéro.
+        let neuf = app.doc.add_scene_after(1);
+        assert_eq!(crate::storyboard::panel_title(&app.doc, neuf), "Plan 2A");
+    }
+}
+
+#[test]
+fn a_restored_plan_whose_number_was_given_away_gets_a_new_one_and_the_message_says_so() {
+    let mut app = appli("numero-pris");
+    app.doc.lock_numbering();
+    let ids = ids_plans(&app);
+    app.delete_panels(&[ids[1]]);
+    // « Renuméroter » (une remise à zéro voulue) donne le 2 au plan qui était le 3.
+    app.doc.renumber();
+    assert_eq!(noms_des_plans(&app), ["Plan 1", "Plan 2", "Plan 3"]);
+    let e = entree_du_plan(&app, ids[1]);
+        restaurer(&mut app, e);
+    let noms = noms_des_plans(&app);
+    assert_eq!(noms[1], "Plan 1A", "un numéro neuf, jamais celui d'un autre plan : {noms:?}");
+    assert_eq!(&noms[2..], ["Plan 2", "Plan 3"], "les autres gardent le leur");
+    assert_eq!(app.status, "« Plan 2 » restauré à sa place : son numéro est pris, il devient « Plan 1A ».");
+}
+
+#[test]
+fn the_number_of_a_plan_in_the_bin_is_not_given_to_a_new_plan() {
+    let mut app = appli("numero-reserve");
+    app.doc.lock_numbering();
+    let ids = ids_plans(&app);
+    // Le dernier plan part : un plan neuf au bout du film aurait reçu « 4 », le numéro de celui de la corbeille.
+    app.delete_panels(&[ids[3]]);
+    let neuf = app.doc.add_scene_after(2);
+    assert_eq!(crate::storyboard::panel_title(&app.doc, neuf), "Plan 4A");
+    let e = entree_du_plan(&app, ids[3]);
+        restaurer(&mut app, e);
+    let i = app.doc.panels.iter().position(|p| p.id == ids[3]).unwrap();
+    assert_eq!(crate::storyboard::panel_title(&app.doc, i), "Plan 4", "il retrouve le sien");
+    // Le reste d'un plan de plusieurs cases : une case jetée, puis rendue, rejoint son plan (le même numéro, pas un plan à part).
+    let mut app = appli("numero-case");
+    app.doc.lock_numbering();
+    app.doc.add_panel_after(1);
+    let case = app.doc.panels[2].id;
+    assert_eq!(noms_des_plans(&app), ["Plan 1", "Plan 2", "Plan 2", "Plan 3", "Plan 4"]);
+    app.delete_panels(&[case]);
+    let e = entree_du_plan(&app, case);
+        restaurer(&mut app, e);
+    assert_eq!(noms_des_plans(&app), ["Plan 1", "Plan 2", "Plan 2", "Plan 3", "Plan 4"]);
+    assert_eq!(app.doc.panels[2].scene, app.doc.panels[1].scene, "la case est revenue dans son plan");
+}
+
+#[test]
+fn the_last_plan_of_a_deleted_sequence_brings_its_sequence_back_at_its_place() {
+    for rouvrir in [false, true] {
+        let nom = if rouvrir { "sequence-rouverte" } else { "sequence" };
+        let mut app = appli(nom);
+        // Trois séquences : les quatre plans, puis « Poursuite » (un plan), puis une troisième (un plan).
+        let i = app.doc.add_sequence_after(3);
+        let j = app.doc.add_sequence_after(i);
+        let (seq2, seq3) = (app.doc.sequence_of(i), app.doc.sequence_of(j));
+        app.doc.sequence_mut(seq2).unwrap().name = "Poursuite".into();
+        app.doc.lock_numbering();
+        let plan = app.doc.panels[i].id;
+        let avant_plans = noms_des_plans(&app);
+        let avant_seqs: Vec<String> = app.doc.sequence_order().iter().map(|&q| app.doc.sequence_code(q)).collect();
+        assert_eq!(avant_seqs, ["1", "2", "3"]);
+        app.delete_panels(&[plan]);
+        assert!(!app.doc.sequences.iter().any(|s| s.id == seq2), "la séquence est partie avec son dernier plan");
+        assert_eq!(app.doc.sequence_order(), [app.doc.sequence_of(0), seq3]);
+        // (Une séquence neuve au bout du film ne prend pas le numéro de celle de la corbeille.)
+        if rouvrir {
+            let d = dossier(nom);
+            let m = manifeste(&d);
+            enregistrer(&app.doc, &m);
+            app = rouvert(&m, nom);
+        }
+        app.cur_panel = 0;
+        let e = entree_du_plan(&app, plan);
+        restaurer(&mut app, e);
+        assert_eq!(app.doc.sequence_order(), [app.doc.sequence_of(0), seq2, seq3], "elle revient entre ses voisines (rouvert : {rouvrir})");
+        let s = app.doc.sequences.iter().find(|s| s.id == seq2).unwrap();
+        assert_eq!(s.name, "Poursuite", "avec son nom");
+        assert_eq!(app.doc.sequence_code(seq2), "2", "et son numéro");
+        assert_eq!(noms_des_plans(&app), avant_plans, "le plan sous son numéro");
+        assert_eq!(app.status, "« Plan 5 » restauré avec sa séquence (« Poursuite »), à sa place dans le film.");
+        annuler(&mut app);
+        assert!(!app.doc.sequences.iter().any(|s| s.id == seq2), "une seule étape d'annulation, séquence comprise");
+        assert_eq!(app.doc.corbeille.len(), 1);
+    }
+}
+
+/// Partie 207 : la vignette d'une entrée se fait comme celle d'un bloc de la timeline (la partie filmée, chaque pixel la moyenne de ce
+/// qu'il couvre) : un zigzag noir de 6 pixels sur une feuille de 3840 × 2160 s'y lit, comme dans la timeline (avant : presque blanc).
+#[test]
+fn the_bin_thumbnail_is_made_like_the_timeline_thumbnail_and_a_thin_line_shows() {
+    use crate::document::{Cel, Layer, LayerKind};
+    use eframe::egui::Color32;
+    let mut doc = Document::new(3840, 2160, 24);
+    let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+    for x in 200..3640usize {
+        let creneau = 300 - ((x % 600) as i64 - 300).abs();
+        let y0 = (900 + creneau) as usize;
+        for y in y0..y0 + 6 {
+            let i = cel.raster.tile_index_of(x, y);
+            cel.raster.tile_mut(i)[(y % crate::raster::TILE) * crate::raster::TILE + x % crate::raster::TILE] = Color32::BLACK;
+        }
+    }
+    let id = doc.add_cel(cel.clone());
+    let mut l = Layer::new("Dessin", LayerKind::Bitmap);
+    l.frames = vec![Some(id); doc.panels[0].length];
+    doc.panels[0].layers = vec![l];
+    let (w, h) = (192, 108);
+    let timeline = crate::render::thumbnail(&doc, &crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper)), &doc.panel_camera(0, 0), w, h);
+    let corbeille = crate::corbeilleui::miniature(&cel, &crate::project::Tete::de(&doc), doc.paper, w, h);
+    assert_eq!(corbeille.size, timeline.size);
+    assert!(corbeille.pixels == timeline.pixels, "la même image que la vignette de la timeline");
+    // Le trait couvre 0,3 pixel de vignette en épaisseur : un gris franc, d'un bout à l'autre (172 colonnes de vignette).
+    let fonces = corbeille.pixels.iter().filter(|c| c.r() < 230).count();
+    let le_plus_fonce = corbeille.pixels.iter().map(|c| c.r()).min().unwrap();
+    // Avant : un échantillon de la feuille entière par point de 96 × 54.
+    let avant = (0..54usize).flat_map(|y| (0..96usize).map(move |x| (x, y))).filter(|&(x, y)| cel.raster.get(x * 3840 / 96, y * 2160 / 54).a() > 0).count();
+    eprintln!("MESURE vignette de la corbeille : {fonces} pixels plus foncés que 230, le plus foncé {le_plus_fonce} ; avant : {avant} points touchés");
+    assert!(fonces >= 160, "le trait se lit sur toute sa longueur : {fonces} pixels");
+    assert!(le_plus_fonce < 200, "{le_plus_fonce}");
+}
+
+/// Partie 207 : Échap ferme la fenêtre de la corbeille, comme les autres fenêtres (dans l'application entière, pas seulement dans sa
+/// fonction) ; pendant une confirmation, il l'abandonne d'abord.
+#[test]
+fn escape_closes_the_bin_window_and_first_cancels_a_confirmation() {
+    use eframe::egui::{Event, Key, Modifiers};
+    let echap = || vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }];
+    let mut b = crate::perf_tests::banc(crate::montage_sans_casse_tests::film(), false);
+    b.app.welcome = false;
+    b.chauffer(2);
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    b.app.delete_panels(&[ids[1]]);
+    b.app.run_action("fichier.corbeille");
+    b.chauffer(2);
+    assert!(b.app.corbeille_ui.is_some(), "la fenêtre est ouverte");
+    b.app.corbeille_ui.as_mut().unwrap().confirmation = Some(crate::corbeilleui::Confirmation::Vider);
+    b.image(echap(), 1.0 / 60.0);
+    assert!(b.app.corbeille_ui.as_ref().is_some_and(|f| f.confirmation.is_none()), "Échap abandonne la confirmation");
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(b.app.corbeille_ui.is_none(), "Échap ferme la fenêtre");
+    assert_eq!(b.app.doc.corbeille.len(), 1, "rien n'est vidé");
+    assert_eq!(b.app.doc.panels.len(), 3, "et rien d'autre ne bouge");
+}
+
+/// Partie 207 (vu à l'écran après la partie 207) : le bloc du dernier plan de la Séquence 2 choisi dans la timeline, supprimé, rendu par
+/// la Corbeille (alors vide) : Échap, trois fois, ne fermait plus la fenêtre. La cause : une liste déroulante qu'egui croyait encore
+/// ouverte alors que plus rien ne la peignait (un champ de couleur dont la fenêtre ou le panneau a disparu) ; `echap_ferme` prenait la
+/// touche et ne fermait rien, à chaque appui. Maintenant la Corbeille se ferme au premier Échap, avant tout autre usage de la touche ; et
+/// l'Export (la fenêtre « Exporter » et celle d'un export) de même.
+#[test]
+fn escape_closes_the_bin_window_after_restoring_a_chosen_plan_block_even_with_a_forgotten_popup() {
+    use eframe::egui::{Event, Id, Key, Modifiers};
+    let echap = || vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }];
+    let oubliee = |b: &crate::perf_tests::Banc| b.ctx.memory_mut(|m| m.open_popup(Id::new("liste dont le champ a disparu")));
+    let mut doc = crate::timelinesb_tests::film();
+    doc.add_sequence_after(2);
+    let mut b = crate::timelinesb_tests::banc_sb(doc, 1600, 1000, false);
+    let blocs = crate::timelinesb_tests::blocs();
+    assert_eq!(blocs.len(), 4, "{blocs:?}");
+    crate::pistes_tests::clic(&mut b, blocs[3].center(), Modifiers::NONE);
+    let plan = b.app.doc.panels[3].id;
+    b.app.run_action("edition.supprimer");
+    b.chauffer(2);
+    assert_eq!((b.app.doc.panels.len(), b.app.doc.sequence_order().len()), (3, 1), "le plan 4 est parti avec sa séquence : {}", b.app.status);
+    b.app.run_action("fichier.corbeille");
+    b.chauffer(2);
+    // (Le vrai bouton « Restaurer » de la fenêtre.)
+    let r = vus::ou("Restaurer");
+    assert_eq!(r.len(), 1, "{r:?}");
+    crate::pistes_tests::clic(&mut b, r[0].center(), Modifiers::NONE);
+    b.chauffer(3);
+    assert_eq!(b.app.doc.sequence_order().len(), 2, "la séquence est revenue : {}", b.app.status);
+    assert!(b.app.corbeille_ui.is_some() && b.app.doc.corbeille.is_empty(), "la fenêtre ouverte, vide");
+    let i = b.app.doc.panels.iter().position(|p| p.id == plan).unwrap();
+    crate::pistes_tests::clic(&mut b, crate::timelinesb_tests::blocs()[i].center(), Modifiers::NONE);
+    assert!(b.app.corbeille_ui.is_some(), "le bloc rendu choisi, la fenêtre toujours ouverte");
+    let choix = (b.app.board_sel.clone(), b.app.key_sel.clone(), b.app.cur_panel);
+    oubliee(&b);
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(b.app.corbeille_ui.is_none(), "le premier Échap ferme la Corbeille");
+    assert_eq!((b.app.board_sel.clone(), b.app.key_sel.clone(), b.app.cur_panel), choix, "et ne fait rien d'autre");
+    assert!(!b.ctx.memory(|m| m.any_popup_open()), "la liste oubliée est fermée");
+    // Même chose pour l'Export : la fenêtre « Exporter », puis celle d'un export.
+    b.app.run_action("fichier.exporter");
+    b.chauffer(2);
+    assert!(b.app.export_hub);
+    oubliee(&b);
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(!b.app.export_hub, "Échap ferme « Exporter »");
+    b.app.run_action("fichier.exporter_pdf");
+    b.chauffer(2);
+    assert!(b.app.export_dialog.is_some());
+    oubliee(&b);
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(b.app.export_dialog.is_none(), "Échap ferme la fenêtre de l'export");
+    // Les Préférences, qui ne se fermaient pas du tout à Échap.
+    b.app.run_action("fichier.preferences");
+    b.chauffer(2);
+    assert!(b.app.prefs_window);
+    oubliee(&b);
+    b.image(echap(), 1.0 / 60.0);
+    b.chauffer(1);
+    assert!(!b.app.prefs_window, "Échap ferme les Préférences");
 }

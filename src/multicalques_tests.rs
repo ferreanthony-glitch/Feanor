@@ -1123,7 +1123,7 @@ fn the_opacity_field_sets_every_chosen_layer_in_one_step() {
 
 #[test]
 fn emptying_the_drawing_of_chosen_keys_empties_each_drawing_once_and_keeps_the_keys() {
-    // (Partie 207, point 8 : c'était Suppr ; Suppr et Retour arrière suppriment maintenant les clés, « Vider le dessin des clés
+    // (Partie 208, point 8 : c'était Suppr ; Suppr et Retour arrière suppriment maintenant les clés, « Vider le dessin des clés
     // choisies » est sur Alt+Retour arrière et Alt+Suppr.)
     let mut b = banc_cles(Tool::Brush);
     // Le dessin de la clé de l'image 2 du calque 0 est aussi montré à l'image 3 par une seconde clé (la même image tenue deux fois).
@@ -1161,7 +1161,7 @@ fn delete_leaves_a_locked_layer_and_keeps_deleting_a_canvas_selection_first() {
     assert!(encre(&b, cel_de(&b, 1, 2), pos2(200.0, y_de(1))), "le calque verrouillé n'est pas vidé");
     assert!(!encre(&b, cel_de(&b, 0, 2), pos2(200.0, y_de(0))), "l'autre l'est");
     assert!(b.app.status.contains("verrouillé"), "{}", b.app.status);
-    // Suppr (partie 207 : supprime les clés) laisse aussi de côté le calque verrouillé, et le nomme.
+    // Suppr (partie 208 : supprime les clés) laisse aussi de côté le calque verrouillé, et le nomme.
     let mut b = banc_cles(Tool::Brush);
     b.app.doc.panels[0].layers[1].locked = true;
     b.app.key_focus = true;

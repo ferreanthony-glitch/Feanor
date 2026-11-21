@@ -329,6 +329,8 @@ pub struct Arbre {
     pub reconstructions: u64,
     /// Combien de lignes la dernière image a peintes (seulement celles qu'on voit).
     pub peintes: usize,
+    /// Partie 207 : la hauteur de la barre du haut (« Depuis » et le fil d'Ariane) à la dernière image ; 0 : pas encore peinte.
+    pub barre: f32,
 }
 
 impl Arbre {

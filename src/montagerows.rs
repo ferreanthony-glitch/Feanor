@@ -690,7 +690,7 @@ impl App {
 
         // Les calques de chaque plan, dans son ordre.
         let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
-        // Partie 206 : ce que montre chaque clé (coupure, tête de lecture, et en option vignette et durée) ; partie 207 : une clé vide
+        // Partie 206 : ce que montre chaque clé (coupure, tête de lecture, et en option vignette et durée) ; partie 208 : une clé vide
         // ne montre rien.
         let tete_plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         for track in &rows.lanes {
@@ -714,7 +714,7 @@ impl App {
                 }
                 let current = i == self.cur_panel && self.calque_montre_courant(k);
                 let mut hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
-                // Partie 207 : le bord d'une clé tenu reste allumé pendant tout le geste, à sa place de l'instant.
+                // Partie 208 : le bord d'une clé tenu reste allumé pendant tout le geste, à sa place de l'instant.
                 if let (Some((Handle::Boundary { .. }, true)), Some((l, f))) = (hot, self.handle_drag.as_ref().filter(|d| d.panel_id() == p.id).and_then(|d| d.bord_tenu())) {
                     if l == k {
                         hot = Some((Handle::Boundary { layer: l, at: f }, false));
@@ -1060,7 +1060,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
     let mut rang = 0;
     while f < layer.frames.len() {
         let (s, e) = layer.run_bounds(f);
-        // (Partie 207 : une clé vide n'affiche rien, on voit le fond de la ligne ; choisie ou survolée, son cadre se voit encore.)
+        // (Partie 208 : une clé vide n'affiche rien, on voit le fond de la ligne ; choisie ou survolée, son cadre se voit encore.)
         let vide = layer.frames[f].is_some_and(|c| (habit.vide)(c));
         if layer.frames[f].is_some() {
             let seg = Rect::from_min_max(
@@ -1130,7 +1130,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
         }
     }
     // Un bord pris (début, fin, limite entre deux dessins) : une bande claire sur la hauteur de la piste (pendant le geste d'une
-    // limite, l'appelant donne sa place de l'instant, partie 207).
+    // limite, l'appelant donne sa place de l'instant, partie 208).
     let edge = match hot {
         Some(Handle::LayerStart { .. }) => content_bounds(layer).map(|(a, _)| a),
         Some(Handle::LayerEnd { .. }) => content_bounds(layer).map(|(_, b)| b),
@@ -1140,7 +1140,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
     if let Some(f) = edge {
         let x = x0 + f as f32 * ppf;
         if x >= cell.left() - 1.0 && x <= cell.right() + 1.0 {
-            // Partie 206 (D) : le bord s'allume au survol (le curseur passe en ↔) ; partie 207 : une bande claire, bordée de sombre,
+            // Partie 206 (D) : le bord s'allume au survol (le curseur passe en ↔) ; partie 208 : une bande claire, bordée de sombre,
             // et pendant tout le geste.
             crate::clesvue::peindre_bord_allume(&painter.with_clip_rect(cell.intersect(painter.clip_rect())), x, cell.top(), cell.bottom());
         }

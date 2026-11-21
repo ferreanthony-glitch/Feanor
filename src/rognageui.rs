@@ -289,7 +289,7 @@ impl App {
                     String::new()
                 };
                 self.status = format!("{}{hint}{etire}", d.text);
-                // Partie 206 : la bulle près du pointeur, pendant le geste (la durée du plan). Partie 207 : la seule bulle de la fin
+                // Partie 206 : la bulle près du pointeur, pendant le geste (la durée du plan). Partie 208 : la seule bulle de la fin
                 // d'un plan (plus de bande noire en haut, `paint_edge_drag`), avec les mots de l'Animation : « Durée du plan : 1s 16
                 // (-8 i) », et ce que fait « Étirer en proportion » (ou Maj). La barre d'état garde sa phrase.
                 self.bulle_geste = (d.kind == EdgeKind::Tail).then(|| {
@@ -406,7 +406,7 @@ impl App {
             painter.line_segment([pos2(x, top - 4.0), pos2(x, bottom + 4.0)], Stroke::new(1.5_f32, accent));
             painter.circle_filled(pos2(x, top - 4.0), 3.0, accent);
         }
-        // (Partie 207 : la fin d'un plan n'a que la bulle près du pointeur, `bulle_du_geste`.)
+        // (Partie 208 : la fin d'un plan n'a que la bulle près du pointeur, `bulle_du_geste`.)
         if d.text.is_empty() || d.kind == EdgeKind::Tail {
             return;
         }

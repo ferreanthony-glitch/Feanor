@@ -5,6 +5,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-21
 
+- **Vérification à l'écran : la corbeille, l'aplat, la colonne** (partie 207, branche `verif-corrections` partie de main 3fda30a, puis
+  fusionnée avec la partie 206 des bords des clés ; format 61 inchangé) : les 15 vérifications de `a-verifier.md` faites à l'écran sur une
+  copie d'essai pour celles qui se pilotent d'ici (1, 3 à 11, 13 en PDF) ; six défauts corrigés. Un plan rendu par la corbeille retrouve
+  son numéro verrouillé (il revenait « Plan 1A », jusque dans le PDF), un neuf s'il est pris et la phrase le dit ; le numéro d'un plan de
+  la corbeille n'est plus redonné. Le dernier plan d'une séquence supprimée la ramène, nom et numéro, à sa place. L'aplat n'entoure plus
+  les traits ouverts d'un liseré de sa couleur, et deux changements de couleur rapides ne disent plus « retouchée(s) pendant le calcul »
+  (une course). Les vignettes de la corbeille sont celles de la timeline. La Scène garde la hauteur de son arbre dans la colonne,
+  l'Historique trois étapes, le fil d'Ariane passe à la ligne entre ses éléments. Échap ferme la Corbeille, l'Export et les Préférences,
+  même quand egui croit ouverte une liste déroulante que plus rien ne peint. Cinq corrections revues à l'écran ; Échap couvert par un
+  essai qui rejoue le cas vu, pas revu à l'écran (écran verrouillé). Restent à faire chez Anthony : stylet (2), son (12), MP4 et exports
+  pour le montage (13, 14, ffmpeg absent du Mac), relecture HTML (15). Suite entière : les 90 échecs de `main`, aucun de plus.
 - **Les bords des clés et la fin du plan** (partie 206, branche `bords-cles` partie de main 5946370, format inchangé ; le 205 était
   pris par le Mac) : la fin du plan ne change que la dernière clé de chaque calque et s'arrête en butée (Maj : toutes en proportion,
   Ctrl : comme avant) ; le bord entre deux clés ne change que ces deux-là (Ctrl : la suite se décale), sur tous les calques choisis, une

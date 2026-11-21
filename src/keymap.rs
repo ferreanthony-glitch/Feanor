@@ -444,7 +444,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("cles.image_moins", "Raccourcir d'une image les clés choisies (la suite se décale)", true, true),
     act("cles.decaler_suite", "Décaler la suite (bord d'une clé, fin du plan : comme Ctrl tenue)", true, false),
     act("cles.etirer_proportion", "Étirer en proportion (fin du plan : comme Maj tenue)", true, false),
-    // Partie 207 : Suppr et Retour arrière suppriment les clés choisies ; vider leur dessin a son propre raccourci.
+    // Partie 208 : Suppr et Retour arrière suppriment les clés choisies ; vider leur dessin a son propre raccourci.
     act("cles.vider_dessin", "Vider le dessin des clés choisies (les clés restent)", true, false),
     act("montage.debut_a_tete", "Raccourcir le début du plan jusqu'à la tête de lecture", true, false),
     act("montage.fin_a_tete", "Raccourcir la fin du plan jusqu'à la tête de lecture", true, false),

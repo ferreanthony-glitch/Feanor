@@ -6,7 +6,7 @@
 //!   courante s'il en a (`Layer::set_opacity_at`). Un glissé fait une seule étape (`App::edited`). Comme pour un seul calque, un
 //!   calque verrouillé change aussi (le verrou protège le dessin, pas les réglages du calque).
 //! - **Suppr et Retour arrière sur des clés choisies** (la timeline ou le montage a la main, rien n'est choisi sur le dessin) :
-//!   partie 207 (Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac ») : les clés sont supprimées, la clé d'avant
+//!   partie 208 (Anthony : « Retour arrière supprime la clé car pas de Suppr sur Mac ») : les clés sont supprimées, la clé d'avant
 //!   prend leur place (comme Ctrl+X sans copier, `delete_keys`). Calques verrouillés laissés de côté et nommés. Une seule étape.
 //! - **Vider le dessin des clés choisies** (`cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr ; c'était Suppr avant la partie
 //!   207) : le dessin de chaque clé est vidé, la clé reste avec sa durée. Un dessin tenu sur plusieurs clés n'est vidé qu'une fois.
@@ -54,7 +54,7 @@ impl App {
         self.key_focus && !self.key_sel.is_empty() && !self.board_shown() && !self.in_card && !self.selection_sur_le_dessin()
     }
 
-    /// Partie 207 : Suppr et Retour arrière sur les clés choisies (`suppr_vise_les_cles`) : les clés sont supprimées, la clé
+    /// Partie 208 : Suppr et Retour arrière sur les clés choisies (`suppr_vise_les_cles`) : les clés sont supprimées, la clé
     /// d'avant s'allonge pour remplir leur place (`delete_keys`, comme Ctrl+X sans copier). Les clés des calques verrouillés (ou
     /// d'un dossier verrouillé) sont laissées de côté et nommées. Une étape.
     pub(crate) fn supprimer_cles_choisies(&mut self) {
@@ -95,7 +95,7 @@ impl App {
         self.status += &laisses;
     }
 
-    /// « Vider le dessin des clés choisies » (`cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr ; Suppr avant la partie 207) :
+    /// « Vider le dessin des clés choisies » (`cles.vider_dessin`, Alt+Retour arrière ou Alt+Suppr ; Suppr avant la partie 208) :
     /// leurs dessins sont vidés, les clés restent. Une étape, tout ou rien.
     pub(crate) fn vider_cles(&mut self) {
         let choix = self.key_sel.clone();

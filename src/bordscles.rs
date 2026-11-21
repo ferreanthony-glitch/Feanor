@@ -291,7 +291,7 @@ impl App {
             let d = deplacer_coupe(&mut l, a, want, decaler, plan_len);
             if k == 0 {
                 phrase = texte_de_cle(&l, (a as isize + d) as usize, d);
-                // (Partie 207 : le bord tenu reste allumé pendant tout le geste, à sa place de l'instant.)
+                // (Partie 208 : le bord tenu reste allumé pendant tout le geste, à sa place de l'instant.)
                 if let Some(dr) = self.handle_drag.as_mut() {
                     dr.poser_bord(li, (a as isize + d) as usize);
                 }

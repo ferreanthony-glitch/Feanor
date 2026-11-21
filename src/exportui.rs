@@ -25,8 +25,28 @@ use crate::storyboard::duration_label;
 
 /// Échap ferme la fenêtre d'export sans rien lancer (sauf s'il ferme d'abord une liste déroulante ouverte). `Modal::should_close` le
 /// fait déjà quand la fenêtre est « la plus haute » ; ceci le garantit aussi quand une autre couche d'`egui` lui dispute ce titre.
+///
+/// Partie 207 : une liste déroulante (un champ de couleur, un menu de case…) qu'egui croit encore ouverte alors que plus rien ne la
+/// peint (son champ a quitté l'écran : une fenêtre fermée, un panneau replié) gardait Échap pour elle **à chaque appui** : la touche était
+/// prise, et aucune fenêtre ne se fermait plus (la Corbeille, l'Export). Seule une liste **à l'écran** (sa zone peinte à cette image ou à
+/// la précédente) garde Échap, et ne le prend pas (egui la ferme) ; une liste oubliée est fermée ici, et la fenêtre aussi.
 pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
-    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) && !ctx.memory(|m| m.any_popup_open())
+    let echap = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::Escape, pressed: true, modifiers, .. } if !modifiers.any())));
+    if !echap || liste_a_l_ecran(ctx) {
+        return false;
+    }
+    ctx.memory_mut(|m| {
+        if m.any_popup_open() {
+            m.close_popup();
+        }
+    });
+    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+}
+
+/// Partie 207 : une liste déroulante d'egui est ouverte **et peinte** (sa zone, qui porte son numéro, est à l'écran à cette image ou à la
+/// précédente). Une liste « ouverte » que plus rien ne peint n'en est pas une.
+pub(crate) fn liste_a_l_ecran(ctx: &egui::Context) -> bool {
+    ctx.memory(|m| m.any_popup_open() && m.areas().visible_layer_ids().iter().any(|l| m.is_popup_open(l.id)))
 }
 
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).

@@ -91,6 +91,8 @@ enum Retour {
 }
 
 struct Resultat {
+    /// Partie 207 : le numéro du changement de couleur « la clé » qui l'a lancé (`lancer_teinte`) ; rien pour un remplissage.
+    teinte: Option<u64>,
     cel: CelId,
     strate: bool,
     peinture: Raster,
@@ -118,27 +120,32 @@ fn calculer(t: Travail) -> Option<Resultat> {
         let zone = Murs::new(&trait_, trous)?.zone(x, y)?;
         zone.peindre(&mut peinture, if retirer { None } else { Some(color) });
     }
-    Some(Resultat { cel, strate, peinture, coupe, versions })
+    Some(Resultat { teinte: None, cel, strate, peinture, coupe, versions })
 }
 
 /// La forme de l'aplat d'un dessin, peinte de la couleur `new` dans sa strate (là où rien n'est peint) : l'aplat de ce dessin change
 /// de couleur sans que le calque, et donc les autres dessins, en changent (`aplatcouleur.rs`). Le calcul de la forme est celui de
 /// l'aplat affiché ; la peinture est opaque, l'aplat la montre dans sa forme seulement, au bord adouci de la forme.
-fn teinter(cel: CelId, trait_: Raster, r: crate::fond::FondReglages, mut peinture: Raster, coupe: Raster, new: [u8; 3], versions: (u64, u64)) -> Option<Retour> {
+///
+/// Partie 207 : `avant`, les couleurs que les changements « la clé » d'avant ont posées sur ce dessin pendant la séance : la forme
+/// peinte de l'une d'elles prend aussi la nouvelle (sans cela, un deuxième changement de couleur de la même clé ne changeait rien).
+#[allow(clippy::too_many_arguments)]
+fn teinter(teinte: u64, cel: CelId, trait_: Raster, r: crate::fond::FondReglages, mut peinture: Raster, coupe: Raster, new: [u8; 3], avant: &[[u8; 3]], versions: (u64, u64)) -> Option<Retour> {
     let cover = crate::fond::silhouette(&trait_, &r);
     let w = trait_.width;
     let encre = Color32::from_rgb(new[0], new[1], new[2]);
+    let deja = |c: Color32| c.a() == 0 || (c.a() == 255 && avant.iter().any(|a| a[0] == c.r() && a[1] == c.g() && a[2] == c.b()));
     for idx in 0..peinture.tiles.len() {
         let (ox, oy, tw, th) = peinture.tile_bounds(idx);
         for ty in 0..th {
             for tx in 0..tw {
-                if cover[(oy + ty) * w + ox + tx] > 0 && peinture.get(ox + tx, oy + ty).a() == 0 {
+                if cover[(oy + ty) * w + ox + tx] > 0 && deja(peinture.get(ox + tx, oy + ty)) {
                     peinture.tile_mut(idx)[ty * TILE + tx] = encre;
                 }
             }
         }
     }
-    Some(Retour::Rempli(Resultat { cel, strate: true, peinture, coupe, versions }))
+    Some(Retour::Rempli(Resultat { teinte: Some(teinte), cel, strate: true, peinture, coupe, versions }))
 }
 
 /// Un trait de couleur fait sur l'aplat d'une autre clé sans zone (`avant` : les tuiles d'avant le trait, `apres` : celles de
@@ -190,12 +197,17 @@ pub(crate) struct Travaux {
     silencieux: bool,
     /// Des résultats arrivés pendant qu'on dessine sur leur dessin : posés à la fin du geste (ils comptent encore dans `en_route`).
     differes: Vec<Option<Retour>>,
+    /// Partie 207 : par dessin, le dernier changement de couleur « la clé » lancé (son numéro) et les couleurs que ces changements
+    /// y ont posées. Un résultat d'un changement d'avant qui arrive après qu'un autre est parti n'est pas posé, sans rien dire :
+    /// ce n'était pas un dessin retouché pendant le calcul (la barre d'état le disait), et le dernier changement doit gagner.
+    teintes: std::collections::HashMap<CelId, (u64, Vec<[u8; 3]>)>,
+    numero_teinte: u64,
 }
 
 impl Default for Travaux {
     fn default() -> Self {
         let (tx, rx) = channel();
-        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0, silencieux: false, differes: Vec::new() }
+        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0, silencieux: false, differes: Vec::new(), teintes: Default::default(), numero_teinte: 0 }
     }
 }
 
@@ -486,6 +498,8 @@ impl App {
             self.aplat_travaux.en_route = self.aplat_travaux.en_route.saturating_sub(1);
             match r {
                 None => {}
+                // (Un changement de couleur « la clé » qu'un autre a remplacé pendant son calcul : il ne compte pas.)
+                Some(Retour::Rempli(r)) if r.teinte.is_some_and(|n| self.aplat_travaux.teintes.get(&r.cel).is_some_and(|t| t.0 != n)) => {}
                 Some(Retour::Rempli(r)) => {
                     if self.poser_resultat(r) {
                         self.aplat_travaux.poses += 1;
@@ -585,8 +599,17 @@ impl App {
         let trait_ = c.raster.clone();
         let tx = self.aplat_travaux.tx.clone();
         let ctx = self.ctx.clone();
+        let t = &mut self.aplat_travaux;
+        t.numero_teinte += 1;
+        let numero = t.numero_teinte;
+        let entree = t.teintes.entry(cel).or_default();
+        let avant = entree.1.clone();
+        entree.0 = numero;
+        if !entree.1.contains(&new) {
+            entree.1.push(new);
+        }
         let spawned = std::thread::Builder::new().name("aplat-teinte".into()).spawn(move || {
-            let _ = tx.send(teinter(cel, trait_, r, peinture, coupe, new, versions));
+            let _ = tx.send(teinter(numero, cel, trait_, r, peinture, coupe, new, &avant, versions));
             ctx.request_repaint();
         });
         if spawned.is_err() {
